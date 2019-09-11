@@ -1,0 +1,7 @@
+target.dbg.linux.x86_64
+host.dbg.linux.x86_64
+*.swp
+tags
+TAGS
+tmp
+
