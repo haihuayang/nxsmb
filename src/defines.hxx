@@ -119,15 +119,6 @@ uint64_t epollmgmt_monitor(epollmgmt_t *ep, unsigned int fd, uint32_t poll_event
 bool epollmgmt_enable_events(epollmgmt_t *ep, uint64_t id, uint32_t events);
 
 
-using x_oid_t = const char *;
-struct x_gensec_t;
-struct x_gensec_context_t;
-struct x_gensec_mech_t;
-
-x_gensec_context_t *x_gensec_create_context();
-x_gensec_t *x_gensec_create_by_oid(x_gensec_context_t *context, x_oid_t oid);
-int x_gensec_register(x_gensec_context_t *context, const x_gensec_mech_t *mech);
-
 
 #endif /* __src__defines__hxx__ */
 

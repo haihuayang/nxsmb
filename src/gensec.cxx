@@ -1,5 +1,5 @@
 
-#include "gensec.hxx"
+#include "smbd.hxx"
 #include <string.h>
 
 struct x_gensec_context_t
@@ -14,28 +14,27 @@ x_gensec_context_t *x_gensec_create_context()
 	return ret;
 }
 
-int x_gensec_register(x_gensec_context_t *context, const x_gensec_mech_t *mech)
-{
-	for (auto &m : context->mechs) {
-		if (strcmp(m->oid, mech->oid) == 0) {
-			return EEXIST;
-		}
-	}
-	context->mechs.push_back(mech);
-	return 0;
-}
-
-static const x_gensec_mech_t *x_gensec_find_by_oid(x_gensec_context_t *gensec_context, const char *oid)
+static const x_gensec_mech_t *x_gensec_find_by_oid(x_gensec_context_t *gensec_context, gss_const_OID oid)
 {
 	for (auto mech : gensec_context->mechs) {
-		if (strcmp(mech->oid, oid) == 0) {
+		if (gss_oid_equal(oid, mech->oid)) {
 			return mech;
 		}
 	}
 	return NULL;
 }
 
-x_gensec_t *x_gensec_create_by_oid(x_gensec_context_t *context, const char *oid)
+int x_gensec_register(x_gensec_context_t *context, const x_gensec_mech_t *mech)
+{
+	auto old = x_gensec_find_by_oid(context, mech->oid);
+	if (old) {
+		return EEXIST;
+	}
+	context->mechs.push_back(mech);
+	return 0;
+}
+
+x_gensec_t *x_gensec_create_by_oid(x_gensec_context_t *context, gss_const_OID oid)
 {
 	const x_gensec_mech_t *mech = x_gensec_find_by_oid(context, oid);
 	if (!mech) {

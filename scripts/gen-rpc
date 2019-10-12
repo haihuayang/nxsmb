@@ -1,0 +1,1562 @@
+#!/usr/bin/env python3
+
+from __future__ import print_function
+import os, sys
+from io import StringIO
+import re, argparse, json
+
+class OStream(object):
+	def __init__(self, fp):
+		self.fp = fp
+	def write(self, s):
+		self.fp.write(s)
+	def __call__(self, s=''):
+		try:
+			if s[0] == '\n':
+				s = s[1:]
+		except:
+			pass
+
+		self.fp.write(s)
+		try:
+			if s[-1] == '\n':
+				return
+		except:
+			pass
+		self.fp.write('\n')
+
+def _dbg_none(*args):
+	pass
+
+def _dbg_stderr(*args):
+	print("DBG:", *args, file=sys.stderr)
+
+DBG = _dbg_none
+
+def warn(msg):
+	print("Warning:", msg, file = sys.stderr)
+
+def error(msg):
+	print("Error:", msg, file = sys.stderr)
+
+def gen_type_name(t):
+	if not isinstance(t, str):
+		t = t["NAME"]
+	#return f'NDR_t_{t}'
+	return t
+
+def get_property(t, prop, default = None):
+	try:
+		return t['PROPERTIES'][prop]
+	except KeyError:
+		return default
+
+def has_property(t, prop):
+	v = get_property(t, prop)
+	if v is None:
+		return False
+	assert v == '1'
+	return True
+
+def elem_get_pointers(elem):
+	try:
+		v = elem['POINTERS']
+	except KeyError:
+		return 0
+	assert v in [0, 1]
+	return v
+
+def const_get_pointers(elem):
+	try:
+		v = elem['POINTERS']
+	except KeyError:
+		return 0
+	assert v == 0
+	return v
+
+def elem_exist_any_property(elem, *args):
+	try:
+		prop = elem['PROPERTIES']
+	except:
+		return False
+	for arg in args:
+		if arg in prop:
+			return True
+	return False
+
+def elem_get_one_property(elem, *args):
+	try:
+		prop = elem['PROPERTIES']
+	except:
+		return None
+	ret = None
+	for arg in args:
+		if arg in prop:
+			assert ret is None
+			ret = (arg, prop[arg])
+	return ret
+
+def elem_get_refer(elem, elems, func):
+	for oidx, oe in enumerate(elems):
+		try:
+			prop = oe['PROPERTIES']
+		except:
+			continue
+		for n, v in prop.items():
+			if n == 'x_skip' and v == func:
+				continue
+			if n in ['x_length', 'x_offset'] and v == elem['NAME']:
+				yield oidx, n, oe
+	
+def typedef_has_property(t, prop):
+	return has_property(t['DATA'], prop);
+
+def typedef_get_property(t, prop, default = None):
+	return get_property(t['DATA'], prop, default);
+
+F_STRUCT = 0x1
+F_UNION  = 0x2
+know_properties = {
+	'case': F_UNION,
+	'default': F_UNION,
+	'flag': F_STRUCT | F_UNION,
+	'range': F_STRUCT,
+	'value': F_STRUCT | F_UNION,
+	'charset': F_STRUCT | F_UNION,
+	'switch_is': F_STRUCT,
+	'switch_type': F_STRUCT,
+	'size_is': F_STRUCT,
+	'in': F_STRUCT, # TODO
+	'unique': F_STRUCT, # TODO
+	'length_is': F_STRUCT, # TODO
+	'noprint': F_STRUCT | F_UNION, # TODO
+	'ignore': F_STRUCT | F_UNION, # TODO
+	'string': F_STRUCT | F_UNION, # TODO
+	'compression': F_STRUCT | F_UNION, # TODO
+	'subcontext': F_STRUCT | F_UNION, # TODO rewrite
+	'subcontext_size': F_STRUCT | F_UNION, # TODO rewrite
+	'relative': F_STRUCT | F_UNION, # TODO rewrite
+	'relative_short': F_STRUCT | F_UNION, # TODO rewrite
+	'ref': F_STRUCT | F_UNION, # TODO rewrite
+	'x_length': F_STRUCT,
+	'x_offset': F_STRUCT,
+	'x_skip': F_STRUCT,
+	'x_size': F_STRUCT,
+	#'x_with_size': F_STRUCT,
+	'x_relative': F_STRUCT,
+	'x_group_start': F_STRUCT,
+	'x_group_end': F_STRUCT,
+	'x_pull_value': F_STRUCT,
+}
+
+def check_properties(elem, flag):
+	if not 'PROPERTIES' in elem:
+		return
+	for name, value in elem['PROPERTIES'].items():
+		try:
+			flags = know_properties[name]
+			if (flag & flags) == 0:
+				error(f'at {elem["FILE"]}:{elem["LINE"]} Property {name} not support {flag}')
+				assert False
+		except KeyError:
+			error(f"Unknown property {name}.")
+			assert False
+			
+known_structs = [
+	'''
+	'lsa_String',
+	'lsa_StringLarge',
+	'lsa_AsciiString',
+	'lsa_AsciiStringLarge',
+	'lsa_BinaryString',
+	'''
+]
+
+known_simple_types = {
+        'EMPTY': [ 0, True],
+        'void': [0, True],
+        'char': [1, True],
+        'int8': [1, True],
+        'uint8': [1, True],
+        'int16': [2, True],
+        'uint16': [2, True],
+        'int1632': [3, True],
+        'uint1632': [3, True],
+        'int': [4, True], # int32
+        'int32': [4, True],
+        'long': [4, True], # uint32
+        'DWORD': [4, True],
+        'WORD': [2, True],
+        'uint32': [4, True],
+        'mode_t': [4, True], # uint32
+        'boolean8': [1, True],
+        'boolean32': [4, True], # uint32
+        'int3264': [5, True],
+        'uint3264': [5, True],
+        'uint64': [8, True],
+        'double': [8, True],
+        'pointer': [8, True],
+        'dlong': [4, True],
+        'udlong': [4, True],
+        'udlongr': [4, True],
+        'blob_t': [4, False],
+        'DATA_BLOB': [4, False],
+	'dom_sid0': [4, True],
+	'dom_sid': [4, True],
+        'string': [4, False],
+        'astring': [4, False],
+        'nstring': [4, False],
+        'nstring_array': [4, False], #???
+        'string_array': [4, False], #???
+        'time_t': [4, True],
+        'uid_t': [8, True],
+        'gid_t': [8, True],
+        'NTTIME': [4, True],
+        'NTTIME_1sec': [4, True],
+        'NTTIME_hyper': [8, True],
+        'HRESULT': [4, True],
+        'WERROR': [4, True],
+        'NTSTATUS': [4, True],
+        'COMRESULT': [4, False],
+        'dns_string': [4, False],
+        'nbt_string': [4, False],
+        'wrepl_nbt_name': [4, False],
+        'ipv4address': [4, True],
+        'ipv6address': [4, True], #16?
+        'dnsp_name': [1, False],
+        'dnsp_string': [1, False],
+        'utf8string': [1, False],
+}
+
+'''
+BASE_TYPE_MAP = {
+	"uint32": "uint32_t",
+	"uint16": "uint16_t",
+	"uint8": "uint8_t",
+};
+
+def map_base_type(t):
+	try:
+		return BASE_TYPE_MAP[t]
+	except KeyError:
+		return t
+'''
+
+def map_enum_type(t):
+	assert t['DATA']['TYPE'] == "ENUM"
+
+	# for typedef enum { } we need to check $enum->{PARENT}
+	if typedef_has_property(t, "enum8bit"):
+		return "uint8", "uint8"
+	elif typedef_has_property(t, "enum16bit"):
+		return "uint16", "uint16"
+	elif typedef_has_property(t, "v1_enum"):
+		return "uint32", "uint32"
+	else:
+		warn(f'at {t["FILE"]}:{t["LINE"]} unknown enum properties {t["DATA"].get("PROPERTIES", None)}')
+		# should be uint16? TODO
+		return "uint16", "uint1632"
+
+def map_bitmap_type(t):
+	assert t['DATA']['TYPE'] == "BITMAP"
+
+	if typedef_has_property(t, "bitmap8bit"):
+		return "uint8", "uint8"
+	elif typedef_has_property(t, "bitmap16bit"):
+		return "uint16", "uint16"
+	elif typedef_has_property(t, "bitmap32bit"):
+		return "uint32", "uint32"
+	elif typedef_has_property(t, "bitmap64bit"):
+		return "uint64", "uint64"
+	else:
+		warn(f'at {t["FILE"]}:{t["LINE"]} {t["NAME"]} unknown bits')
+		return "uint32", "uint32"
+
+def find_type(idl, tname):
+	for o in idl:
+		if o['TYPE'] != "INTERFACE":
+			continue
+		for t in o['DATA']:
+			if t['TYPE'] == "TYPEDEF" and t['NAME'] == tname:
+				return t
+	return None
+
+def find_type_idl_tbl(idl_tbl, tname):
+	for _, idl in idl_tbl.items():
+		t = find_type(idl, tname)
+		if t is not None:
+			return t
+	return None
+
+def typedef_get_elements(t):
+	assert t['TYPE'] == 'TYPEDEF'
+	try:
+		return t['DATA']['ELEMENTS']
+	except:
+		return []
+
+def typedef_get_realtype(t):
+	return t['DATA']['TYPE']
+
+def get_element_by_name(t, name):
+	for elem in typedef_get_elements(t):
+		if elem["NAME"] == name:
+			return elem
+	return None
+
+def get_array_len(elem):
+	try:
+		array_len = elem['ARRAY_LEN']
+		if len(array_len) == 0:
+			return None
+		assert len(array_len) == 1
+		return array_len[0]
+	except KeyError:
+		return None
+
+def elem_is_array_len(elem, st):
+	for elem2 in typedef_get_elements(st):
+		array_len = get_array_len(elem2)
+		if elem['NAME'] == array_len:
+			return elem2
+	return None
+
+def elem_get_array_elem(elem, st):
+	array_len = get_array_len(elem)
+	for elem2 in typedef_get_elements(st):
+		if elem2['NAME'] == array_len:
+			return elem2
+	return None
+
+# samba/pidl/lib/Parse/Pidl/NDR.pm align_type
+def get_align(idl_tbl, typedef):
+	class NotFound(Exception):
+		def __init__(self, elem):
+			self.elem = elem
+
+	def get_elem_align(elem):
+		#assert not has_property(elem, "subcontext"), "TODO"
+		#assert not has_property(elem, "transmit_as"), "TODO"
+		et_name = elem['TYPE']
+		try:
+			return known_simple_types[et_name][0]
+		except KeyError:
+			pass
+		et = find_type_idl_tbl(idl_tbl, elem['TYPE'])
+		if et is None:
+			raise NotFound(elem)
+
+		return get_align_1(et)
+
+	def find_largest_alignment(elems):
+		align = 1
+		for elem in elems:
+			if elem_get_pointers(elem):
+				# this is a hack for NDR64
+				# the NDR layer translates this into
+				# an alignment of 4 for NDR and 8 for NDR64
+				a = 5
+			else:
+				a = get_elem_align(elem)
+			if align < a:
+				align = a
+		return align
+
+	def get_align_2(t):
+		assert t["TYPE"] == "TYPEDEF"
+		realtype = typedef_get_realtype(t)
+
+		if realtype in [ "STRUCT", "UNION" ]:
+			elements = typedef_get_elements(t)
+			return find_largest_alignment(elements) if len(elements) else 4
+		elif realtype == "ENUM":
+			_, ftype = map_enum_type(t)
+			return known_simple_types[ftype][0]
+		elif realtype == "BITMAP":
+			_, ftype = map_bitmap_type(t)
+			return known_simple_types[ftype][0]
+		else:
+			assert False
+	def get_align_1(t):
+		try:
+			return t['x_align']
+		except:
+			pass
+		align = get_align_2(t)
+		DBG(f'get_align({t["NAME"]})={align}')
+		t['x_align'] = align
+		return align
+	try:
+		return get_align_1(typedef)
+	except NotFound as e:
+		error(f'''Cannot find type "{e.elem['TYPE']}" at {e.elem['FILE']}:{e.elem['LINE']}''')
+		raise
+
+def is_trivial(idl_tbl, typedef):
+	def is_trivial_2(t):
+		for elem in typedef_get_elements(t):
+			if elem_get_pointers(elem):
+				return False
+			et_name = elem['TYPE']
+			try:
+				if not known_simple_types[et_name][1]:
+					return False
+				continue
+			except KeyError:
+				pass
+			et = find_type_idl_tbl(idl_tbl, et_name)
+			assert et is not None
+			trivial = is_trivial_1(et)
+			if not trivial:
+				return False
+		return True
+	def is_trivial_1(t):
+		if "is_trivial" in typedef:
+			return typedef["is_trivial"]
+		realtype = typedef_get_realtype(t)
+		if realtype in [ "ENUM", "BITMAP" ]:
+			return True
+		elif realtype in [ "STRUCT", "UNION" ]:
+			trivial = is_trivial_2(t)
+			t["is_trivial"] = trivial
+			return trivial
+		else:
+			assert False
+	return is_trivial_1(typedef)
+		
+def get_switch_field(name):
+	return name.split('&')[0]
+
+def get_field_type(t, field):
+	for elem in t["ELEMENTS"]:
+		if elem["NAME"] == field:
+			return elem["TYPE"]
+	return None
+
+def collect_nontrivial_union_fields(idl_tbl, idl, t):
+	union_fields = [[elem, []] for elem in typedef_get_elements(t)]
+	for uf in union_fields:
+		elem = uf[0]
+		et = find_type(idl, elem["TYPE"])
+		if et is not None and et['DATA']["TYPE"] == "UNION" and not is_trivial(idl_tbl, et):
+			#uf[1] = None
+			switch_is = get_property(elem, "switch_is")
+			assert switch_is is not None
+			switch_field = get_switch_field(switch_is)
+			for switch_elem, unions in union_fields:
+				if switch_elem["NAME"] == switch_field:
+					break
+			else:
+				assert False, f'cannot find the switch field {switch_field}'
+			unions.append((elem, et))
+	return [(elem, unions) for elem, unions in union_fields if len(unions) > 0]
+
+def get_first_case(ut):
+	for elem in typedef_get_elements(ut):
+		case = get_property(elem, "case")
+		if case is not None:
+			return case, elem
+			
+def output_header_IMPORT(o, out):
+	for path in o['PATHS']:
+		import_name = re.sub('^"(.*)\.idl"$', r'\1', path)
+		out(f'#include "{import_name}.h"')
+	out()
+
+def output_header_INCLUDE(o, out):
+	for path in o['PATHS']:
+		out(f'#include {path}')
+	out()
+
+def output_header_QUOTE(o, out):
+	quote = o['DATA']
+	out(re.sub('^"(.*)"$', r'\1', quote))
+	out()
+
+def output_const(o, out):
+	assert False
+	pass
+	"""
+	my($const) = shift;
+	if (!defined($const->{ARRAY_LEN}[0])) {
+		pidl "#define $const->{NAME}\t( $const->{VALUE} )\n";
+	} else {
+		pidl "#define $const->{NAME}\t $const->{VALUE}\n";
+	}
+	"""
+
+def tostring_properties(elem):
+	if 'PROPERTIES' in elem:
+		ret = []
+		for key, val in elem['PROPERTIES'].items():
+			if val != '1':
+				ret.append(f'{key}({val})')
+			else:
+				ret.append(key)
+		return '/* [' + ', '.join(ret) + '] */'
+	else:
+		return ''
+
+def typedef_tostring_properties(t):
+	return tostring_properties(t['DATA'])
+
+def output_header_element(t, elem, out):
+	et = gen_type_name(elem['TYPE'])
+	array_len = get_array_len(elem)
+	charset = get_property(elem, "charset")
+	string = get_property(elem, "string")
+	if charset == "UTF16" and string == "1" and elem_get_pointers(elem):
+		assert array_len is None
+		assert elem['TYPE'] == "uint16"
+		assert array_len is None
+		elem_tname = "u16string"
+		field = f'NDR_t_u16string_ptr {elem["NAME"]}'
+	elif array_len is not None:
+		assert charset is None or (charset in ["DOS", "UTF8", "UTF16", "UNIX"])
+		try:
+			array_len = int(array_len)
+			field = f"std::array<{et}, {array_len}> {elem['NAME']}"
+		except:
+			if False and charset is not None: # TODO
+				array_elem = get_element_by_name(t, array_len)
+				value = get_property(array_elem, "value")
+				prop, elem_name = re.search('^(.*)\((.*)\)$', value).groups()
+				assert elem_name == elem['NAME']
+				if prop == 'strlen_m_term_null':
+					assert elem['TYPE'] == 'uint8'
+					field = f'NDR_t_DOS_strlen_m_term_null {elem["NAME"]}'
+				else:
+					# TODO assert prop == 'strlen_m_term_null'
+					field = f"{et} {elem['NAME']}"
+			else:
+				field = f"std::vector<{et}> {elem['NAME']}"
+	else:
+		assert charset is None or (charset in ["DOS", "UTF8", "UTF16"])
+		if elem_get_pointers(elem) == 1:
+			field = f"std::shared_ptr<{et}> {elem['NAME']}"
+		else:
+			field = f"{et} {elem['NAME']}"
+	out(f'''
+	{field};{tostring_properties(elem)}
+''')
+
+def output_header_STRUCT(idl_tbl, idl, t, out):
+	tname = gen_type_name(t)
+	union_fields = collect_nontrivial_union_fields(idl_tbl, idl, t)
+
+	out(f'''
+
+struct {tname} {{
+''')
+	if any([len(u) > 0 for _, u in union_fields]):
+		out(f'''
+	{tname}();
+	~{tname}();
+	{tname}(const {tname}& other);
+	{tname} &operator=(const {tname}& other);
+''')
+		for switch_field, _ in union_fields:
+			if get_property(switch_field, 'value') is not None:
+				continue
+			out(f'''
+	void set_{switch_field["NAME"]}({gen_type_name(switch_field["TYPE"])} v);
+''')
+
+	if not typedef_has_property(t, "nopush"):
+		out('''
+	x_ndr_off_t push(x_ndr_push_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level) const;
+''')
+	if not typedef_has_property(t, "nopull"):
+		out('''
+	x_ndr_off_t pull(x_ndr_pull_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level);
+''')
+	if not typedef_has_property(t, "noprint"): # TODO
+		#ndr_output_type = "x_ndr_output_type_default"
+		ndr_output_type = "x_ndr_output_type_struct"
+		out('''
+	x_ndr_off_t ostr(x_ndr_ostr_t &__ndr, uint32_t __flags, const char *__name, x_ndr_switch_t __level) const;
+''')
+	for elem in typedef_get_elements(t):
+		check_properties(elem, F_STRUCT)
+		if elem_is_array_len(elem, t) or elem_get_one_property(elem, 'value', 'x_length', 'x_offset', 'x_size', 'x_group_start', 'x_group_end') is not None:
+			continue
+		output_header_element(t, elem, out)
+		
+	out(f'''
+}} {typedef_tostring_properties(t)};
+
+''')
+	if not typedef_has_property(t, "noprint"):
+		out(f'''
+template <> struct x_ndr_traits_t<{tname}> {{
+	typedef {ndr_output_type} ndr_output_type;
+}};
+
+''')
+
+
+def get_case_str(elem):
+	case_value = get_property(elem, 'case')
+	if case_value is not None:
+		return f'case {case_value}'
+	else:
+		assert has_property(elem, 'default')
+		return 'default'
+
+def field_is_switch(f, union_fields):
+	for uf, unions in union_fields:
+		if uf["NAME"] == f["NAME"]:
+			return len(unions) > 0
+	else:
+		return False
+
+
+def field_type(elem):
+	t = gen_type_name(elem['TYPE'])
+	array_len = get_array_len(elem)
+	charset = get_property(elem, "charset")
+	string = get_property(elem, "string")
+	if charset == "UTF16" and string == "1" and elem_get_pointers(elem) == 1:
+		assert array_len is None
+		assert elem['TYPE'] == "uint16"
+		assert array_len is None
+		elem_tname = "u16string"
+		return 'u16string_ptr'
+	elif array_len is not None:
+		assert charset is None or (charset == "DOS" and isinstance(charset, str))
+		try:
+			array_len = int(array_len)
+			return f"std::array<{t}, {array_len}>"
+		except:
+			if charset is not None:
+				assert False
+				array_elem = get_element_by_name(tdata, array_len)
+				value = get_property(array_elem, "value")
+				prop, elem_name = re.search('^(.*)\((.*)\)$', value).groups()
+				assert elem_name == elem['NAME']
+				assert prop == 'strlen_m_term_null'
+				if prop == 'strlen_m_term_null':
+					assert elem['TYPE'] == 'uint8'
+					field = f'NDR_t_DOS_strlen_m_term_null {elem["NAME"]}'
+			else:
+				return f"std::vector<{t}>"
+	else:
+		assert charset is None or (charset == "DOS" and isinstance(charset, str))
+		return t
+	assert False
+
+
+def get_ndr_flags(elem):
+	ndr_flags = get_property(elem, "flag")
+	if ndr_flags is not None:
+		return f'x_ndr_set_flags(__flags, {ndr_flags})'
+	else:
+		return '__flags'
+
+def output_ndrcxx_struct_element(idl_tbl, idl, t, name, func, alignment, union_fields, out):
+	elems = typedef_get_elements(t)
+
+	out(f'''
+	X_NDR_HEADER_ALIGN({alignment}, __ndr, __bpos, __epos, __flags);
+	x_ndr_off_t __base = __bpos; (void)__base;
+	x_ndr_off_t __ptr; (void)__ptr;
+''')
+	
+	for eidx, elem in enumerate(elems):
+		if func == 'pull':
+			pull_value = get_property(elem, 'x_pull_value')
+			if pull_value is not None:
+				if field_is_switch(elem, union_fields):
+					out(f'''
+	set_{elem["NAME"]}({pull_value});''')
+				else:
+					out(f'''
+	{elem["NAME"]} = {pull_value};''')
+				continue
+				
+		if elem_get_one_property(elem, 'x_relative', 'ignore'):
+			continue
+
+		ndr_flags = get_ndr_flags(elem)
+		prop = elem_get_one_property(elem, 'x_length', 'x_size', 'x_offset')
+		if prop is not None:
+			assert elem['TYPE'] in ['uint16', 'uint32']
+			assert not elem_exist_any_property(elem, 'value', 'switch_is')
+			if func == 'push':
+				out(f'''
+	X_NDR_ALIGN(sizeof({elem['TYPE']}), __ndr, __bpos, __epos, {ndr_flags});
+	x_ndr_off_t __tmp_{eidx} = __bpos;
+	X_NDR_RESERVE(sizeof({elem['TYPE']}), __ndr, __bpos, __epos, __flags);
+''')
+			else:
+				out(f'''
+	{elem['TYPE']} {elem['NAME']};
+	X_NDR_DATA({elem['NAME']}, __ndr, __bpos, __epos, {ndr_flags}, X_NDR_SWITCH_NONE);
+''')
+				if prop[0] == 'x_size':
+					out(f'''
+	X_NDR_SET_EPOS({elem['NAME']}, __base, __bpos, __epos);
+''')
+			continue
+
+		for _ in elem_get_refer(elem, elems, func):
+			out(f'''
+	__ptr = __bpos;
+''')
+			break
+
+		epos = '__epos'
+		if func == 'pull':
+			for oidx, oprop, oe in elem_get_refer(elem, elems, func):
+				assert oprop == 'x_length'
+				epos = f'X_NDR_ELEM_EPOS({oe["NAME"]}, __base, __bpos, __epos)';
+
+		value = get_property(elem, 'value')
+		if value is not None:
+			if func == 'push':
+				out(f'''
+	{field_type(elem)} {elem["NAME"]}{{{value}}};
+''')
+			elif func == 'pull':
+				out(f'''
+	{field_type(elem)} {elem["NAME"]};
+''')
+			
+		switch_is = get_property(elem, 'switch_is', "X_NDR_SWITCH_NONE")
+		assert isinstance(switch_is, str)
+
+		melem = elem_is_array_len(elem, t)
+		etname = gen_type_name(elem['TYPE'])
+		if melem is not None:
+			prop_range = get_property(elem, "range")
+			if prop_range is not None:
+				prop_range = prop_range.split(',')
+				assert len(prop_range) == 2
+				prop_range = [ int(x, 0) for x in prop_range ]
+			if func == "push":
+				if prop_range:
+					out(f'''
+	X_NDR_CHECK_RANGE(get_size({melem["NAME"]}), {prop_range[0]}, {prop_range[1]});
+''')
+				out(f'''
+	X_NDR_DATA({elem["TYPE"]}(get_size({melem["NAME"]})), __ndr, __bpos, __epos, {ndr_flags}, {switch_is});
+''')
+			elif func == "pull":
+				out(f'''
+	{etname} {elem["NAME"]};
+	X_NDR_DATA({elem["NAME"]}, __ndr, __bpos, {epos}, {ndr_flags}, {switch_is});
+''')
+				if prop_range: out(f'''
+	X_NDR_CHECK_RANGE({elem["NAME"]}, {prop_range[0]}, {prop_range[1]});
+''')
+				if False: out(f'''
+	{melem["NAME"]}.resize({elem["NAME"]});
+''')
+		elif func == "pull" and 'ARRAY_LEN' in elem:
+			array_elem = elem_get_array_elem(elem, t)
+			if array_elem is not None:
+				out(f'''
+	X_NDR_DATA({elem["NAME"]}, __ndr, __bpos, {epos}, {ndr_flags}, {switch_is}, {array_elem["NAME"]});
+''')
+			else:
+				out(f'''
+	X_NDR_DATA({elem['NAME']}, __ndr, __bpos, {epos}, {ndr_flags}, {switch_is});
+''')
+		elif False and 'ARRAY_LEN' in elem and get_property(elem, "charset") is None:
+			out(f'''
+	ret += X_NDR_DO(ndr, {elem['NAME']}, {extra_flags}, {switch_is});
+''')
+		else:
+			if func == "pull" and field_is_switch(elem, union_fields):
+				out(f'''
+	X_NDR_SWITCH({etname}, {elem['NAME']}, __ndr, __bpos, {epos}, {ndr_flags}, {switch_is});
+''')
+			else:
+				out(f'''
+	X_NDR_DATA({elem['NAME']}, __ndr, __bpos, {epos}, {ndr_flags}, {switch_is});
+''')
+
+		if func == 'push':
+			for oidx, oprop, oe in elem_get_refer(elem, elems, func):
+				assert oprop == 'x_length'
+				out(f'''
+	X_NDR_FILL({oe['TYPE']}(__bpos - __ptr), __ndr, __tmp_{oidx}, __epos, {get_ndr_flags(oe)});
+''')
+
+	out(f'''
+	X_NDR_TRAILER_ALIGN({alignment}, __ndr, __bpos, __epos, __flags);
+''')
+
+	if True:
+		for elem in typedef_get_elements(t):
+			x_relative = get_property(elem, "x_relative")
+			if x_relative is None:
+				continue
+			switch_is = get_property(elem, 'switch_is', "X_NDR_SWITCH_NONE")
+			ndr_flags = get_ndr_flags(elem)
+			assert isinstance(switch_is, str)
+
+
+			if func == 'push':
+				out(f'''
+	__ptr = __bpos;''')
+				if not elem_get_pointers(elem):
+					out(f'''
+	X_NDR_DATA({elem["NAME"]}, __ndr, __bpos, __epos, {ndr_flags}, {switch_is});''')
+				else:
+					out(f'''
+	X_NDR_PUSH_PTR(__ptr, __base, {elem["NAME"]}, __ndr, __bpos, __epos, {ndr_flags}, {switch_is});''')
+				for oidx, oprop, oe in elem_get_refer(elem, elems, func):
+					if oprop == 'x_length':
+						out(f'''
+	X_NDR_FILL({oe['TYPE']}(__bpos - __ptr), __ndr, __tmp_{oidx}, __epos, {get_ndr_flags(oe)});''')
+					elif oprop == 'x_offset':
+						out(f'''
+	X_NDR_FILL({oe['TYPE']}(__ptr - __base), __ndr, __tmp_{oidx}, __epos, {get_ndr_flags(oe)});''')
+					else:
+						assert False
+			else:
+				length_idx, offset_idx = None, None
+				length_elem, offset_elem = None, None
+				for oidx, oprop, oe in elem_get_refer(elem, elems, func):
+					if oprop == 'x_offset':
+						offset_idx, offset_elem = oidx, oe
+					elif oprop == 'x_length':
+						length_idx, length_elem = oidx, oe
+					else:
+						assert False
+
+				assert offset_idx is not None
+				#epos = '__epos'
+				#	epos = f'X_NDR_ELEM_EPOS({length_elem["NAME"]}, __base, __tmp_off_{offset_idx}, __epos)' 
+				if length_elem is not None:
+					if not elem_get_pointers(elem):
+						out(f'''
+	X_NDR_PULL_RELATIVE_LENGTH({length_elem["NAME"]}, {offset_elem["NAME"]}, __base, {elem["NAME"]}, __ndr, __bpos, __epos, {ndr_flags}, {switch_is});
+	// x_ndr_off_t __tmp_off_{offset_idx} = __base + {offset_elem["NAME"]};
+	// X_NDR_DATA({elem["NAME"]}, __ndr, __tmp_off_{offset_idx}, {epos}, {ndr_flags}, {switch_is});
+	// __bpos = std::max(__bpos, __tmp_off_{offset_idx});
+''')
+					else:
+						out(f'''
+	X_NDR_PULL_PTR_LENGTH({length_elem["NAME"]}, {offset_elem["NAME"]}, __base, {elem["NAME"]}, __ndr, __bpos, __epos, {ndr_flags}, {switch_is});
+''')
+				else:
+					if not elem_get_pointers(elem):
+						out(f'''
+	X_NDR_PULL_RELATE({offset_elem["NAME"]}, __base, {elem["NAME"]}, __ndr, __bpos, __epos, {ndr_flags}, {switch_is});
+''')
+					else:
+						out(f'''
+	X_NDR_PULL_PTR({offset_elem["NAME"]}, __base, {elem["NAME"]}, __ndr, __bpos, __epos, {ndr_flags}, {switch_is});
+''')
+
+	if True:
+		for idx, elem in enumerate(elems):
+			prop = elem_get_one_property(elem, 'x_size')
+			if prop is None:
+				continue
+			assert elem['TYPE'] in ['uint16', 'uint32']
+			if func == 'push':
+				out(f'''
+	X_NDR_FILL({elem['TYPE']}(__bpos - __base), __ndr, __tmp_{idx}, __epos, {get_ndr_flags(elem)});
+''')
+
+
+
+def output_ndrcxx_STRUCT(idl_tbl, idl, t, out):
+	ndr_name = gen_type_name(t)
+	flag = typedef_get_property(t, 'flag')
+	alignment = get_align(idl_tbl, t)
+	union_fields = collect_nontrivial_union_fields(idl_tbl, idl, t)
+	if any([len(u) > 0 for _, u in union_fields]):
+		output_struct_functions(idl, ndr_name, union_fields, out)
+
+	if not typedef_get_property(t, "nopush"):
+		out(f'''
+
+x_ndr_off_t {ndr_name}::push(x_ndr_push_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level) const
+{{
+''')
+		if flag is not None: out(f'''
+	__flags = x_ndr_set_flags(__flags, {flag});
+''')
+		output_ndrcxx_struct_element(idl_tbl, idl, t, ndr_name, 'push', alignment, union_fields, out)
+		out(f'''
+	return __bpos;
+}}
+
+''')
+
+	if not typedef_get_property(t, "nopull"):
+		out(f'''
+
+x_ndr_off_t {ndr_name}::pull(x_ndr_pull_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level)
+{{
+''')
+		if flag is not None: out(f'''
+	__flags = x_ndr_set_flags(__flags, {flag});
+''')
+		output_ndrcxx_struct_element(idl_tbl, idl, t, ndr_name, 'pull', alignment, union_fields, out)
+		out(f'''
+	return __bpos;
+}}''')
+	if False and not typedef_has_property(t, "noprint"): # TODO
+		out(f'''
+x_ndr_off_t {ndr_name}::ostr(x_ndr_ostr_t &ndr, uint32_t flags, const char *name, x_ndr_switch_t level) const
+{{
+	x_ndr_off_t ret = 0;
+	ndr_output(ndr, flags, name, "{t["NAME"]}", 0);
+	ndr.enter();''')
+		for elem in typedef_get_elements(t):
+			if elem_is_array_len(elem, t) is not None:
+				continue
+			out(f'''
+	ndr_output(ndr, flags, "{elem["NAME"]}", {elem["NAME"]}, {get_property(elem, "switch_is", "0")});
+''')
+		out(f'''
+	ndr.leave();
+	return ret;
+}}
+
+
+''')
+
+def output_ndrcxx_union_element(idl_tbl, idl, t, name, func, out):
+	alignment = get_align(idl_tbl, t)
+	out(f'''
+	X_NDR_UNION_ALIGN({alignment}, __ndr, __bpos, __epos, __flags);
+	switch (__level) {{
+''')
+	for elem in typedef_get_elements(t):
+		etname = gen_type_name(elem['TYPE'])
+		out(f'''
+		{get_case_str(elem)}: {{''')
+		if elem['NAME'] != '': out(f'''
+			X_NDR_DATA({elem['NAME']}, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);''')
+		out(f'''
+		}} break;
+''')
+	out('''
+	}
+''')
+
+def output_ndrcxx_UNION(idl_tbl, idl, t, out):
+	ndr_name = gen_type_name(t)
+	tdata = t['DATA']
+	if not is_trivial(idl_tbl, t):
+		out(f'''
+
+void {ndr_name}::__init(x_ndr_switch_t __level)
+{{
+	switch (__level) {{''')
+		for elem in typedef_get_elements(t):
+			case_str = get_case_str(elem)
+			if len(elem["NAME"]) > 0:
+				in_case_str = f' construct({elem["NAME"]});'
+			else:
+				in_case_str = ''
+			out(f'''
+		{case_str}:{in_case_str} break;''')
+		out(f'''
+	}}
+}}
+
+void {ndr_name}::__init(x_ndr_switch_t __level, const {ndr_name} &other)
+{{
+	switch (__level) {{''')
+		for elem in typedef_get_elements(t):
+			case_str = get_case_str(elem)
+			if len(elem["NAME"]) > 0:
+				in_case_str = f' construct({elem["NAME"]}, other.{elem["NAME"]});'
+			else:
+				in_case_str = ''
+			out(f'''
+		{case_str}:{in_case_str} break;''')
+		out(f'''
+	}}
+}}
+
+void {ndr_name}::__uninit(x_ndr_switch_t __level)
+{{
+	switch (__level) {{''')
+		for elem in typedef_get_elements(t):
+			case_str = get_case_str(elem)
+			if len(elem["NAME"]) > 0:
+				in_case_str = f' destruct({elem["NAME"]});'
+			else:
+				in_case_str = ''
+			out(f'''
+		{case_str}:{in_case_str} break;''')
+		out(f'''
+	}}
+}}
+''')
+
+	flags = typedef_get_property(t, 'flags')
+	if not typedef_get_property(t, "nopush"):
+		out(f'''
+
+x_ndr_off_t {ndr_name}::push(x_ndr_push_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level) const
+{{
+''')
+		if flags is not None:
+			out(f'''
+	x_ndr_set_flags(__flags, {flags});
+''')
+		output_ndrcxx_union_element(idl_tbl, idl, t, ndr_name, "push", out)
+		out(f'''
+	return __bpos;
+}}
+
+''')
+	if not typedef_get_property(t, "nopull"):
+		out(f'''
+x_ndr_off_t {ndr_name}::pull(x_ndr_pull_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level)
+{{
+''')
+		if flags is not None:
+			out(f'''
+	x_ndr_set_flags(__flags, {flags});
+''')
+		output_ndrcxx_union_element(idl_tbl, idl, t, ndr_name, "pull", out)
+		out(f'''
+	return __bpos;
+}}
+
+''')
+	if False and not has_property(tdata, "noprint"): # TODO
+		out(f'''
+x_ndr_off_t {ndr_name}::ostr(x_ndr_ostr_t &ndr, uint32_t flags, const char *name, x_ndr_switch_t level) const
+{{
+	x_ndr_off_t ret = 0;
+	ndr_output(ndr, flags, name, "{t["NAME"]}", 0);
+	ndr.enter();
+	switch (level) {{
+''')
+		for elem in tdata['ELEMENTS']:
+			etname = gen_type_name(elem['TYPE'])
+			if elem['NAME'] == '':
+				continue
+			out(f'''
+		{get_case_str(elem)}: {{
+			ndr_output(ndr, flags, "{elem["NAME"]}", {elem["NAME"]}, 0);
+		}} break;
+''')
+		out(f'''
+	}}
+	ndr.leave();
+	return ret;
+}}
+
+
+''')
+
+
+def output_struct_functions(idl, ndr_name, union_fields, out):
+	for field, unions in union_fields:
+		if len(unions) == 0:
+			continue
+		out(f'''
+void {ndr_name}::set_{field["NAME"]}({gen_type_name(field["TYPE"])} v)
+{{''')
+		for ue, ut in unions:
+			switch_is = get_property(ue, "switch_is")
+			ref = '->' if elem_get_pointers(ue) else '.'
+			out(f'''
+	{ue["NAME"]}{ref}__uninit(x_ndr_switch_t({switch_is}));''')
+		out(f'''
+	{field["NAME"]} = v;''')
+		for ue, ut in unions:
+			switch_is = get_property(ue, "switch_is")
+			out(f'''
+	{ue["NAME"]}{ref}__init(x_ndr_switch_t({switch_is}));''')
+		out(f'''
+}}''')
+
+	out(f'''
+{ndr_name}::{ndr_name}()''')
+	sep = ':'
+	for field, unions in union_fields:
+		if len(unions) == 0:
+			continue
+		first_case, case_elem = get_first_case(unions[0][1])
+		out(f'''	{sep} {field["NAME"]}(({gen_type_name(field["TYPE"])}){first_case})''')
+		sep = ','
+	out('{')
+	for field, unions in union_fields:
+		if len(unions) == 0:
+			continue
+		for ue, ut in unions:
+			switch_is = get_property(ue, "switch_is")
+			ref = '->' if elem_get_pointers(ue) else '.'
+			out(f'''
+	{ue["NAME"]}{ref}__init(x_ndr_switch_t({switch_is}));''')
+	out(f'''
+}}
+
+{ndr_name}::~{ndr_name}()
+{{''')
+	for field, unions in union_fields:
+		for ue, ut in unions:
+			switch_is = get_property(ue, "switch_is")
+			ref = '->' if elem_get_pointers(ue) else '.'
+			out(f'''
+	{ue["NAME"]}{ref}__uninit({switch_is});''')
+	out(f'''
+}}
+
+''')
+
+	out(f'''
+{ndr_name}::{ndr_name}(const {ndr_name} &other)''')
+	sep = ':'
+	for field, unions in union_fields:
+		out(f'''	{sep} {field["NAME"]}(other.{field["NAME"]})''')
+		sep = ','
+	out('{')		
+	for field, unions in union_fields:
+		if len(unions) == 0:
+			continue
+		for ue, ut in unions:
+			switch_is = get_property(ue, "switch_is")
+			ref, deref = ('->', '*') if elem_get_pointers(ue) else ('.', '')
+			out(f'''
+	{ue["NAME"]}{ref}__init(x_ndr_switch_t({switch_is}), {deref}other.{ue["NAME"]});''')
+		out(f'''
+}}
+
+{ndr_name} &{ndr_name}::operator=(const {ndr_name} &other)
+{{''')
+	for field, unions in union_fields:
+		if len(unions) == 0:
+			out(f'''
+	{field["NAME"]} = other.{field["NAME"]};''')
+			continue
+		for ue, ut in unions:
+			switch_is = get_property(ue, "switch_is")
+			ref = '->' if elem_get_pointers(ue) else '.'
+			out(f'''
+	{ue["NAME"]}{ref}__uninit(x_ndr_switch_t({switch_is}));''')
+		out(f'''
+	{field["NAME"]} = other.{field["NAME"]};''')
+		for ue, ut in unions:
+			switch_is = get_property(ue, "switch_is")
+			ref, deref = ('->', '*') if elem_get_pointers(ue) else ('.', '')
+			out(f'''
+	{ue["NAME"]}{ref}__init(x_ndr_switch_t({switch_is}), {deref}other.{ue["NAME"]});''')
+	out(f'''
+	return *this;
+}}''')
+
+
+def output_header_UNION(idl_tbl, idl, t, out):
+	tname = gen_type_name(t)
+	out(f'''
+
+union {tname}
+{{
+	x_ndr_off_t push(x_ndr_push_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level) const;
+	x_ndr_off_t pull(x_ndr_pull_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level);
+	x_ndr_off_t ostr(x_ndr_ostr_t &__ndr, uint32_t __flags, const char *__name, x_ndr_switch_t __level) const;
+''')
+	if not is_trivial(idl_tbl, t):
+		out(f'''
+	{tname}() {{ }}
+	~{tname}() {{ }}
+	void __init(x_ndr_switch_t __level);
+	void __init(x_ndr_switch_t __level, const {tname} &__other);
+	void __uninit(x_ndr_switch_t __level);
+''')
+	# union member may has same name
+	fields = { }
+	for elem in typedef_get_elements(t):
+		check_properties(elem, F_UNION)
+		fname = elem['NAME']
+		if fname == '':
+			continue
+		try:
+			prev = fields[fname]
+			assert prev['TYPE'] == elem['TYPE']
+		except KeyError:
+			output_header_element(t, elem, out)
+			fields[fname] = { 'TYPE': elem['TYPE'] } 
+	out(f'''
+}} {typedef_tostring_properties(t)};
+
+template <> struct x_ndr_traits_t<{tname}> {{
+	typedef x_ndr_output_type_union ndr_output_type;
+}};
+
+''')
+
+def output_header_ENUM(idl_tbl, idl, t, out):
+	tname = gen_type_name(t)
+	elements = typedef_get_elements(t)
+	etype, fname = map_enum_type(t)
+	out(f'''
+
+enum {tname} : {etype}_t {{
+''')
+	for elem in elements:
+		out(f'''
+	{elem},
+''')
+		#out(re.sub(r'^(.*)=(.*)$', r'\1=\2,', elem))
+	out(f'''
+}}{typedef_tostring_properties(t)};
+
+template <> struct x_ndr_traits_t<{tname}> {{
+	typedef x_ndr_output_type_enum ndr_output_type;
+	static const std::array<std::pair<{tname}, const char *>, {len(elements)}> value_name_map;
+}};
+
+template <> inline x_ndr_off_t x_ndr_data<{tname}>(const {tname} &__val, x_ndr_push_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level)
+{{
+	X_ASSERT(__level == X_NDR_SWITCH_NONE);
+	return x_ndr_push_{fname}(__val, __ndr, __bpos, __epos, __flags);
+}}
+
+template <> inline x_ndr_off_t x_ndr_data<{tname}>({tname} &__val, x_ndr_pull_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level)
+{{
+	{etype}_t v;
+	X_NDR_DATA(v, __ndr, __bpos, __epos, __flags, __level);
+	__val = {tname}(v);
+	return __bpos;
+}}
+
+''')
+
+def output_ndrcxx_ENUM(idl_tbl, idl, t, out):
+	tname = gen_type_name(t)
+	tdata = t['DATA']
+	if not "ELEMENTS" in tdata:
+		return
+	out(f'''
+const std::array<std::pair<{tname}, const char *>, {len(tdata["ELEMENTS"])}> x_ndr_traits_t<{tname}>::value_name_map = {{ {{
+''')
+	for elem in tdata["ELEMENTS"]:
+		ev = elem.split('=')[0]
+		out(f'''
+	{{ {ev}, "{ev}" }},
+''')
+	out('''
+} };
+
+
+''')
+		
+def output_header_BITMAP(idl_tbl, idl, t, out):
+	tname = gen_type_name(t)
+	etype, fname = map_bitmap_type(t)
+	elements = typedef_get_elements(t)
+	out(f'''
+
+enum {tname} : {etype}_t {{
+''')
+	for elem in elements:
+		statement = re.sub(r'^([^ ]+) *\( *([^ ]+) *\)$', r'\1=\2,', elem)
+		out(f'''
+	{statement}
+''')
+	out(f'''
+}}{typedef_tostring_properties(t)};
+
+template <> struct x_ndr_traits_t<{tname}> {{
+	typedef x_ndr_output_type_bitmap ndr_output_type;
+	static const std::array<std::pair<{tname}, const char *>, {len(elements)}> value_name_map;
+}};
+
+template <> inline x_ndr_off_t x_ndr_data<{tname}>(const {tname} &__val, x_ndr_push_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level)
+{{
+	X_ASSERT(__level == X_NDR_SWITCH_NONE);
+	return x_ndr_push_{fname}(__val, __ndr, __bpos, __epos, __flags);
+}}
+
+template <> inline x_ndr_off_t x_ndr_data<{tname}>({tname} &__val, x_ndr_pull_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level)
+{{
+	{etype}_t v;
+	X_NDR_DATA(v, __ndr, __bpos, __epos, __flags, __level);
+	__val = {tname}(v);
+	return __bpos;
+}}
+
+
+''')
+
+def output_ndrcxx_BITMAP(idl_tbl, idl, t, out):
+	tname = gen_type_name(t)
+	elements = typedef_get_elements(t)
+	out(f'''
+const std::array<std::pair<{tname}, const char *>, {len(elements)}> x_ndr_traits_t<{tname}>::value_name_map = {{ {{''')
+	for elem in elements:
+		ev = re.sub(r'^([^ ]+) *\( *([^ ]+) *\)$', r'\1', elem)
+		out(f'''
+		{{ {ev}, "{ev}" }},
+''')
+	out('} };')
+
+def output_header_FUNCTION(out, idl, t):
+	return # TODO
+	if has_property(t, 'todo'):
+		return
+	assert t['RETURN_TYPE'] in [ 'WERROR', 'NTSTATUS' ]
+	in_elems, out_elems = [], []
+	for elem in t['ELEMENTS']:
+		for prop, val in elem['PROPERTIES'].items():
+			if prop == 'in':
+				assert val == '1'
+				in_elems.append(elem)
+			elif prop == 'out':
+				assert val == '1'
+				out_elems.append(elem)
+			elif prop == 'switch_is':
+				pass
+			else:
+				assert val == '1'
+				assert prop in ['ref', 'unique']
+	# TODO ignore pointers if it is not unique
+	#assert in_elem['POINTERS'] == 0
+	#union_fields = collect_union_fields(idl, in_elem)
+	out(f'''
+struct {gen_type_name(t)}
+{{
+	struct {{''')
+	for ie in in_elems:
+		assert not has_property(ie, 'unique')
+		out(f'''
+		{gen_type_name(ie["TYPE"])} {ie["NAME"]};''')
+	out(f'''
+	}} in;
+
+	struct {{''')
+	for oe in out_elems:
+		assert oe['POINTERS'] == 1
+		if has_property(oe, 'unique'):
+			out_elem_type = f'NDR_t_unique_ptr<{gen_type_name(oe["TYPE"])}>'
+		else:
+			out_elem_type = f'{gen_type_name(oe["TYPE"])}'
+		out(f'''
+		{out_elem_type} {oe["NAME"]};''')
+	out(f'''
+		{t['RETURN_TYPE']} result;
+	}} out;
+}};''')
+
+def output_header_INTERFACE(idl_tbl, idl, iface, out):
+	out(f'''
+#ifndef _HEADER_{iface["NAME"]}
+#define _HEADER_{iface["NAME"]}
+''')
+
+	for t in iface['DATA']:
+		if t['TYPE'] == 'TYPEDEF':
+			if t['NAME'] in known_structs:
+				continue
+			realtype = typedef_get_realtype(t)
+			if realtype == 'STRUCT':
+				output_header_STRUCT(idl_tbl, idl, t, out)
+			elif realtype == 'UNION':
+				output_header_UNION(idl_tbl, idl, t, out)
+			elif realtype == 'ENUM':
+				output_header_ENUM(idl_tbl, idl, t, out)
+			elif realtype == 'BITMAP':
+				output_header_BITMAP(idl_tbl, idl, t, out)
+			else:
+				error(f'''Unknown typedef "{realtype}" at {t["FILE"]}:{t["LINE"]}''')
+				assert False
+		elif t['TYPE'] == 'CONST':
+			dtype = gen_type_name(t['DTYPE'])
+			assert const_get_pointers(t) == 0
+			out(f'''
+const {dtype}{'*' if t['POINTERS'] == 1 else ''} {t['NAME']} = {t['VALUE']};
+''')
+		elif t["TYPE"] in [ "FUNCTION" ]:
+			output_header_FUNCTION(out, idl, t);
+		else:
+			error(f'''Unknown type "{t['TYPE']}" at {t['FILE']}:{t['LINE']}''')
+			assert False
+
+	out(f"#endif /* _HEADER_{iface['NAME']} */\n")
+
+def process_header(idl_tbl, idl, name, out, outdir):
+	ifacename = None
+	for o in idl:
+		if o['TYPE'] == "INTERFACE":
+			ifacename = o['NAME']
+			break
+
+	out(f'''
+/* header auto-generated by pidl */
+#ifndef _PIDL_HEADER_{ifacename}
+#define _PIDL_HEADER_{ifacename}
+#include "include/librpc/ndr.hxx"
+
+''')
+
+	for o in idl:
+		if o['TYPE'] == "IMPORT": output_header_IMPORT(o, out)
+		if o['TYPE'] == "INCLUDE": output_header_INCLUDE(o, out)
+
+	out(f'''
+namespace idl {{
+''')
+
+	for o in idl:
+		if o['TYPE'] == "CPP_QUOTE": output_header_QUOTE(o, out)
+		if o['TYPE'] == "INTERFACE": output_header_INTERFACE(idl_tbl, idl, o, out)
+			
+	out(f'''
+}} /* namespace idl */
+
+#endif /* _PIDL_HEADER_{ifacename} */
+
+''')
+
+
+def output_ndrcxx_INTERFACE(idl_tbl, idl, iface, out):
+	helper = get_property(iface, "helper")
+	if helper is not None:
+		out(f'''
+#include {helper}
+
+''')
+	out(f'''
+namespace idl {{
+''')
+	for t in iface['DATA']:
+		if t['TYPE'] == 'TYPEDEF':
+			if t['NAME'] in known_structs:
+				continue
+			realtype = t['DATA']['TYPE']
+			if realtype == 'STRUCT':
+				output_ndrcxx_STRUCT(idl_tbl, idl, t, out)
+			elif realtype == 'UNION':
+				output_ndrcxx_UNION(idl_tbl, idl, t, out)
+			elif realtype == 'ENUM':
+				output_ndrcxx_ENUM(idl_tbl, idl, t, out)
+			elif realtype == 'BITMAP':
+				output_ndrcxx_BITMAP(idl_tbl, idl, t, out)
+			else:
+				assert False
+		elif t['TYPE'] in [ "FUNCTION" ]:
+			pass
+			# TODO output_ndrcxx_FUNCTION(out, idl, t)
+		elif t['TYPE'] in [ "CONST", "FUNCTION" ]:
+			pass
+		else:
+			assert False
+
+	out(f'''
+
+}} /* namespace idl */
+''')
+
+def process_ndrcxx(idl_tbl, idl, name, out, outdir):
+	out(f'''
+/* ndr parser auto-generated by pidl */
+	
+#include "{name}.h"
+
+''')
+
+	for o in idl:
+		if o['TYPE'] == "INTERFACE": output_ndrcxx_INTERFACE(idl_tbl, idl, o, out)
+
+def process_depend(idl_tbl, idl, name, out, outdir):
+	for o in idl:
+		if o['TYPE'] != "IMPORT":
+			continue
+		for path in o['PATHS']:
+			import_name = re.sub('^"(.*)\.idl"$', r'\1', path)
+			out(f'''
+{outdir}/{name}.h: {outdir}/{import_name}.json
+{outdir}/{name}.ndr.cxx: {outdir}/{import_name}.h
+{outdir}/{name}.ndr.o: include/librpc/ndr.hxx
+''')
+
+def load_idl_with_import(infp):
+	imports = []
+	idl = json.load(infp)
+	for o in idl:
+		if o['TYPE'] != "IMPORT":
+			continue
+		for path in o['PATHS']:
+			import_name = re.sub('^"(.*)\.idl"$', r'\1', path)
+			imports.append(import_name)
+	return idl, imports
+
+def load_all(infp, name, path, recur):
+	idl_tbl = {}
+	idl, imports = load_idl_with_import(infp)
+	idl_tbl[name] = idl
+
+	while recur and imports:
+		name = imports.pop()
+		if name in idl_tbl:
+			continue
+		filename = os.path.join(path, '.'.join([name, "json"]))
+		with open(filename, 'r') as fp:
+			new_idl, new_imports = load_idl_with_import(fp)
+			idl_tbl[name] = new_idl
+			imports += new_imports
+	return idl, idl_tbl
+
+def process(infp, name, args):
+	idl, idl_tbl = load_all(infp, name, args.outputdir, args.header or args.ndrcxx)
+
+	def output(func, ext):
+		if name is None:
+			outfp = sys.stdout
+		else:
+			filename = os.path.join(args.outputdir, '.'.join([name, ext]))
+			outfp = open(filename, 'w')
+
+		try:
+			out = OStream(outfp)
+			func(idl_tbl, idl, name, out, args.outputdir)
+		except:
+			if name is not None:
+				outfp.close()
+				os.remove(filename)
+			raise
+	
+	if args.depend:
+		output(process_depend, 'd')
+	if args.header:
+		output(process_header, 'h')
+	if args.ndrcxx:
+		output(process_ndrcxx, 'ndr.cxx')
+	if args.python:
+		output(process_python, 'py.cxx')
+			
+	
+def main():
+	parser = argparse.ArgumentParser()
+	parser.add_argument("-d", "--debug", action="store_true", help="output debug info")
+	parser.add_argument("--depend", action="store_true", help="output dependency")
+	parser.add_argument("--header", action="store_true", help="output header")
+	parser.add_argument("--ndrcxx", action="store_true", help="output ndr")
+	parser.add_argument("--python", action="store_true", help="output ndr")
+	parser.add_argument("--outputdir", default=".", help="output directory")
+	parser.add_argument("input", nargs='*', help="Input IDL json files")
+
+	args = parser.parse_args()
+	args.outputdir = args.outputdir.rstrip('/')
+	if args.debug:
+		global DBG
+		print(args, file=sys.stderr)
+		DBG = _dbg_stderr
+
+	if len(args.input) == 0:
+		process(sys.stdin, None, args)
+	else:
+		for f in args.input:
+			with open(f, 'r') as fp:
+				name = os.path.splitext(os.path.basename(f))[0]
+				process(fp, name, args)
+
+	return 0
+
+if __name__ == "__main__": sys.exit(main())
+

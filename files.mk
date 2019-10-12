@@ -1,4 +1,89 @@
 
+TARGET_SET_idl := t_union \
+	ntlmssp \
+	security \
+	misc \
+
+a=\
+	epmapper \
+	atsvc \
+	audiosrv \
+	lsa \
+	samr \
+	netlogon \
+	krb5pac \
+	auth \
+	backupkey \
+	fscc \
+	bkupblobs \
+	svcctl \
+	srvsvc \
+	browser \
+	winreg \
+	clusapi \
+	dbgidl \
+	dfsblobs \
+	dfs \
+	dnsp \
+	dns \
+	dnsserver \
+	dsbackup \
+	dssetup \
+	echo \
+	efs \
+	eventlog6 \
+	eventlog \
+	file_id \
+	frsapi \
+	frsrpc \
+	frsblobs \
+	fsrvp \
+	fsrvp_state \
+	idmap \
+	initshutdown \
+	ioctl \
+	keysvc \
+	mdssvc \
+	server_id \
+	messaging \
+	mgmt \
+	msgsvc \
+	named_pipe_auth \
+	nbt \
+	nfs4acl \
+	notify \
+	ntsvcs \
+	orpc \
+	oxidresolver \
+	policyagent \
+	preg \
+	printcap \
+	rap \
+	remact \
+	rot \
+	scerpc \
+	schannel \
+	smb2_lease_struct \
+	smb_acl \
+	trkwks \
+	unixinfo \
+	w32time \
+	winbind \
+	wkssvc \
+	wmi \
+	wzcsvc \
+	xattr \
+	dcerpc \
+
+a=\
+	dcom \
+	drsuapi \
+	drsblobs \
+	frstrans \
+	ntprinting \
+	spoolss \
+	witness \
+
 SET_SRC_hx509 := \
 	ca \
 	cert \

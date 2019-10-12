@@ -26,6 +26,12 @@
 	} \
 } while (0)
 
+#ifdef __X_DEVELOPER__
+#define X_DEVEL_ASSERT X_ASSERT
+#else
+#define X_DEVEL_ASSERT(...) 
+#endif
+
 #define X_TODO X_PANIC("TODO")
 
 #define X_ASSERT_SYSCALL(call) do { \
