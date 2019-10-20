@@ -1,7 +1,9 @@
 
 #include <cassert>
 #include <cstring>
+#include <iostream>
 #include "librpc/idl/ntlmssp.h"
+#include "common.h"
 
 static const uint8_t negotiate_data[] = {
 	0x4e, 0x54, 0x4c, 0x4d, 0x53, 0x53, 0x50, 0x00,
@@ -78,23 +80,25 @@ static const uint8_t authenticate_data[] = {
 	0x5b, 0x7c, 0x54, 0x80, 0xa4, 0x9d, 0xee, 0x04,
 	0x16, 0x6b, 0xd4, 0x48, 
 };
-
+#if 0
 template <class T>
 static void verify(const uint8_t *data, size_t size, bool verify)
 {
 	T msg;
 	idl::x_ndr_off_t ret = idl::x_ndr_pull(msg, data, size);
-	assert(ret == size);
+	assert(ret == long(size));
+
+	idl::x_ndr_ostr(msg, std::cout, 8, 3);
 
 	std::vector<uint8_t> out;
 	ret = idl::x_ndr_push(msg, out);
 
 	if (verify) {
-		assert(ret == size);
+		assert(ret == long(size));
 		assert(memcmp(out.data(), data, size) == 0);
 	}
 }
-
+#endif
 static void test_ntlmssp()
 {
 	verify<idl::NEGOTIATE_MESSAGE>(negotiate_data, sizeof negotiate_data, false); // data has version, although flag does not mark

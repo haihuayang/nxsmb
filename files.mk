@@ -1,5 +1,5 @@
 
-TARGET_SET_idl := t_union \
+TARGET_SET_idl := \
 	ntlmssp \
 	security \
 	misc \

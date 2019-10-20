@@ -203,8 +203,10 @@ known_simple_types = {
         'DATA_BLOB': [4, False],
 	'dom_sid0': [4, True],
 	'dom_sid': [4, True],
+        'u16string': [4, False],
         'string': [4, False],
         'astring': [4, False],
+        'gstring': [4, False],
         'nstring': [4, False],
         'nstring_array': [4, False], #???
         'string_array': [4, False], #???
@@ -574,7 +576,7 @@ struct {tname} {{
 		#ndr_output_type = "x_ndr_output_type_default"
 		ndr_output_type = "x_ndr_output_type_struct"
 		out('''
-	x_ndr_off_t ostr(x_ndr_ostr_t &__ndr, uint32_t __flags, const char *__name, x_ndr_switch_t __level) const;
+	void ostr(x_ndr_ostr_t &__ndr, uint32_t __flags, x_ndr_switch_t __level) const;
 ''')
 	for elem in typedef_get_elements(t):
 		check_properties(elem, F_STRUCT)
@@ -589,7 +591,7 @@ struct {tname} {{
 	if not typedef_has_property(t, "noprint"):
 		out(f'''
 template <> struct x_ndr_traits_t<{tname}> {{
-	typedef {ndr_output_type} ndr_output_type;
+	using ndr_ostr_type = x_ndr_ostr_type_struct;
 }};
 
 ''')
@@ -901,22 +903,29 @@ x_ndr_off_t {ndr_name}::pull(x_ndr_pull_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_
 		out(f'''
 	return __bpos;
 }}''')
-	if False and not typedef_has_property(t, "noprint"): # TODO
+	if not typedef_has_property(t, "noprint"):
 		out(f'''
-x_ndr_off_t {ndr_name}::ostr(x_ndr_ostr_t &ndr, uint32_t flags, const char *name, x_ndr_switch_t level) const
-{{
-	x_ndr_off_t ret = 0;
-	ndr_output(ndr, flags, name, "{t["NAME"]}", 0);
-	ndr.enter();''')
-		for elem in typedef_get_elements(t):
-			if elem_is_array_len(elem, t) is not None:
-				continue
-			out(f'''
-	ndr_output(ndr, flags, "{elem["NAME"]}", {elem["NAME"]}, {get_property(elem, "switch_is", "0")});
+
+void {ndr_name}::ostr(x_ndr_ostr_t &__ndr, uint32_t __flags, x_ndr_switch_t __level) const
+{{''')
+		if flag is not None: out(f'''
+	__flags = x_ndr_set_flags(__flags, {flag});
 ''')
 		out(f'''
-	ndr.leave();
-	return ret;
+	(__ndr) << enter;''');
+		for elem in typedef_get_elements(t):
+			prop = elem_get_one_property(elem, 'x_length', 'x_size', 'x_offset', 'value')
+			if prop:
+				continue
+			if elem_is_array_len(elem, t) is not None:
+				continue
+			ndr_flags = get_ndr_flags(elem)
+			switch_is = get_property(elem, 'switch_is', "X_NDR_SWITCH_NONE")
+			out(f'''
+	X_NDR_OSTR_NEXT({elem["NAME"]}, __ndr, {ndr_flags}, {switch_is});
+''')
+		out(f'''
+	(__ndr) << leave;
 }}
 
 
@@ -1025,14 +1034,14 @@ x_ndr_off_t {ndr_name}::pull(x_ndr_pull_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_
 }}
 
 ''')
-	if False and not has_property(tdata, "noprint"): # TODO
+	if not has_property(tdata, "noprint"): # TODO
 		out(f'''
-x_ndr_off_t {ndr_name}::ostr(x_ndr_ostr_t &ndr, uint32_t flags, const char *name, x_ndr_switch_t level) const
-{{
-	x_ndr_off_t ret = 0;
-	ndr_output(ndr, flags, name, "{t["NAME"]}", 0);
-	ndr.enter();
-	switch (level) {{
+void {ndr_name}::ostr(x_ndr_ostr_t &__ndr, uint32_t __flags, x_ndr_switch_t __level) const
+{{''')
+		if flags is not None: out(f'''
+	x_ndr_set_flags(__flags, {flags});''')
+		out(f'''
+	switch (__level) {{
 ''')
 		for elem in tdata['ELEMENTS']:
 			etname = gen_type_name(elem['TYPE'])
@@ -1040,15 +1049,12 @@ x_ndr_off_t {ndr_name}::ostr(x_ndr_ostr_t &ndr, uint32_t flags, const char *name
 				continue
 			out(f'''
 		{get_case_str(elem)}: {{
-			ndr_output(ndr, flags, "{elem["NAME"]}", {elem["NAME"]}, 0);
+			X_NDR_OSTR({elem["NAME"]}, __ndr, __flags, X_NDR_SWITCH_NONE);
 		}} break;
 ''')
 		out(f'''
 	}}
-	ndr.leave();
-	return ret;
 }}
-
 
 ''')
 
@@ -1158,7 +1164,10 @@ union {tname}
 {{
 	x_ndr_off_t push(x_ndr_push_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level) const;
 	x_ndr_off_t pull(x_ndr_pull_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level);
-	x_ndr_off_t ostr(x_ndr_ostr_t &__ndr, uint32_t __flags, const char *__name, x_ndr_switch_t __level) const;
+''')
+	if not typedef_has_property(t, "noprint"): # TODO
+		out(f'''
+	void ostr(x_ndr_ostr_t &__ndr, uint32_t __flags, x_ndr_switch_t __level) const;
 ''')
 	if not is_trivial(idl_tbl, t):
 		out(f'''
@@ -1185,7 +1194,7 @@ union {tname}
 }} {typedef_tostring_properties(t)};
 
 template <> struct x_ndr_traits_t<{tname}> {{
-	typedef x_ndr_output_type_union ndr_output_type;
+	using ndr_ostr_type = x_ndr_ostr_type_union;
 }};
 
 ''')
@@ -1196,7 +1205,7 @@ def output_header_ENUM(idl_tbl, idl, t, out):
 	etype, fname = map_enum_type(t)
 	out(f'''
 
-enum {tname} : {etype}_t {{
+enum {tname} : {etype} {{
 ''')
 	for elem in elements:
 		out(f'''
@@ -1207,8 +1216,9 @@ enum {tname} : {etype}_t {{
 }}{typedef_tostring_properties(t)};
 
 template <> struct x_ndr_traits_t<{tname}> {{
-	typedef x_ndr_output_type_enum ndr_output_type;
-	static const std::array<std::pair<{tname}, const char *>, {len(elements)}> value_name_map;
+	using ndr_ostr_type = x_ndr_ostr_type_enum;
+	using ndr_base_type = {etype};
+	static const std::array<std::pair<{etype}, const char *>, {len(elements)}> value_name_map;
 }};
 
 template <> inline x_ndr_off_t x_ndr_data<{tname}>(const {tname} &__val, x_ndr_push_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level)
@@ -1229,11 +1239,12 @@ template <> inline x_ndr_off_t x_ndr_data<{tname}>({tname} &__val, x_ndr_pull_t 
 
 def output_ndrcxx_ENUM(idl_tbl, idl, t, out):
 	tname = gen_type_name(t)
+	etype, fname = map_enum_type(t)
 	tdata = t['DATA']
 	if not "ELEMENTS" in tdata:
 		return
 	out(f'''
-const std::array<std::pair<{tname}, const char *>, {len(tdata["ELEMENTS"])}> x_ndr_traits_t<{tname}>::value_name_map = {{ {{
+const std::array<std::pair<{etype}, const char *>, {len(tdata["ELEMENTS"])}> x_ndr_traits_t<{tname}>::value_name_map = {{ {{
 ''')
 	for elem in tdata["ELEMENTS"]:
 		ev = elem.split('=')[0]
@@ -1252,7 +1263,7 @@ def output_header_BITMAP(idl_tbl, idl, t, out):
 	elements = typedef_get_elements(t)
 	out(f'''
 
-enum {tname} : {etype}_t {{
+enum {tname} : {etype} {{
 ''')
 	for elem in elements:
 		statement = re.sub(r'^([^ ]+) *\( *([^ ]+) *\)$', r'\1=\2,', elem)
@@ -1263,8 +1274,9 @@ enum {tname} : {etype}_t {{
 }}{typedef_tostring_properties(t)};
 
 template <> struct x_ndr_traits_t<{tname}> {{
-	typedef x_ndr_output_type_bitmap ndr_output_type;
-	static const std::array<std::pair<{tname}, const char *>, {len(elements)}> value_name_map;
+	using ndr_ostr_type = x_ndr_ostr_type_bitmap;
+	using ndr_base_type = {etype};
+	static const std::array<std::pair<{etype}, const char *>, {len(elements)}> value_name_map;
 }};
 
 template <> inline x_ndr_off_t x_ndr_data<{tname}>(const {tname} &__val, x_ndr_push_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level)
@@ -1286,9 +1298,10 @@ template <> inline x_ndr_off_t x_ndr_data<{tname}>({tname} &__val, x_ndr_pull_t 
 
 def output_ndrcxx_BITMAP(idl_tbl, idl, t, out):
 	tname = gen_type_name(t)
+	etype, fname = map_bitmap_type(t)
 	elements = typedef_get_elements(t)
 	out(f'''
-const std::array<std::pair<{tname}, const char *>, {len(elements)}> x_ndr_traits_t<{tname}>::value_name_map = {{ {{''')
+const std::array<std::pair<{etype}, const char *>, {len(elements)}> x_ndr_traits_t<{tname}>::value_name_map = {{ {{''')
 	for elem in elements:
 		ev = re.sub(r'^([^ ]+) *\( *([^ ]+) *\)$', r'\1', elem)
 		out(f'''

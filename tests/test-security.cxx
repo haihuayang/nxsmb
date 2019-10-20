@@ -1,5 +1,5 @@
 
-#include <cassert>
+#include <assert.h>
 #include <cstring>
 #include "librpc/idl/security.h"
 #include "common.h"

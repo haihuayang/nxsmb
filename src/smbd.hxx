@@ -47,7 +47,14 @@ struct x_gensec_t
 	virtual ~x_gensec_t() { }
 	virtual NTSTATUS update(const uint8_t *in_buf, size_t in_len,
 			std::vector<uint8_t> &out) = 0;
+	virtual bool have_feature(uint32_t feature) {
+		return false; // TODO
+	}
 
+	virtual NTSTATUS check_packet(const uint8_t *data, size_t data_len,
+			const uint8_t *sig, size_t sig_len) = 0;
+	virtual NTSTATUS sign_packet(const uint8_t *data, size_t data_len,
+			std::vector<uint8_t> &sig) = 0;
 	x_gensec_context_t *context;
 };
 
@@ -98,6 +105,7 @@ struct x_msg_t
 	}
 	dlink_t dlink;
 	uint64_t mid;
+	uint16_t opcode;
 	const uint32_t nbt_hdr;
 	enum {
 		STATE_READING,

@@ -7,6 +7,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include <vector>
+#include <string>
+#include <locale>
+// #include <codecvt> TODO g++4.8.5 does not have this
 #include <arpa/inet.h>
 
 namespace idl {
@@ -137,6 +140,89 @@ x_ndr_off_t x_ndr_at(x_ndr_pull_t &ndr, string &str, uint32_t extra_flags, x_ndr
 	return 0;
 }
 #endif
+
+x_ndr_off_t u16string::push(x_ndr_push_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, x_ndr_switch_t level) const
+{
+	X_ASSERT(level == X_NDR_SWITCH_NONE);
+	x_ndr_off_t new_pos = bpos + val.size() * 2;
+	if (new_pos < 0 || new_pos > epos) {
+		return -NDR_ERR_LENGTH;
+	}
+	ndr.data.resize(new_pos);
+	memcpy(ndr.data.data() + bpos, val.data(), val.size() * 2);
+	return new_pos;
+}
+
+x_ndr_off_t u16string::pull(x_ndr_pull_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, x_ndr_switch_t level)
+{
+	X_ASSERT(level == X_NDR_SWITCH_NONE);
+	if (((epos - bpos) % 2) != 0) {
+		return -NDR_ERR_STRING;
+	}
+	val.assign((const char16_t *)(ndr.data + bpos), (const char16_t *)(ndr.data + epos));
+	return epos;
+}
+
+void u16string::ostr(x_ndr_ostr_t &ndr, uint32_t flags, x_ndr_switch_t level) const
+{
+	X_ASSERT(level == X_NDR_SWITCH_NONE);
+	// TODO
+	ndr.os << "u16string(" << val.size() << ")";
+}
+
+x_ndr_off_t sstring::push(x_ndr_push_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, x_ndr_switch_t level) const
+{
+	X_ASSERT(level == X_NDR_SWITCH_NONE);
+	x_ndr_off_t new_pos = bpos + val.size();
+	if (new_pos < 0 || new_pos > epos) {
+		return -NDR_ERR_LENGTH;
+	}
+	ndr.data.resize(new_pos);
+	memcpy(ndr.data.data() + bpos, val.data(), val.size());
+	return new_pos;
+}
+
+x_ndr_off_t sstring::pull(x_ndr_pull_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, x_ndr_switch_t level)
+{
+	X_ASSERT(level == X_NDR_SWITCH_NONE);
+	val.assign((const char *)(ndr.data + bpos), (const char *)(ndr.data + epos));
+	return epos;
+}
+
+void sstring::ostr(x_ndr_ostr_t &ndr, uint32_t flags, x_ndr_switch_t level) const
+{
+	X_ASSERT(level == X_NDR_SWITCH_NONE);
+	ndr.os << '"' << val << '"';
+}
+
+x_ndr_off_t gstring::push(x_ndr_push_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, x_ndr_switch_t level) const
+{
+	X_ASSERT((flags & LIBNDR_FLAG_STR_ASCII) == 0); //TODO
+	x_ndr_off_t new_pos = bpos + val.size() * 2;
+	if (new_pos < 0 || new_pos > epos) {
+		return -NDR_ERR_LENGTH;
+	}
+	ndr.data.resize(new_pos);
+	memcpy(ndr.data.data() + bpos, val.data(), val.size() * 2);
+	return new_pos;
+}
+
+x_ndr_off_t gstring::pull(x_ndr_pull_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, x_ndr_switch_t level)
+{
+	X_ASSERT((flags & LIBNDR_FLAG_STR_ASCII) == 0); // TODO
+	if (((epos - bpos) % 2) != 0) {
+		return -NDR_ERR_STRING;
+	}
+	val.assign((const char16_t *)(ndr.data + bpos), (const char16_t *)(ndr.data + epos));
+	return epos;
+}
+
+void gstring::ostr(x_ndr_ostr_t &ndr, uint32_t flags, x_ndr_switch_t level) const
+{
+	X_ASSERT(level == X_NDR_SWITCH_NONE);
+	ndr.os << '"' << "gstring TODO" << '"';
+}
+
 x_ndr_off_t nstring::push(x_ndr_push_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, x_ndr_switch_t level) const
 {
 	X_ASSERT(false);
@@ -161,28 +247,17 @@ x_ndr_off_t nstring_array::pull(x_ndr_pull_t &ndr, x_ndr_off_t bpos, x_ndr_off_t
 	return bpos;
 }
 
-x_ndr_off_t DATA_BLOB::push(x_ndr_push_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, x_ndr_switch_t level) const
-{
-	X_ASSERT(false);
-	return bpos;
-}
-
-x_ndr_off_t DATA_BLOB::pull(x_ndr_pull_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, x_ndr_switch_t level)
-{
-	X_ASSERT(false);
-	return bpos;
-}
-
 x_ndr_off_t x_ndr_push_string(const std::string &str, x_ndr_push_t &ndr,
 		x_ndr_off_t bpos, x_ndr_off_t epos,
 		uint32_t extra_flags)
 {
-	if (bpos + str.size() > epos) {
+	x_ndr_off_t new_pos = bpos + str.size();
+	if (new_pos > epos) {
 		return -NDR_ERR_LENGTH;
 	}
-	ndr.data.resize(bpos + str.size());
+	ndr.data.resize(new_pos);
 	memcpy(ndr.data.data() + bpos, str.data(), str.size());
-	return bpos + str.size();
+	return new_pos;
 }
 
 x_ndr_off_t x_ndr_pull_string(std::string &str, x_ndr_pull_t &ndr,

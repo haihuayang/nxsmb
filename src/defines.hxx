@@ -11,6 +11,7 @@
 #include "list.hxx"
 #include <sys/epoll.h>
 #include <atomic>
+#include <string>
 
 // TODO
 #define EVENT_LOG(...) do { } while (0)
@@ -118,6 +119,7 @@ void epollmgmt_dispatch(epollmgmt_t *ep);
 uint64_t epollmgmt_monitor(epollmgmt_t *ep, unsigned int fd, uint32_t poll_events, epoll_upcall_t * upcall);
 bool epollmgmt_enable_events(epollmgmt_t *ep, uint64_t id, uint32_t events);
 
+// std::u16string u16string_from_utf8(const char *s);
 
 
 #endif /* __src__defines__hxx__ */

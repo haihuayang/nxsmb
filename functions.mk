@@ -3,6 +3,10 @@ define cfiles
 $(patsubst $(1)/%.c,%,$(wildcard $(1)/$(2)/*.c))
 endef
 
+define h_and_c
+$(1).c $(1).h
+endef
+
 define compile_et_wrap
 $(1)/$(2).c $(1)/$(2).h: samba/source4/heimdal/$(2).et
 	$(HOST_DIR_out)/bin/compile_et $$< && mv $(notdir $(2)).c $(notdir $(2)).h $(1)/$(dir $(2))

@@ -13,14 +13,18 @@ extern "C" {
 // #include "samba/auth/gensec/gensec.h"
 }
 
+#include <stdlib.h>
+#include <string.h>
+
+#undef max
+#undef min
 
 #include "smbd.hxx"
 #include <cctype>
 #include <algorithm>
-#include <stdlib.h>
-#include <string.h>
 #include "include/asn1_wrap.hxx"
-#include "librpc/gen_ndr/ntlmssp.h"
+#include "librpc/idl/ntlmssp.h"
+#include "include/utils.hxx"
 
 struct x_gensec_ntlmssp_t : x_gensec_t
 {
@@ -84,13 +88,13 @@ struct x_gensec_ntlmssp_t : x_gensec_t
 		}
 		*/
 		is_standalone = false;
-		netbios_name = lpcfg_netbios_name();
-		netbios_domain = lpcfg_workgroup();
+		netbios_name = u16string_from_utf8(lpcfg_netbios_name());
+		netbios_domain = u16string_from_utf8(lpcfg_workgroup());
 
-		dns_domain = lpcfg_dnsdomain();
-		std::string tmp_dns_name = netbios_name;
+		dns_domain = u16string_from_utf8(lpcfg_dnsdomain());
+		std::u16string tmp_dns_name = netbios_name;
 		if (dns_domain.size()) {
-			tmp_dns_name += ".";
+			tmp_dns_name += u".";
 			tmp_dns_name += dns_domain;
 		}
 
@@ -104,6 +108,14 @@ struct x_gensec_ntlmssp_t : x_gensec_t
 
 	NTSTATUS update(const uint8_t *in_buf, size_t in_len,
 			std::vector<uint8_t> &out);
+	virtual NTSTATUS check_packet(const uint8_t *data, size_t data_len,
+			const uint8_t *sig, size_t sig_len) override {
+		X_TODO;
+	}
+	virtual NTSTATUS sign_packet(const uint8_t *data, size_t data_len,
+			std::vector<uint8_t> &sig) override {
+		X_TODO;
+	}
 	enum state_position_t {
 		S_NEGOTIATE,
 		S_AUTHENTICATE,
@@ -124,7 +136,7 @@ struct x_gensec_ntlmssp_t : x_gensec_t
 
 	std::array<uint8_t, 8> chal;
 	struct timeval challenge_endtime;
-	std::string netbios_name, netbios_domain, dns_name, dns_domain;
+	std::u16string netbios_name, netbios_domain, dns_name, dns_domain;
 };
 #if 0
 const DATA_BLOB ntlmssp_version_blob(void)
@@ -162,24 +174,11 @@ const DATA_BLOB ntlmssp_version_blob(void)
 	return data_blob_const(version_buffer, ARRAY_SIZE(version_buffer));
 }
 #endif
-static inline NTSTATUS handle_negotiate(x_gensec_ntlmssp_t &gensec_ntlmssp,
-		const uint8_t *in_buf, size_t in_len, std::vector<uint8_t> &out)
+// ntlmssp_handle_neg_flags
+static NTSTATUS handle_neg_flags(x_gensec_ntlmssp_t &gensec_ntlmssp,
+		uint32_t flags, const char *name)
 {
-	idl::NEGOTIATE_MESSAGE nego_msg;
-	idl::x_ndr_pull_t ndr_pull{in_buf, in_len};
-
-	idl::x_ndr_ret_t err = x_ndr_pull(ndr_pull, nego_msg, idl::X_NDR_SCALARS|idl::X_NDR_BUFFERS, 0, 0);
-#if 0
-	struct ntlm_type1 ntlm;
-	struct ntlm_buf buf{in_len, (void *)in_buf};
-	int err = heim_ntlm_decode_type1(&buf, &ntlm);
-#endif
-	if (err) {
-		return NT_STATUS_INVALID_PARAMETER;
-	}
-	// ntlmssp_handle_neg_flags
 	uint32_t missing_flags = gensec_ntlmssp.required_flags;
-	uint32_t flags = nego_msg.NegotiateFlags;
 	if (flags & idl::NTLMSSP_NEGOTIATE_UNICODE) {
 		gensec_ntlmssp.neg_flags |= idl::NTLMSSP_NEGOTIATE_UNICODE;
 		gensec_ntlmssp.neg_flags &= ~idl::NTLMSSP_NEGOTIATE_OEM;
@@ -253,6 +252,23 @@ static inline NTSTATUS handle_negotiate(x_gensec_ntlmssp_t &gensec_ntlmssp,
 #endif
                 return status;
         }
+	return NT_STATUS_OK;
+}
+
+static inline NTSTATUS handle_negotiate(x_gensec_ntlmssp_t &gensec_ntlmssp,
+		const uint8_t *in_buf, size_t in_len, std::vector<uint8_t> &out)
+{
+	idl::NEGOTIATE_MESSAGE nego_msg;
+	idl::x_ndr_off_t ret = idl::x_ndr_pull(nego_msg, in_buf, in_len);
+
+	if (ret < 0) {
+		return NT_STATUS_INVALID_PARAMETER;
+	}
+
+	NTSTATUS status = handle_neg_flags(gensec_ntlmssp, nego_msg.NegotiateFlags, "negotiate");
+	if (!NT_STATUS_IS_OK(status)) {
+		return status;
+	}
 
 	uint32_t max_lifetime = 30 * 60;
 	struct timeval tv_now = timeval_current();
@@ -263,9 +279,9 @@ static inline NTSTATUS handle_negotiate(x_gensec_ntlmssp_t &gensec_ntlmssp,
 	gensec_ntlmssp.challenge_endtime = tv_end;
 
 	uint32_t chal_flags = gensec_ntlmssp.neg_flags;
-	std::string target_name;
+	std::u16string target_name;
 
-        if (flags & idl::NTLMSSP_REQUEST_TARGET) {
+        if (nego_msg.NegotiateFlags & idl::NTLMSSP_REQUEST_TARGET) {
                 chal_flags |= idl::NTLMSSP_NEGOTIATE_TARGET_INFO |
 			idl::NTLMSSP_REQUEST_TARGET;
                 if (gensec_ntlmssp.is_standalone) {
@@ -281,43 +297,43 @@ static inline NTSTATUS handle_negotiate(x_gensec_ntlmssp_t &gensec_ntlmssp,
 	// TODO gensec_ntlmssp.internal_chal = cryptkey;
 
 	idl::CHALLENGE_MESSAGE chal_msg;
-	idl::AV_PAIR_LIST &av_pair_list = chal_msg.TargetInfo;
+
 	if (chal_flags & idl::NTLMSSP_NEGOTIATE_TARGET_INFO) {
+		chal_msg.TargetInfo = std::make_shared<idl::AV_PAIR_LIST>();
+		auto &av_pair_list = chal_msg.TargetInfo;
 		idl::AV_PAIR pair;
 
 		pair.set_AvId(idl::MsvAvNbDomainName);
-		pair.Value.AvNbDomainName = target_name;
-		av_pair_list.pair.push_back(pair);
+		pair.Value.AvNbDomainName.val = target_name;
+		av_pair_list->pair.push_back(pair);
 
 		pair.set_AvId(idl::MsvAvNbComputerName);
-		pair.Value.AvNbComputerName = gensec_ntlmssp.netbios_name;
-		av_pair_list.pair.push_back(pair);
+		pair.Value.AvNbComputerName.val = gensec_ntlmssp.netbios_name;
+		av_pair_list->pair.push_back(pair);
 
 		pair.set_AvId(idl::MsvAvDnsDomainName);
-		pair.Value.AvDnsDomainName = gensec_ntlmssp.dns_domain;
-		av_pair_list.pair.push_back(pair);
+		pair.Value.AvDnsDomainName.val = gensec_ntlmssp.dns_domain;
+		av_pair_list->pair.push_back(pair);
 
 		pair.set_AvId(idl::MsvAvDnsComputerName);
-		pair.Value.AvDnsComputerName = gensec_ntlmssp.dns_name;
-		av_pair_list.pair.push_back(pair);
+		pair.Value.AvDnsComputerName.val = gensec_ntlmssp.dns_name;
+		av_pair_list->pair.push_back(pair);
 
 		if (gensec_ntlmssp.force_old_spnego) {
 			pair.set_AvId(idl::MsvAvTimestamp);
 			pair.Value.AvTimestamp = timeval_to_nttime(&tv_now);
-			av_pair_list.pair.push_back(pair);
+			av_pair_list->pair.push_back(pair);
 		}
 
 		pair.set_AvId(idl::MsvAvEOL);
-		av_pair_list.pair.push_back(pair);
+		av_pair_list->pair.push_back(pair);
 	}
 
-	chal_msg.TargetName = target_name;
+	chal_msg.TargetName.val = target_name;
 	chal_msg.NegotiateFlags = idl::NEGOTIATE(chal_flags);
 	chal_msg.ServerChallenge = cryptkey;
 
-	idl::x_ndr_push_t ndr_push;
-	idl::x_ndr_push(ndr_push, chal_msg, idl::X_NDR_SCALARS|idl::X_NDR_BUFFERS, 0, 0);
-	out = ndr_push.finish();
+	ret = idl::x_ndr_push(chal_msg, out);
 #if 0
 	{
                 /* Marshal the packet in the right format, be it unicode or ASCII */
@@ -369,18 +385,37 @@ static inline NTSTATUS handle_negotiate(x_gensec_ntlmssp_t &gensec_ntlmssp,
 static inline NTSTATUS handle_authenticate(x_gensec_ntlmssp_t &gensec_ntlmssp,
 		const uint8_t *in_buf, size_t in_len, std::vector<uint8_t> &out)
 {
-	idl::AUTHENTICATE_MESSAGE nego_msg;
-	idl::x_ndr_pull_t ndr_pull{in_buf, in_len};
-
-	idl::x_ndr_ret_t err = x_ndr_pull(ndr_pull, nego_msg, idl::X_NDR_SCALARS|idl::X_NDR_BUFFERS, 0, 0);
-#if 0
-	struct ntlm_type1 ntlm;
-	struct ntlm_buf buf{in_len, (void *)in_buf};
-	int err = heim_ntlm_decode_type1(&buf, &ntlm);
-#endif
-	if (err) {
+	/* TODO ntlmssp.idl, version & mic may not present,s
+	 * samba/auth/ntlmssp/ntlmssp_server.c ntlmssp_server_preauth try
+	 * long format and fail back to short format */
+	idl::AUTHENTICATE_MESSAGE msg;
+	idl::x_ndr_off_t err = x_ndr_pull(msg, in_buf, in_len);
+	if (err < 0) {
 		return NT_STATUS_INVALID_PARAMETER;
 	}
+
+	NTSTATUS status;
+	if (msg.NegotiateFlags != 0) {
+		status = handle_neg_flags(gensec_ntlmssp, msg.NegotiateFlags, "authenticate");
+		if (!NT_STATUS_IS_OK(status)){
+			return status;
+		}
+	}
+
+
+	if (msg.ntlmssp_NTLM_RESPONSE_type > 0x18) {
+		uint32_t av_flags = 0;
+		auto &v2_resp = msg.NtChallengeResponse.v2;
+		for (auto &av: v2_resp.Challenge.AvPairs.pair) {
+			if (av.AvId == idl::MsvAvEOL) {
+				break;
+			} else if (av.AvId == idl::MsvAvFlags) {
+				av_flags = av.Value.AvFlags;
+			}
+		}
+	}
+
+	X_TODO;
 	return NT_STATUS_INVALID_PARAMETER;
 }
 

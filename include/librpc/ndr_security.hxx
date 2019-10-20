@@ -7,6 +7,7 @@
 #endif
 
 #include "include/librpc/ndr.hxx"
+#include "include/librpc/ndr_misc.hxx"
 
 namespace idl {
 
@@ -23,6 +24,8 @@ x_ndr_off_t x_ndr_data<dom_sid>(
 		x_ndr_pull_t &ndr,
 		x_ndr_off_t bpos, x_ndr_off_t epos,
 		uint32_t flags, x_ndr_switch_t level);
+
+void x_ndr_ostr(const dom_sid &v, x_ndr_ostr_t &ndr, uint32_t flags, x_ndr_switch_t level);
 
 }
 

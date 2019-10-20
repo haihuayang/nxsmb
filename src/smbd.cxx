@@ -93,7 +93,7 @@ int x_smb2_reply_error(x_smbconn_t *smbconn, x_msg_t *msg,
 	x_put_le16(outhdr + SMB2_HDR_LENGTH,  SMB2_HDR_BODY);
 	x_put_le16(outhdr + SMB2_HDR_CREDIT_CHARGE,  0);
 	x_put_le32(outhdr + SMB2_HDR_STATUS, status);
-	x_put_le16(outhdr + SMB2_HDR_OPCODE, SMB2_OP_NEGPROT);
+	x_put_le16(outhdr + SMB2_HDR_OPCODE, msg->opcode);
 	x_put_le16(outhdr + SMB2_HDR_CREDIT, 1);
 	x_put_le32(outhdr + SMB2_HDR_FLAGS, SMB2_HDR_FLAG_REDIRECT);
 	x_put_le32(outhdr + SMB2_HDR_NEXT_COMMAND, 0);
@@ -107,6 +107,7 @@ int x_smb2_reply_error(x_smbconn_t *smbconn, x_msg_t *msg,
 	msg->out_len = 4 + 0x40 + 9;
 
 	msg->state = x_msg_t::STATE_COMPLETE;
+	// X_DEVEL_ASSERT(false);
 	x_smbconn_reply(smbconn, msg);
 	return 0;
 }
@@ -134,6 +135,7 @@ static int x_smbconn_process_smb2(x_smbconn_t *smbconn, x_msg_t *msg)
 	}
 
 	msg->mid = x_get_le64(in_buf + SMB2_HDR_MESSAGE_ID);
+	msg->opcode = opcode;
 	return x_smb2_op_table[opcode].op_func(smbconn, msg, in_buf, in_len);
 }
 

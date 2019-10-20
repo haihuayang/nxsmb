@@ -12,11 +12,24 @@ extern "C" {
 #include "source4/heimdal/lib/gssapi/spnego/spnego_asn1.h"
 }
 
+// TODO
+#define gensec_setting_bool(setting, mech, name, default_value) default_value
+
 struct x_gensec_spnego_t : x_gensec_t
 {
 	using x_gensec_t::x_gensec_t;
 	NTSTATUS update(const uint8_t *in_buf, size_t in_len,
 			std::vector<uint8_t> &out);
+	virtual NTSTATUS check_packet(const uint8_t *data, size_t data_len,
+			const uint8_t *sig, size_t sig_len) override {
+		X_ASSERT(false);
+		return NT_STATUS_OK;
+	}
+	virtual NTSTATUS sign_packet(const uint8_t *data, size_t data_len,
+			std::vector<uint8_t> &sig) override {
+		X_ASSERT(false);
+		return NT_STATUS_OK;
+	}
 	enum state_position_t {
 		SERVER_START,
 		CLIENT_START,
@@ -24,8 +37,14 @@ struct x_gensec_spnego_t : x_gensec_t
 		CLIENT_TARG,
 		FALLBACK,
 		DONE
-	} state_position;
+	} state_position = SERVER_START;
 
+	bool needs_mic_check = false;
+	bool needs_mic_sign = false;
+	bool done_mic_check = false;
+	bool simulate_w2k = gensec_setting_bool(gensec_security->settings,
+			"spnego", "simulate_w2k", false);
+	std::vector<uint8_t> mech_types_blob;
 	std::unique_ptr<x_gensec_t> subsec{nullptr};
 };
 
@@ -54,6 +73,7 @@ static int add_mech(MechTypeList *mechtypelist, gss_OID mech_type)
 
 X_ASN1_METHOD(NegotiationTokenWin)
 X_ASN1_METHOD(NegotiationToken)
+X_ASN1_METHOD(MechTypeList)
 X_ASN1_METHOD(GSSAPIContextToken)
 
 static int x_gensec_spnego_create_negTokenInit(x_gensec_spnego_t *gensec, std::vector<uint8_t> &out)
@@ -69,7 +89,8 @@ static int x_gensec_spnego_create_negTokenInit(x_gensec_spnego_t *gensec, std::v
 	memset(&spnego_token, 0, sizeof spnego_token);
 	spnego_token.element = NegotiationTokenWin::choice_NegotiationTokenWin_negTokenInit;
 
-	const gss_OID oids[] = { &_gss_spnego_mskrb_mechanism_oid_desc, GSS_KRB5_MECHANISM, GSS_NTLM_MECHANISM };
+	// const gss_OID oids[] = { &_gss_spnego_mskrb_mechanism_oid_desc, GSS_KRB5_MECHANISM, GSS_NTLM_MECHANISM };
+	const gss_OID oids[] = { GSS_NTLM_MECHANISM };
 
 	for (auto const oid: oids) {
 		ret = add_mech(&spnego_token.u.negTokenInit.mechTypes, oid);
@@ -103,11 +124,12 @@ static int decode_token(NegotiationToken &nt, const uint8_t *in_buf, size_t in_l
 	gss_buffer_desc input{in_len, (void *)in_buf};
 	gss_buffer_desc data;
 	int err = gss_decapsulate_token(&input, GSS_SPNEGO_MECHANISM, &data);
-	if (err) {
-		return err;
+	if (!err) {
+		in_buf = (const uint8_t *)data.value;
+		in_len = data.length;	
 	}
 
-	err = x_asn1_decode(nt, (const uint8_t *)data.value, data.length, NULL);
+	err = x_asn1_decode(nt, in_buf, in_len, NULL);
 	OM_uint32 minor_status;
 	gss_release_buffer(&minor_status, &data);
 	return err;
@@ -125,12 +147,13 @@ static bool oid_equal(const heim_oid &hoid, gss_const_OID goid)
 	return gss_oid_equal(&oid_flat, goid);
 }
 
-static x_gensec_t *match_mech_type(x_gensec_context_t *context, const NegotiationToken &nt)
+static x_gensec_t *match_mech_type(x_gensec_context_t *context, const NegTokenInit &ni, MechType *&mt_match)
 {
-	auto &mech_list = nt.u.negTokenInit.mechTypes;
+	auto &mech_list = ni.mechTypes;
 	for (unsigned int i = 0; i < mech_list.len; ++i) {
-		const MechType &mt = mech_list.val[i];
+		MechType &mt = mech_list.val[i];
 		if (oid_equal(mt, GSS_NTLM_MECHANISM)) {
+			mt_match = &mt;
 			return x_gensec_create_ntlmssp(context);
 		}
 		/* TODO
@@ -141,27 +164,117 @@ static x_gensec_t *match_mech_type(x_gensec_context_t *context, const Negotiatio
 	return nullptr;
 }
 
-static NTSTATUS spnego_update_start(x_gensec_spnego_t &spnego, const NegotiationToken &nt,
+static NTSTATUS spnego_update_start(x_gensec_spnego_t &spnego, const NegotiationToken &nt_requ,
 		std::vector<uint8_t> &out)
 {
-	if (nt.element != NegotiationToken::choice_NegotiationToken_negTokenInit) {
+	if (nt_requ.element != NegotiationToken::choice_NegotiationToken_negTokenInit) {
 		return NT_STATUS_INVALID_PARAMETER;
 	}
-	const NegTokenInit &ni = nt.u.negTokenInit;
-	x_gensec_t *subsec = match_mech_type(spnego.context, nt);
+	const NegTokenInit &ni = nt_requ.u.negTokenInit;
+	MechType *mt = NULL;
+	x_gensec_t *subsec = match_mech_type(spnego.context, ni, mt);
 	if (!subsec) {
 		return NT_STATUS_INVALID_PARAMETER;
 	}
 
+	int ret = x_asn1_encode(ni.mechTypes, spnego.mech_types_blob);
 	spnego.subsec.reset(subsec);
 	std::vector<uint8_t> subout;
 	NTSTATUS status = subsec->update((uint8_t *)ni.mechToken->data, ni.mechToken->length, subout);
 
-	NegotiationToken resp;
-	memset(&resp, 0, sizeof resp);
-	resp.element = NegotiationToken::choice_NegotiationToken_negTokenResp;
-	// resp.u.negTokenResp;
+	NegotiationToken nt_resp;
+	memset(&nt_resp, 0, sizeof nt_resp);
+	nt_resp.element = NegotiationToken::choice_NegotiationToken_negTokenResp;
 
+	NegTokenResp &nt = nt_resp.u.negTokenResp;
+	auto negResult = (status == NT_STATUS_OK) ? NegTokenResp::accept_completed : NegTokenResp::accept_incomplete;
+
+	nt.negResult = &negResult;
+	nt.supportedMech = mt;
+	heim_octet_string resp_token;
+	resp_token.data = subout.data();
+	resp_token.length = subout.size();
+	nt.responseToken = &resp_token;
+
+	spnego.state_position = x_gensec_spnego_t::SERVER_TARG;
+	ret = x_asn1_encode(nt_resp, out);
+
+	return status;
+}
+
+static NTSTATUS spnego_update_targ(x_gensec_spnego_t &spnego, const NegotiationToken &nt_requ,
+		std::vector<uint8_t> &out)
+{
+	if (nt_requ.element != NegotiationToken::choice_NegotiationToken_negTokenResp) {
+		return NT_STATUS_INVALID_PARAMETER;
+	}
+
+	assert(spnego.subsec);
+
+	const NegTokenResp &nt = nt_requ.u.negTokenResp;
+	std::vector<uint8_t> subout;
+	NTSTATUS status = spnego.subsec->update((uint8_t *)nt.responseToken->data, nt.responseToken->length, subout);
+
+	if (status != NT_STATUS_OK) {
+		return STATUS;
+	}
+	
+	bool have_sign = spnego.subsec->have_feature(GENSEC_FEATURE_SIGN);
+	if (spnego.simulate_w2k) {
+		have_sign = false;
+	}
+
+	bool new_spnego = spnego.subsec->have_feature(GENSEC_FEATURE_NEW_SPNEGO);
+	if (nt.mechListMIC) {
+		new_spnego = true;
+	}
+
+	if (have_sign && new_spnego) {
+		spnego.needs_mic_check = true;
+		spnego.needs_mic_sign = true;
+	}
+
+	if (have_sign && nt.mechListMIC) {
+		status = spnego.subsec->check_packet(
+				spnego.mech_types_blob.data(),
+				spnego.mech_types_blob.size(),
+				(const uint8_t *)nt.mechListMIC->data,
+				nt.mechListMIC->length);
+		if (!NT_STATUS_IS_OK(status)) {
+			return STATUS;
+		}
+		spnego.needs_mic_check = false;
+		spnego.done_mic_check = true;
+
+	}
+
+	std::vector<uint8_t> mech_list_mic;
+	if (spnego.needs_mic_sign) {
+		status = spnego.subsec->sign_packet(
+				spnego.mech_types_blob.data(),
+				spnego.mech_types_blob.size(),
+				mech_list_mic);
+	}
+
+	NegotiationToken nt_resp;
+	memset(&nt_resp, 0, sizeof nt_resp);
+	nt_resp.element = NegotiationToken::choice_NegotiationToken_negTokenResp;
+
+	NegTokenResp &ntr = nt_resp.u.negTokenResp;
+	auto negResult = (status == NT_STATUS_OK) ? NegTokenResp::accept_completed : NegTokenResp::accept_incomplete;
+
+	ntr.negResult = &negResult;
+	heim_octet_string resp_token, mic;
+	resp_token.data = subout.data();
+	resp_token.length = subout.size();
+	ntr.responseToken = &resp_token;
+	if (mech_list_mic.size()) {
+		mic.data = mech_list_mic.data();
+		mic.length = mech_list_mic.size();
+		ntr.mechListMIC = &mic;
+	}
+
+	int ret = x_asn1_encode(nt_resp, out);
 
 	return status;
 }
@@ -184,6 +297,15 @@ NTSTATUS x_gensec_spnego_t::update(const uint8_t *in_buf, size_t in_len,
 			X_ASSERT(err == 0);
 			return NT_STATUS_OK;
 		}
+	} else if (state_position == x_gensec_spnego_t::SERVER_TARG) {
+		NegotiationToken nt;
+		int err = decode_token(nt, in_buf, in_len);
+		if (err) {
+			return NT_STATUS_INVALID_PARAMETER;
+		}
+		NTSTATUS status = spnego_update_targ(*this, nt, out);
+		x_asn1_free(nt);
+		return status;
 	}
 
 	X_TODO;
