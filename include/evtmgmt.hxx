@@ -74,18 +74,7 @@ struct x_timer_upcall_cbs_t
 	long (*cb_time)(x_timer_t *timer);
 	void (*cb_unmanaged)(x_timer_t *timer);
 };
-#if 0
-struct x_timer_upcall_t
-{
-	long on_time() {
-		return cbs->cb_time(this);
-	}
-	void on_unmanaged() {
-		cbs->cb_unmanaged(this);
-	}
-	const x_timer_upcall_cbs_t *cbs;
-};
-#endif
+
 struct x_timer_t
 {
 	long on_time() {
@@ -96,7 +85,7 @@ struct x_timer_t
 	}
 	x_job_t job;
 	const x_timer_upcall_cbs_t *cbs;
-	unsigned long timeout;
+	x_tick_t timeout;
 };
 
 struct x_evtmgmt_t;

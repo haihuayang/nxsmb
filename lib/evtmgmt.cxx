@@ -78,7 +78,7 @@ static const x_job_ops_t timer_job_ops = {
 struct timer_comp
 {
 	bool operator()(const x_timer_t *t1, const x_timer_t *t2) const {
-		return t1->timeout > t2->timeout;
+		return x_tick_cmp(t1->timeout, t2->timeout) > 0;
 	}
 };
 
@@ -199,17 +199,6 @@ bool x_evtmgmt_enable_events(x_evtmgmt_t *ep, uint64_t id, uint32_t events)
 	return x_evtmgmt_modify_fdevents(ep, id, x_fdevents_init(0, events));
 }
 
-
-static inline unsigned long get_ms(void)
-{
-	struct timespec ts;
-	clock_gettime(CLOCK_MONOTONIC, &ts);
-	unsigned long ms = ts.tv_sec;
-	return ms * 1000 + (ts.tv_nsec / 1000000);
-	
-	// auto now_ms = std::chrono::time_point_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now());
-}
-
 static void __evtmgmt_add_timer(x_evtmgmt_t *ep, x_timer_t *timer)
 {
 	timer->job.ops = &timer_job_ops;
@@ -237,7 +226,7 @@ static x_job_t::retval_t timer_job_run(x_job_t *job)
 	if (ret == 0) {
 		return x_job_t::JOB_CONTINUE;
 	}
-	timer->timeout = get_ms() + ret;
+	timer->timeout = x_tick_add(tick_now, ret);
 	return x_job_t::JOB_DONE;
 }
 
@@ -266,7 +255,7 @@ static void post_fd_event(x_evtmgmt_t *ep, uint64_t id, uint32_t events)
 
 void x_evtmgmt_add_timer(x_evtmgmt_t *ep, x_timer_t *timer, unsigned long ms)
 {
-	timer->timeout = get_ms() + ms;
+	timer->timeout = x_tick_add(tick_now, ms);
 	__evtmgmt_add_timer(ep, timer);
 }
 
@@ -282,12 +271,12 @@ void x_evtmgmt_dispatch(x_evtmgmt_t *ep)
 		ep->timerq.push(timer);
 	}
 
-	auto now_ms = get_ms();
+	tick_now = x_tick_now();
 	long wait_ms = -1;
 	while (!ep->timerq.empty()) {
 		x_timer_t *timer = ep->timerq.top();
-		if (timer->timeout > now_ms) {
-			wait_ms = timer->timeout - now_ms;
+		wait_ms = x_tick_cmp(timer->timeout, tick_now);
+		if (wait_ms > 0) {
 			break;
 		}
 		ep->timerq.pop();
@@ -334,6 +323,7 @@ x_evtmgmt_t *x_evtmgmt_create(x_threadpool_t *tpool)
 	X_ASSERT(ret == 0);
 
 	x_evtmgmt_t *ep = new x_evtmgmt_t(tpool, epfd, timerfd);
+	tick_now = x_tick_now();
 	return ep;
 }
 

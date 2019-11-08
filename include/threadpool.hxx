@@ -11,7 +11,29 @@
 #include <atomic>
 #include <string>
 
+typedef uint64_t x_tick_t;
+
 extern __thread char task_name[8];
+extern __thread x_tick_t tick_now;
+
+static inline x_tick_t x_tick_now(void)
+{
+	struct timespec ts;
+	clock_gettime(CLOCK_MONOTONIC, &ts);
+	unsigned long ms = ts.tv_sec;
+	return ms * 1000 + (ts.tv_nsec / 1000000);
+	// auto now_ms = std::chrono::time_point_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now());
+}
+
+static inline x_tick_t x_tick_add(x_tick_t t, long delta)
+{
+	return t + delta;
+}
+
+static inline long x_tick_cmp(x_tick_t t1, x_tick_t t2)
+{
+	return t1 - t2;
+}
 
 struct x_threadpool_t;
 x_threadpool_t *x_threadpool_create(unsigned int count);

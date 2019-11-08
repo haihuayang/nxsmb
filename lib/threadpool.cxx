@@ -6,6 +6,7 @@
 #include <condition_variable>
 
 __thread char task_name[8] = "";
+__thread x_tick_t tick_now;
 
 X_DECLARE_MEMBER_TRAITS(job_dlink_traits, x_job_t, dlink)
 
@@ -48,8 +49,10 @@ static inline x_job_t *__threadpool_get(x_threadpool_t *tp)
 static void thread_func(x_threadpool_t *tpool, uint32_t no)
 {
 	snprintf(task_name, sizeof task_name, "T%03d", no);
+	tick_now = x_tick_now();
 	for (;;) {
 		x_job_t *job = __threadpool_get(tpool);
+		tick_now = x_tick_now();
 		x_job_t::retval_t status = job->ops->run(job);
 		X_DBG("%s run job %p %d", task_name, job, status);
 		if (status == x_job_t::JOB_DONE) {

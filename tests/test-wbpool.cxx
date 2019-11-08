@@ -53,13 +53,33 @@ static void get_domain_info(x_wbpool_t *wbpool, const char *dom_name)
 	x_wbpool_request(wbpool, &domain_info->wbcli);
 }
 
+static x_wbpool_t *wbpool;
+static long get_domain_info_timer_func(x_timer_t *timer)
+{
+	get_domain_info(wbpool, "HHDOM2");
+	return 3000;
+}
+
+static void get_domain_info_timer_done(x_timer_t *timer)
+{
+	X_DBG("");
+}
+
+static const x_timer_upcall_cbs_t get_domain_info_timer_cbs = {
+	get_domain_info_timer_func,
+	get_domain_info_timer_done,
+};
+
 int main()
 {
 	x_threadpool_t *tpool = x_threadpool_create(2);
 	x_evtmgmt_t *evtmgmt = x_evtmgmt_create(tpool);
-	x_wbpool_t *wbpool = x_wbpool_create(evtmgmt, 2);
+	wbpool = x_wbpool_create(evtmgmt, 2);
 
-	get_domain_info(wbpool, "HHDOM2");
+	x_timer_t timer;
+	timer.cbs = &get_domain_info_timer_cbs;
+
+	x_evtmgmt_add_timer(evtmgmt, &timer, 0);
 
 	for (;;) {
 		x_evtmgmt_dispatch(evtmgmt);
