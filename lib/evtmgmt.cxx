@@ -1,0 +1,339 @@
+
+#include "include/evtmgmt.hxx"
+#include "include/genref.hxx"
+#include <string.h>
+#include <mutex>
+#include <queue>
+#include <unistd.h>
+#include <fcntl.h>
+
+#define EVENT_LOG(...) do { } while (0)
+
+static x_job_t::retval_t epoll_job_run(x_job_t *job);
+static void epoll_job_done(x_job_t *job);
+
+static const x_job_ops_t epoll_job_ops = {
+	epoll_job_run,
+	epoll_job_done,
+};
+
+struct x_epoll_entry_t
+{
+	uint64_t init(x_epoll_upcall_t *upcall_) {
+		assert(upcall == NULL);
+		upcall = upcall_;
+		job.state = x_job_t::STATE_NONE;
+		fdevents = 0;
+		return genref.init(2);
+	}
+
+	void modify_fdevents(x_fdevents_t mod_fdevents,
+			x_fdevents_t *poval,
+			x_fdevents_t *pnval)
+	{
+		x_fdevents_t oval = fdevents.load(std::memory_order_relaxed);
+		x_fdevents_t nval;
+		for (;;) {
+			nval = oval | mod_fdevents;
+			if (std::atomic_compare_exchange_weak_explicit(
+						&fdevents,
+						&oval,
+						nval,
+						std::memory_order_release,
+						std::memory_order_relaxed)) {
+				break;
+			}
+		}
+		*poval = oval;
+		*pnval = nval;
+	}
+
+	x_fdevents_t get_fdevents() {
+		return fdevents.exchange(0);
+	}
+
+	void put() {
+		if (genref.put()) {
+			x_epoll_upcall_t *tmp_upcall = upcall;
+			upcall = NULL;
+			tmp_upcall->on_unmanaged();
+		}
+	}
+
+	x_job_t job;
+	x_genref_t genref;
+	std::atomic<x_fdevents_t> fdevents;
+
+	x_epoll_upcall_t *upcall;
+};
+
+static x_job_t::retval_t timer_job_run(x_job_t *job);
+static void timer_job_done(x_job_t *job);
+
+static const x_job_ops_t timer_job_ops = {
+	timer_job_run,
+	timer_job_done,
+};
+
+struct timer_comp
+{
+	bool operator()(const x_timer_t *t1, const x_timer_t *t2) const {
+		return t1->timeout > t2->timeout;
+	}
+};
+
+X_DECLARE_MEMBER_TRAITS(timer_dlink_traits, x_timer_t, job.dlink)
+
+struct x_evtmgmt_t
+{
+	x_evtmgmt_t(x_threadpool_t *tp, int efd, int tfd)
+		: tpool{tp}, epfd(efd), timerfd(tfd) {
+		memset(epoll_job, 0, sizeof epoll_job);
+		for (auto &entry: epoll_job) {
+			entry.job.ops = &epoll_job_ops;
+			entry.job.private_data = this;
+		}
+	}
+
+	x_epoll_entry_t *find_by_id(uint64_t id) {
+		uint32_t fd = id;
+		if (fd >= 1024) {
+			return NULL;
+		}
+		x_epoll_entry_t *entry = &epoll_job[fd];
+		return entry->genref.try_get(id & 0xffffffff00000000) ? entry : NULL;
+	}
+
+	int get_entry_fd(x_epoll_entry_t *entry) const {
+		return entry - epoll_job;
+	}
+
+	void release(x_epoll_entry_t *entry) {
+		struct epoll_event ev;
+		int fd = get_entry_fd(entry);
+
+		epoll_ctl(epfd, EPOLL_CTL_DEL, fd, &ev);
+		entry->genref.release();
+		entry->put();
+	}
+
+	x_threadpool_t * const tpool;
+	const int epfd;
+	const int timerfd;
+
+	std::priority_queue<x_timer_t *, std::vector<x_timer_t *>, timer_comp> timerq{timer_comp()};
+	std::mutex mutex; // protect unsorted_timers
+	x_tp_s2list_t<timer_dlink_traits> unsorted_timers;
+
+	x_epoll_entry_t epoll_job[1024];
+};
+
+static x_job_t::retval_t epoll_job_run(x_job_t *job)
+{
+	x_epoll_entry_t *entry = X_CONTAINER_OF(job, x_epoll_entry_t, job);
+	x_fdevents_t fdevents = entry->get_fdevents();
+	x_evtmgmt_t *evtmgmt = (x_evtmgmt_t *)entry->job.private_data;
+	X_DBG("%s %d fdevents=%llx", task_name, evtmgmt->get_entry_fd(entry), fdevents);
+	if (x_fdevents_processable(fdevents)) {
+		if (entry->upcall->on_getevents(fdevents)) {
+			evtmgmt->release(entry);
+			return x_job_t::JOB_DONE;
+		}
+	} else {
+		EVENT_LOG(epoll_job_func, spurious_wakeup);
+	}
+
+	x_fdevents_t oval, nval;
+	entry->modify_fdevents(fdevents, &oval, &nval);
+	X_DBG("%s fdevents=%llx, oval=%llx, nval=%llx", task_name, fdevents, oval, nval);
+	uint32_t ret = x_fdevents_processable(nval);
+	if (ret == 0) {
+		return x_job_t::JOB_BLOCKED;
+	} else {
+		return x_job_t::JOB_CONTINUE;
+	}
+}
+
+static void epoll_job_done(x_job_t *job)
+{
+	x_epoll_entry_t *entry = X_CONTAINER_OF(job, x_epoll_entry_t, job);
+	X_DBG("%p", entry);
+	entry->put();
+}
+
+uint64_t x_evtmgmt_monitor(x_evtmgmt_t *ep, unsigned int fd, uint32_t poll_events, x_epoll_upcall_t * upcall)
+{
+	assert(fd < 1024);
+	x_epoll_entry_t *entry = &ep->epoll_job[fd];
+	uint64_t gen = entry->init(upcall);
+
+	struct epoll_event ev;
+	ev.events = poll_events | EPOLLET;
+	ev.data.u64 = gen | fd;
+	epoll_ctl(ep->epfd, EPOLL_CTL_ADD, fd, &ev);
+	return ev.data.u64;
+}
+
+
+static bool x_evtmgmt_modify_fdevents(x_evtmgmt_t *ep, uint64_t id, x_fdevents_t fdevents)
+{
+	x_epoll_entry_t *entry = ep->find_by_id(id);
+	if (!entry) {
+		return false;
+	}
+
+	x_fdevents_t oval, nval;
+	entry->modify_fdevents(fdevents, &oval, &nval);
+
+	if (oval == nval) {
+		EVENT_LOG(post_fd_event, EEXIST);
+	} else if (x_fdevents_processable(nval)) {
+		x_threadpool_schedule(ep->tpool, &entry->job);
+	}
+	entry->put();
+	return true;
+}
+
+bool x_evtmgmt_enable_events(x_evtmgmt_t *ep, uint64_t id, uint32_t events)
+{
+	return x_evtmgmt_modify_fdevents(ep, id, x_fdevents_init(0, events));
+}
+
+
+static inline unsigned long get_ms(void)
+{
+	struct timespec ts;
+	clock_gettime(CLOCK_MONOTONIC, &ts);
+	unsigned long ms = ts.tv_sec;
+	return ms * 1000 + (ts.tv_nsec / 1000000);
+	
+	// auto now_ms = std::chrono::time_point_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now());
+}
+
+static void __evtmgmt_add_timer(x_evtmgmt_t *ep, x_timer_t *timer)
+{
+	timer->job.ops = &timer_job_ops;
+	timer->job.private_data = ep;
+	timer->job.state = x_job_t::STATE_NONE;
+	{
+		std::unique_lock<std::mutex> lock(ep->mutex);
+		ep->unsorted_timers.push_front(timer);
+	}
+
+	const uint64_t c = 1;
+	ssize_t ret = write(ep->timerfd, &c, sizeof(c));
+	X_ASSERT(ret == sizeof(c));
+}
+
+static x_job_t::retval_t timer_job_run(x_job_t *job)
+{
+	x_timer_t *timer = X_CONTAINER_OF(job, x_timer_t, job);
+	long ret = timer->on_time();
+	if (ret < 0) {
+		timer->timeout = 0;
+		return x_job_t::JOB_DONE;
+	}
+
+	if (ret == 0) {
+		return x_job_t::JOB_CONTINUE;
+	}
+	timer->timeout = get_ms() + ret;
+	return x_job_t::JOB_DONE;
+}
+
+static void timer_job_done(x_job_t *job)
+{
+	x_timer_t *timer = X_CONTAINER_OF(job, x_timer_t, job);
+	X_DBG("%p", timer);
+	x_evtmgmt_t *evtmgmt = (x_evtmgmt_t *)job->private_data;
+	if (timer->timeout != 0) {
+		__evtmgmt_add_timer(evtmgmt, timer);
+	} else {
+		timer->on_unmanaged();
+	}
+}
+
+static void post_fd_event(x_evtmgmt_t *ep, uint64_t id, uint32_t events)
+{
+	X_DBG("%s id=x%llx evt=x%x", task_name, id, events);
+	/* TODO convert POLLHUP to POLLIN, the POLLIN event may be disable ... */
+	if (events & EPOLLHUP) {
+		events &= ~EPOLLHUP;
+		events |= FDEVT_IN;
+	}
+	x_evtmgmt_modify_fdevents(ep, id, x_fdevents_init(events, 0));
+}
+
+void x_evtmgmt_add_timer(x_evtmgmt_t *ep, x_timer_t *timer, unsigned long ms)
+{
+	timer->timeout = get_ms() + ms;
+	__evtmgmt_add_timer(ep, timer);
+}
+
+void x_evtmgmt_dispatch(x_evtmgmt_t *ep)
+{
+	x_tp_s2list_t<timer_dlink_traits> unsorted_list;
+	{
+		std::unique_lock<std::mutex> lock(ep->mutex);
+		unsorted_list = std::move(ep->unsorted_timers);
+	}
+
+	for (x_timer_t *timer = unsorted_list.get_front(); timer; timer = unsorted_list.next(timer)) {
+		ep->timerq.push(timer);
+	}
+
+	auto now_ms = get_ms();
+	long wait_ms = -1;
+	while (!ep->timerq.empty()) {
+		x_timer_t *timer = ep->timerq.top();
+		if (timer->timeout > now_ms) {
+			wait_ms = timer->timeout - now_ms;
+			break;
+		}
+		ep->timerq.pop();
+		/* run timer */
+		x_threadpool_schedule(ep->tpool, &timer->job);
+	}
+
+
+	struct epoll_event ev;
+	int err = epoll_wait(ep->epfd, &ev, 1, wait_ms);
+	if (err > 0) {
+		if (ev.data.u64 == (uint64_t)ep->timerfd) {
+			uint64_t c;
+			err = read(ep->timerfd, &c, sizeof(c));
+			X_ASSERT(err == sizeof(c));
+			X_DBG("timerfd read %lu", c);
+		} else {
+			post_fd_event(ep, ev.data.u64, ev.events);
+		}
+	} else if (err < 0) {
+		X_ASSERT(errno == EINTR);
+	}
+}
+
+// copy from include/linux/eventfd.h
+#define EFD_CLOEXEC O_CLOEXEC
+#define EFD_NONBLOCK O_NONBLOCK
+
+#define SYS_eventfd2	290
+#define eventfd(count, flags) syscall(SYS_eventfd2, (count), (flags))
+	
+x_evtmgmt_t *x_evtmgmt_create(x_threadpool_t *tpool)
+{
+	int epfd = epoll_create(16);
+	X_ASSERT(epfd >= 0);
+
+	int timerfd = eventfd(0, EFD_CLOEXEC | EFD_NONBLOCK);
+	X_ASSERT(timerfd >= 0);
+
+	struct epoll_event ev;
+	ev.events = EPOLLIN | EPOLLET;
+	ev.data.u64 = timerfd;
+	int ret = epoll_ctl(epfd, EPOLL_CTL_ADD, timerfd, &ev);
+	X_ASSERT(ret == 0);
+
+	x_evtmgmt_t *ep = new x_evtmgmt_t(tpool, epfd, timerfd);
+	return ep;
+}
+

@@ -6,9 +6,11 @@
 #error "Must be c++"
 #endif
 
-#include "include/xdefines.h"
+#include "xdefines.h"
+#include <assert.h>
+#include <atomic>
 
-struct genref_t
+struct x_genref_t
 {
 	/* high 32 bit is gen, low 32 bit is refcount */
 	std::atomic<uint64_t> val{0};

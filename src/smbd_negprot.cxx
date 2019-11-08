@@ -77,7 +77,7 @@ static int x_smbconn_reply_negprot(x_smbconn_t *smbconn, x_msg_t *msg,
 	x_put_le64(outhdr + SMB2_HDR_MESSAGE_ID, msg->mid);
 
 	uint8_t *outnbt = outbuf + 4;
-	put_be32(outnbt, 0x80 + dyn_off);
+	x_put_be32(outnbt, 0x80 + dyn_off);
 
 	msg->out_buf = outbuf;
 	msg->out_off = 4;

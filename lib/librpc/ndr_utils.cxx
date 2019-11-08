@@ -64,6 +64,15 @@ std::ostream &operator<<(std::ostream &os, x_hex_t<uint8_t> v)
 	return os << buf;
 }
 
+void x_ndr_ostr_uint8_array(const uint8_t *v, x_ndr_ostr_t &ndr, uint32_t flags, x_ndr_switch_t level, size_t count)
+{
+	char buf[4];
+	for (size_t i = 0; i < count; ++i) {
+		snprintf(buf, 4, "%02x", v[i]);
+		ndr.os << buf;
+	}
+}
+
 
 x_ndr_off_t blob_t::push(x_ndr_push_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, x_ndr_switch_t level) const
 {

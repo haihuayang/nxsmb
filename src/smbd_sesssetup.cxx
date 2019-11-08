@@ -1,4 +1,5 @@
 #include "smbd.hxx"
+#include "core.hxx"
 
 enum {
 	X_SMB2_SESSSETUP_BODY_LEN = 0x18,
@@ -62,7 +63,7 @@ static int x_smb2_reply_sesssetup(x_smbconn_t *smbconn, x_smbsess_t *sess,
 	SBVAL(outhdr, SMB2_HDR_SESSION_ID, sess->id);
 
 	uint8_t *outnbt = outbuf + 4;
-	put_be32(outnbt, 0x40 + 0x8 + out_security.size());
+	x_put_be32(outnbt, 0x40 + 0x8 + out_security.size());
 
 	msg->out_buf = outbuf;
 	msg->out_off = 4;

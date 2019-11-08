@@ -914,7 +914,7 @@ void {ndr_name}::ostr(x_ndr_ostr_t &__ndr, uint32_t __flags, x_ndr_switch_t __le
 		out(f'''
 	(__ndr) << enter;''');
 		for elem in typedef_get_elements(t):
-			prop = elem_get_one_property(elem, 'x_length', 'x_size', 'x_offset', 'value')
+			prop = elem_get_one_property(elem, 'x_length', 'x_size', 'x_offset', 'value', 'noprint')
 			if prop:
 				continue
 			if elem_is_array_len(elem, t) is not None:
@@ -1045,11 +1045,11 @@ void {ndr_name}::ostr(x_ndr_ostr_t &__ndr, uint32_t __flags, x_ndr_switch_t __le
 ''')
 		for elem in tdata['ELEMENTS']:
 			etname = gen_type_name(elem['TYPE'])
-			if elem['NAME'] == '':
-				continue
 			out(f'''
-		{get_case_str(elem)}: {{
-			X_NDR_OSTR({elem["NAME"]}, __ndr, __flags, X_NDR_SWITCH_NONE);
+		{get_case_str(elem)}: {{''')
+			if elem['NAME'] != '': out(f'''
+			X_NDR_OSTR({elem["NAME"]}, __ndr, __flags, X_NDR_SWITCH_NONE);''')
+			out(f'''
 		}} break;
 ''')
 		out(f'''

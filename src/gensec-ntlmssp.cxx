@@ -402,10 +402,40 @@ static inline NTSTATUS handle_authenticate(x_gensec_ntlmssp_t &gensec_ntlmssp,
 		}
 	}
 
-
+#if 0 
+	TODO
 	if (msg.ntlmssp_NTLM_RESPONSE_type > 0x18) {
 		uint32_t av_flags = 0;
 		auto &v2_resp = msg.NtChallengeResponse.v2;
+		if (v2_resp.Challenge.AvPairs.pair.size() < gensec_ntlmssp.server_av_pair_list.size()) {
+			return NT_STATUS_INVALID_PARAMETER;
+		}
+		for (auto &av: gensec_ntlmssp.server_av_pair_list) {
+			if (av.AvId == idl::MsvAvEOL) {
+				continue;
+			}
+
+			auto cpair = av_pairs_find(v2_resp.Challenge.AvPairs.pair);
+			if (cpair == nullptr) {
+				return NT_STATUS_INVALID_PARAMETER;
+			}
+			if (av.AvId == idl::MsvAvNbComputerName) {
+				if (av.Value.AvNbComputerName != cpair->Value.AvNbComputerName) {
+					return NT_STATUS_INVALID_PARAMETER;
+				}
+			} else if (av.AvId == idl::MsvAvTimestamp) {
+				if (av.Value.AvTimestamp != cp->Value.AvTimestamp) {
+					return NT_STATUS_INVALID_PARAMETER;
+				}
+			} else {
+				/*
+				 * This can't happen as we control
+				 * ntlmssp_state->server.av_pair_list
+				 */
+				return NT_STATUS_INTERNAL_ERROR;
+			}
+		}
+
 		for (auto &av: v2_resp.Challenge.AvPairs.pair) {
 			if (av.AvId == idl::MsvAvEOL) {
 				break;
@@ -414,6 +444,28 @@ static inline NTSTATUS handle_authenticate(x_gensec_ntlmssp_t &gensec_ntlmssp,
 			}
 		}
 	}
+
+	if (now > gensec_ntlmssp.challeng_endtime) {
+		return NT_STATUS_INVALID_PARAMETER;
+	}
+
+
+        /* NTLM2 uses a 'challenge' that is made of up both the server challenge, and a
+           client challenge
+
+           However, the NTLM2 flag may still be set for the real NTLMv2 logins, be careful.
+        */
+	if (gensec_ntlmssp.neg_flags & idl::NTLMSSP_NEGOTIATE_NTLM2) {
+		if (msg.ntlmssp_NTLM_RESPONSE_type == 0x18) {
+			uint6_t session_nonce_hash[16];
+			MD5_CTX md5_session_nonce_ctx;
+			MD5Init(&md5_session_nonce_ctx);
+			MD5Update();
+			MD5Final(session_nonce_hash, &md5_session_nonce_ctx);
+		}
+	}
+#endif
+
 
 	X_TODO;
 	return NT_STATUS_INVALID_PARAMETER;

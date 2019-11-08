@@ -35,8 +35,8 @@ TARGET_SET_samba_dir := \
 TARGET_SET_dir := bin lib lib/librpc librpc/idl src tests \
 	$(TARGET_SET_samba_dir)
 
-.PHONY: all target_mkdir host_mkdir
-TARGET_SET_tests := test-ntlmssp test-security
+.PHONY: all target_mkdir host_mkdir target_samba_gen
+TARGET_SET_tests := test-timer test-ntlmssp test-security test-wbcli test-wbpool
 TARGET_SET_lib := nxsmb samba
 
 TARGET_CFLAGS_EXTRA := \
@@ -77,7 +77,7 @@ TARGET_CFLAGS_EXTRA := \
 all: $(TARGET_SET_tests:%=$(TARGET_DIR_out)/tests/%) $(TARGET_DIR_out)/bin/nxsmbd
 
 SET_src_nxsmbd := gensec-ntlmssp \
-	threadpool epollmgmt network  \
+	network  \
 	gensec gensec-spnego \
 	smbd smbd_negprot smbd_sesssetup \
 
@@ -218,14 +218,13 @@ TARGET_GEN_samba := \
 $(TARGET_DIR_out)/libsamba.a: $(TARGET_SRC_libsamba:%=$(TARGET_DIR_out)/samba/%.o) $(TARGET_GEN_libsamba:%=$(TARGET_DIR_out)/samba/%.o)
 	ar rcs $@ $^
 
-#| target_mkdir target_samba_gen
 $(TARGET_SRC_libsamba:%=$(TARGET_DIR_out)/samba/%.o): $(TARGET_DIR_out)/%.o: %.c | target_samba_gen
 	$(CC) -c $(TARGET_CFLAGS) $(TARGET_CFLAGS_EXTRA) \
 		-DBINDIR=\"/usr/bin\" -DSBINDIR=\"/usr/sbin\" \
 		-DLIBDIR=\"/usr/lib\" -DLIBEXECDIR=\"/usr/libexec\" \
 		-o $@ $<
 
-$(TARGET_GEN_libsamba:%=$(TARGET_DIR_out)/samba/%.o): %.o: %.c
+$(TARGET_GEN_libsamba:%=$(TARGET_DIR_out)/samba/%.o): %.o: %.c | target_samba_gen
 	$(CC) -c $(TARGET_CFLAGS) $(TARGET_CFLAGS_EXTRA) -o $@ $<
 
 $(TARGET_SET_tests:%=$(TARGET_DIR_out)/tests/%.o) : $(TARGET_DIR_out)/tests/%.o: tests/%.cxx | target_mkdir target_idl
@@ -242,6 +241,9 @@ TARGET_SRC_libnxsmb := \
 		lib/librpc/ndr_security \
 		lib/xutils \
 		lib/string \
+		lib/threadpool \
+		lib/evtmgmt \
+		lib/wbpool \
 
 
 $(TARGET_DIR_out)/libnxsmb.a: $(TARGET_SRC_libnxsmb:%=$(TARGET_DIR_out)/%.o) $(TARGET_SET_idl:%=$(TARGET_DIR_out)/librpc/idl/%.ndr.o)
@@ -297,6 +299,89 @@ $(TARGET_DIR_out)/samba/include/config.h: scripts/generate-config
 target_mkdir: $(TARGET_SET_dir:%=$(TARGET_DIR_out)/%)
 
 $(TARGET_SET_dir:%=$(TARGET_DIR_out)/%): %:
+	mkdir -p $@
+
+SET_asn1_compile := \
+	main \
+	gen \
+	gen_copy \
+	gen_decode \
+	gen_encode \
+	gen_free \
+	gen_glue \
+	gen_length \
+	gen_seq \
+	gen_template \
+	hash \
+	symbol \
+	lex \
+	asn1parse \
+
+SET_SRC_host_common := \
+	samba/lib/replace/replace \
+	samba/source4/heimdal/lib/vers/print_version \
+	samba/source4/heimdal_build/replace \
+	samba/source4/heimdal_build/version	
+
+HOST_CFLAGS += -g -I$(HOST_DIR_out)/include \
+	-Isamba/source4/heimdal_build \
+	-Isamba/source4/heimdal/lib/com_err \
+	-Isamba/source4/heimdal/lib/roken \
+	-I$(HOST_DIR_out)/samba/source4/heimdal/lib/asn1 \
+	-I$(HOST_DIR_out)/samba \
+	-I$(HOST_DIR_out)/samba/include \
+	-Isamba -Isamba/lib/replace -Isamba/source4 \
+	-D__STDC_WANT_LIB_EXT1__=1
+
+SET_DIR_compile_et := lib/com_err
+SET_SRC_compile_et := $(foreach d,$(SET_DIR_compile_et),$(call cfiles,samba/source4/heimdal,$(d)))
+
+SET_OBJ_SRC_compile_et := \
+	$(SET_SRC_compile_et:%=$(HOST_DIR_out)/samba/source4/heimdal/%.o) \
+	$(SET_SRC_roken:%=$(HOST_DIR_out)/samba/source4/heimdal/lib/roken/%.o) \
+	$(SET_SRC_host_common:%=$(HOST_DIR_out)/%.o) \
+
+$(HOST_DIR_out)/bin/compile_et: $(SET_OBJ_SRC_compile_et)
+	$(HOSTCC) -g -o $@ $^
+
+SET_OBJ_SRC_asn1_compile := \
+	$(SET_asn1_compile:%=$(HOST_DIR_out)/samba/source4/heimdal/lib/asn1/%.o) \
+	$(SET_SRC_roken:%=$(HOST_DIR_out)/samba/source4/heimdal/lib/roken/%.o) \
+	$(SET_SRC_host_common:%=$(HOST_DIR_out)/%.o) \
+
+$(HOST_DIR_out)/bin/asn1_compile: $(SET_OBJ_SRC_asn1_compile)
+	$(HOSTCC) -g -o $@ $^
+
+$(HOST_DIR_out)/%.o: %.c | host_mkdir
+	$(HOSTCC) -g $(HOST_CFLAGS) -o $@ -c $<
+
+HOST_SET_proto := \
+	lib/asn1/der
+
+$(SET_OBJ_SRC_asn1_compile): \
+	$(HOST_SET_proto:%=$(HOST_DIR_out)/samba/source4/heimdal/%-protos.h) \
+	$(HOST_SET_proto:%=$(HOST_DIR_out)/samba/source4/heimdal/%-private.h) \
+	$(HOST_DIR_out)/samba/include/version.h \
+	$(HOST_DIR_out)/samba/include/config.h
+
+$(HOST_DIR_out)/samba/include/version.h: ./scripts/generate-version
+	./scripts/generate-version > $@
+
+$(HOST_DIR_out)/samba/include/config.h: ./scripts/generate-config
+	./scripts/generate-config > $@
+
+$(foreach i,$(HOST_SET_proto),$(eval $(call make_proto_wrap,$(HOST_DIR_out)/samba/source4/heimdal,$(i))))
+
+HOST_SET_heimdal := lib/com_err lib/vers
+
+HOST_SET_dir := bin samba/include samba/lib/replace samba/source4/heimdal_build \
+	$(HOST_SET_heimdal:%=samba/source4/heimdal/%) \
+	samba/source4/heimdal/lib/asn1 \
+	samba/source4/heimdal/lib/roken
+
+host_mkdir: $(HOST_SET_dir:%=$(HOST_DIR_out)/%)
+
+$(HOST_SET_dir:%=$(HOST_DIR_out)/%): %:
 	mkdir -p $@
 
 .PHONY:

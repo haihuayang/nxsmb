@@ -1013,6 +1013,19 @@ inline void x_ndr_ostr(const std::vector<T> &v, x_ndr_ostr_t &ndr, uint32_t flag
 	x_ndr_ostr_array(v.data(), ndr, flags, level, v.size());
 }
 
+void x_ndr_ostr_uint8_array(const uint8_t *v, x_ndr_ostr_t &ndr, uint32_t flags, x_ndr_switch_t level, size_t count);
+
+template <size_t C>
+inline void x_ndr_ostr(const std::array<uint8_t, C> &v, x_ndr_ostr_t &ndr, uint32_t flags, x_ndr_switch_t level)
+{
+	x_ndr_ostr_uint8_array(v.data(), ndr, flags, level, C);
+}
+
+inline void x_ndr_ostr(const std::vector<uint8_t> &v, x_ndr_ostr_t &ndr, uint32_t flags, x_ndr_switch_t level)
+{
+	x_ndr_ostr_uint8_array(v.data(), ndr, flags, level, v.size());
+}
+
 template <typename T>
 inline void x_ndr_ostr(const T &t, x_ndr_ostr_t &ndr, uint32_t flags, x_ndr_switch_t level)
 {

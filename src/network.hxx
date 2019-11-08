@@ -6,7 +6,7 @@
 #error "Must be c++"
 #endif
 
-#include "defines.hxx"
+#include "smbd.hxx"
 #include <sys/socket.h>
 #include <sys/ioctl.h>
 

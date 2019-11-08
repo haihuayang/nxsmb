@@ -1,5 +1,5 @@
 
-#include "defines.hxx"
+#include "smbd.hxx"
 #include <atomic>
 #include <memory>
 #include <errno.h>
@@ -11,8 +11,6 @@
 #include <stdlib.h>
 #include <stdio.h>
 
-#include "smbd.hxx"
-#include "genref.hxx"
 // #include "smb_consts.h"
 #include "smbconf.hxx"
 #include "nttime.hxx"
@@ -30,8 +28,9 @@ enum {
 
 static struct {
 	bool do_async = false;
-	threadpool_t *tpool;
-	epollmgmt_t *epmgmt;
+	x_threadpool_t *tpool;
+	x_evtmgmt_t *evtmgmt;
+	x_wbpool_t *wbpool;
 } globals;
 
 
@@ -39,7 +38,7 @@ static void main_loop()
 {
 	snprintf(task_name, sizeof task_name, "MAIN");
 	for (;;) {
-		epollmgmt_dispatch(globals.epmgmt);
+		x_evtmgmt_dispatch(globals.evtmgmt);
 	}
 }
 
@@ -66,7 +65,7 @@ void x_smbconn_reply(x_smbconn_t *smbconn, x_msg_t *msg)
 		bool orig_empty = smbconn->send_queue.empty();
 		smbconn->send_queue.push_back(msg);
 		if (orig_empty) {
-			epollmgmt_enable_events(globals.epmgmt, smbconn->ep_id, FDEVT_OUT);
+			x_evtmgmt_enable_events(globals.evtmgmt, smbconn->ep_id, FDEVT_OUT);
 		}
 	} else {
 		delete msg;
@@ -100,7 +99,7 @@ int x_smb2_reply_error(x_smbconn_t *smbconn, x_msg_t *msg,
 	x_put_le64(outhdr + SMB2_HDR_MESSAGE_ID, msg->mid);
 
 	uint8_t *outnbt = outbuf + 4;
-	put_be32(outnbt, 0x40 + 9);
+	x_put_be32(outnbt, 0x40 + 9);
 
 	msg->out_buf = outbuf;
 	msg->out_off = 4;
@@ -182,9 +181,9 @@ static int x_smbconn_process_msg(x_smbconn_t *smbconn)
 	return err;
 }
 
-static inline x_smbconn_t *x_smbconn_from_upcall(epoll_upcall_t *upcall)
+static inline x_smbconn_t *x_smbconn_from_upcall(x_epoll_upcall_t *upcall)
 {
-	return YAPL_CONTAINER_OF(upcall, x_smbconn_t, upcall);
+	return X_CONTAINER_OF(upcall, x_smbconn_t, upcall);
 }
 
 static bool x_smbconn_do_recv(x_smbconn_t *smbconn, x_fdevents_t &fdevents)
@@ -304,7 +303,7 @@ static bool x_smbconn_handle_events(x_smbconn_t *smbconn, x_fdevents_t &fdevents
 	return false;
 }
 
-static bool x_smbconn_upcall_cb_getevents(epoll_upcall_t *upcall, x_fdevents_t &fdevents)
+static bool x_smbconn_upcall_cb_getevents(x_epoll_upcall_t *upcall, x_fdevents_t &fdevents)
 {
 	x_smbconn_t *smbconn = x_smbconn_from_upcall(upcall);
 	X_DBG("%s %p x%llx", task_name, smbconn, fdevents);
@@ -313,14 +312,14 @@ static bool x_smbconn_upcall_cb_getevents(epoll_upcall_t *upcall, x_fdevents_t &
 	return ret;
 }
 
-static void x_smbconn_upcall_cb_unmonitor(epoll_upcall_t *upcall)
+static void x_smbconn_upcall_cb_unmonitor(x_epoll_upcall_t *upcall)
 {
 	x_smbconn_t *smbconn = x_smbconn_from_upcall(upcall);
 	X_DBG("%s %p", task_name, smbconn);
 	x_smbconn_done(smbconn);
 }
 
-static const epoll_upcall_cbs_t x_smbconn_upcall_cbs = {
+static const x_epoll_upcall_cbs_t x_smbconn_upcall_cbs = {
 	x_smbconn_upcall_cb_getevents,
 	x_smbconn_upcall_cb_unmonitor,
 };
@@ -331,16 +330,16 @@ static void x_smbsrv_accepted(x_smbsrv_t *smbsrv, int fd, const struct sockaddr_
 	x_smbconn_t *smbconn = new x_smbconn_t(smbsrv, fd, sin);
 	X_ASSERT(smbconn != NULL);
 	smbconn->upcall.cbs = &x_smbconn_upcall_cbs;
-	smbconn->ep_id = epollmgmt_monitor(globals.epmgmt, fd, FDEVT_IN | FDEVT_OUT, &smbconn->upcall);
-	epollmgmt_enable_events(globals.epmgmt, smbconn->ep_id, FDEVT_IN | FDEVT_ERR | FDEVT_SHUTDOWN);
+	smbconn->ep_id = x_evtmgmt_monitor(globals.evtmgmt, fd, FDEVT_IN | FDEVT_OUT, &smbconn->upcall);
+	x_evtmgmt_enable_events(globals.evtmgmt, smbconn->ep_id, FDEVT_IN | FDEVT_ERR | FDEVT_SHUTDOWN);
 }
 
-static inline x_smbsrv_t *x_smbsrv_from_upcall(epoll_upcall_t *upcall)
+static inline x_smbsrv_t *x_smbsrv_from_upcall(x_epoll_upcall_t *upcall)
 {
-	return YAPL_CONTAINER_OF(upcall, x_smbsrv_t, upcall);
+	return X_CONTAINER_OF(upcall, x_smbsrv_t, upcall);
 }
 
-static bool x_smbsrv_upcall_cb_getevents(epoll_upcall_t *upcall, x_fdevents_t &fdevents)
+static bool x_smbsrv_upcall_cb_getevents(x_epoll_upcall_t *upcall, x_fdevents_t &fdevents)
 {
 	x_smbsrv_t *smbsrv = x_smbsrv_from_upcall(upcall);
 	uint32_t events = x_fdevents_processable(fdevents);
@@ -363,7 +362,7 @@ static bool x_smbsrv_upcall_cb_getevents(epoll_upcall_t *upcall, x_fdevents_t &f
 	return false;
 }
 
-static void x_smbsrv_upcall_cb_unmonitor(epoll_upcall_t *upcall)
+static void x_smbsrv_upcall_cb_unmonitor(x_epoll_upcall_t *upcall)
 {
 	x_smbsrv_t *smbsrv = x_smbsrv_from_upcall(upcall);
 	X_DBG("%s %p", task_name, smbsrv);
@@ -371,7 +370,7 @@ static void x_smbsrv_upcall_cb_unmonitor(epoll_upcall_t *upcall)
 	/* TODO may close all accepted client, and notify it is freed */
 }
 
-static const epoll_upcall_cbs_t x_smbsrv_upcall_cbs = {
+static const x_epoll_upcall_cbs_t x_smbsrv_upcall_cbs = {
 	x_smbsrv_upcall_cb_getevents,
 	x_smbsrv_upcall_cb_unmonitor,
 };
@@ -384,8 +383,8 @@ static void x_smbsrv_init(x_smbsrv_t &smbsrv, int port)
 	smbsrv.fd = fd;
 	smbsrv.upcall.cbs = &x_smbsrv_upcall_cbs;
 
-	smbsrv.ep_id = epollmgmt_monitor(globals.epmgmt, fd, FDEVT_IN, &smbsrv.upcall);
-	epollmgmt_enable_events(globals.epmgmt, smbsrv.ep_id, FDEVT_IN | FDEVT_ERR | FDEVT_SHUTDOWN);
+	smbsrv.ep_id = x_evtmgmt_monitor(globals.evtmgmt, fd, FDEVT_IN, &smbsrv.upcall);
+	x_evtmgmt_enable_events(globals.evtmgmt, smbsrv.ep_id, FDEVT_IN | FDEVT_ERR | FDEVT_SHUTDOWN);
 
 	smbsrv.gensec_context = x_gensec_create_context();
 	x_gensec_register(smbsrv.gensec_context, &x_gensec_mech_spnego);
@@ -398,6 +397,8 @@ static void x_smbsrv_init(x_smbsrv_t &smbsrv, int port)
 		X_ASSERT(err == 0);
 		smbsrv.negprot_spnego.swap(negprot_spnego);
 	}
+
+	// TODO start_wbcli(1);
 }
 
 
@@ -407,10 +408,11 @@ int main(int argc, char **argv)
 	unsigned int count = atoi(*argv);
 	int port = 445;
 
-	threadpool_t *tpool = threadpool_create(count);
+	x_threadpool_t *tpool = x_threadpool_create(count);
 	globals.tpool = tpool;
 
-	globals.epmgmt = epollmgmt_create(tpool);
+	globals.evtmgmt = x_evtmgmt_create(tpool);
+	globals.wbpool = x_wbpool_create(globals.evtmgmt, 2);
 
 	x_smbsrv_t smbsrv;
 	x_smbsrv_init(smbsrv, port);
@@ -418,7 +420,7 @@ int main(int argc, char **argv)
 
 	main_loop();
 
-	threadpool_destroy(tpool);
+	x_threadpool_destroy(tpool);
 	return 0;
 }
 

@@ -6,7 +6,8 @@
 #error "Must be c++"
 #endif
 
-#include "defines.hxx"
+#include "include/evtmgmt.hxx"
+#include "include/wbpool.hxx"
 #include <vector>
 #include <memory>
 #include <string.h>
@@ -80,7 +81,7 @@ struct x_smbconf_t
 
 struct x_smbsrv_t
 {
-	epoll_upcall_t upcall;
+	x_epoll_upcall_t upcall;
 	uint64_t ep_id;
 	int fd;
 
@@ -103,7 +104,7 @@ struct x_msg_t
 			delete[] out_buf;
 		}
 	}
-	dlink_t dlink;
+	x_dlink_t dlink;
 	uint64_t mid;
 	uint16_t opcode;
 	const uint32_t nbt_hdr;
@@ -120,7 +121,7 @@ struct x_msg_t
 	unsigned int out_off;
 	uint8_t *out_buf = NULL;
 };
-YAPL_DECLARE_MEMBER_TRAITS(msg_dlink_traits, x_msg_t, dlink)
+X_DECLARE_MEMBER_TRAITS(msg_dlink_traits, x_msg_t, dlink)
 
 struct x_smbsess_t
 {
@@ -163,7 +164,7 @@ struct x_smbconn_t
 		}
 	}
 
-	epoll_upcall_t upcall;
+	x_epoll_upcall_t upcall;
 	uint64_t ep_id;
 	x_smbsrv_t * const smbsrv;
 	std::atomic<int> refcnt{1};
@@ -182,7 +183,7 @@ struct x_smbconn_t
 	uint32_t nbt_hdr;
 	x_msg_t *recving_msg = NULL;
 	x_msg_t *sending_msg = NULL;
-	tp_d2list_t<msg_dlink_traits> send_queue;
+	x_tp_d2list_t<msg_dlink_traits> send_queue;
 	// TODO improve session lookup later
 	std::vector<x_smbsess_ptr_t> sessions;
 };
