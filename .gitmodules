@@ -1,0 +1,4 @@
+[submodule "samba"]
+	path = samba
+	url = haihua-yang.user.nutanix.com:ws/projects/samba
+	branch = nxsmb
