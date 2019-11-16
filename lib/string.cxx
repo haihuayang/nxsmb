@@ -1,7 +1,9 @@
 
+#include "include/xdefines.h"
 #include "include/utils.hxx"
 
-std::u16string u16string_from_utf8(const char *s)
+/* TODO not a real converter, maybe implement by iconv future */
+std::u16string x_convert_utf8_to_utf16(const std::string &src)
 {
 #if 0
 	std::wstring_convert<std::codecvt_utf8_utf16<char16_t>> converter;
@@ -9,10 +11,25 @@ std::u16string u16string_from_utf8(const char *s)
 #else
 	/* TODO not a real convert */
 	std::u16string ret;
-	if (s) {
-		for ( ; *s; ++s) {
-			ret.push_back(*s);
-		}
+	for (char c: src) {
+		X_ASSERT((c & 0x80) == 0);
+		ret.push_back(c);
+	}
+	return ret;
+#endif
+}
+
+std::string x_convert_utf16_to_utf8(const std::u16string &src)
+{
+#if 0
+	std::wstring_convert<std::codecvt_utf8_utf16<char16_t>> converter;
+	return converter.from_bytes(s);
+#else
+	/* TODO not a real convert */
+	std::string ret;
+	for (char16_t c: src) {
+		X_ASSERT(c < 0x100);
+		ret.push_back(c);
 	}
 	return ret;
 #endif

@@ -88,10 +88,10 @@ struct x_gensec_ntlmssp_t : x_gensec_t
 		}
 		*/
 		is_standalone = false;
-		netbios_name = u16string_from_utf8(lpcfg_netbios_name());
-		netbios_domain = u16string_from_utf8(lpcfg_workgroup());
+		netbios_name = x_convert_utf8_to_utf16(lpcfg_netbios_name());
+		netbios_domain = x_convert_utf8_to_utf16(lpcfg_workgroup());
 
-		dns_domain = u16string_from_utf8(lpcfg_dnsdomain());
+		dns_domain = x_convert_utf8_to_utf16(lpcfg_dnsdomain());
 		std::u16string tmp_dns_name = netbios_name;
 		if (dns_domain.size()) {
 			tmp_dns_name += u".";
@@ -111,10 +111,12 @@ struct x_gensec_ntlmssp_t : x_gensec_t
 	virtual NTSTATUS check_packet(const uint8_t *data, size_t data_len,
 			const uint8_t *sig, size_t sig_len) override {
 		X_TODO;
+		return NT_STATUS_NOT_IMPLEMENTED;
 	}
 	virtual NTSTATUS sign_packet(const uint8_t *data, size_t data_len,
 			std::vector<uint8_t> &sig) override {
 		X_TODO;
+		return NT_STATUS_NOT_IMPLEMENTED;
 	}
 	enum state_position_t {
 		S_NEGOTIATE,
@@ -329,7 +331,7 @@ static inline NTSTATUS handle_negotiate(x_gensec_ntlmssp_t &gensec_ntlmssp,
 		av_pair_list->pair.push_back(pair);
 	}
 
-	chal_msg.TargetName.val = target_name;
+	chal_msg.TargetName.val = x_convert_utf16_to_utf8(target_name);
 	chal_msg.NegotiateFlags = idl::NEGOTIATE(chal_flags);
 	chal_msg.ServerChallenge = cryptkey;
 

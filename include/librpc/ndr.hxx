@@ -815,7 +815,7 @@ struct gstring
 	x_ndr_off_t push(x_ndr_push_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, x_ndr_switch_t level) const;
 	x_ndr_off_t pull(x_ndr_pull_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, x_ndr_switch_t level);
 	void ostr(x_ndr_ostr_t &ndr, uint32_t flags, x_ndr_switch_t level) const;
-	std::u16string val;
+	std::string val;
 };
 
 struct astring
