@@ -17,8 +17,12 @@ enum {
 
 struct simple_wbcli_t
 {
-	simple_wbcli_t();
-	struct x_wbcli_t wbcli;
+	simple_wbcli_t() {
+		wbcli.requ = &requ;
+		wbcli.resp = &resp;
+	}
+
+	x_wbcli_t wbcli;
 	x_wbrequ_t requ;
 	x_wbresp_t resp;
 };
@@ -31,8 +35,6 @@ struct wbconn_t
 	x_dlink_t dlink;
 	enum {
 		S_DISCONNECTED,
-		S_SENDING_HS,
-		S_RECVING_HS,
 		S_READY,
 		S_SENDING,
 		S_RECVING,
@@ -59,7 +61,6 @@ struct x_wbpool_t
 	std::mutex mutex;
 	enum {
 		S_NONE,
-		S_SCHEDULED,
 		S_CONNECTING,
 	} state = S_NONE;
 	x_tp_d2list_t<wbcli_dlink_traits> queue;
@@ -68,25 +69,34 @@ struct x_wbpool_t
 	std::vector<wbconn_t> wbconns;
 };
 
-static void simple_wbcli_cb_reply(x_wbcli_t *wbcli, int err)
+static inline pid_t wbconn_getpid(wbconn_t *wbconn) 
 {
-	// wbconn_t *wbconn = X_CONTAINER_OF(wbcli, wbconn_t, simple_wbcli.wbcli);
+	// TODO, does winbindd allow multiple connections using same pid?
+	return getpid();
 }
 
-static const x_wb_cbs_t simple_wbcli_cbs = {
-	simple_wbcli_cb_reply,
+static void wbconn_set_wbcli(wbconn_t *wbconn, x_wbcli_t *wbcli)
+{
+	X_ASSERT(wbconn->wbcli == nullptr);
+	wbconn->wbcli = wbcli;
+	wbconn->requ_off = wbconn->resp_off = 0;
+	wbcli->requ->header.length = sizeof(wbcli->requ->header);
+	wbcli->requ->header.pid = wbconn_getpid(wbconn);
+	wbconn->state = wbconn_t::S_SENDING;
+}
+
+static void handshake_wbcli_cb_reply(x_wbcli_t *wbcli, int err);
+static const x_wb_cbs_t handshake_wbcli_cbs = {
+	handshake_wbcli_cb_reply,
 };
 
-inline simple_wbcli_t::simple_wbcli_t()
+static void ping_wbcli_cb_reply(x_wbcli_t *wbcli, int err)
 {
-	requ.header.length = sizeof(struct winbindd_request);
-	requ.header.cmd = WINBINDD_INTERFACE_VERSION;
-	requ.header.pid = getpid(); // TODO, does winbindd allow multiple connections using same pid?
-
-	wbcli.requ = &requ;
-	wbcli.resp = &resp;
-	wbcli.cbs = &simple_wbcli_cbs;
 }
+
+static const x_wb_cbs_t ping_wbcli_cbs = {
+	ping_wbcli_cb_reply,
+};
 
 static int set_sock_flags(int fd)
 {
@@ -140,19 +150,40 @@ static int winbindd_open_pipe()
 	}
 }
 
+static inline void wbconn_send(wbconn_t *wbconn, x_wbcli_t *wbcli)
+{
+	wbconn_set_wbcli(wbconn, wbcli);
+	x_evtmgmt_enable_events(wbconn->wbpool->evtmgmt, wbconn->ep_id, FDEVT_OUT);
+}
+
+static inline void wbconn_send_simple(wbconn_t *wbconn,
+		const x_wb_cbs_t *cbs,
+		enum winbindd_cmd cmd)
+{
+	wbconn->simple_wbcli.wbcli.cbs = cbs;
+	wbconn->simple_wbcli.requ.header.cmd = cmd;
+	wbconn_send(wbconn, &wbconn->simple_wbcli.wbcli);
+}
+
+static inline void wbconn_ping(wbconn_t *wbconn)
+{
+	X_ASSERT(wbconn->state == wbconn_t::S_READY);
+	wbconn_send_simple(wbconn, &ping_wbcli_cbs, WINBINDD_PING);
+}
+
 static int wb_connect(x_wbpool_t *wbpool, wbconn_t *wbconn)
 {
+	X_ASSERT(wbconn->fd == -1);
+
 	int fd = winbindd_open_pipe();
 	if (fd < 0) {
 		return fd;
 	}
 
 	wbconn->fd = fd;
-	simple_wbcli_t *hscli = new simple_wbcli_t;
-	wbconn->wbcli = &hscli->wbcli;
-	wbconn->state = wbconn_t::S_SENDING_HS;
 	wbconn->ep_id = x_evtmgmt_monitor(wbpool->evtmgmt, fd, FDEVT_IN | FDEVT_OUT, &wbconn->upcall);
-	x_evtmgmt_enable_events(wbpool->evtmgmt, wbconn->ep_id, FDEVT_OUT | FDEVT_ERR | FDEVT_SHUTDOWN);
+
+	wbconn_send_simple(wbconn, &handshake_wbcli_cbs, WINBINDD_INTERFACE_VERSION);
 	return 0;
 }
 
@@ -167,19 +198,32 @@ static void wb_connect_or_schedule(x_wbpool_t *wbpool, wbconn_t *wbconn)
 	}
 }
 
-static inline void wbconn_send(wbconn_t *wbconn, x_wbcli_t *wbcli)
+static void handshake_wbcli_cb_reply(x_wbcli_t *wbcli, int err)
 {
-	X_ASSERT(wbconn->state == wbconn_t::S_READY);
-	wbconn->wbcli = wbcli;
-	wbconn->requ_off = wbconn->resp_off = 0;
-	wbconn->state = wbconn_t::S_SENDING;
-	x_evtmgmt_enable_events(wbconn->wbpool->evtmgmt, wbconn->ep_id, FDEVT_OUT);
-}
+	if (err < 0) {
+		return;
+	}
 
-static inline void wbconn_ping(wbconn_t *wbconn)
-{
-	wbconn->simple_wbcli.requ.header.cmd = WINBINDD_PING;
-	wbconn_send(wbconn, &wbconn->simple_wbcli.wbcli);
+	X_ASSERT(wbcli->resp->header.result == WINBINDD_OK);
+	X_ASSERT(wbcli->resp->header.data.interface_version == WINBIND_INTERFACE_VERSION);
+
+	wbconn_t *wbconn = X_CONTAINER_OF(wbcli, wbconn_t, simple_wbcli.wbcli);
+	x_wbpool_t *wbpool = wbconn->wbpool;
+	wbconn_t *wbc_to_connect = nullptr;
+	{
+		std::unique_lock<std::mutex> lock(wbpool->mutex);
+		X_ASSERT(wbpool->state == x_wbpool_t::S_CONNECTING);
+		wbc_to_connect = wbpool->disconnected_list.get_front();
+		if (wbc_to_connect) {
+			wbpool->disconnected_list.remove(wbc_to_connect);
+		} else {
+			wbpool->state = x_wbpool_t::S_NONE;
+		}
+	}
+
+	if (wbc_to_connect) {
+		wb_connect_or_schedule(wbconn->wbpool, wbc_to_connect);
+	}
 }
 
 static long wbpool_timer_func(x_timer_t *timer)
@@ -288,6 +332,7 @@ static int wbconn_dorecv(wbconn_t &wbconn)
 		if (wbconn.resp_off == sizeof(struct winbindd_response)) {
 			X_ASSERT(resp->header.length >= sizeof(struct winbindd_response));
 			if (wbconn.resp_off == resp->header.length) {
+				resp->extra.clear();
 				return 0;
 			}
 			resp->extra.resize(resp->header.length - sizeof(struct winbindd_response));
@@ -352,8 +397,11 @@ static bool wbconn_upcall_cb_getevents(x_epoll_upcall_t *upcall,
 				}
 
 				if (wbcli) {
+					wbconn_set_wbcli(wbconn, wbcli);
+#if 0
 					wbconn->wbcli = wbcli;
 					wbconn->state = wbconn_t::S_SENDING;
+#endif
 					fdevents = x_fdevents_enable(fdevents, FDEVT_OUT);
 				}
 			} else if (err == -EAGAIN) {
@@ -361,57 +409,6 @@ static bool wbconn_upcall_cb_getevents(x_epoll_upcall_t *upcall,
 			} else if (err != -EINTR) {
 				return true;
 			}
-
-		} else if (wbconn->state == wbconn_t::S_RECVING_HS) {
-			err = wbconn_dorecv(*wbconn);
-			if (err == 0) {
-				x_wbcli_t *wbcli = nullptr;
-				std::swap(wbcli, wbconn->wbcli);
-				wbconn->requ_off = wbconn->resp_off = 0;
-				wbconn->state = wbconn_t::S_READY;
-				fdevents = x_fdevents_disable(fdevents, FDEVT_IN);
-
-				X_DBG("result = %d", wbcli->resp->header.result);
-				// wbcli->on_reply(0);
-				X_ASSERT(wbcli->resp->header.data.interface_version == WINBIND_INTERFACE_VERSION);
-
-				X_DBG("%p ready", wbconn);
-				wbconn_t *wbc_to_connect = nullptr;
-				{
-					std::unique_lock<std::mutex> lock(wbpool->mutex);
-					X_ASSERT(wbpool->state == x_wbpool_t::S_CONNECTING);
-					wbcli = wbpool->queue.get_front();
-					if (wbcli == nullptr) {
-						wbconn->timeout = x_tick_add(tick_now, PING_INTERVAL);
-						wbpool->ready_list.push_back(wbconn);
-					} else {
-						wbpool->queue.remove(wbcli);
-					}
-
-					wbc_to_connect = wbpool->disconnected_list.get_front();
-					if (wbc_to_connect) {
-						wbpool->disconnected_list.remove(wbc_to_connect);
-					} else {
-						wbpool->state = x_wbpool_t::S_NONE;
-					}
-				}
-
-				if (wbc_to_connect) {
-					wb_connect_or_schedule(wbconn->wbpool, wbc_to_connect);
-				}
-
-				if (wbcli) {
-					wbconn->wbcli = wbcli;
-					wbconn->state = wbconn_t::S_SENDING;
-					fdevents = x_fdevents_enable(fdevents, FDEVT_OUT);
-				}
-
-			} else if (err == -EAGAIN) {
-				fdevents = x_fdevents_consume(fdevents, FDEVT_IN);
-			} else if (err != -EINTR) {
-				return true;
-			}
-
 		} else {
 			X_ASSERT(false);
 			return true;
@@ -431,18 +428,6 @@ static bool wbconn_upcall_cb_getevents(x_epoll_upcall_t *upcall,
 			} else if (err != -EINTR) {
 				return true;
 			}
-
-		} else if (wbconn->state == wbconn_t::S_SENDING_HS) {
-			err = wbconn_dosend(*wbconn);
-			if (err == 0) {
-				wbconn->state = wbconn_t::S_RECVING_HS;
-				fdevents = x_fdevents_disable(fdevents, FDEVT_OUT);
-				fdevents = x_fdevents_enable(fdevents, FDEVT_IN);
-			} else if (err == -EAGAIN) {
-				fdevents = x_fdevents_consume(fdevents, FDEVT_OUT);
-			} else if (err != -EINTR) {
-				return true;
-			}
 		} else {
 			X_ASSERT(false);
 		}
@@ -454,8 +439,8 @@ static void wbconn_upcall_cb_unmonitor(x_epoll_upcall_t *upcall)
 {
 	wbconn_t *wbconn = wbconn_from_upcall(upcall);
 	close(wbconn->fd);
-	x_wbcli_t *wbcli = nullptr;
-	std::swap(wbcli, wbconn->wbcli);
+	x_wbcli_t *wbcli = wbconn->wbcli;
+	wbconn->wbcli = nullptr;
 	wbconn->state = wbconn_t::S_DISCONNECTED;
 
 	if (wbcli) {
@@ -463,7 +448,6 @@ static void wbconn_upcall_cb_unmonitor(x_epoll_upcall_t *upcall)
 	}
 
 	x_wbpool_t *wbpool = wbconn->wbpool;
-
 	std::unique_lock<std::mutex> lock(wbpool->mutex);
 	wbpool->disconnected_list.push_back(wbconn);
 }
@@ -493,6 +477,8 @@ x_wbpool_t *x_wbpool_create(x_evtmgmt_t *evtmgmt, unsigned int count)
 int x_wbpool_request(x_wbpool_t *wbpool, x_wbcli_t *wbcli)
 {
 	wbconn_t *wbconn = nullptr;
+	wbcli->requ->header.length = sizeof(wbcli->requ->header);
+	wbcli->requ->header.extra_len = wbcli->requ->extra.size();
 	{
 		std::unique_lock<std::mutex> lock(wbpool->mutex);
 		wbconn = wbpool->ready_list.get_front();
@@ -503,6 +489,7 @@ int x_wbpool_request(x_wbpool_t *wbpool, x_wbcli_t *wbcli)
 			wbpool->ready_list.remove(wbconn);
 		}
 	}
+	X_ASSERT(wbconn->state == wbconn_t::S_READY);
 	wbconn_send(wbconn, wbcli);
 	return 0;
 }
