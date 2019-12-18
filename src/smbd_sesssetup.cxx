@@ -21,7 +21,7 @@ static x_smbsess_ptr_t x_smbconn_create_session(x_smbconn_t *smbconn)
 {
 	x_smbsess_ptr_t sess = std::make_shared<x_smbsess_t>();
 	sess->id = g_sess_id++;
-	sess->gensec = std::unique_ptr<x_gensec_t, void (*)(x_gensec_t *)>(x_smbsrv_create_gensec(smbconn->smbsrv), x_gensec_destroy);
+	sess->gensec = x_smbsrv_create_gensec(smbconn->smbsrv);
 	smbconn->sessions.push_back(sess);
 	return sess;
 }

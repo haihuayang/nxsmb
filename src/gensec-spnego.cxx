@@ -19,6 +19,11 @@ struct x_gensec_spnego_t
 {
 	x_gensec_spnego_t(x_gensec_context_t *context, const x_gensec_ops_t *ops) :
 		gensec{context, ops} { }
+	~x_gensec_spnego_t() {
+		if (subsec) {
+			x_gensec_destroy(subsec);
+		}
+	}
 
 	x_gensec_t gensec;
 	enum state_position_t {
@@ -36,7 +41,7 @@ struct x_gensec_spnego_t
 	bool simulate_w2k = gensec_setting_bool(gensec_security->settings,
 			"spnego", "simulate_w2k", false);
 	std::vector<uint8_t> mech_types_blob;
-	std::unique_ptr<x_gensec_t, void (*)(x_gensec_t *)> subsec{nullptr, nullptr};
+	x_gensec_t *subsec{nullptr};
 };
 
 static int add_mech(MechTypeList *mechtypelist, gss_OID mech_type)
@@ -152,15 +157,15 @@ static NTSTATUS spnego_update_start(x_gensec_spnego_t &spnego, const Negotiation
 	}
 	const NegTokenInit &ni = nt_requ.u.negTokenInit;
 	MechType *mt = NULL;
-	x_gensec_t *subsec = match_mech_type(spnego.gensec.context, ni, mt);
-	if (!subsec) {
+	X_ASSERT(!spnego.subsec);
+	spnego.subsec = match_mech_type(spnego.gensec.context, ni, mt);
+	if (!spnego.subsec) {
 		return NT_STATUS_INVALID_PARAMETER;
 	}
 
 	int ret = x_asn1_encode(ni.mechTypes, spnego.mech_types_blob);
-	spnego.subsec = std::unique_ptr<x_gensec_t, void (*)(x_gensec_t *)>(subsec, x_gensec_destroy);
 	std::vector<uint8_t> subout;
-	NTSTATUS status = subsec->update((uint8_t *)ni.mechToken->data, ni.mechToken->length, subout, upcall);
+	NTSTATUS status = spnego.subsec->update((uint8_t *)ni.mechToken->data, ni.mechToken->length, subout, upcall);
 
 	NegotiationToken nt_resp;
 	memset(&nt_resp, 0, sizeof nt_resp);
@@ -195,8 +200,8 @@ static NTSTATUS spnego_update_targ(x_gensec_spnego_t &spnego, const NegotiationT
 	std::vector<uint8_t> subout;
 	NTSTATUS status = spnego.subsec->update((uint8_t *)nt.responseToken->data, nt.responseToken->length, subout, upcall);
 
-	if (status != NT_STATUS_OK) {
-		return STATUS;
+	if (!NT_STATUS_IS_OK(status)) {
+		return status;
 	}
 	
 	bool have_sign = spnego.subsec->have_feature(GENSEC_FEATURE_SIGN);

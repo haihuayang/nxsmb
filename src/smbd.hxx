@@ -166,14 +166,25 @@ struct x_msg_t
 };
 X_DECLARE_MEMBER_TRAITS(msg_dlink_traits, x_msg_t, dlink)
 
+struct x_smbuser_t
+{
+	// security token
+};
+
 struct x_smbconn_t;
 struct x_smbsess_t
 {
+	~x_smbsess_t() {
+		if (gensec) {
+			x_gensec_destroy(gensec);
+		}
+	}
 	x_gensec_upcall_t gensec_upcall;
 	x_smbconn_t *smbconn;
 	uint64_t id;
 	bool is_blocked = false;
-	std::unique_ptr<x_gensec_t, void (*)(x_gensec_t *)> gensec{nullptr, nullptr};
+	std::shared_ptr<x_smbuser_t> user;
+	x_gensec_t *gensec{nullptr};
 };
 using x_smbsess_ptr_t = std::shared_ptr<x_smbsess_t>;
 
