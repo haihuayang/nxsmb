@@ -3,6 +3,31 @@
 
 namespace idl {
 
+x_ndr_off_t GUID::ndr_scalars(x_ndr_push_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level) const
+{
+	X_NDR_HEADER_ALIGN(4, __ndr, __bpos, __epos, __flags);
+	X_NDR_SCALARS(time_low, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
+	X_NDR_SCALARS(time_mid, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
+	X_NDR_SCALARS(time_hi_and_version, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
+	X_NDR_SCALARS(clock_seq, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
+	X_NDR_SCALARS(node, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
+	X_NDR_TRAILER_ALIGN(4, __ndr, __bpos, __epos, __flags);
+	return __bpos;
+}
+
+
+x_ndr_off_t GUID::ndr_scalars(x_ndr_pull_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level)
+{
+	X_NDR_HEADER_ALIGN(4, __ndr, __bpos, __epos, __flags);
+	X_NDR_SCALARS(time_low, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
+	X_NDR_SCALARS(time_mid, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
+	X_NDR_SCALARS(time_hi_and_version, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
+	X_NDR_SCALARS(clock_seq, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
+	X_NDR_SCALARS(node, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
+	X_NDR_TRAILER_ALIGN(4, __ndr, __bpos, __epos, __flags);
+	return __bpos;
+}
+
 void x_ndr_ostr(const GUID &v, x_ndr_ostr_t &os, uint32_t flags, x_ndr_switch_t level)
 {
 	X_ASSERT(level == X_NDR_SWITCH_NONE);

@@ -1,16 +1,17 @@
 
 TARGET_SET_idl := \
+
+a=\
 	ntlmssp \
 	security \
 	misc \
-
-a=\
+	samr \
+	lsa \
+	netlogon \
+	krb5pac \
 	epmapper \
 	atsvc \
 	audiosrv \
-	lsa \
-	samr \
-	netlogon \
 	krb5pac \
 	auth \
 	backupkey \

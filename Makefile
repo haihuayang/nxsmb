@@ -10,8 +10,8 @@ include functions.mk
 include files.mk
 
 TARGET_PROJECT_CFLAGS := -g -Wall -DPROJECT=$(PROJECT)
-TARGET_CFLAGS := $(TARGET_PROJECT_CFLAGS) -Wstrict-prototypes
-TARGET_CXXFLAGS := $(TARGET_PROJECT_CFLAGS) -std=c++14
+TARGET_CFLAGS = $(TARGET_PROJECT_CFLAGS) -Wstrict-prototypes -MT $@ -MMD -MP -MF $@.d
+TARGET_CXXFLAGS = $(TARGET_PROJECT_CFLAGS) -std=c++14 -MT $@ -MMD -MP -MF $@.d
 
 TARGET_DIR_out := target.dbg.linux.x86_64
 HOST_DIR_out := host.dbg.linux.x86_64
@@ -36,7 +36,7 @@ TARGET_SET_dir := bin lib lib/librpc librpc/idl src tests \
 	$(TARGET_SET_samba_dir)
 
 .PHONY: all target_mkdir host_mkdir target_samba_gen
-TARGET_SET_tests := test-timer test-ntlmssp test-security test-wbcli test-wbpool
+TARGET_SET_tests := test-timer test-krb5pac test-ntlmssp test-security test-wbcli test-wbpool
 TARGET_SET_lib := nxsmb samba
 
 TARGET_CFLAGS_EXTRA := \
@@ -72,11 +72,13 @@ TARGET_CFLAGS_EXTRA := \
 	-Isamba/source4/heimdal/base \
 	-I. \
 	-Isamba/lib/talloc \
+	-Isamba/source3 \
 	-D__X_DEVELOPER__=1
 
 all: $(TARGET_SET_tests:%=$(TARGET_DIR_out)/tests/%) $(TARGET_DIR_out)/bin/nxsmbd
 
 SET_src_nxsmbd := gensec-ntlmssp \
+	gensec-krb5 \
 	network  \
 	gensec gensec-spnego \
 	smbd smbd_negprot smbd_sesssetup \
@@ -230,31 +232,33 @@ $(TARGET_GEN_libsamba:%=$(TARGET_DIR_out)/samba/%.o): %.o: %.c | target_samba_ge
 $(TARGET_SET_tests:%=$(TARGET_DIR_out)/tests/%.o) : $(TARGET_DIR_out)/tests/%.o: tests/%.cxx | target_mkdir target_idl
 	$(CXX) -c $(TARGET_CXXFLAGS) $(TARGET_CFLAGS_EXTRA) -o $@ $<
 
-$(TARGET_SET_tests:%=$(TARGET_DIR_out)/tests/%.o) : tests/common.h
 
 TARGET_SRC_libnxsmb := \
 		lib/librpc/ndr \
+		lib/librpc/ndr_nxsmb \
 		lib/librpc/ndr_utils \
 		lib/librpc/ndr_string \
 		lib/librpc/ndr_misc \
 		lib/librpc/ndr_ntlmssp \
 		lib/librpc/ndr_security \
+		lib/librpc/ndr_krb5pac \
+		lib/librpc/ndr_netlogon \
+		lib/librpc/ndr_samr \
+		lib/librpc/ndr_lsa \
 		lib/xutils \
 		lib/string \
 		lib/threadpool \
 		lib/evtmgmt \
 		lib/wbpool \
+		lib/kerberos_pac \
 
 
 $(TARGET_DIR_out)/libnxsmb.a: $(TARGET_SRC_libnxsmb:%=$(TARGET_DIR_out)/%.o) $(TARGET_SET_idl:%=$(TARGET_DIR_out)/librpc/idl/%.ndr.o)
 	ar rcs $@ $^
 
-$(TARGET_SRC_libnxsmb:%=$(TARGET_DIR_out)/%.o): $(TARGET_DIR_out)/lib/%.o: lib/%.cxx | target_idl
+$(TARGET_SRC_libnxsmb:%=$(TARGET_DIR_out)/%.o): $(TARGET_DIR_out)/lib/%.o: lib/%.cxx | target_idl target_samba_gen
 	$(CXX) -c $(TARGET_CXXFLAGS) $(TARGET_CFLAGS_EXTRA) -o $@ $<
 
-$(TARGET_SRC_libsamba:%=$(TARGET_DIR_out)/samba/%.o) $(TARGET_GEN_libsamba:%=$(TARGET_DIR_out)/samba/%.o): $(TARGET_DIR_out)/samba/include/config.h
-
-target_idl: $(TARGET_SET_idl:%=$(TARGET_DIR_out)/librpc/idl/%.ndr.cxx) $(TARGET_SET_idl:%=$(TARGET_DIR_out)/librpc/idl/%.h)
 
 $(TARGET_SET_idl:%=$(TARGET_DIR_out)/librpc/idl/%.ndr.o) : $(TARGET_DIR_out)/librpc/idl/%.ndr.o: $(TARGET_DIR_out)/librpc/idl/%.ndr.cxx
 	$(CXX) -c $(TARGET_CXXFLAGS) $(TARGET_CFLAGS_EXTRA) -o $@ $<
@@ -295,6 +299,12 @@ $(patsubst %,$(TARGET_DIR_out)/samba/source4/heimdal/lib/wind/combining_table.%,
 
 $(TARGET_DIR_out)/samba/include/config.h: scripts/generate-config
 	scripts/generate-config > $@
+
+target_idl: $(TARGET_SET_idl:%=$(TARGET_DIR_out)/librpc/idl/%.ndr.cxx) $(TARGET_SET_idl:%=$(TARGET_DIR_out)/librpc/idl/%.h)
+
+TARGET_DEPFILES := $(TARGET_SET_tests:%=$(TARGET_DIR_out)/tests/%.o.d) $(TARGET_SRC_libnxsmb:%=$(TARGET_DIR_out)/%.o.d) $(SET_src_nxsmbd:%=$(TARGET_DIR_out)/src/%.o.d) $(TARGET_SRC_libsamba:%=$(TARGET_DIR_out)/samba/%.o.d)
+
+include $(wildcard $(TARGET_DEPFILES))
 
 target_mkdir: $(TARGET_SET_dir:%=$(TARGET_DIR_out)/%)
 

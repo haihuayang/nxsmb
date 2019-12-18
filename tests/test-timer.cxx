@@ -8,7 +8,7 @@ struct test_timer_t
 
 static long test_timer_func(x_timer_t *timer)
 {
-	test_timer_t *test_timer = X_CONTAINER_OF(timer, test_timer_t, timer);
+	// test_timer_t *test_timer = X_CONTAINER_OF(timer, test_timer_t, timer);
 	X_DBG("");
 	return 1000;
 }

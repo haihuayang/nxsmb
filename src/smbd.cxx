@@ -377,6 +377,20 @@ static const x_epoll_upcall_cbs_t x_smbsrv_upcall_cbs = {
 
 static void x_smbsrv_init(x_smbsrv_t &smbsrv, int port)
 {
+	smbsrv.gensec_context = x_gensec_create_context();
+	x_gensec_krb5_init(smbsrv.gensec_context);
+	x_gensec_ntlmssp_init(smbsrv.gensec_context);
+	x_gensec_spnego_init(smbsrv.gensec_context);
+
+	std::unique_ptr<x_gensec_t> spnego{x_smbsrv_create_gensec(&smbsrv)};
+
+	if (spnego) {
+		std::vector<uint8_t> negprot_spnego;
+		int err = spnego->update(NULL, 0, negprot_spnego, NULL);
+		X_ASSERT(err == 0);
+		smbsrv.negprot_spnego.swap(negprot_spnego);
+	}
+
 	int fd = tcplisten(port);
 	assert(fd >= 0);
 
@@ -385,18 +399,6 @@ static void x_smbsrv_init(x_smbsrv_t &smbsrv, int port)
 
 	smbsrv.ep_id = x_evtmgmt_monitor(globals.evtmgmt, fd, FDEVT_IN, &smbsrv.upcall);
 	x_evtmgmt_enable_events(globals.evtmgmt, smbsrv.ep_id, FDEVT_IN | FDEVT_ERR | FDEVT_SHUTDOWN);
-
-	smbsrv.gensec_context = x_gensec_create_context();
-	x_gensec_register(smbsrv.gensec_context, &x_gensec_mech_spnego);
-
-	std::unique_ptr<x_gensec_t> spnego{x_smbsrv_create_gensec(&smbsrv)};
-
-	if (spnego) {
-		std::vector<uint8_t> negprot_spnego;
-		int err = spnego->update(NULL, 0, negprot_spnego);
-		X_ASSERT(err == 0);
-		smbsrv.negprot_spnego.swap(negprot_spnego);
-	}
 
 	// TODO start_wbcli(1);
 }
@@ -422,5 +424,10 @@ int main(int argc, char **argv)
 
 	x_threadpool_destroy(tpool);
 	return 0;
+}
+
+void x_smbsrv_wbpool_request(x_wbcli_t *wbcli)
+{
+	x_wbpool_request(globals.wbpool, wbcli);
 }
 

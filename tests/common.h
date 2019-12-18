@@ -17,15 +17,17 @@ void verify(const uint8_t *data, size_t size, bool verify)
 {
 	T msg;
 	idl::x_ndr_off_t ret = idl::x_ndr_pull(msg, data, size);
-	assert(ret == size);
-
+	assert(ret > 0);
 	idl::x_ndr_ostr(msg, std::cout, 8, 3);
+
+	assert((size_t)ret == size);
 
 	std::vector<uint8_t> out;
 	ret = idl::x_ndr_push(msg, out);
 
 	if (verify) {
-		assert(ret == size);
+		assert(ret > 0);
+		assert((size_t)ret == size);
 		assert(memcmp(out.data(), data, size) == 0);
 	}
 }

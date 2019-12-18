@@ -2,7 +2,7 @@
 #include <cassert>
 #include <cstring>
 #include <iostream>
-#include "librpc/idl/ntlmssp.h"
+#include "include/librpc/ndr_ntlmssp.hxx"
 #include "common.h"
 
 static const uint8_t negotiate_data[] = {

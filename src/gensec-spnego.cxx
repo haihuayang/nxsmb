@@ -15,21 +15,12 @@ extern "C" {
 // TODO
 #define gensec_setting_bool(setting, mech, name, default_value) default_value
 
-struct x_gensec_spnego_t : x_gensec_t
+struct x_gensec_spnego_t
 {
-	using x_gensec_t::x_gensec_t;
-	NTSTATUS update(const uint8_t *in_buf, size_t in_len,
-			std::vector<uint8_t> &out);
-	virtual NTSTATUS check_packet(const uint8_t *data, size_t data_len,
-			const uint8_t *sig, size_t sig_len) override {
-		X_ASSERT(false);
-		return NT_STATUS_OK;
-	}
-	virtual NTSTATUS sign_packet(const uint8_t *data, size_t data_len,
-			std::vector<uint8_t> &sig) override {
-		X_ASSERT(false);
-		return NT_STATUS_OK;
-	}
+	x_gensec_spnego_t(x_gensec_context_t *context, const x_gensec_ops_t *ops) :
+		gensec{context, ops} { }
+
+	x_gensec_t gensec;
 	enum state_position_t {
 		SERVER_START,
 		CLIENT_START,
@@ -45,17 +36,7 @@ struct x_gensec_spnego_t : x_gensec_t
 	bool simulate_w2k = gensec_setting_bool(gensec_security->settings,
 			"spnego", "simulate_w2k", false);
 	std::vector<uint8_t> mech_types_blob;
-	std::unique_ptr<x_gensec_t> subsec{nullptr};
-};
-
-static x_gensec_t *x_gensec_spnego_create(x_gensec_context_t *context)
-{
-	return new x_gensec_spnego_t(context);
-};
-
-const struct x_gensec_mech_t x_gensec_mech_spnego = {
-	GSS_SPNEGO_MECHANISM,
-	x_gensec_spnego_create,
+	std::unique_ptr<x_gensec_t, void (*)(x_gensec_t *)> subsec{nullptr, nullptr};
 };
 
 static int add_mech(MechTypeList *mechtypelist, gss_OID mech_type)
@@ -76,7 +57,7 @@ X_ASN1_METHOD(NegotiationToken)
 X_ASN1_METHOD(MechTypeList)
 X_ASN1_METHOD(GSSAPIContextToken)
 
-static int x_gensec_spnego_create_negTokenInit(x_gensec_spnego_t *gensec, std::vector<uint8_t> &out)
+static int x_gensec_spnego_create_negTokenInit(std::vector<uint8_t> &out)
 {
 	size_t size;
 	GSSAPIContextToken ct;
@@ -155,32 +136,31 @@ static x_gensec_t *match_mech_type(x_gensec_context_t *context, const NegTokenIn
 		if (oid_equal(mt, GSS_NTLM_MECHANISM)) {
 			mt_match = &mt;
 			return x_gensec_create_ntlmssp(context);
+		} else if (oid_equal(mt, GSS_KRB5_MECHANISM)) {
+			mt_match = &mt;
+			return x_gensec_create_krb5(context);
 		}
-		/* TODO
-		if (oid_equal(mt, GSS_KRB5_MECHANISM)) {
-			return GSS_KRB5_MECHANISM;
-		}*/
 	}
 	return nullptr;
 }
 
 static NTSTATUS spnego_update_start(x_gensec_spnego_t &spnego, const NegotiationToken &nt_requ,
-		std::vector<uint8_t> &out)
+		std::vector<uint8_t> &out, x_gensec_upcall_t *upcall)
 {
 	if (nt_requ.element != NegotiationToken::choice_NegotiationToken_negTokenInit) {
 		return NT_STATUS_INVALID_PARAMETER;
 	}
 	const NegTokenInit &ni = nt_requ.u.negTokenInit;
 	MechType *mt = NULL;
-	x_gensec_t *subsec = match_mech_type(spnego.context, ni, mt);
+	x_gensec_t *subsec = match_mech_type(spnego.gensec.context, ni, mt);
 	if (!subsec) {
 		return NT_STATUS_INVALID_PARAMETER;
 	}
 
 	int ret = x_asn1_encode(ni.mechTypes, spnego.mech_types_blob);
-	spnego.subsec.reset(subsec);
+	spnego.subsec = std::unique_ptr<x_gensec_t, void (*)(x_gensec_t *)>(subsec, x_gensec_destroy);
 	std::vector<uint8_t> subout;
-	NTSTATUS status = subsec->update((uint8_t *)ni.mechToken->data, ni.mechToken->length, subout);
+	NTSTATUS status = subsec->update((uint8_t *)ni.mechToken->data, ni.mechToken->length, subout, upcall);
 
 	NegotiationToken nt_resp;
 	memset(&nt_resp, 0, sizeof nt_resp);
@@ -203,7 +183,7 @@ static NTSTATUS spnego_update_start(x_gensec_spnego_t &spnego, const Negotiation
 }
 
 static NTSTATUS spnego_update_targ(x_gensec_spnego_t &spnego, const NegotiationToken &nt_requ,
-		std::vector<uint8_t> &out)
+		std::vector<uint8_t> &out, x_gensec_upcall_t *upcall)
 {
 	if (nt_requ.element != NegotiationToken::choice_NegotiationToken_negTokenResp) {
 		return NT_STATUS_INVALID_PARAMETER;
@@ -213,7 +193,7 @@ static NTSTATUS spnego_update_targ(x_gensec_spnego_t &spnego, const NegotiationT
 
 	const NegTokenResp &nt = nt_requ.u.negTokenResp;
 	std::vector<uint8_t> subout;
-	NTSTATUS status = spnego.subsec->update((uint8_t *)nt.responseToken->data, nt.responseToken->length, subout);
+	NTSTATUS status = spnego.subsec->update((uint8_t *)nt.responseToken->data, nt.responseToken->length, subout, upcall);
 
 	if (status != NT_STATUS_OK) {
 		return STATUS;
@@ -279,31 +259,32 @@ static NTSTATUS spnego_update_targ(x_gensec_spnego_t &spnego, const NegotiationT
 	return status;
 }
 
-NTSTATUS x_gensec_spnego_t::update(const uint8_t *in_buf, size_t in_len,
-		std::vector<uint8_t> &out)
+static NTSTATUS spnego_update(x_gensec_t *gensec, const uint8_t *in_buf, size_t in_len,
+		std::vector<uint8_t> &out, x_gensec_upcall_t *upcall)
 {
-	if (state_position == x_gensec_spnego_t::SERVER_START) {
+	x_gensec_spnego_t *spnego = X_CONTAINER_OF(gensec, x_gensec_spnego_t, gensec);
+	if (spnego->state_position == x_gensec_spnego_t::SERVER_START) {
 		if (in_len > 0) {
 			NegotiationToken nt;
 			int err = decode_token(nt, in_buf, in_len);
 			if (err) {
 				return NT_STATUS_INVALID_PARAMETER;
 			}
-			NTSTATUS status = spnego_update_start(*this, nt, out);
+			NTSTATUS status = spnego_update_start(*spnego, nt, out, upcall);
 			x_asn1_free(nt);
 			return status;
 		} else {
-			int err = x_gensec_spnego_create_negTokenInit(this, out);
+			int err = x_gensec_spnego_create_negTokenInit(out);
 			X_ASSERT(err == 0);
 			return NT_STATUS_OK;
 		}
-	} else if (state_position == x_gensec_spnego_t::SERVER_TARG) {
+	} else if (spnego->state_position == x_gensec_spnego_t::SERVER_TARG) {
 		NegotiationToken nt;
 		int err = decode_token(nt, in_buf, in_len);
 		if (err) {
 			return NT_STATUS_INVALID_PARAMETER;
 		}
-		NTSTATUS status = spnego_update_targ(*this, nt, out);
+		NTSTATUS status = spnego_update_targ(*spnego, nt, out, upcall);
 		x_asn1_free(nt);
 		return status;
 	}
@@ -311,4 +292,55 @@ NTSTATUS x_gensec_spnego_t::update(const uint8_t *in_buf, size_t in_len,
 	X_TODO;
 	return NT_STATUS_OK;
 }
+
+static void spnego_destroy(x_gensec_t *gensec)
+{
+	x_gensec_spnego_t *spnego = X_CONTAINER_OF(gensec, x_gensec_spnego_t, gensec);
+	delete spnego;
+}
+
+static bool spnego_have_feature(x_gensec_t *gensec, uint32_t feature)
+{
+	return false;
+}
+
+static NTSTATUS spnego_check_packet(x_gensec_t *gensec, const uint8_t *data, size_t data_len,
+		const uint8_t *sig, size_t sig_len)
+{
+	X_TODO;
+	return NT_STATUS_NOT_IMPLEMENTED;
+}
+
+static NTSTATUS spnego_sign_packet(x_gensec_t *gensec, const uint8_t *data, size_t data_len,
+		std::vector<uint8_t> &sig)
+{
+	X_TODO;
+	return NT_STATUS_NOT_IMPLEMENTED;
+}
+
+static const x_gensec_ops_t gensec_spnego_ops = {
+	spnego_update,
+	spnego_destroy,
+	spnego_have_feature,
+	spnego_check_packet,
+	spnego_sign_packet,
+};
+
+static x_gensec_t *x_gensec_spnego_create(x_gensec_context_t *context)
+{
+	x_gensec_spnego_t *spnego = new x_gensec_spnego_t(context, &gensec_spnego_ops);
+	return &spnego->gensec;
+};
+
+const struct x_gensec_mech_t x_gensec_mech_spnego = {
+	GSS_SPNEGO_MECHANISM,
+	x_gensec_spnego_create,
+};
+
+int x_gensec_spnego_init(x_gensec_context_t *ctx)
+{
+	x_gensec_register(ctx, &x_gensec_mech_spnego);
+	return 0;
+}
+
 

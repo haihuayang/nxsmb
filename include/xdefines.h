@@ -74,6 +74,8 @@ void x_dbg(const char *fmt, ...);
 
 #define PROJECT_NAME XSTR2(PROJECT)
 
+#define X_MALLOC malloc
+
 #ifdef __cplusplus
 extern "C" {
 #endif

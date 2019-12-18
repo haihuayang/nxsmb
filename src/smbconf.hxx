@@ -46,10 +46,35 @@ static inline const char *lpcfg_workgroup()
 	return "HHDOM2";
 }
 
+static inline const char *lpcfg_realm()
+{
+	return "HHDOM2.HHLAB";
+}
+
+static inline const char *lpcfg_salt_princ()
+{
+	return "host/hh360u.hhdom2.hhlab@HHDOM2.HHLAB";
+}
+
+static inline std::vector<std::string> lpcfg_cluster_nodes()
+{
+	return std::vector<std::string>{"NTNX-hh360u-1.hhdom2.hhlab"};
+}
+
 static inline const char *lpcfg_dnsdomain()
 {
-	return NULL;
+	return "";
 }
-	
+
+static inline bool lpcfg_gensec_require_pac(bool def)
+{
+	return true;
+}
+
+static inline bool lpcfg_allow_trusted_domains()
+{
+	return false;
+}
+
 #endif /* __smbconf__hxx__ */
 

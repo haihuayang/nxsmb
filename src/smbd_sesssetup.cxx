@@ -21,7 +21,7 @@ static x_smbsess_ptr_t x_smbconn_create_session(x_smbconn_t *smbconn)
 {
 	x_smbsess_ptr_t sess = std::make_shared<x_smbsess_t>();
 	sess->id = g_sess_id++;
-	sess->gensec.reset(x_smbsrv_create_gensec(smbconn->smbsrv));
+	sess->gensec = std::unique_ptr<x_gensec_t, void (*)(x_gensec_t *)>(x_smbsrv_create_gensec(smbconn->smbsrv), x_gensec_destroy);
 	smbconn->sessions.push_back(sess);
 	return sess;
 }
@@ -74,6 +74,13 @@ static int x_smb2_reply_sesssetup(x_smbconn_t *smbconn, x_smbsess_t *sess,
 	return 0;
 }
 
+static inline NTSTATUS x_smbsess_update_gensec(x_smbsess_ptr_t &smbsess, const uint8_t *inbuf, size_t inlen,
+		std::vector<uint8_t> &outbuf)
+{
+	return smbsess->gensec->update(inbuf, inlen, outbuf, &smbsess->gensec_upcall);
+}
+
+
 int x_smb2_process_SESSSETUP(x_smbconn_t *smbconn, x_msg_t *msg,
 		const uint8_t *in_buf, size_t in_len)
 {
@@ -114,15 +121,21 @@ int x_smb2_process_SESSSETUP(x_smbconn_t *smbconn, x_msg_t *msg,
 		if (sess == nullptr) {
 			return x_smb2_reply_error(smbconn, msg, NT_STATUS_USER_SESSION_DELETED);
 		}
+		if (sess->is_blocked) {
+			/* TODO just drop the message, should we reply something for this unexpected message */
+			return 0;
+		}
 	}
 
 	std::vector<uint8_t> out_security;
-	NTSTATUS status = sess->gensec->update(in_buf + in_security_offset, in_security_length, out_security);
+	NTSTATUS status = x_smbsess_update_gensec(sess, in_buf + in_security_offset, in_security_length, out_security);
 	if (NT_STATUS_IS_OK(status)) {
+		X_TODO;
 	} else if (NT_STATUS_EQUAL(status, NT_STATUS_MORE_PROCESSING_REQUIRED)) {
 		return x_smb2_reply_sesssetup(smbconn, sess.get(), msg, status, out_security);
-//	} else if (NT_STATUS_EQUAL(status, INTERNAL_BLOCKING)) {
-//		return;
+	} else if (NT_STATUS_EQUAL(status, X_NT_STATUS_INTERNAL_BLOCKED)) {
+		sess->is_blocked = true;
+		return 0;
 	} else {
 		return x_smb2_reply_error(smbconn, msg, status);
 	}

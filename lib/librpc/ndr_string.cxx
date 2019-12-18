@@ -148,36 +148,63 @@ static x_ndr_off_t push_utf8(const std::string &val, x_ndr_push_t &ndr, x_ndr_of
 	if (new_pos < 0 || new_pos > epos) {
 		return -NDR_ERR_LENGTH;
 	}
-	ndr.data.resize(new_pos);
-	memcpy(ndr.data.data() + bpos, val.data(), val.size());
+	ndr.reserve(new_pos);
+	memcpy(ndr.get_data() + bpos, val.data(), val.size());
 	return new_pos;
 }
 
 static x_ndr_off_t pull_utf8(std::string &val, x_ndr_pull_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos)
 {
-	val.assign((const char *)(ndr.data + bpos), (const char *)(ndr.data + epos));
+	val.assign((const char *)(ndr.get_data() + bpos), (const char *)(ndr.get_data() + epos));
 	return epos;
 }
 
-x_ndr_off_t u16string::push(x_ndr_push_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, x_ndr_switch_t level) const
+x_ndr_off_t x_ndr_push_u16string(const std::u16string &str, x_ndr_push_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags)
+{
+	X_ASSERT((flags & LIBNDR_FLAG_BIGENDIAN) == 0); // TODO
+	return x_ndr_push_bytes(str.data(), ndr, bpos, epos, str.size() * 2);
+}
+
+x_ndr_off_t x_ndr_pull_u16string(std::u16string &str, x_ndr_pull_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, size_t size)
+{
+	X_ASSERT((flags & LIBNDR_FLAG_BIGENDIAN) == 0); // TODO
+	if ((size % 2) != 0) {
+		return -NDR_ERR_LENGTH;
+	}
+	x_ndr_off_t new_epos = bpos + size;
+	if (new_epos > epos || new_epos < bpos) {
+		return -NDR_ERR_LENGTH;
+	}
+	str.assign((const char16_t *)(ndr.get_data() + bpos), (const char16_t *)(ndr.get_data() + new_epos));
+	return new_epos;
+}
+
+void x_ndr_ostr_u16string(const std::u16string &str, x_ndr_ostr_t &ndr, uint32_t flags, x_ndr_switch_t level)
+{
+	X_ASSERT(level == X_NDR_SWITCH_NONE);
+	// TODO
+	ndr.os << "u16string(" << str.size() << ")";
+}
+
+x_ndr_off_t u16string::ndr_scalars(x_ndr_push_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, x_ndr_switch_t level) const
 {
 	X_ASSERT(level == X_NDR_SWITCH_NONE);
 	x_ndr_off_t new_pos = bpos + val.size() * 2;
 	if (new_pos < 0 || new_pos > epos) {
 		return -NDR_ERR_LENGTH;
 	}
-	ndr.data.resize(new_pos);
-	memcpy(ndr.data.data() + bpos, val.data(), val.size() * 2);
+	ndr.reserve(new_pos);
+	memcpy(ndr.get_data() + bpos, val.data(), val.size() * 2);
 	return new_pos;
 }
 
-x_ndr_off_t u16string::pull(x_ndr_pull_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, x_ndr_switch_t level)
+x_ndr_off_t u16string::ndr_scalars(x_ndr_pull_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, x_ndr_switch_t level)
 {
 	X_ASSERT(level == X_NDR_SWITCH_NONE);
 	if (((epos - bpos) % 2) != 0) {
 		return -NDR_ERR_STRING;
 	}
-	val.assign((const char16_t *)(ndr.data + bpos), (const char16_t *)(ndr.data + epos));
+	val.assign((const char16_t *)(ndr.get_data() + bpos), (const char16_t *)(ndr.get_data() + epos));
 	return epos;
 }
 
@@ -188,13 +215,13 @@ void u16string::ostr(x_ndr_ostr_t &ndr, uint32_t flags, x_ndr_switch_t level) co
 	ndr.os << "u16string(" << val.size() << ")";
 }
 
-x_ndr_off_t sstring::push(x_ndr_push_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, x_ndr_switch_t level) const
+x_ndr_off_t sstring::ndr_scalars(x_ndr_push_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, x_ndr_switch_t level) const
 {
 	X_ASSERT(level == X_NDR_SWITCH_NONE);
 	return push_utf8(val, ndr, bpos, epos);
 }
 
-x_ndr_off_t sstring::pull(x_ndr_pull_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, x_ndr_switch_t level)
+x_ndr_off_t sstring::ndr_scalars(x_ndr_pull_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, x_ndr_switch_t level)
 {
 	X_ASSERT(level == X_NDR_SWITCH_NONE);
 	return pull_utf8(val, ndr, bpos, epos);
@@ -206,7 +233,7 @@ void sstring::ostr(x_ndr_ostr_t &ndr, uint32_t flags, x_ndr_switch_t level) cons
 	ndr.os << '"' << val << '"';
 }
 
-x_ndr_off_t gstring::push(x_ndr_push_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, x_ndr_switch_t level) const
+x_ndr_off_t gstring::ndr_scalars(x_ndr_push_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, x_ndr_switch_t level) const
 {
 	X_ASSERT(level == X_NDR_SWITCH_NONE);
 	if ((flags & LIBNDR_FLAG_STR_ASCII) != 0) {
@@ -218,12 +245,12 @@ x_ndr_off_t gstring::push(x_ndr_push_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos,
 	if (new_pos < 0 || new_pos > epos) {
 		return -NDR_ERR_LENGTH;
 	}
-	ndr.data.resize(new_pos);
-	memcpy(ndr.data.data() + bpos, u16s.data(), u16s.size() * 2);
+	ndr.reserve(new_pos);
+	memcpy(ndr.get_data() + bpos, u16s.data(), u16s.size() * 2);
 	return new_pos;
 }
 
-x_ndr_off_t gstring::pull(x_ndr_pull_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, x_ndr_switch_t level)
+x_ndr_off_t gstring::ndr_scalars(x_ndr_pull_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, x_ndr_switch_t level)
 {
 	X_ASSERT(level == X_NDR_SWITCH_NONE);
 	if ((flags & LIBNDR_FLAG_STR_ASCII) != 0) {
@@ -233,7 +260,7 @@ x_ndr_off_t gstring::pull(x_ndr_pull_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos,
 	if (((epos - bpos) % 2) != 0) {
 		return -NDR_ERR_STRING;
 	}
-	std::u16string u16s((const char16_t *)(ndr.data + bpos), (const char16_t *)(ndr.data + epos));
+	std::u16string u16s((const char16_t *)(ndr.get_data() + bpos), (const char16_t *)(ndr.get_data() + epos));
 	val = x_convert_utf16_to_utf8(u16s);
 	return epos;
 }
@@ -244,25 +271,25 @@ void gstring::ostr(x_ndr_ostr_t &ndr, uint32_t flags, x_ndr_switch_t level) cons
 	ndr.os << '"' << val << '"';
 }
 
-x_ndr_off_t nstring::push(x_ndr_push_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, x_ndr_switch_t level) const
+x_ndr_off_t nstring::ndr_scalars(x_ndr_push_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, x_ndr_switch_t level) const
 {
 	X_ASSERT(false);
 	return bpos;
 }
 
-x_ndr_off_t nstring::pull(x_ndr_pull_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, x_ndr_switch_t level)
+x_ndr_off_t nstring::ndr_scalars(x_ndr_pull_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, x_ndr_switch_t level)
 {
 	X_ASSERT(false);
 	return bpos;
 }
 
-x_ndr_off_t nstring_array::push(x_ndr_push_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, x_ndr_switch_t level) const
+x_ndr_off_t nstring_array::ndr_scalars(x_ndr_push_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, x_ndr_switch_t level) const
 {
 	X_ASSERT(false);
 	return bpos;
 }
 
-x_ndr_off_t nstring_array::pull(x_ndr_pull_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, x_ndr_switch_t level)
+x_ndr_off_t nstring_array::ndr_scalars(x_ndr_pull_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, x_ndr_switch_t level)
 {
 	X_ASSERT(false);
 	return bpos;
@@ -276,8 +303,8 @@ x_ndr_off_t x_ndr_push_string(const std::string &str, x_ndr_push_t &ndr,
 	if (new_pos > epos) {
 		return -NDR_ERR_LENGTH;
 	}
-	ndr.data.resize(new_pos);
-	memcpy(ndr.data.data() + bpos, str.data(), str.size());
+	ndr.reserve(new_pos);
+	memcpy(ndr.get_data() + bpos, str.data(), str.size());
 	return new_pos;
 }
 
@@ -285,7 +312,7 @@ x_ndr_off_t x_ndr_pull_string(std::string &str, x_ndr_pull_t &ndr,
 		x_ndr_off_t bpos, x_ndr_off_t epos,
 		uint32_t extra_flags)
 {
-	str = std::string(ndr.data + bpos, ndr.data + epos);
+	str = std::string(ndr.get_data() + bpos, ndr.get_data() + epos);
 	return epos;
 }
 

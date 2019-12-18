@@ -38,26 +38,69 @@ extern "C" {
 
 #define GENSEC_EXPIRE_TIME_INFINITY (NTTIME)0x8000000000000000LL
 
+#define X_NT_STATUS_INTERNAL_BLOCKED	NT_STATUS(1)
 
+struct x_smbsess_t;
 struct x_gensec_context_t;
+
+struct x_gensec_t;
+struct x_gensec_upcall_t;
+struct x_gensec_cbs_t
+{
+	void (*updated)(x_gensec_upcall_t *upcall, NTSTATUS status);
+};
+
+struct x_gensec_upcall_t
+{
+	const x_gensec_cbs_t *cbs;
+	void updated(NTSTATUS status) {
+		cbs->updated(this, status);
+	}
+};
+
+struct x_gensec_ops_t
+{
+	NTSTATUS (*update)(x_gensec_t *gensec, const uint8_t *in_buf, size_t in_len,
+			std::vector<uint8_t> &out, x_gensec_upcall_t *upcall);
+	void (*destroy)(x_gensec_t *gensec);
+	bool (*have_feature)(x_gensec_t *gensec, uint32_t feature);
+	NTSTATUS (*check_packet)(x_gensec_t *gensec, const uint8_t *data, size_t data_len,
+			const uint8_t *sig, size_t sig_len);
+	NTSTATUS (*sign_packet)(x_gensec_t *gensec, const uint8_t *data, size_t data_len,
+			std::vector<uint8_t> &sig);
+};
 
 struct x_gensec_t
 {
-	explicit x_gensec_t(x_gensec_context_t *context) : context(context) { }
+	explicit x_gensec_t(x_gensec_context_t *context, const x_gensec_ops_t *ops)
+		: context(context), ops(ops) { }
 
-	virtual ~x_gensec_t() { }
-	virtual NTSTATUS update(const uint8_t *in_buf, size_t in_len,
-			std::vector<uint8_t> &out) = 0;
-	virtual bool have_feature(uint32_t feature) {
-		return false; // TODO
+	NTSTATUS update(const uint8_t *in_buf, size_t in_len,
+			std::vector<uint8_t> &out, x_gensec_upcall_t *upcall) {
+		return ops->update(this, in_buf, in_len, out, upcall);
 	}
 
-	virtual NTSTATUS check_packet(const uint8_t *data, size_t data_len,
-			const uint8_t *sig, size_t sig_len) = 0;
-	virtual NTSTATUS sign_packet(const uint8_t *data, size_t data_len,
-			std::vector<uint8_t> &sig) = 0;
-	x_gensec_context_t *context;
+	bool have_feature(uint32_t feature) {
+		return ops->have_feature(this, feature);
+	}
+
+	NTSTATUS check_packet(const uint8_t *data, size_t data_len,
+			const uint8_t *sig, size_t sig_len) {
+		return ops->check_packet(this, data, data_len, sig, sig_len);
+	}
+
+	NTSTATUS sign_packet(const uint8_t *data, size_t data_len,
+			std::vector<uint8_t> &sig) {
+		return ops->sign_packet(this, data, data_len, sig);
+	}
+
+	x_gensec_context_t * const context;
+	const x_gensec_ops_t * const ops;
 };
+
+static inline void x_gensec_destroy(x_gensec_t *gensec) {
+	return gensec->ops->destroy(gensec);
+}
 
 struct x_gensec_mech_t
 {
@@ -123,10 +166,14 @@ struct x_msg_t
 };
 X_DECLARE_MEMBER_TRAITS(msg_dlink_traits, x_msg_t, dlink)
 
+struct x_smbconn_t;
 struct x_smbsess_t
 {
+	x_gensec_upcall_t gensec_upcall;
+	x_smbconn_t *smbconn;
 	uint64_t id;
-	std::unique_ptr<x_gensec_t> gensec;
+	bool is_blocked = false;
+	std::unique_ptr<x_gensec_t, void (*)(x_gensec_t *)> gensec{nullptr, nullptr};
 };
 using x_smbsess_ptr_t = std::shared_ptr<x_smbsess_t>;
 
@@ -188,7 +235,11 @@ struct x_smbconn_t
 	std::vector<x_smbsess_ptr_t> sessions;
 };
 
+int x_gensec_spnego_init(x_gensec_context_t *context);
 x_gensec_t *x_gensec_create_ntlmssp(x_gensec_context_t *context);
+int x_gensec_ntlmssp_init(x_gensec_context_t *context);
+x_gensec_t *x_gensec_create_krb5(x_gensec_context_t *context);
+int x_gensec_krb5_init(x_gensec_context_t *context);
 
 x_gensec_context_t *x_gensec_create_context();
 x_gensec_t *x_gensec_create_by_oid(x_gensec_context_t *context, gss_const_OID oid);
@@ -208,6 +259,10 @@ int x_smb2_process_NEGPROT(x_smbconn_t *smbconn, x_msg_t *msg,
 		const uint8_t *in_buf, size_t in_len);
 int x_smb2_process_SESSSETUP(x_smbconn_t *smbconn, x_msg_t *msg,
 		const uint8_t *in_buf, size_t in_len);
+
+void x_smbsess_auth_failed(x_smbsess_t *smbsess);
+
+void x_smbsrv_wbpool_request(x_wbcli_t *wbcli);
 
 #endif /* __smbd__hxx__ */
 
