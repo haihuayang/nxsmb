@@ -41,42 +41,42 @@ extern "C" {
 #define X_NT_STATUS_INTERNAL_BLOCKED	NT_STATUS(1)
 
 struct x_smbsess_t;
-struct x_gensec_context_t;
+struct x_auth_context_t;
 
-struct x_gensec_t;
-struct x_gensec_upcall_t;
-struct x_gensec_cbs_t
+struct x_auth_t;
+struct x_auth_upcall_t;
+struct x_auth_cbs_t
 {
-	void (*updated)(x_gensec_upcall_t *upcall, NTSTATUS status);
+	void (*updated)(x_auth_upcall_t *upcall, NTSTATUS status);
 };
 
-struct x_gensec_upcall_t
+struct x_auth_upcall_t
 {
-	const x_gensec_cbs_t *cbs;
+	const x_auth_cbs_t *cbs;
 	void updated(NTSTATUS status) {
 		cbs->updated(this, status);
 	}
 };
 
-struct x_gensec_ops_t
+struct x_auth_ops_t
 {
-	NTSTATUS (*update)(x_gensec_t *gensec, const uint8_t *in_buf, size_t in_len,
-			std::vector<uint8_t> &out, x_gensec_upcall_t *upcall);
-	void (*destroy)(x_gensec_t *gensec);
-	bool (*have_feature)(x_gensec_t *gensec, uint32_t feature);
-	NTSTATUS (*check_packet)(x_gensec_t *gensec, const uint8_t *data, size_t data_len,
+	NTSTATUS (*update)(x_auth_t *auth, const uint8_t *in_buf, size_t in_len,
+			std::vector<uint8_t> &out, x_auth_upcall_t *upcall);
+	void (*destroy)(x_auth_t *auth);
+	bool (*have_feature)(x_auth_t *auth, uint32_t feature);
+	NTSTATUS (*check_packet)(x_auth_t *auth, const uint8_t *data, size_t data_len,
 			const uint8_t *sig, size_t sig_len);
-	NTSTATUS (*sign_packet)(x_gensec_t *gensec, const uint8_t *data, size_t data_len,
+	NTSTATUS (*sign_packet)(x_auth_t *auth, const uint8_t *data, size_t data_len,
 			std::vector<uint8_t> &sig);
 };
 
-struct x_gensec_t
+struct x_auth_t
 {
-	explicit x_gensec_t(x_gensec_context_t *context, const x_gensec_ops_t *ops)
+	explicit x_auth_t(x_auth_context_t *context, const x_auth_ops_t *ops)
 		: context(context), ops(ops) { }
 
 	NTSTATUS update(const uint8_t *in_buf, size_t in_len,
-			std::vector<uint8_t> &out, x_gensec_upcall_t *upcall) {
+			std::vector<uint8_t> &out, x_auth_upcall_t *upcall) {
 		return ops->update(this, in_buf, in_len, out, upcall);
 	}
 
@@ -94,18 +94,18 @@ struct x_gensec_t
 		return ops->sign_packet(this, data, data_len, sig);
 	}
 
-	x_gensec_context_t * const context;
-	const x_gensec_ops_t * const ops;
+	x_auth_context_t * const context;
+	const x_auth_ops_t * const ops;
 };
 
-static inline void x_gensec_destroy(x_gensec_t *gensec) {
-	return gensec->ops->destroy(gensec);
+static inline void x_auth_destroy(x_auth_t *auth) {
+	return auth->ops->destroy(auth);
 }
 
-struct x_gensec_mech_t
+struct x_auth_mech_t
 {
 	gss_const_OID oid;
-	x_gensec_t *(*create)(x_gensec_context_t *context);
+	x_auth_t *(*create)(x_auth_context_t *context);
 };
 
 
@@ -130,7 +130,7 @@ struct x_smbsrv_t
 
 	x_smbconf_t conf;
 
-	x_gensec_context_t *gensec_context;
+	x_auth_context_t *auth_context;
 	std::vector<uint8_t> negprot_spnego;
 };
 
@@ -175,16 +175,16 @@ struct x_smbconn_t;
 struct x_smbsess_t
 {
 	~x_smbsess_t() {
-		if (gensec) {
-			x_gensec_destroy(gensec);
+		if (auth) {
+			x_auth_destroy(auth);
 		}
 	}
-	x_gensec_upcall_t gensec_upcall;
+	x_auth_upcall_t auth_upcall;
 	x_smbconn_t *smbconn;
 	uint64_t id;
 	bool is_blocked = false;
 	std::shared_ptr<x_smbuser_t> user;
-	x_gensec_t *gensec{nullptr};
+	x_auth_t *auth{nullptr};
 };
 using x_smbsess_ptr_t = std::shared_ptr<x_smbsess_t>;
 
@@ -246,19 +246,19 @@ struct x_smbconn_t
 	std::vector<x_smbsess_ptr_t> sessions;
 };
 
-int x_gensec_spnego_init(x_gensec_context_t *context);
-x_gensec_t *x_gensec_create_ntlmssp(x_gensec_context_t *context);
-int x_gensec_ntlmssp_init(x_gensec_context_t *context);
-x_gensec_t *x_gensec_create_krb5(x_gensec_context_t *context);
-int x_gensec_krb5_init(x_gensec_context_t *context);
+int x_auth_spnego_init(x_auth_context_t *context);
+x_auth_t *x_auth_create_ntlmssp(x_auth_context_t *context);
+int x_auth_ntlmssp_init(x_auth_context_t *context);
+x_auth_t *x_auth_create_krb5(x_auth_context_t *context);
+int x_auth_krb5_init(x_auth_context_t *context);
 
-x_gensec_context_t *x_gensec_create_context();
-x_gensec_t *x_gensec_create_by_oid(x_gensec_context_t *context, gss_const_OID oid);
-int x_gensec_register(x_gensec_context_t *context, const x_gensec_mech_t *mech);
+x_auth_context_t *x_auth_create_context();
+x_auth_t *x_auth_create_by_oid(x_auth_context_t *context, gss_const_OID oid);
+int x_auth_register(x_auth_context_t *context, const x_auth_mech_t *mech);
 
-extern const x_gensec_mech_t x_gensec_mech_spnego;
+extern const x_auth_mech_t x_auth_mech_spnego;
 
-x_gensec_t *x_smbsrv_create_gensec(x_smbsrv_t *smbsrv);
+x_auth_t *x_smbsrv_create_auth(x_smbsrv_t *smbsrv);
 
 void x_smbconn_reply(x_smbconn_t *smbconn, x_msg_t *msg);
 int x_smb2_reply_error(x_smbconn_t *smbconn, x_msg_t *msg,

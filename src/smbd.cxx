@@ -54,9 +54,9 @@ static void x_smbconn_done(x_smbconn_t *smbconn)
 	smbconn->decref();
 }
 
-x_gensec_t *x_smbsrv_create_gensec(x_smbsrv_t *smbsrv)
+x_auth_t *x_smbsrv_create_auth(x_smbsrv_t *smbsrv)
 {
-	return x_gensec_create_by_oid(smbsrv->gensec_context, GSS_SPNEGO_MECHANISM);
+	return x_auth_create_by_oid(smbsrv->auth_context, GSS_SPNEGO_MECHANISM);
 }
 
 void x_smbconn_reply(x_smbconn_t *smbconn, x_msg_t *msg)
@@ -377,12 +377,12 @@ static const x_epoll_upcall_cbs_t x_smbsrv_upcall_cbs = {
 
 static void x_smbsrv_init(x_smbsrv_t &smbsrv, int port)
 {
-	smbsrv.gensec_context = x_gensec_create_context();
-	x_gensec_krb5_init(smbsrv.gensec_context);
-	x_gensec_ntlmssp_init(smbsrv.gensec_context);
-	x_gensec_spnego_init(smbsrv.gensec_context);
+	smbsrv.auth_context = x_auth_create_context();
+	x_auth_krb5_init(smbsrv.auth_context);
+	x_auth_ntlmssp_init(smbsrv.auth_context);
+	x_auth_spnego_init(smbsrv.auth_context);
 
-	std::unique_ptr<x_gensec_t> spnego{x_smbsrv_create_gensec(&smbsrv)};
+	std::unique_ptr<x_auth_t> spnego{x_smbsrv_create_auth(&smbsrv)};
 
 	if (spnego) {
 		std::vector<uint8_t> negprot_spnego;

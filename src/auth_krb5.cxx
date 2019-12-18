@@ -40,7 +40,7 @@ using x_gss_buffer_set_ptr_t = std::unique_ptr<gss_buffer_set_desc, std::functio
 
 struct x_auth_krb5_t
 {
-	x_auth_krb5_t(x_gensec_context_t *context, const x_gensec_ops_t *ops);
+	x_auth_krb5_t(x_auth_context_t *context, const x_auth_ops_t *ops);
 	x_wbcli_t wbcli;
 	x_wbrequ_t wbrequ;
 	x_wbresp_t wbresp;
@@ -52,8 +52,8 @@ struct x_auth_krb5_t
 		S_DONE
 	} state_position{S_START};
 
-	x_gensec_t gensec; // base class
-	x_gensec_upcall_t *upcall;
+	x_auth_t auth; // base class
+	x_auth_upcall_t *upcall;
 
 	std::string domain;
 	std::string realm;
@@ -305,8 +305,8 @@ static void x_ntlmssp_is_trusted_domain(x_auth_krb5_t &ntlmssp)
 }
 #endif
 
-x_auth_krb5_t::x_auth_krb5_t(x_gensec_context_t *context, const x_gensec_ops_t *ops)
-	: gensec{context, ops}
+x_auth_krb5_t::x_auth_krb5_t(x_auth_context_t *context, const x_auth_ops_t *ops)
+	: auth{context, ops}
 {
 	wbcli.requ = &wbrequ;
 	wbcli.resp = &wbresp;
@@ -1015,10 +1015,10 @@ done:
 	return NT_STATUS_OK;
 }
 
-static NTSTATUS auth_krb5_update(x_gensec_t *gensec, const uint8_t *in_buf, size_t in_len,
-		std::vector<uint8_t> &out, x_gensec_upcall_t *upcall)
+static NTSTATUS auth_krb5_update(x_auth_t *auth, const uint8_t *in_buf, size_t in_len,
+		std::vector<uint8_t> &out, x_auth_upcall_t *upcall)
 {
-	x_auth_krb5_t *auth_krb5 = X_CONTAINER_OF(gensec, x_auth_krb5_t, gensec);
+	x_auth_krb5_t *auth_krb5 = X_CONTAINER_OF(auth, x_auth_krb5_t, auth);
 	NTSTATUS status;
 
 	/* Hold a reference */
@@ -1111,32 +1111,32 @@ static NTSTATUS auth_krb5_update(x_gensec_t *gensec, const uint8_t *in_buf, size
 	return X_NT_STATUS_INTERNAL_BLOCKED;
 }
 
-static void auth_krb5_destroy(x_gensec_t *gensec)
+static void auth_krb5_destroy(x_auth_t *auth)
 {
-	x_auth_krb5_t *auth_krb5 = X_CONTAINER_OF(gensec, x_auth_krb5_t, gensec);
+	x_auth_krb5_t *auth_krb5 = X_CONTAINER_OF(auth, x_auth_krb5_t, auth);
 	delete auth_krb5;
 }
 
-static bool auth_krb5_have_feature(x_gensec_t *gensec, uint32_t feature)
+static bool auth_krb5_have_feature(x_auth_t *auth, uint32_t feature)
 {
 	return false;
 }
 
-static NTSTATUS auth_krb5_check_packet(x_gensec_t *gensec, const uint8_t *data, size_t data_len,
+static NTSTATUS auth_krb5_check_packet(x_auth_t *auth, const uint8_t *data, size_t data_len,
 		const uint8_t *sig, size_t sig_len)
 {
 	X_TODO;
 	return NT_STATUS_NOT_IMPLEMENTED;
 }
 
-static NTSTATUS auth_krb5_sign_packet(x_gensec_t *gensec, const uint8_t *data, size_t data_len,
+static NTSTATUS auth_krb5_sign_packet(x_auth_t *auth, const uint8_t *data, size_t data_len,
 		std::vector<uint8_t> &sig)
 {
 	X_TODO;
 	return NT_STATUS_NOT_IMPLEMENTED;
 }
 
-static const x_gensec_ops_t auth_krb5_ops = {
+static const x_auth_ops_t auth_krb5_ops = {
 	auth_krb5_update,
 	auth_krb5_destroy,
 	auth_krb5_have_feature,
@@ -1145,10 +1145,10 @@ static const x_gensec_ops_t auth_krb5_ops = {
 };
 
 
-x_gensec_t *x_gensec_create_krb5(x_gensec_context_t *context)
+x_auth_t *x_auth_create_krb5(x_auth_context_t *context)
 {
 	x_auth_krb5_t *auth_krb5 = new x_auth_krb5_t(context, &auth_krb5_ops);
-	return &auth_krb5->gensec;
+	return &auth_krb5->auth;
 }
 
 static bool strlower_m(char *s)
@@ -1611,11 +1611,11 @@ static std::shared_ptr<auth_krb5_context_t> load_krb5_context()
 	return ret;
 }
 
-int x_gensec_krb5_init(x_gensec_context_t *ctx)
+int x_auth_krb5_init(x_auth_context_t *ctx)
 {
 	initialize_krb5_error_table();
 	g_krb5_context = load_krb5_context();
-	// x_gensec_register(
+	// x_auth_register(
 	return 0;
 }
 

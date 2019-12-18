@@ -28,9 +28,9 @@ extern "C" {
 #include "include/librpc/ndr_ntlmssp.hxx"
 #include "include/utils.hxx"
 
-struct x_gensec_ntlmssp_t
+struct x_auth_ntlmssp_t
 {
-	x_gensec_ntlmssp_t(x_gensec_context_t *context, const x_gensec_ops_t *ops);
+	x_auth_ntlmssp_t(x_auth_context_t *context, const x_auth_ops_t *ops);
 #if 0
 	NTSTATUS update(const uint8_t *in_buf, size_t in_len,
 			std::vector<uint8_t> &out);
@@ -58,8 +58,8 @@ struct x_gensec_ntlmssp_t
 		S_DONE
 	} state_position{S_NEGOTIATE};
 
-	x_gensec_t gensec; // base class
-	x_gensec_upcall_t *upcall;
+	x_auth_t auth; // base class
+	x_auth_upcall_t *upcall;
 
 	// smbd_smb2_session_setup_send, should in base class
 	uint32_t want_features = GENSEC_FEATURE_SESSION_KEY | GENSEC_FEATURE_UNIX_TOKEN;
@@ -214,8 +214,8 @@ struct AuthUserInfo_t {
 
 static void ntlmssp_check_password_cb_reply(x_wbcli_t *wbcli, int err)
 {
-	x_gensec_ntlmssp_t *ntlmssp = X_CONTAINER_OF(wbcli, x_gensec_ntlmssp_t, wbcli);
-	X_ASSERT(ntlmssp->state_position == x_gensec_ntlmssp_t::S_CHECK_PASSWORD);
+	x_auth_ntlmssp_t *ntlmssp = X_CONTAINER_OF(wbcli, x_auth_ntlmssp_t, wbcli);
+	X_ASSERT(ntlmssp->state_position == x_auth_ntlmssp_t::S_CHECK_PASSWORD);
 
 	if (err < 0) {
 		ntlmssp->upcall->updated(NT_STATUS_INTERNAL_ERROR);
@@ -308,7 +308,7 @@ static const x_wb_cbs_t ntlmssp_check_password_cbs = {
 	ntlmssp_check_password_cb_reply,
 };
 
-static void ntlmssp_check_password(x_gensec_ntlmssp_t &ntlmssp, bool trusted)
+static void ntlmssp_check_password(x_auth_ntlmssp_t &ntlmssp, bool trusted)
 {
 	std::string domain;
 	if (trusted) {
@@ -316,7 +316,7 @@ static void ntlmssp_check_password(x_gensec_ntlmssp_t &ntlmssp, bool trusted)
 	} else {
 		domain = x_convert_utf16_to_utf8(ntlmssp.netbios_name);
 	}
-	ntlmssp.state_position = x_gensec_ntlmssp_t::S_CHECK_PASSWORD;
+	ntlmssp.state_position = x_auth_ntlmssp_t::S_CHECK_PASSWORD;
 	// ntlmssp->
 
 	/* check_winbind_security */
@@ -378,8 +378,8 @@ static void ntlmssp_check_password(x_gensec_ntlmssp_t &ntlmssp, bool trusted)
 
 static void ntlmssp_domain_info_cb_reply(x_wbcli_t *wbcli, int err)
 {
-	x_gensec_ntlmssp_t *ntlmssp = X_CONTAINER_OF(wbcli, x_gensec_ntlmssp_t, wbcli);
-	X_ASSERT(ntlmssp->state_position == x_gensec_ntlmssp_t::S_CHECK_TRUSTED_DOMAIN);
+	x_auth_ntlmssp_t *ntlmssp = X_CONTAINER_OF(wbcli, x_auth_ntlmssp_t, wbcli);
+	X_ASSERT(ntlmssp->state_position == x_auth_ntlmssp_t::S_CHECK_TRUSTED_DOMAIN);
 
 	if (err < 0) {
 		ntlmssp->upcall->updated(NT_STATUS_INTERNAL_ERROR);
@@ -403,9 +403,9 @@ static const x_wb_cbs_t ntlmssp_domain_info_cbs = {
 	ntlmssp_domain_info_cb_reply,
 };
 
-static void x_ntlmssp_is_trusted_domain(x_gensec_ntlmssp_t &ntlmssp)
+static void x_ntlmssp_is_trusted_domain(x_auth_ntlmssp_t &ntlmssp)
 {
-	ntlmssp.state_position = x_gensec_ntlmssp_t::S_CHECK_TRUSTED_DOMAIN;
+	ntlmssp.state_position = x_auth_ntlmssp_t::S_CHECK_TRUSTED_DOMAIN;
 	auto &requ = ntlmssp.wbrequ.header;
 	requ.cmd = WINBINDD_DOMAIN_INFO;
 	strncpy(requ.domain_name, ntlmssp.client_domain.c_str(), sizeof(requ.domain_name) - 1);
@@ -415,8 +415,8 @@ static void x_ntlmssp_is_trusted_domain(x_gensec_ntlmssp_t &ntlmssp)
 }
 
 
-x_gensec_ntlmssp_t::x_gensec_ntlmssp_t(x_gensec_context_t *context, const x_gensec_ops_t *ops)
-	: gensec{context, ops}
+x_auth_ntlmssp_t::x_auth_ntlmssp_t(x_auth_context_t *context, const x_auth_ops_t *ops)
+	: auth{context, ops}
 {
 	wbcli.requ = &wbrequ;
 	wbcli.resp = &wbresp;
@@ -534,18 +534,18 @@ const DATA_BLOB ntlmssp_version_blob(void)
 }
 #endif
 // ntlmssp_handle_neg_flags
-static NTSTATUS handle_neg_flags(x_gensec_ntlmssp_t &gensec_ntlmssp,
+static NTSTATUS handle_neg_flags(x_auth_ntlmssp_t &auth_ntlmssp,
 		uint32_t flags, const char *name)
 {
-	uint32_t missing_flags = gensec_ntlmssp.required_flags;
+	uint32_t missing_flags = auth_ntlmssp.required_flags;
 	if (flags & idl::NTLMSSP_NEGOTIATE_UNICODE) {
-		gensec_ntlmssp.neg_flags |= idl::NTLMSSP_NEGOTIATE_UNICODE;
-		gensec_ntlmssp.neg_flags &= ~idl::NTLMSSP_NEGOTIATE_OEM;
-		gensec_ntlmssp.unicode = true;
+		auth_ntlmssp.neg_flags |= idl::NTLMSSP_NEGOTIATE_UNICODE;
+		auth_ntlmssp.neg_flags &= ~idl::NTLMSSP_NEGOTIATE_OEM;
+		auth_ntlmssp.unicode = true;
 	} else {
-		gensec_ntlmssp.neg_flags &= ~idl::NTLMSSP_NEGOTIATE_UNICODE;
-		gensec_ntlmssp.neg_flags |= idl::NTLMSSP_NEGOTIATE_OEM;
-		gensec_ntlmssp.unicode = false;
+		auth_ntlmssp.neg_flags &= ~idl::NTLMSSP_NEGOTIATE_UNICODE;
+		auth_ntlmssp.neg_flags |= idl::NTLMSSP_NEGOTIATE_OEM;
+		auth_ntlmssp.unicode = false;
 	}
 
         /*
@@ -553,46 +553,46 @@ static NTSTATUS handle_neg_flags(x_gensec_ntlmssp_t &gensec_ntlmssp,
          * has priority over NTLMSSP_NEGOTIATE_LM_KEY
          */
         if (!(flags & idl::NTLMSSP_NEGOTIATE_NTLM2)) {
-                gensec_ntlmssp.neg_flags &= ~idl::NTLMSSP_NEGOTIATE_NTLM2;
+                auth_ntlmssp.neg_flags &= ~idl::NTLMSSP_NEGOTIATE_NTLM2;
         }
 
-        if (gensec_ntlmssp.neg_flags & idl::NTLMSSP_NEGOTIATE_NTLM2) {
-                gensec_ntlmssp.neg_flags &= ~idl::NTLMSSP_NEGOTIATE_LM_KEY;
+        if (auth_ntlmssp.neg_flags & idl::NTLMSSP_NEGOTIATE_NTLM2) {
+                auth_ntlmssp.neg_flags &= ~idl::NTLMSSP_NEGOTIATE_LM_KEY;
         }
 
         if (!(flags & idl::NTLMSSP_NEGOTIATE_LM_KEY)) {
-                gensec_ntlmssp.neg_flags &= ~idl::NTLMSSP_NEGOTIATE_LM_KEY;
+                auth_ntlmssp.neg_flags &= ~idl::NTLMSSP_NEGOTIATE_LM_KEY;
         }
 
         if (!(flags & idl::NTLMSSP_NEGOTIATE_ALWAYS_SIGN)) {
-                gensec_ntlmssp.neg_flags &= ~idl::NTLMSSP_NEGOTIATE_ALWAYS_SIGN;
+                auth_ntlmssp.neg_flags &= ~idl::NTLMSSP_NEGOTIATE_ALWAYS_SIGN;
         }
 
         if (!(flags & idl::NTLMSSP_NEGOTIATE_128)) {
-                gensec_ntlmssp.neg_flags &= ~idl::NTLMSSP_NEGOTIATE_128;
+                auth_ntlmssp.neg_flags &= ~idl::NTLMSSP_NEGOTIATE_128;
         }
 
         if (!(flags & idl::NTLMSSP_NEGOTIATE_56)) {
-                gensec_ntlmssp.neg_flags &= ~idl::NTLMSSP_NEGOTIATE_56;
+                auth_ntlmssp.neg_flags &= ~idl::NTLMSSP_NEGOTIATE_56;
         }
 
         if (!(flags & idl::NTLMSSP_NEGOTIATE_KEY_EXCH)) {
-                gensec_ntlmssp.neg_flags &= ~idl::NTLMSSP_NEGOTIATE_KEY_EXCH;
+                auth_ntlmssp.neg_flags &= ~idl::NTLMSSP_NEGOTIATE_KEY_EXCH;
         }
 
         if (!(flags & idl::NTLMSSP_NEGOTIATE_SIGN)) {
-                gensec_ntlmssp.neg_flags &= ~idl::NTLMSSP_NEGOTIATE_SIGN;
+                auth_ntlmssp.neg_flags &= ~idl::NTLMSSP_NEGOTIATE_SIGN;
         }
 
         if (!(flags & idl::NTLMSSP_NEGOTIATE_SEAL)) {
-                gensec_ntlmssp.neg_flags &= ~idl::NTLMSSP_NEGOTIATE_SEAL;
+                auth_ntlmssp.neg_flags &= ~idl::NTLMSSP_NEGOTIATE_SEAL;
         }
 
         if ((flags & idl::NTLMSSP_REQUEST_TARGET)) {
-                gensec_ntlmssp.neg_flags |= idl::NTLMSSP_REQUEST_TARGET;
+                auth_ntlmssp.neg_flags |= idl::NTLMSSP_REQUEST_TARGET;
         }
 
-        missing_flags &= ~gensec_ntlmssp.neg_flags;
+        missing_flags &= ~auth_ntlmssp.neg_flags;
         if (missing_flags != 0) {
                 HRESULT hres = HRES_SEC_E_UNSUPPORTED_FUNCTION;
                 NTSTATUS status = NT_STATUS(HRES_ERROR_V(hres));
@@ -615,9 +615,9 @@ static NTSTATUS handle_neg_flags(x_gensec_ntlmssp_t &gensec_ntlmssp,
 }
 
 static const uint32_t max_lifetime = 30 * 60 * 1000;
-static inline NTSTATUS handle_negotiate(x_gensec_ntlmssp_t &gensec_ntlmssp,
+static inline NTSTATUS handle_negotiate(x_auth_ntlmssp_t &auth_ntlmssp,
 		const uint8_t *in_buf, size_t in_len, std::vector<uint8_t> &out,
-		x_gensec_upcall_t *upcall)
+		x_auth_upcall_t *upcall)
 {
 	// samba gensec_ntlmssp_server_negotiate
 	idl::NEGOTIATE_MESSAGE nego_msg;
@@ -627,7 +627,7 @@ static inline NTSTATUS handle_negotiate(x_gensec_ntlmssp_t &gensec_ntlmssp,
 		return NT_STATUS_INVALID_PARAMETER;
 	}
 
-	NTSTATUS status = handle_neg_flags(gensec_ntlmssp, nego_msg.NegotiateFlags, "negotiate");
+	NTSTATUS status = handle_neg_flags(auth_ntlmssp, nego_msg.NegotiateFlags, "negotiate");
 	if (!NT_STATUS_IS_OK(status)) {
 		return status;
 	}
@@ -636,25 +636,25 @@ static inline NTSTATUS handle_negotiate(x_gensec_ntlmssp_t &gensec_ntlmssp,
 	std::array<uint8_t, 8> cryptkey;
 	generate_random_buffer(cryptkey.data(), cryptkey.size());
 
-	gensec_ntlmssp.challenge_endtime = x_tick_add(tick_now, max_lifetime);
+	auth_ntlmssp.challenge_endtime = x_tick_add(tick_now, max_lifetime);
 
-	uint32_t chal_flags = gensec_ntlmssp.neg_flags;
+	uint32_t chal_flags = auth_ntlmssp.neg_flags;
 	std::u16string target_name;
 
         if (nego_msg.NegotiateFlags & idl::NTLMSSP_REQUEST_TARGET) {
                 chal_flags |= idl::NTLMSSP_NEGOTIATE_TARGET_INFO |
 			idl::NTLMSSP_REQUEST_TARGET;
-                if (gensec_ntlmssp.is_standalone) {
+                if (auth_ntlmssp.is_standalone) {
                         chal_flags |= idl::NTLMSSP_TARGET_TYPE_SERVER;
-                        target_name = gensec_ntlmssp.netbios_name;
+                        target_name = auth_ntlmssp.netbios_name;
                 } else {
                         chal_flags |= idl::NTLMSSP_TARGET_TYPE_DOMAIN;
-                        target_name = gensec_ntlmssp.netbios_domain;
+                        target_name = auth_ntlmssp.netbios_domain;
                 };
         }
 
-	gensec_ntlmssp.chal = cryptkey;
-	// TODO gensec_ntlmssp.internal_chal = cryptkey;
+	auth_ntlmssp.chal = cryptkey;
+	// TODO auth_ntlmssp.internal_chal = cryptkey;
 
 	idl::CHALLENGE_MESSAGE chal_msg;
 
@@ -668,18 +668,18 @@ static inline NTSTATUS handle_negotiate(x_gensec_ntlmssp_t &gensec_ntlmssp,
 		av_pair_list->pair.val.push_back(pair);
 
 		pair.set_AvId(idl::MsvAvNbComputerName);
-		pair.Value.AvNbComputerName.val = gensec_ntlmssp.netbios_name;
+		pair.Value.AvNbComputerName.val = auth_ntlmssp.netbios_name;
 		av_pair_list->pair.val.push_back(pair);
 
 		pair.set_AvId(idl::MsvAvDnsDomainName);
-		pair.Value.AvDnsDomainName.val = gensec_ntlmssp.dns_domain;
+		pair.Value.AvDnsDomainName.val = auth_ntlmssp.dns_domain;
 		av_pair_list->pair.val.push_back(pair);
 
 		pair.set_AvId(idl::MsvAvDnsComputerName);
-		pair.Value.AvDnsComputerName.val = gensec_ntlmssp.dns_name;
+		pair.Value.AvDnsComputerName.val = auth_ntlmssp.dns_name;
 		av_pair_list->pair.val.push_back(pair);
 
-		if (gensec_ntlmssp.force_old_spnego) {
+		if (auth_ntlmssp.force_old_spnego) {
 			pair.set_AvId(idl::MsvAvTimestamp);
 			pair.Value.AvTimestamp.val = timeval_to_nttime(&tv_now);
 			av_pair_list->pair.val.push_back(pair);
@@ -688,7 +688,7 @@ static inline NTSTATUS handle_negotiate(x_gensec_ntlmssp_t &gensec_ntlmssp,
 		pair.set_AvId(idl::MsvAvEOL);
 		av_pair_list->pair.val.push_back(pair);
 
-		gensec_ntlmssp.server_av_pair_list = chal_msg.TargetInfo.val;
+		auth_ntlmssp.server_av_pair_list = chal_msg.TargetInfo.val;
 	}
 
 	chal_msg.TargetName.val = std::make_shared<idl::gstring>();
@@ -740,7 +740,7 @@ static inline NTSTATUS handle_negotiate(x_gensec_ntlmssp_t &gensec_ntlmssp,
                 }
         }
 #endif
-        gensec_ntlmssp.state_position = x_gensec_ntlmssp_t::S_AUTHENTICATE;
+        auth_ntlmssp.state_position = x_auth_ntlmssp_t::S_AUTHENTICATE;
 
         return NT_STATUS_MORE_PROCESSING_REQUIRED;
 }
@@ -755,9 +755,9 @@ static const idl::AV_PAIR *av_pair_find(const idl::AV_PAIR_LIST &av_pair_list, i
 	return nullptr;
 }
 
-static inline NTSTATUS handle_authenticate(x_gensec_ntlmssp_t &gensec_ntlmssp,
+static inline NTSTATUS handle_authenticate(x_auth_ntlmssp_t &auth_ntlmssp,
 		const uint8_t *in_buf, size_t in_len, std::vector<uint8_t> &out,
-		x_gensec_upcall_t *upcall)
+		x_auth_upcall_t *upcall)
 {
 	/* TODO ntlmssp.idl, version & mic may not present,
 	 * samba/auth/ntlmssp/ntlmssp_server.c ntlmssp_server_preauth try
@@ -770,7 +770,7 @@ static inline NTSTATUS handle_authenticate(x_gensec_ntlmssp_t &gensec_ntlmssp,
 
 	NTSTATUS status;
 	if (msg.NegotiateFlags != 0) {
-		status = handle_neg_flags(gensec_ntlmssp, msg.NegotiateFlags, "authenticate");
+		status = handle_neg_flags(auth_ntlmssp, msg.NegotiateFlags, "authenticate");
 		if (!NT_STATUS_IS_OK(status)){
 			return status;
 		}
@@ -784,12 +784,12 @@ static inline NTSTATUS handle_authenticate(x_gensec_ntlmssp_t &gensec_ntlmssp,
 			return NT_STATUS_INVALID_PARAMETER;
 		}
 		
-		auto &server_av_pair_list = gensec_ntlmssp.server_av_pair_list;
+		auto &server_av_pair_list = auth_ntlmssp.server_av_pair_list;
 		if (server_av_pair_list) {
 		       	if (v2_resp.Challenge.AvPairs.pair.val.size() < server_av_pair_list->pair.val.size()) {
 				return NT_STATUS_INVALID_PARAMETER;
 			}
-			for (auto &av: gensec_ntlmssp.server_av_pair_list->pair.val) {
+			for (auto &av: auth_ntlmssp.server_av_pair_list->pair.val) {
 				if (av.AvId == idl::MsvAvEOL) {
 					continue;
 				}
@@ -851,7 +851,7 @@ static inline NTSTATUS handle_authenticate(x_gensec_ntlmssp_t &gensec_ntlmssp,
 		}
 	}
 
-	if (tick_now > gensec_ntlmssp.challenge_endtime) {
+	if (tick_now > auth_ntlmssp.challenge_endtime) {
 		return NT_STATUS_INVALID_PARAMETER;
 	}
 
@@ -861,7 +861,7 @@ static inline NTSTATUS handle_authenticate(x_gensec_ntlmssp_t &gensec_ntlmssp,
 
            However, the NTLM2 flag may still be set for the real NTLMv2 logins, be careful.
         */
-	if (gensec_ntlmssp.neg_flags & idl::NTLMSSP_NEGOTIATE_NTLM2) {
+	if (auth_ntlmssp.neg_flags & idl::NTLMSSP_NEGOTIATE_NTLM2) {
 		if (msg.NtChallengeResponse.val && msg.NtChallengeResponse.val->val.size() == 0x18) {
 			X_TODO; /*
 			uint8_t session_nonce_hash[16];
@@ -875,44 +875,44 @@ static inline NTSTATUS handle_authenticate(x_gensec_ntlmssp_t &gensec_ntlmssp,
 
 	/* ntlmssp_server_check_password */
 	if (msg.DomainName.val) {
-		gensec_ntlmssp.client_domain = msg.DomainName.val->val;
+		auth_ntlmssp.client_domain = msg.DomainName.val->val;
 	}
 	if (msg.UserName.val) {
-		gensec_ntlmssp.client_user = msg.UserName.val->val;
+		auth_ntlmssp.client_user = msg.UserName.val->val;
 	}
 	if (msg.Workstation.val) {
-		gensec_ntlmssp.client_workstation = msg.Workstation.val->val;
+		auth_ntlmssp.client_workstation = msg.Workstation.val->val;
 	}
 	if (msg.LmChallengeResponse.val) {
-		gensec_ntlmssp.client_lm_resp = msg.LmChallengeResponse.val;
+		auth_ntlmssp.client_lm_resp = msg.LmChallengeResponse.val;
 	}
 	if (msg.NtChallengeResponse.val) {
-		gensec_ntlmssp.client_nt_resp = msg.NtChallengeResponse.val;
+		auth_ntlmssp.client_nt_resp = msg.NtChallengeResponse.val;
 	}
 
-	gensec_ntlmssp.encrypted_session_key = msg.EncryptedRandomSessionKey.val->val;
-	bool upn_form = gensec_ntlmssp.client_domain.empty() &&
-		(gensec_ntlmssp.client_user.find('@') != std::string::npos);
+	auth_ntlmssp.encrypted_session_key = msg.EncryptedRandomSessionKey.val->val;
+	bool upn_form = auth_ntlmssp.client_domain.empty() &&
+		(auth_ntlmssp.client_user.find('@') != std::string::npos);
 
 	if (!upn_form) {
-		std::string netbios_name = x_convert_utf16_to_utf8(gensec_ntlmssp.netbios_name);
-		if (gensec_ntlmssp.client_domain != netbios_name) {
-			x_ntlmssp_is_trusted_domain(gensec_ntlmssp);
+		std::string netbios_name = x_convert_utf16_to_utf8(auth_ntlmssp.netbios_name);
+		if (auth_ntlmssp.client_domain != netbios_name) {
+			x_ntlmssp_is_trusted_domain(auth_ntlmssp);
 			return X_NT_STATUS_INTERNAL_BLOCKED;
 		}
 	}
 
-	ntlmssp_check_password(gensec_ntlmssp, false);
+	ntlmssp_check_password(auth_ntlmssp, false);
 	return X_NT_STATUS_INTERNAL_BLOCKED;
 }
 
-static NTSTATUS ntlmssp_update(x_gensec_t *gensec, const uint8_t *in_buf, size_t in_len,
-		std::vector<uint8_t> &out, x_gensec_upcall_t *upcall)
+static NTSTATUS ntlmssp_update(x_auth_t *auth, const uint8_t *in_buf, size_t in_len,
+		std::vector<uint8_t> &out, x_auth_upcall_t *upcall)
 {
-	x_gensec_ntlmssp_t *ntlmssp = X_CONTAINER_OF(gensec, x_gensec_ntlmssp_t, gensec);
-	if (ntlmssp->state_position == x_gensec_ntlmssp_t::S_NEGOTIATE) {
+	x_auth_ntlmssp_t *ntlmssp = X_CONTAINER_OF(auth, x_auth_ntlmssp_t, auth);
+	if (ntlmssp->state_position == x_auth_ntlmssp_t::S_NEGOTIATE) {
 		return handle_negotiate(*ntlmssp, in_buf, in_len, out, upcall);
-	} else if (ntlmssp->state_position == x_gensec_ntlmssp_t::S_AUTHENTICATE) {
+	} else if (ntlmssp->state_position == x_auth_ntlmssp_t::S_AUTHENTICATE) {
 		return handle_authenticate(*ntlmssp, in_buf, in_len, out, upcall);
 	} else {
 		X_ASSERT(false);
@@ -920,32 +920,32 @@ static NTSTATUS ntlmssp_update(x_gensec_t *gensec, const uint8_t *in_buf, size_t
 	}
 }
 
-static void ntlmssp_destroy(x_gensec_t *gensec)
+static void ntlmssp_destroy(x_auth_t *auth)
 {
-	x_gensec_ntlmssp_t *ntlmssp = X_CONTAINER_OF(gensec, x_gensec_ntlmssp_t, gensec);
+	x_auth_ntlmssp_t *ntlmssp = X_CONTAINER_OF(auth, x_auth_ntlmssp_t, auth);
 	delete ntlmssp;
 }
 
-static bool ntlmssp_have_feature(x_gensec_t *gensec, uint32_t feature)
+static bool ntlmssp_have_feature(x_auth_t *auth, uint32_t feature)
 {
 	return false;
 }
 
-static NTSTATUS ntlmssp_check_packet(x_gensec_t *gensec, const uint8_t *data, size_t data_len,
+static NTSTATUS ntlmssp_check_packet(x_auth_t *auth, const uint8_t *data, size_t data_len,
 		const uint8_t *sig, size_t sig_len)
 {
 	X_TODO;
 	return NT_STATUS_NOT_IMPLEMENTED;
 }
 
-static NTSTATUS ntlmssp_sign_packet(x_gensec_t *gensec, const uint8_t *data, size_t data_len,
+static NTSTATUS ntlmssp_sign_packet(x_auth_t *auth, const uint8_t *data, size_t data_len,
 		std::vector<uint8_t> &sig)
 {
 	X_TODO;
 	return NT_STATUS_NOT_IMPLEMENTED;
 }
 
-static const x_gensec_ops_t gensec_ntlmssp_ops = {
+static const x_auth_ops_t auth_ntlmssp_ops = {
 	ntlmssp_update,
 	ntlmssp_destroy,
 	ntlmssp_have_feature,
@@ -954,26 +954,26 @@ static const x_gensec_ops_t gensec_ntlmssp_ops = {
 };
 
 
-x_gensec_t *x_gensec_create_ntlmssp(x_gensec_context_t *context)
+x_auth_t *x_auth_create_ntlmssp(x_auth_context_t *context)
 {
-	x_gensec_ntlmssp_t *ntlmssp = new x_gensec_ntlmssp_t(context, &gensec_ntlmssp_ops);
-	return &ntlmssp->gensec;
+	x_auth_ntlmssp_t *ntlmssp = new x_auth_ntlmssp_t(context, &auth_ntlmssp_ops);
+	return &ntlmssp->auth;
 }
 
-int x_gensec_ntlmssp_init(x_gensec_context_t *ctx)
+int x_auth_ntlmssp_init(x_auth_context_t *ctx)
 {
 	return 0;
 }
 
 #if 0
-static x_gensec_t *x_gensec_ntlmssp_create(x_gensec_context_t *context)
+static x_auth_t *x_auth_ntlmssp_create(x_auth_context_t *context)
 {
-	return new x_gensec_ntlmssp_t(context);
+	return new x_auth_ntlmssp_t(context);
 };
 
-const struct x_gensec_mech_t x_gensec_mech_ntlmssp = {
+const struct x_auth_mech_t x_auth_mech_ntlmssp = {
 	GSS_SPNEGO_MECHANISM,
-	x_gensec_ntlmssp_create,
+	x_auth_ntlmssp_create,
 };
 #endif
 

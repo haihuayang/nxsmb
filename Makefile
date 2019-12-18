@@ -77,10 +77,8 @@ TARGET_CFLAGS_EXTRA := \
 
 all: $(TARGET_SET_tests:%=$(TARGET_DIR_out)/tests/%) $(TARGET_DIR_out)/bin/nxsmbd
 
-SET_src_nxsmbd := gensec-ntlmssp \
-	gensec-krb5 \
+SET_src_nxsmbd := auth_ntlmssp auth_krb5 auth_spnego auth \
 	network  \
-	gensec gensec-spnego \
 	smbd smbd_negprot smbd_sesssetup \
 
 $(TARGET_DIR_out)/bin/nxsmbd: $(SET_src_nxsmbd:%=$(TARGET_DIR_out)/src/%.o) $(TARGET_SET_lib:%=$(TARGET_DIR_out)/lib%.a)

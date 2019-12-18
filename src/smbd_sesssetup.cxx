@@ -21,7 +21,7 @@ static x_smbsess_ptr_t x_smbconn_create_session(x_smbconn_t *smbconn)
 {
 	x_smbsess_ptr_t sess = std::make_shared<x_smbsess_t>();
 	sess->id = g_sess_id++;
-	sess->gensec = x_smbsrv_create_gensec(smbconn->smbsrv);
+	sess->auth = x_smbsrv_create_auth(smbconn->smbsrv);
 	smbconn->sessions.push_back(sess);
 	return sess;
 }
@@ -74,10 +74,10 @@ static int x_smb2_reply_sesssetup(x_smbconn_t *smbconn, x_smbsess_t *sess,
 	return 0;
 }
 
-static inline NTSTATUS x_smbsess_update_gensec(x_smbsess_ptr_t &smbsess, const uint8_t *inbuf, size_t inlen,
+static inline NTSTATUS x_smbsess_update_auth(x_smbsess_ptr_t &smbsess, const uint8_t *inbuf, size_t inlen,
 		std::vector<uint8_t> &outbuf)
 {
-	return smbsess->gensec->update(inbuf, inlen, outbuf, &smbsess->gensec_upcall);
+	return smbsess->auth->update(inbuf, inlen, outbuf, &smbsess->auth_upcall);
 }
 
 
@@ -128,7 +128,7 @@ int x_smb2_process_SESSSETUP(x_smbconn_t *smbconn, x_msg_t *msg,
 	}
 
 	std::vector<uint8_t> out_security;
-	NTSTATUS status = x_smbsess_update_gensec(sess, in_buf + in_security_offset, in_security_length, out_security);
+	NTSTATUS status = x_smbsess_update_auth(sess, in_buf + in_security_offset, in_security_length, out_security);
 	if (NT_STATUS_IS_OK(status)) {
 		X_TODO;
 	} else if (NT_STATUS_EQUAL(status, NT_STATUS_MORE_PROCESSING_REQUIRED)) {
