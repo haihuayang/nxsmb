@@ -84,7 +84,7 @@ SET_src_nxsmbd := auth_ntlmssp auth_krb5 auth_spnego auth \
 $(TARGET_DIR_out)/bin/nxsmbd: $(SET_src_nxsmbd:%=$(TARGET_DIR_out)/src/%.o) $(TARGET_SET_lib:%=$(TARGET_DIR_out)/lib%.a)
 	$(CXX) -g $(TARGET_LDFLAGS) -o $@ $^ -lpthread -lresolv -ldl
 
-$(SET_src_nxsmbd:%=$(TARGET_DIR_out)/src/%.o): $(TARGET_DIR_out)/%.o: %.cxx | target_mkdir target_idl
+$(SET_src_nxsmbd:%=$(TARGET_DIR_out)/src/%.o): $(TARGET_DIR_out)/%.o: %.cxx | target_mkdir target_idl target_samba_gen
 	$(CXX) -c $(TARGET_CXXFLAGS) $(TARGET_CFLAGS_EXTRA) -o $@ $<
 
 $(TARGET_SET_tests:%=$(TARGET_DIR_out)/tests/%) : %: %.o $(TARGET_SET_lib:%=$(TARGET_DIR_out)/lib%.a)
