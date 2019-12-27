@@ -275,8 +275,9 @@ void x_evtmgmt_dispatch(x_evtmgmt_t *ep)
 	long wait_ms = -1;
 	while (!ep->timerq.empty()) {
 		x_timer_t *timer = ep->timerq.top();
-		wait_ms = x_tick_cmp(timer->timeout, tick_now);
-		if (wait_ms > 0) {
+		long wait_ns = x_tick_cmp(timer->timeout, tick_now);
+		if (wait_ns > 0) {
+			wait_ms = std::max(wait_ns / 1000000, 1l);
 			break;
 		}
 		ep->timerq.pop();

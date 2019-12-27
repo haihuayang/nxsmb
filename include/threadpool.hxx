@@ -20,8 +20,8 @@ static inline x_tick_t x_tick_now(void)
 {
 	struct timespec ts;
 	clock_gettime(CLOCK_MONOTONIC, &ts);
-	unsigned long ms = ts.tv_sec;
-	return ms * 1000 + (ts.tv_nsec / 1000000);
+	unsigned long ns = ts.tv_sec;
+	return ns * 1000000000 + ts.tv_nsec;
 	// auto now_ms = std::chrono::time_point_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now());
 }
 
