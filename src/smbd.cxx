@@ -413,7 +413,7 @@ int main(int argc, char **argv)
 	x_threadpool_t *tpool = x_threadpool_create(count);
 	globals.tpool = tpool;
 
-	globals.evtmgmt = x_evtmgmt_create(tpool);
+	globals.evtmgmt = x_evtmgmt_create(tpool, 2000000000);
 	globals.wbpool = x_wbpool_create(globals.evtmgmt, 2);
 
 	x_smbsrv_t smbsrv;

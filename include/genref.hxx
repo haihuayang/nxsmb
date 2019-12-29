@@ -49,6 +49,24 @@ struct x_genref_t
 		return true;
 	}
 
+	bool get() {
+		uint64_t oval = val.load(std::memory_order_relaxed);
+		for (;;) {
+			int32_t ref = int32_t(oval);
+			assert(ref > 0);
+
+			if (std::atomic_compare_exchange_weak_explicit(
+						&val,
+						&oval,
+						oval + 1,
+						std::memory_order_release,
+						std::memory_order_relaxed)) {
+				break;
+			}
+		}
+		return true;
+	}
+
 	void release() {
 		X_ASSERT(int32_t(val) > 0);
 		val += (1ul << 32);

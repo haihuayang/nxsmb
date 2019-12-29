@@ -13,6 +13,7 @@ enum {
 	FDEVT_IN = EPOLLIN,
 	FDEVT_OUT = EPOLLOUT,
 	FDEVT_ERR = EPOLLERR,
+	FDEVT_TIMER = (1u << 30),
 	FDEVT_SHUTDOWN = (1u << 31),
 };
 
@@ -89,7 +90,7 @@ struct x_timer_t
 };
 
 struct x_evtmgmt_t;
-x_evtmgmt_t *x_evtmgmt_create(x_threadpool_t *tpool);
+x_evtmgmt_t *x_evtmgmt_create(x_threadpool_t *tpool, unsigned long entry_interval);
 void x_evtmgmt_dispatch(x_evtmgmt_t *ep);
 // void x_evtmgmt_dispatch(x_evtmgmt_t *ep);
 

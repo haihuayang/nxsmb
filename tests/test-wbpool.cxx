@@ -73,7 +73,7 @@ static const x_timer_upcall_cbs_t get_domain_info_timer_cbs = {
 int main()
 {
 	x_threadpool_t *tpool = x_threadpool_create(2);
-	x_evtmgmt_t *evtmgmt = x_evtmgmt_create(tpool);
+	x_evtmgmt_t *evtmgmt = x_evtmgmt_create(tpool, 2000000000);
 	wbpool = x_wbpool_create(evtmgmt, 2);
 
 	x_timer_t timer;

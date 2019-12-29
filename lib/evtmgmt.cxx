@@ -61,6 +61,9 @@ struct x_epoll_entry_t
 	}
 
 	x_job_t job;
+	x_dlink_t timer_link;
+	x_tick_t timeout;
+
 	x_genref_t genref;
 	std::atomic<x_fdevents_t> fdevents;
 
@@ -83,11 +86,13 @@ struct timer_comp
 };
 
 X_DECLARE_MEMBER_TRAITS(timer_dlink_traits, x_timer_t, job.dlink)
+X_DECLARE_MEMBER_TRAITS(epoll_entry_timer_traits, x_epoll_entry_t, timer_link)
 
 struct x_evtmgmt_t
 {
-	x_evtmgmt_t(x_threadpool_t *tp, int efd, int tfd)
-		: tpool{tp}, epfd(efd), timerfd(tfd) {
+	x_evtmgmt_t(x_threadpool_t *tp, int efd, int tfd, uint64_t entry_interval)
+		: tpool{tp}, epfd(efd), timerfd(tfd)
+		, entry_interval{entry_interval} {
 		memset(epoll_job, 0, sizeof epoll_job);
 		for (auto &entry: epoll_job) {
 			entry.job.ops = &epoll_job_ops;
@@ -120,10 +125,12 @@ struct x_evtmgmt_t
 	x_threadpool_t * const tpool;
 	const int epfd;
 	const int timerfd;
+	const uint64_t entry_interval;
 
 	std::priority_queue<x_timer_t *, std::vector<x_timer_t *>, timer_comp> timerq{timer_comp()};
 	std::mutex mutex; // protect unsorted_timers
 	x_tp_s2list_t<timer_dlink_traits> unsorted_timers;
+	x_tp_d2list_t<epoll_entry_timer_traits> epoll_timer_list;
 
 	x_epoll_entry_t epoll_job[1024];
 };
@@ -158,6 +165,11 @@ static void epoll_job_done(x_job_t *job)
 {
 	x_epoll_entry_t *entry = X_CONTAINER_OF(job, x_epoll_entry_t, job);
 	X_DBG("%p", entry);
+	x_evtmgmt_t *evtmgmt = (x_evtmgmt_t *)entry->job.private_data;
+	{
+		std::lock_guard<std::mutex> lock(evtmgmt->mutex);
+		evtmgmt->epoll_timer_list.remove(entry);
+	}
 	entry->put();
 }
 
@@ -171,17 +183,17 @@ uint64_t x_evtmgmt_monitor(x_evtmgmt_t *ep, unsigned int fd, uint32_t poll_event
 	ev.events = poll_events | EPOLLET;
 	ev.data.u64 = gen | fd;
 	epoll_ctl(ep->epfd, EPOLL_CTL_ADD, fd, &ev);
+
+	if (ep->entry_interval) {
+		entry->timeout = x_tick_add(tick_now, ep->entry_interval);
+		std::lock_guard<std::mutex> lock{ep->mutex};
+		ep->epoll_timer_list.push_back(entry);
+	}
 	return ev.data.u64;
 }
 
-
-static bool x_evtmgmt_modify_fdevents(x_evtmgmt_t *ep, uint64_t id, x_fdevents_t fdevents)
+static inline void __evtmgmt_modify_fdevents(x_evtmgmt_t *ep, x_epoll_entry_t *entry, x_fdevents_t fdevents)
 {
-	x_epoll_entry_t *entry = ep->find_by_id(id);
-	if (!entry) {
-		return false;
-	}
-
 	x_fdevents_t oval, nval;
 	entry->modify_fdevents(fdevents, &oval, &nval);
 
@@ -190,6 +202,15 @@ static bool x_evtmgmt_modify_fdevents(x_evtmgmt_t *ep, uint64_t id, x_fdevents_t
 	} else if (x_fdevents_processable(nval)) {
 		x_threadpool_schedule(ep->tpool, &entry->job);
 	}
+}
+
+static bool x_evtmgmt_modify_fdevents(x_evtmgmt_t *ep, uint64_t id, x_fdevents_t fdevents)
+{
+	x_epoll_entry_t *entry = ep->find_by_id(id);
+	if (!entry) {
+		return false;
+	}
+	__evtmgmt_modify_fdevents(ep, entry, fdevents);
 	entry->put();
 	return true;
 }
@@ -285,6 +306,24 @@ void x_evtmgmt_dispatch(x_evtmgmt_t *ep)
 		x_threadpool_schedule(ep->tpool, &timer->job);
 	}
 
+	if (ep->entry_interval) {
+		x_epoll_entry_t *entry;
+		std::unique_lock<std::mutex> lock(ep->mutex);
+		while ((entry = ep->epoll_timer_list.get_front()) != nullptr) {
+			long wait_ns = x_tick_cmp(entry->timeout, tick_now);
+			if (wait_ns > 0) {
+				break;
+			}
+			ep->epoll_timer_list.remove(entry);
+			entry->timeout = x_tick_add(tick_now, ep->entry_interval);
+			ep->epoll_timer_list.push_back(entry);
+			entry->genref.get();
+			lock.unlock();
+			__evtmgmt_modify_fdevents(ep, entry, x_fdevents_init(FDEVT_TIMER, 0));
+			entry->put();
+			lock.lock();
+		}
+	}
 
 	struct epoll_event ev;
 	int err = epoll_wait(ep->epfd, &ev, 1, wait_ms);
@@ -309,7 +348,7 @@ void x_evtmgmt_dispatch(x_evtmgmt_t *ep)
 #define SYS_eventfd2	290
 #define eventfd(count, flags) syscall(SYS_eventfd2, (count), (flags))
 	
-x_evtmgmt_t *x_evtmgmt_create(x_threadpool_t *tpool)
+x_evtmgmt_t *x_evtmgmt_create(x_threadpool_t *tpool, unsigned long entry_interval)
 {
 	int epfd = epoll_create(16);
 	X_ASSERT(epfd >= 0);
@@ -323,7 +362,7 @@ x_evtmgmt_t *x_evtmgmt_create(x_threadpool_t *tpool)
 	int ret = epoll_ctl(epfd, EPOLL_CTL_ADD, timerfd, &ev);
 	X_ASSERT(ret == 0);
 
-	x_evtmgmt_t *ep = new x_evtmgmt_t(tpool, epfd, timerfd);
+	x_evtmgmt_t *ep = new x_evtmgmt_t(tpool, epfd, timerfd, entry_interval);
 	tick_now = x_tick_now();
 	return ep;
 }

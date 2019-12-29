@@ -26,12 +26,12 @@ static const x_timer_upcall_cbs_t test_timer_cbs = {
 int main()
 {
 	x_threadpool_t *tpool = x_threadpool_create(2);
-	x_evtmgmt_t *evtmgmt = x_evtmgmt_create(tpool);
+	x_evtmgmt_t *evtmgmt = x_evtmgmt_create(tpool, 0);
 
 	test_timer_t test_timer;
 	test_timer.timer.cbs = &test_timer_cbs;
 
-	x_evtmgmt_add_timer(evtmgmt, &test_timer.timer, 1000);
+	x_evtmgmt_add_timer(evtmgmt, &test_timer.timer, 1000000000);
 	
 	for (;;) {
 		x_evtmgmt_dispatch(evtmgmt);
