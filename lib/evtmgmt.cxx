@@ -1,6 +1,6 @@
 
 #include "include/evtmgmt.hxx"
-#include "include/genref.hxx"
+#include "include/atomic.hxx"
 #include <string.h>
 #include <mutex>
 #include <queue>
@@ -128,9 +128,9 @@ struct x_evtmgmt_t
 	const uint64_t entry_interval;
 
 	std::priority_queue<x_timer_t *, std::vector<x_timer_t *>, timer_comp> timerq{timer_comp()};
-	std::mutex mutex; // protect unsorted_timers
-	x_tp_s2list_t<timer_dlink_traits> unsorted_timers;
-	x_tp_d2list_t<epoll_entry_timer_traits> epoll_timer_list;
+	std::mutex mutex; // protect unsorted_timers, TODO it can be lock-less?
+	x_tp_sdlist_t<timer_dlink_traits> unsorted_timers;
+	x_tp_ddlist_t<epoll_entry_timer_traits> epoll_timer_list;
 
 	x_epoll_entry_t epoll_job[1024];
 };
@@ -220,6 +220,11 @@ bool x_evtmgmt_enable_events(x_evtmgmt_t *ep, uint64_t id, uint32_t events)
 	return x_evtmgmt_modify_fdevents(ep, id, x_fdevents_init(0, events));
 }
 
+bool x_evtmgmt_post_events(x_evtmgmt_t *ep, uint64_t id, uint32_t events)
+{
+	return x_evtmgmt_modify_fdevents(ep, id, x_fdevents_init(events, 0));
+}
+
 static void __evtmgmt_add_timer(x_evtmgmt_t *ep, x_timer_t *timer)
 {
 	timer->job.ops = &timer_job_ops;
@@ -274,6 +279,7 @@ static void post_fd_event(x_evtmgmt_t *ep, uint64_t id, uint32_t events)
 	x_evtmgmt_modify_fdevents(ep, id, x_fdevents_init(events, 0));
 }
 
+/* TODO, cancel timer */
 void x_evtmgmt_add_timer(x_evtmgmt_t *ep, x_timer_t *timer, unsigned long ms)
 {
 	timer->timeout = x_tick_add(tick_now, ms);
@@ -282,7 +288,7 @@ void x_evtmgmt_add_timer(x_evtmgmt_t *ep, x_timer_t *timer, unsigned long ms)
 
 void x_evtmgmt_dispatch(x_evtmgmt_t *ep)
 {
-	x_tp_s2list_t<timer_dlink_traits> unsorted_list;
+	x_tp_sdlist_t<timer_dlink_traits> unsorted_list;
 	{
 		std::unique_lock<std::mutex> lock(ep->mutex);
 		unsorted_list = std::move(ep->unsorted_timers);
@@ -293,12 +299,11 @@ void x_evtmgmt_dispatch(x_evtmgmt_t *ep)
 	}
 
 	tick_now = x_tick_now();
-	long wait_ms = -1;
+	long wait_ns = 60 * 1000000000l;
 	while (!ep->timerq.empty()) {
 		x_timer_t *timer = ep->timerq.top();
-		long wait_ns = x_tick_cmp(timer->timeout, tick_now);
+		wait_ns = x_tick_cmp(timer->timeout, tick_now);
 		if (wait_ns > 0) {
-			wait_ms = std::max(wait_ns / 1000000, 1l);
 			break;
 		}
 		ep->timerq.pop();
@@ -307,11 +312,12 @@ void x_evtmgmt_dispatch(x_evtmgmt_t *ep)
 	}
 
 	if (ep->entry_interval) {
+		long wait_ns2 = -1;
 		x_epoll_entry_t *entry;
 		std::unique_lock<std::mutex> lock(ep->mutex);
 		while ((entry = ep->epoll_timer_list.get_front()) != nullptr) {
-			long wait_ns = x_tick_cmp(entry->timeout, tick_now);
-			if (wait_ns > 0) {
+			wait_ns2 = x_tick_cmp(entry->timeout, tick_now);
+			if (wait_ns2 > 0) {
 				break;
 			}
 			ep->epoll_timer_list.remove(entry);
@@ -323,10 +329,13 @@ void x_evtmgmt_dispatch(x_evtmgmt_t *ep)
 			entry->put();
 			lock.lock();
 		}
+		if (wait_ns > wait_ns2) {
+			wait_ns = wait_ns2;
+		}
 	}
 
 	struct epoll_event ev;
-	int err = epoll_wait(ep->epfd, &ev, 1, wait_ms);
+	int err = epoll_wait(ep->epfd, &ev, 1, wait_ns / 1000000);
 	if (err > 0) {
 		if (ev.data.u64 == (uint64_t)ep->timerfd) {
 			uint64_t c;

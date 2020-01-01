@@ -53,7 +53,7 @@ struct x_auth_krb5_t
 	} state_position{S_START};
 
 	x_auth_t auth; // base class
-	x_auth_upcall_t *upcall;
+	x_smbdsess_t *smbdsess;
 
 	std::string domain;
 	std::string realm;
@@ -125,7 +125,7 @@ static void auth_krb5_get_domain_info(x_auth_krb5_t &auth)
 	strncpy(requ.domain_name, auth.realm.c_str(), sizeof(requ.domain_name) - 1);
 
 	auth.wbcli.cbs = &auth_krb5_domain_info_cbs;
-	x_smbsrv_wbpool_request(&auth.wbcli);
+	x_smbd_wbpool_request(&auth.wbcli);
 }
 
 #if 0
@@ -759,7 +759,8 @@ static inline OM_uint32 gssapi_obtain_pac_blob(OM_uint32 &gss_min,
 }
 
 // gensec_gse_session_info
-static NTSTATUS auth_krb5_accepted(x_auth_krb5_t &auth, gss_ctx_id_t gss_ctx, gss_name_t client_name)
+static NTSTATUS auth_krb5_accepted(x_auth_krb5_t &auth, gss_ctx_id_t gss_ctx,
+		gss_name_t client_name, x_smbdsess_t *smbdsess)
 {
 	OM_uint32 gss_maj, gss_min;
 	gss_buffer_set_t pac_buffer_set = GSS_C_NO_BUFFER_SET;
@@ -1016,7 +1017,7 @@ done:
 }
 
 static NTSTATUS auth_krb5_update(x_auth_t *auth, const uint8_t *in_buf, size_t in_len,
-		std::vector<uint8_t> &out, x_auth_upcall_t *upcall)
+		std::vector<uint8_t> &out, x_smbdsess_t *smbdsess)
 {
 	x_auth_krb5_t *auth_krb5 = X_CONTAINER_OF(auth, x_auth_krb5_t, auth);
 	NTSTATUS status;
@@ -1057,7 +1058,11 @@ static NTSTATUS auth_krb5_update(x_auth_t *auth, const uint8_t *in_buf, size_t i
 					 &delegated_cred_handle);
 	switch (gss_maj) {
 	case GSS_S_COMPLETE:
-		return auth_krb5_accepted(*auth_krb5, gssapi_context, client_name);
+		status = auth_krb5_accepted(*auth_krb5, gssapi_context, client_name, smbdsess);
+		if (NT_STATUS_IS_OK(status)) {
+			out.assign((uint8_t *)out_data.value, (uint8_t *)out_data.value + out_data.length);
+		}
+		return status;
 #if 0
 	struct timeval tv;
 		/* we are done with it */
@@ -1076,6 +1081,7 @@ static NTSTATUS auth_krb5_update(x_auth_t *auth, const uint8_t *in_buf, size_t i
 		break;
 	case GSS_S_CONTINUE_NEEDED:
 		/* we will need a third leg */
+		out.assign((uint8_t *)out_data.value, (uint8_t *)out_data.value + out_data.length);
 		status = NT_STATUS_MORE_PROCESSING_REQUIRED;
 		break;
 	default:
@@ -1100,6 +1106,8 @@ static NTSTATUS auth_krb5_update(x_auth_t *auth, const uint8_t *in_buf, size_t i
 		}
 	}
 
+	X_TODO;
+	return NT_STATUS_LOGON_FAILURE;
 	/* we may be told to return nothing */
 	if (out_data.length) {
 		const uint8_t *p = (const uint8_t *)out_data.value;

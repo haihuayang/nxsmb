@@ -63,9 +63,9 @@ struct x_wbpool_t
 		S_NONE,
 		S_CONNECTING,
 	} state = S_NONE;
-	x_tp_d2list_t<wbcli_dlink_traits> queue;
-	x_tp_d2list_t<wbconn_dlink_traits> ready_list; //  TODO front is ready, back is disconnected
-	x_tp_d2list_t<wbconn_dlink_traits> disconnected_list;
+	x_tp_ddlist_t<wbcli_dlink_traits> queue;
+	x_tp_ddlist_t<wbconn_dlink_traits> ready_list; //  TODO front is ready, back is disconnected
+	x_tp_ddlist_t<wbconn_dlink_traits> disconnected_list;
 	std::vector<wbconn_t> wbconns;
 };
 

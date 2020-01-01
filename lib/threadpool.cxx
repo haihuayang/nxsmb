@@ -16,7 +16,7 @@ struct x_threadpool_t
 	std::vector<std::thread> threads;
 	std::mutex mutex;
 	std::condition_variable cond;
-	x_tp_d2list_t<job_dlink_traits> queue;
+	x_tp_ddlist_t<job_dlink_traits> queue;
 };
 
 static void __threadpool_schedule_job(x_threadpool_t *tp, x_job_t *job)
@@ -46,6 +46,7 @@ static inline x_job_t *__threadpool_get(x_threadpool_t *tp)
 	return job;
 }
 
+/* TODO exit gracely */
 static void thread_func(x_threadpool_t *tpool, uint32_t no)
 {
 	snprintf(task_name, sizeof task_name, "T%03d", no);

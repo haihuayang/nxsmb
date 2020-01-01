@@ -11,6 +11,7 @@
 #include <atomic>
 #include <string>
 
+/* unit is nsec */
 typedef uint64_t x_tick_t;
 
 extern __thread char task_name[8];

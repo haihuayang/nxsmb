@@ -91,5 +91,48 @@ struct x_genref_t
 	}
 };
 
+template <typename T>
+inline bool x_atomic_check_set_flags(std::atomic<T> &obj,
+		T expected_flags, T new_flag)
+{
+	auto old_flag = obj.load(std::memory_order_relaxed);
+	for (;;) {
+		if (x_unlikely((old_flag & expected_flags) == 0)) {
+			return false;
+		}
+
+		X_ASSERT((old_flag & (~expected_flags)) == 0);
+		if (std::atomic_compare_exchange_weak_explicit(
+					&obj,
+					&old_flag,
+					new_flag,
+					std::memory_order_release,
+					std::memory_order_relaxed)) {
+			return true;
+		}
+	}
+}
+
+template <typename T>
+inline bool x_atomic_check_set_value(std::atomic<T> &obj,
+		T expected_value, T new_value)
+{
+	auto old_value = obj.load(std::memory_order_relaxed);
+	for (;;) {
+		if (x_unlikely((old_value != expected_value) == 0)) {
+			return false;
+		}
+
+		if (std::atomic_compare_exchange_weak_explicit(
+					&obj,
+					&old_value,
+					new_value,
+					std::memory_order_release,
+					std::memory_order_relaxed)) {
+			return true;
+		}
+	}
+}
+
 #endif /* __genref__hxx__ */
 

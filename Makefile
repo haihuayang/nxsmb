@@ -78,8 +78,9 @@ TARGET_CFLAGS_EXTRA := \
 all: $(TARGET_SET_tests:%=$(TARGET_DIR_out)/tests/%) $(TARGET_DIR_out)/bin/nxsmbd
 
 SET_src_nxsmbd := auth_ntlmssp auth_krb5 auth_spnego auth \
-	network  \
-	smbd smbd_negprot smbd_sesssetup \
+	network \
+	smbd smbd_sess smbd_conn \
+	smb2_negprot smb2_sesssetup \
 
 $(TARGET_DIR_out)/bin/nxsmbd: $(SET_src_nxsmbd:%=$(TARGET_DIR_out)/src/%.o) $(TARGET_SET_lib:%=$(TARGET_DIR_out)/lib%.a)
 	$(CXX) -g $(TARGET_LDFLAGS) -o $@ $^ -lpthread -lresolv -ldl

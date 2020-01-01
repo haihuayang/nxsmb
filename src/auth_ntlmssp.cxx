@@ -59,7 +59,8 @@ struct x_auth_ntlmssp_t
 	} state_position{S_NEGOTIATE};
 
 	x_auth_t auth; // base class
-	x_auth_upcall_t *upcall;
+	x_smbdsess_t *smbdsess;
+	// x_auth_upcall_t *upcall;
 
 	// smbd_smb2_session_setup_send, should in base class
 	uint32_t want_features = GENSEC_FEATURE_SESSION_KEY | GENSEC_FEATURE_UNIX_TOKEN;
@@ -217,8 +218,12 @@ static void ntlmssp_check_password_cb_reply(x_wbcli_t *wbcli, int err)
 	x_auth_ntlmssp_t *ntlmssp = X_CONTAINER_OF(wbcli, x_auth_ntlmssp_t, wbcli);
 	X_ASSERT(ntlmssp->state_position == x_auth_ntlmssp_t::S_CHECK_PASSWORD);
 
+	x_ref_t<x_smbdsess_t> sess_decref{ntlmssp->smbdsess};
+	ntlmssp->smbdsess = nullptr;
 	if (err < 0) {
-		ntlmssp->upcall->updated(NT_STATUS_INTERNAL_ERROR);
+		std::vector<uint8_t> out_security;
+		x_smbdsess_auth_updated(sess_decref.get(), NT_STATUS_INTERNAL_ERROR, 
+				out_security);
 		return;
 	}
 
@@ -301,14 +306,20 @@ static void ntlmssp_check_password_cb_reply(x_wbcli_t *wbcli, int err)
 		}
 
 	}
-	X_TODO;
+
+	{
+		/* TODO update userinfo */
+		std::vector<uint8_t> out_security;
+		x_smbdsess_auth_updated(sess_decref.get(), NT_STATUS_OK, 
+				out_security);
+	}
 }
 
 static const x_wb_cbs_t ntlmssp_check_password_cbs = {
 	ntlmssp_check_password_cb_reply,
 };
 
-static void ntlmssp_check_password(x_auth_ntlmssp_t &ntlmssp, bool trusted)
+static void ntlmssp_check_password(x_auth_ntlmssp_t &ntlmssp, bool trusted, x_smbdsess_t *smbdsess)
 {
 	std::string domain;
 	if (trusted) {
@@ -373,7 +384,9 @@ static void ntlmssp_check_password(x_auth_ntlmssp_t &ntlmssp, bool trusted)
 	}
 
 	ntlmssp.wbcli.cbs = &ntlmssp_check_password_cbs;
-	x_smbsrv_wbpool_request(&ntlmssp.wbcli);
+	ntlmssp.smbdsess = smbdsess;
+	smbdsess->incref();
+	x_smbd_wbpool_request(&ntlmssp.wbcli);
 }
 
 static void ntlmssp_domain_info_cb_reply(x_wbcli_t *wbcli, int err)
@@ -381,8 +394,13 @@ static void ntlmssp_domain_info_cb_reply(x_wbcli_t *wbcli, int err)
 	x_auth_ntlmssp_t *ntlmssp = X_CONTAINER_OF(wbcli, x_auth_ntlmssp_t, wbcli);
 	X_ASSERT(ntlmssp->state_position == x_auth_ntlmssp_t::S_CHECK_TRUSTED_DOMAIN);
 
+	x_ref_t<x_smbdsess_t> sess_decref{ntlmssp->smbdsess};
+	ntlmssp->smbdsess = nullptr;
+
 	if (err < 0) {
-		ntlmssp->upcall->updated(NT_STATUS_INTERNAL_ERROR);
+		std::vector<uint8_t> out_security;
+		x_smbdsess_auth_updated(sess_decref.get(), NT_STATUS_INTERNAL_ERROR, 
+				out_security);
 		return;
 	}
 
@@ -396,14 +414,14 @@ static void ntlmssp_domain_info_cb_reply(x_wbcli_t *wbcli, int err)
 
 	bool is_trusted = err == 0 && ntlmssp->wbresp.header.result == WINBINDD_OK;
 
-	ntlmssp_check_password(*ntlmssp, is_trusted);
+	ntlmssp_check_password(*ntlmssp, is_trusted, sess_decref.get());
 }
 
 static const x_wb_cbs_t ntlmssp_domain_info_cbs = {
 	ntlmssp_domain_info_cb_reply,
 };
 
-static void x_ntlmssp_is_trusted_domain(x_auth_ntlmssp_t &ntlmssp)
+static void x_ntlmssp_is_trusted_domain(x_auth_ntlmssp_t &ntlmssp, x_smbdsess_t *smbdsess)
 {
 	ntlmssp.state_position = x_auth_ntlmssp_t::S_CHECK_TRUSTED_DOMAIN;
 	auto &requ = ntlmssp.wbrequ.header;
@@ -411,7 +429,9 @@ static void x_ntlmssp_is_trusted_domain(x_auth_ntlmssp_t &ntlmssp)
 	strncpy(requ.domain_name, ntlmssp.client_domain.c_str(), sizeof(requ.domain_name) - 1);
 
 	ntlmssp.wbcli.cbs = &ntlmssp_domain_info_cbs;
-	x_smbsrv_wbpool_request(&ntlmssp.wbcli);
+	ntlmssp.smbdsess = smbdsess;
+	smbdsess->incref();
+	x_smbd_wbpool_request(&ntlmssp.wbcli);
 }
 
 
@@ -617,7 +637,7 @@ static NTSTATUS handle_neg_flags(x_auth_ntlmssp_t &auth_ntlmssp,
 static const uint32_t max_lifetime = 30 * 60 * 1000;
 static inline NTSTATUS handle_negotiate(x_auth_ntlmssp_t &auth_ntlmssp,
 		const uint8_t *in_buf, size_t in_len, std::vector<uint8_t> &out,
-		x_auth_upcall_t *upcall)
+		x_smbdsess_t *smbdsess)
 {
 	// samba gensec_ntlmssp_server_negotiate
 	idl::NEGOTIATE_MESSAGE nego_msg;
@@ -757,7 +777,7 @@ static const idl::AV_PAIR *av_pair_find(const idl::AV_PAIR_LIST &av_pair_list, i
 
 static inline NTSTATUS handle_authenticate(x_auth_ntlmssp_t &auth_ntlmssp,
 		const uint8_t *in_buf, size_t in_len, std::vector<uint8_t> &out,
-		x_auth_upcall_t *upcall)
+		x_smbdsess_t *smbdsess)
 {
 	/* TODO ntlmssp.idl, version & mic may not present,
 	 * samba/auth/ntlmssp/ntlmssp_server.c ntlmssp_server_preauth try
@@ -897,23 +917,24 @@ static inline NTSTATUS handle_authenticate(x_auth_ntlmssp_t &auth_ntlmssp,
 	if (!upn_form) {
 		std::string netbios_name = x_convert_utf16_to_utf8(auth_ntlmssp.netbios_name);
 		if (auth_ntlmssp.client_domain != netbios_name) {
-			x_ntlmssp_is_trusted_domain(auth_ntlmssp);
+			x_ntlmssp_is_trusted_domain(auth_ntlmssp, smbdsess);
+			return NT_STATUS(2); // TODO introduce error
 			return X_NT_STATUS_INTERNAL_BLOCKED;
 		}
 	}
 
-	ntlmssp_check_password(auth_ntlmssp, false);
+	ntlmssp_check_password(auth_ntlmssp, false, smbdsess);
 	return X_NT_STATUS_INTERNAL_BLOCKED;
 }
 
 static NTSTATUS ntlmssp_update(x_auth_t *auth, const uint8_t *in_buf, size_t in_len,
-		std::vector<uint8_t> &out, x_auth_upcall_t *upcall)
+		std::vector<uint8_t> &out, x_smbdsess_t *smbdsess)
 {
 	x_auth_ntlmssp_t *ntlmssp = X_CONTAINER_OF(auth, x_auth_ntlmssp_t, auth);
 	if (ntlmssp->state_position == x_auth_ntlmssp_t::S_NEGOTIATE) {
-		return handle_negotiate(*ntlmssp, in_buf, in_len, out, upcall);
+		return handle_negotiate(*ntlmssp, in_buf, in_len, out, smbdsess);
 	} else if (ntlmssp->state_position == x_auth_ntlmssp_t::S_AUTHENTICATE) {
-		return handle_authenticate(*ntlmssp, in_buf, in_len, out, upcall);
+		return handle_authenticate(*ntlmssp, in_buf, in_len, out, smbdsess);
 	} else {
 		X_ASSERT(false);
 		return NT_STATUS_INTERNAL_ERROR;

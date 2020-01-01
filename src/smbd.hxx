@@ -6,16 +6,19 @@
 #error "Must be c++"
 #endif
 
+#include "samba/include/config.h"
 #include "include/evtmgmt.hxx"
 #include "include/wbpool.hxx"
 #include <vector>
 #include <memory>
+#include <mutex>
 #include <string.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <unistd.h>
 #include "smbconf.hxx"
 #include "nttime.hxx"
+#include "include/utils.hxx"
 extern "C" {
 #include "samba/libcli/smb/smb_constants.h"
 #include "samba/libcli/smb/smb2_constants.h"
@@ -40,10 +43,11 @@ extern "C" {
 
 #define X_NT_STATUS_INTERNAL_BLOCKED	NT_STATUS(1)
 
-struct x_smbsess_t;
+struct x_smbdsess_t;
 struct x_auth_context_t;
 
 struct x_auth_t;
+#if 0
 struct x_auth_upcall_t;
 struct x_auth_cbs_t
 {
@@ -57,11 +61,11 @@ struct x_auth_upcall_t
 		cbs->updated(this, status);
 	}
 };
-
+#endif
 struct x_auth_ops_t
 {
 	NTSTATUS (*update)(x_auth_t *auth, const uint8_t *in_buf, size_t in_len,
-			std::vector<uint8_t> &out, x_auth_upcall_t *upcall);
+			std::vector<uint8_t> &out, x_smbdsess_t *sess);
 	void (*destroy)(x_auth_t *auth);
 	bool (*have_feature)(x_auth_t *auth, uint32_t feature);
 	NTSTATUS (*check_packet)(x_auth_t *auth, const uint8_t *data, size_t data_len,
@@ -76,8 +80,8 @@ struct x_auth_t
 		: context(context), ops(ops) { }
 
 	NTSTATUS update(const uint8_t *in_buf, size_t in_len,
-			std::vector<uint8_t> &out, x_auth_upcall_t *upcall) {
-		return ops->update(this, in_buf, in_len, out, upcall);
+			std::vector<uint8_t> &out, x_smbdsess_t *sess) {
+		return ops->update(this, in_buf, in_len, out, sess);
 	}
 
 	bool have_feature(uint32_t feature) {
@@ -122,7 +126,7 @@ struct x_smbconf_t
 	uint8_t guid[16];
 };
 
-struct x_smbsrv_t
+struct x_smbd_t
 {
 	x_epoll_upcall_t upcall;
 	uint64_t ep_id;
@@ -171,45 +175,77 @@ struct x_smbuser_t
 	// security token
 };
 
-struct x_smbconn_t;
-struct x_smbsess_t
+struct x_smbdconn_t;
+struct x_smbdsess_t
 {
-	~x_smbsess_t() {
+	explicit x_smbdsess_t(x_smbdconn_t *smbdconn);
+	~x_smbdsess_t() {
 		if (auth) {
 			x_auth_destroy(auth);
 		}
 	}
-	x_auth_upcall_t auth_upcall;
-	x_smbconn_t *smbconn;
-	uint64_t id;
-	bool is_blocked = false;
-	std::shared_ptr<x_smbuser_t> user;
-	x_auth_t *auth{nullptr};
-};
-using x_smbsess_ptr_t = std::shared_ptr<x_smbsess_t>;
-
-struct x_smbconn_t
-{
-	enum { MAX_MSG = 4 };
-	x_smbconn_t(x_smbsrv_t *smbsrv, int fd_, const struct sockaddr_in &sin_)
-		: smbsrv(smbsrv), fd(fd_), sin(sin_) { }
-	~x_smbconn_t() {
-		if (recving_msg) {
-			delete recving_msg;
-		}
-		if (sending_msg) {
-			delete sending_msg;
-		}
-		while (!send_queue.empty()) {
-			x_msg_t *msg = send_queue.get_front();
-			send_queue.remove(msg);
-			delete msg;
-		}
-		X_ASSERT_SYSCALL(close(fd));
+	void incref() {
+		X_ASSERT(refcnt++ > 0);
 	}
 
+	void decref() {
+		if (unlikely(--refcnt == 0)) {
+			delete this;
+		}
+	}
+#if 0
+	enum {
+		SF_PROCESSING = 1,
+		SF_WAITINPUT = 1 << 1,
+		SF_ACTIVE = 1 << 2,
+		SF_BLOCKED = 1 << 3,
+		SF_FAILED = 1 << 4,
+		SF_EXPIRED = 1 << 5,
+		SF_SHUTDOWN = 1 << 6,
+	};
+#endif
+	enum {
+		S_PROCESSING,
+		S_WAIT_INPUT,
+		S_ACTIVE,
+		S_BLOCKED,
+		S_FAILED,
+		S_EXPIRED,
+		S_SHUTDOWN,
+	};
+	x_dqlink_t hash_link;
+	x_dlink_t conn_link;
+
+	// x_auth_upcall_t auth_upcall;
+	x_smbdconn_t *smbdconn;
+	uint64_t id;
+	x_tick_t timeout;
+	std::atomic<uint32_t> state{S_PROCESSING};
+	std::atomic<int> refcnt;
+	std::mutex mutex;
+	std::shared_ptr<x_smbuser_t> user;
+	x_auth_t *auth{nullptr};
+	x_msg_t *authmsg{nullptr};
+};
+X_DECLARE_MEMBER_TRAITS(smbdsess_hash_traits, x_smbdsess_t, hash_link)
+X_DECLARE_MEMBER_TRAITS(smbdsess_conn_traits, x_smbdsess_t, conn_link)
+
+struct x_fdevt_user_t
+{
+	x_dlink_t link;
+	void (*func)(x_smbdconn_t *smbdconn, x_fdevt_user_t *);
+};
+X_DECLARE_MEMBER_TRAITS(fdevt_user_conn_traits, x_fdevt_user_t, link)
+
+struct x_smbdconn_t
+{
+	enum { MAX_MSG = 4 };
+	x_smbdconn_t(x_smbd_t *smbd, int fd_, const struct sockaddr_in &sin_)
+		: smbd(smbd), fd(fd_), sin(sin_) { }
+	~x_smbdconn_t();
+
 	const x_smbconf_t &get_conf() const {
-		return smbsrv->conf;
+		return smbd->conf;
 	}
 
 	void incref() {
@@ -217,14 +253,15 @@ struct x_smbconn_t
 	}
 
 	void decref() {
-		if (--refcnt == 0) {
+		if (unlikely(--refcnt == 0)) {
 			delete this;
 		}
 	}
 
 	x_epoll_upcall_t upcall;
 	uint64_t ep_id;
-	x_smbsrv_t * const smbsrv;
+	std::mutex mutex;
+	x_smbd_t * const smbd;
 	std::atomic<int> refcnt{1};
 	enum { STATE_RUNNING, STATE_DONE } state{STATE_RUNNING};
 	int fd;
@@ -241,10 +278,16 @@ struct x_smbconn_t
 	uint32_t nbt_hdr;
 	x_msg_t *recving_msg = NULL;
 	x_msg_t *sending_msg = NULL;
-	x_tp_d2list_t<msg_dlink_traits> send_queue;
-	// TODO improve session lookup later
-	std::vector<x_smbsess_ptr_t> sessions;
+	x_tp_ddlist_t<msg_dlink_traits> send_queue;
+	x_tp_ddlist_t<smbdsess_conn_traits> session_list;
+	x_tp_ddlist_t<smbdsess_conn_traits> session_wait_input_list;
+	x_tp_ddlist_t<fdevt_user_conn_traits> fdevt_user_list;
 };
+
+int x_smbdsess_pool_init(x_evtmgmt_t *ep, uint32_t count);
+x_smbdsess_t *x_smbdsess_create(x_smbdconn_t *smbdconn);
+x_smbdsess_t *x_smbdsess_find(uint64_t id, const x_smbdconn_t *smbdconn);
+void x_smbdsess_release(x_smbdsess_t *smbdsess);
 
 int x_auth_spnego_init(x_auth_context_t *context);
 x_auth_t *x_auth_create_ntlmssp(x_auth_context_t *context);
@@ -258,22 +301,25 @@ int x_auth_register(x_auth_context_t *context, const x_auth_mech_t *mech);
 
 extern const x_auth_mech_t x_auth_mech_spnego;
 
-x_auth_t *x_smbsrv_create_auth(x_smbsrv_t *smbsrv);
+x_auth_t *x_smbd_create_auth(x_smbd_t *smbd);
 
-void x_smbconn_reply(x_smbconn_t *smbconn, x_msg_t *msg);
-int x_smb2_reply_error(x_smbconn_t *smbconn, x_msg_t *msg,
-		uint32_t status);
+void x_smbdconn_remove_sessions(x_smbdconn_t *smbdconn);
+void x_smbdconn_post_user(x_smbdconn_t *smbdconn, x_fdevt_user_t *fdevt_user);
 
-int x_smbconn_process_smb1negoprot(x_smbconn_t *smbconn, x_msg_t *msg,
+void x_smbdconn_reply(x_smbdconn_t *smbdconn, x_msg_t *msg);
+int x_smb2_reply_error(x_smbdconn_t *smbdconn, x_msg_t *msg,
+		NTSTATUS status);
+
+int x_smbdconn_process_smb1negoprot(x_smbdconn_t *smbdconn, x_msg_t *msg,
 		const uint8_t *buf, size_t len);
-int x_smb2_process_NEGPROT(x_smbconn_t *smbconn, x_msg_t *msg,
+int x_smb2_process_NEGPROT(x_smbdconn_t *smbdconn, x_msg_t *msg,
 		const uint8_t *in_buf, size_t in_len);
-int x_smb2_process_SESSSETUP(x_smbconn_t *smbconn, x_msg_t *msg,
+int x_smb2_process_SESSSETUP(x_smbdconn_t *smbdconn, x_msg_t *msg,
 		const uint8_t *in_buf, size_t in_len);
 
-void x_smbsess_auth_failed(x_smbsess_t *smbsess);
+void x_smbdsess_auth_updated(x_smbdsess_t *smbdsess, NTSTATUS status, std::vector<uint8_t> &response);
 
-void x_smbsrv_wbpool_request(x_wbcli_t *wbcli);
+void x_smbd_wbpool_request(x_wbcli_t *wbcli);
 
 #endif /* __smbd__hxx__ */
 

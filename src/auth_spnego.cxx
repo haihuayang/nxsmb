@@ -150,7 +150,7 @@ static x_auth_t *match_mech_type(x_auth_context_t *context, const NegTokenInit &
 }
 
 static NTSTATUS spnego_update_start(x_auth_spnego_t &spnego, const NegotiationToken &nt_requ,
-		std::vector<uint8_t> &out, x_auth_upcall_t *upcall)
+		std::vector<uint8_t> &out, x_smbdsess_t *smbdsess)
 {
 	if (nt_requ.element != NegotiationToken::choice_NegotiationToken_negTokenInit) {
 		return NT_STATUS_INVALID_PARAMETER;
@@ -165,14 +165,14 @@ static NTSTATUS spnego_update_start(x_auth_spnego_t &spnego, const NegotiationTo
 
 	int ret = x_asn1_encode(ni.mechTypes, spnego.mech_types_blob);
 	std::vector<uint8_t> subout;
-	NTSTATUS status = spnego.subauth->update((uint8_t *)ni.mechToken->data, ni.mechToken->length, subout, upcall);
+	NTSTATUS status = spnego.subauth->update((uint8_t *)ni.mechToken->data, ni.mechToken->length, subout, smbdsess);
 
 	NegotiationToken nt_resp;
 	memset(&nt_resp, 0, sizeof nt_resp);
 	nt_resp.element = NegotiationToken::choice_NegotiationToken_negTokenResp;
 
 	NegTokenResp &nt = nt_resp.u.negTokenResp;
-	auto negResult = (status == NT_STATUS_OK) ? NegTokenResp::accept_completed : NegTokenResp::accept_incomplete;
+	auto negResult = NT_STATUS_IS_OK(status) ? NegTokenResp::accept_completed : NegTokenResp::accept_incomplete;
 
 	nt.negResult = &negResult;
 	nt.supportedMech = mt;
@@ -188,7 +188,7 @@ static NTSTATUS spnego_update_start(x_auth_spnego_t &spnego, const NegotiationTo
 }
 
 static NTSTATUS spnego_update_targ(x_auth_spnego_t &spnego, const NegotiationToken &nt_requ,
-		std::vector<uint8_t> &out, x_auth_upcall_t *upcall)
+		std::vector<uint8_t> &out, x_smbdsess_t *smbdsess)
 {
 	if (nt_requ.element != NegotiationToken::choice_NegotiationToken_negTokenResp) {
 		return NT_STATUS_INVALID_PARAMETER;
@@ -198,7 +198,7 @@ static NTSTATUS spnego_update_targ(x_auth_spnego_t &spnego, const NegotiationTok
 
 	const NegTokenResp &nt = nt_requ.u.negTokenResp;
 	std::vector<uint8_t> subout;
-	NTSTATUS status = spnego.subauth->update((uint8_t *)nt.responseToken->data, nt.responseToken->length, subout, upcall);
+	NTSTATUS status = spnego.subauth->update((uint8_t *)nt.responseToken->data, nt.responseToken->length, subout, smbdsess);
 
 	if (!NT_STATUS_IS_OK(status)) {
 		return status;
@@ -226,7 +226,7 @@ static NTSTATUS spnego_update_targ(x_auth_spnego_t &spnego, const NegotiationTok
 				(const uint8_t *)nt.mechListMIC->data,
 				nt.mechListMIC->length);
 		if (!NT_STATUS_IS_OK(status)) {
-			return STATUS;
+			return status;
 		}
 		spnego.needs_mic_check = false;
 		spnego.done_mic_check = true;
@@ -246,7 +246,7 @@ static NTSTATUS spnego_update_targ(x_auth_spnego_t &spnego, const NegotiationTok
 	nt_resp.element = NegotiationToken::choice_NegotiationToken_negTokenResp;
 
 	NegTokenResp &ntr = nt_resp.u.negTokenResp;
-	auto negResult = (status == NT_STATUS_OK) ? NegTokenResp::accept_completed : NegTokenResp::accept_incomplete;
+	auto negResult = NT_STATUS_IS_OK(status) ? NegTokenResp::accept_completed : NegTokenResp::accept_incomplete;
 
 	ntr.negResult = &negResult;
 	heim_octet_string resp_token, mic;
@@ -265,7 +265,7 @@ static NTSTATUS spnego_update_targ(x_auth_spnego_t &spnego, const NegotiationTok
 }
 
 static NTSTATUS spnego_update(x_auth_t *auth, const uint8_t *in_buf, size_t in_len,
-		std::vector<uint8_t> &out, x_auth_upcall_t *upcall)
+		std::vector<uint8_t> &out, x_smbdsess_t *smbdsess)
 {
 	x_auth_spnego_t *spnego = X_CONTAINER_OF(auth, x_auth_spnego_t, auth);
 	if (spnego->state_position == x_auth_spnego_t::SERVER_START) {
@@ -275,7 +275,7 @@ static NTSTATUS spnego_update(x_auth_t *auth, const uint8_t *in_buf, size_t in_l
 			if (err) {
 				return NT_STATUS_INVALID_PARAMETER;
 			}
-			NTSTATUS status = spnego_update_start(*spnego, nt, out, upcall);
+			NTSTATUS status = spnego_update_start(*spnego, nt, out, smbdsess);
 			x_asn1_free(nt);
 			return status;
 		} else {
@@ -289,7 +289,7 @@ static NTSTATUS spnego_update(x_auth_t *auth, const uint8_t *in_buf, size_t in_l
 		if (err) {
 			return NT_STATUS_INVALID_PARAMETER;
 		}
-		NTSTATUS status = spnego_update_targ(*spnego, nt, out, upcall);
+		NTSTATUS status = spnego_update_targ(*spnego, nt, out, smbdsess);
 		x_asn1_free(nt);
 		return status;
 	}

@@ -13,6 +13,7 @@ enum {
 	FDEVT_IN = EPOLLIN,
 	FDEVT_OUT = EPOLLOUT,
 	FDEVT_ERR = EPOLLERR,
+	FDEVT_USER = (1u << 29),
 	FDEVT_TIMER = (1u << 30),
 	FDEVT_SHUTDOWN = (1u << 31),
 };
@@ -96,8 +97,10 @@ void x_evtmgmt_dispatch(x_evtmgmt_t *ep);
 
 uint64_t x_evtmgmt_monitor(x_evtmgmt_t *ep, unsigned int fd, uint32_t poll_events, x_epoll_upcall_t * upcall);
 bool x_evtmgmt_enable_events(x_evtmgmt_t *ep, uint64_t id, uint32_t events);
+bool x_evtmgmt_post_events(x_evtmgmt_t *ep, uint64_t id, uint32_t events);
 
 void x_evtmgmt_add_timer(x_evtmgmt_t *ep, x_timer_t *timer, unsigned long ms);
+/* TODO bool x_evtmgmt_cancel_timer(x_evtmgmt_t *ep, x_timer_t *timer); */
 
 #endif /* __evtmgmt__hxx__ */
 
