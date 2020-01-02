@@ -439,6 +439,7 @@ static void wbconn_upcall_cb_unmonitor(x_epoll_upcall_t *upcall)
 {
 	wbconn_t *wbconn = wbconn_from_upcall(upcall);
 	close(wbconn->fd);
+	wbconn->fd = -1;
 	x_wbcli_t *wbcli = wbconn->wbcli;
 	wbconn->wbcli = nullptr;
 	wbconn->state = wbconn_t::S_DISCONNECTED;

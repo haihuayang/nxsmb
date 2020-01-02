@@ -74,10 +74,12 @@ static int x_auth_spnego_create_negTokenInit(std::vector<uint8_t> &out)
 	NegotiationTokenWin spnego_token;
 	memset(&spnego_token, 0, sizeof spnego_token);
 	spnego_token.element = NegotiationTokenWin::choice_NegotiationTokenWin_negTokenInit;
-
-	// const gss_OID oids[] = { &_gss_spnego_mskrb_mechanism_oid_desc, GSS_KRB5_MECHANISM, GSS_NTLM_MECHANISM };
+#if 1
+	const gss_OID oids[] = { &_gss_spnego_mskrb_mechanism_oid_desc, GSS_KRB5_MECHANISM, GSS_NTLM_MECHANISM };
+#else
+	// disable kerberos
 	const gss_OID oids[] = { GSS_NTLM_MECHANISM };
-
+#endif
 	for (auto const oid: oids) {
 		ret = add_mech(&spnego_token.u.negTokenInit.mechTypes, oid);
 		X_ASSERT(ret == 0);
@@ -141,7 +143,7 @@ static x_auth_t *match_mech_type(x_auth_context_t *context, const NegTokenInit &
 		if (oid_equal(mt, GSS_NTLM_MECHANISM)) {
 			mt_match = &mt;
 			return x_auth_create_ntlmssp(context);
-		} else if (oid_equal(mt, GSS_KRB5_MECHANISM)) {
+		} else if (oid_equal(mt, GSS_KRB5_MECHANISM) || oid_equal(mt, &_gss_spnego_mskrb_mechanism_oid_desc)) {
 			mt_match = &mt;
 			return x_auth_create_krb5(context);
 		}

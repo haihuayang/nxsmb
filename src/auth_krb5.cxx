@@ -87,6 +87,7 @@ struct x_auth_krb5_t
 
 static void auth_krb5_post_domain_info(x_auth_krb5_t &auth)
 {
+	X_TODO;
 }
 
 static void auth_krb5_domain_info_cb_reply(x_wbcli_t *wbcli, int err)
@@ -758,6 +759,112 @@ static inline OM_uint32 gssapi_obtain_pac_blob(OM_uint32 &gss_min,
 			&pac_data_oid, &set);
 }
 
+#ifndef GSS_KRB5_INQ_SSPI_SESSION_KEY_OID
+#define GSS_KRB5_INQ_SSPI_SESSION_KEY_OID_LENGTH 11
+#define GSS_KRB5_INQ_SSPI_SESSION_KEY_OID "\x2a\x86\x48\x86\xf7\x12\x01\x02\x02\x05\x05"
+#endif
+// gssapi_get_session_key
+static NTSTATUS auth_krb5_get_session_key(std::vector<uint8_t> &session_key,
+		gss_ctx_id_t gss_ctx)
+{
+	gss_OID_desc gse_sesskey_inq_oid = {
+		.length = GSS_KRB5_INQ_SSPI_SESSION_KEY_OID_LENGTH,
+		.elements = (void *)(GSS_KRB5_INQ_SSPI_SESSION_KEY_OID)
+	};
+
+	OM_uint32 gss_min, gss_maj;
+	gss_buffer_set_t set = GSS_C_NO_BUFFER_SET;
+
+	gss_maj = gss_inquire_sec_context_by_oid(
+				&gss_min, gss_ctx,
+				&gse_sesskey_inq_oid, &set);
+	if (gss_maj) {
+		DEBUG(0, ("gss_inquire_sec_context_by_oid failed [%s]\n",
+			  gssapi_error_string(mem_ctx, gss_maj, gss_min, gss_mech_krb5)));
+		return NT_STATUS_NO_USER_SESSION_KEY;
+	}
+
+	if ((set == GSS_C_NO_BUFFER_SET) ||
+	    (set->count == 0)) {
+#ifdef HAVE_GSSKRB5_GET_SUBKEY
+		krb5_keyblock *subkey;
+		gss_maj = gsskrb5_get_subkey(&gss_min,
+					     gss_ctx,
+					     &subkey);
+		if (gss_maj != 0) {
+			DEBUG(1, ("NO session key for this mech\n"));
+			return NT_STATUS_NO_USER_SESSION_KEY;
+		}
+		session_key.assign((const uint8_t *)KRB5_KEY_DATA(subkey),
+				(const uint8_t *)KRB5_KEY_DATA(subkey) + KRB5_KEY_LENGTH(subkey));
+#if 0
+		if (keytype) {
+			*keytype = KRB5_KEY_TYPE(subkey);
+		}
+#endif
+		krb5_free_keyblock(NULL /* should be krb5_context */, subkey);
+		return NT_STATUS_OK;
+#else
+		DEBUG(0, ("gss_inquire_sec_context_by_oid didn't return any session key (and no alternative method available)\n"));
+		return NT_STATUS_NO_USER_SESSION_KEY;
+#endif
+	}
+
+	session_key.assign((const uint8_t *)set->elements[0].value,
+			(const uint8_t *)set->elements[0].value + set->elements[0].length);
+#if 0
+	if (keytype) {
+		int diflen, i;
+		const uint8_t *p;
+
+		if (set->count < 2) {
+
+#ifdef HAVE_GSSKRB5_GET_SUBKEY
+			krb5_keyblock *subkey;
+			gss_maj = gsskrb5_get_subkey(&gss_min,
+						     gssapi_context,
+						     &subkey);
+			if (gss_maj == 0) {
+				*keytype = KRB5_KEY_TYPE(subkey);
+				krb5_free_keyblock(NULL /* should be krb5_context */, subkey);
+			} else
+#else
+			{
+				*keytype = 0;
+			}
+#endif
+			gss_maj = gss_release_buffer_set(&gss_min, &set);
+	
+			return NT_STATUS_OK;
+
+		} else if (memcmp(set->elements[1].value,
+				  gse_sesskeytype_oid.elements,
+				  gse_sesskeytype_oid.length) != 0) {
+			/* Perhaps a non-krb5 session key */
+			*keytype = 0;
+			gss_maj = gss_release_buffer_set(&gss_min, &set);
+			return NT_STATUS_OK;
+		}
+		p = (const uint8_t *)set->elements[1].value + gse_sesskeytype_oid.length;
+		diflen = set->elements[1].length - gse_sesskeytype_oid.length;
+		if (diflen <= 0) {
+			gss_maj = gss_release_buffer_set(&gss_min, &set);
+			return NT_STATUS_INVALID_PARAMETER;
+		}
+		*keytype = 0;
+		for (i = 0; i < diflen; i++) {
+			*keytype = (*keytype << 7) | (p[i] & 0x7f);
+			if (i + 1 != diflen && (p[i] & 0x80) == 0) {
+				gss_maj = gss_release_buffer_set(&gss_min, &set);
+				return NT_STATUS_INVALID_PARAMETER;
+			}
+		}
+	}
+#endif
+	gss_maj = gss_release_buffer_set(&gss_min, &set);
+	return NT_STATUS_OK;
+}
+
 // gensec_gse_session_info
 static NTSTATUS auth_krb5_accepted(x_auth_krb5_t &auth, gss_ctx_id_t gss_ctx,
 		gss_name_t client_name, x_smbdsess_t *smbdsess)
@@ -836,6 +943,10 @@ static NTSTATUS auth_krb5_accepted(x_auth_krb5_t &auth, gss_ctx_id_t gss_ctx,
 	if (!logon_info/* TODO  || !logon_info->info3.base.logon_domain.string */) {
 		auth_krb5_get_domain_info(auth);
 	}
+
+	return auth_krb5_get_session_key(smbdsess->session_key, gss_ctx);
+
+
 #if 0
 	rc = get_remote_hostname(remote_address,
 				 &rhost,

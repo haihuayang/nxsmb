@@ -53,10 +53,17 @@ x_auth_t *x_smbd_create_auth(x_smbd_t *smbd)
 	return x_auth_create_by_oid(smbd->auth_context, GSS_SPNEGO_MECHANISM);
 }
 
-void x_smbdconn_reply(x_smbdconn_t *smbdconn, x_msg_t *msg)
+void x_smbdconn_reply(x_smbdconn_t *smbdconn, x_msg_t *msg, x_smbdsess_t *smbdsess)
 {
 	if (msg->state == x_msg_t::STATE_COMPLETE) {
 		bool orig_empty = smbdconn->send_queue.empty();
+		if (msg->do_signing) {
+			X_ASSERT(smbdsess);
+			x_smb2_sign_msg(msg->out_buf + 8,
+					msg->out_len - 4,
+					smbdconn->dialect,
+					smbdsess->signing_key);
+		}
 		smbdconn->send_queue.push_back(msg);
 		if (orig_empty) {
 			x_evtmgmt_enable_events(globals.evtmgmt, smbdconn->ep_id, FDEVT_OUT);
@@ -73,6 +80,7 @@ void x_smbdconn_reply(x_smbdconn_t *smbdconn, x_msg_t *msg)
 #define SMB2_TF_MAGIC 0x424D53FD /* 0xFD 'S' 'M' 'B' */
 
 int x_smb2_reply_error(x_smbdconn_t *smbdconn, x_msg_t *msg,
+		x_smbdsess_t *smbdsess,
 		NTSTATUS status)
 {
 	uint8_t *outbuf = new uint8_t[8 + 0x40 + 9];
@@ -101,7 +109,7 @@ int x_smb2_reply_error(x_smbdconn_t *smbdconn, x_msg_t *msg,
 
 	msg->state = x_msg_t::STATE_COMPLETE;
 	// X_DEVEL_ASSERT(false);
-	x_smbdconn_reply(smbdconn, msg);
+	x_smbdconn_reply(smbdconn, msg, smbdsess);
 	return 0;
 }
 
@@ -203,10 +211,9 @@ static bool x_smbdconn_do_user(x_smbdconn_t *smbdconn, x_fdevents_t &fdevents)
 static bool x_smbdconn_do_timer(x_smbdconn_t *smbdconn, x_fdevents_t &fdevents)
 {
 	X_DBG("%s %p x%llx", task_name, smbdconn, fdevents);
-	X_TODO;
 	x_smbdsess_t *smbdsess;
 	while ((smbdsess = smbdconn->session_wait_input_list.get_front()) != nullptr) {
-		if (x_tick_cmp(smbdsess->timeout, tick_now) < 0) {
+		if (x_tick_cmp(smbdsess->timeout, tick_now) > 0) {
 			break;
 		}
 		X_DBG("%p expired\n", smbdsess);
@@ -457,6 +464,8 @@ int main(int argc, char **argv)
 	argv++;
 	unsigned int count = atoi(*argv);
 	int port = 445;
+
+	signal(SIGPIPE, SIG_IGN);
 
 	x_threadpool_t *tpool = x_threadpool_create(count);
 	globals.tpool = tpool;

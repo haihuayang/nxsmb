@@ -12,6 +12,9 @@ static int x_smbdconn_reply_negprot(x_smbdconn_t *smbdconn, x_msg_t *msg,
 	smbdconn->dialect = dialect;
 
 	uint16_t security_mode = SMB2_NEGOTIATE_SIGNING_ENABLED;
+	if (lpcfg_server_signing_required()) {
+		security_mode |= SMB2_NEGOTIATE_SIGNING_REQUIRED;
+	}
 	uint32_t capabilities = SMB2_CAP_DFS | SMB2_CAP_LARGE_MTU | SMB2_CAP_LEASING;
 
 	uint16_t negotiate_context_off = 0;
@@ -84,7 +87,13 @@ static int x_smbdconn_reply_negprot(x_smbdconn_t *smbdconn, x_msg_t *msg,
 	msg->out_len = 4 + 0x80 + dyn_off;
 
 	msg->state = x_msg_t::STATE_COMPLETE;
-	x_smbdconn_reply(smbdconn, msg);
+
+	if (dialect != SMB2_DIALECT_REVISION_2FF) {
+		smbdconn->server_security_mode = security_mode;
+		smbdconn->server_capabilities = capabilities;
+	}
+
+	x_smbdconn_reply(smbdconn, msg, nullptr);
 	return 0;
 }
 
@@ -140,21 +149,26 @@ int x_smb2_process_NEGPROT(x_smbdconn_t *smbdconn, x_msg_t *msg,
 	const uint8_t *in_body = in_buf + 0x40;
 	uint16_t dialect_count = x_get_le16(in_body + 0x2);
 	if (dialect_count == 0) {
-		return x_smb2_reply_error(smbdconn, msg, NT_STATUS_INVALID_PARAMETER);
+		return x_smb2_reply_error(smbdconn, msg, nullptr, NT_STATUS_INVALID_PARAMETER);
 	}
 	size_t dyn_len = in_len - SMB2_HDR_LENGTH - SMB2_NEGPROT_BODY_LEN;
 	if (dialect_count * 2 > dyn_len) {
-		return x_smb2_reply_error(smbdconn, msg, NT_STATUS_INVALID_PARAMETER);
+		return x_smb2_reply_error(smbdconn, msg, nullptr, NT_STATUS_INVALID_PARAMETER);
 	}
 
-	// TODO uint16_t in_security_mode = x_get_le16(in_body + 0x04);
-	// TODO uint32_t in_capabilities = x_get_le32(in_body + 0x08);
+	uint16_t in_security_mode = x_get_le16(in_body + 0x04);
+	uint32_t in_capabilities = x_get_le32(in_body + 0x08);
 
 	const uint8_t *in_dyn = in_body + SMB2_NEGPROT_BODY_LEN;
 	uint16_t dialect = x_smb2_dialect_match(smbdconn, in_dyn, dialect_count);
 	if (dialect == SMB2_DIALECT_REVISION_000) {
-		return x_smb2_reply_error(smbdconn, msg, NT_STATUS_NOT_SUPPORTED);
+		return x_smb2_reply_error(smbdconn, msg, nullptr, NT_STATUS_NOT_SUPPORTED);
 	}
+
+	smbdconn->client_security_mode = in_security_mode;
+	smbdconn->client_capabilities = in_capabilities;
+	// TODO client_guid
+	
 #if 0
 	if (dialect >= SMB2_DIALECT_310) {
 		// TODO preauth

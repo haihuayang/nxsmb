@@ -19,6 +19,7 @@
 #include "smbconf.hxx"
 #include "nttime.hxx"
 #include "include/utils.hxx"
+#include "include/librpc/ndr_misc.hxx"
 extern "C" {
 #include "samba/libcli/smb/smb_constants.h"
 #include "samba/libcli/smb/smb2_constants.h"
@@ -154,6 +155,7 @@ struct x_msg_t
 	x_dlink_t dlink;
 	uint64_t mid;
 	uint16_t opcode;
+	bool do_signing{false};
 	const uint32_t nbt_hdr;
 	enum {
 		STATE_READING,
@@ -175,6 +177,7 @@ struct x_smbuser_t
 	// security token
 };
 
+using x_smb2_key_t = std::array<uint8_t, 16>;
 struct x_smbdconn_t;
 struct x_smbdsess_t
 {
@@ -226,6 +229,10 @@ struct x_smbdsess_t
 	std::shared_ptr<x_smbuser_t> user;
 	x_auth_t *auth{nullptr};
 	x_msg_t *authmsg{nullptr};
+
+	std::vector<uint8_t> session_key;
+	x_smb2_key_t signing_key, decryption_key, encryption_key, application_key;
+
 };
 X_DECLARE_MEMBER_TRAITS(smbdsess_hash_traits, x_smbdsess_t, hash_link)
 X_DECLARE_MEMBER_TRAITS(smbdsess_conn_traits, x_smbdsess_t, conn_link)
@@ -266,8 +273,14 @@ struct x_smbdconn_t
 	enum { STATE_RUNNING, STATE_DONE } state{STATE_RUNNING};
 	int fd;
 	unsigned int count_msg = 0;
-	uint16_t dialect;
 	const struct sockaddr_in sin;
+	uint16_t dialect;
+
+	uint16_t server_security_mode;
+	uint32_t server_capabilities;
+	uint16_t client_security_mode;
+	uint32_t client_capabilities;
+	idl::GUID client_guid;
 
 	uint64_t credit_seq_low = 0;
 	uint64_t credit_seq_range = 1;
@@ -306,8 +319,8 @@ x_auth_t *x_smbd_create_auth(x_smbd_t *smbd);
 void x_smbdconn_remove_sessions(x_smbdconn_t *smbdconn);
 void x_smbdconn_post_user(x_smbdconn_t *smbdconn, x_fdevt_user_t *fdevt_user);
 
-void x_smbdconn_reply(x_smbdconn_t *smbdconn, x_msg_t *msg);
-int x_smb2_reply_error(x_smbdconn_t *smbdconn, x_msg_t *msg,
+void x_smbdconn_reply(x_smbdconn_t *smbdconn, x_msg_t *msg, x_smbdsess_t *smbdsess);
+int x_smb2_reply_error(x_smbdconn_t *smbdconn, x_msg_t *msg, x_smbdsess_t *smbdsess,
 		NTSTATUS status);
 
 int x_smbdconn_process_smb1negoprot(x_smbdconn_t *smbdconn, x_msg_t *msg,
@@ -320,6 +333,13 @@ int x_smb2_process_SESSSETUP(x_smbdconn_t *smbdconn, x_msg_t *msg,
 void x_smbdsess_auth_updated(x_smbdsess_t *smbdsess, NTSTATUS status, std::vector<uint8_t> &response);
 
 void x_smbd_wbpool_request(x_wbcli_t *wbcli);
+
+void x_smb2_key_derivation(const uint8_t *KI, size_t KI_len,
+		const void *Label, size_t Label_len,
+		const void *Context, size_t Context_len,
+		x_smb2_key_t &key);
+NTSTATUS x_smb2_sign_msg(uint8_t *data, size_t length, uint16_t dialect,
+		const x_smb2_key_t &key);
 
 #endif /* __smbd__hxx__ */
 

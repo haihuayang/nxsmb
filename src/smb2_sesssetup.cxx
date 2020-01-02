@@ -54,9 +54,92 @@ static int x_smb2_reply_sesssetup(x_smbdconn_t *smbdconn,
 	msg->out_len = 4 + 0x40 + 0x8 + out_security.size();
 
 	msg->state = x_msg_t::STATE_COMPLETE;
-	x_smbdconn_reply(smbdconn, msg);
+	x_smbdconn_reply(smbdconn, msg, smbdsess);
 	return 0;
 }
+
+static const uint8_t SMB2_24_signing_label[] = "SMB2AESCMAC";
+static const uint8_t SMB2_24_signing_context[] = "SmbSign";
+static const uint8_t SMB2_24_decryption_label[] = "SMB2AESCCM";
+static const uint8_t SMB2_24_decryption_context[] = "ServerIn ";
+static const uint8_t SMB2_24_encryption_label[] = "SMB2AESCCM";
+static const uint8_t SMB2_24_encryption_context[] = "ServerOut ";
+static const uint8_t SMB2_24_application_label[] = "SMB2APP";
+static const uint8_t SMB2_24_application_context[] = "SmbRpc";
+
+// smbd_smb2_auth_generic_return
+static void smbdsess_auth_succeeded(x_smbdconn_t *smbdconn, x_smbdsess_t *smbdsess)
+{
+	struct _derivation {
+		const void *label_data;
+		const void *context_data;
+		uint32_t label_length;
+		uint32_t context_length;
+	};
+	struct {
+		struct _derivation signing;
+		struct _derivation encryption;
+		struct _derivation decryption;
+		struct _derivation application;
+	} derivation = { };
+
+	/* TODO set user token ... */
+	if (smbdconn->dialect >= SMB3_DIALECT_REVISION_310) {
+		X_TODO; // preauth
+	} else if (smbdconn->dialect >= SMB2_DIALECT_REVISION_224) {
+		derivation.signing.label_data = SMB2_24_signing_label;
+		derivation.signing.label_length = sizeof(SMB2_24_signing_label);
+		derivation.signing.context_data = SMB2_24_signing_context;
+		derivation.signing.context_length = sizeof(SMB2_24_signing_context);
+
+		derivation.decryption.label_data = SMB2_24_decryption_label;
+		derivation.decryption.label_length = sizeof(SMB2_24_decryption_label);
+		derivation.decryption.context_data = SMB2_24_decryption_context;
+		derivation.decryption.context_length = sizeof(SMB2_24_decryption_context);
+
+		derivation.encryption.label_data = SMB2_24_encryption_label;
+		derivation.encryption.label_length = sizeof(SMB2_24_encryption_label);
+		derivation.encryption.context_data = SMB2_24_encryption_context;
+		derivation.encryption.context_length = sizeof(SMB2_24_encryption_context);
+
+		derivation.application.label_data = SMB2_24_application_label;
+		derivation.application.label_length = sizeof(SMB2_24_application_label);
+		derivation.application.context_data = SMB2_24_application_context;
+		derivation.application.context_length = sizeof(SMB2_24_application_context);
+	}
+
+	std::array<uint8_t, 16> session_key;
+	memcpy(session_key.data(), smbdsess->session_key.data(), std::min(session_key.size(), smbdsess->session_key.size()));
+	if (smbdconn->dialect >= SMB2_DIALECT_REVISION_224) {
+		x_smb2_key_derivation(session_key.data(), 16,
+				derivation.signing.label_data,
+				derivation.signing.label_length,
+				derivation.signing.context_data,
+				derivation.signing.context_length,
+				smbdsess->signing_key);
+		x_smb2_key_derivation(session_key.data(), 16,
+				derivation.decryption.label_data,
+				derivation.decryption.label_length,
+				derivation.decryption.context_data,
+				derivation.decryption.context_length,
+				smbdsess->decryption_key);
+		x_smb2_key_derivation(session_key.data(), 16,
+				derivation.encryption.label_data,
+				derivation.encryption.label_length,
+				derivation.encryption.context_data,
+				derivation.encryption.context_length,
+				smbdsess->encryption_key);
+		/* TODO encryption nonce */
+		x_smb2_key_derivation(session_key.data(), 16,
+				derivation.application.label_data,
+				derivation.application.label_length,
+				derivation.application.context_data,
+				derivation.application.context_length,
+				smbdsess->application_key);
+	}
+}
+
+
 
 static inline NTSTATUS x_smbdsess_update_auth(x_smbdsess_t *smbdsess, const uint8_t *inbuf, size_t inlen,
 		std::vector<uint8_t> &outbuf)
@@ -73,19 +156,16 @@ static void smbdsess_auth_updated(x_smbdsess_t *smbdsess, NTSTATUS status,
 	if (NT_STATUS_IS_OK(status)) {
 		smbdsess->state = x_smbdsess_t::S_ACTIVE;
 		smbdconn->session_list.push_back(smbdsess);
-		/* TODO set user token ... */
+		smbdsess_auth_succeeded(smbdconn, smbdsess);
+		msg->do_signing = true;
 		x_smb2_reply_sesssetup(smbdconn, smbdsess, msg, status, out_security);
 	} else if (NT_STATUS_EQUAL(status, NT_STATUS_MORE_PROCESSING_REQUIRED)) {
 		smbdsess->state = x_smbdsess_t::S_WAIT_INPUT;
 		smbdsess->timeout = x_tick_add(tick_now, SESSSETUP_TIMEOUT);
 		smbdconn->session_wait_input_list.push_back(smbdsess);
 		x_smb2_reply_sesssetup(smbdconn, smbdsess, msg, status, out_security);
-	} else if (NT_STATUS_EQUAL(status, X_NT_STATUS_INTERNAL_BLOCKED)) {
-		smbdsess->state = x_smbdsess_t::S_BLOCKED;
-		smbdsess->incref();
-		smbdconn->session_list.push_back(smbdsess);
 	} else {
-		x_smb2_reply_error(smbdconn, msg, status);
+		x_smb2_reply_error(smbdconn, msg, smbdsess, status);
 	}
 }
 
@@ -107,33 +187,34 @@ int x_smb2_process_SESSSETUP(x_smbdconn_t *smbdconn, x_msg_t *msg,
 	// TODO uint64_t in_previous_session_id = BVAL(inbody, 0x10);
 
 	if (in_security_offset != (SMB2_HDR_BODY + X_SMB2_SESSSETUP_BODY_LEN)) {
-		return x_smb2_reply_error(smbdconn, msg, NT_STATUS_INVALID_PARAMETER);
+		return x_smb2_reply_error(smbdconn, msg, nullptr, NT_STATUS_INVALID_PARAMETER);
 	}
 	
 	if (in_security_offset + in_security_length > in_len) {
-		return x_smb2_reply_error(smbdconn, msg, NT_STATUS_INVALID_PARAMETER);
+		return x_smb2_reply_error(smbdconn, msg, nullptr, NT_STATUS_INVALID_PARAMETER);
 	}
 
 	if (in_flags & SMB2_SESSION_FLAG_BINDING) {
 		if (smbdconn->dialect < SMB2_DIALECT_REVISION_222) {
-			return x_smb2_reply_error(smbdconn, msg, NT_STATUS_REQUEST_NOT_ACCEPTED);
+			return x_smb2_reply_error(smbdconn, msg, nullptr, NT_STATUS_REQUEST_NOT_ACCEPTED);
 		}
-		return x_smb2_reply_error(smbdconn, msg, NT_STATUS_NOT_SUPPORTED);
+		return x_smb2_reply_error(smbdconn, msg, nullptr, NT_STATUS_NOT_SUPPORTED);
 	}
 
 	x_smbdsess_t *smbdsess;
 	if (in_session_id == 0) {
 		smbdsess = x_smbdsess_create(smbdconn);
+		/* TODO too many session */
 		smbdsess->auth = x_smbd_create_auth(smbdconn->smbd);
 	} else {
 		smbdsess = x_smbdsess_find(in_session_id, smbdconn);
 		if (smbdsess == nullptr) {
-			return x_smb2_reply_error(smbdconn, msg, NT_STATUS_USER_SESSION_DELETED);
+			return x_smb2_reply_error(smbdconn, msg, nullptr, NT_STATUS_USER_SESSION_DELETED);
 		}
 		if (smbdsess->state != x_smbdsess_t::S_WAIT_INPUT) {
 			smbdsess->decref();
 			/* TODO just drop the message, should we reply something for this unexpected message */
-			return x_smb2_reply_error(smbdconn, msg, NT_STATUS_INVALID_PARAMETER);
+			return x_smb2_reply_error(smbdconn, msg, nullptr, NT_STATUS_INVALID_PARAMETER);
 		}
 		smbdsess->decref();
 		smbdconn->session_wait_input_list.remove(smbdsess);
@@ -143,7 +224,14 @@ int x_smb2_process_SESSSETUP(x_smbdconn_t *smbdconn, x_msg_t *msg,
 	smbdsess->authmsg = msg;
 	std::vector<uint8_t> out_security;
 	NTSTATUS status = x_smbdsess_update_auth(smbdsess, in_buf + in_security_offset, in_security_length, out_security);
-	smbdsess_auth_updated(smbdsess, status, out_security);
+	X_DBG("smbdsess=%p, msg=%p, status=0x%x", smbdsess, msg, NT_STATUS_V(status));
+	if (!NT_STATUS_EQUAL(status, X_NT_STATUS_INTERNAL_BLOCKED)) {
+		smbdsess_auth_updated(smbdsess, status, out_security);
+	} else {
+		smbdsess->state = x_smbdsess_t::S_BLOCKED;
+		smbdsess->incref();
+		smbdconn->session_list.push_back(smbdsess);
+	}
 	smbdsess->decref();
 	return 0;
 }
@@ -175,6 +263,7 @@ static void smbdsess_auth_updated_func(x_smbdconn_t *smbdconn, x_fdevt_user_t *f
 
 void x_smbdsess_auth_updated(x_smbdsess_t *smbdsess, NTSTATUS status, std::vector<uint8_t> &out_security)
 {
+	X_DBG("smbdsess=%p, authmsg=%p, status=0x%x", smbdsess, smbdsess->authmsg, NT_STATUS_V(status));
 	smbdsess->incref();
 	smbdsess_auth_updated_evt_t *updated_evt = new smbdsess_auth_updated_evt_t;
 	updated_evt->base.func = smbdsess_auth_updated_func;

@@ -779,6 +779,7 @@ static inline NTSTATUS handle_authenticate(x_auth_ntlmssp_t &auth_ntlmssp,
 		const uint8_t *in_buf, size_t in_len, std::vector<uint8_t> &out,
 		x_smbdsess_t *smbdsess)
 {
+	X_ASSERT(smbdsess->authmsg);
 	/* TODO ntlmssp.idl, version & mic may not present,
 	 * samba/auth/ntlmssp/ntlmssp_server.c ntlmssp_server_preauth try
 	 * long format and fail back to short format */
@@ -918,8 +919,8 @@ static inline NTSTATUS handle_authenticate(x_auth_ntlmssp_t &auth_ntlmssp,
 		std::string netbios_name = x_convert_utf16_to_utf8(auth_ntlmssp.netbios_name);
 		if (auth_ntlmssp.client_domain != netbios_name) {
 			x_ntlmssp_is_trusted_domain(auth_ntlmssp, smbdsess);
-			return NT_STATUS(2); // TODO introduce error
 			return X_NT_STATUS_INTERNAL_BLOCKED;
+			return NT_STATUS(2); // TODO introduce error
 		}
 	}
 

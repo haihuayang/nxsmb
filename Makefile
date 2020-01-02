@@ -80,6 +80,7 @@ all: $(TARGET_SET_tests:%=$(TARGET_DIR_out)/tests/%) $(TARGET_DIR_out)/bin/nxsmb
 SET_src_nxsmbd := auth_ntlmssp auth_krb5 auth_spnego auth \
 	network \
 	smbd smbd_sess smbd_conn \
+	smb2_signing \
 	smb2_negprot smb2_sesssetup \
 
 $(TARGET_DIR_out)/bin/nxsmbd: $(SET_src_nxsmbd:%=$(TARGET_DIR_out)/src/%.o) $(TARGET_SET_lib:%=$(TARGET_DIR_out)/lib%.a)
@@ -180,7 +181,12 @@ TARGET_SRC_libsamba := \
 		lib/util/time \
 		lib/util/time_basic \
 		lib/util/blocking \
+		lib/crypto/aes \
+		lib/crypto/rijndael-alg-fst \
 		lib/crypto/md4 \
+		lib/crypto/sha256 \
+		lib/crypto/hmacsha256 \
+		lib/crypto/aes_cmac_128 \
 		source4/heimdal/lib/roken/resolve \
 		source4/heimdal/lib/asn1/timegm \
 		source4/heimdal/lib/asn1/extra \

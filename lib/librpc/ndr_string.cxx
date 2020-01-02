@@ -204,7 +204,13 @@ x_ndr_off_t u16string::ndr_scalars(x_ndr_pull_t &ndr, x_ndr_off_t bpos, x_ndr_of
 	if (((epos - bpos) % 2) != 0) {
 		return -NDR_ERR_STRING;
 	}
-	val.assign((const char16_t *)(ndr.get_data() + bpos), (const char16_t *)(ndr.get_data() + epos));
+	char16_t *beg = (char16_t *)(ndr.get_data() + bpos);
+	char16_t *end = (char16_t *)(ndr.get_data() + epos);
+	char16_t *p;
+	for (p = beg; p < end && *p; ++p) {
+	}
+	val.assign(beg, p);
+	// val.assign((const char16_t *)(ndr.get_data() + bpos), (const char16_t *)(ndr.get_data() + epos));
 	return epos;
 }
 

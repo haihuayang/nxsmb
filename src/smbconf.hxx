@@ -26,6 +26,11 @@ static inline size_t lp_smb2_max_write()
 	return 1024 * 1024;
 }
 
+static inline bool lpcfg_server_signing_required()
+{
+	return false;
+}
+
 static inline bool lpcfg_lanman_auth()
 {
 	return false;
