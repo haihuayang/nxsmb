@@ -3683,6 +3683,15 @@ void samr_ValidatePasswordReq::ostr(x_ndr_ostr_t &__ndr, uint32_t __flags, x_ndr
 		} break;
 	}
 }
+
 #endif
+
+std::ostream &operator<<(std::ostream &os, samr_RidWithAttribute rid_with_attr)
+{
+	char buf[32];
+	snprintf(buf, sizeof buf, "0x%x", rid_with_attr.attributes);
+	os << rid_with_attr.rid << ", " << buf;
+	return os;
+}
 
 } /* namespace idl */

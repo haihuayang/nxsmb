@@ -12,8 +12,13 @@ namespace idl {
 
 struct NTTIME
 {
+	enum {
+		TIME_FIXUP_CONSTANT = 11644473600L,
+	};
 	uint64_t val;
 };
+
+std::ostream &operator<<(std::ostream &os, NTTIME v);
 
 template <>
 struct x_ndr_traits_t<NTTIME> {
@@ -39,7 +44,11 @@ inline x_ndr_off_t x_ndr_scalars(NTTIME &t, x_ndr_pull_t &ndr,
 	return x_ndr_pull_uint64(t.val, ndr, bpos, epos, flags, 4);
 }
 
-void x_ndr_ostr(const NTTIME &t, x_ndr_ostr_t &ndr, uint32_t flags, x_ndr_switch_t level);
+static inline void x_ndr_ostr(const NTTIME &t, x_ndr_ostr_t &ndr, uint32_t flags, x_ndr_switch_t level)
+{
+	X_ASSERT(level == X_NDR_SWITCH_NONE);
+	ndr.os << t;
+}
 
 struct NTTIME_hyper
 {

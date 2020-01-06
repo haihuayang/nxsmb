@@ -3,6 +3,27 @@
 
 namespace idl {
 
+std::ostream &operator<<(std::ostream &os, const dom_sid &v)
+{
+	os << "S-" << v.sid_rev_num;
+
+	uint64_t ia = ((uint64_t)v.id_auth[5]) +
+		((uint64_t)v.id_auth[4] << 8 ) +
+		((uint64_t)v.id_auth[3] << 16) +
+		((uint64_t)v.id_auth[2] << 24) +
+		((uint64_t)v.id_auth[1] << 32) +
+		((uint64_t)v.id_auth[0] << 40);
+	if (ia >= UINT32_MAX) {
+		os << "0x" << std::hex << ia << std::dec;
+	} else {
+		os << ia;
+	}
+	for (int i = 0; i < v.num_auths; ++i) {
+		os << '-' << v.sub_auths[i];
+	}
+	return os;
+}
+
 const std::array<std::pair<uint32, const char *>, 13> x_ndr_traits_t<lsa_SystemAccessModeFlags>::value_name_map = { {
 		{ LSA_POLICY_MODE_INTERACTIVE, "LSA_POLICY_MODE_INTERACTIVE" },
 		{ LSA_POLICY_MODE_NETWORK, "LSA_POLICY_MODE_NETWORK" },
@@ -774,25 +795,10 @@ x_ndr_off_t x_ndr_scalars<dom_sid>(dom_sid &t, x_ndr_pull_t &ndr,
 }
 
 template <>
-void x_ndr_ostr<dom_sid>(const dom_sid &v, x_ndr_ostr_t &os, uint32_t flags, x_ndr_switch_t level)
+void x_ndr_ostr<dom_sid>(const dom_sid &v, x_ndr_ostr_t &ndr, uint32_t flags, x_ndr_switch_t level)
 {
 	X_ASSERT(level == X_NDR_SWITCH_NONE);
-	os << "S-" << v.sid_rev_num;
-
-	uint64_t ia = ((uint64_t)v.id_auth[5]) +
-		((uint64_t)v.id_auth[4] << 8 ) +
-		((uint64_t)v.id_auth[3] << 16) +
-		((uint64_t)v.id_auth[2] << 24) +
-		((uint64_t)v.id_auth[1] << 32) +
-		((uint64_t)v.id_auth[0] << 40);
-	if (ia >= UINT32_MAX) {
-		os << "0x" << std::hex << ia << std::dec;
-	} else {
-		os << ia;
-	}
-	for (int i = 0; i < v.num_auths; ++i) {
-		os << '-' << v.sub_auths[i];
-	}
+	ndr.os << v;
 }
 
 template <>

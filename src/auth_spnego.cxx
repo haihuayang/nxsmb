@@ -15,25 +15,38 @@ extern "C" {
 // TODO
 #define gensec_setting_bool(setting, mech, name, default_value) default_value
 
+X_ASN1_METHOD(NegotiationTokenWin)
+X_ASN1_METHOD(NegotiationToken)
+X_ASN1_METHOD(MechTypeList)
+X_ASN1_METHOD(GSSAPIContextToken)
+
+
 struct x_auth_spnego_t
 {
-	x_auth_spnego_t(x_auth_context_t *context, const x_auth_ops_t *ops) :
-		auth{context, ops} { }
+	x_auth_spnego_t(x_auth_context_t *context, const x_auth_ops_t *ops);
 	~x_auth_spnego_t() {
 		if (subauth) {
 			x_auth_destroy(subauth);
 		}
+		free_MechType(&mt_subauth);
+		der_free_octet_string(&mechListMIC);
 	}
 
-	x_auth_t auth;
+	x_auth_t auth_base;
+	x_auth_upcall_t this_auth_upcall;
+	x_auth_upcall_t *up_auth_upcall{nullptr};
+
 	enum state_position_t {
 		SERVER_START,
-		CLIENT_START,
+		// CLIENT_START,
 		SERVER_TARG,
-		CLIENT_TARG,
-		FALLBACK,
+		// CLIENT_TARG,
+		// FALLBACK,
 		DONE
 	} state_position = SERVER_START;
+
+	MechType mt_subauth{};
+	heim_octet_string mechListMIC{};
 
 	bool needs_mic_check = false;
 	bool needs_mic_sign = false;
@@ -43,6 +56,143 @@ struct x_auth_spnego_t
 	std::vector<uint8_t> mech_types_blob;
 	x_auth_t *subauth{nullptr};
 };
+
+static inline x_auth_spnego_t *auth_spnego_from_base(x_auth_t *base)
+{
+	return X_CONTAINER_OF(base, x_auth_spnego_t, auth_base);
+}
+
+static void spnego_wrap(NTSTATUS status, MechType *mt, void *mic_data,
+		unsigned int mic_length, const std::vector<uint8_t> &subout,
+		std::vector<uint8_t> &out)
+{
+	NegotiationToken nt_resp;
+	memset(&nt_resp, 0, sizeof nt_resp);
+	nt_resp.element = NegotiationToken::choice_NegotiationToken_negTokenResp;
+
+	NegTokenResp &nt = nt_resp.u.negTokenResp;
+	auto negResult = NT_STATUS_IS_OK(status) ? NegTokenResp::accept_completed : NegTokenResp::accept_incomplete;
+
+	nt.negResult = &negResult;
+	heim_octet_string resp_token, mic;
+	resp_token.data = (void *)subout.data();
+	resp_token.length = subout.size();
+	nt.responseToken = &resp_token;
+	if (mic_length) {
+		mic.data = mic_data;
+		mic.length = mic_length;
+		nt.mechListMIC = &mic;
+	}
+
+	if (mt) {
+		nt.supportedMech = mt;
+	}
+	x_asn1_encode(nt_resp, out);
+}
+
+static NTSTATUS x_spnego_auth_start_return(x_auth_spnego_t *spnego, NTSTATUS status,
+		std::vector<uint8_t>& subout, std::vector<uint8_t> &out)
+{
+	if (NT_STATUS_IS_OK(status) || NT_STATUS_EQUAL(status, NT_STATUS_MORE_PROCESSING_REQUIRED)) {
+		spnego_wrap(status, &spnego->mt_subauth, nullptr, 0, subout, out);
+		if (NT_STATUS_IS_OK(status)) {
+			spnego->state_position = x_auth_spnego_t::DONE;
+		} else {
+			spnego->state_position = x_auth_spnego_t::SERVER_TARG;
+		}
+	} else {
+		out.clear();
+		spnego->state_position = x_auth_spnego_t::DONE;
+	}
+	return status;
+}
+
+static NTSTATUS x_spnego_auth_targ_return(x_auth_spnego_t *spnego, NTSTATUS status,
+		std::vector<uint8_t>& subout, std::vector<uint8_t> &out)
+{
+	if (NT_STATUS_IS_OK(status)) {
+		bool have_sign = spnego->subauth->have_feature(GENSEC_FEATURE_SIGN);
+		if (spnego->simulate_w2k) {
+			have_sign = false;
+		}
+
+		bool new_spnego = spnego->subauth->have_feature(GENSEC_FEATURE_NEW_SPNEGO);
+		if (spnego->mechListMIC.data) {
+			new_spnego = true;
+		}
+
+		if (have_sign && new_spnego) {
+			spnego->needs_mic_check = true;
+			spnego->needs_mic_sign = true;
+		}
+
+		if (have_sign && spnego->mechListMIC.data) {
+			status = spnego->subauth->check_packet(
+					spnego->mech_types_blob.data(),
+					spnego->mech_types_blob.size(),
+					spnego->mech_types_blob.data(),
+					spnego->mech_types_blob.size(),
+					(const uint8_t *)spnego->mechListMIC.data,
+					spnego->mechListMIC.length);
+			if (!NT_STATUS_IS_OK(status)) {
+				der_free_octet_string(&spnego->mechListMIC);
+				return status;
+			}
+			spnego->needs_mic_check = false;
+			spnego->done_mic_check = true;
+
+		}
+
+		std::vector<uint8_t> mech_list_mic;
+		if (spnego->needs_mic_sign) {
+			status = spnego->subauth->sign_packet(
+					spnego->mech_types_blob.data(),
+					spnego->mech_types_blob.size(),
+					spnego->mech_types_blob.data(),
+					spnego->mech_types_blob.size(),
+					mech_list_mic);
+		}
+
+		spnego_wrap(status, nullptr, mech_list_mic.data(), mech_list_mic.size(), subout, out);
+		spnego->state_position = x_auth_spnego_t::DONE;
+	} else if (NT_STATUS_EQUAL(status, NT_STATUS_MORE_PROCESSING_REQUIRED)) {
+		spnego_wrap(status, nullptr, nullptr, 0, subout, out);
+	} else {
+		out.clear();
+		spnego->state_position = x_auth_spnego_t::DONE;
+	}
+	der_free_octet_string(&spnego->mechListMIC);
+	return status;
+}
+
+static void x_spnego_auth_updated(x_auth_upcall_t *auth_upcall, NTSTATUS status,
+		std::vector<uint8_t> &sub_out_security,
+		std::shared_ptr<x_auth_info_t> &auth_info)
+{
+	x_auth_spnego_t *spnego = X_CONTAINER_OF(auth_upcall, x_auth_spnego_t, this_auth_upcall);
+
+	x_auth_upcall_t *up_auth_upcall = spnego->up_auth_upcall;
+	spnego->up_auth_upcall = nullptr;
+
+	std::vector<uint8_t> out_security;
+	if (spnego->state_position == x_auth_spnego_t::SERVER_START) {
+		status = x_spnego_auth_start_return(spnego, status, sub_out_security, out_security);
+	} else {
+		status = x_spnego_auth_targ_return(spnego, status, sub_out_security, out_security);
+	}
+
+	up_auth_upcall->updated(status, out_security, auth_info);
+}
+
+static const struct x_auth_cbs_t spnego_auth_upcall_cbs = {
+	x_spnego_auth_updated,
+};
+
+x_auth_spnego_t::x_auth_spnego_t(x_auth_context_t *context, const x_auth_ops_t *ops)
+	: auth_base{context, ops}
+{
+	this_auth_upcall.cbs = &spnego_auth_upcall_cbs;
+}
 
 static int add_mech(MechTypeList *mechtypelist, gss_OID mech_type)
 {
@@ -56,11 +206,6 @@ static int add_mech(MechTypeList *mechtypelist, gss_OID mech_type)
 	free_MechType(&mech);
 	return ret;
 }
-
-X_ASN1_METHOD(NegotiationTokenWin)
-X_ASN1_METHOD(NegotiationToken)
-X_ASN1_METHOD(MechTypeList)
-X_ASN1_METHOD(GSSAPIContextToken)
 
 static int x_auth_spnego_create_negTokenInit(std::vector<uint8_t> &out)
 {
@@ -151,24 +296,35 @@ static x_auth_t *match_mech_type(x_auth_context_t *context, const NegTokenInit &
 	return nullptr;
 }
 
-static NTSTATUS spnego_update_start(x_auth_spnego_t &spnego, const NegotiationToken &nt_requ,
-		std::vector<uint8_t> &out, x_smbdsess_t *smbdsess)
+static NTSTATUS spnego_update_start(x_auth_spnego_t *spnego, const NegotiationToken &nt_requ,
+		std::vector<uint8_t> &out, x_auth_upcall_t *auth_upcall,
+		std::shared_ptr<x_auth_info_t> &auth_info)
 {
 	if (nt_requ.element != NegotiationToken::choice_NegotiationToken_negTokenInit) {
 		return NT_STATUS_INVALID_PARAMETER;
 	}
 	const NegTokenInit &ni = nt_requ.u.negTokenInit;
 	MechType *mt = NULL;
-	X_ASSERT(!spnego.subauth);
-	spnego.subauth = match_mech_type(spnego.auth.context, ni, mt);
-	if (!spnego.subauth) {
+	X_ASSERT(!spnego->subauth);
+	spnego->subauth = match_mech_type(spnego->auth_base.context, ni, mt);
+	if (!spnego->subauth) {
 		return NT_STATUS_INVALID_PARAMETER;
 	}
 
-	int ret = x_asn1_encode(ni.mechTypes, spnego.mech_types_blob);
-	std::vector<uint8_t> subout;
-	NTSTATUS status = spnego.subauth->update((uint8_t *)ni.mechToken->data, ni.mechToken->length, subout, smbdsess);
+	copy_MechType(mt, &spnego->mt_subauth);
 
+	int ret = x_asn1_encode(ni.mechTypes, spnego->mech_types_blob);
+
+	X_ASSERT(!spnego->up_auth_upcall);
+	spnego->up_auth_upcall = auth_upcall;
+	std::vector<uint8_t> subout;
+	NTSTATUS status = spnego->subauth->update((uint8_t *)ni.mechToken->data, ni.mechToken->length, subout, &spnego->this_auth_upcall, auth_info);
+
+	if (NT_STATUS_EQUAL(status, X_NT_STATUS_INTERNAL_BLOCKED)) {
+		return status;
+	}
+
+#if 0
 	NegotiationToken nt_resp;
 	memset(&nt_resp, 0, sizeof nt_resp);
 	nt_resp.element = NegotiationToken::choice_NegotiationToken_negTokenResp;
@@ -182,56 +338,68 @@ static NTSTATUS spnego_update_start(x_auth_spnego_t &spnego, const NegotiationTo
 	resp_token.data = subout.data();
 	resp_token.length = subout.size();
 	nt.responseToken = &resp_token;
-
-	spnego.state_position = x_auth_spnego_t::SERVER_TARG;
 	ret = x_asn1_encode(nt_resp, out);
-
+#endif
+	spnego->up_auth_upcall = nullptr;
+	x_spnego_auth_start_return(spnego, status, subout, out);
 	return status;
 }
 
-static NTSTATUS spnego_update_targ(x_auth_spnego_t &spnego, const NegotiationToken &nt_requ,
-		std::vector<uint8_t> &out, x_smbdsess_t *smbdsess)
+static NTSTATUS spnego_update_targ(x_auth_spnego_t *spnego, const NegotiationToken &nt_requ,
+		std::vector<uint8_t> &out, x_auth_upcall_t *auth_upcall,
+		std::shared_ptr<x_auth_info_t> &auth_info)
 {
 	if (nt_requ.element != NegotiationToken::choice_NegotiationToken_negTokenResp) {
 		return NT_STATUS_INVALID_PARAMETER;
 	}
 
-	assert(spnego.subauth);
+	assert(spnego->subauth);
 
 	const NegTokenResp &nt = nt_requ.u.negTokenResp;
-	std::vector<uint8_t> subout;
-	NTSTATUS status = spnego.subauth->update((uint8_t *)nt.responseToken->data, nt.responseToken->length, subout, smbdsess);
 
-	if (!NT_STATUS_IS_OK(status)) {
+	if (nt.mechListMIC) {
+		der_copy_octet_string(nt.mechListMIC, &spnego->mechListMIC);
+	}
+
+	X_ASSERT(!spnego->up_auth_upcall);
+	spnego->up_auth_upcall = auth_upcall;
+	std::vector<uint8_t> subout;
+	NTSTATUS status = spnego->subauth->update((uint8_t *)nt.responseToken->data, nt.responseToken->length, subout,
+			&spnego->this_auth_upcall, auth_info);
+
+	if (NT_STATUS_EQUAL(status, X_NT_STATUS_INTERNAL_BLOCKED)) {
 		return status;
 	}
-	
-	bool have_sign = spnego.subauth->have_feature(GENSEC_FEATURE_SIGN);
-	if (spnego.simulate_w2k) {
+
+	spnego->up_auth_upcall = nullptr;
+	return x_spnego_auth_targ_return(spnego, status, subout, out);
+#if 0	
+	bool have_sign = spnego->subauth->have_feature(GENSEC_FEATURE_SIGN);
+	if (spnego->simulate_w2k) {
 		have_sign = false;
 	}
 
-	bool new_spnego = spnego.subauth->have_feature(GENSEC_FEATURE_NEW_SPNEGO);
+	bool new_spnego = spnego->subauth->have_feature(GENSEC_FEATURE_NEW_SPNEGO);
 	if (nt.mechListMIC) {
 		new_spnego = true;
 	}
 
 	if (have_sign && new_spnego) {
-		spnego.needs_mic_check = true;
-		spnego.needs_mic_sign = true;
+		spnego->needs_mic_check = true;
+		spnego->needs_mic_sign = true;
 	}
 
-	if (have_sign && nt.mechListMIC) {
-		status = spnego.subauth->check_packet(
-				spnego.mech_types_blob.data(),
-				spnego.mech_types_blob.size(),
+	if (have_sign && nt->mechListMIC) {
+		status = spnego->subauth->check_packet(
+				spnego->mech_types_blob.data(),
+				spnego->mech_types_blob.size(),
 				(const uint8_t *)nt.mechListMIC->data,
 				nt.mechListMIC->length);
 		if (!NT_STATUS_IS_OK(status)) {
 			return status;
 		}
-		spnego.needs_mic_check = false;
-		spnego.done_mic_check = true;
+		spnego->needs_mic_check = false;
+		spnego->done_mic_check = true;
 
 	}
 
@@ -264,12 +432,14 @@ static NTSTATUS spnego_update_targ(x_auth_spnego_t &spnego, const NegotiationTok
 	int ret = x_asn1_encode(nt_resp, out);
 
 	return status;
+#endif
 }
 
 static NTSTATUS spnego_update(x_auth_t *auth, const uint8_t *in_buf, size_t in_len,
-		std::vector<uint8_t> &out, x_smbdsess_t *smbdsess)
+		std::vector<uint8_t> &out, x_auth_upcall_t *auth_upcall,
+		std::shared_ptr<x_auth_info_t> &auth_info)
 {
-	x_auth_spnego_t *spnego = X_CONTAINER_OF(auth, x_auth_spnego_t, auth);
+	x_auth_spnego_t *spnego = auth_spnego_from_base(auth);
 	if (spnego->state_position == x_auth_spnego_t::SERVER_START) {
 		if (in_len > 0) {
 			NegotiationToken nt;
@@ -277,7 +447,7 @@ static NTSTATUS spnego_update(x_auth_t *auth, const uint8_t *in_buf, size_t in_l
 			if (err) {
 				return NT_STATUS_INVALID_PARAMETER;
 			}
-			NTSTATUS status = spnego_update_start(*spnego, nt, out, smbdsess);
+			NTSTATUS status = spnego_update_start(spnego, nt, out, auth_upcall, auth_info);
 			x_asn1_free(nt);
 			return status;
 		} else {
@@ -291,7 +461,7 @@ static NTSTATUS spnego_update(x_auth_t *auth, const uint8_t *in_buf, size_t in_l
 		if (err) {
 			return NT_STATUS_INVALID_PARAMETER;
 		}
-		NTSTATUS status = spnego_update_targ(*spnego, nt, out, smbdsess);
+		NTSTATUS status = spnego_update_targ(spnego, nt, out, auth_upcall, auth_info);
 		x_asn1_free(nt);
 		return status;
 	}
@@ -302,7 +472,7 @@ static NTSTATUS spnego_update(x_auth_t *auth, const uint8_t *in_buf, size_t in_l
 
 static void spnego_destroy(x_auth_t *auth)
 {
-	x_auth_spnego_t *spnego = X_CONTAINER_OF(auth, x_auth_spnego_t, auth);
+	x_auth_spnego_t *spnego = auth_spnego_from_base(auth);
 	delete spnego;
 }
 
@@ -312,6 +482,7 @@ static bool spnego_have_feature(x_auth_t *auth, uint32_t feature)
 }
 
 static NTSTATUS spnego_check_packet(x_auth_t *auth, const uint8_t *data, size_t data_len,
+		const uint8_t *whole_pdu, size_t pdu_length,
 		const uint8_t *sig, size_t sig_len)
 {
 	X_TODO;
@@ -319,6 +490,7 @@ static NTSTATUS spnego_check_packet(x_auth_t *auth, const uint8_t *data, size_t 
 }
 
 static NTSTATUS spnego_sign_packet(x_auth_t *auth, const uint8_t *data, size_t data_len,
+		const uint8_t *whole_pdu, size_t pdu_length,
 		std::vector<uint8_t> &sig)
 {
 	X_TODO;
@@ -336,7 +508,7 @@ static const x_auth_ops_t auth_spnego_ops = {
 static x_auth_t *x_auth_spnego_create(x_auth_context_t *context)
 {
 	x_auth_spnego_t *spnego = new x_auth_spnego_t(context, &auth_spnego_ops);
-	return &spnego->auth;
+	return &spnego->auth_base;
 };
 
 const struct x_auth_mech_t x_auth_mech_spnego = {

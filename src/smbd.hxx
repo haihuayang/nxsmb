@@ -17,9 +17,11 @@
 #include <netinet/in.h>
 #include <unistd.h>
 #include "smbconf.hxx"
-#include "nttime.hxx"
+#include "misc.hxx"
 #include "include/utils.hxx"
 #include "include/librpc/ndr_misc.hxx"
+#include "include/librpc/ndr_security.hxx"
+#include "include/librpc/ndr_samr.hxx"
 extern "C" {
 #include "samba/libcli/smb/smb_constants.h"
 #include "samba/libcli/smb/smb2_constants.h"
@@ -44,34 +46,87 @@ extern "C" {
 
 #define X_NT_STATUS_INTERNAL_BLOCKED	NT_STATUS(1)
 
-struct x_smbdsess_t;
 struct x_auth_context_t;
 
 struct x_auth_t;
+
+struct x_dom_sid_with_attrs_t
+{
+	idl::dom_sid sid;
+	uint32_t attrs;
+};
+
+struct x_auth_info_t
+{
+	uint32_t user_flags;
+
+	std::string account_name;
+	std::string user_principal;
+	std::string full_name;
+	std::string logon_domain;
+	std::string dns_domain_name;
+
+	uint32_t acct_flags;
 #if 0
+	uint8_t user_session_key[16];
+	uint8_t lm_session_key[8];
+#endif
+	uint16_t logon_count;
+	uint16_t bad_password_count;
+
+	idl::NTTIME logon_time;
+	idl::NTTIME logoff_time;
+	idl::NTTIME kickoff_time;
+	idl::NTTIME pass_last_set_time;
+	idl::NTTIME pass_can_change_time;
+	idl::NTTIME pass_must_change_time;
+
+	std::string logon_server;
+	std::string logon_script;
+	std::string profile_path;
+	std::string home_directory;
+	std::string home_drive;
+
+	uint32_t rid, primary_gid;
+	idl::dom_sid domain_sid;
+
+	std::vector<idl::samr_RidWithAttribute> group_rids;
+	/*
+	 * the 1st one is the account sid
+	 * the 2nd one is the primary_group sid
+	 * followed by the rest of the groups
+	 */
+	std::vector<x_dom_sid_with_attrs_t> res_group_sids;
+	std::vector<uint8_t> session_key;
+};
+
 struct x_auth_upcall_t;
 struct x_auth_cbs_t
 {
-	void (*updated)(x_auth_upcall_t *upcall, NTSTATUS status);
+	void (*updated)(x_auth_upcall_t *upcall, NTSTATUS status, std::vector<uint8_t> &out_security,
+			std::shared_ptr<x_auth_info_t> &auth_info);
 };
 
 struct x_auth_upcall_t
 {
 	const x_auth_cbs_t *cbs;
-	void updated(NTSTATUS status) {
-		cbs->updated(this, status);
+	void updated(NTSTATUS status, std::vector<uint8_t> &out_security, std::shared_ptr<x_auth_info_t> auth_info) {
+		cbs->updated(this, status, out_security, auth_info);
 	}
 };
-#endif
+
 struct x_auth_ops_t
 {
 	NTSTATUS (*update)(x_auth_t *auth, const uint8_t *in_buf, size_t in_len,
-			std::vector<uint8_t> &out, x_smbdsess_t *sess);
+			std::vector<uint8_t> &out, x_auth_upcall_t *auth_upcall,
+			std::shared_ptr<x_auth_info_t> &auth_info);
 	void (*destroy)(x_auth_t *auth);
 	bool (*have_feature)(x_auth_t *auth, uint32_t feature);
 	NTSTATUS (*check_packet)(x_auth_t *auth, const uint8_t *data, size_t data_len,
+			const uint8_t *whole_pdu, size_t pdu_length,
 			const uint8_t *sig, size_t sig_len);
 	NTSTATUS (*sign_packet)(x_auth_t *auth, const uint8_t *data, size_t data_len,
+			const uint8_t *whole_pdu, size_t pdu_length,
 			std::vector<uint8_t> &sig);
 };
 
@@ -81,8 +136,9 @@ struct x_auth_t
 		: context(context), ops(ops) { }
 
 	NTSTATUS update(const uint8_t *in_buf, size_t in_len,
-			std::vector<uint8_t> &out, x_smbdsess_t *sess) {
-		return ops->update(this, in_buf, in_len, out, sess);
+			std::vector<uint8_t> &out, x_auth_upcall_t *upcall,
+			std::shared_ptr<x_auth_info_t> &auth_info) {
+		return ops->update(this, in_buf, in_len, out, upcall, auth_info);
 	}
 
 	bool have_feature(uint32_t feature) {
@@ -90,13 +146,15 @@ struct x_auth_t
 	}
 
 	NTSTATUS check_packet(const uint8_t *data, size_t data_len,
+			const uint8_t *whole_pdu, size_t pdu_length,
 			const uint8_t *sig, size_t sig_len) {
-		return ops->check_packet(this, data, data_len, sig, sig_len);
+		return ops->check_packet(this, data, data_len, whole_pdu, pdu_length, sig, sig_len);
 	}
 
 	NTSTATUS sign_packet(const uint8_t *data, size_t data_len,
+			const uint8_t *whole_pdu, size_t pdu_length,
 			std::vector<uint8_t> &sig) {
-		return ops->sign_packet(this, data, data_len, sig);
+		return ops->sign_packet(this, data, data_len, whole_pdu, pdu_length, sig);
 	}
 
 	x_auth_context_t * const context;
@@ -219,7 +277,8 @@ struct x_smbdsess_t
 	x_dqlink_t hash_link;
 	x_dlink_t conn_link;
 
-	// x_auth_upcall_t auth_upcall;
+	x_auth_upcall_t auth_upcall;
+
 	x_smbdconn_t *smbdconn;
 	uint64_t id;
 	x_tick_t timeout;
@@ -230,7 +289,6 @@ struct x_smbdsess_t
 	x_auth_t *auth{nullptr};
 	x_msg_t *authmsg{nullptr};
 
-	std::vector<uint8_t> session_key;
 	x_smb2_key_t signing_key, decryption_key, encryption_key, application_key;
 
 };
@@ -330,13 +388,13 @@ int x_smb2_process_NEGPROT(x_smbdconn_t *smbdconn, x_msg_t *msg,
 int x_smb2_process_SESSSETUP(x_smbdconn_t *smbdconn, x_msg_t *msg,
 		const uint8_t *in_buf, size_t in_len);
 
-void x_smbdsess_auth_updated(x_smbdsess_t *smbdsess, NTSTATUS status, std::vector<uint8_t> &response);
+// void x_smbdsess_auth_updated(x_auth_upcall_t *upcall, NTSTATUS status, std::vector<uint8_t> &response);
 
 void x_smbd_wbpool_request(x_wbcli_t *wbcli);
 
 void x_smb2_key_derivation(const uint8_t *KI, size_t KI_len,
-		const void *Label, size_t Label_len,
-		const void *Context, size_t Context_len,
+		const x_array_const_t<char> &label,
+		const x_array_const_t<char> &context,
 		x_smb2_key_t &key);
 NTSTATUS x_smb2_sign_msg(uint8_t *data, size_t length, uint16_t dialect,
 		const x_smb2_key_t &key);

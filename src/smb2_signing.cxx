@@ -7,8 +7,8 @@ extern "C" {
 #include <openssl/cmac.h>
 
 void x_smb2_key_derivation(const uint8_t *KI, size_t KI_len,
-		const void *Label, size_t Label_len,
-		const void *Context, size_t Context_len,
+		const x_array_const_t<char> &label,
+		const x_array_const_t<char> &context,
 		x_smb2_key_t &key)
 {
 	struct HMACSHA256Context ctx;
@@ -27,9 +27,9 @@ void x_smb2_key_derivation(const uint8_t *KI, size_t KI_len,
 
 	RSIVAL(buf, 0, i);
 	hmac_sha256_update(buf, sizeof(buf), &ctx);
-	hmac_sha256_update((const uint8_t *)Label, Label_len, &ctx);
+	hmac_sha256_update((const uint8_t *)label.data, label.size, &ctx);
 	hmac_sha256_update(&zero, 1, &ctx);
-	hmac_sha256_update((const uint8_t *)Context, Context_len, &ctx);
+	hmac_sha256_update((const uint8_t *)context.data, context.size, &ctx);
 	RSIVAL(buf, 0, L);
 	hmac_sha256_update(buf, sizeof(buf), &ctx);
 

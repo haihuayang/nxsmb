@@ -7,7 +7,8 @@ static int x_smbdconn_reply_negprot(x_smbdconn_t *smbdconn, x_msg_t *msg,
 {
 	const x_smbd_t *smbd = smbdconn->smbd;
 	const x_smbconf_t &conf = smbdconn->get_conf();
-	x_nttime_t now = x_nttime_current();
+	idl::NTTIME now = x_tick_to_nttime(tick_now);
+	// x_nttime_t now = x_nttime_current();
 
 	smbdconn->dialect = dialect;
 
@@ -41,7 +42,7 @@ static int x_smbdconn_reply_negprot(x_smbdconn_t *smbdconn, x_msg_t *msg,
 	x_put_le32(outbody + 0x20, conf.max_read);
 	x_put_le32(outbody + 0x24, conf.max_write);
 
-	x_put_le64(outbody + 0x28, now);         /* system time */
+	x_put_le64(outbody + 0x28, now.val);         /* system time */
 	x_put_le64(outbody + 0x30, 0);           /* server start time */
 
 	size_t security_offset = SMB2_HDR_BODY + 0x40;

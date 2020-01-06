@@ -535,7 +535,7 @@ struct AUTHENTICATE_MESSAGE {
 	x_ndr_l2s2o4_ptr_t<gstring> Workstation;/* [x_relative, flag(x_ndr_ntlmssp_negotiated_string_flags(NegotiateFlags))] */
 	x_ndr_l2s2o4_ptr_t<blob_t> EncryptedRandomSessionKey;/* [x_relative] */
 	NEGOTIATE NegotiateFlags;
-	ntlmssp_Version Version;/* [switch_is(NegotiateFlags&NTLMSSP_NEGOTIATE_VERSION)] */
+	// TODO ntlmssp_Version Version;/* [switch_is(NegotiateFlags&NTLMSSP_NEGOTIATE_VERSION)] */
 	// TODO ntlmssp_MIC mic;
 } /* [public, flag(LIBNDR_FLAG_REMAINING)] */;
 

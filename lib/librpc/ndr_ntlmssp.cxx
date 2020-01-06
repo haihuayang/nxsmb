@@ -938,7 +938,7 @@ x_ndr_off_t AUTHENTICATE_MESSAGE::ndr_scalars(x_ndr_push_t &__ndr, x_ndr_off_t _
 	X_NDR_SCALARS(Workstation, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
 	X_NDR_SCALARS(EncryptedRandomSessionKey, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
 	X_NDR_SCALARS(NegotiateFlags, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
-	X_NDR_SCALARS(Version, __ndr, __bpos, __epos, __flags, NegotiateFlags&NTLMSSP_NEGOTIATE_VERSION);
+	// X_NDR_SCALARS(Version, __ndr, __bpos, __epos, __flags, NegotiateFlags&NTLMSSP_NEGOTIATE_VERSION);
 	// X_NDR_SCALARS(mic, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
 	X_NDR_TRAILER_ALIGN(5, __ndr, __bpos, __epos, __flags);
 	return __bpos;
@@ -969,7 +969,7 @@ x_ndr_off_t AUTHENTICATE_MESSAGE::ndr_scalars(x_ndr_pull_t &__ndr, x_ndr_off_t _
 	X_NDR_SCALARS(Workstation, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
 	X_NDR_SCALARS(EncryptedRandomSessionKey, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
 	X_NDR_SCALARS(NegotiateFlags, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
-	X_NDR_SCALARS(Version, __ndr, __bpos, __epos, __flags, NegotiateFlags&NTLMSSP_NEGOTIATE_VERSION);
+	// X_NDR_SCALARS(Version, __ndr, __bpos, __epos, __flags, NegotiateFlags&NTLMSSP_NEGOTIATE_VERSION);
 	// X_NDR_SCALARS(mic, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
 	X_NDR_TRAILER_ALIGN(5, __ndr, __bpos, __epos, __flags);
 	return __bpos;
@@ -997,7 +997,7 @@ void AUTHENTICATE_MESSAGE::ostr(x_ndr_ostr_t &__ndr, uint32_t __flags, x_ndr_swi
 	X_NDR_OSTR_NEXT(Workstation, __ndr, x_ndr_set_flags(__flags, x_ndr_ntlmssp_negotiated_string_flags(NegotiateFlags)), X_NDR_SWITCH_NONE);
 	X_NDR_OSTR_NEXT(EncryptedRandomSessionKey, __ndr, __flags, X_NDR_SWITCH_NONE);
 	X_NDR_OSTR_NEXT(NegotiateFlags, __ndr, __flags, X_NDR_SWITCH_NONE);
-	X_NDR_OSTR_NEXT(Version, __ndr, __flags, NegotiateFlags&NTLMSSP_NEGOTIATE_VERSION);
+	// X_NDR_OSTR_NEXT(Version, __ndr, __flags, NegotiateFlags&NTLMSSP_NEGOTIATE_VERSION);
 // 	X_NDR_OSTR_NEXT(mic, __ndr, __flags, X_NDR_SWITCH_NONE);
 	(__ndr) << leave;
 }

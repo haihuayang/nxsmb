@@ -13,7 +13,6 @@
 
 // #include "smb_consts.h"
 #include "smbconf.hxx"
-#include "nttime.hxx"
 #include "core.hxx"
 #include "network.hxx"
 
@@ -441,7 +440,8 @@ static void x_smbd_init(x_smbd_t &smbd, int port)
 
 	if (spnego) {
 		std::vector<uint8_t> negprot_spnego;
-		NTSTATUS status = spnego->update(NULL, 0, negprot_spnego, NULL);
+		std::shared_ptr<x_auth_info_t> auth_info;
+		NTSTATUS status = spnego->update(NULL, 0, negprot_spnego, NULL, auth_info);
 		X_ASSERT(NT_STATUS_IS_OK(status));
 		smbd.negprot_spnego.swap(negprot_spnego);
 	}

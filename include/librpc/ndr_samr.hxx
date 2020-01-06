@@ -1384,6 +1384,7 @@ template <> struct x_ndr_traits_t<samr_RidWithAttributeArray> {
 	using ndr_type = x_ndr_type_struct;
 };
 
+std::ostream &operator<<(std::ostream &os, samr_RidWithAttribute rid_with_attr);
 
 struct samr_DispEntryGeneral {
 	x_ndr_off_t push(x_ndr_push_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level) const;

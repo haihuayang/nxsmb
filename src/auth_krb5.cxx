@@ -53,7 +53,7 @@ struct x_auth_krb5_t
 	} state_position{S_START};
 
 	x_auth_t auth; // base class
-	x_smbdsess_t *smbdsess;
+	x_auth_upcall_t *auth_upcall;
 
 	std::string domain;
 	std::string realm;
@@ -865,9 +865,69 @@ static NTSTATUS auth_krb5_get_session_key(std::vector<uint8_t> &session_key,
 	return NT_STATUS_OK;
 }
 
+static x_dom_sid_with_attrs_t sid_attr_compose(
+		const idl::dom_sid &d,
+		uint32_t rid, uint32_t attrs)
+{
+	x_dom_sid_with_attrs_t s;
+	X_ASSERT(d.num_auths < d.sub_auths.size() - 1);
+	s.sid = d;
+	s.sid.sub_auths[s.sid.num_auths++] = rid;
+	s.attrs = attrs;
+	return s;
+}
+
+static std::string safe_utf16_ptr_to_utf8(const std::shared_ptr<idl::u16string> &u16s)
+{
+	if (u16s) {
+		return x_convert_utf16_to_utf8(u16s->val);
+	} else {
+		return "";
+	}
+}
+
+static void auth_info_from_pac_logon_info(x_auth_info_t &auth_info, const idl::PAC_LOGON_INFO &logon_info)
+{
+	auth_info.logon_time = logon_info.info3.base.logon_time;
+	auth_info.logoff_time = logon_info.info3.base.logoff_time;
+	auth_info.kickoff_time = logon_info.info3.base.kickoff_time;
+	auth_info.pass_last_set_time = logon_info.info3.base.last_password_change;
+	auth_info.pass_can_change_time = logon_info.info3.base.allow_password_change;
+	auth_info.pass_must_change_time = logon_info.info3.base.force_password_change;
+
+	auth_info.account_name = safe_utf16_ptr_to_utf8(logon_info.info3.base.account_name.val);
+	auth_info.full_name = safe_utf16_ptr_to_utf8(logon_info.info3.base.full_name.val);
+	auth_info.logon_script = safe_utf16_ptr_to_utf8(logon_info.info3.base.logon_script.val);
+	auth_info.profile_path = safe_utf16_ptr_to_utf8(logon_info.info3.base.profile_path.val);
+	auth_info.home_directory = safe_utf16_ptr_to_utf8(logon_info.info3.base.home_directory.val);
+	auth_info.home_drive = safe_utf16_ptr_to_utf8(logon_info.info3.base.home_drive.val);
+
+	auth_info.logon_count = logon_info.info3.base.logon_count;
+	auth_info.bad_password_count = logon_info.info3.base.bad_password_count;
+	auth_info.acct_flags = logon_info.info3.base.acct_flags;
+	auth_info.user_flags = logon_info.info3.base.user_flags;
+
+	auth_info.logon_server = safe_utf16_ptr_to_utf8(logon_info.info3.base.logon_server.val);
+	auth_info.logon_domain = safe_utf16_ptr_to_utf8(logon_info.info3.base.logon_domain.val);
+
+	auth_info.domain_sid = logon_info.info3.base.domain_sid.val->val;
+	auth_info.rid = logon_info.info3.base.rid;
+	auth_info.primary_gid = logon_info.info3.base.primary_gid;
+	auth_info.group_rids = logon_info.info3.base.groups.rids.val->val;
+
+	if (logon_info.res_group_dom_sid.val) {
+		const idl::dom_sid &res_group_dom_sid = logon_info.res_group_dom_sid.val->val;
+		for (const auto &rid_with_attr : logon_info.res_groups.rids.val->val) {
+			auth_info.res_group_sids.push_back(sid_attr_compose(res_group_dom_sid,
+					rid_with_attr.rid, rid_with_attr.attributes));
+		}
+	}
+}
+
 // gensec_gse_session_info
 static NTSTATUS auth_krb5_accepted(x_auth_krb5_t &auth, gss_ctx_id_t gss_ctx,
-		gss_name_t client_name, x_smbdsess_t *smbdsess)
+		gss_name_t client_name, x_auth_upcall_t *auth_upcall,
+		std::shared_ptr<x_auth_info_t> &auth_info)
 {
 	OM_uint32 gss_maj, gss_min;
 	gss_buffer_set_t pac_buffer_set = GSS_C_NO_BUFFER_SET;
@@ -944,8 +1004,14 @@ static NTSTATUS auth_krb5_accepted(x_auth_krb5_t &auth, gss_ctx_id_t gss_ctx,
 		auth_krb5_get_domain_info(auth);
 	}
 
-	return auth_krb5_get_session_key(smbdsess->session_key, gss_ctx);
-
+	std::vector<uint8_t> session_key;
+	NTSTATUS status = auth_krb5_get_session_key(session_key, gss_ctx);
+	if (NT_STATUS_IS_OK(status)) {
+		auth_info = std::make_shared<x_auth_info_t>();
+		auth_info_from_pac_logon_info(*auth_info, *logon_info);
+		std::swap(auth_info->session_key, session_key);
+	}
+	return status;
 
 #if 0
 	rc = get_remote_hostname(remote_address,
@@ -1128,7 +1194,8 @@ done:
 }
 
 static NTSTATUS auth_krb5_update(x_auth_t *auth, const uint8_t *in_buf, size_t in_len,
-		std::vector<uint8_t> &out, x_smbdsess_t *smbdsess)
+		std::vector<uint8_t> &out, x_auth_upcall_t *auth_upcall,
+		std::shared_ptr<x_auth_info_t> &auth_info)
 {
 	x_auth_krb5_t *auth_krb5 = X_CONTAINER_OF(auth, x_auth_krb5_t, auth);
 	NTSTATUS status;
@@ -1169,7 +1236,7 @@ static NTSTATUS auth_krb5_update(x_auth_t *auth, const uint8_t *in_buf, size_t i
 					 &delegated_cred_handle);
 	switch (gss_maj) {
 	case GSS_S_COMPLETE:
-		status = auth_krb5_accepted(*auth_krb5, gssapi_context, client_name, smbdsess);
+		status = auth_krb5_accepted(*auth_krb5, gssapi_context, client_name, auth_upcall, auth_info);
 		if (NT_STATUS_IS_OK(status)) {
 			out.assign((uint8_t *)out_data.value, (uint8_t *)out_data.value + out_data.length);
 		}
@@ -1242,6 +1309,7 @@ static bool auth_krb5_have_feature(x_auth_t *auth, uint32_t feature)
 }
 
 static NTSTATUS auth_krb5_check_packet(x_auth_t *auth, const uint8_t *data, size_t data_len,
+		const uint8_t *whole_pdu, size_t pdu_length,
 		const uint8_t *sig, size_t sig_len)
 {
 	X_TODO;
@@ -1249,6 +1317,7 @@ static NTSTATUS auth_krb5_check_packet(x_auth_t *auth, const uint8_t *data, size
 }
 
 static NTSTATUS auth_krb5_sign_packet(x_auth_t *auth, const uint8_t *data, size_t data_len,
+		const uint8_t *whole_pdu, size_t pdu_length,
 		std::vector<uint8_t> &sig)
 {
 	X_TODO;

@@ -183,10 +183,14 @@ TARGET_SRC_libsamba := \
 		lib/util/blocking \
 		lib/crypto/aes \
 		lib/crypto/rijndael-alg-fst \
+		lib/crypto/crc32 \
 		lib/crypto/md4 \
+		lib/crypto/md5 \
 		lib/crypto/sha256 \
+		lib/crypto/hmacmd5 \
 		lib/crypto/hmacsha256 \
 		lib/crypto/aes_cmac_128 \
+		lib/crypto/arcfour \
 		source4/heimdal/lib/roken/resolve \
 		source4/heimdal/lib/asn1/timegm \
 		source4/heimdal/lib/asn1/extra \
