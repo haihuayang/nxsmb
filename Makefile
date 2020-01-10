@@ -11,7 +11,7 @@ include files.mk
 
 TARGET_PROJECT_CFLAGS := -g -Wall -DPROJECT=$(PROJECT)
 TARGET_CFLAGS = $(TARGET_PROJECT_CFLAGS) -Wstrict-prototypes -MT $@ -MMD -MP -MF $@.d
-TARGET_CXXFLAGS = $(TARGET_PROJECT_CFLAGS) -std=c++14 -MT $@ -MMD -MP -MF $@.d
+TARGET_CXXFLAGS = $(TARGET_PROJECT_CFLAGS) -std=c++14 -Wno-invalid-offsetof -MT $@ -MMD -MP -MF $@.d
 
 TARGET_DIR_out := target.dbg.linux.x86_64
 HOST_DIR_out := host.dbg.linux.x86_64
@@ -79,9 +79,14 @@ all: $(TARGET_SET_tests:%=$(TARGET_DIR_out)/tests/%) $(TARGET_DIR_out)/bin/nxsmb
 
 SET_src_nxsmbd := auth_ntlmssp auth_krb5 auth_spnego auth \
 	network \
-	smbd smbd_sess smbd_conn \
+	smbd smbd_sess smbd_conn smbd_share \
 	smb2_signing \
-	smb2_negprot smb2_sesssetup \
+	smb2_negprot \
+	smb2_sesssetup smb2_logoff \
+	smb2_tcon smb2_tdis \
+	smb2_create smb2_close \
+	smb2_flush smb2_read smb2_write \
+	smb2_lock smb2_ioctl \
 
 $(TARGET_DIR_out)/bin/nxsmbd: $(SET_src_nxsmbd:%=$(TARGET_DIR_out)/src/%.o) $(TARGET_SET_lib:%=$(TARGET_DIR_out)/lib%.a)
 	$(CXX) -g $(TARGET_LDFLAGS) -o $@ $^ -lpthread -lresolv -ldl
@@ -256,6 +261,7 @@ TARGET_SRC_libnxsmb := \
 		lib/librpc/ndr_lsa \
 		lib/xutils \
 		lib/string \
+		lib/charset \
 		lib/threadpool \
 		lib/evtmgmt \
 		lib/wbpool \

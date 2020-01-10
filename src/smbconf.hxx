@@ -63,7 +63,7 @@ static inline const char *lpcfg_salt_princ()
 
 static inline std::vector<std::string> lpcfg_cluster_nodes()
 {
-	return std::vector<std::string>{"NTNX-hh360u-1.hhdom2.hhlab"};
+	return std::vector<std::string>{"ntnx-hh360u-1.hhdom2.hhlab"};
 }
 
 static inline const char *lpcfg_dnsdomain()

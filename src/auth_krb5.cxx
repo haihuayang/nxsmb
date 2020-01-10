@@ -30,9 +30,7 @@ extern "C" {
 #include <algorithm>
 #include "include/asn1_wrap.hxx"
 #include "include/krb5_wrap.hxx"
-#include "include/utils.hxx"
-
-#define DEBUG(...) do { } while (0)
+#include "include/charset.hxx"
 
 using x_krb5_principal_ptr_t = std::unique_ptr<Principal, std::function<void (Principal *)>>;
 using x_krb5_principals_ptr_t = std::unique_ptr<Principals, std::function<void (Principals *)>>;

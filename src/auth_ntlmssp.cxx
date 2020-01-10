@@ -29,7 +29,7 @@ extern "C" {
 #include <algorithm>
 #include "include/asn1_wrap.hxx"
 #include "include/librpc/ndr_ntlmssp.hxx"
-#include "include/utils.hxx"
+#include "include/charset.hxx"
 
 #define DEBUG(...) do { } while (0)
 #define dump_data_pw(...) do { } while (0)

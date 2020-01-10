@@ -112,6 +112,11 @@ int x_smb2_reply_error(x_smbdconn_t *smbdconn, x_msg_t *msg,
 	return 0;
 }
 
+#define X_SMB2_OP_DECL(X) \
+	extern int x_smb2_process_##X(x_smbdconn_t *cli, x_msg_t *msg, const uint8_t *in_buf, size_t in_len);
+	X_SMB2_OP_ENUM
+#undef X_SMB2_OP_DECL
+
 static const struct {
 	int (*op_func)(x_smbdconn_t *cli, x_msg_t *msg, const uint8_t *in_buf, size_t in_len);
 } x_smb2_op_table[] = {
@@ -445,6 +450,8 @@ static void x_smbd_init(x_smbd_t &smbd, int port)
 		X_ASSERT(NT_STATUS_IS_OK(status));
 		smbd.negprot_spnego.swap(negprot_spnego);
 	}
+
+	x_smbd_load_shares();
 
 	int fd = tcplisten(port);
 	assert(fd >= 0);

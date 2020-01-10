@@ -10,6 +10,7 @@
 #include "include/evtmgmt.hxx"
 #include "include/wbpool.hxx"
 #include <vector>
+#include <map>
 #include <memory>
 #include <mutex>
 #include <string.h>
@@ -89,8 +90,8 @@ struct x_auth_info_t
 
 	uint32_t rid, primary_gid;
 	idl::dom_sid domain_sid;
-
 	std::vector<idl::samr_RidWithAttribute> group_rids;
+
 	/*
 	 * info3.sids and res_group sids
 	 */
@@ -228,11 +229,37 @@ struct x_msg_t
 };
 X_DECLARE_MEMBER_TRAITS(msg_dlink_traits, x_msg_t, dlink)
 
-struct x_smbuser_t
+struct x_smbdshare_t
+{
+	std::string name;
+	uint8_t type;
+	bool read_only;
+};
+
+
+struct x_smbduser_t
 {
 	// security token
 };
 
+struct x_smbdtcon_t
+{ 
+	x_smbdtcon_t(const std::shared_ptr<x_smbdshare_t> &share) : share(share) { }
+	uint32_t tid;
+	uint32_t share_access;
+	std::shared_ptr<x_smbdshare_t> share;
+};
+#if 0
+struct x_smbdtcon_t
+{
+	x_dqlink_t hash_link;
+	x_dlink_t link_session;
+	std::atomic<int> ref;
+
+	/* pointer share */
+};
+X_DECLARE_MEMBER_TRAITS(tcon_dlink_traits, x_smbdtcon_t, link_session)
+#endif
 using x_smb2_key_t = std::array<uint8_t, 16>;
 struct x_smbdconn_t;
 struct x_smbdsess_t
@@ -283,12 +310,15 @@ struct x_smbdsess_t
 	std::atomic<uint32_t> state{S_PROCESSING};
 	std::atomic<int> refcnt;
 	std::mutex mutex;
-	std::shared_ptr<x_smbuser_t> user;
+	std::shared_ptr<x_smbduser_t> user;
 	x_auth_t *auth{nullptr};
 	x_msg_t *authmsg{nullptr};
 
 	x_smb2_key_t signing_key, decryption_key, encryption_key, application_key;
 
+	uint32_t next_tcon_id = 1;
+	std::map<uint32_t, std::shared_ptr<x_smbdtcon_t>> tcon_table; // TODO map is non-standard-layout
+	//x_tp_ddlist_t<tcon_dlink_traits> tcon_list;
 };
 X_DECLARE_MEMBER_TRAITS(smbdsess_hash_traits, x_smbdsess_t, hash_link)
 X_DECLARE_MEMBER_TRAITS(smbdsess_conn_traits, x_smbdsess_t, conn_link)
@@ -353,6 +383,9 @@ struct x_smbdconn_t
 	x_tp_ddlist_t<fdevt_user_conn_traits> fdevt_user_list;
 };
 
+std::shared_ptr<x_smbdshare_t> x_smbd_share_find(const std::string &name);
+int x_smbd_load_shares();
+
 int x_smbdsess_pool_init(x_evtmgmt_t *ep, uint32_t count);
 x_smbdsess_t *x_smbdsess_create(x_smbdconn_t *smbdconn);
 x_smbdsess_t *x_smbdsess_find(uint64_t id, const x_smbdconn_t *smbdconn);
@@ -381,11 +414,16 @@ int x_smb2_reply_error(x_smbdconn_t *smbdconn, x_msg_t *msg, x_smbdsess_t *smbds
 
 int x_smbdconn_process_smb1negoprot(x_smbdconn_t *smbdconn, x_msg_t *msg,
 		const uint8_t *buf, size_t len);
+#if 0
 int x_smb2_process_NEGPROT(x_smbdconn_t *smbdconn, x_msg_t *msg,
 		const uint8_t *in_buf, size_t in_len);
 int x_smb2_process_SESSSETUP(x_smbdconn_t *smbdconn, x_msg_t *msg,
 		const uint8_t *in_buf, size_t in_len);
-
+int x_smb2_process_LOGOFF(x_smbdconn_t *smbdconn, x_msg_t *msg,
+		const uint8_t *in_buf, size_t in_len);
+int x_smb2_process_TCON(x_smbdconn_t *smbdconn, x_msg_t *msg,
+		const uint8_t *in_buf, size_t in_len);
+#endif
 // void x_smbdsess_auth_updated(x_auth_upcall_t *upcall, NTSTATUS status, std::vector<uint8_t> &response);
 
 void x_smbd_wbpool_request(x_wbcli_t *wbcli);
@@ -396,6 +434,9 @@ void x_smb2_key_derivation(const uint8_t *KI, size_t KI_len,
 		x_smb2_key_t &key);
 NTSTATUS x_smb2_sign_msg(uint8_t *data, size_t length, uint16_t dialect,
 		const x_smb2_key_t &key);
+
+/* TODO */
+#define DEBUG(...) do { } while (0)
 
 #endif /* __smbd__hxx__ */
 
