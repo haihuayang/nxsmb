@@ -885,7 +885,7 @@ static NTSTATUS ntlmssp_post_auth(x_auth_ntlmssp_t *ntlmssp, x_auth_info_t &auth
 		if (!end || *end != '\n') {
 			return NT_STATUS_LOGON_FAILURE;
 		}
-		auth_info.res_group_sids.push_back(sid_attr);
+		auth_info.other_sids.push_back(sid_attr);
 	}
 	// ntlmssp_server_postauth
 	const uint8_t *session_key_data = nullptr;

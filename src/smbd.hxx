@@ -92,11 +92,9 @@ struct x_auth_info_t
 
 	std::vector<idl::samr_RidWithAttribute> group_rids;
 	/*
-	 * the 1st one is the account sid
-	 * the 2nd one is the primary_group sid
-	 * followed by the rest of the groups
+	 * info3.sids and res_group sids
 	 */
-	std::vector<x_dom_sid_with_attrs_t> res_group_sids;
+	std::vector<x_dom_sid_with_attrs_t> other_sids;
 	std::vector<uint8_t> session_key;
 };
 

@@ -915,10 +915,15 @@ static void auth_info_from_pac_logon_info(x_auth_info_t &auth_info, const idl::P
 	auth_info.primary_gid = logon_info.info3.base.primary_gid;
 	auth_info.group_rids = logon_info.info3.base.groups.rids.val->val;
 
+	if (logon_info.info3.sids.val) {
+		for (const auto &sa: logon_info.info3.sids.val->val) {
+			auth_info.other_sids.push_back(x_dom_sid_with_attrs_t{sa.sid.val->val, (uint32_t)sa.attributes});
+		}
+	}
 	if (logon_info.res_group_dom_sid.val) {
 		const idl::dom_sid &res_group_dom_sid = logon_info.res_group_dom_sid.val->val;
 		for (const auto &rid_with_attr : logon_info.res_groups.rids.val->val) {
-			auth_info.res_group_sids.push_back(sid_attr_compose(res_group_dom_sid,
+			auth_info.other_sids.push_back(sid_attr_compose(res_group_dom_sid,
 					rid_with_attr.rid, rid_with_attr.attributes));
 		}
 	}

@@ -106,10 +106,10 @@ static std::ostream &operator<<(std::ostream &os, const x_auth_info_t &auth_info
 	}
 
 	i = 0;
-	for (const auto &res_group_sid: auth_info.res_group_sids) {
+	for (const auto &other_sid: auth_info.other_sids) {
 		char buf[32];
-		snprintf(buf, sizeof buf, "0x%x", res_group_sid.attrs);
-		os << "\t#" << i << ": " << res_group_sid.sid << ", " << buf << std::endl;
+		snprintf(buf, sizeof buf, "0x%x", other_sid.attrs);
+		os << "\t#" << i << ": " << other_sid.sid << ", " << buf << std::endl;
 		++i;
 	}
 
@@ -129,6 +129,24 @@ static void smbdsess_auth_succeeded(x_smbdconn_t *smbdconn, x_smbdsess_t *smbdse
 		const x_auth_info_t &auth_info)
 {
 	X_DBG("auth_info %s", tostr(auth_info).c_str());
+	
+	/* TODO find_user by auth_info
+	sort auth_info sids ..., create unique hash value 
+	static void find_user(x_auth_info_t &auth_info)
+	{
+
+	}
+
+	finalize_local_nt_token
+	add_local_groups
+
+	??? how group_mapping.tdb is generated
+	add group aliases sush global_sid_Builtin_Administrators, global_sid_Builtin_Users,
+	global_sid_Builtin_Backup_Operators
+
+	*/
+
+
 	const x_array_const_t<char> *derivation_sign_label, *derivation_sign_context,
 	      *derivation_encryption_label, *derivation_encryption_context,
 	      *derivation_decryption_label, *derivation_decryption_context,
