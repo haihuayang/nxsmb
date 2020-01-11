@@ -229,11 +229,18 @@ struct x_msg_t
 };
 X_DECLARE_MEMBER_TRAITS(msg_dlink_traits, x_msg_t, dlink)
 
-struct x_smbdshare_t
+struct x_smbd_share_t
 {
+        enum {
+                TYPE_IPC,
+                TYPE_DEFAULT,
+                TYPE_HOME,
+        };
 	std::string name;
 	uint8_t type;
 	bool read_only;
+        std::string msdfs_proxy;
+        uint32_t max_referral_ttl = 300;
 };
 
 
@@ -242,15 +249,15 @@ struct x_smbduser_t
 	// security token
 };
 
-struct x_smbdtcon_t
+struct x_smbd_tcon_t
 { 
-	x_smbdtcon_t(const std::shared_ptr<x_smbdshare_t> &share) : share(share) { }
+	x_smbd_tcon_t(const std::shared_ptr<x_smbd_share_t> &share) : share(share) { }
 	uint32_t tid;
 	uint32_t share_access;
-	std::shared_ptr<x_smbdshare_t> share;
+	std::shared_ptr<x_smbd_share_t> share;
 };
 #if 0
-struct x_smbdtcon_t
+struct x_smbd_tcon_t
 {
 	x_dqlink_t hash_link;
 	x_dlink_t link_session;
@@ -258,14 +265,14 @@ struct x_smbdtcon_t
 
 	/* pointer share */
 };
-X_DECLARE_MEMBER_TRAITS(tcon_dlink_traits, x_smbdtcon_t, link_session)
+X_DECLARE_MEMBER_TRAITS(tcon_dlink_traits, x_smbd_tcon_t, link_session)
 #endif
 using x_smb2_key_t = std::array<uint8_t, 16>;
-struct x_smbdconn_t;
-struct x_smbdsess_t
+struct x_smbd_conn_t;
+struct x_smbd_sess_t
 {
-	explicit x_smbdsess_t(x_smbdconn_t *smbdconn);
-	~x_smbdsess_t() {
+	explicit x_smbd_sess_t(x_smbd_conn_t *smbd_conn);
+	~x_smbd_sess_t() {
 		if (auth) {
 			x_auth_destroy(auth);
 		}
@@ -304,7 +311,7 @@ struct x_smbdsess_t
 
 	x_auth_upcall_t auth_upcall;
 
-	x_smbdconn_t *smbdconn;
+	x_smbd_conn_t *smbd_conn;
 	uint64_t id;
 	x_tick_t timeout;
 	std::atomic<uint32_t> state{S_PROCESSING};
@@ -317,25 +324,25 @@ struct x_smbdsess_t
 	x_smb2_key_t signing_key, decryption_key, encryption_key, application_key;
 
 	uint32_t next_tcon_id = 1;
-	std::map<uint32_t, std::shared_ptr<x_smbdtcon_t>> tcon_table; // TODO map is non-standard-layout
+	std::map<uint32_t, std::shared_ptr<x_smbd_tcon_t>> tcon_table; // TODO map is non-standard-layout
 	//x_tp_ddlist_t<tcon_dlink_traits> tcon_list;
 };
-X_DECLARE_MEMBER_TRAITS(smbdsess_hash_traits, x_smbdsess_t, hash_link)
-X_DECLARE_MEMBER_TRAITS(smbdsess_conn_traits, x_smbdsess_t, conn_link)
+X_DECLARE_MEMBER_TRAITS(smbd_sess_hash_traits, x_smbd_sess_t, hash_link)
+X_DECLARE_MEMBER_TRAITS(smbd_sess_conn_traits, x_smbd_sess_t, conn_link)
 
 struct x_fdevt_user_t
 {
 	x_dlink_t link;
-	void (*func)(x_smbdconn_t *smbdconn, x_fdevt_user_t *);
+	void (*func)(x_smbd_conn_t *smbd_conn, x_fdevt_user_t *);
 };
 X_DECLARE_MEMBER_TRAITS(fdevt_user_conn_traits, x_fdevt_user_t, link)
 
-struct x_smbdconn_t
+struct x_smbd_conn_t
 {
 	enum { MAX_MSG = 4 };
-	x_smbdconn_t(x_smbd_t *smbd, int fd_, const struct sockaddr_in &sin_)
+	x_smbd_conn_t(x_smbd_t *smbd, int fd_, const struct sockaddr_in &sin_)
 		: smbd(smbd), fd(fd_), sin(sin_) { }
-	~x_smbdconn_t();
+	~x_smbd_conn_t();
 
 	const x_smbconf_t &get_conf() const {
 		return smbd->conf;
@@ -378,18 +385,18 @@ struct x_smbdconn_t
 	x_msg_t *recving_msg = NULL;
 	x_msg_t *sending_msg = NULL;
 	x_tp_ddlist_t<msg_dlink_traits> send_queue;
-	x_tp_ddlist_t<smbdsess_conn_traits> session_list;
-	x_tp_ddlist_t<smbdsess_conn_traits> session_wait_input_list;
+	x_tp_ddlist_t<smbd_sess_conn_traits> session_list;
+	x_tp_ddlist_t<smbd_sess_conn_traits> session_wait_input_list;
 	x_tp_ddlist_t<fdevt_user_conn_traits> fdevt_user_list;
 };
 
-std::shared_ptr<x_smbdshare_t> x_smbd_share_find(const std::string &name);
+std::shared_ptr<x_smbd_share_t> x_smbd_share_find(const std::string &name);
 int x_smbd_load_shares();
 
-int x_smbdsess_pool_init(x_evtmgmt_t *ep, uint32_t count);
-x_smbdsess_t *x_smbdsess_create(x_smbdconn_t *smbdconn);
-x_smbdsess_t *x_smbdsess_find(uint64_t id, const x_smbdconn_t *smbdconn);
-void x_smbdsess_release(x_smbdsess_t *smbdsess);
+int x_smbd_sess_pool_init(x_evtmgmt_t *ep, uint32_t count);
+x_smbd_sess_t *x_smbd_sess_create(x_smbd_conn_t *smbd_conn);
+x_smbd_sess_t *x_smbd_sess_find(uint64_t id, const x_smbd_conn_t *smbd_conn);
+void x_smbd_sess_release(x_smbd_sess_t *smbd_sess);
 
 int x_auth_spnego_init(x_auth_context_t *context);
 x_auth_t *x_auth_create_ntlmssp(x_auth_context_t *context);
@@ -405,26 +412,15 @@ extern const x_auth_mech_t x_auth_mech_spnego;
 
 x_auth_t *x_smbd_create_auth(x_smbd_t *smbd);
 
-void x_smbdconn_remove_sessions(x_smbdconn_t *smbdconn);
-void x_smbdconn_post_user(x_smbdconn_t *smbdconn, x_fdevt_user_t *fdevt_user);
+void x_smbd_conn_remove_sessions(x_smbd_conn_t *smbd_conn);
+void x_smbd_conn_post_user(x_smbd_conn_t *smbd_conn, x_fdevt_user_t *fdevt_user);
 
-void x_smbdconn_reply(x_smbdconn_t *smbdconn, x_msg_t *msg, x_smbdsess_t *smbdsess);
-int x_smb2_reply_error(x_smbdconn_t *smbdconn, x_msg_t *msg, x_smbdsess_t *smbdsess,
+void x_smbd_conn_reply(x_smbd_conn_t *smbd_conn, x_msg_t *msg, x_smbd_sess_t *smbd_sess);
+int x_smb2_reply_error(x_smbd_conn_t *smbd_conn, x_msg_t *msg, x_smbd_sess_t *smbd_sess,
 		NTSTATUS status);
 
-int x_smbdconn_process_smb1negoprot(x_smbdconn_t *smbdconn, x_msg_t *msg,
+int x_smbd_conn_process_smb1negoprot(x_smbd_conn_t *smbd_conn, x_msg_t *msg,
 		const uint8_t *buf, size_t len);
-#if 0
-int x_smb2_process_NEGPROT(x_smbdconn_t *smbdconn, x_msg_t *msg,
-		const uint8_t *in_buf, size_t in_len);
-int x_smb2_process_SESSSETUP(x_smbdconn_t *smbdconn, x_msg_t *msg,
-		const uint8_t *in_buf, size_t in_len);
-int x_smb2_process_LOGOFF(x_smbdconn_t *smbdconn, x_msg_t *msg,
-		const uint8_t *in_buf, size_t in_len);
-int x_smb2_process_TCON(x_smbdconn_t *smbdconn, x_msg_t *msg,
-		const uint8_t *in_buf, size_t in_len);
-#endif
-// void x_smbdsess_auth_updated(x_auth_upcall_t *upcall, NTSTATUS status, std::vector<uint8_t> &response);
 
 void x_smbd_wbpool_request(x_wbcli_t *wbcli);
 

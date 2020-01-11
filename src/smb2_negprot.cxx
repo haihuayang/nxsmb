@@ -1,16 +1,16 @@
 #include "smbd.hxx"
 #include "core.hxx"
 
-static int x_smbdconn_reply_negprot(x_smbdconn_t *smbdconn, x_msg_t *msg,
+static int x_smbd_conn_reply_negprot(x_smbd_conn_t *smbd_conn, x_msg_t *msg,
 		uint16_t dialect,
 		const std::vector<std::pair<const uint8_t *, size_t>> &negotiate_context)
 {
-	const x_smbd_t *smbd = smbdconn->smbd;
-	const x_smbconf_t &conf = smbdconn->get_conf();
+	const x_smbd_t *smbd = smbd_conn->smbd;
+	const x_smbconf_t &conf = smbd_conn->get_conf();
 	idl::NTTIME now = x_tick_to_nttime(tick_now);
 	// x_nttime_t now = x_nttime_current();
 
-	smbdconn->dialect = dialect;
+	smbd_conn->dialect = dialect;
 
 	uint16_t security_mode = SMB2_NEGOTIATE_SIGNING_ENABLED;
 	if (lpcfg_server_signing_required()) {
@@ -90,15 +90,15 @@ static int x_smbdconn_reply_negprot(x_smbdconn_t *smbdconn, x_msg_t *msg,
 	msg->state = x_msg_t::STATE_COMPLETE;
 
 	if (dialect != SMB2_DIALECT_REVISION_2FF) {
-		smbdconn->server_security_mode = security_mode;
-		smbdconn->server_capabilities = capabilities;
+		smbd_conn->server_security_mode = security_mode;
+		smbd_conn->server_capabilities = capabilities;
 	}
 
-	x_smbdconn_reply(smbdconn, msg, nullptr);
+	x_smbd_conn_reply(smbd_conn, msg, nullptr);
 	return 0;
 }
 
-int x_smbdconn_process_smb1negoprot(x_smbdconn_t *smbdconn, x_msg_t *msg,
+int x_smbd_conn_process_smb1negoprot(x_smbd_conn_t *smbd_conn, x_msg_t *msg,
 		const uint8_t *buf, size_t len)
 {
 	uint8_t wct = buf[HDR_WCT];
@@ -119,14 +119,14 @@ int x_smbdconn_process_smb1negoprot(x_smbdconn_t *smbdconn, x_msg_t *msg,
 	// TODO check if support smb2
 	
 
-	return x_smbdconn_reply_negprot(smbdconn, msg, 0x2ff, {});
+	return x_smbd_conn_reply_negprot(smbd_conn, msg, 0x2ff, {});
 }
 
-static uint16_t x_smb2_dialect_match(x_smbdconn_t *smbdconn,
+static uint16_t x_smb2_dialect_match(x_smbd_conn_t *smbd_conn,
 		const uint8_t *in_dyn,
 		size_t dialect_count)
 {
-	const x_smbconf_t &smbconf = smbdconn->get_conf();
+	const x_smbconf_t &smbconf = smbd_conn->get_conf();
 	for (auto sdialect: smbconf.dialects) {
 		for (unsigned int di = 0; di < dialect_count; ++di) {
 			uint16_t cdialect = x_get_le16(in_dyn + di * 2);
@@ -139,7 +139,7 @@ static uint16_t x_smb2_dialect_match(x_smbdconn_t *smbdconn,
 }
 
 enum { SMB2_NEGPROT_BODY_LEN = 0x24, };
-int x_smb2_process_NEGPROT(x_smbdconn_t *smbdconn, x_msg_t *msg,
+int x_smb2_process_NEGPROT(x_smbd_conn_t *smbd_conn, x_msg_t *msg,
 		const uint8_t *in_buf, size_t in_len)
 {
 	// x_smb2_verify_size(msg, X_SMB2_NEGPROT_BODY_LEN);
@@ -150,24 +150,24 @@ int x_smb2_process_NEGPROT(x_smbdconn_t *smbdconn, x_msg_t *msg,
 	const uint8_t *in_body = in_buf + 0x40;
 	uint16_t dialect_count = x_get_le16(in_body + 0x2);
 	if (dialect_count == 0) {
-		return x_smb2_reply_error(smbdconn, msg, nullptr, NT_STATUS_INVALID_PARAMETER);
+		return x_smb2_reply_error(smbd_conn, msg, nullptr, NT_STATUS_INVALID_PARAMETER);
 	}
 	size_t dyn_len = in_len - SMB2_HDR_LENGTH - SMB2_NEGPROT_BODY_LEN;
 	if (dialect_count * 2 > dyn_len) {
-		return x_smb2_reply_error(smbdconn, msg, nullptr, NT_STATUS_INVALID_PARAMETER);
+		return x_smb2_reply_error(smbd_conn, msg, nullptr, NT_STATUS_INVALID_PARAMETER);
 	}
 
 	uint16_t in_security_mode = x_get_le16(in_body + 0x04);
 	uint32_t in_capabilities = x_get_le32(in_body + 0x08);
 
 	const uint8_t *in_dyn = in_body + SMB2_NEGPROT_BODY_LEN;
-	uint16_t dialect = x_smb2_dialect_match(smbdconn, in_dyn, dialect_count);
+	uint16_t dialect = x_smb2_dialect_match(smbd_conn, in_dyn, dialect_count);
 	if (dialect == SMB2_DIALECT_REVISION_000) {
-		return x_smb2_reply_error(smbdconn, msg, nullptr, NT_STATUS_NOT_SUPPORTED);
+		return x_smb2_reply_error(smbd_conn, msg, nullptr, NT_STATUS_NOT_SUPPORTED);
 	}
 
-	smbdconn->client_security_mode = in_security_mode;
-	smbdconn->client_capabilities = in_capabilities;
+	smbd_conn->client_security_mode = in_security_mode;
+	smbd_conn->client_capabilities = in_capabilities;
 	// TODO client_guid
 	
 #if 0
@@ -176,7 +176,7 @@ int x_smb2_process_NEGPROT(x_smbdconn_t *smbdconn, x_msg_t *msg,
 		X_ASSERT(false);
 	}
 #endif
-	return x_smbdconn_reply_negprot(smbdconn, msg, dialect, {});
+	return x_smbd_conn_reply_negprot(smbd_conn, msg, dialect, {});
 }
 
 

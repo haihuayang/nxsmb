@@ -87,6 +87,10 @@ SET_src_nxsmbd := auth_ntlmssp auth_krb5 auth_spnego auth \
 	smb2_create smb2_close \
 	smb2_flush smb2_read smb2_write \
 	smb2_lock smb2_ioctl \
+	smb2_cancel smb2_keepalive \
+	smb2_query_directory smb2_notify \
+	smb2_getinfo smb2_setinfo \
+	smb2_break
 
 $(TARGET_DIR_out)/bin/nxsmbd: $(SET_src_nxsmbd:%=$(TARGET_DIR_out)/src/%.o) $(TARGET_SET_lib:%=$(TARGET_DIR_out)/lib%.a)
 	$(CXX) -g $(TARGET_LDFLAGS) -o $@ $^ -lpthread -lresolv -ldl
