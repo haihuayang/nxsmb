@@ -26,6 +26,27 @@ extern "C" {
 #include "samba/lib/util/byteorder.h"
 }
 
+#define X_NDR_ERR_CODE_IS_SUCCESS(x) (x >= 0)
+
+/* these are used to make the error checking on each element in libndr
+   less tedious, hopefully making the code more readable */
+#define X_NDR_CHECK(call) ({ \
+	idl::x_ndr_off_t _ret = call; \
+	if (unlikely(!X_NDR_ERR_CODE_IS_SUCCESS(_ret))) { \
+		return _ret; \
+	} \
+	_ret; \
+})
+
+#define X_NDR_VERIFY(ret, call) do { \
+	idl::x_ndr_off_t _ret = (call); \
+	if (unlikely(!X_NDR_ERR_CODE_IS_SUCCESS(_ret))) { \
+		X_DEVEL_ASSERT(0); \
+		return _ret; \
+	} \
+	(ret) = _ret; \
+} while (0)
+
 namespace idl {
 
 enum x_ndr_err_code_t : int {
@@ -95,7 +116,7 @@ enum x_ndr_err_code_t : int {
 #define LIBNDR_FLAG_ALIGN4       (1<<23)
 #define LIBNDR_FLAG_ALIGN8       (1<<24)
 
-#define LIBNDR_ALIGN_FLAGS ( 0        | \
+#define LIBNDR_ALIGN_FLAGS ( 0	| \
 		LIBNDR_FLAG_NOALIGN   | \
 		LIBNDR_FLAG_REMAINING | \
 		LIBNDR_FLAG_ALIGN2    | \
@@ -112,7 +133,7 @@ enum x_ndr_err_code_t : int {
 /* used to check if alignment padding is zero */
 #define LIBNDR_FLAG_PAD_CHECK     (1<<28)
 
-#define LIBNDR_FLAG_NDR64         (1<<29)
+#define LIBNDR_FLAG_NDR64	 (1<<29)
 
 /* set if an object uuid will be present */
 #define LIBNDR_FLAG_OBJECT_PRESENT    (1<<30)
@@ -122,7 +143,7 @@ enum x_ndr_err_code_t : int {
 
 static inline uint32_t x_ndr_set_flags(uint32_t flags, uint32_t extra_flags)
 {
-        // TODO some flags should exclude others
+	// TODO some flags should exclude others
 	return flags | extra_flags;
 }
 
@@ -181,9 +202,9 @@ using string = std::string;
 
 struct x_ndr_push_buff_t {
 	enum { NDR_BASE_MARSHALL_SIZE = 1024, };
-        x_ndr_push_buff_t() {
-                data.reserve(NDR_BASE_MARSHALL_SIZE);
-        }
+	x_ndr_push_buff_t() {
+		data.reserve(NDR_BASE_MARSHALL_SIZE);
+	}
 	std::vector<uint8_t> finish() {
 		return std::move(data);
 	}
@@ -192,8 +213,8 @@ struct x_ndr_push_buff_t {
 
 /* structure passed to functions that generate NDR formatted data */
 struct x_ndr_push_t {
-        x_ndr_push_t(x_ndr_push_buff_t &buff, x_ndr_off_t base): buff(buff), base(base) {
-        }
+	x_ndr_push_t(x_ndr_push_buff_t &buff, x_ndr_off_t base): buff(buff), base(base) {
+	}
 	void reserve(size_t size) {
 		if (buff.data.size() < size) {
 			buff.data.resize(size);
@@ -210,8 +231,8 @@ struct x_ndr_push_t {
 
 	x_ndr_push_buff_t &buff;
 	x_ndr_off_t base;
-        /* this is used to ensure we generate unique reference IDs */
-        uint32_t ptr_count = 0;
+	/* this is used to ensure we generate unique reference IDs */
+	uint32_t ptr_count = 0;
 };
 
 struct x_ndr_pull_buff_t {
@@ -221,7 +242,7 @@ struct x_ndr_pull_buff_t {
 };
 
 struct x_ndr_pull_t {
-        x_ndr_pull_t(x_ndr_pull_buff_t &buff, x_ndr_off_t base): buff(buff), base(base) {
+	x_ndr_pull_t(x_ndr_pull_buff_t &buff, x_ndr_off_t base): buff(buff), base(base) {
 	}
 	const uint8_t *get_data() const {
 		return buff.data;
@@ -229,9 +250,9 @@ struct x_ndr_pull_t {
 
 	x_ndr_pull_buff_t &buff;
 	x_ndr_off_t base;
-        /* this is used to ensure we generate unique reference IDs
-           between request and reply */
-        uint32_t ptr_count = 0;
+	/* this is used to ensure we generate unique reference IDs
+	   between request and reply */
+	uint32_t ptr_count = 0;
 };
 
 struct x_ndr_ostr_t {
@@ -242,7 +263,7 @@ struct x_ndr_ostr_t {
 		return pf(*this);
 	}
 
-        std::ostream &os;
+	std::ostream &os;
 	bool newline = false;
 	uint32_t indent;
 	uint32_t tabstop;
@@ -383,27 +404,6 @@ struct x_ndr_ptr_allocator_t<T, x_ndr_type_union>
 	}
 };
 
-#define X_NDR_ERR_CODE_IS_SUCCESS(x) (x >= 0)
-
-/* these are used to make the error checking on each element in libndr
-   less tedious, hopefully making the code more readable */
-#define X_NDR_CHECK(call) ({ \
-        x_ndr_off_t _ret = call; \
-        if (unlikely(!X_NDR_ERR_CODE_IS_SUCCESS(_ret))) { \
-                return _ret; \
-        } \
-        _ret; \
-})
-
-#define X_NDR_VERIFY(ret, call) do { \
-	x_ndr_off_t _ret = (call); \
-	if (unlikely(!X_NDR_ERR_CODE_IS_SUCCESS(_ret))) { \
-		X_DEVEL_ASSERT(0); \
-		return _ret; \
-	} \
-	(ret) = _ret; \
-} while (0)
-
 static inline x_ndr_off_t x_ndr_check_pos(x_ndr_off_t pos,
 		x_ndr_off_t bpos, x_ndr_off_t epos)
 {
@@ -450,7 +450,7 @@ inline x_ndr_off_t x_ndr_scalars(const T &t, x_ndr_push_t &ndr,
 		x_ndr_off_t bpos, x_ndr_off_t epos,
 		uint32_t flags, x_ndr_switch_t level)
 {
-        return t.ndr_scalars(ndr, bpos, epos, flags, level);
+	return t.ndr_scalars(ndr, bpos, epos, flags, level);
 }
 
 template <typename T>
@@ -458,7 +458,7 @@ inline x_ndr_off_t x_ndr_buffers(const T &t, x_ndr_push_t &ndr,
 		x_ndr_off_t bpos, x_ndr_off_t epos,
 		uint32_t flags, x_ndr_switch_t level)
 {
-        return t.ndr_buffers(ndr, bpos, epos, flags, level);
+	return t.ndr_buffers(ndr, bpos, epos, flags, level);
 }
 
 template <typename T>
@@ -466,7 +466,7 @@ inline x_ndr_off_t x_ndr_scalars(T &t, x_ndr_pull_t &ndr,
 		x_ndr_off_t bpos, x_ndr_off_t epos,
 		uint32_t flags, x_ndr_switch_t level)
 {
-        return t.ndr_scalars(ndr, bpos, epos, flags, level);
+	return t.ndr_scalars(ndr, bpos, epos, flags, level);
 }
 
 template <typename T>
@@ -474,7 +474,7 @@ inline x_ndr_off_t x_ndr_buffers(T &t, x_ndr_pull_t &ndr,
 		x_ndr_off_t bpos, x_ndr_off_t epos,
 		uint32_t flags, x_ndr_switch_t level)
 {
-        return t.ndr_buffers(ndr, bpos, epos, flags, level);
+	return t.ndr_buffers(ndr, bpos, epos, flags, level);
 }
 
 template <typename T, typename HasBuffers>
@@ -482,8 +482,8 @@ struct x_ndr_puller_t {
 	x_ndr_off_t operator()(T& t, x_ndr_pull_t &ndr,
 			x_ndr_off_t bpos, x_ndr_off_t epos,
 			uint32_t flags, x_ndr_switch_t level) const {
-                X_NDR_SCALARS(t, ndr, bpos, epos, flags, level); 
-                return bpos;
+		X_NDR_SCALARS(t, ndr, bpos, epos, flags, level); 
+		return bpos;
 	}
 };
 
@@ -492,9 +492,9 @@ struct x_ndr_puller_t<T, std::true_type> {
 	x_ndr_off_t operator()(T& t, x_ndr_pull_t &ndr,
 			x_ndr_off_t bpos, x_ndr_off_t epos,
 			uint32_t flags, x_ndr_switch_t level) const {
-                X_NDR_SCALARS(t, ndr, bpos, epos, flags, level); 
-                X_NDR_BUFFERS(t, ndr, bpos, epos, flags, level); 
-                return bpos;
+		X_NDR_SCALARS(t, ndr, bpos, epos, flags, level); 
+		X_NDR_BUFFERS(t, ndr, bpos, epos, flags, level); 
+		return bpos;
 	}
 };
 
@@ -503,7 +503,7 @@ inline x_ndr_off_t x_ndr_pull(T &t, const uint8_t *data, size_t size)
 {
 	x_ndr_pull_buff_t ndr_data{data, size};
 	x_ndr_pull_t ndr{ndr_data, 0};
-        return x_ndr_puller_t<T, typename x_ndr_traits_t<T>::has_buffers>()(t, ndr, 0, size, 0, X_NDR_SWITCH_NONE);
+	return x_ndr_puller_t<T, typename x_ndr_traits_t<T>::has_buffers>()(t, ndr, 0, size, 0, X_NDR_SWITCH_NONE);
 }
 
 template <typename T, typename HasBuffers>
@@ -511,8 +511,8 @@ struct x_ndr_pusher_t {
 	x_ndr_off_t operator()(const T& t, x_ndr_push_t &ndr,
 			x_ndr_off_t bpos, x_ndr_off_t epos,
 			uint32_t flags, x_ndr_switch_t level) const {
-                X_NDR_SCALARS(t, ndr, bpos, epos, flags, level); 
-                return bpos;
+		X_NDR_SCALARS(t, ndr, bpos, epos, flags, level); 
+		return bpos;
 	}
 };
 
@@ -521,9 +521,9 @@ struct x_ndr_pusher_t<T, std::true_type> {
 	x_ndr_off_t operator()(const T& t, x_ndr_push_t &ndr,
 			x_ndr_off_t bpos, x_ndr_off_t epos,
 			uint32_t flags, x_ndr_switch_t level) const {
-                X_NDR_SCALARS(t, ndr, bpos, epos, flags, level); 
-                X_NDR_BUFFERS(t, ndr, bpos, epos, flags, level); 
-                return bpos;
+		X_NDR_SCALARS(t, ndr, bpos, epos, flags, level); 
+		X_NDR_BUFFERS(t, ndr, bpos, epos, flags, level); 
+		return bpos;
 	}
 };
 
@@ -532,7 +532,7 @@ inline x_ndr_off_t x_ndr_push(const T &t, std::vector<uint8_t> &data)
 {
 	x_ndr_push_buff_t ndr_data{};
 	x_ndr_push_t ndr{ndr_data, 0};
-        x_ndr_off_t ret = x_ndr_pusher_t<T, typename x_ndr_traits_t<T>::has_buffers>()(t, ndr, 0, X_NDR_MAX_SIZE, 0, X_NDR_SWITCH_NONE);
+	x_ndr_off_t ret = x_ndr_pusher_t<T, typename x_ndr_traits_t<T>::has_buffers>()(t, ndr, 0, X_NDR_MAX_SIZE, 0, X_NDR_SWITCH_NONE);
 	if (ret >= 0) {
 		std::swap(data, ndr_data.data);
 	}
@@ -1036,7 +1036,7 @@ struct nstring_array
 	x_ndr_off_t ndr_scalars(x_ndr_push_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, x_ndr_switch_t level) const;
 	x_ndr_off_t ndr_scalars(x_ndr_pull_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, x_ndr_switch_t level);
 	void ostr(x_ndr_ostr_t &ndr, uint32_t flags, x_ndr_switch_t level) const;
-        std::vector<std::string> val;
+	std::vector<std::string> val;
 };
 
 struct blob_t
@@ -1373,7 +1373,7 @@ struct x_ndr_vector_pusher_t {
 		for (auto &t: vec.val) {
 			X_NDR_SCALARS(t, ndr, bpos, epos, flags, level); 
 		}
-                return bpos;
+		return bpos;
 	}
 };
 
@@ -1388,7 +1388,7 @@ struct x_ndr_vector_pusher_t<T, std::true_type> {
 		for (auto &t: vec.val) {
 			X_NDR_BUFFERS(t, ndr, bpos, epos, flags, level); 
 		}
-                return bpos;
+		return bpos;
 	}
 };
 
@@ -1400,7 +1400,7 @@ struct x_ndr_vector_puller_t {
 		for (auto &t: vec.val) {
 			X_NDR_SCALARS(t, ndr, bpos, epos, flags, level); 
 		}
-                return bpos;
+		return bpos;
 	}
 };
 
@@ -1415,7 +1415,7 @@ struct x_ndr_vector_puller_t<T, std::true_type> {
 		for (auto &t: vec.val) {
 			X_NDR_BUFFERS(t, ndr, bpos, epos, flags, level); 
 		}
-                return bpos;
+		return bpos;
 	}
 };
 

@@ -21,7 +21,7 @@ struct PAC_LOGON_NAME {
 } ;
 
 template <> struct x_ndr_traits_t<PAC_LOGON_NAME> {
-        using has_buffers = std::false_type;
+	using has_buffers = std::false_type;
 	using ndr_type = x_ndr_type_struct;
 };
 
@@ -35,7 +35,7 @@ struct PAC_SIGNATURE_DATA {
 } /* [public, flag(LIBNDR_PRINT_ARRAY_HEX)] */;
 
 template <> struct x_ndr_traits_t<PAC_SIGNATURE_DATA> {
-        using has_buffers = std::false_type;
+	using has_buffers = std::false_type;
 	using ndr_type = x_ndr_type_struct;
 };
 
@@ -52,7 +52,7 @@ struct PAC_LOGON_INFO {
 } ;
 
 template <> struct x_ndr_traits_t<PAC_LOGON_INFO> {
-        using has_buffers = std::true_type;
+	using has_buffers = std::true_type;
 	using ndr_type = x_ndr_type_struct;
 };
 
@@ -68,7 +68,7 @@ struct PAC_CONSTRAINED_DELEGATION {
 } ;
 
 template <> struct x_ndr_traits_t<PAC_CONSTRAINED_DELEGATION> {
-        using has_buffers = std::true_type;
+	using has_buffers = std::true_type;
 	using ndr_type = x_ndr_type_struct;
 };
 
@@ -93,7 +93,7 @@ struct PAC_LOGON_INFO_CTR
 };
 
 template <> struct x_ndr_traits_t<PAC_LOGON_INFO_CTR> {
-        using has_buffers = std::true_type;
+	using has_buffers = std::true_type;
 	using ndr_type = x_ndr_type_struct;
 };
 
@@ -110,7 +110,7 @@ struct PAC_CONSTRAINED_DELEGATION_CTR {
 } /* [public] */;
 
 template <> struct x_ndr_traits_t<PAC_CONSTRAINED_DELEGATION_CTR> {
-        using has_buffers = std::true_type;
+	using has_buffers = std::true_type;
 	using ndr_type = x_ndr_type_struct;
 };
 #endif
@@ -359,10 +359,10 @@ struct PAC_BUFFER {
 	PAC_BUFFER(const PAC_BUFFER& other);
 	PAC_BUFFER &operator=(const PAC_BUFFER& other);
 	void set_type(PAC_TYPE v);
-        x_ndr_off_t pull(x_ndr_pull_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level);
+	x_ndr_off_t pull(x_ndr_pull_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level);
 	void ostr(x_ndr_ostr_t &__ndr, uint32_t __flags, x_ndr_switch_t __level) const;
 	PAC_TYPE type;
-        uint32_t info;
+	uint32_t info;
 	// x_ndr_ptr_t<PAC_INFO> info;/* [relative, subcontext_size(_subcontext_size_PAC_INFO(r,ndr->flags)), subcontext(0), switch_is(type), flag(LIBNDR_FLAG_ALIGN8)] */
 } /* [nopush, public, nopull] */;
 
@@ -371,7 +371,7 @@ template <> struct x_ndr_traits_t<PAC_BUFFER> {
 };
 
 struct PAC_DATA {
-        x_ndr_off_t ndr_scalars(x_ndr_pull_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level);
+	x_ndr_off_t ndr_scalars(x_ndr_pull_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level);
 	void ostr(x_ndr_ostr_t &__ndr, uint32_t __flags, x_ndr_switch_t __level) const;
 	uint32 version;
 	std::vector<x_ndr_ptr_t<PAC_BUFFER>> ndr_buffers;

@@ -518,7 +518,7 @@ static inline x_ndr_off_t x_ndr_pull_align_intl(size_t n, x_ndr_pull_t &ndr,
 	}
 #endif
 #if 0
-	if (unlikely(ndr.offset > ndr.data_size)) {                   \
+	if (unlikely(ndr.offset > ndr.data_size)) {		   \
 		if (ndr.flags & LIBNDR_FLAG_INCOMPLETE_BUFFER) { \
 			uint32_t _missing = ndr.offset - ndr.data_size; \
 			ndr.relative_highest_offset = _missing; \
@@ -544,7 +544,7 @@ x_ndr_off_t x_ndr_scalars(const x_ndr_subctx_t &t, x_ndr_push_t &ndr,
 		x_ndr_off_t bpos, x_ndr_off_t epos,
 		uint32_t flags, x_ndr_switch_t level)
 {
-        X_ASSERT(level == X_NDR_SWITCH_NONE);
+	X_ASSERT(level == X_NDR_SWITCH_NONE);
 	X_NDR_SCALARS(uint8_t{1}, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
 	uint8_t drep;
 	if (t.flags & LIBNDR_FLAG_BIGENDIAN) {
@@ -565,7 +565,7 @@ x_ndr_off_t x_ndr_scalars(x_ndr_subctx_t &t, x_ndr_pull_t &ndr,
 		x_ndr_off_t bpos, x_ndr_off_t epos,
 		uint32_t flags, x_ndr_switch_t level)
 {
-        X_ASSERT(level == X_NDR_SWITCH_NONE);
+	X_ASSERT(level == X_NDR_SWITCH_NONE);
 	uint8_t version;
 	uint8_t drep;
 	uint16_t hdrlen;
@@ -643,7 +643,7 @@ _PUBLIC_ void ndr_check_padding(x_ndr_pull_t &ndr, size_t n)
 		} \
 		ndr.offset = (ndr.offset + (n-1)) & ~(n-1); \
 	} \
-	if (unlikely(ndr.offset > ndr.data_size)) {                   \
+	if (unlikely(ndr.offset > ndr.data_size)) {		   \
 		if (ndr.flags & LIBNDR_FLAG_INCOMPLETE_BUFFER) { \
 			uint32_t _missing = ndr.offset - ndr.data_size; \
 			ndr.relative_highest_offset = _missing; \

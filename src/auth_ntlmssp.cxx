@@ -499,7 +499,7 @@ NTSTATUS ntlmssp_wrap(struct ntlmssp_state *ntlmssp_state,
 		}
 		memcpy(out->data + NTLMSSP_SIG_SIZE, in->data, in->length);
 
-	        nt_status = ntlmssp_seal_packet(ntlmssp_state, out_mem_ctx,
+		nt_status = ntlmssp_seal_packet(ntlmssp_state, out_mem_ctx,
 						out->data + NTLMSSP_SIG_SIZE,
 						out->length - NTLMSSP_SIG_SIZE,
 						out->data + NTLMSSP_SIG_SIZE,
@@ -523,7 +523,7 @@ NTSTATUS ntlmssp_wrap(struct ntlmssp_state *ntlmssp_state,
 		}
 		memcpy(out->data + NTLMSSP_SIG_SIZE, in->data, in->length);
 
-	        nt_status = ntlmssp_sign_packet(ntlmssp_state, out_mem_ctx,
+		nt_status = ntlmssp_sign_packet(ntlmssp_state, out_mem_ctx,
 						out->data + NTLMSSP_SIG_SIZE,
 						out->length - NTLMSSP_SIG_SIZE,
 						out->data + NTLMSSP_SIG_SIZE,
@@ -560,7 +560,7 @@ NTSTATUS ntlmssp_unwrap(struct ntlmssp_state *ntlmssp_state,
 
 		*out = data_blob_talloc(out_mem_ctx, in->data + NTLMSSP_SIG_SIZE, in->length - NTLMSSP_SIG_SIZE);
 
-	        return ntlmssp_unseal_packet(ntlmssp_state,
+		return ntlmssp_unseal_packet(ntlmssp_state,
 					     out->data, out->length,
 					     out->data, out->length,
 					     &sig);
@@ -1180,7 +1180,7 @@ x_auth_ntlmssp_t::x_auth_ntlmssp_t(x_auth_context_t *context, const x_auth_ops_t
 	netbios_name = x_convert_utf8_to_utf16(lpcfg_netbios_name());
 	netbios_domain = x_convert_utf8_to_utf16(lpcfg_workgroup());
 
-	dns_domain = x_convert_utf8_to_utf16(lpcfg_dnsdomain());
+	dns_domain = x_convert_utf8_to_utf16(lpcfg_dns_domain());
 	std::u16string tmp_dns_name = netbios_name;
 	if (dns_domain.size()) {
 		tmp_dns_name += u".";
@@ -1245,69 +1245,69 @@ static NTSTATUS handle_neg_flags(x_auth_ntlmssp_t &auth_ntlmssp,
 		auth_ntlmssp.unicode = false;
 	}
 
-        /*
-         * NTLMSSP_NEGOTIATE_NTLM2 (NTLMSSP_NEGOTIATE_EXTENDED_SESSIONSECURITY)
-         * has priority over NTLMSSP_NEGOTIATE_LM_KEY
-         */
-        if (!(flags & idl::NTLMSSP_NEGOTIATE_NTLM2)) {
-                auth_ntlmssp.neg_flags &= ~idl::NTLMSSP_NEGOTIATE_NTLM2;
-        }
+	/*
+	 * NTLMSSP_NEGOTIATE_NTLM2 (NTLMSSP_NEGOTIATE_EXTENDED_SESSIONSECURITY)
+	 * has priority over NTLMSSP_NEGOTIATE_LM_KEY
+	 */
+	if (!(flags & idl::NTLMSSP_NEGOTIATE_NTLM2)) {
+		auth_ntlmssp.neg_flags &= ~idl::NTLMSSP_NEGOTIATE_NTLM2;
+	}
 
-        if (auth_ntlmssp.neg_flags & idl::NTLMSSP_NEGOTIATE_NTLM2) {
-                auth_ntlmssp.neg_flags &= ~idl::NTLMSSP_NEGOTIATE_LM_KEY;
-        }
+	if (auth_ntlmssp.neg_flags & idl::NTLMSSP_NEGOTIATE_NTLM2) {
+		auth_ntlmssp.neg_flags &= ~idl::NTLMSSP_NEGOTIATE_LM_KEY;
+	}
 
-        if (!(flags & idl::NTLMSSP_NEGOTIATE_LM_KEY)) {
-                auth_ntlmssp.neg_flags &= ~idl::NTLMSSP_NEGOTIATE_LM_KEY;
-        }
+	if (!(flags & idl::NTLMSSP_NEGOTIATE_LM_KEY)) {
+		auth_ntlmssp.neg_flags &= ~idl::NTLMSSP_NEGOTIATE_LM_KEY;
+	}
 
-        if (!(flags & idl::NTLMSSP_NEGOTIATE_ALWAYS_SIGN)) {
-                auth_ntlmssp.neg_flags &= ~idl::NTLMSSP_NEGOTIATE_ALWAYS_SIGN;
-        }
+	if (!(flags & idl::NTLMSSP_NEGOTIATE_ALWAYS_SIGN)) {
+		auth_ntlmssp.neg_flags &= ~idl::NTLMSSP_NEGOTIATE_ALWAYS_SIGN;
+	}
 
-        if (!(flags & idl::NTLMSSP_NEGOTIATE_128)) {
-                auth_ntlmssp.neg_flags &= ~idl::NTLMSSP_NEGOTIATE_128;
-        }
+	if (!(flags & idl::NTLMSSP_NEGOTIATE_128)) {
+		auth_ntlmssp.neg_flags &= ~idl::NTLMSSP_NEGOTIATE_128;
+	}
 
-        if (!(flags & idl::NTLMSSP_NEGOTIATE_56)) {
-                auth_ntlmssp.neg_flags &= ~idl::NTLMSSP_NEGOTIATE_56;
-        }
+	if (!(flags & idl::NTLMSSP_NEGOTIATE_56)) {
+		auth_ntlmssp.neg_flags &= ~idl::NTLMSSP_NEGOTIATE_56;
+	}
 
-        if (!(flags & idl::NTLMSSP_NEGOTIATE_KEY_EXCH)) {
-                auth_ntlmssp.neg_flags &= ~idl::NTLMSSP_NEGOTIATE_KEY_EXCH;
-        }
+	if (!(flags & idl::NTLMSSP_NEGOTIATE_KEY_EXCH)) {
+		auth_ntlmssp.neg_flags &= ~idl::NTLMSSP_NEGOTIATE_KEY_EXCH;
+	}
 
-        if (!(flags & idl::NTLMSSP_NEGOTIATE_SIGN)) {
-                auth_ntlmssp.neg_flags &= ~idl::NTLMSSP_NEGOTIATE_SIGN;
-        }
+	if (!(flags & idl::NTLMSSP_NEGOTIATE_SIGN)) {
+		auth_ntlmssp.neg_flags &= ~idl::NTLMSSP_NEGOTIATE_SIGN;
+	}
 
-        if (!(flags & idl::NTLMSSP_NEGOTIATE_SEAL)) {
-                auth_ntlmssp.neg_flags &= ~idl::NTLMSSP_NEGOTIATE_SEAL;
-        }
+	if (!(flags & idl::NTLMSSP_NEGOTIATE_SEAL)) {
+		auth_ntlmssp.neg_flags &= ~idl::NTLMSSP_NEGOTIATE_SEAL;
+	}
 
-        if ((flags & idl::NTLMSSP_REQUEST_TARGET)) {
-                auth_ntlmssp.neg_flags |= idl::NTLMSSP_REQUEST_TARGET;
-        }
+	if ((flags & idl::NTLMSSP_REQUEST_TARGET)) {
+		auth_ntlmssp.neg_flags |= idl::NTLMSSP_REQUEST_TARGET;
+	}
 
-        missing_flags &= ~auth_ntlmssp.neg_flags;
-        if (missing_flags != 0) {
-                HRESULT hres = HRES_SEC_E_UNSUPPORTED_FUNCTION;
-                NTSTATUS status = NT_STATUS(HRES_ERROR_V(hres));
+	missing_flags &= ~auth_ntlmssp.neg_flags;
+	if (missing_flags != 0) {
+		HRESULT hres = HRES_SEC_E_UNSUPPORTED_FUNCTION;
+		NTSTATUS status = NT_STATUS(HRES_ERROR_V(hres));
 #if 0
-                DEBUG(1, ("%s: Got %s flags[0x%08x] "
-                          "- possible downgrade detected! "
-                          "missing_flags[0x%08x] - %s\n",
-                          __func__, name,
-                          (unsigned)flags,
-                          (unsigned)missing_flags,
-                          nt_errstr(status)));
-                debug_ntlmssp_flags_raw(1, missing_flags);
-                DEBUGADD(4, ("neg_flags[0x%08x]\n",
-                             (unsigned)ntlmssp_state->neg_flags));
-                debug_ntlmssp_flags_raw(4, ntlmssp_state->neg_flags);
+		DEBUG(1, ("%s: Got %s flags[0x%08x] "
+			  "- possible downgrade detected! "
+			  "missing_flags[0x%08x] - %s\n",
+			  __func__, name,
+			  (unsigned)flags,
+			  (unsigned)missing_flags,
+			  nt_errstr(status)));
+		debug_ntlmssp_flags_raw(1, missing_flags);
+		DEBUGADD(4, ("neg_flags[0x%08x]\n",
+			     (unsigned)ntlmssp_state->neg_flags));
+		debug_ntlmssp_flags_raw(4, ntlmssp_state->neg_flags);
 #endif
-                return status;
-        }
+		return status;
+	}
 	return NT_STATUS_OK;
 }
 
@@ -1338,17 +1338,17 @@ static inline NTSTATUS handle_negotiate(x_auth_ntlmssp_t &auth_ntlmssp,
 	uint32_t chal_flags = auth_ntlmssp.neg_flags;
 	std::u16string target_name;
 
-        if (nego_msg.NegotiateFlags & idl::NTLMSSP_REQUEST_TARGET) {
-                chal_flags |= idl::NTLMSSP_NEGOTIATE_TARGET_INFO |
+	if (nego_msg.NegotiateFlags & idl::NTLMSSP_REQUEST_TARGET) {
+		chal_flags |= idl::NTLMSSP_NEGOTIATE_TARGET_INFO |
 			idl::NTLMSSP_REQUEST_TARGET;
-                if (auth_ntlmssp.is_standalone) {
-                        chal_flags |= idl::NTLMSSP_TARGET_TYPE_SERVER;
-                        target_name = auth_ntlmssp.netbios_name;
-                } else {
-                        chal_flags |= idl::NTLMSSP_TARGET_TYPE_DOMAIN;
-                        target_name = auth_ntlmssp.netbios_domain;
-                };
-        }
+		if (auth_ntlmssp.is_standalone) {
+			chal_flags |= idl::NTLMSSP_TARGET_TYPE_SERVER;
+			target_name = auth_ntlmssp.netbios_name;
+		} else {
+			chal_flags |= idl::NTLMSSP_TARGET_TYPE_DOMAIN;
+			target_name = auth_ntlmssp.netbios_domain;
+		};
+	}
 
 	auth_ntlmssp.chal = cryptkey;
 	// TODO auth_ntlmssp.internal_chal = cryptkey;
@@ -1396,52 +1396,52 @@ static inline NTSTATUS handle_negotiate(x_auth_ntlmssp_t &auth_ntlmssp,
 	ret = idl::x_ndr_push(chal_msg, out);
 #if 0
 	{
-                /* Marshal the packet in the right format, be it unicode or ASCII */
-                const char *gen_string;
-                const DATA_BLOB version_blob = ntlmssp_version_blob();
+		/* Marshal the packet in the right format, be it unicode or ASCII */
+		const char *gen_string;
+		const DATA_BLOB version_blob = ntlmssp_version_blob();
 
-                if (ntlmssp_state->unicode) {
-                        gen_string = "CdUdbddBb";
-                } else {
-                        gen_string = "CdAdbddBb";
-                }
+		if (ntlmssp_state->unicode) {
+			gen_string = "CdUdbddBb";
+		} else {
+			gen_string = "CdAdbddBb";
+		}
 
-                status = msrpc_gen(out_mem_ctx, reply, gen_string,
-                        "NTLMSSP",
-                        idl::NTLMSSP_CHALLENGE,
-                        target_name,
-                        chal_flags,
-                        cryptkey, 8,
-                        0, 0,
-                        struct_blob.data, struct_blob.length,
-                        version_blob.data, version_blob.length);
+		status = msrpc_gen(out_mem_ctx, reply, gen_string,
+			"NTLMSSP",
+			idl::NTLMSSP_CHALLENGE,
+			target_name,
+			chal_flags,
+			cryptkey, 8,
+			0, 0,
+			struct_blob.data, struct_blob.length,
+			version_blob.data, version_blob.length);
 
-                if (!NT_STATUS_IS_OK(status)) {
-                        data_blob_free(&struct_blob);
-                        return status;
-                }
+		if (!NT_STATUS_IS_OK(status)) {
+			data_blob_free(&struct_blob);
+			return status;
+		}
 
-                if (DEBUGLEVEL >= 10) {
-                        struct CHALLENGE_MESSAGE *challenge = talloc(
-                                ntlmssp_state, struct CHALLENGE_MESSAGE);
-                        if (challenge != NULL) {
-                                challenge->NegotiateFlags = chal_flags;
-                                status = ntlmssp_pull_CHALLENGE_MESSAGE(
-                                        reply, challenge, challenge);
-                                if (NT_STATUS_IS_OK(status)) {
-                                        NDR_PRINT_DEBUG(CHALLENGE_MESSAGE,
-                                                        challenge);
-                                }
-                                TALLOC_FREE(challenge);
-                        }
-                }
-        }
+		if (DEBUGLEVEL >= 10) {
+			struct CHALLENGE_MESSAGE *challenge = talloc(
+				ntlmssp_state, struct CHALLENGE_MESSAGE);
+			if (challenge != NULL) {
+				challenge->NegotiateFlags = chal_flags;
+				status = ntlmssp_pull_CHALLENGE_MESSAGE(
+					reply, challenge, challenge);
+				if (NT_STATUS_IS_OK(status)) {
+					NDR_PRINT_DEBUG(CHALLENGE_MESSAGE,
+							challenge);
+				}
+				TALLOC_FREE(challenge);
+			}
+		}
+	}
 #endif
 	auth_ntlmssp.msg_negotiate.assign(in_buf, in_buf + in_len);
 	auth_ntlmssp.msg_challenge = out;
-        auth_ntlmssp.state_position = x_auth_ntlmssp_t::S_AUTHENTICATE;
+	auth_ntlmssp.state_position = x_auth_ntlmssp_t::S_AUTHENTICATE;
 
-        return NT_STATUS_MORE_PROCESSING_REQUIRED;
+	return NT_STATUS_MORE_PROCESSING_REQUIRED;
 }
 
 static const idl::AV_PAIR *av_pair_find(const idl::AV_PAIR_LIST &av_pair_list, idl::ntlmssp_AvId avid)
@@ -1558,11 +1558,11 @@ static inline NTSTATUS handle_authenticate(x_auth_ntlmssp_t &auth_ntlmssp,
 	}
 
 
-        /* NTLM2 uses a 'challenge' that is made of up both the server challenge, and a
-           client challenge
+	/* NTLM2 uses a 'challenge' that is made of up both the server challenge, and a
+	   client challenge
 
-           However, the NTLM2 flag may still be set for the real NTLMv2 logins, be careful.
-        */
+	   However, the NTLM2 flag may still be set for the real NTLMv2 logins, be careful.
+	*/
 	if (auth_ntlmssp.neg_flags & idl::NTLMSSP_NEGOTIATE_NTLM2) {
 		if (msg.NtChallengeResponse.val && msg.NtChallengeResponse.val->val.size() == 0x18) {
 			auth_ntlmssp.doing_ntlm2 = true;

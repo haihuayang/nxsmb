@@ -59,7 +59,7 @@ void netr_SidAttr::ostr(x_ndr_ostr_t &__ndr, uint32_t __flags, x_ndr_switch_t __
 
 x_ndr_off_t netr_SamBaseInfo::ndr_scalars(x_ndr_push_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level) const
 {
-        X_ASSERT(__level == X_NDR_SWITCH_NONE);
+	X_ASSERT(__level == X_NDR_SWITCH_NONE);
 	X_NDR_HEADER_ALIGN(5, __ndr, __bpos, __epos, __flags);
 	X_NDR_SCALARS(logon_time, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
 	X_NDR_SCALARS(logoff_time, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
@@ -96,7 +96,7 @@ x_ndr_off_t netr_SamBaseInfo::ndr_scalars(x_ndr_push_t &__ndr, x_ndr_off_t __bpo
 
 x_ndr_off_t netr_SamBaseInfo::ndr_buffers(x_ndr_push_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level) const
 {
-        X_ASSERT(__level == X_NDR_SWITCH_NONE);
+	X_ASSERT(__level == X_NDR_SWITCH_NONE);
 	X_NDR_BUFFERS(account_name, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
 	X_NDR_BUFFERS(full_name, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
 	X_NDR_BUFFERS(logon_script, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
@@ -112,7 +112,7 @@ x_ndr_off_t netr_SamBaseInfo::ndr_buffers(x_ndr_push_t &__ndr, x_ndr_off_t __bpo
 
 x_ndr_off_t netr_SamBaseInfo::ndr_scalars(x_ndr_pull_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level)
 {
-        X_ASSERT(__level == X_NDR_SWITCH_NONE);
+	X_ASSERT(__level == X_NDR_SWITCH_NONE);
 	X_NDR_HEADER_ALIGN(5, __ndr, __bpos, __epos, __flags);
 	X_NDR_SCALARS(logon_time, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
 	X_NDR_SCALARS(logoff_time, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
@@ -149,7 +149,7 @@ x_ndr_off_t netr_SamBaseInfo::ndr_scalars(x_ndr_pull_t &__ndr, x_ndr_off_t __bpo
 
 x_ndr_off_t netr_SamBaseInfo::ndr_buffers(x_ndr_pull_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level)
 {
-        X_ASSERT(__level == X_NDR_SWITCH_NONE);
+	X_ASSERT(__level == X_NDR_SWITCH_NONE);
 	X_NDR_BUFFERS(account_name, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
 	X_NDR_BUFFERS(full_name, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
 	X_NDR_BUFFERS(logon_script, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
@@ -200,7 +200,7 @@ void netr_SamBaseInfo::ostr(x_ndr_ostr_t &__ndr, uint32_t __flags, x_ndr_switch_
 
 x_ndr_off_t netr_SamInfo3::ndr_scalars(x_ndr_push_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level) const
 {
-        X_ASSERT(__level == X_NDR_SWITCH_NONE);
+	X_ASSERT(__level == X_NDR_SWITCH_NONE);
 	X_NDR_HEADER_ALIGN(5, __ndr, __bpos, __epos, __flags);
 	X_NDR_SCALARS(base, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
 	X_NDR_SCALARS(sids, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
@@ -211,7 +211,7 @@ x_ndr_off_t netr_SamInfo3::ndr_scalars(x_ndr_push_t &__ndr, x_ndr_off_t __bpos, 
 
 x_ndr_off_t netr_SamInfo3::ndr_buffers(x_ndr_push_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level) const
 {
-        X_ASSERT(__level == X_NDR_SWITCH_NONE);
+	X_ASSERT(__level == X_NDR_SWITCH_NONE);
 	X_NDR_BUFFERS(base, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
 	X_NDR_BUFFERS(sids, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
 	return __bpos;
@@ -219,7 +219,7 @@ x_ndr_off_t netr_SamInfo3::ndr_buffers(x_ndr_push_t &__ndr, x_ndr_off_t __bpos, 
 
 x_ndr_off_t netr_SamInfo3::ndr_scalars(x_ndr_pull_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level)
 {
-        X_ASSERT(__level == X_NDR_SWITCH_NONE);
+	X_ASSERT(__level == X_NDR_SWITCH_NONE);
 	X_NDR_HEADER_ALIGN(5, __ndr, __bpos, __epos, __flags);
 	X_NDR_SCALARS(base, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
 	X_NDR_SCALARS(sids, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
@@ -230,7 +230,7 @@ x_ndr_off_t netr_SamInfo3::ndr_scalars(x_ndr_pull_t &__ndr, x_ndr_off_t __bpos, 
 
 x_ndr_off_t netr_SamInfo3::ndr_buffers(x_ndr_pull_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level)
 {
-        X_ASSERT(__level == X_NDR_SWITCH_NONE);
+	X_ASSERT(__level == X_NDR_SWITCH_NONE);
 	X_NDR_BUFFERS(base, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
 	X_NDR_BUFFERS(sids, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
 	return __bpos;
@@ -248,22 +248,22 @@ void netr_SamInfo3::ostr(x_ndr_ostr_t &__ndr, uint32_t __flags, x_ndr_switch_t _
 #if 0
 x_ndr_off_t x_ndr_ptr(netr_SamBaseInfo &val, x_ndr_pull_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level)
 {
-        X_ASSERT(__level == X_NDR_SWITCH_NONE);
+	X_ASSERT(__level == X_NDR_SWITCH_NONE);
 	X_NDR_HEADER_ALIGN(5, __ndr, __bpos, __epos, __flags);
-        X_NDR_PTR(val.base, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
-        X_NDR_PTR(val.sids, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
+	X_NDR_PTR(val.base, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
+	X_NDR_PTR(val.sids, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
 	X_NDR_TRAILER_ALIGN(5, __ndr, __bpos, __epos, __flags);
-        return __bpos;
+	return __bpos;
 }
 
 x_ndr_off_t x_ndr_ptr(netr_SamInfo3 &val, x_ndr_pull_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level)
 {
-        X_ASSERT(__level == X_NDR_SWITCH_NONE);
+	X_ASSERT(__level == X_NDR_SWITCH_NONE);
 	X_NDR_HEADER_ALIGN(5, __ndr, __bpos, __epos, __flags);
-        X_NDR_PTR(val.base, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
-        X_NDR_PTR(val.sids, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
+	X_NDR_PTR(val.base, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
+	X_NDR_PTR(val.sids, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
 	X_NDR_TRAILER_ALIGN(5, __ndr, __bpos, __epos, __flags);
-        return __bpos;
+	return __bpos;
 }
 #endif
 }

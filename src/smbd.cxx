@@ -52,11 +52,17 @@ x_auth_t *x_smbd_create_auth(x_smbd_t *smbd)
 	return x_auth_create_by_oid(smbd->auth_context, GSS_SPNEGO_MECHANISM);
 }
 
+static inline bool msg_is_signed(const x_msg_t *msg)
+{
+	uint32_t flags = x_get_le32(msg->in_buf + SMB2_HDR_FLAGS);
+	return flags & SMB2_HDR_FLAG_SIGNED;
+}
+
 void x_smbd_conn_reply(x_smbd_conn_t *smbd_conn, x_msg_t *msg, x_smbd_sess_t *smbd_sess)
 {
 	if (msg->state == x_msg_t::STATE_COMPLETE) {
 		bool orig_empty = smbd_conn->send_queue.empty();
-		if (msg->do_signing) {
+		if (msg->do_signing || msg_is_signed(msg)) {
 			X_ASSERT(smbd_sess);
 			x_smb2_sign_msg(msg->out_buf + 8,
 					msg->out_len - 4,
@@ -452,6 +458,9 @@ static void x_smbd_init(x_smbd_t &smbd, int port)
 	}
 
 	x_smbd_load_shares();
+
+	// TODO
+	smbd.capabilities = SMB2_CAP_DFS | SMB2_CAP_LARGE_MTU | SMB2_CAP_LEASING;
 
 	int fd = tcplisten(port);
 	assert(fd >= 0);

@@ -11,7 +11,7 @@
 #include <algorithm>
 
 #define X_CONTAINER_OF(ptr, type, member) \
-	        ((type *)((char *)(ptr)-offsetof(type, member)))
+		((type *)((char *)(ptr)-offsetof(type, member)))
 
 #define X_DECLARE_MEMBER_TRAITS(name, type, member_name) \
 struct name \
@@ -60,7 +60,7 @@ struct x_sdlist_t
 	}
 #ifndef NDEBUG
 	bool in_list_check(x_dlink_t *link) const {
-		// ???          return link && (link->prev != 0 || link->next != 0 || (front == link && back == link) && contain(link));
+		// ???	  return link && (link->prev != 0 || link->next != 0 || (front == link && back == link) && contain(link));
 		return link && contain(link);
 	}
 #endif
@@ -110,7 +110,7 @@ struct x_ddlist_t
 	}
 #ifndef NDEBUG
 	bool in_list_check(x_dlink_t *link) const {
-		// ???          return link && (link->prev != 0 || link->next != 0 || (front == link && back == link) && contain(link));
+		// ???	  return link && (link->prev != 0 || link->next != 0 || (front == link && back == link) && contain(link));
 		return link && contain(link);
 	}
 #endif
@@ -375,7 +375,7 @@ struct x_sdqueue_t
 	}
 #ifndef NDEBUG
 	bool in_list_check(x_dqlink_t *link) const {
-		// ???          return link && (link->prev != 0 || link->next != 0 || (front == link && back == link) && contain(link));
+		// ???	  return link && (link->prev != 0 || link->next != 0 || (front == link && back == link) && contain(link));
 		return link && contain(link);
 	}
 #endif

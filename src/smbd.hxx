@@ -46,6 +46,7 @@ extern "C" {
 #define GENSEC_EXPIRE_TIME_INFINITY (NTTIME)0x8000000000000000LL
 
 #define X_NT_STATUS_INTERNAL_BLOCKED	NT_STATUS(1)
+#define X_NT_STATUS_INTERNAL_TERMINATE	NT_STATUS(2)
 
 struct x_auth_context_t;
 
@@ -191,6 +192,7 @@ struct x_smbd_t
 	int fd;
 
 	x_smbconf_t conf;
+	uint32_t capabilities;
 
 	x_auth_context_t *auth_context;
 	std::vector<uint8_t> negprot_spnego;
@@ -231,16 +233,16 @@ X_DECLARE_MEMBER_TRAITS(msg_dlink_traits, x_msg_t, dlink)
 
 struct x_smbd_share_t
 {
-        enum {
-                TYPE_IPC,
-                TYPE_DEFAULT,
-                TYPE_HOME,
-        };
+	enum {
+		TYPE_IPC,
+		TYPE_DEFAULT,
+		TYPE_HOME,
+	};
 	std::string name;
 	uint8_t type;
 	bool read_only;
-        std::string msdfs_proxy;
-        uint32_t max_referral_ttl = 300;
+	std::string msdfs_proxy;
+	uint32_t max_referral_ttl = 300;
 };
 
 
@@ -430,6 +432,10 @@ void x_smb2_key_derivation(const uint8_t *KI, size_t KI_len,
 		x_smb2_key_t &key);
 NTSTATUS x_smb2_sign_msg(uint8_t *data, size_t length, uint16_t dialect,
 		const x_smb2_key_t &key);
+
+uint16_t x_smb2_dialect_match(x_smbd_conn_t *smbd_conn,
+		const void *dialects,
+		size_t dialect_count);
 
 /* TODO */
 #define DEBUG(...) do { } while (0)

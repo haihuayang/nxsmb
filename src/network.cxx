@@ -13,7 +13,7 @@ int tcplisten(int port)
 	struct sockaddr_in sa;
 	memset(&sa, 0, sizeof(sa));
 	sa.sin_family      = AF_INET;
-	sa.sin_port        = htons((unsigned short)port);
+	sa.sin_port	= htons((unsigned short)port);
 	X_ASSERT_SYSCALL(bind(sock, (struct sockaddr*) &sa, sizeof sa));
 
 	set_tcpkeepalive(sock, 1);

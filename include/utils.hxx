@@ -17,6 +17,18 @@ struct x_ref_t
 	x_ref_t(x_ref_t<T> &&o) = delete;
 	x_ref_t<T> &operator=(const x_ref_t<T> &o) = delete;
 	x_ref_t<T> &operator=(x_ref_t<T> &&o) = delete;
+
+	void set(T *t) {
+		if (val == t) {
+			return;
+		}
+		if (val) {
+			val->decref();
+		}
+		val = t;
+		val->incref();
+	}
+
 	operator T*() const {
 		return val;
 	}

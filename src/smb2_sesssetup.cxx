@@ -36,7 +36,7 @@ static int x_smb2_reply_sesssetup(x_smbd_conn_t *smbd_conn,
 	//smbd_smb2_request_setup_out
 	memset(outhdr, 0, 0x40);
 	SIVAL(outhdr, SMB2_HDR_PROTOCOL_ID,     SMB2_MAGIC);
-	SSVAL(outhdr, SMB2_HDR_LENGTH,          SMB2_HDR_BODY);
+	SSVAL(outhdr, SMB2_HDR_LENGTH,	  SMB2_HDR_BODY);
 	SSVAL(outhdr, SMB2_HDR_CREDIT_CHARGE, 1); // TODO
 	SIVAL(outhdr, SMB2_HDR_STATUS, NT_STATUS_V(status));
 	SIVAL(outhdr, SMB2_HDR_OPCODE, SMB2_OP_SESSSETUP);

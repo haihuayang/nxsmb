@@ -23,7 +23,7 @@ int x_smbd_load_shares()
 	g_smbdshare_map["ipc$"] = share;
 
 	g_smbdshare_map["gen1"] = std::make_shared<x_smbd_share_t>(x_smbd_share_t{"gen1", x_smbd_share_t::TYPE_DEFAULT, false, "NTNX-hh360u-1"});
-	g_smbdshare_map["gen1"] = std::make_shared<x_smbd_share_t>(x_smbd_share_t{"home1", x_smbd_share_t::TYPE_HOME, false});
+	g_smbdshare_map["home1"] = std::make_shared<x_smbd_share_t>(x_smbd_share_t{"home1", x_smbd_share_t::TYPE_HOME, false});
 	return 0;
 }
 

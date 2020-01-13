@@ -34,7 +34,7 @@ struct x_hashtable_t
 	}
 
 private:
-        template <class EQ> item_type *find_in_bucket(const bucket_type &bucket,
+	template <class EQ> item_type *find_in_bucket(const bucket_type &bucket,
 			const EQ &eq) const
 	{
 		for (x_dqlink_t *link = bucket.get_front(); link; link = link->get_next()) {

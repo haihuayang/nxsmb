@@ -16,7 +16,6 @@ static int x_smbd_conn_reply_negprot(x_smbd_conn_t *smbd_conn, x_msg_t *msg,
 	if (lpcfg_server_signing_required()) {
 		security_mode |= SMB2_NEGOTIATE_SIGNING_REQUIRED;
 	}
-	uint32_t capabilities = SMB2_CAP_DFS | SMB2_CAP_LARGE_MTU | SMB2_CAP_LEASING;
 
 	uint16_t negotiate_context_off = 0;
 	const std::vector<uint8_t> &security_blob = smbd->negprot_spnego;
@@ -37,13 +36,13 @@ static int x_smbd_conn_reply_negprot(x_smbd_conn_t *smbd_conn, x_msg_t *msg,
 	x_put_le16(outbody + 4, dialect);
 	x_put_le16(outbody + 6, negotiate_context.size());
 	memcpy(outbody + 8, conf.guid, 16);
-	x_put_le32(outbody + 0x18, capabilities);
+	x_put_le32(outbody + 0x18, smbd->capabilities);
 	x_put_le32(outbody + 0x1c, conf.max_trans);
 	x_put_le32(outbody + 0x20, conf.max_read);
 	x_put_le32(outbody + 0x24, conf.max_write);
 
-	x_put_le64(outbody + 0x28, now.val);         /* system time */
-	x_put_le64(outbody + 0x30, 0);           /* server start time */
+	x_put_le64(outbody + 0x28, now.val);	 /* system time */
+	x_put_le64(outbody + 0x30, 0);	   /* server start time */
 
 	size_t security_offset = SMB2_HDR_BODY + 0x40;
 
@@ -91,7 +90,7 @@ static int x_smbd_conn_reply_negprot(x_smbd_conn_t *smbd_conn, x_msg_t *msg,
 
 	if (dialect != SMB2_DIALECT_REVISION_2FF) {
 		smbd_conn->server_security_mode = security_mode;
-		smbd_conn->server_capabilities = capabilities;
+		smbd_conn->server_capabilities = smbd->capabilities;
 	}
 
 	x_smbd_conn_reply(smbd_conn, msg, nullptr);
@@ -122,17 +121,19 @@ int x_smbd_conn_process_smb1negoprot(x_smbd_conn_t *smbd_conn, x_msg_t *msg,
 	return x_smbd_conn_reply_negprot(smbd_conn, msg, 0x2ff, {});
 }
 
-static uint16_t x_smb2_dialect_match(x_smbd_conn_t *smbd_conn,
-		const uint8_t *in_dyn,
+uint16_t x_smb2_dialect_match(x_smbd_conn_t *smbd_conn,
+		const void *dialects,
 		size_t dialect_count)
 {
 	const x_smbconf_t &smbconf = smbd_conn->get_conf();
 	for (auto sdialect: smbconf.dialects) {
+		const uint8_t *data = (const uint8_t *)dialects;
 		for (unsigned int di = 0; di < dialect_count; ++di) {
-			uint16_t cdialect = x_get_le16(in_dyn + di * 2);
+			uint16_t cdialect = x_get_le16(data);
 			if (sdialect == cdialect) {
 				return sdialect;
 			}
+			data += 2;
 		}
 	}
 	return SMB2_DIALECT_REVISION_000;
@@ -168,7 +169,7 @@ int x_smb2_process_NEGPROT(x_smbd_conn_t *smbd_conn, x_msg_t *msg,
 
 	smbd_conn->client_security_mode = in_security_mode;
 	smbd_conn->client_capabilities = in_capabilities;
-	// TODO client_guid
+	idl::x_ndr_pull(smbd_conn->client_guid, in_body + 0x0c, 0x24);
 	
 #if 0
 	if (dialect >= SMB2_DIALECT_310) {

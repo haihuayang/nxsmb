@@ -1703,7 +1703,7 @@ static krb5_error_code fill_mem_keytab_from_secrets(krb5_context krbctx,
 		if ((memcmp(&kt_cursor, &zero_csr, sizeof(krb5_kt_cursor)) != 0) && *keytab) {
 			krb5_kt_end_seq_get(krbctx, *keytab, &kt_cursor);
 		}
-        }
+	}
 #endif
 	/* keytab is not up to date, fill it up */
 
@@ -1773,7 +1773,7 @@ out:
 		if ((memcmp(&kt_cursor, &zero_csr, sizeof(krb5_kt_cursor)) != 0) && *keytab) {
 			krb5_kt_end_seq_get(krbctx, *keytab, &kt_cursor);
 		}
-        }
+	}
 
 	if (princ) {
 		krb5_free_principal(krbctx, princ);

@@ -66,9 +66,9 @@ static inline std::vector<std::string> lpcfg_cluster_nodes()
 	return std::vector<std::string>{"ntnx-hh360u-1.hhdom2.hhlab"};
 }
 
-static inline const char *lpcfg_dnsdomain()
+static inline const char *lpcfg_dns_domain()
 {
-	return "";
+	return "hhdom2.hhlab";
 }
 
 static inline bool lpcfg_gensec_require_pac(bool def)
@@ -79,6 +79,16 @@ static inline bool lpcfg_gensec_require_pac(bool def)
 static inline bool lpcfg_allow_trusted_domains()
 {
 	return false;
+}
+
+static inline bool lpcfg_host_msdfs()
+{
+	return true;
+}
+
+static inline uint32_t lpcfg_max_referral_ttl()
+{
+	return 300;
 }
 
 #endif /* __smbconf__hxx__ */
