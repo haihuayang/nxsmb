@@ -232,6 +232,8 @@ int x_smb2_process_TCON(x_smbd_conn_t *smbd_conn, x_msg_t *msg,
 	std::string host{in_path_s, in_share_s};
 	std::string share{in_share_s + 1};
 
+	X_LOG_OP("TCON %s", in_path.c_str());
+
 	auto smbd_share = x_smbd_share_find(share);
 	if (!smbd_share) {
 		return x_smb2_reply_error(smbd_conn, msg, smbd_sess, NT_STATUS_BAD_NETWORK_NAME);

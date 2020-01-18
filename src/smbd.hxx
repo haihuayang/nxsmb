@@ -312,6 +312,8 @@ static inline x_smbd_open_t *x_smbd_tcon_op_create(x_smbd_tcon_t *smbd_tcon, NTS
 void x_smbd_tcon_init_ipc(x_smbd_tcon_t *smbd_tcon);
 void x_smbd_tcon_init_disk(x_smbd_tcon_t *smbd_tcon);
 
+int x_smbd_ipc_init();
+
 struct x_smbd_open_ops_t
 {
 	void (*read)(x_smbd_open_t *smbd_open);

@@ -52,6 +52,38 @@ void x_panic(const char *fmt, ...);
 
 void x_dbg(const char *fmt, ...);
 
+#define X_LOG_ENUM \
+	X_LOG_DECL(ERR) \
+	X_LOG_DECL(WARN) \
+	X_LOG_DECL(CONN) \
+	X_LOG_DECL(OP) \
+	X_LOG_DECL(DBG) \
+	X_LOG_DECL(VERB) \
+
+enum {
+#define X_LOG_DECL(x) X_LOG_LEVEL_##x,
+	X_LOG_ENUM
+#undef X_LOG_DECL
+	X_LOG_LEVEL_MAX
+};
+
+extern int x_loglevel;
+void x_log(int level, const char *fmt, ...);
+
+#define X_LOG_L(level, ...) do { \
+	if ((level) <= x_loglevel) { \
+		x_log((level), __VA_ARGS__); \
+	} \
+} while (0)
+
+#define X_LOG_ERR(...) X_LOG_L(X_LOG_LEVEL_ERR, __VA_ARGS__)
+#define X_LOG_WARN(...) X_LOG_L(X_LOG_LEVEL_WARN, __VA_ARGS__)
+#define X_LOG_CONN(...) X_LOG_L(X_LOG_LEVEL_CONN, __VA_ARGS__)
+#define X_LOG_OP(...) X_LOG_L(X_LOG_LEVEL_OP, __VA_ARGS__)
+#define X_LOG_DBG(...) X_LOG_L(X_LOG_LEVEL_DBG, __VA_ARGS__)
+#define X_LOG_VERB(...) X_LOG_L(X_LOG_LEVEL_VERB, __VA_ARGS__)
+
+
 /* these are used to mark symbols as local to a shared lib, or
  * publicly available via the shared lib API */
 #ifndef _PUBLIC_
@@ -75,6 +107,12 @@ void x_dbg(const char *fmt, ...);
 #define PROJECT_NAME XSTR2(PROJECT)
 
 #define X_MALLOC malloc
+
+#define X_IPQUAD_BE(addr) \
+	((unsigned char *)&addr)[0], \
+	((unsigned char *)&addr)[1], \
+	((unsigned char *)&addr)[2], \
+	((unsigned char *)&addr)[3]
 
 #ifdef __cplusplus
 extern "C" {

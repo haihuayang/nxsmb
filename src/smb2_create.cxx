@@ -1,6 +1,7 @@
 
 #include "smbd.hxx"
 #include "core.hxx"
+#include "include/charset.hxx"
 
 enum {
 	X_SMB2_CREATE_REQU_BODY_LEN = 0x38,
@@ -120,6 +121,7 @@ int x_smb2_process_CREATE(x_smbd_conn_t *smbd_conn, x_msg_t *msg,
 	requ_create.in_name.assign((char16_t *)(in_buf + in_name_offset),
 			(char16_t *)(in_buf + in_name_offset + in_name_length)); 
 
+	X_LOG_OP("CREATE %s", x_convert_utf16_to_utf8(requ_create.in_name).c_str());
 	NTSTATUS status;
 	x_auto_ref_t<x_smbd_open_t> smbd_open{x_smbd_tcon_op_create(smbd_tcon.get(),
 			status, requ_create)};

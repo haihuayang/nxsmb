@@ -390,6 +390,9 @@ static const x_epoll_upcall_cbs_t x_smbd_conn_upcall_cbs = {
 
 static void x_smbd_accepted(x_smbd_t *smbd, int fd, const struct sockaddr_in &sin)
 {
+	X_LOG_CONN("accept %d from %d.%d.%d.%d:%d", fd,
+			X_IPQUAD_BE(sin.sin_addr), ntohs(sin.sin_port));
+
 	set_nbio(fd, 1);
 	x_smbd_conn_t *smbd_conn = new x_smbd_conn_t(smbd, fd, sin);
 	X_ASSERT(smbd_conn != NULL);
@@ -491,6 +494,8 @@ int main(int argc, char **argv)
 
 	x_smbd_open_pool_init(globals.evtmgmt, 1024);
 	x_smbd_sess_pool_init(globals.evtmgmt, 1024);
+
+	x_smbd_ipc_init();
 
 	x_smbd_t smbd;
 	x_smbd_init(smbd, port);
