@@ -43,5 +43,25 @@ static inline idl::NTTIME x_tick_to_nttime(x_tick_t tick)
 	return idl::NTTIME{(tick / 100) + idl::NTTIME::TIME_FIXUP_CONSTANT * 1000 * 1000 * 10};
 }
 
+static inline bool x_check_range(uint32_t offset, uint32_t length,
+		uint32_t min_offset, uint32_t max_offset)
+{
+	if (length == 0) {
+		return true;
+	}
+	if (offset < min_offset) {
+		return false;
+	}
+	uint32_t end = offset + length;
+	if (end < offset) {
+		return false;
+	}
+	if (end > max_offset) {
+		return false;
+	}
+	return true;
+}
+
+
 #endif /* __misc__hxx__ */
 

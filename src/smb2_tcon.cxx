@@ -8,6 +8,12 @@ static std::shared_ptr<x_smbd_tcon_t> make_tcon(x_smbd_sess_t *smbd_sess,
 		const std::shared_ptr<x_smbd_share_t> &smbd_share)
 {
 	auto smbd_tcon = std::make_shared<x_smbd_tcon_t>(smbd_share);
+	if (smbd_share->type == x_smbd_share_t::TYPE_IPC) {
+		x_smbd_tcon_init_ipc(smbd_tcon.get());
+	} else {
+		x_smbd_tcon_init_disk(smbd_tcon.get());
+	}
+
 	std::lock_guard<std::mutex> lock(smbd_sess->mutex);
 	while (true) {
 		uint32_t id = smbd_sess->next_tcon_id++;
@@ -185,7 +191,7 @@ int x_smb2_process_TCON(x_smbd_conn_t *smbd_conn, x_msg_t *msg,
 		return x_smb2_reply_error(smbd_conn, msg, nullptr, NT_STATUS_USER_SESSION_DELETED);
 	}
 	
-	x_ref_t<x_smbd_sess_t> smbd_sess{x_smbd_sess_find(in_session_id, smbd_conn)};
+	x_auto_ref_t<x_smbd_sess_t> smbd_sess{x_smbd_sess_find(in_session_id, smbd_conn)};
 	if (smbd_sess == nullptr) {
 		return x_smb2_reply_error(smbd_conn, msg, nullptr, NT_STATUS_USER_SESSION_DELETED);
 	}
@@ -248,14 +254,14 @@ int x_smb2_process_TCON(x_smbd_conn_t *smbd_conn, x_msg_t *msg,
 
 	uint32_t out_share_flags = 0;
 	uint32_t out_capabilities = 0;
-#if 0
-	if (lp_msdfs_root(SNUM(tcon->compat)) && lp_host_msdfs()) {
-		out_share_flags |= (SMB2_SHAREFLAG_DFS|SMB2_SHAREFLAG_DFS_ROOT);
-		out_capabilities = SMB2_SHARE_CAP_DFS;
-	} else {
-		out_capabilities = 0;
+	if (smbd_share->is_msdfs_root()) {
+		out_share_flags |= SMB2_SHAREFLAG_DFS|SMB2_SHAREFLAG_DFS_ROOT;
+		out_capabilities |= SMB2_SHARE_CAP_DFS;
 	}
-
+	if (smbd_share->abe_enabled()) {
+		out_share_flags |= SMB2_SHAREFLAG_ACCESS_BASED_DIRECTORY_ENUM;
+	}
+#if 0
 	switch(lp_csc_policy(SNUM(tcon->compat))) {
 		case CSC_POLICY_MANUAL:
 			break;

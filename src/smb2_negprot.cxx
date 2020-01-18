@@ -102,7 +102,7 @@ int x_smbd_conn_process_smb1negoprot(x_smbd_conn_t *smbd_conn, x_msg_t *msg,
 {
 	uint8_t wct = buf[HDR_WCT];
 	uint16_t vwv = buf[HDR_VWV] + (buf[HDR_VWV + 1] << 8);
-	if (len < HDR_WCT + 2 *wct + vwv) {
+	if (len < (size_t)HDR_WCT + 2 *wct + vwv) {
 		return -EBADMSG;
 	}
 	if (vwv == 0) {

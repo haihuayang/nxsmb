@@ -243,6 +243,15 @@ struct x_smbd_share_t
 	bool read_only;
 	std::string msdfs_proxy;
 	uint32_t max_referral_ttl = 300;
+
+	bool is_msdfs_root() const {
+		// TODO
+		return type != TYPE_IPC;
+	}
+	bool abe_enabled() const {
+		// TODO
+		return false;
+	}
 };
 
 
@@ -251,13 +260,86 @@ struct x_smbduser_t
 	// security token
 };
 
+struct x_smbd_open_t;
+
+struct x_smb2_requ_create_t
+{
+	uint8_t in_oplock_level;
+	uint32_t in_impersonation_level;
+	uint32_t in_desired_access;
+	uint32_t in_file_attributes;
+	uint32_t in_share_access;
+	uint32_t in_create_disposition;
+	uint32_t in_create_options;
+
+	std::u16string in_name;
+	// TODO in_contexts
+
+	uint8_t out_oplock_level;
+	uint8_t out_create_flags;
+	uint32_t out_create_action;
+	idl::NTTIME out_create_ts;
+	idl::NTTIME out_last_access_ts;
+	idl::NTTIME out_last_write_ts;
+	idl::NTTIME out_change_ts;
+	uint64_t out_allocation_size;
+	uint64_t out_end_of_file;
+	uint32_t out_file_attributes;
+
+	// TODO out_contexts
+};
+
+struct x_smbd_tcon_t;
+struct x_smbd_tcon_ops_t
+{
+	x_smbd_open_t *(*create)(x_smbd_tcon_t *, NTSTATUS &status, x_smb2_requ_create_t &);
+};
+
 struct x_smbd_tcon_t
 { 
-	x_smbd_tcon_t(const std::shared_ptr<x_smbd_share_t> &share) : share(share) { }
+	x_smbd_tcon_t(const std::shared_ptr<x_smbd_share_t> &share) : smbd_share(share) { }
+	const x_smbd_tcon_ops_t *ops;
 	uint32_t tid;
 	uint32_t share_access;
-	std::shared_ptr<x_smbd_share_t> share;
+	std::shared_ptr<x_smbd_share_t> smbd_share;
+	// std::vector<std::shared_ptr<x_smbd_open_t>> smbd_opens;
 };
+
+static inline x_smbd_open_t *x_smbd_tcon_op_create(x_smbd_tcon_t *smbd_tcon, NTSTATUS &status, x_smb2_requ_create_t &requ_create)
+{
+	return smbd_tcon->ops->create(smbd_tcon, status, requ_create);
+}
+void x_smbd_tcon_init_ipc(x_smbd_tcon_t *smbd_tcon);
+void x_smbd_tcon_init_disk(x_smbd_tcon_t *smbd_tcon);
+
+struct x_smbd_open_ops_t
+{
+	void (*read)(x_smbd_open_t *smbd_open);
+	void (*write)(x_smbd_open_t *smbd_open);
+};
+
+struct x_smbd_open_t
+{
+	void incref() {
+		X_ASSERT(refcnt++ > 0);
+	}
+
+	void decref() {
+		if (unlikely(--refcnt == 0)) {
+			delete this;
+		}
+	}
+	x_dqlink_t hash_link;
+	// x_dlink_t tcon_link;
+	const x_smbd_open_ops_t *ops;
+	uint64_t id;
+	std::shared_ptr<x_smbd_tcon_t> smbd_tcon;
+	std::atomic<int> refcnt;
+};
+X_DECLARE_MEMBER_TRAITS(smbd_open_hash_traits, x_smbd_open_t, hash_link)
+
+x_smbd_open_t *x_smbd_open_create(x_smbd_tcon_t *smbd_tcon);
+
 #if 0
 struct x_smbd_tcon_t
 {
@@ -409,6 +491,8 @@ int x_auth_krb5_init(x_auth_context_t *context);
 x_auth_context_t *x_auth_create_context();
 x_auth_t *x_auth_create_by_oid(x_auth_context_t *context, gss_const_OID oid);
 int x_auth_register(x_auth_context_t *context, const x_auth_mech_t *mech);
+
+int x_smbd_open_pool_init(x_evtmgmt_t *ep, uint32_t count);
 
 extern const x_auth_mech_t x_auth_mech_spnego;
 

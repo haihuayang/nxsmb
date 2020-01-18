@@ -58,7 +58,7 @@ int x_smb2_process_KEEPALIVE(x_smbd_conn_t *smbd_conn, x_msg_t *msg,
 	const uint8_t *inhdr = in_buf;
 	uint64_t in_session_id = BVAL(inhdr, SMB2_HDR_SESSION_ID);
 
-	x_ref_t<x_smbd_sess_t> smbd_sess;
+	x_auto_ref_t<x_smbd_sess_t> smbd_sess;
 	if (in_session_id != 0) {
 		smbd_sess.set(x_smbd_sess_find(in_session_id, smbd_conn));
 		if (smbd_sess == nullptr) {

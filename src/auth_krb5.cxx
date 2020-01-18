@@ -1222,7 +1222,7 @@ static NTSTATUS auth_krb5_update(x_auth_t *auth, const uint8_t *in_buf, size_t i
 
 	gss_ctx_id_t gssapi_context = nullptr;
 	gss_cred_id_t delegated_cred_handle = nullptr;
-	OM_uint32 gss_want_flags, gss_got_flags;
+	OM_uint32 /*gss_want_flags,*/ gss_got_flags;
 	gss_name_t client_name;
 	gss_OID ret_mech;
 

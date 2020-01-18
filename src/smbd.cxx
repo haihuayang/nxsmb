@@ -489,6 +489,7 @@ int main(int argc, char **argv)
 	globals.evtmgmt = x_evtmgmt_create(tpool, 2000000000);
 	globals.wbpool = x_wbpool_create(globals.evtmgmt, 2);
 
+	x_smbd_open_pool_init(globals.evtmgmt, 1024);
 	x_smbd_sess_pool_init(globals.evtmgmt, 1024);
 
 	x_smbd_t smbd;

@@ -1,7 +1,6 @@
 
-#include <mutex>
-#include "include/hashtable.hxx"
 #include "smbd.hxx"
+#include "include/hashtable.hxx"
 
 x_smbd_sess_t::x_smbd_sess_t(x_smbd_conn_t *smbd_conn)
 	: smbd_conn{smbd_conn}, refcnt{1}
@@ -66,11 +65,12 @@ static x_smbd_sess_t *__smbd_sess_create(smbd_sess_pool_t &pool, x_smbd_conn_t *
 	x_smbd_sess_t *smbd_sess = new x_smbd_sess_t(smbd_conn);
 	smbd_sess->incref(); /* for hash */
 	// smbd_sess->incref(); /* for dcircle */
+
 	std::unique_lock<std::mutex> lock(pool.mutex);
 	for (;;) {
 		/* TODO to reduce hash conflict */
 		smbd_sess->id = g_sess_id++;
-		x_smbd_sess_t *exist = smbd_sess_find_by_id(pool, smbd_sess->id);
+		x_auto_ref_t<x_smbd_sess_t> exist{smbd_sess_find_by_id(pool, smbd_sess->id)};
 		if (!exist) {
 			break;
 		}

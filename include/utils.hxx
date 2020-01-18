@@ -9,14 +9,13 @@
 #include <string>
 
 template <typename T>
-struct x_ref_t
+struct x_auto_ref_t
 {
-	x_ref_t() : val{nullptr} { }
-	x_ref_t(T *t) : val{t} { val->incref(); }
-	x_ref_t(const x_ref_t<T> &o) = delete;
-	x_ref_t(x_ref_t<T> &&o) = delete;
-	x_ref_t<T> &operator=(const x_ref_t<T> &o) = delete;
-	x_ref_t<T> &operator=(x_ref_t<T> &&o) = delete;
+	x_auto_ref_t(T *t = nullptr) : val{t} { }
+	x_auto_ref_t(const x_auto_ref_t<T> &o) = delete;
+	x_auto_ref_t(x_auto_ref_t<T> &&o) = delete;
+	x_auto_ref_t<T> &operator=(const x_auto_ref_t<T> &o) = delete;
+	x_auto_ref_t<T> &operator=(x_auto_ref_t<T> &&o) = delete;
 
 	void set(T *t) {
 		if (val == t) {
@@ -26,7 +25,6 @@ struct x_ref_t
 			val->decref();
 		}
 		val = t;
-		val->incref();
 	}
 
 	operator T*() const {
@@ -35,7 +33,7 @@ struct x_ref_t
 	T *operator->() const {
 		return val;
 	}
-	~x_ref_t() {
+	~x_auto_ref_t() {
 		if (val) {
 			val->decref();
 		}

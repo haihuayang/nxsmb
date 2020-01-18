@@ -314,6 +314,7 @@ static NTSTATUS spnego_update_start(x_auth_spnego_t *spnego, const NegotiationTo
 	copy_MechType(mt, &spnego->mt_subauth);
 
 	int ret = x_asn1_encode(ni.mechTypes, spnego->mech_types_blob);
+	(void)ret; // TODO
 
 	X_ASSERT(!spnego->up_auth_upcall);
 	spnego->up_auth_upcall = auth_upcall;

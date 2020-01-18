@@ -63,22 +63,6 @@ static int x_smb2_reply_ioctl(x_smbd_conn_t *smbd_conn,
 	return 0;
 }
 
-static inline bool check_input_range(uint32_t offset, uint32_t length,
-		uint32_t min_offset, uint32_t max_offset)
-{
-	if (offset < min_offset) {
-		return false;
-	}
-	uint32_t end = offset + length;
-	if (end < offset) {
-		return false;
-	}
-	if (end > max_offset) {
-		return false;
-	}
-	return true;
-}
-
 static NTSTATUS parse_dfs_path(const char16_t *in_file_name_data, size_t in_file_name_size,
 		std::string &host, std::string &share, std::string &relpath)
 {
@@ -121,6 +105,7 @@ struct x_referral_t
 	uint32_t proximity;
 	uint32_t ttl;
 	std::u16string path;
+	std::u16string node;
 };
 
 #define DFS_HEADER_FLAG_REFERAL_SVR ( 0x00000001 )
@@ -155,11 +140,15 @@ static idl::x_ndr_off_t push_referral_v3(const x_referral_t &referral, idl::x_nd
 
 	uint16_t size = bpos - base_pos;
 	idl::x_ndr_push_uint16(size, ndr, size_pos, epos, ndr_flags);
-	for (uint32_t i = 0; i < 3; ++i) {
+	for (uint32_t i = 0; i < 2; ++i) {
 		path_pos = idl::x_ndr_push_uint16(bpos - base_pos, ndr, path_pos, epos, ndr_flags);
 		bpos = X_NDR_CHECK(idl::x_ndr_push_u16string(referral.path, ndr, bpos, epos, ndr_flags));
 		bpos = X_NDR_CHECK(idl::x_ndr_push_uint16(0, ndr, bpos, epos, ndr_flags));
 	}
+
+	path_pos = idl::x_ndr_push_uint16(bpos - base_pos, ndr, path_pos, epos, ndr_flags);
+	bpos = X_NDR_CHECK(idl::x_ndr_push_u16string(referral.node, ndr, bpos, epos, ndr_flags));
+	bpos = X_NDR_CHECK(idl::x_ndr_push_uint16(0, ndr, bpos, epos, ndr_flags));
 
 	return bpos;
 }
@@ -226,10 +215,10 @@ static NTSTATUS fsctl_dfs_get_refers_internal(x_smbd_tcon_t *smbd_tcon,
 	x_dfs_referral_resp_t dfs_referral_resp;
 	dfs_referral_resp.path_consumed = in_file_name_size; // TODO, samba first skip double '\\'
 	if (true || reqpath.size() == 0) {
+		std::u16string in_file_name{(const char16_t *)in_file_name_data,
+			(const char16_t *)(in_file_name_data + in_file_name_size)};
 		if (smbd_share->msdfs_proxy.size() == 0) {
-			dfs_referral_resp.referrals.push_back(x_referral_t{0, lpcfg_max_referral_ttl(),
-					std::u16string((const char16_t *)in_file_name_data,
-						(const char16_t *)(in_file_name_data + in_file_name_size))});
+			dfs_referral_resp.referrals.push_back(x_referral_t{0, lpcfg_max_referral_ttl(), in_file_name, in_file_name});
 		} else {
 			std::string alt_path = "\\";
 			alt_path += smbd_share->msdfs_proxy;
@@ -243,8 +232,7 @@ static NTSTATUS fsctl_dfs_get_refers_internal(x_smbd_tcon_t *smbd_tcon,
 				alt_path += '\\';
 				alt_path += reqpath;
 			}
-			dfs_referral_resp.referrals.push_back(x_referral_t{0, lpcfg_max_referral_ttl(),
-					x_convert_utf8_to_utf16(alt_path)});
+			dfs_referral_resp.referrals.push_back(x_referral_t{0, lpcfg_max_referral_ttl(), in_file_name, x_convert_utf8_to_utf16(alt_path)});
 		}
 
 	} else {
@@ -318,7 +306,7 @@ static NTSTATUS x_smb2_ioctl_dfs(x_smbd_tcon_t *smbd_tcon,
 		uint32_t in_max_output,
 		std::vector<uint8_t>& output)
 {
-	if (smbd_tcon->share->type != x_smbd_share_t::TYPE_IPC) {
+	if (smbd_tcon->smbd_share->type != x_smbd_share_t::TYPE_IPC) {
 		return NT_STATUS_INVALID_DEVICE_REQUEST;
 	}
 	if (!lpcfg_host_msdfs()) {
@@ -549,7 +537,7 @@ int x_smb2_process_IOCTL(x_smbd_conn_t *smbd_conn, x_msg_t *msg,
 	if (in_session_id == 0) {
 		return x_smb2_reply_error(smbd_conn, msg, nullptr, NT_STATUS_USER_SESSION_DELETED);
 	}
-	x_ref_t<x_smbd_sess_t> smbd_sess{x_smbd_sess_find(in_session_id, smbd_conn)};
+	x_auto_ref_t<x_smbd_sess_t> smbd_sess{x_smbd_sess_find(in_session_id, smbd_conn)};
 	if (smbd_sess == nullptr) {
 		return x_smb2_reply_error(smbd_conn, msg, nullptr, NT_STATUS_USER_SESSION_DELETED);
 	}
@@ -587,14 +575,14 @@ int x_smb2_process_IOCTL(x_smbd_conn_t *smbd_conn, x_msg_t *msg,
 	 */
 	// allowed_length_in = 0;
 	if ((in_input_offset > 0) && (in_input_length > 0)) {
-		if (!check_input_range(in_input_offset, in_input_length,
+		if (!x_check_range(in_input_offset, in_input_length,
 					0x40 + X_SMB2_IOCTL_REQU_BODY_LEN, in_len)) {
 			return x_smb2_reply_error(smbd_conn, msg, smbd_sess, NT_STATUS_INVALID_PARAMETER);
 		}
 	}
 
 	if (in_output_offset > 0) {
-		if (!check_input_range(in_output_offset, in_output_length,
+		if (!x_check_range(in_output_offset, in_output_length,
 					0x40 + X_SMB2_IOCTL_REQU_BODY_LEN, in_len)) {
 			return x_smb2_reply_error(smbd_conn, msg, smbd_sess, NT_STATUS_INVALID_PARAMETER);
 		}
@@ -712,6 +700,7 @@ int x_smb2_process_IOCTL(x_smbd_conn_t *smbd_conn, x_msg_t *msg,
 	if (NT_STATUS_EQUAL(status, X_NT_STATUS_INTERNAL_TERMINATE)) {
 		return -EACCES;
 	}
+	/* TODO return error */
 	return x_smb2_reply_ioctl(smbd_conn, smbd_sess, msg, status, in_tid, in_ctl_code,
 			in_file_id_persistent, in_file_id_volatile, output);
 #if 0
