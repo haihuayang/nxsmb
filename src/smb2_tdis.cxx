@@ -12,6 +12,8 @@ static int x_smb2_reply_tdis(x_smbd_conn_t *smbd_conn,
 		x_msg_t *msg, NTSTATUS status,
 		uint32_t tid)
 {
+	X_LOG_OP("%ld RESP SUCCESS %x", msg->mid, tid);
+
 	uint8_t *outbuf = new uint8_t[8 + 0x40 + X_SMB2_TDIS_RESP_BODY_LEN];
 	uint8_t *outhdr = outbuf + 8;
 	uint8_t *outbody = outhdr + 0x40;
@@ -49,28 +51,31 @@ int x_smb2_process_TDIS(x_smbd_conn_t *smbd_conn, x_msg_t *msg,
 		const uint8_t *in_buf, size_t in_len)
 {
 	if (in_len < 0x40 + X_SMB2_TDIS_REQU_BODY_LEN) {
-		return x_smb2_reply_error(smbd_conn, msg, nullptr, NT_STATUS_INVALID_PARAMETER);
+		return X_SMB2_REPLY_ERROR(smbd_conn, msg, nullptr, NT_STATUS_INVALID_PARAMETER);
 	}
 
 	const uint8_t *inhdr = in_buf;
 
 	uint64_t in_session_id = BVAL(inhdr, SMB2_HDR_SESSION_ID);
+	uint32_t in_tid = IVAL(inhdr, SMB2_HDR_TID);
+
+	X_LOG_OP("%ld TDIS 0x%lx, 0x%x", msg->mid, in_session_id, in_tid);
+
 	if (in_session_id == 0) {
-		return x_smb2_reply_error(smbd_conn, msg, nullptr, NT_STATUS_USER_SESSION_DELETED);
+		return X_SMB2_REPLY_ERROR(smbd_conn, msg, nullptr, NT_STATUS_USER_SESSION_DELETED);
 	}
 	x_auto_ref_t<x_smbd_sess_t> smbd_sess{x_smbd_sess_find(in_session_id, smbd_conn)};
 	if (smbd_sess == nullptr) {
-		return x_smb2_reply_error(smbd_conn, msg, nullptr, NT_STATUS_USER_SESSION_DELETED);
+		return X_SMB2_REPLY_ERROR(smbd_conn, msg, nullptr, NT_STATUS_USER_SESSION_DELETED);
 	}
 	if (smbd_sess->state != x_smbd_sess_t::S_ACTIVE) {
-		return x_smb2_reply_error(smbd_conn, msg, smbd_sess, NT_STATUS_INVALID_PARAMETER);
+		return X_SMB2_REPLY_ERROR(smbd_conn, msg, smbd_sess, NT_STATUS_INVALID_PARAMETER);
 	}
 	/* TODO signing/encryption */
 
-	uint32_t in_tid = IVAL(inhdr, SMB2_HDR_TID);
 	auto it = smbd_sess->tcon_table.find(in_tid);
 	if (it == smbd_sess->tcon_table.end()) {
-		return x_smb2_reply_error(smbd_conn, msg, smbd_sess, NT_STATUS_NETWORK_NAME_DELETED);
+		return X_SMB2_REPLY_ERROR(smbd_conn, msg, smbd_sess, NT_STATUS_NETWORK_NAME_DELETED);
 	}
 	smbd_sess->tcon_table.erase(it);
 

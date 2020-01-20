@@ -48,7 +48,7 @@ int x_smb2_process_KEEPALIVE(x_smbd_conn_t *smbd_conn, x_msg_t *msg,
 		const uint8_t *in_buf, size_t in_len)
 {
 	if (in_len < 0x40 + X_SMB2_KEEPALIVE_REQU_BODY_LEN) {
-		return x_smb2_reply_error(smbd_conn, msg, nullptr, NT_STATUS_INVALID_PARAMETER);
+		return X_SMB2_REPLY_ERROR(smbd_conn, msg, nullptr, NT_STATUS_INVALID_PARAMETER);
 	}
 
 	if (smbd_conn->session_list.empty() && smbd_conn->session_wait_input_list.empty()) {
@@ -62,10 +62,10 @@ int x_smb2_process_KEEPALIVE(x_smbd_conn_t *smbd_conn, x_msg_t *msg,
 	if (in_session_id != 0) {
 		smbd_sess.set(x_smbd_sess_find(in_session_id, smbd_conn));
 		if (smbd_sess == nullptr) {
-			return x_smb2_reply_error(smbd_conn, msg, nullptr, NT_STATUS_USER_SESSION_DELETED);
+			return X_SMB2_REPLY_ERROR(smbd_conn, msg, nullptr, NT_STATUS_USER_SESSION_DELETED);
 		}
 		if (smbd_sess->state != x_smbd_sess_t::S_ACTIVE) {
-			return x_smb2_reply_error(smbd_conn, msg, smbd_sess, NT_STATUS_INVALID_PARAMETER);
+			return X_SMB2_REPLY_ERROR(smbd_conn, msg, smbd_sess, NT_STATUS_INVALID_PARAMETER);
 		}
 	}
 	/* TODO signing/encryption */

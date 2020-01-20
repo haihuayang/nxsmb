@@ -137,6 +137,8 @@ static int x_smb2_reply_tcon(x_smbd_conn_t *smbd_conn,
 		uint32_t out_share_capabilities,
 		uint32_t out_access_mask)
 {
+	X_LOG_OP("%ld RESP SUCCESS tid=%x", msg->mid, tid);
+
 	uint8_t *outbuf = new uint8_t[8 + 0x40 + 0x10];
 	uint8_t *outhdr = outbuf + 8;
 	uint8_t *outbody = outhdr + 0x40;
@@ -180,7 +182,7 @@ int x_smb2_process_TCON(x_smbd_conn_t *smbd_conn, x_msg_t *msg,
 		const uint8_t *in_buf, size_t in_len)
 {
 	if (in_len < 0x40 + 0x9) {
-		return x_smb2_reply_error(smbd_conn, msg, nullptr, NT_STATUS_INVALID_PARAMETER);
+		return X_SMB2_REPLY_ERROR(smbd_conn, msg, nullptr, NT_STATUS_INVALID_PARAMETER);
 	}
 
 	const uint8_t *inhdr = in_buf;
@@ -188,30 +190,30 @@ int x_smb2_process_TCON(x_smbd_conn_t *smbd_conn, x_msg_t *msg,
 	uint64_t in_session_id = BVAL(inhdr, SMB2_HDR_SESSION_ID);
 
 	if (in_session_id == 0) {
-		return x_smb2_reply_error(smbd_conn, msg, nullptr, NT_STATUS_USER_SESSION_DELETED);
+		return X_SMB2_REPLY_ERROR(smbd_conn, msg, nullptr, NT_STATUS_USER_SESSION_DELETED);
 	}
 	
 	x_auto_ref_t<x_smbd_sess_t> smbd_sess{x_smbd_sess_find(in_session_id, smbd_conn)};
 	if (smbd_sess == nullptr) {
-		return x_smb2_reply_error(smbd_conn, msg, nullptr, NT_STATUS_USER_SESSION_DELETED);
+		return X_SMB2_REPLY_ERROR(smbd_conn, msg, nullptr, NT_STATUS_USER_SESSION_DELETED);
 	}
 	if (smbd_sess->state != x_smbd_sess_t::S_ACTIVE) {
-		return x_smb2_reply_error(smbd_conn, msg, smbd_sess, NT_STATUS_INVALID_PARAMETER);
+		return X_SMB2_REPLY_ERROR(smbd_conn, msg, smbd_sess, NT_STATUS_INVALID_PARAMETER);
 	}
 	/* TODO signing/encryption */
 
 	uint16_t in_path_offset = SVAL(inbody, 0x04);
 	uint16_t in_path_length = SVAL(inbody, 0x06);
 	if (in_path_length % 2 != 0) {
-		return x_smb2_reply_error(smbd_conn, msg, smbd_sess, NT_STATUS_INVALID_PARAMETER);
+		return X_SMB2_REPLY_ERROR(smbd_conn, msg, smbd_sess, NT_STATUS_INVALID_PARAMETER);
 	}
 
 	if (in_path_offset != (SMB2_HDR_BODY + X_SMB2_TCON_BODY_LEN)) {
-		return x_smb2_reply_error(smbd_conn, msg, smbd_sess, NT_STATUS_INVALID_PARAMETER);
+		return X_SMB2_REPLY_ERROR(smbd_conn, msg, smbd_sess, NT_STATUS_INVALID_PARAMETER);
 	}
 	
 	if (in_path_offset + in_path_length > in_len) {
-		return x_smb2_reply_error(smbd_conn, msg, smbd_sess, NT_STATUS_INVALID_PARAMETER);
+		return X_SMB2_REPLY_ERROR(smbd_conn, msg, smbd_sess, NT_STATUS_INVALID_PARAMETER);
 	}
 
 	/* convert lower case utf8 */
@@ -226,17 +228,17 @@ int x_smb2_process_TCON(x_smbd_conn_t *smbd_conn, x_msg_t *msg,
 	}
 	const char *in_share_s = strchr(in_path_s, '\\');
 	if (!in_share_s) {
-		return x_smb2_reply_error(smbd_conn, msg, smbd_sess, NT_STATUS_INVALID_PARAMETER);
+		return X_SMB2_REPLY_ERROR(smbd_conn, msg, smbd_sess, NT_STATUS_INVALID_PARAMETER);
 	}
 
 	std::string host{in_path_s, in_share_s};
 	std::string share{in_share_s + 1};
 
-	X_LOG_OP("TCON %s", in_path.c_str());
+	X_LOG_OP("%ld TCON %s", msg->mid, in_path.c_str());
 
 	auto smbd_share = x_smbd_share_find(share);
 	if (!smbd_share) {
-		return x_smb2_reply_error(smbd_conn, msg, smbd_sess, NT_STATUS_BAD_NETWORK_NAME);
+		return X_SMB2_REPLY_ERROR(smbd_conn, msg, smbd_sess, NT_STATUS_BAD_NETWORK_NAME);
 	}
 
 	uint32_t share_access = create_share_access_mask(smbd_share,
@@ -248,7 +250,7 @@ int x_smb2_process_TCON(x_smbd_conn_t *smbd_conn, x_msg_t *msg,
 			 "security descriptor.\n",
 			 session_info->unix_info->unix_name,
 			 lp_servicename(talloc_tos(), snum)));
-		return x_smb2_reply_error(smbd_conn, msg, smbd_sess, NT_STATUS_ACCESS_DENIED);
+		return X_SMB2_REPLY_ERROR(smbd_conn, msg, smbd_sess, NT_STATUS_ACCESS_DENIED);
 	}
 
 	auto smbd_tcon = make_tcon(smbd_sess, smbd_share);

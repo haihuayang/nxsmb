@@ -199,6 +199,8 @@ static void smbd_sess_auth_updated(x_smbd_sess_t *smbd_sess, NTSTATUS status,
 		std::vector<uint8_t> &out_security, std::shared_ptr<x_auth_info_t> &auth_info)
 {
 	x_msg_t *msg = smbd_sess->authmsg;
+	X_LOG_OP("%ld RESP %x dialect=%x", msg->mid, status.v);
+
 	smbd_sess->authmsg = nullptr;
 	x_smbd_conn_t *smbd_conn = smbd_sess->smbd_conn;
 	if (NT_STATUS_IS_OK(status)) {
@@ -213,7 +215,7 @@ static void smbd_sess_auth_updated(x_smbd_sess_t *smbd_sess, NTSTATUS status,
 		smbd_conn->session_wait_input_list.push_back(smbd_sess);
 		x_smb2_reply_sesssetup(smbd_conn, smbd_sess, msg, status, out_security);
 	} else {
-		x_smb2_reply_error(smbd_conn, msg, smbd_sess, status);
+		X_SMB2_REPLY_ERROR(smbd_conn, msg, smbd_sess, status);
 		/* release the session */
 		x_smbd_sess_release(smbd_sess);
 		smbd_sess->decref();
@@ -280,19 +282,21 @@ int x_smb2_process_SESSSETUP(x_smbd_conn_t *smbd_conn, x_msg_t *msg,
 	uint16_t in_security_length = SVAL(inbody, 0x0E);
 	// TODO uint64_t in_previous_session_id = BVAL(inbody, 0x10);
 
+	X_LOG_OP("%ld SESSSETUP 0x%lx, 0x%lx", msg->mid);
+
 	if (in_security_offset != (SMB2_HDR_BODY + X_SMB2_SESSSETUP_BODY_LEN)) {
-		return x_smb2_reply_error(smbd_conn, msg, nullptr, NT_STATUS_INVALID_PARAMETER);
+		return X_SMB2_REPLY_ERROR(smbd_conn, msg, nullptr, NT_STATUS_INVALID_PARAMETER);
 	}
 	
 	if (in_security_offset + in_security_length > in_len) {
-		return x_smb2_reply_error(smbd_conn, msg, nullptr, NT_STATUS_INVALID_PARAMETER);
+		return X_SMB2_REPLY_ERROR(smbd_conn, msg, nullptr, NT_STATUS_INVALID_PARAMETER);
 	}
 
 	if (in_flags & SMB2_SESSION_FLAG_BINDING) {
 		if (smbd_conn->dialect < SMB2_DIALECT_REVISION_222) {
-			return x_smb2_reply_error(smbd_conn, msg, nullptr, NT_STATUS_REQUEST_NOT_ACCEPTED);
+			return X_SMB2_REPLY_ERROR(smbd_conn, msg, nullptr, NT_STATUS_REQUEST_NOT_ACCEPTED);
 		}
-		return x_smb2_reply_error(smbd_conn, msg, nullptr, NT_STATUS_NOT_SUPPORTED);
+		return X_SMB2_REPLY_ERROR(smbd_conn, msg, nullptr, NT_STATUS_NOT_SUPPORTED);
 	}
 
 	x_smbd_sess_t *smbd_sess;
@@ -304,12 +308,12 @@ int x_smb2_process_SESSSETUP(x_smbd_conn_t *smbd_conn, x_msg_t *msg,
 	} else {
 		smbd_sess = x_smbd_sess_find(in_session_id, smbd_conn);
 		if (smbd_sess == nullptr) {
-			return x_smb2_reply_error(smbd_conn, msg, nullptr, NT_STATUS_USER_SESSION_DELETED);
+			return X_SMB2_REPLY_ERROR(smbd_conn, msg, nullptr, NT_STATUS_USER_SESSION_DELETED);
 		}
 		if (smbd_sess->state != x_smbd_sess_t::S_WAIT_INPUT) {
 			smbd_sess->decref();
 			/* TODO just drop the message, should we reply something for this unexpected message */
-			return x_smb2_reply_error(smbd_conn, msg, nullptr, NT_STATUS_INVALID_PARAMETER);
+			return X_SMB2_REPLY_ERROR(smbd_conn, msg, nullptr, NT_STATUS_INVALID_PARAMETER);
 		}
 		smbd_sess->decref();
 		smbd_conn->session_wait_input_list.remove(smbd_sess);

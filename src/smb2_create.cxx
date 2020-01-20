@@ -16,6 +16,8 @@ static int x_smb2_reply_create(x_smbd_conn_t *smbd_conn,
 		const x_smb2_requ_create_t &requ_create,
 		const std::vector<uint8_t> &output)
 {
+	X_LOG_OP("%ld RESP SUCCESS 0x%lx,0x%lx", msg->mid, smbd_open->id, smbd_open->id);
+
 	uint8_t *outbuf = new uint8_t[8 + 0x40 + X_SMB2_CREATE_RESP_BODY_LEN + output.size()];
 	uint8_t *outhdr = outbuf + 8;
 	uint8_t *outbody = outhdr + 0x40;
@@ -69,7 +71,7 @@ int x_smb2_process_CREATE(x_smbd_conn_t *smbd_conn, x_msg_t *msg,
 		const uint8_t *in_buf, size_t in_len)
 {
 	if (in_len < 0x40 + X_SMB2_CREATE_REQU_BODY_LEN + 1) {
-		return x_smb2_reply_error(smbd_conn, msg, nullptr, NT_STATUS_INVALID_PARAMETER);
+		return X_SMB2_REPLY_ERROR(smbd_conn, msg, nullptr, NT_STATUS_INVALID_PARAMETER);
 	}
 
 	const uint8_t *inhdr = in_buf;
@@ -77,21 +79,21 @@ int x_smb2_process_CREATE(x_smbd_conn_t *smbd_conn, x_msg_t *msg,
 
 	uint64_t in_session_id = BVAL(inhdr, SMB2_HDR_SESSION_ID);
 	if (in_session_id == 0) {
-		return x_smb2_reply_error(smbd_conn, msg, nullptr, NT_STATUS_USER_SESSION_DELETED);
+		return X_SMB2_REPLY_ERROR(smbd_conn, msg, nullptr, NT_STATUS_USER_SESSION_DELETED);
 	}
 	x_auto_ref_t<x_smbd_sess_t> smbd_sess{x_smbd_sess_find(in_session_id, smbd_conn)};
 	if (smbd_sess == nullptr) {
-		return x_smb2_reply_error(smbd_conn, msg, nullptr, NT_STATUS_USER_SESSION_DELETED);
+		return X_SMB2_REPLY_ERROR(smbd_conn, msg, nullptr, NT_STATUS_USER_SESSION_DELETED);
 	}
 	if (smbd_sess->state != x_smbd_sess_t::S_ACTIVE) {
-		return x_smb2_reply_error(smbd_conn, msg, smbd_sess, NT_STATUS_INVALID_PARAMETER);
+		return X_SMB2_REPLY_ERROR(smbd_conn, msg, smbd_sess, NT_STATUS_INVALID_PARAMETER);
 	}
 	/* TODO signing/encryption */
 
 	uint32_t in_tid = IVAL(inhdr, SMB2_HDR_TID);
 	auto it = smbd_sess->tcon_table.find(in_tid);
 	if (it == smbd_sess->tcon_table.end()) {
-		return x_smb2_reply_error(smbd_conn, msg, smbd_sess, NT_STATUS_NETWORK_NAME_DELETED);
+		return X_SMB2_REPLY_ERROR(smbd_conn, msg, smbd_sess, NT_STATUS_NETWORK_NAME_DELETED);
 	}
 	std::shared_ptr<x_smbd_tcon_t> smbd_tcon = it->second;
 
@@ -110,20 +112,20 @@ int x_smb2_process_CREATE(x_smbd_conn_t *smbd_conn, x_msg_t *msg,
 
 	if (in_name_length % 2 != 0 || !x_check_range(in_name_offset, in_name_length, 
 				0x40 + X_SMB2_CREATE_REQU_BODY_LEN, in_len)) {
-		return x_smb2_reply_error(smbd_conn, msg, smbd_sess, NT_STATUS_INVALID_PARAMETER);
+		return X_SMB2_REPLY_ERROR(smbd_conn, msg, smbd_sess, NT_STATUS_INVALID_PARAMETER);
 	}
 
 	if (!x_check_range(in_context_offset, in_context_length, 
 				0x40 + X_SMB2_CREATE_REQU_BODY_LEN, in_len)) {
-		return x_smb2_reply_error(smbd_conn, msg, smbd_sess, NT_STATUS_INVALID_PARAMETER);
+		return X_SMB2_REPLY_ERROR(smbd_conn, msg, smbd_sess, NT_STATUS_INVALID_PARAMETER);
 	}
 
 	requ_create.in_name.assign((char16_t *)(in_buf + in_name_offset),
 			(char16_t *)(in_buf + in_name_offset + in_name_length)); 
 
-	X_LOG_OP("CREATE %s", x_convert_utf16_to_utf8(requ_create.in_name).c_str());
+	X_LOG_OP("%ld CREATE %s", msg->mid, x_convert_utf16_to_utf8(requ_create.in_name).c_str());
 	NTSTATUS status;
-	x_auto_ref_t<x_smbd_open_t> smbd_open{x_smbd_tcon_op_create(smbd_tcon.get(),
+	x_auto_ref_t<x_smbd_open_t> smbd_open{x_smbd_tcon_op_create(smbd_tcon,
 			status, requ_create)};
 	if (smbd_open) {
 		return x_smb2_reply_create(smbd_conn, smbd_sess, msg, status,
@@ -135,11 +137,11 @@ int x_smb2_process_CREATE(x_smbd_conn_t *smbd_conn, x_msg_t *msg,
 		return 0;
 	}
 
-	return x_smb2_reply_error(smbd_conn, msg, smbd_sess, status);
+	return X_SMB2_REPLY_ERROR(smbd_conn, msg, smbd_sess, status);
 #if 0
 	if (smbd_tcon->smbd_share->type == x_smbd_share_t::TYPE_IPC) {
 		if (dhnc || dh2c) {
-			return x_smb2_reply_error(smbd_conn, msg, smbd_sess, NT_STATUS_OBJECT_NAME_NOT_FOUND);
+			return X_SMB2_REPLY_ERROR(smbd_conn, msg, smbd_sess, NT_STATUS_OBJECT_NAME_NOT_FOUND);
 		}
 		status = x_smbd_open_np_file(smbd_open);
 	} else {

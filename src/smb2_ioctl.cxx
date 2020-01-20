@@ -16,6 +16,8 @@ static int x_smb2_reply_ioctl(x_smbd_conn_t *smbd_conn,
 		uint64_t file_id_persistent, uint64_t file_id_volatile,
 		const std::vector<uint8_t> &output)
 {
+	X_LOG_OP("%ld RESP SUCCESS", msg->mid);
+
 	uint8_t *outbuf = new uint8_t[8 + 0x40 + X_SMB2_IOCTL_RESP_BODY_LEN + output.size()];
 	uint8_t *outhdr = outbuf + 8;
 	uint8_t *outbody = outhdr + 0x40;
@@ -527,7 +529,7 @@ int x_smb2_process_IOCTL(x_smbd_conn_t *smbd_conn, x_msg_t *msg,
 		const uint8_t *in_buf, size_t in_len)
 {
 	if (in_len < 0x40 + X_SMB2_IOCTL_REQU_BODY_LEN + 1) {
-		return x_smb2_reply_error(smbd_conn, msg, nullptr, NT_STATUS_INVALID_PARAMETER);
+		return X_SMB2_REPLY_ERROR(smbd_conn, msg, nullptr, NT_STATUS_INVALID_PARAMETER);
 	}
 
 	const uint8_t *inhdr = in_buf;
@@ -535,21 +537,21 @@ int x_smb2_process_IOCTL(x_smbd_conn_t *smbd_conn, x_msg_t *msg,
 
 	uint64_t in_session_id = BVAL(inhdr, SMB2_HDR_SESSION_ID);
 	if (in_session_id == 0) {
-		return x_smb2_reply_error(smbd_conn, msg, nullptr, NT_STATUS_USER_SESSION_DELETED);
+		return X_SMB2_REPLY_ERROR(smbd_conn, msg, nullptr, NT_STATUS_USER_SESSION_DELETED);
 	}
 	x_auto_ref_t<x_smbd_sess_t> smbd_sess{x_smbd_sess_find(in_session_id, smbd_conn)};
 	if (smbd_sess == nullptr) {
-		return x_smb2_reply_error(smbd_conn, msg, nullptr, NT_STATUS_USER_SESSION_DELETED);
+		return X_SMB2_REPLY_ERROR(smbd_conn, msg, nullptr, NT_STATUS_USER_SESSION_DELETED);
 	}
 	if (smbd_sess->state != x_smbd_sess_t::S_ACTIVE) {
-		return x_smb2_reply_error(smbd_conn, msg, smbd_sess, NT_STATUS_INVALID_PARAMETER);
+		return X_SMB2_REPLY_ERROR(smbd_conn, msg, smbd_sess, NT_STATUS_INVALID_PARAMETER);
 	}
 	/* TODO signing/encryption */
 
 	uint32_t in_tid = IVAL(inhdr, SMB2_HDR_TID);
 	auto it = smbd_sess->tcon_table.find(in_tid);
 	if (it == smbd_sess->tcon_table.end()) {
-		return x_smb2_reply_error(smbd_conn, msg, smbd_sess, NT_STATUS_NETWORK_NAME_DELETED);
+		return X_SMB2_REPLY_ERROR(smbd_conn, msg, smbd_sess, NT_STATUS_NETWORK_NAME_DELETED);
 	}
 	std::shared_ptr<x_smbd_tcon_t> smbd_tcon = it->second;
 
@@ -565,6 +567,9 @@ int x_smb2_process_IOCTL(x_smbd_conn_t *smbd_conn, x_msg_t *msg,
 	uint32_t in_flags		= IVAL(inbody, 0x30);
 	(void)in_max_input_length;
 
+	X_LOG_OP("%ld IOCTL 0x%x 0x%lx,0x%lx", msg->mid, 
+			in_ctl_code, in_file_id_persistent, in_file_id_volatile);
+
 	/*
 	 * InputOffset (4 bytes): The offset, in bytes, from the beginning of
 	 * the SMB2 header to the input data buffer. If no input data is
@@ -577,14 +582,14 @@ int x_smb2_process_IOCTL(x_smbd_conn_t *smbd_conn, x_msg_t *msg,
 	if ((in_input_offset > 0) && (in_input_length > 0)) {
 		if (!x_check_range(in_input_offset, in_input_length,
 					0x40 + X_SMB2_IOCTL_REQU_BODY_LEN, in_len)) {
-			return x_smb2_reply_error(smbd_conn, msg, smbd_sess, NT_STATUS_INVALID_PARAMETER);
+			return X_SMB2_REPLY_ERROR(smbd_conn, msg, smbd_sess, NT_STATUS_INVALID_PARAMETER);
 		}
 	}
 
 	if (in_output_offset > 0) {
 		if (!x_check_range(in_output_offset, in_output_length,
 					0x40 + X_SMB2_IOCTL_REQU_BODY_LEN, in_len)) {
-			return x_smb2_reply_error(smbd_conn, msg, smbd_sess, NT_STATUS_INVALID_PARAMETER);
+			return X_SMB2_REPLY_ERROR(smbd_conn, msg, smbd_sess, NT_STATUS_INVALID_PARAMETER);
 		}
 	}
 #if 0
@@ -628,7 +633,7 @@ int x_smb2_process_IOCTL(x_smbd_conn_t *smbd_conn, x_msg_t *msg,
 	 * server MUST fail the request with STATUS_NOT_SUPPORTED.
 	 */
 	if (in_flags != SMB2_IOCTL_FLAG_IS_FSCTL) {
-		return x_smb2_reply_error(smbd_conn, msg, smbd_sess, NT_STATUS_NOT_SUPPORTED);
+		return X_SMB2_REPLY_ERROR(smbd_conn, msg, smbd_sess, NT_STATUS_NOT_SUPPORTED);
 	}
 
 	switch (in_ctl_code) {
@@ -648,7 +653,7 @@ int x_smb2_process_IOCTL(x_smbd_conn_t *smbd_conn, x_msg_t *msg,
 		 */
 		if (in_file_id_persistent != UINT64_MAX ||
 				in_file_id_volatile != UINT64_MAX) {
-			return x_smb2_reply_error(smbd_conn, msg, smbd_sess,
+			return X_SMB2_REPLY_ERROR(smbd_conn, msg, smbd_sess,
 					NT_STATUS_INVALID_PARAMETER);
 		}
 		break;

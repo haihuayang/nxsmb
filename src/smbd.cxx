@@ -86,8 +86,10 @@ void x_smbd_conn_reply(x_smbd_conn_t *smbd_conn, x_msg_t *msg, x_smbd_sess_t *sm
 
 int x_smb2_reply_error(x_smbd_conn_t *smbd_conn, x_msg_t *msg,
 		x_smbd_sess_t *smbd_sess,
-		NTSTATUS status)
+		NTSTATUS status, const char *file, unsigned int line)
 {
+	X_LOG_OP("%ld RESP 0x%lx at %s:%d", msg->mid, status.v, file, line);
+
 	uint8_t *outbuf = new uint8_t[8 + 0x40 + 9];
 	uint8_t *outhdr = outbuf + 8;
 	uint8_t *outbody = outhdr + 0x40;

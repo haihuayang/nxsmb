@@ -292,7 +292,7 @@ struct x_smb2_requ_create_t
 struct x_smbd_tcon_t;
 struct x_smbd_tcon_ops_t
 {
-	x_smbd_open_t *(*create)(x_smbd_tcon_t *, NTSTATUS &status, x_smb2_requ_create_t &);
+	x_smbd_open_t *(*create)(std::shared_ptr<x_smbd_tcon_t>&, NTSTATUS &status, x_smb2_requ_create_t &);
 };
 
 struct x_smbd_tcon_t
@@ -305,7 +305,7 @@ struct x_smbd_tcon_t
 	// std::vector<std::shared_ptr<x_smbd_open_t>> smbd_opens;
 };
 
-static inline x_smbd_open_t *x_smbd_tcon_op_create(x_smbd_tcon_t *smbd_tcon, NTSTATUS &status, x_smb2_requ_create_t &requ_create)
+static inline x_smbd_open_t *x_smbd_tcon_op_create(std::shared_ptr<x_smbd_tcon_t> &smbd_tcon, NTSTATUS &status, x_smb2_requ_create_t &requ_create)
 {
 	return smbd_tcon->ops->create(smbd_tcon, status, requ_create);
 }
@@ -314,10 +314,77 @@ void x_smbd_tcon_init_disk(x_smbd_tcon_t *smbd_tcon);
 
 int x_smbd_ipc_init();
 
+struct x_smb2_requ_write_t
+{
+	uint16_t struct_size;
+	uint16_t data_offset;
+	uint32_t data_length;
+	uint64_t offset;
+	uint64_t file_id_persistent;
+	uint64_t file_id_volatile;
+	uint32_t channel;
+	uint32_t remaining_bytes;
+	uint32_t reserved;
+	uint32_t flags;
+};
+
+struct x_smb2_resp_write_t
+{
+	uint16_t struct_size;
+	uint16_t reserved;
+	uint32_t write_count;
+	uint32_t write_remaining;
+};
+
+struct x_smb2_requ_close_t
+{
+	uint16_t struct_size;
+	uint16_t flags;
+	uint32_t reserved;
+	uint64_t file_id_persistent;
+	uint64_t file_id_volatile;
+};
+
+struct x_smb2_resp_close_t
+{
+	uint16_t struct_size;
+	uint16_t flags;
+	uint32_t reserved;
+	idl::NTTIME out_create_ts;
+	idl::NTTIME out_last_access_ts;
+	idl::NTTIME out_last_write_ts;
+	idl::NTTIME out_change_ts;
+	uint64_t out_allocation_size;
+	uint64_t out_end_of_file;
+	uint32_t out_file_attributes;
+};
+
+struct x_smb2_requ_getinfo_t
+{
+	uint16_t struct_size;
+	uint8_t  info_class;
+	uint8_t  info_level;
+	uint32_t output_buffer_length;
+	uint16_t input_buffer_offset;
+	uint16_t reserve;
+	uint32_t input_buffer_length;
+	uint32_t additional;
+	uint32_t flags;
+	uint64_t file_id_persistent;
+	uint64_t file_id_volatile;
+};
+
 struct x_smbd_open_ops_t
 {
-	void (*read)(x_smbd_open_t *smbd_open);
-	void (*write)(x_smbd_open_t *smbd_open);
+	NTSTATUS (*read)(x_smbd_open_t *smbd_open);
+	NTSTATUS (*write)(x_smbd_open_t *smbd_open, const x_smb2_requ_write_t &requ,
+			const uint8_t *data,
+			x_smb2_resp_write_t &resp);
+	NTSTATUS (*getinfo)(x_smbd_open_t *smbd_open, const x_smb2_requ_getinfo_t &requ, std::vector<uint8_t> &output);
+	NTSTATUS (*setinfo)(x_smbd_open_t *smbd_open);
+	NTSTATUS (*close)(x_smbd_open_t *smbd_open, const x_smb2_requ_close_t &requ,
+			x_smb2_resp_close_t &resp);
+	void (*destroy)(x_smbd_open_t *smbd_open);
 };
 
 struct x_smbd_open_t
@@ -328,7 +395,7 @@ struct x_smbd_open_t
 
 	void decref() {
 		if (unlikely(--refcnt == 0)) {
-			delete this;
+			ops->destroy(this);
 		}
 	}
 	x_dqlink_t hash_link;
@@ -336,13 +403,34 @@ struct x_smbd_open_t
 	const x_smbd_open_ops_t *ops;
 	uint64_t id;
 	std::shared_ptr<x_smbd_tcon_t> smbd_tcon;
-	std::atomic<int> refcnt;
+	std::atomic<int> refcnt{1};
 };
 X_DECLARE_MEMBER_TRAITS(smbd_open_hash_traits, x_smbd_open_t, hash_link)
 
-x_smbd_open_t *x_smbd_open_create(x_smbd_tcon_t *smbd_tcon);
+static inline NTSTATUS x_smbd_open_op_write(x_smbd_open_t *smbd_open, const x_smb2_requ_write_t &requ,
+		const uint8_t *data,
+		x_smb2_resp_write_t &resp)
+{
+	return smbd_open->ops->write(smbd_open, requ, data, resp);
+}
+
+static inline NTSTATUS x_smbd_open_op_getinfo(x_smbd_open_t *smbd_open, const x_smb2_requ_getinfo_t &requ, std::vector<uint8_t> &output)
+{
+	return smbd_open->ops->getinfo(smbd_open, requ, output);
+}
+
+static inline NTSTATUS x_smbd_open_op_close(x_smbd_open_t *smbd_open, const x_smb2_requ_close_t &requ,
+		x_smb2_resp_close_t &resp)
+{
+	return smbd_open->ops->close(smbd_open, requ, resp);
+}
+
+void x_smbd_open_insert_local(x_smbd_open_t *smbd_open);
+x_smbd_open_t *x_smbd_open_find(uint64_t id, const x_smbd_tcon_t *smbd_tcon);
+void x_smbd_open_release(x_smbd_open_t *smbd_open);
 
 #if 0
+x_smbd_open_t *x_smbd_open_create(x_smbd_tcon_t *smbd_tcon);
 struct x_smbd_tcon_t
 {
 	x_dqlink_t hash_link;
@@ -459,6 +547,7 @@ struct x_smbd_conn_t
 	uint32_t server_capabilities;
 	uint16_t client_security_mode;
 	uint32_t client_capabilities;
+
 	idl::GUID client_guid;
 
 	uint64_t credit_seq_low = 0;
@@ -505,7 +594,10 @@ void x_smbd_conn_post_user(x_smbd_conn_t *smbd_conn, x_fdevt_user_t *fdevt_user)
 
 void x_smbd_conn_reply(x_smbd_conn_t *smbd_conn, x_msg_t *msg, x_smbd_sess_t *smbd_sess);
 int x_smb2_reply_error(x_smbd_conn_t *smbd_conn, x_msg_t *msg, x_smbd_sess_t *smbd_sess,
-		NTSTATUS status);
+		NTSTATUS status, const char *file, unsigned int line);
+
+#define X_SMB2_REPLY_ERROR(smbd_conn, msg, smbd_sess, status) \
+	x_smb2_reply_error((smbd_conn), (msg), (smbd_sess), (status), __FILE__, __LINE__)
 
 int x_smbd_conn_process_smb1negoprot(x_smbd_conn_t *smbd_conn, x_msg_t *msg,
 		const uint8_t *buf, size_t len);

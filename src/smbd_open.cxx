@@ -45,32 +45,33 @@ static x_smbd_open_t *__smbd_open_find(smbd_open_pool_t &pool, uint64_t id,
 }
 
 static uint64_t g_open_id = 0x1234;
-static x_smbd_open_t *__smbd_open_create(smbd_open_pool_t &pool, x_smbd_tcon_t *smbd_tcon)
+static void __smbd_open_insert(smbd_open_pool_t &pool, x_smbd_open_t *smbd_open)
 {
+#if 0
 	if (pool.count++ > pool.capacity) {
 		--pool.count;
 		return nullptr;
 	}
 	x_smbd_open_t *smbd_open = new x_smbd_open_t;
-	smbd_open->incref(); /* for hash */
-	{
-		std::lock_guard<std::mutex> lock(pool.mutex);
-		for (;;) {
-			/* TODO to reduce hash conflict */
-			smbd_open->id = g_open_id++;
-			if (smbd_open->id == 0) {
-				continue;
-			}
-			x_auto_ref_t<x_smbd_open_t> exist{smbd_open_find_by_id(pool, smbd_open->id)};
-			if (!exist) {
-				break;
-			}
-		}
-		pool.hashtable.insert(smbd_open, smbd_open->id);
-	}
 	smbd_open->smbd_tcon.reset(smbd_tcon);
 	
 	return smbd_open;
+#endif
+	smbd_open->incref(); /* for hash */
+
+	std::lock_guard<std::mutex> lock(pool.mutex);
+	for (;;) {
+		/* TODO to reduce hash conflict */
+		smbd_open->id = g_open_id++;
+		if (smbd_open->id == 0) {
+			continue;
+		}
+		x_auto_ref_t<x_smbd_open_t> exist{smbd_open_find_by_id(pool, smbd_open->id)};
+		if (!exist) {
+			break;
+		}
+	}
+	pool.hashtable.insert(smbd_open, smbd_open->id);
 }
 
 static void __smbd_open_release(smbd_open_pool_t &pool, x_smbd_open_t *smbd_open)
@@ -79,7 +80,7 @@ static void __smbd_open_release(smbd_open_pool_t &pool, x_smbd_open_t *smbd_open
 		std::lock_guard<std::mutex> lock(pool.mutex);
 		pool.hashtable.remove(smbd_open);
 	}
-	--pool.count;
+//	--pool.count;
 	smbd_open->decref();
 }
 
@@ -90,9 +91,9 @@ int x_smbd_open_pool_init(x_evtmgmt_t *ep, uint32_t count)
 	return __smbd_open_pool_init(smbd_open_pool, ep, count);
 }
 
-x_smbd_open_t *x_smbd_open_create(x_smbd_tcon_t *smbd_tcon)
+void x_smbd_open_insert_local(x_smbd_open_t *smbd_open)
 {
-	return __smbd_open_create(smbd_open_pool, smbd_tcon);
+	return __smbd_open_insert(smbd_open_pool, smbd_open);
 }
 
 x_smbd_open_t *x_smbd_open_find(uint64_t id, const x_smbd_tcon_t *smbd_tcon)
