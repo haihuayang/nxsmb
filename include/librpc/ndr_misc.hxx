@@ -7,6 +7,7 @@
 #endif
 
 #include "include/librpc/ndr.hxx"
+#include <string.h>
 
 namespace idl {
 
@@ -20,6 +21,10 @@ struct GUID {
 	std::array<uint8, 6> node;
 } /* [noprint, gensize, public] */;
 
+static inline bool operator==(const GUID &id1, const GUID &id2)
+{
+	return memcmp(&id1, &id2, sizeof(GUID)) == 0;
+}
 
 struct ndr_syntax_id {
 	x_ndr_off_t ndr_scalars(x_ndr_push_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level) const;
@@ -33,6 +38,10 @@ template <> struct x_ndr_traits_t<ndr_syntax_id> {
 	using ndr_type = x_ndr_type_struct;
 };
 
+static inline bool operator==(const ndr_syntax_id &id1, const ndr_syntax_id &id2)
+{
+	return id1.uuid == id2.uuid && id1.if_version == id2.if_version;
+}
 
 struct policy_handle {
 	x_ndr_off_t ndr_scalars(x_ndr_push_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level) const;

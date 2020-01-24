@@ -173,7 +173,7 @@ int x_smb2_process_NEGPROT(x_smbd_conn_t *smbd_conn, x_msg_t *msg,
 
 	smbd_conn->client_security_mode = in_security_mode;
 	smbd_conn->client_capabilities = in_capabilities;
-	idl::x_ndr_pull(smbd_conn->client_guid, in_body + 0x0c, 0x24);
+	idl::x_ndr_pull(smbd_conn->client_guid, in_body + 0x0c, 0x24, 0);
 	
 #if 0
 	if (dialect >= SMB2_DIALECT_310) {

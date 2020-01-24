@@ -499,11 +499,11 @@ struct x_ndr_puller_t<T, std::true_type> {
 };
 
 template <typename T>
-inline x_ndr_off_t x_ndr_pull(T &t, const uint8_t *data, size_t size)
+inline x_ndr_off_t x_ndr_pull(T &t, const uint8_t *data, size_t size, uint32_t flags)
 {
 	x_ndr_pull_buff_t ndr_data{data, size};
 	x_ndr_pull_t ndr{ndr_data, 0};
-	return x_ndr_puller_t<T, typename x_ndr_traits_t<T>::has_buffers>()(t, ndr, 0, size, 0, X_NDR_SWITCH_NONE);
+	return x_ndr_puller_t<T, typename x_ndr_traits_t<T>::has_buffers>()(t, ndr, 0, size, flags, X_NDR_SWITCH_NONE);
 }
 
 template <typename T, typename HasBuffers>
@@ -528,11 +528,11 @@ struct x_ndr_pusher_t<T, std::true_type> {
 };
 
 template <typename T>
-inline x_ndr_off_t x_ndr_push(const T &t, std::vector<uint8_t> &data)
+inline x_ndr_off_t x_ndr_push(const T &t, std::vector<uint8_t> &data, uint32_t flags)
 {
 	x_ndr_push_buff_t ndr_data{};
 	x_ndr_push_t ndr{ndr_data, 0};
-	x_ndr_off_t ret = x_ndr_pusher_t<T, typename x_ndr_traits_t<T>::has_buffers>()(t, ndr, 0, X_NDR_MAX_SIZE, 0, X_NDR_SWITCH_NONE);
+	x_ndr_off_t ret = x_ndr_pusher_t<T, typename x_ndr_traits_t<T>::has_buffers>()(t, ndr, 0, X_NDR_MAX_SIZE, flags, X_NDR_SWITCH_NONE);
 	if (ret >= 0) {
 		std::swap(data, ndr_data.data);
 	}
@@ -968,6 +968,24 @@ static inline x_ndr_off_t x_ndr_scalars(uint8_t &t, x_ndr_pull_t &ndr,
 {
 	return x_ndr_pull_uint8(t, ndr, bpos, epos, flags);
 }
+static inline x_ndr_off_t x_ndr_scalars(char t, x_ndr_push_t &ndr,
+		x_ndr_off_t bpos, x_ndr_off_t epos,
+		uint32_t flags, x_ndr_switch_t level)
+{
+	return x_ndr_push_uint8(t, ndr, bpos, epos, flags);
+}
+
+static inline x_ndr_off_t x_ndr_scalars(char &t, x_ndr_pull_t &ndr,
+		x_ndr_off_t bpos, x_ndr_off_t epos,
+		uint32_t flags, x_ndr_switch_t level)
+{
+	uint8_t tmp;
+	x_ndr_off_t ret = x_ndr_pull_uint8(tmp, ndr, bpos, epos, flags);
+	if (ret > 0) {
+		t = (char)tmp;
+	}
+	return ret;
+}
 #if 0
 static inline x_ndr_off_t x_ndr_scalars(const std::string &t, x_ndr_push_t &ndr,
 		x_ndr_off_t bpos, x_ndr_off_t epos,
@@ -1015,14 +1033,14 @@ struct gstring
 	void ostr(x_ndr_ostr_t &ndr, uint32_t flags, x_ndr_switch_t level) const;
 	std::string val;
 };
-
+#if 0
 struct astring
 {
 	x_ndr_off_t ndr_scalars(x_ndr_push_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, x_ndr_switch_t level) const;
 	x_ndr_off_t ndr_scalars(x_ndr_pull_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, x_ndr_switch_t level);
 	std::string val;
 };
-
+#endif
 struct nstring
 {
 	x_ndr_off_t ndr_scalars(x_ndr_push_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, x_ndr_switch_t level) const;
@@ -2026,6 +2044,63 @@ inline void x_ndr_ostr(const x_ndr_subndr_t<T> &t, x_ndr_ostr_t &ndr, uint32_t f
 	x_ndr_ostr(t.val, ndr, flags, level);
 }
 
+/* ndr string with length and EOS */
+template <typename VT, typename LT>
+struct x_ndr_strlz_t
+{
+	VT val;
+};
+
+template <typename VT, typename LT>
+struct x_ndr_traits_t<x_ndr_strlz_t<VT, LT>> {
+	using has_buffers = std::false_type;
+	using ndr_type = x_ndr_type_struct;
+};
+
+template <typename VT, typename LT>
+inline x_ndr_off_t x_ndr_scalars(const x_ndr_strlz_t<VT, LT> &t, x_ndr_push_t &ndr,
+		x_ndr_off_t bpos, x_ndr_off_t epos,
+		uint32_t flags, x_ndr_switch_t level)
+{
+	using value_type = typename VT::value_type;
+	X_ASSERT(level == X_NDR_SWITCH_NONE);
+	LT size = (t.val.size() + 1) * sizeof(value_type);
+	X_NDR_SCALARS(size, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
+	/* TODO endian of unicode? */
+	bpos = x_ndr_push_bytes(t.val.data(), ndr, bpos, epos,
+			t.val.size() * sizeof(value_type));
+	if (bpos < 0) {
+		return bpos;
+	}
+	return x_ndr_scalars(value_type(0), ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
+}
+
+template <typename VT, typename LT>
+inline x_ndr_off_t x_ndr_scalars(x_ndr_strlz_t<VT, LT> &t, x_ndr_pull_t &ndr,
+		x_ndr_off_t bpos, x_ndr_off_t epos,
+		uint32_t flags, x_ndr_switch_t level)
+{
+	using value_type = typename VT::value_type;
+	X_ASSERT(level == X_NDR_SWITCH_NONE);
+	LT size;
+	X_NDR_SCALARS(size, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
+	if (size > 0) {
+		if ((size % sizeof(value_type)) != 0) {
+			return -NDR_ERR_STRING;
+		}
+		epos = X_NDR_CHECK_POS(bpos + size, bpos, epos);
+		t.val.assign((const value_type *)ndr.get_data(), (const value_type *)(ndr.get_data() + epos) - 1);
+		X_NDR_VALUE(value_type(0), ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
+	}
+	return bpos;
+}
+
+template <typename VT, typename LT>
+inline void x_ndr_ostr(const x_ndr_strlz_t<VT, LT> &t, x_ndr_ostr_t &ndr, uint32_t flags, x_ndr_switch_t level)
+{
+	X_ASSERT(level == X_NDR_SWITCH_NONE);
+	X_TODO; // x_ndr_ostr_u16string(t.val, ndr, flags, level);
+}
 
 struct x_ndr_s2_u16string_t
 {

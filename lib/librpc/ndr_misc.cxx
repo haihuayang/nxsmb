@@ -44,5 +44,32 @@ void x_ndr_ostr(const GUID &v, x_ndr_ostr_t &os, uint32_t flags, x_ndr_switch_t 
 	os << buf;
 }
 
+x_ndr_off_t ndr_syntax_id::ndr_scalars(x_ndr_push_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level) const
+{
+	X_NDR_HEADER_ALIGN(4, __ndr, __bpos, __epos, __flags);
+	X_NDR_SCALARS(uuid, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
+	X_NDR_SCALARS(if_version, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
+	X_NDR_TRAILER_ALIGN(4, __ndr, __bpos, __epos, __flags);
+	return __bpos;
+}
+
+
+x_ndr_off_t ndr_syntax_id::ndr_scalars(x_ndr_pull_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level)
+{
+	X_NDR_HEADER_ALIGN(4, __ndr, __bpos, __epos, __flags);
+	X_NDR_SCALARS(uuid, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
+	X_NDR_SCALARS(if_version, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
+	X_NDR_TRAILER_ALIGN(4, __ndr, __bpos, __epos, __flags);
+	return __bpos;
+}
+
+void ndr_syntax_id::ostr(x_ndr_ostr_t &__ndr, uint32_t __flags, x_ndr_switch_t __level) const
+{
+	(__ndr) << enter;
+	X_NDR_OSTR_NEXT(uuid, __ndr, __flags, X_NDR_SWITCH_NONE);
+	X_NDR_OSTR_NEXT(if_version, __ndr, __flags, X_NDR_SWITCH_NONE);
+	(__ndr) << leave;
+}
+
 }
 

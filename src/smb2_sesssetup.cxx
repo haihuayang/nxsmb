@@ -199,7 +199,7 @@ static void smbd_sess_auth_updated(x_smbd_sess_t *smbd_sess, NTSTATUS status,
 		std::vector<uint8_t> &out_security, std::shared_ptr<x_auth_info_t> &auth_info)
 {
 	x_msg_t *msg = smbd_sess->authmsg;
-	X_LOG_OP("%ld RESP %x dialect=%x", msg->mid, status.v);
+	X_LOG_OP("%ld RESP 0x%x", msg->mid, status.v);
 
 	smbd_sess->authmsg = nullptr;
 	x_smbd_conn_t *smbd_conn = smbd_sess->smbd_conn;

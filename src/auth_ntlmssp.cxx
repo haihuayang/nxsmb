@@ -82,7 +82,6 @@ struct x_auth_ntlmssp_t
 	uint32_t required_flags = 0;
 
 	std::array<uint8_t, 8> chal;
-	x_tick_t challenge_endtime;
 	std::u16string netbios_name, netbios_domain, dns_name, dns_domain;
 	std::shared_ptr<idl::AV_PAIR_LIST> server_av_pair_list;
 
@@ -270,12 +269,12 @@ static NTSTATUS ntlmssp_sign_packet(x_auth_ntlmssp_t *ntlmssp,
 {
 	if (!(ntlmssp->neg_flags & idl::NTLMSSP_NEGOTIATE_SIGN)) {
 		DEBUG(3, ("NTLMSSP Signing not negotiated - cannot sign packet!\n"));
-		return NT_STATUS_INVALID_PARAMETER;
+		RETURN_ERR_NT_STATUS(NT_STATUS_INVALID_PARAMETER);
 	}
 
 	if (!ntlmssp->session_key.size()) {
 		DEBUG(3, ("NO session key, cannot check sign packet\n"));
-		return NT_STATUS_NO_USER_SESSION_KEY;
+		RETURN_ERR_NT_STATUS(NT_STATUS_NO_USER_SESSION_KEY);
 	}
 
 	std::array<uint8_t, 16> tmp = ntlmssp_make_packet_signature(ntlmssp,
@@ -299,7 +298,7 @@ static NTSTATUS ntlmssp_check_packet(x_auth_ntlmssp_t *ntlmssp,
 {
 	if (!ntlmssp->session_key.size()) {
 		DEBUG(3, ("NO session key, cannot check packet signature\n"));
-		return NT_STATUS_NO_USER_SESSION_KEY;
+		RETURN_ERR_NT_STATUS(NT_STATUS_NO_USER_SESSION_KEY);
 	}
 
 	if (sig_len < 8) {
@@ -323,7 +322,7 @@ static NTSTATUS ntlmssp_check_packet(x_auth_ntlmssp_t *ntlmssp,
 			dump_data(5, sig, sig_len);
 
 			DEBUG(0, ("NTLMSSP NTLM2 packet check failed due to invalid signature!\n"));
-			return NT_STATUS_ACCESS_DENIED;
+			RETURN_ERR_NT_STATUS(NT_STATUS_ACCESS_DENIED);
 		}
 	} else {
 		if (local_sig.size() != sig_len ||
@@ -335,7 +334,7 @@ static NTSTATUS ntlmssp_check_packet(x_auth_ntlmssp_t *ntlmssp,
 			dump_data(5, sig, sig_len);
 
 			DEBUG(0, ("NTLMSSP NTLM1 packet check failed due to invalid signature!\n"));
-			return NT_STATUS_ACCESS_DENIED;
+			RETURN_ERR_NT_STATUS(NT_STATUS_ACCESS_DENIED);
 		}
 	}
 	dump_data_pw("checked ntlmssp signature\n", sig, sig_len);
@@ -840,12 +839,12 @@ static NTSTATUS ntlmssp_post_auth(x_auth_ntlmssp_t *ntlmssp, x_auth_info_t &auth
 	idl::dom_sid domain_sid;
 	if (!dom_sid_parse(domain_sid, auth.info3.dom_sid, '\0')) {
 		/* WBC_ERR_INVALID_SID */
-		return NT_STATUS_LOGON_FAILURE;
+		RETURN_ERR_NT_STATUS(NT_STATUS_LOGON_FAILURE);
 	}
 
 	if (domain_sid.num_auths >= domain_sid.sub_auths.size() - 1) {
 		/* WBC_ERR_INVALID_SID */
-		return NT_STATUS_LOGON_FAILURE;
+		RETURN_ERR_NT_STATUS(NT_STATUS_LOGON_FAILURE);
 	}
 
 	auth_info.domain_sid = domain_sid;
@@ -855,7 +854,7 @@ static NTSTATUS ntlmssp_post_auth(x_auth_ntlmssp_t *ntlmssp, x_auth_info_t &auth
 	const auto &extra = wbresp.extra;
 	if (extra.empty() || extra.back() != 0) {
 		/* WBC_ERR_INVALID_RESPONSE */
-		return NT_STATUS_LOGON_FAILURE;
+		RETURN_ERR_NT_STATUS(NT_STATUS_LOGON_FAILURE);
 	}
 	const char *p = (const char *)extra.data(); 
 	char *end;
@@ -863,12 +862,12 @@ static NTSTATUS ntlmssp_post_auth(x_auth_ntlmssp_t *ntlmssp, x_auth_info_t &auth
 		idl::samr_RidWithAttribute rid_with_attr;
 		rid_with_attr.rid = strtoul(p, &end, 0);
 		if (!end || *end != ':') {
-			return NT_STATUS_LOGON_FAILURE;
+			RETURN_ERR_NT_STATUS(NT_STATUS_LOGON_FAILURE);
 		}
 		p = end + 1;
 		rid_with_attr.attributes = idl::samr_GroupAttrs(strtoul(p, &end, 0));
 		if (!end || *end != '\n') {
-			return NT_STATUS_LOGON_FAILURE;
+			RETURN_ERR_NT_STATUS(NT_STATUS_LOGON_FAILURE);
 		}
 		p = end + 1;
 		auth_info.group_rids.push_back(rid_with_attr);
@@ -878,12 +877,12 @@ static NTSTATUS ntlmssp_post_auth(x_auth_ntlmssp_t *ntlmssp, x_auth_info_t &auth
 		x_dom_sid_with_attrs_t sid_attr;
 		end = dom_sid_parse(sid_attr.sid, p, ':');
 		if (!end) {
-			return NT_STATUS_LOGON_FAILURE;
+			RETURN_ERR_NT_STATUS(NT_STATUS_LOGON_FAILURE);
 		}
 		p = end + 1;
 		sid_attr.attrs = strtoul(p, &end, 0);
 		if (!end || *end != '\n') {
-			return NT_STATUS_LOGON_FAILURE;
+			RETURN_ERR_NT_STATUS(NT_STATUS_LOGON_FAILURE);
 		}
 		auth_info.other_sids.push_back(sid_attr);
 	}
@@ -964,7 +963,7 @@ static NTSTATUS ntlmssp_post_auth(x_auth_ntlmssp_t *ntlmssp, x_auth_info_t &auth
 			dump_data(1, mic_buffer,
 				  NTLMSSP_MIC_SIZE);
 #endif
-			return NT_STATUS_INVALID_PARAMETER;
+			RETURN_ERR_NT_STATUS(NT_STATUS_INVALID_PARAMETER);
 		}
 	}
 
@@ -1318,10 +1317,10 @@ static inline NTSTATUS handle_negotiate(x_auth_ntlmssp_t &auth_ntlmssp,
 {
 	// samba gensec_ntlmssp_server_negotiate
 	idl::NEGOTIATE_MESSAGE nego_msg;
-	idl::x_ndr_off_t ret = idl::x_ndr_pull(nego_msg, in_buf, in_len);
+	idl::x_ndr_off_t ret = idl::x_ndr_pull(nego_msg, in_buf, in_len, 0);
 
 	if (ret < 0) {
-		return NT_STATUS_INVALID_PARAMETER;
+		RETURN_ERR_NT_STATUS(NT_STATUS_INVALID_PARAMETER);
 	}
 
 	NTSTATUS status = handle_neg_flags(auth_ntlmssp, nego_msg.NegotiateFlags, "negotiate");
@@ -1332,8 +1331,6 @@ static inline NTSTATUS handle_negotiate(x_auth_ntlmssp_t &auth_ntlmssp,
 	struct timeval tv_now = timeval_current();
 	std::array<uint8_t, 8> cryptkey;
 	generate_random_buffer(cryptkey.data(), cryptkey.size());
-
-	auth_ntlmssp.challenge_endtime = x_tick_add(tick_now, max_lifetime);
 
 	uint32_t chal_flags = auth_ntlmssp.neg_flags;
 	std::u16string target_name;
@@ -1393,7 +1390,7 @@ static inline NTSTATUS handle_negotiate(x_auth_ntlmssp_t &auth_ntlmssp,
 	chal_msg.NegotiateFlags = idl::NEGOTIATE(chal_flags);
 	chal_msg.ServerChallenge = cryptkey;
 
-	ret = idl::x_ndr_push(chal_msg, out);
+	ret = idl::x_ndr_push(chal_msg, out, 0);
 #if 0
 	{
 		/* Marshal the packet in the right format, be it unicode or ASCII */
@@ -1462,9 +1459,9 @@ static inline NTSTATUS handle_authenticate(x_auth_ntlmssp_t &auth_ntlmssp,
 	 * samba/auth/ntlmssp/ntlmssp_server.c ntlmssp_server_preauth try
 	 * long format and fail back to short format */
 	idl::AUTHENTICATE_MESSAGE msg;
-	idl::x_ndr_off_t err = x_ndr_pull(msg, in_buf, in_len);
+	idl::x_ndr_off_t err = x_ndr_pull(msg, in_buf, in_len, 0);
 	if (err < 0) {
-		return NT_STATUS_INVALID_PARAMETER;
+		RETURN_ERR_NT_STATUS(NT_STATUS_INVALID_PARAMETER);
 	}
 
 	NTSTATUS status;
@@ -1478,15 +1475,15 @@ static inline NTSTATUS handle_authenticate(x_auth_ntlmssp_t &auth_ntlmssp,
 	if (msg.NtChallengeResponse.val && msg.NtChallengeResponse.val->val.size() > 0x18) {
 		idl::NTLMv2_RESPONSE v2_resp;
 		err = x_ndr_pull(v2_resp, msg.NtChallengeResponse.val->val.data(),
-				msg.NtChallengeResponse.val->val.size());
+				msg.NtChallengeResponse.val->val.size(), 0);
 		if (err < 0) {
-			return NT_STATUS_INVALID_PARAMETER;
+			RETURN_ERR_NT_STATUS(NT_STATUS_INVALID_PARAMETER);
 		}
 		
 		auto &server_av_pair_list = auth_ntlmssp.server_av_pair_list;
 		if (server_av_pair_list) {
 		       	if (v2_resp.Challenge.AvPairs.pair.val.size() < server_av_pair_list->pair.val.size()) {
-				return NT_STATUS_INVALID_PARAMETER;
+				RETURN_ERR_NT_STATUS(NT_STATUS_INVALID_PARAMETER);
 			}
 			for (auto &av: auth_ntlmssp.server_av_pair_list->pair.val) {
 				if (av.AvId == idl::MsvAvEOL) {
@@ -1495,40 +1492,40 @@ static inline NTSTATUS handle_authenticate(x_auth_ntlmssp_t &auth_ntlmssp,
 
 				auto cpair = av_pair_find(v2_resp.Challenge.AvPairs, av.AvId);
 				if (cpair == nullptr) {
-					return NT_STATUS_INVALID_PARAMETER;
+					RETURN_ERR_NT_STATUS(NT_STATUS_INVALID_PARAMETER);
 				}
 
 				if (false) {
 				} else if (av.AvId == idl::MsvAvNbComputerName) {
 					if (av.Value.AvNbComputerName != cpair->Value.AvNbComputerName) {
-						return NT_STATUS_INVALID_PARAMETER;
+						RETURN_ERR_NT_STATUS(NT_STATUS_INVALID_PARAMETER);
 					}
 				} else if (av.AvId == idl::MsvAvNbDomainName) {
 					if (av.Value.AvNbDomainName != cpair->Value.AvNbDomainName) {
-						return NT_STATUS_INVALID_PARAMETER;
+						RETURN_ERR_NT_STATUS(NT_STATUS_INVALID_PARAMETER);
 					}
 				} else if (av.AvId == idl::MsvAvDnsComputerName) {
 					if (av.Value.AvDnsComputerName != cpair->Value.AvDnsComputerName) {
-						return NT_STATUS_INVALID_PARAMETER;
+						RETURN_ERR_NT_STATUS(NT_STATUS_INVALID_PARAMETER);
 					}
 				} else if (av.AvId == idl::MsvAvDnsDomainName) {
 					if (av.Value.AvDnsDomainName != cpair->Value.AvDnsDomainName) {
-						return NT_STATUS_INVALID_PARAMETER;
+						RETURN_ERR_NT_STATUS(NT_STATUS_INVALID_PARAMETER);
 					}
 				} else if (av.AvId == idl::MsvAvDnsTreeName) {
 					if (av.Value.AvDnsTreeName != cpair->Value.AvDnsTreeName) {
-						return NT_STATUS_INVALID_PARAMETER;
+						RETURN_ERR_NT_STATUS(NT_STATUS_INVALID_PARAMETER);
 					}
 				} else if (av.AvId == idl::MsvAvTimestamp) {
 					if (av.Value.AvTimestamp.val != cpair->Value.AvTimestamp.val) {
-						return NT_STATUS_INVALID_PARAMETER;
+						RETURN_ERR_NT_STATUS(NT_STATUS_INVALID_PARAMETER);
 					}
 				} else {
 					/*
 					 * This can't happen as we control
 					 * ntlmssp_state->server.av_pair_list
 					 */
-					return NT_STATUS_INTERNAL_ERROR;
+					RETURN_ERR_NT_STATUS(NT_STATUS_INTERNAL_ERROR);
 				}
 			}
 		}
@@ -1547,14 +1544,10 @@ static inline NTSTATUS handle_authenticate(x_auth_ntlmssp_t &auth_ntlmssp,
 		 * valid although it may not present */
 		if (av_flags & idl::NTLMSSP_AVFLAG_MIC_IN_AUTHENTICATE_MESSAGE) {
 			if (in_len < idl::NTLMSSP_MIC_OFFSET + idl::NTLMSSP_MIC_SIZE) {
-				return NT_STATUS_INVALID_PARAMETER;
+				RETURN_ERR_NT_STATUS(NT_STATUS_INVALID_PARAMETER);
 			}
 			auth_ntlmssp.new_spnego = true;
 		}
-	}
-
-	if (tick_now > auth_ntlmssp.challenge_endtime) {
-		return NT_STATUS_INVALID_PARAMETER;
 	}
 
 
@@ -1595,7 +1588,7 @@ static inline NTSTATUS handle_authenticate(x_auth_ntlmssp_t &auth_ntlmssp,
 
 	if (auth_ntlmssp.neg_flags & idl::NTLMSSP_NEGOTIATE_KEY_EXCH) {
 		if (msg.EncryptedRandomSessionKey.val->val.size() != auth_ntlmssp.encrypted_session_key.size()) {
-			return NT_STATUS_INVALID_PARAMETER;
+			RETURN_ERR_NT_STATUS(NT_STATUS_INVALID_PARAMETER);
 		}
 		memcpy(auth_ntlmssp.encrypted_session_key.data(), msg.EncryptedRandomSessionKey.val->val.data(), auth_ntlmssp.encrypted_session_key.size());
 	}
@@ -1629,7 +1622,7 @@ static NTSTATUS auth_ntlmssp_update(x_auth_t *auth, const uint8_t *in_buf, size_
 		return handle_authenticate(*ntlmssp, in_buf, in_len, out, auth_upcall);
 	} else {
 		X_ASSERT(false);
-		return NT_STATUS_INTERNAL_ERROR;
+		RETURN_ERR_NT_STATUS(NT_STATUS_INTERNAL_ERROR);
 	}
 }
 

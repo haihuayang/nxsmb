@@ -141,7 +141,7 @@ NTSTATUS kerberos_decode_pac(gss_const_buffer_t pac_buf,
 		return NT_STATUS_NO_MEMORY;
 	}
 #endif
-	idl::x_ndr_off_t ndr_ret = idl::x_ndr_pull(pac_data, (const uint8_t *)pac_buf->value, pac_buf->length);
+	idl::x_ndr_off_t ndr_ret = idl::x_ndr_pull(pac_data, (const uint8_t *)pac_buf->value, pac_buf->length, 0);
 	if (ndr_ret < 0) {
 		status = idl::x_ndr_map_error2ntstatus(-ndr_ret);
 		DEBUG(0,("can't parse the PAC: %s\n",
@@ -156,7 +156,7 @@ NTSTATUS kerberos_decode_pac(gss_const_buffer_t pac_buf,
 	}
 
 	idl::PAC_DATA_RAW pac_data_raw;
-	ndr_ret = idl::x_ndr_pull(pac_data_raw, (const uint8_t *)pac_buf->value, pac_buf->length);
+	ndr_ret = idl::x_ndr_pull(pac_data_raw, (const uint8_t *)pac_buf->value, pac_buf->length, 0);
 	if (ndr_ret < 0) {
 		status = idl::x_ndr_map_error2ntstatus(-ndr_ret);
 		DEBUG(0,("can't parse the PAC: %s\n",
@@ -241,7 +241,7 @@ NTSTATUS kerberos_decode_pac(gss_const_buffer_t pac_buf,
 	/* We find the data blobs above,
 	 * now we parse them to get at the exact portion we should zero */
 	idl::PAC_SIGNATURE_DATA kdc_sig_wipe;
-	ndr_ret = x_ndr_pull(kdc_sig_wipe, kdc_sig_blob->val.data(), kdc_sig_blob->val.size());
+	ndr_ret = x_ndr_pull(kdc_sig_wipe, kdc_sig_blob->val.data(), kdc_sig_blob->val.size(), 0);
 	if (ndr_ret < 0) {
 		status = idl::x_ndr_map_error2ntstatus(-ndr_ret);
 		DEBUG(0,("can't parse the KDC signature: %s\n",
@@ -250,7 +250,7 @@ NTSTATUS kerberos_decode_pac(gss_const_buffer_t pac_buf,
 	}
 
 	idl::PAC_SIGNATURE_DATA srv_sig_wipe;
-	ndr_ret = x_ndr_pull(srv_sig_wipe, srv_sig_blob->val.data(), srv_sig_blob->val.size());
+	ndr_ret = x_ndr_pull(srv_sig_wipe, srv_sig_blob->val.data(), srv_sig_blob->val.size(), 0);
 	if (ndr_ret < 0) {
 		status = idl::x_ndr_map_error2ntstatus(-ndr_ret);
 		DEBUG(0,("can't parse the SRV signature: %s\n",
@@ -264,7 +264,7 @@ NTSTATUS kerberos_decode_pac(gss_const_buffer_t pac_buf,
 
 	/* and reencode, back into the same place it came from */
 	kdc_sig_blob->val.clear();
-	ndr_ret = x_ndr_push(kdc_sig_wipe, kdc_sig_blob->val);
+	ndr_ret = x_ndr_push(kdc_sig_wipe, kdc_sig_blob->val, 0);
 	if (ndr_ret < 0) {
 		status = idl::x_ndr_map_error2ntstatus(-ndr_ret);
 		DEBUG(0,("can't repack the KDC signature: %s\n",
@@ -273,7 +273,7 @@ NTSTATUS kerberos_decode_pac(gss_const_buffer_t pac_buf,
 	}
 
 	srv_sig_blob->val.clear();
-	ndr_ret = x_ndr_push(srv_sig_wipe, srv_sig_blob->val);
+	ndr_ret = x_ndr_push(srv_sig_wipe, srv_sig_blob->val, 0);
 	if (ndr_ret < 0) {
 		status = idl::x_ndr_map_error2ntstatus(-ndr_ret);
 		DEBUG(0,("can't repack the KDC signature: %s\n",
@@ -283,7 +283,7 @@ NTSTATUS kerberos_decode_pac(gss_const_buffer_t pac_buf,
 
 	std::vector<uint8_t> modified_pac_blob;
 	/* push out the whole structure, but now with zero'ed signatures */
-	ndr_ret = x_ndr_push(pac_data_raw, modified_pac_blob);
+	ndr_ret = x_ndr_push(pac_data_raw, modified_pac_blob, 0);
 	if (ndr_ret < 0) {
 		status = idl::x_ndr_map_error2ntstatus(-ndr_ret);
 		DEBUG(0,("can't repack the RAW PAC: %s\n",

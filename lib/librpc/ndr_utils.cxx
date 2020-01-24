@@ -77,7 +77,7 @@ void x_ndr_ostr_uint8_array(const uint8_t *v, x_ndr_ostr_t &ndr, uint32_t flags,
 x_ndr_off_t blob_t::ndr_scalars(x_ndr_push_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, x_ndr_switch_t level) const
 {
 	X_ASSERT(level == X_NDR_SWITCH_NONE);
-	X_NDR_ALIGN(4, ndr, bpos, epos, flags);
+	// TODO should align? X_NDR_ALIGN(4, ndr, bpos, epos, flags);
 
 	ndr.reserve(bpos + val.size());
 	memcpy(ndr.get_data() + bpos, val.data(), val.size());
@@ -87,7 +87,7 @@ x_ndr_off_t blob_t::ndr_scalars(x_ndr_push_t &ndr, x_ndr_off_t bpos, x_ndr_off_t
 x_ndr_off_t blob_t::ndr_scalars(x_ndr_pull_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, x_ndr_switch_t level)
 {
 	X_ASSERT(level == X_NDR_SWITCH_NONE);
-	X_NDR_ALIGN(4, ndr, bpos, epos, flags);
+	// TODO should align? X_NDR_ALIGN(4, ndr, bpos, epos, flags);
 	val.assign(ndr.get_data() + bpos, ndr.get_data() + epos);
 	return epos;
 }

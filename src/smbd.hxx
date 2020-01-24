@@ -314,6 +314,30 @@ void x_smbd_tcon_init_disk(x_smbd_tcon_t *smbd_tcon);
 
 int x_smbd_ipc_init();
 
+struct x_smb2_requ_read_t
+{
+	uint16_t struct_size;
+	uint8_t flags;
+	uint8_t reserved;
+	uint32_t length;
+	uint64_t offset;
+	uint64_t file_id_persistent;
+	uint64_t file_id_volatile;
+	uint32_t minimum_count;
+	uint32_t reserved1;
+	uint32_t remaining_bytes;
+	uint32_t reserved2; // channel
+};
+
+struct x_smb2_resp_read_t
+{
+	uint16_t struct_size;
+	uint16_t data_offset;
+	uint32_t data_length;
+	uint32_t read_remaining;
+	uint32_t reserved;
+};
+
 struct x_smb2_requ_write_t
 {
 	uint16_t struct_size;
@@ -376,7 +400,8 @@ struct x_smb2_requ_getinfo_t
 
 struct x_smbd_open_ops_t
 {
-	NTSTATUS (*read)(x_smbd_open_t *smbd_open);
+	NTSTATUS (*read)(x_smbd_open_t *smbd_open, const x_smb2_requ_read_t &requ,
+			std::vector<uint8_t> &output);
 	NTSTATUS (*write)(x_smbd_open_t *smbd_open, const x_smb2_requ_write_t &requ,
 			const uint8_t *data,
 			x_smb2_resp_write_t &resp);
@@ -406,6 +431,11 @@ struct x_smbd_open_t
 	std::atomic<int> refcnt{1};
 };
 X_DECLARE_MEMBER_TRAITS(smbd_open_hash_traits, x_smbd_open_t, hash_link)
+
+static inline NTSTATUS x_smbd_open_op_read(x_smbd_open_t *smbd_open, const x_smb2_requ_read_t &requ, std::vector<uint8_t> &output)
+{
+	return smbd_open->ops->read(smbd_open, requ, output);
+}
 
 static inline NTSTATUS x_smbd_open_op_write(x_smbd_open_t *smbd_open, const x_smb2_requ_write_t &requ,
 		const uint8_t *data,

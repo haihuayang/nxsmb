@@ -15,6 +15,10 @@
 #define x_unlikely(x) (x)
 #endif
 
+#if __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+#error "Not supported yet"
+#endif
+
 #define X_PANIC(fmt, ...) do { \
 	x_panic("at %s:%d %s: " fmt, __FILE__, __LINE__, __FUNCTION__, ##__VA_ARGS__); \
 } while (0)

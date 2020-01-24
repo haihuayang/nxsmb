@@ -6,6 +6,7 @@
 #error "Must be c++"
 #endif
 
+#include "include/utils.hxx"
 #include "include/librpc/ndr_nxsmb.hxx"
 
 template <class T>
@@ -61,6 +62,13 @@ static inline bool x_check_range(uint32_t offset, uint32_t length,
 	}
 	return true;
 }
+
+void x_smbd_report_nt_status(NTSTATUS status, unsigned int line, const char *file);
+
+#define RETURN_ERR_NT_STATUS(status) do { \
+	x_smbd_report_nt_status((status), __LINE__, __FILE__); \
+	return (status); \
+} while(0)
 
 
 #endif /* __misc__hxx__ */

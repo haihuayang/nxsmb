@@ -8,33 +8,12 @@
 
 #include "include/xdefines.h"
 #include "list.hxx"
+#include "utils.hxx"
 #include <atomic>
 #include <string>
 
-/* unit is nsec */
-typedef uint64_t x_tick_t;
-
 extern __thread char task_name[8];
 extern __thread x_tick_t tick_now;
-
-static inline x_tick_t x_tick_now(void)
-{
-	struct timespec ts;
-	clock_gettime(CLOCK_MONOTONIC, &ts);
-	unsigned long ns = ts.tv_sec;
-	return ns * 1000000000 + ts.tv_nsec;
-	// auto now_ms = std::chrono::time_point_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now());
-}
-
-static inline x_tick_t x_tick_add(x_tick_t t, long delta)
-{
-	return t + delta;
-}
-
-static inline long x_tick_cmp(x_tick_t t1, x_tick_t t2)
-{
-	return t1 - t2;
-}
 
 struct x_threadpool_t;
 x_threadpool_t *x_threadpool_create(unsigned int count);

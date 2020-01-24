@@ -384,7 +384,7 @@ static NTSTATUS fsctl_validate_neg_info(x_smbd_conn_t *smbd_conn,
 	}
 
 	idl::GUID client_guid;
-	idl::x_ndr_pull(client_guid, in_input_data + 4, 0x10);
+	idl::x_ndr_pull(client_guid, in_input_data + 4, 0x10, 0);
 	if (memcmp(&client_guid, &smbd_conn->client_guid, 0x10) != 0) {
 		return X_NT_STATUS_INTERNAL_TERMINATE;
 	}

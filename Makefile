@@ -78,7 +78,7 @@ TARGET_CFLAGS_EXTRA := \
 all: $(TARGET_SET_tests:%=$(TARGET_DIR_out)/tests/%) $(TARGET_DIR_out)/bin/nxsmbd
 
 SET_src_nxsmbd := auth_ntlmssp auth_krb5 auth_spnego auth \
-	network \
+	network misc \
 	smbd smbd_sess smbd_conn smbd_share smbd_open \
 	smbd_ipc smbd_disk \
 	smb2_signing \
@@ -264,6 +264,7 @@ TARGET_SRC_libnxsmb := \
 		lib/librpc/ndr_netlogon \
 		lib/librpc/ndr_samr \
 		lib/librpc/ndr_lsa \
+		lib/librpc/ndr_dcerpc \
 		lib/xutils \
 		lib/string \
 		lib/charset \
