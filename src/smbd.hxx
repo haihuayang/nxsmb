@@ -314,6 +314,23 @@ void x_smbd_tcon_init_disk(x_smbd_tcon_t *smbd_tcon);
 
 int x_smbd_ipc_init();
 
+struct x_smb2_requ_ioctl_t
+{
+	uint16_t struct_size;
+	uint16_t reserved0;
+	uint32_t ctl_code;
+	uint64_t file_id_persistent;
+	uint64_t file_id_volatile;
+	uint32_t input_offset;
+	uint32_t input_length;
+	uint32_t max_input_length;
+	uint32_t output_offset;
+	uint32_t output_length;
+	uint32_t max_output_length;
+	uint32_t flags;
+	uint32_t reserved1;
+};
+
 struct x_smb2_requ_read_t
 {
 	uint16_t struct_size;
@@ -407,6 +424,12 @@ struct x_smbd_open_ops_t
 			x_smb2_resp_write_t &resp);
 	NTSTATUS (*getinfo)(x_smbd_open_t *smbd_open, const x_smb2_requ_getinfo_t &requ, std::vector<uint8_t> &output);
 	NTSTATUS (*setinfo)(x_smbd_open_t *smbd_open);
+	NTSTATUS (*ioctl)(x_smbd_open_t *smbd_open,
+			uint32_t ctl_code,
+			const uint8_t *in_input_data,
+			uint32_t in_input_size,
+			uint32_t in_max_output,
+			std::vector<uint8_t> &output);
 	NTSTATUS (*close)(x_smbd_open_t *smbd_open, const x_smb2_requ_close_t &requ,
 			x_smb2_resp_close_t &resp);
 	void (*destroy)(x_smbd_open_t *smbd_open);
@@ -447,6 +470,16 @@ static inline NTSTATUS x_smbd_open_op_write(x_smbd_open_t *smbd_open, const x_sm
 static inline NTSTATUS x_smbd_open_op_getinfo(x_smbd_open_t *smbd_open, const x_smb2_requ_getinfo_t &requ, std::vector<uint8_t> &output)
 {
 	return smbd_open->ops->getinfo(smbd_open, requ, output);
+}
+
+static inline NTSTATUS x_smbd_open_op_ioctl(x_smbd_open_t *smbd_open,
+		uint32_t ctl_code,
+		const uint8_t *in_input_data,
+		uint32_t in_input_size,
+		uint32_t in_max_output,
+		std::vector<uint8_t> &output)
+{
+	return smbd_open->ops->ioctl(smbd_open, ctl_code, in_input_data, in_input_size, in_max_output, output);
 }
 
 static inline NTSTATUS x_smbd_open_op_close(x_smbd_open_t *smbd_open, const x_smb2_requ_close_t &requ,

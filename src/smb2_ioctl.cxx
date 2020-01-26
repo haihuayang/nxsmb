@@ -302,6 +302,7 @@ static NTSTATUS fsctl_dfs_get_refers_ex(x_smbd_tcon_t *smbd_tcon,
 /* FSCTL_DFS_GET_REFERRALS_EX References: [MS-DFSC]: 2.2.3
  */
 static NTSTATUS x_smb2_ioctl_dfs(x_smbd_tcon_t *smbd_tcon,
+		x_smbd_open_t *smbd_open,
 		uint32_t ctl_code,
 		const uint8_t *in_input_data,
 		uint32_t in_input_size,
@@ -319,9 +320,11 @@ static NTSTATUS x_smb2_ioctl_dfs(x_smbd_tcon_t *smbd_tcon,
 
 	switch (ctl_code) {
 	case FSCTL_DFS_GET_REFERRALS:
+		X_ASSERT(!smbd_open);
 		status = fsctl_dfs_get_refers(smbd_tcon, in_input_data, in_input_size, in_max_output, output);
 		break;
 	case FSCTL_DFS_GET_REFERRALS_EX:
+		X_ASSERT(!smbd_open);
 		status = fsctl_dfs_get_refers_ex(smbd_tcon, in_input_data, in_input_size, in_max_output, output);
 		break;
 	default: {
@@ -365,6 +368,21 @@ static NTSTATUS x_smb2_ioctl_dfs(x_smbd_tcon_t *smbd_tcon,
 	}
 
 	return status;
+}
+
+// FSCTL_NETWORK_FILESYSTEM
+static NTSTATUS x_smb2_ioctl_named_pipe(x_smbd_open_t *smbd_open,
+		uint32_t ctl_code,
+		const uint8_t *in_input_data,
+		uint32_t in_input_size,
+		uint32_t in_max_output,
+		std::vector<uint8_t>& output)
+{
+	if (!smbd_open) {
+		return NT_STATUS_NOT_SUPPORTED;
+	}
+
+	return x_smbd_open_op_ioctl(smbd_open, ctl_code, in_input_data, in_input_size, in_max_output, output);
 }
 
 // FSCTL_NETWORK_FILESYSTEM
@@ -434,6 +452,7 @@ static NTSTATUS fsctl_validate_neg_info(x_smbd_conn_t *smbd_conn,
 
 static NTSTATUS x_smb2_ioctl_network_fs(x_smbd_conn_t *smbd_conn,
 		x_smbd_tcon_t *smbd_tcon,
+		x_smbd_open_t *smbd_open,
 		uint32_t ctl_code,
 		const uint8_t *in_input_data,
 		uint32_t in_input_size,
@@ -469,6 +488,7 @@ static NTSTATUS x_smb2_ioctl_network_fs(x_smbd_conn_t *smbd_conn,
 		break;
 #endif
 	case FSCTL_VALIDATE_NEGOTIATE_INFO:
+		X_ASSERT(!smbd_open);
 		status = fsctl_validate_neg_info(smbd_conn, in_input_data, in_input_size, in_max_output, output);
 		break;
 #if 0
@@ -555,20 +575,11 @@ int x_smb2_process_IOCTL(x_smbd_conn_t *smbd_conn, x_msg_t *msg,
 	}
 	std::shared_ptr<x_smbd_tcon_t> smbd_tcon = it->second;
 
-	uint32_t in_ctl_code = IVAL(inbody, 0x04);
-	uint64_t in_file_id_persistent   = BVAL(inbody, 0x08);
-	uint64_t in_file_id_volatile     = BVAL(inbody, 0x10);
-	uint32_t in_input_offset	 = IVAL(inbody, 0x18);
-	uint32_t in_input_length	 = IVAL(inbody, 0x1C);
-	uint32_t in_max_input_length     = IVAL(inbody, 0x20);
-	uint32_t in_output_offset	= IVAL(inbody, 0x24);
-	uint32_t in_output_length	= IVAL(inbody, 0x28);
-	uint32_t in_max_output_length    = IVAL(inbody, 0x2C);
-	uint32_t in_flags		= IVAL(inbody, 0x30);
-	(void)in_max_input_length;
+	x_smb2_requ_ioctl_t requ_ioctl;
+	memcpy(&requ_ioctl, inbody, sizeof(requ_ioctl));
 
-	X_LOG_OP("%ld IOCTL 0x%x 0x%lx,0x%lx", msg->mid, 
-			in_ctl_code, in_file_id_persistent, in_file_id_volatile);
+	X_LOG_OP("%ld IOCTL 0x%x 0x%lx,0x%lx", msg->mid, requ_ioctl.ctl_code,
+			requ_ioctl.file_id_persistent, requ_ioctl.file_id_volatile);
 
 	/*
 	 * InputOffset (4 bytes): The offset, in bytes, from the beginning of
@@ -579,18 +590,14 @@ int x_smb2_process_IOCTL(x_smbd_conn_t *smbd_conn, x_msg_t *msg,
 	 * issued, Windows-based clients set this field to any value.
 	 */
 	// allowed_length_in = 0;
-	if ((in_input_offset > 0) && (in_input_length > 0)) {
-		if (!x_check_range(in_input_offset, in_input_length,
-					0x40 + X_SMB2_IOCTL_REQU_BODY_LEN, in_len)) {
-			return X_SMB2_REPLY_ERROR(smbd_conn, msg, smbd_sess, NT_STATUS_INVALID_PARAMETER);
-		}
+	if (!x_check_range(requ_ioctl.input_offset, requ_ioctl.input_length,
+			0x40 + X_SMB2_IOCTL_REQU_BODY_LEN, in_len)) {
+		return X_SMB2_REPLY_ERROR(smbd_conn, msg, smbd_sess, NT_STATUS_INVALID_PARAMETER);
 	}
 
-	if (in_output_offset > 0) {
-		if (!x_check_range(in_output_offset, in_output_length,
-					0x40 + X_SMB2_IOCTL_REQU_BODY_LEN, in_len)) {
-			return X_SMB2_REPLY_ERROR(smbd_conn, msg, smbd_sess, NT_STATUS_INVALID_PARAMETER);
-		}
+	if (!x_check_range(requ_ioctl.output_offset, requ_ioctl.output_length,
+			0x40 + X_SMB2_IOCTL_REQU_BODY_LEN, in_len)) {
+		return X_SMB2_REPLY_ERROR(smbd_conn, msg, smbd_sess, NT_STATUS_INVALID_PARAMETER);
 	}
 #if 0
 	if (in_output_length > 0) {
@@ -628,15 +635,16 @@ int x_smb2_process_IOCTL(x_smbd_conn_t *smbd_conn, x_msg_t *msg,
 		return smbd_smb2_request_error(req, status);
 	}
 #endif
+	x_auto_ref_t<x_smbd_open_t> smbd_open;
 	/*
 	 * If the Flags field of the request is not SMB2_0_IOCTL_IS_FSCTL the
 	 * server MUST fail the request with STATUS_NOT_SUPPORTED.
 	 */
-	if (in_flags != SMB2_IOCTL_FLAG_IS_FSCTL) {
+	if (requ_ioctl.flags != SMB2_IOCTL_FLAG_IS_FSCTL) {
 		return X_SMB2_REPLY_ERROR(smbd_conn, msg, smbd_sess, NT_STATUS_NOT_SUPPORTED);
 	}
 
-	switch (in_ctl_code) {
+	switch (requ_ioctl.ctl_code) {
 	case FSCTL_DFS_GET_REFERRALS:
 	case FSCTL_DFS_GET_REFERRALS_EX:
 	case FSCTL_PIPE_WAIT:
@@ -651,42 +659,49 @@ int x_smb2_process_IOCTL(x_smbd_conn_t *smbd_conn, x_msg_t *msg,
 		 * 0xFFFFFFFFFFFFFFFF, then the server MUST fail the request
 		 * with STATUS_INVALID_PARAMETER.
 		 */
-		if (in_file_id_persistent != UINT64_MAX ||
-				in_file_id_volatile != UINT64_MAX) {
+		if (requ_ioctl.file_id_persistent != UINT64_MAX ||
+				requ_ioctl.file_id_volatile != UINT64_MAX) {
 			return X_SMB2_REPLY_ERROR(smbd_conn, msg, smbd_sess,
 					NT_STATUS_INVALID_PARAMETER);
 		}
 		break;
 	default:
-		X_TODO;
-#if 0
-		in_fsp = file_fsp_smb2(req, in_file_id_persistent,
-				       in_file_id_volatile);
-		if (in_fsp == NULL) {
-			return smbd_smb2_request_error(req, NT_STATUS_FILE_CLOSED);
+		smbd_open.set(x_smbd_open_find(requ_ioctl.file_id_volatile,
+				smbd_tcon.get()));
+		if (!smbd_open) {
+			return X_SMB2_REPLY_ERROR(smbd_conn, msg, smbd_sess,
+					NT_STATUS_FILE_CLOSED);
 		}
-#endif
 		break;
 	}
 
 	std::vector<uint8_t> output;
 	NTSTATUS status;
-	switch (in_ctl_code & IOCTL_DEV_TYPE_MASK) {
+	switch (requ_ioctl.ctl_code & IOCTL_DEV_TYPE_MASK) {
 	case FSCTL_DFS:
-		status = x_smb2_ioctl_dfs(smbd_tcon.get(), in_ctl_code, in_buf + in_input_offset,
-				in_input_length, in_max_output_length, output);
+		status = x_smb2_ioctl_dfs(smbd_tcon.get(), smbd_open,
+				requ_ioctl.ctl_code,
+				in_buf + requ_ioctl.input_offset,
+				requ_ioctl.input_length,
+				requ_ioctl.max_output_length, output);
 		break;
 #if 0
 	case FSCTL_FILESYSTEM:
 		return smb2_ioctl_filesys(in_ctl_code, ev, req, state);
 		break;
-	case FSCTL_NAMED_PIPE:
-		return smb2_ioctl_named_pipe(in_ctl_code, ev, req, state);
-		break;
 #endif
+	case FSCTL_NAMED_PIPE:
+		status = x_smb2_ioctl_named_pipe(smbd_open,
+				requ_ioctl.ctl_code, in_buf + requ_ioctl.input_offset,
+				requ_ioctl.input_length,
+				requ_ioctl.max_output_length, output);
+		break;
 	case FSCTL_NETWORK_FILESYSTEM:
-		status = x_smb2_ioctl_network_fs(smbd_conn, smbd_tcon.get(), in_ctl_code, in_buf + in_input_offset,
-				in_input_length, in_max_output_length, output);
+		status = x_smb2_ioctl_network_fs(smbd_conn, smbd_tcon.get(),
+				smbd_open,
+			       	requ_ioctl.ctl_code, in_buf + requ_ioctl.input_offset,
+				requ_ioctl.input_length,
+				requ_ioctl.max_output_length, output);
 		break;
 	default:
 		X_TODO;
@@ -706,8 +721,9 @@ int x_smb2_process_IOCTL(x_smbd_conn_t *smbd_conn, x_msg_t *msg,
 		return -EACCES;
 	}
 	/* TODO return error */
-	return x_smb2_reply_ioctl(smbd_conn, smbd_sess, msg, status, in_tid, in_ctl_code,
-			in_file_id_persistent, in_file_id_volatile, output);
+	return x_smb2_reply_ioctl(smbd_conn, smbd_sess, msg, status, in_tid,
+			requ_ioctl.ctl_code,
+			requ_ioctl.file_id_persistent, requ_ioctl.file_id_volatile, output);
 #if 0
 	subreq = smbd_smb2_ioctl_send(req, req->sconn->ev_ctx,
 				      req, in_fsp,

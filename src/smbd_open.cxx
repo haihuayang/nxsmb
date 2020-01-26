@@ -96,6 +96,7 @@ void x_smbd_open_insert_local(x_smbd_open_t *smbd_open)
 	return __smbd_open_insert(smbd_open_pool, smbd_open);
 }
 
+/* TODO should also match persistent id??? */
 x_smbd_open_t *x_smbd_open_find(uint64_t id, const x_smbd_tcon_t *smbd_tcon)
 {
 	return __smbd_open_find(smbd_open_pool, id, smbd_tcon);
