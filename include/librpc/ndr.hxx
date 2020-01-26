@@ -1604,6 +1604,37 @@ inline x_ndr_off_t x_ndr_scalars(x_ndr_relative_ptr_t<T> &t, x_ndr_pull_t &ndr,
 }
 
 template <typename T>
+x_ndr_off_t x_ndr_pull_at(T &t, x_ndr_pull_t &ndr,
+		x_ndr_off_t bpos, x_ndr_off_t epos,
+		uint32_t flags, x_ndr_switch_t level,
+		uint32_t offset)
+{
+	x_ndr_off_t tmp_bpos = X_NDR_CHECK_POS(ndr.base + offset, 0, epos);
+	tmp_bpos = x_ndr_puller_t<T, typename x_ndr_traits_t<T>::has_buffers>()(t, ndr,
+			tmp_bpos, epos, flags, level);
+	if (tmp_bpos < 0) {
+		return tmp_bpos;
+	}
+	return std::max(bpos, tmp_bpos);
+}
+
+template <typename T>
+x_ndr_off_t x_ndr_pull_at(T &t, x_ndr_pull_t &ndr,
+		x_ndr_off_t bpos, x_ndr_off_t epos,
+		uint32_t flags, x_ndr_switch_t level,
+		uint32_t offset, uint32_t length)
+{
+	x_ndr_off_t tmp_bpos = X_NDR_CHECK_POS(ndr.base + offset, 0, epos);
+	epos = X_NDR_CHECK_POS(tmp_bpos + length, tmp_bpos, epos);
+	tmp_bpos = x_ndr_puller_t<T, typename x_ndr_traits_t<T>::has_buffers>()(t, ndr,
+			tmp_bpos, epos, flags, level);
+	if (tmp_bpos < 0) {
+		return tmp_bpos;
+	}
+	return std::max(bpos, tmp_bpos);
+}
+
+template <typename T>
 inline x_ndr_off_t x_ndr_buffers(x_ndr_relative_ptr_t<T> &t, x_ndr_pull_t &ndr,
 		x_ndr_off_t bpos, x_ndr_off_t epos,
 		uint32_t flags, x_ndr_switch_t level)
@@ -1612,9 +1643,8 @@ inline x_ndr_off_t x_ndr_buffers(x_ndr_relative_ptr_t<T> &t, x_ndr_pull_t &ndr,
 	X_NDR_SCALARS(offset, ndr, t.__pos_ptr, epos, flags, X_NDR_SWITCH_NONE);
 	if (offset != 0) {
 		t.val = x_ndr_allocate_ptr<T>(level);
-		bpos = X_NDR_CHECK_POS(ndr.base + offset, bpos, epos);
-		bpos = x_ndr_puller_t<T, typename x_ndr_traits_t<T>::has_buffers>()(*t.val, ndr,
-				bpos, epos, flags, level);
+		bpos = x_ndr_pull_at(*t.val, ndr,
+				bpos, epos, flags, level, offset);
 	}
 	return bpos;
 }
@@ -1696,11 +1726,9 @@ inline x_ndr_off_t x_ndr_buffers(x_ndr_l2s2o4_ptr_t<T> &t, x_ndr_pull_t &ndr,
 	X_NDR_SCALARS(offset, ndr, t.__pos_ptr, epos, flags, X_NDR_SWITCH_NONE);
 	if (offset) {
 		// TODO check size and length?
-		bpos = X_NDR_CHECK_POS(ndr.base + offset, bpos, epos);
-		epos = X_NDR_CHECK_POS(bpos + length, bpos, epos);
 		t.val = x_ndr_allocate_ptr<T>(level);
-		bpos = x_ndr_puller_t<T, typename x_ndr_traits_t<T>::has_buffers>()(*t.val, ndr,
-				bpos, epos, flags, level);
+		bpos = x_ndr_pull_at(*t.val, ndr, bpos, epos, flags, level,
+				offset, length);
 	}
 	return bpos;
 }
@@ -1777,11 +1805,9 @@ inline x_ndr_off_t x_ndr_buffers(x_ndr_s4o4_ptr_t<T> &t, x_ndr_pull_t &ndr,
 	X_NDR_SCALARS(offset, ndr, t.__pos_ptr, epos, flags, X_NDR_SWITCH_NONE);
 	if (offset) {
 		// TODO check size and length?
-		bpos = X_NDR_CHECK_POS(ndr.base + offset, bpos, epos);
-		epos = X_NDR_CHECK_POS(bpos + size, bpos, epos);
 		t.val = x_ndr_allocate_ptr<T>(level);
-		bpos = x_ndr_puller_t<T, typename x_ndr_traits_t<T>::has_buffers>()(*t.val, ndr,
-				bpos, epos, flags, level);
+		bpos = x_ndr_pull_at(*t.val, ndr, bpos, epos, flags, level,
+				offset, size);
 	}
 	return bpos;
 }

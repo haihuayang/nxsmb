@@ -805,6 +805,10 @@ static bool ntlmssp_have_feature(x_auth_ntlmssp_t *ntlmssp, uint32_t feature)
 
 static NTSTATUS ntlmssp_post_auth(x_auth_ntlmssp_t *ntlmssp, x_auth_info_t &auth_info, const x_wbresp_t &wbresp)
 {
+	if (wbresp.header.result != WINBINDD_OK) {
+		RETURN_ERR_NT_STATUS(NT_STATUS_LOGON_FAILURE);
+	}
+
 	// wbc_create_auth_info
 	const auto &auth = wbresp.header.data.auth;
 	auth_info.user_flags = auth.info3.user_flgs;
