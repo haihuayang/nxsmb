@@ -1,5 +1,5 @@
 
-#include "include/librpc/ndr_netlogon.hxx"
+#include "include/librpc/netlogon_ndr.hxx"
 
 namespace idl {
 

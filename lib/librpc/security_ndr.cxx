@@ -1,5 +1,5 @@
 
-#include "include/librpc/ndr_security.hxx"
+#include "include/librpc/security_ndr.hxx"
 
 namespace idl {
 

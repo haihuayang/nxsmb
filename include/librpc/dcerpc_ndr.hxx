@@ -3,7 +3,7 @@
 #define _PIDL_HEADER_dcerpc
 #include "include/librpc/ndr.hxx"
 
-#include "ndr_misc.hxx"
+#include "misc_ndr.hxx"
 
 namespace idl {
 extern const uint8_t DCERPC_SEC_VT_MAGIC[8];
@@ -42,48 +42,46 @@ template <> struct x_ndr_traits_t<dcerpc_bind> {
 
 const uint8 DCERPC_REQUEST_LENGTH = 24;
 
-#if 0
 struct dcerpc_empty {
-	x_ndr_off_t push(x_ndr_push_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level) const;
-	x_ndr_off_t pull(x_ndr_pull_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level);
+	x_ndr_off_t ndr_scalars(x_ndr_push_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level) const;
+	x_ndr_off_t ndr_scalars(x_ndr_pull_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level);
 	void ostr(x_ndr_ostr_t &__ndr, uint32_t __flags, x_ndr_switch_t __level) const;
 } ;
 
 template <> struct x_ndr_traits_t<dcerpc_empty> {
-	using ndr_ostr_type = x_ndr_ostr_type_struct;
+	using ndr_type = x_ndr_type_struct;
 };
 
 
 union dcerpc_object
 {
-	x_ndr_off_t push(x_ndr_push_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level) const;
-	x_ndr_off_t pull(x_ndr_pull_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level);
+	x_ndr_off_t ndr_scalars(x_ndr_push_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level) const;
+	x_ndr_off_t ndr_scalars(x_ndr_pull_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level);
 	void ostr(x_ndr_ostr_t &__ndr, uint32_t __flags, x_ndr_switch_t __level) const;
 	GUID object;/* [case(LIBNDR_FLAG_OBJECT_PRESENT)] */
 	dcerpc_empty empty;/* [default] */
 } /* [nodiscriminant] */;
 
 template <> struct x_ndr_traits_t<dcerpc_object> {
-	using ndr_ostr_type = x_ndr_ostr_type_union;
+	using ndr_type = x_ndr_type_union;
 };
 
 
 struct dcerpc_request {
-	x_ndr_off_t push(x_ndr_push_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level) const;
-	x_ndr_off_t pull(x_ndr_pull_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level);
+	x_ndr_off_t ndr_scalars(x_ndr_push_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level) const;
+	x_ndr_off_t ndr_scalars(x_ndr_pull_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level);
 	void ostr(x_ndr_ostr_t &__ndr, uint32_t __flags, x_ndr_switch_t __level) const;
 	uint32 alloc_hint;
 	uint16 context_id;
 	uint16 opnum;
 	dcerpc_object object;/* [switch_is(NDR_DCERPC_REQUEST_OBJECT_PRESENT)] */
-	DATA_BLOB _pad;/* [flag(LIBNDR_FLAG_ALIGN8)] */
 	DATA_BLOB stub_and_verifier;/* [flag(LIBNDR_FLAG_REMAINING)] */
 } ;
 
 template <> struct x_ndr_traits_t<dcerpc_request> {
-	using ndr_ostr_type = x_ndr_ostr_type_struct;
+	using has_buffers = std::false_type;
+	using ndr_type = x_ndr_type_struct;
 };
-#endif
 
 enum dcerpc_bind_ack_result : uint16 {
 	DCERPC_BIND_ACK_RESULT_ACCEPTANCE=0,

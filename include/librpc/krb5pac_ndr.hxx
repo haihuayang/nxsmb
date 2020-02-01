@@ -8,7 +8,7 @@
 
 #include "include/librpc/ndr_nxsmb.hxx"
 // #include "librpc/idl/security.h"
-#include "include/librpc/ndr_netlogon.hxx"
+#include "include/librpc/netlogon_ndr.hxx"
 
 namespace idl {
 

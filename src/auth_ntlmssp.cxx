@@ -28,7 +28,7 @@ extern "C" {
 #include <cctype>
 #include <algorithm>
 #include "include/asn1_wrap.hxx"
-#include "include/librpc/ndr_ntlmssp.hxx"
+#include "include/librpc/ntlmssp_ndr.hxx"
 #include "include/charset.hxx"
 
 #define DEBUG(...) do { } while (0)

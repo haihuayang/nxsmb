@@ -36,7 +36,9 @@ TARGET_SET_dir := bin lib lib/librpc librpc/idl src tests \
 	$(TARGET_SET_samba_dir)
 
 .PHONY: all target_mkdir host_mkdir target_samba_gen
-TARGET_SET_tests := test-timer test-krb5pac test-ntlmssp test-security test-wbcli test-wbpool
+TARGET_SET_tests := test-timer test-krb5pac test-ntlmssp test-security test-wbcli test-wbpool \
+	test-mbuf
+
 TARGET_SET_lib := nxsmb samba
 
 TARGET_CFLAGS_EXTRA := \
@@ -257,14 +259,14 @@ TARGET_SRC_libnxsmb := \
 		lib/librpc/ndr_nxsmb \
 		lib/librpc/ndr_utils \
 		lib/librpc/ndr_string \
-		lib/librpc/ndr_misc \
-		lib/librpc/ndr_ntlmssp \
-		lib/librpc/ndr_security \
-		lib/librpc/ndr_krb5pac \
-		lib/librpc/ndr_netlogon \
-		lib/librpc/ndr_samr \
-		lib/librpc/ndr_lsa \
-		lib/librpc/ndr_dcerpc \
+		lib/librpc/misc_ndr \
+		lib/librpc/ntlmssp_ndr \
+		lib/librpc/security_ndr \
+		lib/librpc/krb5pac_ndr \
+		lib/librpc/netlogon_ndr \
+		lib/librpc/samr_ndr \
+		lib/librpc/lsa_ndr \
+		lib/librpc/dcerpc_ndr \
 		lib/xutils \
 		lib/string \
 		lib/charset \

@@ -1,6 +1,6 @@
 
-#ifndef __ndr_samr__h__
-#define __ndr_samr__h__
+#ifndef __samr_ndr__h__
+#define __samr_ndr__h__
 
 #ifdef __cplusplus
 extern "C" {
@@ -13,8 +13,8 @@ extern "C" {
 #include "include/librpc/ndr_nxsmb.hxx"
 
 // #include "librpc/idl/misc.h"
-#include "include/librpc/ndr_security.hxx"
-#include "include/librpc/ndr_lsa.hxx"
+#include "include/librpc/security_ndr.hxx"
+#include "include/librpc/lsa_ndr.hxx"
 
 namespace idl {
 
@@ -1853,5 +1853,5 @@ template <> struct x_ndr_traits_t<samr_ValidatePasswordReq> {
 } /* namespace idl */
 
 
-#endif /* __ndr_samr__h__ */
+#endif /* __samr_ndr__h__ */
 

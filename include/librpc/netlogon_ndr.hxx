@@ -4,8 +4,8 @@
 #include "include/librpc/ndr.hxx"
 
 // #include "librpc/idl/misc.h"
-#include "include/librpc/ndr_lsa.hxx"
-#include "include/librpc/ndr_samr.hxx"
+#include "include/librpc/lsa_ndr.hxx"
+#include "include/librpc/samr_ndr.hxx"
 // #include "librpc/idl/security.h"
 
 namespace idl {

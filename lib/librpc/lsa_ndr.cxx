@@ -1,5 +1,5 @@
 
-#include "include/librpc/ndr_lsa.hxx"
+#include "include/librpc/lsa_ndr.hxx"
 
 namespace idl {
 

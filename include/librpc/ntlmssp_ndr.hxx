@@ -24,7 +24,7 @@
 #define _PIDL_HEADER_ntlmssp
 #include "include/librpc/ndr_nxsmb.hxx"
 
-#include "include/librpc/ndr_security.hxx"
+#include "include/librpc/security_ndr.hxx"
 
 namespace idl {
 #ifndef _HEADER_ntlmssp

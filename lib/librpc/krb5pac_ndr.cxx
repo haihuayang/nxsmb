@@ -1,5 +1,5 @@
 
-#include "include/librpc/ndr_krb5pac.hxx"
+#include "include/librpc/krb5pac_ndr.hxx"
 
 namespace idl {
 

@@ -38,7 +38,7 @@ extern "C" {
 #define KRB5_ERROR_CODE(k)      ((k)->error)
 #endif /* HAVE_E_DATA_POINTER_IN_KRB5_ERROR */
 
-#include "include/librpc/ndr_krb5pac.hxx"
+#include "include/librpc/krb5pac_ndr.hxx"
 
 NTSTATUS kerberos_pac_logon_info(gss_const_buffer_t pac_blob,
 				 krb5_context context,

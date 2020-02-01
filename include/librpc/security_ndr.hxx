@@ -1,13 +1,13 @@
 
-#ifndef __ndr_security__hxx__
-#define __ndr_security__hxx__
+#ifndef __security_ndr__hxx__
+#define __security_ndr__hxx__
 
 #ifndef __cplusplus
 #error "Must be c++"
 #endif
 
 #include "include/librpc/ndr.hxx"
-#include "include/librpc/ndr_misc.hxx"
+#include "include/librpc/misc_ndr.hxx"
 
 namespace idl {
 
@@ -884,5 +884,5 @@ inline void x_ndr_ostr<dom_sid2>(const dom_sid2 &v, x_ndr_ostr_t &ndr, uint32_t 
 
 }
 
-#endif /* __ndr_security__hxx__ */
+#endif /* __security_ndr__hxx__ */
 
