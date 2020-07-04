@@ -1,8 +1,8 @@
 
-#include "include/librpc/misc_ndr.hxx"
+#include "include/librpc/misc.hxx"
 
 namespace idl {
-
+#if 0
 x_ndr_off_t GUID::ndr_scalars(x_ndr_push_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level) const
 {
 	X_NDR_HEADER_ALIGN(4, __ndr, __bpos, __epos, __flags);
@@ -27,7 +27,7 @@ x_ndr_off_t GUID::ndr_scalars(x_ndr_pull_t &__ndr, x_ndr_off_t __bpos, x_ndr_off
 	X_NDR_TRAILER_ALIGN(4, __ndr, __bpos, __epos, __flags);
 	return __bpos;
 }
-
+#endif
 void x_ndr_ostr(const GUID &v, x_ndr_ostr_t &os, uint32_t flags, x_ndr_switch_t level)
 {
 	X_ASSERT(level == X_NDR_SWITCH_NONE);
@@ -43,7 +43,7 @@ void x_ndr_ostr(const GUID &v, x_ndr_ostr_t &os, uint32_t flags, x_ndr_switch_t 
 		 v.node[4], v.node[5]);
 	os << buf;
 }
-
+#if 0
 x_ndr_off_t ndr_syntax_id::ndr_scalars(x_ndr_push_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level) const
 {
 	X_NDR_HEADER_ALIGN(4, __ndr, __bpos, __epos, __flags);
@@ -69,6 +69,13 @@ void ndr_syntax_id::ostr(x_ndr_ostr_t &__ndr, uint32_t __flags, x_ndr_switch_t _
 	X_NDR_OSTR_NEXT(uuid, __ndr, __flags, X_NDR_SWITCH_NONE);
 	X_NDR_OSTR_NEXT(if_version, __ndr, __flags, X_NDR_SWITCH_NONE);
 	(__ndr) << leave;
+}
+#endif
+
+void x_ndr_ostr(const ndr_syntax_id &v, x_ndr_ostr_t &os, uint32_t flags, x_ndr_switch_t level)
+{
+	x_ndr_ostr(v.uuid, os, flags, X_NDR_SWITCH_NONE);
+	os << '/' << v.if_version;
 }
 
 }

@@ -165,6 +165,18 @@ x_ndr_off_t x_ndr_push_u16string(const std::u16string &str, x_ndr_push_t &ndr, x
 	return x_ndr_push_bytes(str.data(), ndr, bpos, epos, str.size() * 2);
 }
 
+x_ndr_off_t x_ndr_pull_u16string(std::u16string &str, x_ndr_pull_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags)
+{
+	X_ASSERT((flags & LIBNDR_FLAG_BIGENDIAN) == 0); // TODO
+	size_t size = epos - bpos;
+	if ((size % 2) != 0) {
+		return -NDR_ERR_LENGTH;
+	}
+	str.assign((const char16_t *)(ndr.get_data() + bpos), (const char16_t *)(ndr.get_data() + epos));
+	return epos;
+}
+
+#if 0
 x_ndr_off_t x_ndr_pull_u16string(std::u16string &str, x_ndr_pull_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, size_t size)
 {
 	X_ASSERT((flags & LIBNDR_FLAG_BIGENDIAN) == 0); // TODO
@@ -178,6 +190,7 @@ x_ndr_off_t x_ndr_pull_u16string(std::u16string &str, x_ndr_pull_t &ndr, x_ndr_o
 	str.assign((const char16_t *)(ndr.get_data() + bpos), (const char16_t *)(ndr.get_data() + new_epos));
 	return new_epos;
 }
+#endif
 
 void x_ndr_ostr_u16string(const std::u16string &str, x_ndr_ostr_t &ndr, uint32_t flags, x_ndr_switch_t level)
 {
@@ -185,7 +198,7 @@ void x_ndr_ostr_u16string(const std::u16string &str, x_ndr_ostr_t &ndr, uint32_t
 	// TODO
 	ndr.os << "u16string(" << str.size() << ")";
 }
-
+#if 0
 x_ndr_off_t u16string::ndr_scalars(x_ndr_push_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, x_ndr_switch_t level) const
 {
 	X_ASSERT(level == X_NDR_SWITCH_NONE);
@@ -220,7 +233,7 @@ void u16string::ostr(x_ndr_ostr_t &ndr, uint32_t flags, x_ndr_switch_t level) co
 	// TODO
 	ndr.os << "u16string(" << val.size() << ")";
 }
-
+#endif
 x_ndr_off_t sstring::ndr_scalars(x_ndr_push_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, x_ndr_switch_t level) const
 {
 	X_ASSERT(level == X_NDR_SWITCH_NONE);

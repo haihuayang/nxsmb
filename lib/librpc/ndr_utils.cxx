@@ -73,7 +73,7 @@ void x_ndr_ostr_uint8_array(const uint8_t *v, x_ndr_ostr_t &ndr, uint32_t flags,
 	}
 }
 
-
+#if 0
 x_ndr_off_t blob_t::ndr_scalars(x_ndr_push_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, x_ndr_switch_t level) const
 {
 	X_ASSERT(level == X_NDR_SWITCH_NONE);
@@ -97,7 +97,7 @@ void blob_t::ostr(x_ndr_ostr_t &ndr, uint32_t flags, x_ndr_switch_t level) const
 	X_ASSERT(level == X_NDR_SWITCH_NONE);
 	ndr.os << "blob(" << val.size() << ')';
 }
-
+#endif
 x_ndr_off_t DATA_BLOB::ndr_scalars(x_ndr_push_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, x_ndr_switch_t level) const
 {
 	X_ASSERT(level == X_NDR_SWITCH_NONE);

@@ -6,7 +6,7 @@
 #error "Must be c++"
 #endif
 
-#include "dcerpc_ndr.hxx"
+#include "dcerpc.hxx"
 
 typedef void *x_dcerpc_arg_res_t;
 typedef x_dcerpc_arg_res_t (*x_dcerpc_create_fn)();

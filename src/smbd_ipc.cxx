@@ -1,9 +1,12 @@
 
 #include "smbd.hxx"
 #include "include/charset.hxx"
+#if 0
 #include "include/librpc/dcerpc_ndr.hxx"
 #include "include/librpc/wkssvc_svc.hxx"
 #include "include/librpc/srvsvc_svc.hxx"
+#endif
+#include "include/librpc/dcerpc_x.hxx"
 
 namespace {
 
@@ -139,13 +142,13 @@ static bool x_smbd_named_pipe_bind(x_smbd_named_pipe_t *named_pipe,
 		idl::dcerpc_ack_ctx &ack_ctx)
 {
 	// api_pipe_bind_req
-	if (ctx.transfer_syntaxes.val.size() == 0) {
+	if (ctx.transfer_syntaxes.size() == 0) {
 		ack_ctx.result = idl::DCERPC_BIND_ACK_RESULT_USER_REJECTION;
 		ack_ctx.reason.value = idl::DCERPC_BIND_ACK_REASON_NOT_SPECIFIED;
 		ack_ctx.syntax = PNIO;
 		return false;
 	}
-	if (std::find(std::begin(ctx.transfer_syntaxes.val), std::end(ctx.transfer_syntaxes.val), ndr_transfer_syntax_ndr) == std::end(ctx.transfer_syntaxes.val)) {
+	if (std::find(std::begin(ctx.transfer_syntaxes), std::end(ctx.transfer_syntaxes), ndr_transfer_syntax_ndr) == std::end(ctx.transfer_syntaxes)) {
 		ack_ctx.result = idl::DCERPC_BIND_ACK_RESULT_USER_REJECTION;
 		ack_ctx.reason.value = idl::DCERPC_BIND_ACK_REASON_TRANSFER_SYNTAXES_NOT_SUPPORTED;
 		ack_ctx.syntax = PNIO;
@@ -194,15 +197,15 @@ static NTSTATUS process_dcerpc_bind(x_smbd_named_pipe_t *named_pipe, std::vector
 	if (ndr_ret < 0) {
 		return NT_STATUS_INVALID_PARAMETER;
 	}
-	if (bind.ctx_list.val.size() == 0) {
+	if (bind.ctx_list.size() == 0) {
 		return NT_STATUS_INVALID_PARAMETER;
 	}
 
 	idl::dcerpc_bind_ack bind_ack;
-	bind_ack.ctx_list.resize(bind.ctx_list.val.size());
+	bind_ack.ctx_list.resize(bind.ctx_list.size());
 	unsigned int ok_count = 0;
-	for (size_t i = 0; i < bind.ctx_list.val.size(); ++i) {
-		if (x_smbd_named_pipe_bind(named_pipe, bind.ctx_list.val[i], bind_ack.ctx_list.val[i])) {
+	for (size_t i = 0; i < bind.ctx_list.size(); ++i) {
+		if (x_smbd_named_pipe_bind(named_pipe, bind.ctx_list[i], bind_ack.ctx_list[i])) {
 			++ok_count;
 		}
 	}
@@ -213,7 +216,7 @@ static NTSTATUS process_dcerpc_bind(x_smbd_named_pipe_t *named_pipe, std::vector
 	} else {
 		bind_ack.assoc_group_id = 0x53f0;
 	}
-	bind_ack.secondary_address.val = "\\PIPE\\" + x_convert_utf16_to_utf8(named_pipe->iface->iface_name);
+	bind_ack.secondary_address = "\\PIPE\\" + x_convert_utf16_to_utf8(named_pipe->iface->iface_name);
 
 
 	std::vector<uint8_t> body_output;

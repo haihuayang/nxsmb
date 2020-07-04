@@ -1,7 +1,7 @@
 
 #include <assert.h>
 #include <cstring>
-#include "include/librpc/krb5pac_ndr.hxx"
+#include "include/librpc/krb5pac.hxx"
 #include "common.h"
 
 static const uint8_t data_1[] = {

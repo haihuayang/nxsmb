@@ -28,7 +28,7 @@ extern "C" {
 #include <cctype>
 #include <algorithm>
 #include "include/asn1_wrap.hxx"
-#include "include/librpc/ntlmssp_ndr.hxx"
+#include "include/librpc/ntlmssp.hxx"
 #include "include/charset.hxx"
 
 #define DEBUG(...) do { } while (0)
@@ -89,7 +89,7 @@ struct x_auth_ntlmssp_t
 	std::string client_user;
 	std::string client_workstation;
 	std::shared_ptr<idl::LM_RESPONSE> client_lm_resp;
-	std::shared_ptr<idl::blob_t> client_nt_resp;
+	std::shared_ptr<idl::DATA_BLOB> client_nt_resp;
 	std::array<uint8_t, 16> encrypted_session_key;
 	std::vector<uint8_t> session_key;
 	std::vector<uint8_t> msg_negotiate, msg_challenge, msg_authenticate;
@@ -1332,7 +1332,6 @@ static inline NTSTATUS handle_negotiate(x_auth_ntlmssp_t &auth_ntlmssp,
 		return status;
 	}
 
-	struct timeval tv_now = timeval_current();
 	std::array<uint8_t, 8> cryptkey;
 	generate_random_buffer(cryptkey.data(), cryptkey.size());
 
@@ -1357,40 +1356,40 @@ static inline NTSTATUS handle_negotiate(x_auth_ntlmssp_t &auth_ntlmssp,
 	idl::CHALLENGE_MESSAGE chal_msg;
 
 	if (chal_flags & idl::NTLMSSP_NEGOTIATE_TARGET_INFO) {
-		chal_msg.TargetInfo.val = std::make_shared<idl::AV_PAIR_LIST>();
-		auto &av_pair_list = chal_msg.TargetInfo.val;
+		chal_msg.TargetInfo = std::make_shared<idl::AV_PAIR_LIST>();
+		auto &av_pair_list = chal_msg.TargetInfo;
 		idl::AV_PAIR pair;
 
 		pair.set_AvId(idl::MsvAvNbDomainName);
-		pair.Value.AvNbDomainName.val = target_name;
-		av_pair_list->pair.val.push_back(pair);
+		pair.Value.AvNbDomainName = target_name;
+		av_pair_list->pair.push_back(pair);
 
 		pair.set_AvId(idl::MsvAvNbComputerName);
-		pair.Value.AvNbComputerName.val = auth_ntlmssp.netbios_name;
-		av_pair_list->pair.val.push_back(pair);
+		pair.Value.AvNbComputerName = auth_ntlmssp.netbios_name;
+		av_pair_list->pair.push_back(pair);
 
 		pair.set_AvId(idl::MsvAvDnsDomainName);
-		pair.Value.AvDnsDomainName.val = auth_ntlmssp.dns_domain;
-		av_pair_list->pair.val.push_back(pair);
+		pair.Value.AvDnsDomainName = auth_ntlmssp.dns_domain;
+		av_pair_list->pair.push_back(pair);
 
 		pair.set_AvId(idl::MsvAvDnsComputerName);
-		pair.Value.AvDnsComputerName.val = auth_ntlmssp.dns_name;
-		av_pair_list->pair.val.push_back(pair);
+		pair.Value.AvDnsComputerName = auth_ntlmssp.dns_name;
+		av_pair_list->pair.push_back(pair);
 
 		if (auth_ntlmssp.force_old_spnego) {
 			pair.set_AvId(idl::MsvAvTimestamp);
-			pair.Value.AvTimestamp.val = timeval_to_nttime(&tv_now);
-			av_pair_list->pair.val.push_back(pair);
+			pair.Value.AvTimestamp = x_tick_to_nttime(tick_now);
+			av_pair_list->pair.push_back(pair);
 		}
 
 		pair.set_AvId(idl::MsvAvEOL);
-		av_pair_list->pair.val.push_back(pair);
+		av_pair_list->pair.push_back(pair);
 
-		auth_ntlmssp.server_av_pair_list = chal_msg.TargetInfo.val;
+		auth_ntlmssp.server_av_pair_list = chal_msg.TargetInfo;
 	}
 
-	chal_msg.TargetName.val = std::make_shared<idl::gstring>();
-	chal_msg.TargetName.val->val = x_convert_utf16_to_utf8(target_name);
+	chal_msg.TargetName = std::make_shared<idl::gstring>();
+	chal_msg.TargetName->val = x_convert_utf16_to_utf8(target_name);
 	chal_msg.NegotiateFlags = idl::NEGOTIATE(chal_flags);
 	chal_msg.ServerChallenge = cryptkey;
 
@@ -1447,7 +1446,7 @@ static inline NTSTATUS handle_negotiate(x_auth_ntlmssp_t &auth_ntlmssp,
 
 static const idl::AV_PAIR *av_pair_find(const idl::AV_PAIR_LIST &av_pair_list, idl::ntlmssp_AvId avid)
 {
-	for (const auto &p: av_pair_list.pair.val) {
+	for (const auto &p: av_pair_list.pair) {
 		if (p.AvId == avid) {
 			return &p;
 		}
@@ -1476,20 +1475,20 @@ static inline NTSTATUS handle_authenticate(x_auth_ntlmssp_t &auth_ntlmssp,
 		}
 	}
 
-	if (msg.NtChallengeResponse.val && msg.NtChallengeResponse.val->val.size() > 0x18) {
+	if (msg.NtChallengeResponse && msg.NtChallengeResponse->val.size() > 0x18) {
 		idl::NTLMv2_RESPONSE v2_resp;
-		err = x_ndr_pull(v2_resp, msg.NtChallengeResponse.val->val.data(),
-				msg.NtChallengeResponse.val->val.size(), 0);
+		err = x_ndr_pull(v2_resp, msg.NtChallengeResponse->val.data(),
+				msg.NtChallengeResponse->val.size(), 0);
 		if (err < 0) {
 			RETURN_ERR_NT_STATUS(NT_STATUS_INVALID_PARAMETER);
 		}
 		
 		auto &server_av_pair_list = auth_ntlmssp.server_av_pair_list;
 		if (server_av_pair_list) {
-		       	if (v2_resp.Challenge.AvPairs.pair.val.size() < server_av_pair_list->pair.val.size()) {
+		       	if (v2_resp.Challenge.AvPairs.pair.size() < server_av_pair_list->pair.size()) {
 				RETURN_ERR_NT_STATUS(NT_STATUS_INVALID_PARAMETER);
 			}
-			for (auto &av: auth_ntlmssp.server_av_pair_list->pair.val) {
+			for (auto &av: auth_ntlmssp.server_av_pair_list->pair) {
 				if (av.AvId == idl::MsvAvEOL) {
 					continue;
 				}
@@ -1535,7 +1534,7 @@ static inline NTSTATUS handle_authenticate(x_auth_ntlmssp_t &auth_ntlmssp,
 		}
 
 		uint32_t av_flags = 0;
-		for (auto &av: v2_resp.Challenge.AvPairs.pair.val) {
+		for (auto &av: v2_resp.Challenge.AvPairs.pair) {
 			if (av.AvId == idl::MsvAvEOL) {
 				break;
 			} else if (av.AvId == idl::MsvAvFlags) {
@@ -1561,7 +1560,7 @@ static inline NTSTATUS handle_authenticate(x_auth_ntlmssp_t &auth_ntlmssp,
 	   However, the NTLM2 flag may still be set for the real NTLMv2 logins, be careful.
 	*/
 	if (auth_ntlmssp.neg_flags & idl::NTLMSSP_NEGOTIATE_NTLM2) {
-		if (msg.NtChallengeResponse.val && msg.NtChallengeResponse.val->val.size() == 0x18) {
+		if (msg.NtChallengeResponse && msg.NtChallengeResponse->val.size() == 0x18) {
 			auth_ntlmssp.doing_ntlm2 = true;
 			X_TODO; /*
 			uint8_t session_nonce_hash[16];
@@ -1574,27 +1573,27 @@ static inline NTSTATUS handle_authenticate(x_auth_ntlmssp_t &auth_ntlmssp,
 	}
 
 	/* ntlmssp_server_check_password */
-	if (msg.DomainName.val) {
-		auth_ntlmssp.client_domain = msg.DomainName.val->val;
+	if (msg.DomainName) {
+		auth_ntlmssp.client_domain = msg.DomainName->val;
 	}
-	if (msg.UserName.val) {
-		auth_ntlmssp.client_user = msg.UserName.val->val;
+	if (msg.UserName) {
+		auth_ntlmssp.client_user = msg.UserName->val;
 	}
-	if (msg.Workstation.val) {
-		auth_ntlmssp.client_workstation = msg.Workstation.val->val;
+	if (msg.Workstation) {
+		auth_ntlmssp.client_workstation = msg.Workstation->val;
 	}
-	if (msg.LmChallengeResponse.val) {
-		auth_ntlmssp.client_lm_resp = msg.LmChallengeResponse.val;
+	if (msg.LmChallengeResponse) {
+		auth_ntlmssp.client_lm_resp = msg.LmChallengeResponse;
 	}
-	if (msg.NtChallengeResponse.val) {
-		auth_ntlmssp.client_nt_resp = msg.NtChallengeResponse.val;
+	if (msg.NtChallengeResponse) {
+		auth_ntlmssp.client_nt_resp = msg.NtChallengeResponse;
 	}
 
 	if (auth_ntlmssp.neg_flags & idl::NTLMSSP_NEGOTIATE_KEY_EXCH) {
-		if (msg.EncryptedRandomSessionKey.val->val.size() != auth_ntlmssp.encrypted_session_key.size()) {
+		if (msg.EncryptedRandomSessionKey->val.size() != auth_ntlmssp.encrypted_session_key.size()) {
 			RETURN_ERR_NT_STATUS(NT_STATUS_INVALID_PARAMETER);
 		}
-		memcpy(auth_ntlmssp.encrypted_session_key.data(), msg.EncryptedRandomSessionKey.val->val.data(), auth_ntlmssp.encrypted_session_key.size());
+		memcpy(auth_ntlmssp.encrypted_session_key.data(), msg.EncryptedRandomSessionKey->val.data(), auth_ntlmssp.encrypted_session_key.size());
 	}
 
 	auth_ntlmssp.msg_authenticate.assign(in_buf, in_buf + in_len);

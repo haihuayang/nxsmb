@@ -149,7 +149,7 @@ NTSTATUS kerberos_decode_pac(gss_const_buffer_t pac_buf,
 		return status;
 	}
 
-	if (pac_data.buffers.val.size() < 4) {
+	if (pac_data.buffers.size() < 4) {
 		/* we need logon_ingo, service_key and kdc_key */
 		DEBUG(0,("less than 4 PAC buffers\n"));
 		return NT_STATUS_INVALID_PARAMETER;
@@ -164,13 +164,13 @@ NTSTATUS kerberos_decode_pac(gss_const_buffer_t pac_buf,
 		return status;
 	}
 
-	if (pac_data_raw.buffers.val.size() < 4) {
+	if (pac_data_raw.buffers.size() < 4) {
 		/* we need logon_ingo, service_key and kdc_key */
 		DEBUG(0,("less than 4 PAC buffers\n"));
 		return NT_STATUS_INVALID_PARAMETER;
 	}
 
-	if (pac_data.buffers.val.size() != pac_data_raw.buffers.val.size()) {
+	if (pac_data.buffers.size() != pac_data_raw.buffers.size()) {
 		/* we need logon_ingo, service_key and kdc_key */
 		DEBUG(0, ("misparse! PAC_DATA has %d buffers while "
 			  "PAC_DATA_RAW has %d\n", pac_data->num_buffers,
@@ -185,9 +185,9 @@ NTSTATUS kerberos_decode_pac(gss_const_buffer_t pac_buf,
 	idl::DATA_BLOB *srv_sig_blob = NULL;
 	idl::DATA_BLOB *kdc_sig_blob = NULL;
 
-	for (size_t i=0; i < pac_data.buffers.val.size(); i++) {
-		auto &data_buf = pac_data.buffers.val[i];
-		auto &raw_buf = pac_data_raw.buffers.val[i];
+	for (size_t i=0; i < pac_data.buffers.size(); i++) {
+		auto &data_buf = pac_data.buffers[i];
+		auto &raw_buf = pac_data_raw.buffers[i];
 
 		if (data_buf.type != raw_buf.type) {
 			DEBUG(0, ("misparse! PAC_DATA buffer %d has type "
@@ -197,18 +197,18 @@ NTSTATUS kerberos_decode_pac(gss_const_buffer_t pac_buf,
 		}
 		switch (data_buf.type) {
 		case idl::PAC_TYPE_LOGON_INFO:
-			logon_info = data_buf.info.val->logon_info.val.info.val;
+			logon_info = data_buf.info->logon_info.info;
 			break;
 		case idl::PAC_TYPE_SRV_CHECKSUM:
-			srv_sig_ptr = &data_buf.info.val->srv_cksum;
-			srv_sig_blob = raw_buf.info.val.get();
+			srv_sig_ptr = &data_buf.info->srv_cksum;
+			srv_sig_blob = raw_buf.info.get();
 			break;
 		case idl::PAC_TYPE_KDC_CHECKSUM:
-			kdc_sig_ptr = &data_buf.info.val->kdc_cksum;
-			kdc_sig_blob = raw_buf.info.val.get();
+			kdc_sig_ptr = &data_buf.info->kdc_cksum;
+			kdc_sig_blob = raw_buf.info.get();
 			break;
 		case idl::PAC_TYPE_LOGON_NAME:
-			logon_name = &data_buf.info.val->logon_name;
+			logon_name = &data_buf.info->logon_name;
 			break;
 		default:
 			break;
@@ -403,14 +403,14 @@ NTSTATUS kerberos_pac_logon_info(gss_const_buffer_t pac_blob,
 		return nt_status;
 	}
 
-	for (auto &pac_buf: pac_data.buffers.val) {
+	for (auto &pac_buf: pac_data.buffers) {
 		if (pac_buf.type != idl::PAC_TYPE_LOGON_INFO) {
 			continue;
 		}
-		if (!pac_buf.info.val->logon_info.val.info.val) {
+		if (!pac_buf.info->logon_info.info) {
 			return NT_STATUS_INVALID_PARAMETER;
 		}
-		logon_info = pac_buf.info.val->logon_info.val.info.val;
+		logon_info = pac_buf.info->logon_info.info;
 		return NT_STATUS_OK;
 	}
 	return NT_STATUS_INVALID_PARAMETER;

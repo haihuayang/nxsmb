@@ -1,5 +1,5 @@
 
-#include "include/librpc/ndr_nxsmb.hxx"
+#include "include/librpc/ndr_smb.hxx"
 
 namespace idl {
 

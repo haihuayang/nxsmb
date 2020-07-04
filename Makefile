@@ -50,6 +50,7 @@ TARGET_CFLAGS_EXTRA := \
 	-I$(TARGET_DIR_out)/samba/source4 \
 	-I$(TARGET_DIR_out)/samba \
 	-I$(TARGET_DIR_out) \
+	-Iidl-gen \
 	-Isamba/source4 \
 	-Isamba \
 	-Isamba/source4/heimdal_build\
@@ -256,17 +257,11 @@ $(TARGET_SET_tests:%=$(TARGET_DIR_out)/tests/%.o) : $(TARGET_DIR_out)/tests/%.o:
 
 TARGET_SRC_libnxsmb := \
 		lib/librpc/ndr \
-		lib/librpc/ndr_nxsmb \
+		lib/librpc/ndr_smb \
 		lib/librpc/ndr_utils \
 		lib/librpc/ndr_string \
-		lib/librpc/misc_ndr \
-		lib/librpc/ntlmssp_ndr \
-		lib/librpc/security_ndr \
-		lib/librpc/krb5pac_ndr \
-		lib/librpc/netlogon_ndr \
-		lib/librpc/samr_ndr \
-		lib/librpc/lsa_ndr \
-		lib/librpc/dcerpc_ndr \
+		lib/librpc/misc \
+		lib/librpc/security \
 		lib/xutils \
 		lib/string \
 		lib/charset \
@@ -275,21 +270,34 @@ TARGET_SRC_libnxsmb := \
 		lib/wbpool \
 		lib/kerberos_pac \
 
+a=\
+		lib/librpc/security_ndr \
+		lib/librpc/ntlmssp_ndr \
+		lib/librpc/krb5pac_ndr \
+		lib/librpc/netlogon_ndr \
+		lib/librpc/samr_ndr \
+		lib/librpc/lsa_ndr \
+		lib/librpc/dcerpc_ndr \
 
-$(TARGET_DIR_out)/libnxsmb.a: $(TARGET_SRC_libnxsmb:%=$(TARGET_DIR_out)/%.o) $(TARGET_SET_idl:%=$(TARGET_DIR_out)/librpc/idl/%.ndr.o)
+TARGET_SET_m_idl := misc security lsa samr netlogon krb5pac ntlmssp dcerpc
+
+$(TARGET_DIR_out)/libnxsmb.a: $(TARGET_SRC_libnxsmb:%=$(TARGET_DIR_out)/%.o) $(TARGET_SET_idl:%=$(TARGET_DIR_out)/librpc/idl/%.idl.ndr.o) $(TARGET_SET_m_idl:%=$(TARGET_DIR_out)/librpc/idl/%.idl.ndr.o)
 	ar rcs $@ $^
 
 $(TARGET_SRC_libnxsmb:%=$(TARGET_DIR_out)/%.o): $(TARGET_DIR_out)/lib/%.o: lib/%.cxx | target_idl target_samba_gen
 	$(CXX) -c $(TARGET_CXXFLAGS) $(TARGET_CFLAGS_EXTRA) -o $@ $<
 
 
-$(TARGET_SET_idl:%=$(TARGET_DIR_out)/librpc/idl/%.ndr.o) : $(TARGET_DIR_out)/librpc/idl/%.ndr.o: $(TARGET_DIR_out)/librpc/idl/%.ndr.cxx
+$(TARGET_SET_m_idl:%=$(TARGET_DIR_out)/librpc/idl/%.idl.ndr.o) : $(TARGET_DIR_out)/librpc/idl/%.idl.ndr.o: idl-gen/librpc/idl/%.idl.ndr.cxx
+	$(CXX) -c $(TARGET_CXXFLAGS) $(TARGET_CFLAGS_EXTRA) -o $@ $<
+
+$(TARGET_SET_idl:%=$(TARGET_DIR_out)/librpc/idl/%.idl.ndr.o) : $(TARGET_DIR_out)/librpc/idl/%.idl.ndr.o: $(TARGET_DIR_out)/librpc/idl/%.idl.ndr.cxx
 	$(CXX) -c $(TARGET_CXXFLAGS) $(TARGET_CFLAGS_EXTRA) -o $@ $<
 
 $(TARGET_SET_idl:%=$(TARGET_DIR_out)/librpc/idl/%.h): %.h: %.json | $(TARGET_SET_idl:%=$(TARGET_DIR_out)/librpc/idl/%.json)
 	scripts/gen-rpc --depend --header --ndrcxx --outputdir $(dir $@) $<
 
-$(TARGET_SET_idl:%=$(TARGET_DIR_out)/librpc/idl/%.ndr.cxx): %.ndr.cxx: %.json | $(TARGET_SET_idl:%=$(TARGET_DIR_out)/librpc/idl/%.json)
+$(TARGET_SET_idl:%=$(TARGET_DIR_out)/librpc/idl/%.idl.ndr.cxx): %.idl.ndr.cxx: %.json | $(TARGET_SET_idl:%=$(TARGET_DIR_out)/librpc/idl/%.json)
 	scripts/gen-rpc --depend --header --ndrcxx --outputdir $(dir $@) $<
 
 $(TARGET_SET_idl:%=$(TARGET_DIR_out)/librpc/idl/%.d) : %.d: %.json
@@ -297,8 +305,8 @@ $(TARGET_SET_idl:%=$(TARGET_DIR_out)/librpc/idl/%.d) : %.d: %.json
 
 include $(wildcard $(TARGET_SET_idl:%=$(TARGET_DIR_out)/librpc/idl/%.d))
 
-$(TARGET_SET_idl:%=$(TARGET_DIR_out)/librpc/idl/%.ndr.cxx): scripts/gen-rpc
-$(TARGET_SET_idl:%=$(TARGET_DIR_out)/librpc/idl/%.h): scripts/gen-rpc
+$(TARGET_SET_idl:%=$(TARGET_DIR_out)/librpc/idl/%.idl.ndr.cxx): scripts/gen-rpc
+$(TARGET_SET_idl:%=$(TARGET_DIR_out)/librpc/idl/%.idl.hxx): scripts/gen-rpc
 
 $(TARGET_SET_idl:%=$(TARGET_DIR_out)/librpc/idl/%.json): $(TARGET_DIR_out)/librpc/idl/%.json: samba/librpc/idl/%.idl | target_mkdir
 	CPP=/usr/bin/cpp CC=/usr/bin/gcc /usr/bin/perl samba/pidl/pidl --quiet --dump-json $< > $@
@@ -323,9 +331,9 @@ $(patsubst %,$(TARGET_DIR_out)/samba/source4/heimdal/lib/wind/combining_table.%,
 $(TARGET_DIR_out)/samba/include/config.h: scripts/generate-config
 	scripts/generate-config > $@
 
-target_idl: $(TARGET_SET_idl:%=$(TARGET_DIR_out)/librpc/idl/%.ndr.cxx) $(TARGET_SET_idl:%=$(TARGET_DIR_out)/librpc/idl/%.h)
+target_idl: $(TARGET_SET_idl:%=$(TARGET_DIR_out)/librpc/idl/%.idl.ndr.cxx) $(TARGET_SET_idl:%=$(TARGET_DIR_out)/librpc/idl/%.idl.hxx)
 
-TARGET_DEPFILES := $(TARGET_SET_tests:%=$(TARGET_DIR_out)/tests/%.o.d) $(TARGET_SRC_libnxsmb:%=$(TARGET_DIR_out)/%.o.d) $(SET_src_nxsmbd:%=$(TARGET_DIR_out)/src/%.o.d) $(TARGET_SRC_libsamba:%=$(TARGET_DIR_out)/samba/%.o.d)
+TARGET_DEPFILES := $(TARGET_SET_tests:%=$(TARGET_DIR_out)/tests/%.o.d) $(TARGET_SRC_libnxsmb:%=$(TARGET_DIR_out)/%.o.d) $(SET_src_nxsmbd:%=$(TARGET_DIR_out)/src/%.o.d) $(TARGET_SRC_libsamba:%=$(TARGET_DIR_out)/samba/%.o.d) $(TARGET_SET_m_idl:%=$(TARGET_DIR_out)/librpc/idl/%.idl.ndr.o.d)
 
 include $(wildcard $(TARGET_DEPFILES))
 

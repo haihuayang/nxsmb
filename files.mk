@@ -2,13 +2,26 @@
 TARGET_SET_idl := \
 
 a=\
-	ntlmssp \
-	security \
+	mytest_x_elem_size \
+	mytest_size_is \
+	mytest_length_is \
+	mytest_x_length \
+
+a=\
 	misc \
-	samr \
+	security \
 	lsa \
+	samr \
 	netlogon \
 	krb5pac \
+	ntlmssp \
+
+a=\
+	wkssvc \
+	srvsvc \
+	security \
+	misc \
+	netlogon \
 	epmapper \
 	atsvc \
 	audiosrv \

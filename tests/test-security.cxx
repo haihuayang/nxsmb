@@ -1,7 +1,7 @@
 
 #include <assert.h>
 #include <cstring>
-#include "include/librpc/security_ndr.hxx"
+#include "include/librpc/security.hxx"
 #include "common.h"
 
 static const uint8_t acl_data_1[] = {

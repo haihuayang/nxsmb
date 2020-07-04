@@ -20,9 +20,9 @@
 #include "smbconf.hxx"
 #include "misc.hxx"
 #include "include/utils.hxx"
-#include "include/librpc/misc_ndr.hxx"
-#include "include/librpc/security_ndr.hxx"
-#include "include/librpc/samr_ndr.hxx"
+#include "include/librpc/misc.hxx"
+#include "include/librpc/security.hxx"
+#include "include/librpc/samr.hxx"
 extern "C" {
 #include "samba/libcli/smb/smb_constants.h"
 #include "samba/libcli/smb/smb2_constants.h"

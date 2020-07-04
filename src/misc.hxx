@@ -7,7 +7,7 @@
 #endif
 
 #include "include/utils.hxx"
-#include "include/librpc/ndr_nxsmb.hxx"
+#include "include/librpc/ndr_smb.hxx"
 
 template <class T>
 struct x_array_const_t

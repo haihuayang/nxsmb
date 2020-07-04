@@ -8,6 +8,7 @@
 
 #include "include/librpc/ndr.hxx"
 
+#if 0
 namespace idl {
 
 struct lsa_String
@@ -18,7 +19,7 @@ struct lsa_String
 	x_ndr_off_t ndr_buffers(x_ndr_pull_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level);
 	void ostr(x_ndr_ostr_t &__ndr, uint32_t __flags, x_ndr_switch_t __level) const;
 	mutable x_ndr_off_t __pos_ptr;
-	std::shared_ptr<u16string> val;
+	std::shared_ptr<std::u16string> val;
 };
 
 template <> struct x_ndr_traits_t<lsa_String> {
@@ -28,6 +29,18 @@ template <> struct x_ndr_traits_t<lsa_String> {
 
 struct lsa_BinaryString
 {
+	x_ndr_off_t ndr_scalars(x_ndr_push_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level) const;
+	x_ndr_off_t ndr_scalars(x_ndr_pull_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level);
+	x_ndr_off_t ndr_buffers(x_ndr_push_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level) const;
+	x_ndr_off_t ndr_buffers(x_ndr_pull_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level);
+	void ostr(x_ndr_ostr_t &__ndr, uint32_t __flags, x_ndr_switch_t __level) const;
+	mutable x_ndr_off_t __pos_ptr;
+	std::shared_ptr<std::u16string> val;
+};
+
+template <> struct x_ndr_traits_t<lsa_BinaryString> {
+	using has_buffers = std::true_type;
+	using ndr_type = x_ndr_type_struct;
 };
 
 struct lsa_StringLarge
@@ -38,7 +51,7 @@ struct lsa_StringLarge
 	x_ndr_off_t ndr_buffers(x_ndr_pull_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level);
 	void ostr(x_ndr_ostr_t &__ndr, uint32_t __flags, x_ndr_switch_t __level) const;
 	mutable x_ndr_off_t __pos_ptr;
-	std::shared_ptr<u16string> val;
+	std::shared_ptr<std::u16string> val;
 };
 
 template <> struct x_ndr_traits_t<lsa_StringLarge> {
@@ -48,12 +61,21 @@ template <> struct x_ndr_traits_t<lsa_StringLarge> {
 
 struct lsa_AsciiStringLarge
 {
+	x_ndr_off_t ndr_scalars(x_ndr_push_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level) const;
+	x_ndr_off_t ndr_scalars(x_ndr_pull_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level);
+	x_ndr_off_t ndr_buffers(x_ndr_push_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level) const;
+	x_ndr_off_t ndr_buffers(x_ndr_pull_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level);
+	void ostr(x_ndr_ostr_t &__ndr, uint32_t __flags, x_ndr_switch_t __level) const;
+	mutable x_ndr_off_t __pos_ptr;
+	std::shared_ptr<std::u16string> val;
 };
 
-struct lsa_SidArray
-{
+template <> struct x_ndr_traits_t<lsa_AsciiStringLarge> {
+	using has_buffers = std::true_type;
+	using ndr_type = x_ndr_type_struct;
 };
 
+#if 0
 enum lsa_TrustType : uint32 {
 	LSA_TRUST_TYPE_DOWNLEVEL=0x00000001,
 	LSA_TRUST_TYPE_UPLEVEL=0x00000002,
@@ -111,9 +133,12 @@ template <> inline x_ndr_off_t x_ndr_scalars<lsa_TrustAttributes>(lsa_TrustAttri
 	__val = lsa_TrustAttributes(v);
 	return __bpos;
 }
-
+#endif
 
 }
+#endif
+
+#include "librpc/idl/lsa.idl.hxx"
 
 #endif /* __ndr_lsa__hxx__ */
 
