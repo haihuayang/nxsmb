@@ -214,7 +214,16 @@ struct x_ndr_push_buff_t {
 	std::vector<uint8_t> finish() {
 		return std::move(data);
 	}
+
+	uint32_t next_ptr() {
+		uint32_t ret = 0x20000 + 4 * ptr_count;
+		++ptr_count;
+		return ret;
+	}
 	std::vector<uint8_t> data;
+
+	/* this is used to ensure we generate unique reference IDs */
+	uint32_t ptr_count = 0;
 };
 
 /* structure passed to functions that generate NDR formatted data */
@@ -230,15 +239,11 @@ struct x_ndr_push_t {
 		return buff.data.data();
 	}
 	uint32_t next_ptr() {
-		uint32_t ret = 0x20000 + 4 * ptr_count;
-		++ptr_count;
-		return ret;
+		return buff.next_ptr();
 	}
 
 	x_ndr_push_buff_t &buff;
 	x_ndr_off_t base;
-	/* this is used to ensure we generate unique reference IDs */
-	uint32_t ptr_count = 0;
 
 	void save_pos(x_ndr_off_t pos) {
 		X_ASSERT(pos_index == pos_array.size());
@@ -272,9 +277,6 @@ struct x_ndr_pull_t {
 
 	x_ndr_pull_buff_t &buff;
 	x_ndr_off_t base;
-	/* this is used to ensure we generate unique reference IDs
-	   between request and reply */
-	uint32_t ptr_count = 0;
 
 	void save_pos(x_ndr_off_t pos) {
 		X_ASSERT(pos_index == pos_array.size());
