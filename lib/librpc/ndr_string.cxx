@@ -168,10 +168,7 @@ x_ndr_off_t x_ndr_push_u16string(const std::u16string &str, x_ndr_push_t &ndr, x
 x_ndr_off_t x_ndr_pull_u16string(std::u16string &str, x_ndr_pull_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags)
 {
 	X_ASSERT((flags & LIBNDR_FLAG_BIGENDIAN) == 0); // TODO
-	size_t size = epos - bpos;
-	if ((size % 2) != 0) {
-		return -NDR_ERR_LENGTH;
-	}
+	epos = X_NDR_CHECK_POS(bpos + str.size() * 2, bpos, epos);
 	str.assign((const char16_t *)(ndr.get_data() + bpos), (const char16_t *)(ndr.get_data() + epos));
 	return epos;
 }
@@ -192,12 +189,11 @@ x_ndr_off_t x_ndr_pull_u16string(std::u16string &str, x_ndr_pull_t &ndr, x_ndr_o
 }
 #endif
 
-void x_ndr_ostr_u16string(const std::u16string &str, x_ndr_ostr_t &ndr, uint32_t flags, x_ndr_switch_t level)
+void x_ndr_ostr_u16string(const std::u16string &str, x_ndr_ostr_t &ndr, uint32_t flags)
 {
-	X_ASSERT(level == X_NDR_SWITCH_NONE);
-	// TODO
-	ndr.os << "u16string(" << str.size() << ")";
+	ndr.os << '"' << x_convert_utf16_to_utf8(str) << '"';
 }
+
 #if 0
 x_ndr_off_t u16string::ndr_scalars(x_ndr_push_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, x_ndr_switch_t level) const
 {

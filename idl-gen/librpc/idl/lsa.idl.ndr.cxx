@@ -6,12 +6,35 @@
 
 namespace idl {
 
-// namespace lsarpc {
-
-struct double_sizer
+struct lsa_String_traits_t
 {
-	template <typename T>
-	T operator()(T t) const { return t * 2; }
+	void get_size_length(const std::u16string &v, size_t &size, size_t &length) const {
+		size = length = v.size();
+	}
+
+	void set_size_length(std::u16string &v, size_t size, size_t length) const {
+		v.resize(length);
+	}
+
+	size_t scale(size_t size) const {
+		return size * 2;
+	}
+};
+
+struct lsa_StringLarge_traits_t
+{
+	void get_size_length(const std::u16string &v, size_t &size, size_t &length) const {
+		length = v.size();
+		size = length + 1;
+	}
+
+	void set_size_length(std::u16string &v, size_t size, size_t length) const {
+		v.resize(length);
+	}
+
+	size_t scale(size_t size) const {
+		return size * 2;
+	}
 };
 
 x_ndr_off_t lsa_String::ndr_scalars(x_ndr_push_t &__ndr,
@@ -35,8 +58,7 @@ x_ndr_off_t lsa_String::ndr_buffers(x_ndr_push_t &__ndr,
 	x_ndr_off_t __pos_length = __ndr.load_pos();
 	x_ndr_off_t __pos_size = __ndr.load_pos();
 	X_NDR_BUFFERS_UNIQUE_SIZE_IS_LENGTH_IS__2(string, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE,
-			uint16, __pos_length, double_sizer(),
-			uint16, __pos_size, double_sizer());
+			uint16, __pos_size, uint16, __pos_length, lsa_String_traits_t());
 	return __bpos;
 }
 
@@ -61,15 +83,13 @@ x_ndr_off_t lsa_String::ndr_buffers(x_ndr_pull_t &__ndr,
 	x_ndr_off_t __pos_length = __ndr.load_pos();
 	x_ndr_off_t __pos_size = __ndr.load_pos();
 	X_NDR_BUFFERS_UNIQUE_SIZE_IS_LENGTH_IS__2(string, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE,
-			uint16, __pos_length, double_sizer(),
-			uint16, __pos_size, double_sizer());
+			uint16, __pos_size, uint16, __pos_length, lsa_String_traits_t());
 	return __bpos;
 }
 
 void lsa_String::ostr(x_ndr_ostr_t &__ndr, uint32_t __flags, x_ndr_switch_t __level) const
 {
-	X_TODO;
-	x_ndr_ostr_u16string(*string, __ndr, __flags, __level);
+	x_ndr_ostr_u16string(*string, __ndr, __flags);
 }
 
 
@@ -77,7 +97,6 @@ x_ndr_off_t lsa_BinaryString::ndr_scalars(x_ndr_push_t &__ndr,
 		x_ndr_off_t __bpos, x_ndr_off_t __epos,
 		uint32_t __flags, x_ndr_switch_t __level) const
 {
-	X_TODO;
 	X_ASSERT(__level == X_NDR_SWITCH_NONE);
 	X_NDR_HEADER_ALIGN(5, __ndr, __bpos, __epos, __flags);
 	X_NDR_SAVE_POS(uint16, __ndr, __bpos, __epos, __flags);
@@ -91,12 +110,11 @@ x_ndr_off_t lsa_BinaryString::ndr_buffers(x_ndr_push_t &__ndr,
 		x_ndr_off_t __bpos, x_ndr_off_t __epos,
 		uint32_t __flags, x_ndr_switch_t __level) const
 {
-	X_TODO;
 	X_ASSERT(__level == X_NDR_SWITCH_NONE);
 	x_ndr_off_t __pos_length = __ndr.load_pos();
 	x_ndr_off_t __pos_size = __ndr.load_pos();
 	X_NDR_BUFFERS_UNIQUE_SIZE_IS_LENGTH_IS__2(array, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE,
-			uint16, __pos_length, double_sizer(), uint16, __pos_size, double_sizer());
+			uint16, __pos_size, uint16, __pos_length, lsa_String_traits_t());
 	return __bpos;
 }
 
@@ -104,7 +122,6 @@ x_ndr_off_t lsa_BinaryString::ndr_scalars(x_ndr_pull_t &__ndr,
 		x_ndr_off_t __bpos, x_ndr_off_t __epos,
 		uint32_t __flags, x_ndr_switch_t __level)
 {
-	X_TODO;
 	X_ASSERT(__level == X_NDR_SWITCH_NONE);
 	X_NDR_HEADER_ALIGN(5, __ndr, __bpos, __epos, __flags);
 	X_NDR_SAVE_POS(uint16, __ndr, __bpos, __epos, __flags);
@@ -123,14 +140,13 @@ x_ndr_off_t lsa_BinaryString::ndr_buffers(x_ndr_pull_t &__ndr,
 	x_ndr_off_t __pos_length = __ndr.load_pos();
 	x_ndr_off_t __pos_size = __ndr.load_pos();
 	X_NDR_BUFFERS_UNIQUE_SIZE_IS_LENGTH_IS__2(array, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE,
-			uint16, __pos_length, double_sizer(), uint16, __pos_size, double_sizer());
+			uint16, __pos_size, uint16, __pos_length, lsa_String_traits_t());
 	return __bpos;
 }
 
 void lsa_BinaryString::ostr(x_ndr_ostr_t &__ndr, uint32_t __flags, x_ndr_switch_t __level) const
 {
-	X_TODO;
-	x_ndr_ostr_u16string(*array, __ndr, __flags, __level);
+	x_ndr_ostr_u16string(*array, __ndr, __flags);
 }
 
 
@@ -164,18 +180,8 @@ x_ndr_off_t lsa_StringLarge::ndr_buffers(x_ndr_push_t &__ndr,
 	X_ASSERT(__level == X_NDR_SWITCH_NONE);
 	x_ndr_off_t __pos_length = __ndr.load_pos();
 	x_ndr_off_t __pos_size = __ndr.load_pos();
-	if (string) {
-		X_TODO;
-#if 0
-		uint32_t size = string->size();
-		X_NDR_SCALARS((uint3264{size + 1}), __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
-		X_NDR_SCALARS(uint3264{0}, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
-		X_NDR_SCALARS(uint3264{size}, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
-		X_NDR_SCALARS(*string, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
-		X_NDR_SCALARS(uint16(2 * size), __ndr, __pos_length, __epos, __flags, X_NDR_SWITCH_NONE);
-		X_NDR_SCALARS(uint16(2 * size + 2), __ndr, __pos_size, __epos, __flags, X_NDR_SWITCH_NONE);
-#endif
-	}
+	X_NDR_BUFFERS_UNIQUE_SIZE_IS_LENGTH_IS__2(string, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE,
+			uint16, __pos_size, uint16, __pos_length, lsa_StringLarge_traits_t());
 	return __bpos;
 }
 
@@ -199,40 +205,18 @@ x_ndr_off_t lsa_StringLarge::ndr_buffers(x_ndr_pull_t &__ndr,
 	X_ASSERT(__level == X_NDR_SWITCH_NONE);
 	x_ndr_off_t __pos_length = __ndr.load_pos();
 	x_ndr_off_t __pos_size = __ndr.load_pos();
-	if (string) {
-		uint3264 size, offset, length;
-		X_NDR_SCALARS(size, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
-		X_NDR_SCALARS(offset, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
-		X_NDR_SCALARS(length, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
-		if (offset.val != 0) {
-			return -NDR_ERR_ARRAY_SIZE;
-		}
-		if (length.val > size.val) {
-			return -NDR_ERR_ARRAY_SIZE;
-		}
-
-		X_TODO; // pull u16string with length
-		// epos = X_NDR_CHECK_POS(bpos + length.val, bpos, epos);
-		// bpos = x_ndr_puller_t<T, typename x_ndr_traits_t<T>::has_buffers>()(*t, ndr,
-		//		bpos, epos, flags, level);
-
-		uint16 tmp_length, tmp_size;
-		X_NDR_SCALARS(tmp_length, __ndr, __pos_length, __epos, __flags, X_NDR_SWITCH_NONE);
-		if (tmp_length != 2 * length.val) {
-			return -NDR_ERR_ARRAY_SIZE;
-		}
-		X_NDR_SCALARS(tmp_size, __ndr, __pos_size, __epos, __flags, X_NDR_SWITCH_NONE);
-		if (tmp_size != 2 * size.val) {
-			return -NDR_ERR_ARRAY_SIZE;
-		}
-	}
+	X_NDR_BUFFERS_UNIQUE_SIZE_IS_LENGTH_IS__2(string, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE,
+			uint16, __pos_size, uint16, __pos_length, lsa_StringLarge_traits_t());
 	return __bpos;
 }
 
 void lsa_StringLarge::ostr(x_ndr_ostr_t &__ndr, uint32_t __flags, x_ndr_switch_t __level) const
 {
-	X_TODO;
-	x_ndr_ostr_u16string(*string, __ndr, __flags, __level);
+	if (string) {
+		x_ndr_ostr_u16string(*string, __ndr, __flags);
+	} else {
+		__ndr.os << "NULL";
+	}
 }
 
 
@@ -265,6 +249,7 @@ x_ndr_off_t lsa_AsciiStringLarge::ndr_buffers(x_ndr_push_t &__ndr,
 		uint32_t __flags, x_ndr_switch_t __level) const
 {
 	X_TODO;
+#if 0
 	X_ASSERT(__level == X_NDR_SWITCH_NONE);
 	x_ndr_off_t __pos_length = __ndr.load_pos();
 	x_ndr_off_t __pos_size = __ndr.load_pos();
@@ -280,6 +265,7 @@ x_ndr_off_t lsa_AsciiStringLarge::ndr_buffers(x_ndr_push_t &__ndr,
 		X_NDR_SCALARS(uint16(2 * size + 2), __ndr, __pos_size, __epos, __flags, X_NDR_SWITCH_NONE);
 #endif
 	}
+#endif
 	return __bpos;
 }
 
@@ -338,7 +324,7 @@ x_ndr_off_t lsa_AsciiStringLarge::ndr_buffers(x_ndr_pull_t &__ndr,
 void lsa_AsciiStringLarge::ostr(x_ndr_ostr_t &__ndr, uint32_t __flags, x_ndr_switch_t __level) const
 {
 	X_TODO;
-	x_ndr_ostr_u16string(*string, __ndr, __flags, __level);
+	x_ndr_ostr_u16string(*string, __ndr, __flags);
 }
 
 
@@ -1672,7 +1658,7 @@ x_ndr_off_t lsa_DATA_BUF::ndr_buffers(x_ndr_push_t &__ndr, x_ndr_off_t __bpos, x
 	__flags = x_ndr_set_flags(__flags, LIBNDR_PRINT_ARRAY_HEX);
 	x_ndr_off_t __pos_length = __ndr.load_pos();
 	x_ndr_off_t __pos_size = __ndr.load_pos();
-	X_NDR_BUFFERS_UNIQUE_SIZE_IS_LENGTH_IS__2(data, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE, uint3264, __pos_length, x_ndr_I_t(), uint3264, __pos_size, x_ndr_I_t());
+	X_NDR_BUFFERS_UNIQUE_SIZE_IS_LENGTH_IS__2(data, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE, uint3264, __pos_length, uint3264, __pos_size);
 	return __bpos;
 }
 
@@ -1691,7 +1677,7 @@ x_ndr_off_t lsa_DATA_BUF::ndr_buffers(x_ndr_pull_t &__ndr, x_ndr_off_t __bpos, x
 {
 	x_ndr_off_t __pos_length = __ndr.load_pos();
 	x_ndr_off_t __pos_size = __ndr.load_pos();
-	X_NDR_BUFFERS_UNIQUE_SIZE_IS_LENGTH_IS__2(data, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE, uint3264, __pos_length, x_ndr_I_t(), uint3264, __pos_size, x_ndr_I_t());
+	X_NDR_BUFFERS_UNIQUE_SIZE_IS_LENGTH_IS__2(data, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE, uint3264, __pos_length, uint3264, __pos_size);
 	return __bpos;
 }
 

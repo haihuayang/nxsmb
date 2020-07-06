@@ -543,7 +543,10 @@ x_ndr_off_t AV_PAIR_LIST::ndr_scalars(x_ndr_pull_t &__ndr, x_ndr_off_t __bpos, x
 {
 	__flags = x_ndr_set_flags(__flags, LIBNDR_FLAG_NOALIGN);
 	X_NDR_HEADER_ALIGN(4, __ndr, __bpos, __epos, __flags);
-	X_NDR_SCALARS(pair, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
+	while (__bpos < __epos) {
+		pair.resize(pair.size() + 1);
+		X_NDR_SCALARS(pair.back(), __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
+	}
 	X_NDR_TRAILER_ALIGN(4, __ndr, __bpos, __epos, __flags);
 	return __bpos;
 }

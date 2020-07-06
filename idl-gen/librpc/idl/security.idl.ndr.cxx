@@ -287,7 +287,7 @@ x_ndr_off_t security_ace::ndr_scalars(x_ndr_push_t &__ndr, x_ndr_off_t __bpos, x
 	x_ndr_off_t __base = __bpos; (void)__base;
 	X_NDR_SCALARS(type, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
 	X_NDR_SCALARS(flags, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
-	x_ndr_off_t __tmp_2;
+	x_ndr_off_t __tmp_2 = __bpos;
 	X_NDR_SKIP(uint16, __ndr, __bpos, __epos, __flags);
 	X_NDR_SCALARS(access_mask, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
 	X_NDR_SCALARS(object, __ndr, __bpos, __epos, __flags, type);
@@ -338,7 +338,7 @@ x_ndr_off_t security_acl::ndr_scalars(x_ndr_push_t &__ndr, x_ndr_off_t __bpos, x
 	X_NDR_HEADER_ALIGN(4, __ndr, __bpos, __epos, __flags);
 	x_ndr_off_t __base = __bpos;
 	X_NDR_SCALARS(revision, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
-	x_ndr_off_t __tmp_1;
+	x_ndr_off_t __tmp_1 = __bpos;
 	X_NDR_SKIP(uint16, __ndr, __bpos, __epos, __flags);
 	X_NDR_CHECK_RANGE(aces.size(), 0, 2000);
 	X_NDR_SCALARS(uint32(aces.size()), __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);

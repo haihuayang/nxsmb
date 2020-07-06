@@ -294,10 +294,8 @@ x_ndr_off_t netr_ChallengeResponse::ndr_scalars(x_ndr_push_t &__ndr, x_ndr_off_t
 {
 	__flags = x_ndr_set_flags(__flags, LIBNDR_PRINT_ARRAY_HEX);
 	X_NDR_HEADER_ALIGN(5, __ndr, __bpos, __epos, __flags);
-	__ndr.save_pos(__bpos);
-	X_NDR_SCALARS(uint16(0), __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
-	__ndr.save_pos(__bpos);
-	X_NDR_SCALARS(uint16(0), __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
+	X_NDR_SAVE_POS(uint16, __ndr, __bpos, __epos, __flags);
+	X_NDR_SAVE_POS(uint16, __ndr, __bpos, __epos, __flags);
 	X_NDR_SCALARS_UNIQUE_PTR(data, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
 	X_NDR_TRAILER_ALIGN(5, __ndr, __bpos, __epos, __flags);
 	return __bpos;
@@ -306,10 +304,10 @@ x_ndr_off_t netr_ChallengeResponse::ndr_scalars(x_ndr_push_t &__ndr, x_ndr_off_t
 x_ndr_off_t netr_ChallengeResponse::ndr_buffers(x_ndr_push_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level) const
 {
 	__flags = x_ndr_set_flags(__flags, LIBNDR_PRINT_ARRAY_HEX);
-	x_ndr_off_t pos_length = __ndr.load_pos();
-	x_ndr_off_t pos_size = __ndr.load_pos();
+	x_ndr_off_t __pos_length = __ndr.load_pos();
+	x_ndr_off_t __pos_size = __ndr.load_pos();
 	X_NDR_BUFFERS_UNIQUE_SIZE_IS_LENGTH_IS__2(data, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE,
-			uint16, pos_length, x_ndr_I_t(), uint16, pos_size, x_ndr_I_t());
+			uint16, __pos_size, uint16, __pos_length);
 	return __bpos;
 }
 
@@ -317,12 +315,8 @@ x_ndr_off_t netr_ChallengeResponse::ndr_scalars(x_ndr_pull_t &__ndr, x_ndr_off_t
 {
 	__flags = x_ndr_set_flags(__flags, LIBNDR_PRINT_ARRAY_HEX);
 	X_NDR_HEADER_ALIGN(5, __ndr, __bpos, __epos, __flags);
-	__ndr.save_pos(__bpos);
-	uint16 length;
-	X_NDR_SCALARS(length, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
-	__ndr.save_pos(__bpos);
-	uint16 size;
-	X_NDR_SCALARS(size, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
+	X_NDR_SAVE_POS(uint16, __ndr, __bpos, __epos, __flags);
+	X_NDR_SAVE_POS(uint16, __ndr, __bpos, __epos, __flags);
 	X_NDR_SCALARS_UNIQUE_PTR(data, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
 	X_NDR_TRAILER_ALIGN(5, __ndr, __bpos, __epos, __flags);
 	return __bpos;
@@ -331,10 +325,10 @@ x_ndr_off_t netr_ChallengeResponse::ndr_scalars(x_ndr_pull_t &__ndr, x_ndr_off_t
 x_ndr_off_t netr_ChallengeResponse::ndr_buffers(x_ndr_pull_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level)
 {
 	__flags = x_ndr_set_flags(__flags, LIBNDR_PRINT_ARRAY_HEX);
-	x_ndr_off_t pos_length = __ndr.load_pos();
-	x_ndr_off_t pos_size = __ndr.load_pos();
+	x_ndr_off_t __pos_length = __ndr.load_pos();
+	x_ndr_off_t __pos_size = __ndr.load_pos();
 	X_NDR_BUFFERS_UNIQUE_SIZE_IS_LENGTH_IS__2(data, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE,
-			uint16, pos_length, x_ndr_I_t(), uint16, pos_size, x_ndr_I_t());
+			uint16, __pos_size, uint16, __pos_length);
 	return __bpos;
 }
 
@@ -408,8 +402,7 @@ x_ndr_off_t netr_GenericInfo::ndr_scalars(x_ndr_push_t &__ndr, x_ndr_off_t __bpo
 	X_NDR_HEADER_ALIGN(5, __ndr, __bpos, __epos, __flags);
 	X_NDR_SCALARS(identity_info, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
 	X_NDR_SCALARS(package_name, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
-	__ndr.save_pos(__bpos);
-	X_NDR_SCALARS(uint32(0), __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
+	X_NDR_SAVE_POS(uint32, __ndr, __bpos, __epos, __flags);
 	X_NDR_SCALARS_UNIQUE_PTR(data, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
 	X_NDR_TRAILER_ALIGN(5, __ndr, __bpos, __epos, __flags);
 	return __bpos;
@@ -431,9 +424,7 @@ x_ndr_off_t netr_GenericInfo::ndr_scalars(x_ndr_pull_t &__ndr, x_ndr_off_t __bpo
 	X_NDR_HEADER_ALIGN(5, __ndr, __bpos, __epos, __flags);
 	X_NDR_SCALARS(identity_info, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
 	X_NDR_SCALARS(package_name, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
-	__ndr.save_pos(__bpos);
-	uint32 data_length;
-	X_NDR_SCALARS(data_length, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
+	X_NDR_SAVE_POS(uint32, __ndr, __bpos, __epos, __flags);
 	X_NDR_SCALARS_UNIQUE_PTR(data, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
 	X_NDR_TRAILER_ALIGN(5, __ndr, __bpos, __epos, __flags);
 	return __bpos;
@@ -2662,7 +2653,7 @@ x_ndr_off_t netr_CIPHER_VALUE::ndr_buffers(x_ndr_push_t &__ndr, x_ndr_off_t __bp
 {
 	x_ndr_off_t __pos_len = __ndr.load_pos();
 	x_ndr_off_t __pos_maxlen = __ndr.load_pos();
-	X_NDR_BUFFERS_UNIQUE_SIZE_IS_LENGTH_IS__2(cipher_data, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE, uint32, __pos_len, x_ndr_I_t(), uint32, __pos_maxlen, x_ndr_I_t());
+	X_NDR_BUFFERS_UNIQUE_SIZE_IS_LENGTH_IS__2(cipher_data, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE, uint32, __pos_maxlen, uint32, __pos_len);
 	return __bpos;
 }
 
@@ -2680,7 +2671,7 @@ x_ndr_off_t netr_CIPHER_VALUE::ndr_buffers(x_ndr_pull_t &__ndr, x_ndr_off_t __bp
 {
 	x_ndr_off_t __pos_len = __ndr.load_pos();
 	x_ndr_off_t __pos_maxlen = __ndr.load_pos();
-	X_NDR_BUFFERS_UNIQUE_SIZE_IS_LENGTH_IS__2(cipher_data, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE, uint32, __pos_len, x_ndr_I_t(), uint32, __pos_maxlen, x_ndr_I_t());
+	X_NDR_BUFFERS_UNIQUE_SIZE_IS_LENGTH_IS__2(cipher_data, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE, uint32, __pos_maxlen, uint32, __pos_len);
 	return __bpos;
 }
 

@@ -356,83 +356,118 @@ x_ndr_off_t x_ndr_buffers_unique_size_is(std::shared_ptr<T> &t,
 
 
 template <typename T>
-x_ndr_off_t x_ndr_buffers_unique_size_is_length_is(const std::shared_ptr<T> &t,
-		x_ndr_push_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos,
-		uint32_t flags, x_ndr_switch_t level)
-{
-	if (t) {
-		uint3264 size = t->size();
-		X_NDR_SCALARS(size, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
-		X_NDR_SCALARS(uint3264(0), ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
-		X_NDR_SCALARS(size, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
-		bpos = x_ndr_handler_t<T, typename x_ndr_traits_t<T>::has_buffers>()(*t, ndr,
-				bpos, epos, flags, level);
-		if (bpos < 0) {
-			return bpos;
-		}
-	}
-	return bpos;
-}
+struct x_ndr_traits_size_is_length_is_t;
 
 template <typename T>
-x_ndr_off_t x_ndr_buffers_unique_size_is_length_is(std::shared_ptr<T> &t,
-		x_ndr_pull_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos,
-		uint32_t flags, x_ndr_switch_t level)
+struct x_ndr_traits_size_is_length_is_t<std::vector<T>>
 {
-	if (t) {
-		uint3264 size, offset, length;
-		X_NDR_SCALARS(size, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
-		X_NDR_SCALARS(offset, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
-		X_NDR_SCALARS(length, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
-		if (offset.val != 0) {
-			return -NDR_ERR_ARRAY_SIZE;
-		}
-		if (length.val > size.val) {
-			return -NDR_ERR_ARRAY_SIZE;
-		}
-
-		t->resize(length.val);
-		bpos = x_ndr_handler_t<T, typename x_ndr_traits_t<T>::has_buffers>()(*t, ndr,
-				bpos, epos, flags, level);
-		if (bpos < 0) {
-			return bpos;
-		}
+	void get_size_length(const std::vector<T> &v, size_t &size, size_t &length) const {
+		size = length = v.size();
 	}
-	return bpos;
-}
 
-template <typename T, typename SPos, typename SSizer, typename LPos, typename LSizer>
+	void set_size_length(std::vector<T> &v, size_t size, size_t length) const {
+		v.resize(length);
+	}
+
+	size_t scale(size_t size) const {
+		return size;
+	}
+};
+
+template <>
+struct x_ndr_traits_size_is_length_is_t<std::u16string>
+{
+	void get_size_length(const std::u16string &v, size_t &size, size_t &length) const {
+		size = length = v.size();
+	}
+
+	void set_size_length(std::u16string &v, size_t size, size_t length) const {
+		v.resize(length);
+	}
+
+	size_t scale(size_t size) const {
+		return size;
+	}
+};
+
+template <typename T, typename Traits = x_ndr_traits_size_is_length_is_t<T>>
 x_ndr_off_t x_ndr_buffers_unique_size_is_length_is(const std::shared_ptr<T> &t,
 		x_ndr_push_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos,
 		uint32_t flags, x_ndr_switch_t level,
-		const SPos &spos, const SSizer &ssizer,
-		const LPos &lpos, const LSizer &lsizer)
+		const Traits &traits = Traits())
+{
+	if (t) {
+		size_t size, length;
+		traits.get_size_length(*t, size, length);
+		X_NDR_SCALARS(uint3264(size), ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
+		X_NDR_SCALARS(uint3264(0), ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
+		X_NDR_SCALARS(uint3264(length), ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
+		bpos = x_ndr_handler_t<T, typename x_ndr_traits_t<T>::has_buffers>()(*t, ndr,
+				bpos, epos, flags, level);
+	}
+	return bpos;
+}
+
+template <typename T, typename Traits = x_ndr_traits_size_is_length_is_t<T>>
+x_ndr_off_t x_ndr_buffers_unique_size_is_length_is(std::shared_ptr<T> &t,
+		x_ndr_pull_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos,
+		uint32_t flags, x_ndr_switch_t level,
+		const Traits &traits = Traits())
+{
+	if (t) {
+		uint3264 size, offset, length;
+		X_NDR_SCALARS(size, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
+		X_NDR_SCALARS(offset, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
+		X_NDR_SCALARS(length, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
+		if (offset.val != 0) {
+			return -NDR_ERR_ARRAY_SIZE;
+		}
+		if (length.val > size.val) {
+			return -NDR_ERR_ARRAY_SIZE;
+		}
+		if (bpos < 0) {
+			return bpos;
+		}
+
+		traits.set_size_length(*t, size.val, length.val);
+		bpos = x_ndr_handler_t<T, typename x_ndr_traits_t<T>::has_buffers>()(*t, ndr,
+				bpos, epos, flags, level);
+	}
+	return bpos;
+}
+
+template <typename T, typename SPos, typename LPos, typename Traits = x_ndr_traits_size_is_length_is_t<T>>
+x_ndr_off_t x_ndr_buffers_unique_size_is_length_is(const std::shared_ptr<T> &t,
+		x_ndr_push_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos,
+		uint32_t flags, x_ndr_switch_t level,
+		const SPos &spos, const LPos &lpos,
+		const Traits &traits = Traits())
 
 {
 	if (t) {
-		uint3264 size = t->size();
-		X_NDR_SCALARS(size, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
+		size_t size, length;
+		traits.get_size_length(*t, size, length);
+		X_NDR_SCALARS(uint3264(size), ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
 		X_NDR_SCALARS(uint3264(0), ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
-		X_NDR_SCALARS(size, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
+		X_NDR_SCALARS(uint3264(length), ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
 		bpos = x_ndr_handler_t<T, typename x_ndr_traits_t<T>::has_buffers>()(*t, ndr,
 				bpos, epos, flags, level);
 		if (bpos < 0) {
 			return bpos;
 		}
 
-
-		spos(ssizer(size.val), ndr, epos, flags);
-		lpos(lsizer(size.val), ndr, epos, flags);
+		spos(traits.scale(size), ndr, epos, flags);
+		lpos(traits.scale(length), ndr, epos, flags);
 	}
 	return bpos;
 }
 
-template <typename T, typename SPos, typename SSizer, typename LPos, typename LSizer>
+template <typename T, typename SPos, typename LPos, typename Traits = x_ndr_traits_size_is_length_is_t<T>>
 x_ndr_off_t x_ndr_buffers_unique_size_is_length_is(std::shared_ptr<T> &t,
 		x_ndr_pull_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos,
 		uint32_t flags, x_ndr_switch_t level,
-		const SPos &spos, const SSizer &ssizer,
-		const LPos &lpos, const LSizer &lsizer)
+		const SPos &spos, const LPos &lpos,
+		const Traits &traits = Traits())
 {
 	if (t) {
 		uint3264 size, offset, length;
@@ -446,7 +481,7 @@ x_ndr_off_t x_ndr_buffers_unique_size_is_length_is(std::shared_ptr<T> &t,
 			return -NDR_ERR_ARRAY_SIZE;
 		}
 
-		t->resize(length.val);
+		traits.set_size_length(*t, size.val, length.val);
 		bpos = x_ndr_handler_t<T, typename x_ndr_traits_t<T>::has_buffers>()(*t, ndr,
 				bpos, epos, flags, level);
 		if (bpos < 0) {
@@ -458,11 +493,11 @@ x_ndr_off_t x_ndr_buffers_unique_size_is_length_is(std::shared_ptr<T> &t,
 	return bpos;
 }
 
-#define X_NDR_BUFFERS_UNIQUE_SIZE_IS_LENGTH_IS__0(t, ndr, bpos, epos, flags, level) \
-	X_NDR_VERIFY((bpos), x_ndr_buffers_unique_size_is_length_is((t), (ndr), (bpos), (epos), (flags), (level)))
+#define X_NDR_BUFFERS_UNIQUE_SIZE_IS_LENGTH_IS__0(t, ndr, bpos, epos, flags, level, ...) \
+	X_NDR_VERIFY((bpos), (x_ndr_buffers_unique_size_is_length_is((t), (ndr), (bpos), (epos), (flags), (level), ##__VA_ARGS__)))
 
-#define X_NDR_BUFFERS_UNIQUE_SIZE_IS_LENGTH_IS__2(t, ndr, bpos, epos, flags, level, type_size, pos_size, sizer_size, type_length, pos_length, sizer_length) \
-	X_NDR_VERIFY((bpos), (x_ndr_buffers_unique_size_is_length_is((t), (ndr), (bpos), (epos), (flags), (level), x_ndr_at_t<type_size>(pos_size), (sizer_size), x_ndr_at_t<type_length>(pos_length), (sizer_length))))
+#define X_NDR_BUFFERS_UNIQUE_SIZE_IS_LENGTH_IS__2(t, ndr, bpos, epos, flags, level, type_size, pos_size, type_length, pos_length, ...) \
+	X_NDR_VERIFY((bpos), (x_ndr_buffers_unique_size_is_length_is((t), (ndr), (bpos), (epos), (flags), (level), x_ndr_at_t<type_size>(pos_size), x_ndr_at_t<type_length>(pos_length), ##__VA_ARGS__)))
 
 template <typename T, typename SPos>
 x_ndr_off_t x_ndr_scalars_size(const T &t,
