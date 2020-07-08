@@ -499,9 +499,7 @@ x_ndr_off_t AV_PAIR::ndr_scalars(x_ndr_push_t &__ndr, x_ndr_off_t __bpos, x_ndr_
 	X_NDR_SCALARS(AvId, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
 	x_ndr_off_t __pos_AvLen = __bpos;
 	X_NDR_SKIP(uint16, __ndr, __bpos, __epos, __flags);
-	x_ndr_off_t __orig_bpos = __bpos;
-	X_NDR_SCALARS(Value, __ndr, __bpos, __epos, __flags, AvId);
-	X_NDR_SCALARS(uint16(__bpos - __orig_bpos), __ndr, __pos_AvLen, __epos, __flags, X_NDR_SWITCH_NONE);
+	X_NDR_SCALARS_SIZE(Value, __ndr, __bpos, __epos, __flags, AvId, uint16, __pos_AvLen);
 	X_NDR_TRAILER_ALIGN(4, __ndr, __bpos, __epos, __flags);
 	return __bpos;
 }
@@ -511,10 +509,9 @@ x_ndr_off_t AV_PAIR::ndr_scalars(x_ndr_pull_t &__ndr, x_ndr_off_t __bpos, x_ndr_
 	__flags = x_ndr_set_flags(__flags, LIBNDR_FLAG_NOALIGN);
 	X_NDR_HEADER_ALIGN(4, __ndr, __bpos, __epos, __flags);
 	X_NDR_SWITCH(ntlmssp_AvId, AvId, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
-	uint16 AvLen;
-	X_NDR_SCALARS(AvLen, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
-	__epos = X_NDR_CHECK_POS(__bpos + AvLen, __bpos, __epos);
-	X_NDR_SCALARS(Value, __ndr, __bpos, __epos, __flags, AvId);
+	x_ndr_off_t __pos_AvLen = __bpos;
+	X_NDR_SKIP(uint16, __ndr, __bpos, __epos, __flags);
+	X_NDR_SCALARS_SIZE(Value, __ndr, __bpos, __epos, __flags, AvId, uint16, __pos_AvLen);
 	X_NDR_TRAILER_ALIGN(4, __ndr, __bpos, __epos, __flags);
 	return __bpos;
 }

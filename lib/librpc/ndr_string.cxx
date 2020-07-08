@@ -168,7 +168,10 @@ x_ndr_off_t x_ndr_push_u16string(const std::u16string &str, x_ndr_push_t &ndr, x
 x_ndr_off_t x_ndr_pull_u16string(std::u16string &str, x_ndr_pull_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags)
 {
 	X_ASSERT((flags & LIBNDR_FLAG_BIGENDIAN) == 0); // TODO
-	epos = X_NDR_CHECK_POS(bpos + str.size() * 2, bpos, epos);
+	x_ndr_off_t size = epos - bpos;
+	if (size < 0 || (size % 2) != 0) {
+		return -NDR_ERR_LENGTH;
+	}
 	str.assign((const char16_t *)(ndr.get_data() + bpos), (const char16_t *)(ndr.get_data() + epos));
 	return epos;
 }

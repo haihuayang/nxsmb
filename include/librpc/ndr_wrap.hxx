@@ -481,14 +481,12 @@ x_ndr_off_t x_ndr_buffers_unique_size_is_length_is(std::shared_ptr<T> &t,
 			return -NDR_ERR_ARRAY_SIZE;
 		}
 
-		traits.set_size_length(*t, size.val, length.val);
-		bpos = x_ndr_handler_t<T, typename x_ndr_traits_t<T>::has_buffers>()(*t, ndr,
-				bpos, epos, flags, level);
+		x_ndr_with_size_t<T> tmp(*t, length.val);
+		bpos = x_ndr_handler_t<x_ndr_with_size_t<T>, typename x_ndr_traits_t<T>::has_buffers>()(tmp,
+				ndr, bpos, epos, flags, level);
 		if (bpos < 0) {
 			return bpos;
 		}
-
-		// TODO sizers x_ndr_pull_at(length.val, ndr, epos, flags, args...);
 	}
 	return bpos;
 }

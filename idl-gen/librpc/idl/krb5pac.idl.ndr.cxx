@@ -6,21 +6,6 @@
 
 namespace idl {
 
-struct remain_u16string_t
-{
-	remain_u16string_t(std::u16string &v) : val(v) { }
-	x_ndr_off_t ndr_scalars(x_ndr_pull_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, x_ndr_switch_t level) {
-		X_ASSERT(level == X_NDR_SWITCH_NONE);
-		size_t size = epos - bpos;
-		if ((size % 2) != 0) {
-			return -NDR_ERR_LENGTH;
-		}
-		val.assign((const char16_t *)(ndr.get_data() + bpos), (const char16_t *)(ndr.get_data() + epos));
-		return epos;
-	}
-	std::u16string &val;
-};
-
 x_ndr_off_t PAC_LOGON_NAME::ndr_scalars(x_ndr_push_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level) const
 {
 	X_NDR_HEADER_ALIGN(4, __ndr, __bpos, __epos, __flags);
@@ -28,11 +13,6 @@ x_ndr_off_t PAC_LOGON_NAME::ndr_scalars(x_ndr_push_t &__ndr, x_ndr_off_t __bpos,
 	x_ndr_off_t __pos_size = __bpos;
 	X_NDR_SKIP(uint16, __ndr, __bpos, __epos, __flags);
 	X_NDR_SCALARS_SIZE(account_name, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE, uint16, __pos_size);
-#if 0
-	x_ndr_off_t __orig_bpos = __bpos;
-	X_NDR_SCALARS(account_name, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
-	X_NDR_SCALARS(uint16(__bpos - __orig_bpos), _bpos, __epos, __flags, X_NDR_SWITCH_NONE);
-#endif
 	X_NDR_TRAILER_ALIGN(4, __ndr, __bpos, __epos, __flags);
 	return __bpos;
 }
@@ -43,8 +23,7 @@ x_ndr_off_t PAC_LOGON_NAME::ndr_scalars(x_ndr_pull_t &__ndr, x_ndr_off_t __bpos,
 	X_NDR_SCALARS(logon_time, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
 	x_ndr_off_t __pos_size = __bpos;
 	X_NDR_SKIP(uint16, __ndr, __bpos, __epos, __flags);
-	remain_u16string_t tmp(account_name);
-	X_NDR_SCALARS_SIZE(tmp, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE, uint16, __pos_size);
+	X_NDR_SCALARS_SIZE(account_name, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE, uint16, __pos_size);
 	X_NDR_TRAILER_ALIGN(4, __ndr, __bpos, __epos, __flags);
 	return __bpos;
 }
