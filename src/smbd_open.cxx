@@ -17,10 +17,7 @@ struct smbd_open_pool_t
 
 static inline int __smbd_open_pool_init(smbd_open_pool_t &pool, x_evtmgmt_t *ep, uint32_t count)
 {
-	uint32_t bucket_size = 1;
-	while (bucket_size <= count) {
-		bucket_size <<= 1;
-	}
+	size_t bucket_size = x_next_2_power(count);
 	pool.hashtable.init(bucket_size);
 	pool.capacity = count;
 

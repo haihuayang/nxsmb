@@ -7,6 +7,7 @@
 #endif
 
 #include <string>
+#include <cstring>
 
 /* unit is nsec */
 typedef uint64_t x_tick_t;
@@ -33,11 +34,22 @@ static inline long x_tick_cmp(x_tick_t t1, x_tick_t t2)
 template <typename T>
 struct x_auto_ref_t
 {
-	x_auto_ref_t(T *t = nullptr) : val{t} { }
+	explicit x_auto_ref_t(T *t = nullptr) : val{t} { }
 	x_auto_ref_t(const x_auto_ref_t<T> &o) = delete;
-	x_auto_ref_t(x_auto_ref_t<T> &&o) = delete;
+	x_auto_ref_t(x_auto_ref_t<T> &&o) {
+		val = o.val;
+		o.val = nullptr;
+	}
+
 	x_auto_ref_t<T> &operator=(const x_auto_ref_t<T> &o) = delete;
-	x_auto_ref_t<T> &operator=(x_auto_ref_t<T> &&o) = delete;
+	x_auto_ref_t<T> &operator=(x_auto_ref_t<T> &&o) {
+		if (val != o.val && val) {
+			val->decref();
+		}
+		val = o.val;
+		o.val = nullptr;
+		return *this;
+	}
 
 	void set(T *t) {
 		if (val == t) {
@@ -63,7 +75,22 @@ struct x_auto_ref_t
 	T *val;
 };
 
+static inline size_t x_next_2_power(size_t num)
+{
+	size_t ret = 1;
+	while (ret <= num) {
+		ret <<= 1;
+	}
+	return ret;
+}
 
+struct uuid_t
+{
+	uint8_t val[16];
+	bool operator==(const uuid_t &other) const {
+		return std::memcmp(val, other.val, sizeof val) == 0;
+	}
+};
 
 #endif /* __utils__hxx__ */
 

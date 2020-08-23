@@ -65,22 +65,9 @@ static int x_smb2_reply_ioctl(x_smbd_conn_t *smbd_conn,
 	return 0;
 }
 
-static NTSTATUS parse_dfs_path(const char16_t *in_file_name_data, size_t in_file_name_size,
+static NTSTATUS parse_dfs_path(const std::string &in_file_name,
 		std::string &host, std::string &share, std::string &relpath)
 {
-#if 0
-	skip double '\\'
-	const char16_t *in_file_name_b = in_file_name_data;
-	const char16_t *in_file_name_e = in_file_name_data + in_file_name_size;
-	for ( ; in_file_name_b < in_file_name_e; ++in_file_name_b) {
-		if (*in_file_name_b != u'\\') {
-			break;
-		}
-	}
-#endif
-	// TODO not full implementation parse_dfs_path
-	std::string in_file_name = x_convert_utf16_to_lower_utf8(in_file_name_data,
-			in_file_name_data + in_file_name_size);
 	// TODO NT_STATUS_ILLEGAL_CHARACTER
 	const char *str = in_file_name.c_str();
 	while (*str == '\\') {
@@ -127,11 +114,11 @@ static idl::x_ndr_off_t push_referral_v3(const x_referral_t &referral, idl::x_nd
 		idl::x_ndr_off_t bpos, idl::x_ndr_off_t epos, uint32_t ndr_flags)
 {
 	idl::x_ndr_off_t base_pos = bpos;
-	bpos = X_NDR_CHECK(idl::x_ndr_push_uint16(3, ndr, bpos, epos, ndr_flags));
+	bpos = X_NDR_CHECK(idl::x_ndr_push_uint16(4, ndr, bpos, epos, ndr_flags)); // TODO version to be max_referral_level
 	idl::x_ndr_off_t size_pos = bpos;
 	bpos = X_NDR_CHECK(idl::x_ndr_skip<uint16_t>(ndr, bpos, epos, ndr_flags));
 	bpos = X_NDR_CHECK(idl::x_ndr_push_uint16(DFS_SERVER_ROOT, ndr, bpos, epos, ndr_flags));
-	bpos = X_NDR_CHECK(idl::x_ndr_push_uint16(0, ndr, bpos, epos, ndr_flags)); // entry_flags
+	bpos = X_NDR_CHECK(idl::x_ndr_push_uint16(4, ndr, bpos, epos, ndr_flags)); // entry_flags
 	bpos = X_NDR_CHECK(idl::x_ndr_push_uint32(referral.ttl, ndr, bpos, epos, ndr_flags));
 	idl::x_ndr_off_t path_pos = bpos;
 	bpos = X_NDR_CHECK(idl::x_ndr_skip<uint16_t>(ndr, bpos, epos, ndr_flags));
@@ -193,9 +180,26 @@ static NTSTATUS fsctl_dfs_get_refers_internal(x_smbd_tcon_t *smbd_tcon,
 		return NT_STATUS_INVALID_PARAMETER;
 	}
 
+	const char16_t *in_file_name_ptr = (const char16_t *)in_file_name_data;
+	const char16_t *in_file_name_end = (const char16_t *)(in_file_name_data + in_file_name_size);
+	for ( ; in_file_name_ptr < in_file_name_end; ++in_file_name_ptr) {
+		if (*in_file_name_ptr != u'\\' && *in_file_name_ptr != u'/') {
+			break;
+		}
+	}
+
+	if (in_file_name_ptr != in_file_name_end && in_file_name_end[-1] == 0) {
+		--in_file_name_end;
+	}
+
+	if (in_file_name_ptr != (const char16_t *)in_file_name_data) {
+		--in_file_name_ptr;
+	}
+
+	std::string in_file_name = x_convert_utf16_to_lower_utf8(in_file_name_ptr,
+			in_file_name_end);
 	std::string host, share, reqpath;
-	status = parse_dfs_path((const char16_t *)in_file_name_data, in_file_name_size / 2,
-			host, share, reqpath);
+	status = parse_dfs_path(in_file_name, host, share, reqpath);
 
 	if (!NT_STATUS_IS_OK(status)) {
 		return status;
@@ -215,10 +219,9 @@ static NTSTATUS fsctl_dfs_get_refers_internal(x_smbd_tcon_t *smbd_tcon,
 	}
 
 	x_dfs_referral_resp_t dfs_referral_resp;
-	dfs_referral_resp.path_consumed = in_file_name_size; // TODO, samba first skip double '\\'
+	dfs_referral_resp.path_consumed = (in_file_name_end - in_file_name_ptr) * 2;
 	if (true || reqpath.size() == 0) {
-		std::u16string in_file_name{(const char16_t *)in_file_name_data,
-			(const char16_t *)(in_file_name_data + in_file_name_size)};
+		std::u16string in_file_name{in_file_name_ptr, in_file_name_end};
 		if (smbd_share->msdfs_proxy.size() == 0) {
 			dfs_referral_resp.referrals.push_back(x_referral_t{0, lpcfg_max_referral_ttl(), in_file_name, in_file_name});
 		} else {
@@ -309,7 +312,7 @@ static NTSTATUS x_smb2_ioctl_dfs(x_smbd_tcon_t *smbd_tcon,
 		uint32_t in_max_output,
 		std::vector<uint8_t>& output)
 {
-	if (smbd_tcon->smbd_share->type != x_smbd_share_t::TYPE_IPC) {
+	if (smbd_tcon->smbd_share->type != TYPE_IPC) {
 		return NT_STATUS_INVALID_DEVICE_REQUEST;
 	}
 	if (!lpcfg_host_msdfs()) {

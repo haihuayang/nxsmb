@@ -413,7 +413,6 @@ static NTSTATUS x_smbd_named_pipe_ioctl(x_smbd_open_t *smbd_open,
 static NTSTATUS x_smbd_named_pipe_close(x_smbd_open_t *smbd_open,
 		const x_smb2_requ_close_t &requ, x_smb2_resp_close_t &resp)
 {
-	memset(&resp, 0, sizeof resp);
 	resp.struct_size = 0x3c;
 	return NT_STATUS_OK;
 }
@@ -444,7 +443,8 @@ static inline x_smbd_named_pipe_t *x_smbd_named_pipe_create(std::shared_ptr<x_sm
 }
 
 static x_smbd_open_t *x_smbd_tcon_ipc_op_create(std::shared_ptr<x_smbd_tcon_t> &smbd_tcon,
-		NTSTATUS &status, x_smb2_requ_create_t &requ_create)
+		NTSTATUS &status, uint32_t in_hdr_flags,
+		x_smb2_requ_create_t &requ_create)
 {
 	std::u16string in_name;
 	in_name.reserve(requ_create.in_name.size());
@@ -458,7 +458,6 @@ static x_smbd_open_t *x_smbd_tcon_ipc_op_create(std::shared_ptr<x_smbd_tcon_t> &
 	}
 
 	x_smbd_named_pipe_t *named_pipe = x_smbd_named_pipe_create(smbd_tcon, rpc);
-	x_smbd_open_insert_local(&named_pipe->base);
 
 	requ_create.out_create_ts.val = 0;
 	requ_create.out_last_access_ts.val = 0;

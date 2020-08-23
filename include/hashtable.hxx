@@ -28,14 +28,14 @@ struct x_hashtable_t
 		HashTraits::member(item)->remove();
 	}
 
-	template <typename EQ> item_type *find(size_t hash, const EQ &eq) const {
+	template <typename EQ> item_type *find(size_t hash, EQ &&eq) const {
 		const bucket_type &bucket = buckets[hash % buckets.size()];
 		return find_in_bucket(bucket, eq);
 	}
 
 private:
 	template <class EQ> item_type *find_in_bucket(const bucket_type &bucket,
-			const EQ &eq) const
+			EQ &&eq) const
 	{
 		for (x_dqlink_t *link = bucket.get_front(); link; link = link->get_next()) {
 			item_type *item = HashTraits::container(link);

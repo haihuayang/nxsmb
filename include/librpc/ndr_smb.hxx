@@ -16,7 +16,7 @@ struct NTTIME
 	enum {
 		TIME_FIXUP_CONSTANT = 11644473600L,
 	};
-	uint64_t val;
+	uint64_t val{0};
 };
 
 std::ostream &operator<<(std::ostream &os, NTTIME v);

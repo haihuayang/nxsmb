@@ -74,6 +74,7 @@ int x_smb2_process_CREATE(x_smbd_conn_t *smbd_conn, x_msg_t *msg,
 		return X_SMB2_REPLY_ERROR(smbd_conn, msg, nullptr, NT_STATUS_INVALID_PARAMETER);
 	}
 
+	/* TODO check limit of open for both total and per conn*/
 	const uint8_t *inhdr = in_buf;
 	const uint8_t *inbody = in_buf + 0x40;
 
@@ -96,6 +97,8 @@ int x_smb2_process_CREATE(x_smbd_conn_t *smbd_conn, x_msg_t *msg,
 		return X_SMB2_REPLY_ERROR(smbd_conn, msg, smbd_sess, NT_STATUS_NETWORK_NAME_DELETED);
 	}
 	std::shared_ptr<x_smbd_tcon_t> smbd_tcon = it->second;
+
+	uint32_t in_hdr_flags = IVAL(inhdr, SMB2_HDR_FLAGS);
 
 	x_smb2_requ_create_t requ_create;
 	requ_create.in_oplock_level         = CVAL(inbody, 0x03);
@@ -123,11 +126,12 @@ int x_smb2_process_CREATE(x_smbd_conn_t *smbd_conn, x_msg_t *msg,
 	requ_create.in_name.assign((char16_t *)(in_buf + in_name_offset),
 			(char16_t *)(in_buf + in_name_offset + in_name_length)); 
 
-	X_LOG_OP("%ld CREATE %s", msg->mid, x_convert_utf16_to_utf8(requ_create.in_name).c_str());
+	X_LOG_OP("%ld CREATE '%s'", msg->mid, x_convert_utf16_to_utf8(requ_create.in_name).c_str());
 	NTSTATUS status;
 	x_auto_ref_t<x_smbd_open_t> smbd_open{x_smbd_tcon_op_create(smbd_tcon,
-			status, requ_create)};
+			status, in_hdr_flags, requ_create)};
 	if (smbd_open) {
+		x_smbd_open_insert_local(smbd_open);
 		return x_smb2_reply_create(smbd_conn, smbd_sess, msg, status,
 				smbd_tcon->tid, smbd_open,
 				requ_create, std::vector<uint8_t>());

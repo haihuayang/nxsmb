@@ -8,7 +8,7 @@ static std::shared_ptr<x_smbd_tcon_t> make_tcon(x_smbd_sess_t *smbd_sess,
 		const std::shared_ptr<x_smbd_share_t> &smbd_share)
 {
 	auto smbd_tcon = std::make_shared<x_smbd_tcon_t>(smbd_share);
-	if (smbd_share->type == x_smbd_share_t::TYPE_IPC) {
+	if (smbd_share->type == TYPE_IPC) {
 		x_smbd_tcon_init_ipc(smbd_tcon.get());
 	} else {
 		x_smbd_tcon_init_disk(smbd_tcon.get());
@@ -296,7 +296,7 @@ int x_smb2_process_TCON(x_smbd_conn_t *smbd_conn, x_msg_t *msg,
 
 	return x_smb2_reply_tcon(smbd_conn, smbd_sess, msg, NT_STATUS_OK,
 			smbd_tcon->tid,
-			smbd_share->type == x_smbd_share_t::TYPE_IPC ? SMB2_SHARE_TYPE_PIPE : SMB2_SHARE_TYPE_DISK,
+			smbd_share->type == TYPE_IPC ? SMB2_SHARE_TYPE_PIPE : SMB2_SHARE_TYPE_DISK,
 			out_share_flags,
 			out_capabilities, share_access);
 

@@ -479,6 +479,10 @@ static void x_smbd_init(x_smbd_t &smbd, int port)
 	// TODO start_wbcli(1);
 }
 
+enum {
+	X_SMBD_MAX_SESSION = 1024,
+	X_SMBD_MAX_OPEN = 1024,
+};
 
 int main(int argc, char **argv)
 {
@@ -494,10 +498,11 @@ int main(int argc, char **argv)
 	globals.evtmgmt = x_evtmgmt_create(tpool, 2000000000);
 	globals.wbpool = x_wbpool_create(globals.evtmgmt, 2);
 
-	x_smbd_open_pool_init(globals.evtmgmt, 1024);
-	x_smbd_sess_pool_init(globals.evtmgmt, 1024);
+	x_smbd_open_pool_init(globals.evtmgmt, X_SMBD_MAX_OPEN);
+	x_smbd_sess_pool_init(globals.evtmgmt, X_SMBD_MAX_SESSION);
 
 	x_smbd_ipc_init();
+	x_smbd_disk_init(X_SMBD_MAX_OPEN);
 
 	x_smbd_t smbd;
 	x_smbd_init(smbd, port);

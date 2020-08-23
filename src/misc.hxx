@@ -44,6 +44,14 @@ static inline idl::NTTIME x_tick_to_nttime(x_tick_t tick)
 	return idl::NTTIME{(tick / 100) + idl::NTTIME::TIME_FIXUP_CONSTANT * 1000 * 1000 * 10};
 }
 
+static inline idl::NTTIME x_timespec_to_nttime(const struct timespec &ts)
+{
+	uint64_t val = ts.tv_sec + idl::NTTIME::TIME_FIXUP_CONSTANT;
+	val *= 1000 * 1000 * 10;
+	val += ts.tv_nsec / 100;
+	return idl::NTTIME{val};
+}
+
 static inline bool x_check_range(uint32_t offset, uint32_t length,
 		uint32_t min_offset, uint32_t max_offset)
 {

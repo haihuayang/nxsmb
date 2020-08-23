@@ -231,16 +231,19 @@ struct x_msg_t
 };
 X_DECLARE_MEMBER_TRAITS(msg_dlink_traits, x_msg_t, dlink)
 
+enum x_smbd_share_type_t {
+	TYPE_IPC,
+	TYPE_DEFAULT,
+	TYPE_HOME,
+};
+
 struct x_smbd_share_t
 {
-	enum {
-		TYPE_IPC,
-		TYPE_DEFAULT,
-		TYPE_HOME,
-	};
 	std::string name;
-	uint8_t type;
+	x_smbd_share_type_t type;
 	bool read_only;
+	uuid_t uuid;
+	std::string path;
 	std::string msdfs_proxy;
 	uint32_t max_referral_ttl = 300;
 
@@ -292,12 +295,18 @@ struct x_smb2_requ_create_t
 struct x_smbd_tcon_t;
 struct x_smbd_tcon_ops_t
 {
-	x_smbd_open_t *(*create)(std::shared_ptr<x_smbd_tcon_t>&, NTSTATUS &status, x_smb2_requ_create_t &);
+	x_smbd_open_t *(*create)(std::shared_ptr<x_smbd_tcon_t>&,
+			NTSTATUS &status, uint32_t in_hdr_flags,
+			x_smb2_requ_create_t &);
 };
 
 struct x_smbd_tcon_t
 { 
 	x_smbd_tcon_t(const std::shared_ptr<x_smbd_share_t> &share) : smbd_share(share) { }
+	x_smbd_share_type_t get_share_type() const {
+		return smbd_share->type;
+	}
+
 	const x_smbd_tcon_ops_t *ops;
 	uint32_t tid;
 	uint32_t share_access;
@@ -305,13 +314,16 @@ struct x_smbd_tcon_t
 	// std::vector<std::shared_ptr<x_smbd_open_t>> smbd_opens;
 };
 
-static inline x_smbd_open_t *x_smbd_tcon_op_create(std::shared_ptr<x_smbd_tcon_t> &smbd_tcon, NTSTATUS &status, x_smb2_requ_create_t &requ_create)
+static inline x_smbd_open_t *x_smbd_tcon_op_create(std::shared_ptr<x_smbd_tcon_t> &smbd_tcon,
+		NTSTATUS &status, uint32_t in_hdr_flags, x_smb2_requ_create_t &requ_create)
 {
-	return smbd_tcon->ops->create(smbd_tcon, status, requ_create);
+	return smbd_tcon->ops->create(smbd_tcon, status, in_hdr_flags, requ_create);
 }
+
 void x_smbd_tcon_init_ipc(x_smbd_tcon_t *smbd_tcon);
 void x_smbd_tcon_init_disk(x_smbd_tcon_t *smbd_tcon);
 
+int x_smbd_disk_init(size_t max_open);
 int x_smbd_ipc_init();
 
 struct x_smb2_requ_ioctl_t
@@ -389,15 +401,15 @@ struct x_smb2_requ_close_t
 struct x_smb2_resp_close_t
 {
 	uint16_t struct_size;
-	uint16_t flags;
-	uint32_t reserved;
+	uint16_t flags{0};
+	uint32_t reserved{0};
 	idl::NTTIME out_create_ts;
 	idl::NTTIME out_last_access_ts;
 	idl::NTTIME out_last_write_ts;
 	idl::NTTIME out_change_ts;
-	uint64_t out_allocation_size;
-	uint64_t out_end_of_file;
-	uint32_t out_file_attributes;
+	uint64_t out_allocation_size{0};
+	uint64_t out_end_of_file{0};
+	uint32_t out_file_attributes{0};
 };
 
 struct x_smb2_requ_getinfo_t
