@@ -26,13 +26,13 @@ static int x_smb2_reply_create(x_smbd_conn_t *smbd_conn,
 	SCVAL(outbody, 0x02, requ_create.out_oplock_level);		/* oplock level */
 	SCVAL(outbody, 0x03, requ_create.out_create_flags);		/* create flags - SMB3 only*/
 	SIVAL(outbody, 0x04, requ_create.out_create_action);		/* create action */
-	SBVAL(outbody, 0x08, requ_create.out_create_ts.val);		/* creation time */
-	SBVAL(outbody, 0x10, requ_create.out_last_access_ts.val);		/* last access time */
-	SBVAL(outbody, 0x18, requ_create.out_last_write_ts.val);		/* last write time */
-	SBVAL(outbody, 0x20, requ_create.out_change_ts.val);			/* change time */
-	SBVAL(outbody, 0x28, requ_create.out_allocation_size);		/* allocation size */
-	SBVAL(outbody, 0x30, requ_create.out_end_of_file);			/* end of file */
-	SIVAL(outbody, 0x38, requ_create.out_file_attributes);		/* file attributes */
+	SBVAL(outbody, 0x08, requ_create.out_info.out_create_ts.val);		/* creation time */
+	SBVAL(outbody, 0x10, requ_create.out_info.out_last_access_ts.val);		/* last access time */
+	SBVAL(outbody, 0x18, requ_create.out_info.out_last_write_ts.val);		/* last write time */
+	SBVAL(outbody, 0x20, requ_create.out_info.out_change_ts.val);			/* change time */
+	SBVAL(outbody, 0x28, requ_create.out_info.out_allocation_size);		/* allocation size */
+	SBVAL(outbody, 0x30, requ_create.out_info.out_end_of_file);			/* end of file */
+	SIVAL(outbody, 0x38, requ_create.out_info.out_file_attributes);		/* file attributes */
 	SIVAL(outbody, 0x3C, 0);		/* reserved */
 	SBVAL(outbody, 0x40, smbd_open->id);		/* file id (persistent) */
 	SBVAL(outbody, 0x48, smbd_open->id);		/* file id (volatile) */

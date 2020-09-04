@@ -1,5 +1,6 @@
 
 #include "smbd.hxx"
+#include "core.hxx"
 #include "include/charset.hxx"
 #include "include/hashtable.hxx"
 #include <functional>
@@ -7,6 +8,8 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <sys/ioctl.h>
+#include <sys/syscall.h>
+#include <dirent.h>
 
 #define FS_IOC_GET_DOS_ATTR             _IOR('t', 1, dos_attr_t)
 #define FS_IOC_SET_DOS_ATTR             _IOW('t', 2, dos_attr_t)
@@ -40,6 +43,15 @@ struct x_smbd_statex_t
 	void invalidate() {
 		stat.st_nlink = 0;
 	}
+
+	uint64_t get_end_of_file() const {
+		return stat.st_size;
+	}
+
+	uint64_t get_allocation() const {
+		return stat.st_blocks * 512;
+	}
+
 	struct stat stat;
 	struct timespec birth_time;
 	uint32_t file_attributes;
@@ -54,7 +66,7 @@ struct x_smbd_disk_object_t
 #endif
 	void decref();
 
-	x_smbd_disk_object_t(const uuid_t &u, const std::string &p) : share_uuid(u), path(p) { }
+	x_smbd_disk_object_t(const uuid_t &u, const std::string &p) : share_uuid(u), req_path(p) { }
 	~x_smbd_disk_object_t() {
 		if (fd != -1) {
 			close(fd);
@@ -63,6 +75,10 @@ struct x_smbd_disk_object_t
 	}
 
 	bool exists() const { return fd != -1; }
+	bool is_dir() const {
+		X_ASSERT(fd != -1);
+		return S_ISDIR(statex.stat.st_mode);
+	}
 #if 0
 	void clear() {
 		if (fd != -1) {
@@ -78,16 +94,18 @@ struct x_smbd_disk_object_t
 	int open_count = 0;
 
 	enum {
-		flag_unknown = 1,
+		flag_initialized = 1,
 		flag_not_exist = 2,
+		flag_root = 4,
 		flag_delete_on_close = 0x1000,
 	};
 
-	uint32_t flags;
-	// bool delete_on_close = false;
+	uint32_t flags = 0;
+	uint32_t path_flags = 0;
 	x_smbd_statex_t statex;
 	const uuid_t share_uuid;
-	const std::string path; // TODO duplicated, it is also a key in map
+	const std::string req_path; // TODO duplicated, it is also a key in map
+	std::string unix_path;
 };
 X_DECLARE_MEMBER_TRAITS(smbd_disk_object_hash_traits, x_smbd_disk_object_t, hash_link)
 X_DECLARE_MEMBER_TRAITS(smbd_disk_object_free_traits, x_smbd_disk_object_t, free_link)
@@ -113,7 +131,7 @@ x_smbd_disk_object_t *x_smbd_disk_object_pool_t::find_or_create(
 	auto hash = std::hash<std::string>()(path);
 	std::unique_lock<std::mutex> lock(mutex);
 	x_smbd_disk_object_t *disk_object = hashtable.find(hash, [&share_uuid, &path](const x_smbd_disk_object_t &o) {
-			return o.share_uuid == share_uuid && o.path == path;
+			return o.share_uuid == share_uuid && o.req_path == path;
 			});
 
 	if (!disk_object) {
@@ -147,7 +165,7 @@ void x_smbd_disk_object_pool_t::release(x_smbd_disk_object_t *disk_object)
 	}
 	std::unique_lock<std::mutex> lock(disk_object->mutex);
 	if (disk_object->flags & x_smbd_disk_object_t::flag_delete_on_close) {
-		int err = unlink(disk_object->path.c_str());
+		int err = unlink(disk_object->unix_path.c_str());
 		X_ASSERT(err == 0);
 		err = close(disk_object->fd);
 		X_ASSERT(err == 0);
@@ -159,6 +177,112 @@ void x_smbd_disk_object_pool_t::release(x_smbd_disk_object_t *disk_object)
 void x_smbd_disk_object_t::decref()
 {
 	smbd_disk_object_pool.release(this);
+}
+
+static int get_metadata(int fd, x_smbd_statex_t *statex)
+{
+	// get stats as well as dos attr ...
+	X_ASSERT(fstat(fd, &statex->stat) == 0);
+	dos_attr_t dos_attr;
+	int err = ioctl(fd, FS_IOC_GET_DOS_ATTR, &dos_attr);
+	X_ASSERT(err == 0);
+	statex->birth_time = dos_attr.create_time;
+	statex->file_attributes = dos_attr.file_attrs;
+
+	return 0;
+}
+
+static int get_metadata(x_smbd_disk_object_t *disk_object)
+{
+	return get_metadata(disk_object->fd, &disk_object->statex);
+}
+
+struct qdir_t
+{
+	uint64_t filepos = 0;
+	int save_errno = 0;
+	uint32_t file_number = 0;
+	uint16_t data_length = 0, data_offset = 0;
+	uint8_t data[32 * 1024];
+};
+
+struct qdir_pos_t
+{
+	uint32_t file_number;
+	uint32_t data_offset;
+	uint64_t filepos;
+};
+
+static const char *pseudo_entries[] = {
+	".",
+	"..",
+	".snapshot",
+};
+#define PSEUDO_ENTRIES_COUNT    ARRAY_SIZE(pseudo_entries)
+
+static int qdir_filldents(qdir_t &qdir, x_smbd_disk_object_t *disk_object)
+{
+	std::unique_lock<std::mutex> lock(disk_object->mutex);
+	lseek(disk_object->fd, qdir.filepos, SEEK_SET);
+	return syscall(SYS_getdents64, disk_object->fd, qdir.data, sizeof(qdir.data));
+}
+
+static inline bool is_dot_or_dotdot(const char *name)
+{
+	return name[0] == '.' && (name[1] == '\0' || (name[1] == '.' && name[2] == '\0'));
+}
+
+static const char *qdir_get(qdir_t &qdir, qdir_pos_t &pos, x_smbd_disk_object_t *disk_object)
+{
+	const char *ent_name;
+	if ((qdir.save_errno != 0)) {
+		return nullptr;
+	} else if (qdir.file_number >= PSEUDO_ENTRIES_COUNT) {
+		for (;;) {
+			if (qdir.data_offset >= qdir.data_length) {
+				int retval = qdir_filldents(qdir, disk_object);
+				if (retval > 0) {
+					qdir.data_length = retval;
+					qdir.data_offset = 0;
+				} else if (retval == 0) {
+					qdir.save_errno = ENOENT;
+					return nullptr;
+				} else {
+					qdir.save_errno = errno;
+					return nullptr;
+				}
+			}
+			struct dirent *dp = (struct dirent *)&qdir.data[qdir.data_offset];
+			pos.data_offset = qdir.data_offset;
+			pos.file_number = qdir.file_number;
+			pos.filepos = qdir.filepos;
+
+			qdir.data_offset += dp->d_reclen;
+			++qdir.file_number;
+			qdir.filepos = dp->d_off;
+			ent_name = dp->d_name;
+
+			if (is_dot_or_dotdot(ent_name) || strcmp(ent_name, ":streams") == 0) {
+				continue;
+			}
+			return ent_name;
+		}
+	} else {
+		ent_name = pseudo_entries[qdir.file_number];
+		pos.data_offset = qdir.data_offset;
+		pos.file_number = qdir.file_number;
+		pos.filepos = qdir.filepos;
+		++qdir.file_number;
+		return ent_name;
+	}
+}
+	
+static void qdir_unget(qdir_t &qdir, qdir_pos_t &pos)
+{
+	X_ASSERT(qdir.file_number == pos.file_number + 1);
+	qdir.file_number = pos.file_number;
+	qdir.data_offset = pos.data_offset;
+	qdir.filepos = pos.filepos;
 }
 
 struct x_smbd_disk_open_t
@@ -175,6 +299,7 @@ struct x_smbd_disk_open_t
 	// std::string unix_path;
 	// uint32_t path_flags = 0;
 
+	qdir_t *qdir = nullptr;
 	x_auto_ref_t<x_smbd_disk_object_t> disk_object;
 };
 
@@ -204,6 +329,201 @@ static NTSTATUS x_smbd_disk_open_getinfo(x_smbd_open_t *smbd_open, const x_smb2_
 	return NT_STATUS_OK;
 }
 
+static bool get_dirent_meta(x_smbd_statex_t *statex,
+		x_smbd_disk_object_t *dir_obj,
+		const char *ent_name)
+{
+	int fd = openat(dir_obj->fd, ent_name, O_NOFOLLOW);
+	if (fd < 0) {
+		return false;
+	}
+
+	get_metadata(fd, statex);
+	X_ASSERT(close(fd) == 0);
+	return true;
+}
+
+static bool get_dirent_meta_special(x_smbd_statex_t *statex,
+		x_smbd_disk_object_t *dir_obj,
+		const char *ent_name)
+{
+	/* TODO for special fs, home share root, .snapshot, ... */
+	return get_dirent_meta(statex, dir_obj, ent_name);
+}
+
+static bool process_entry(x_smbd_statex_t *statex,
+		x_smbd_disk_object_t *dir_obj,
+		const char *ent_name,
+		uint32_t file_number)
+{
+	/* TODO match pattern */
+
+	bool ret = true;
+	if (file_number >= PSEUDO_ENTRIES_COUNT) {
+		/* TODO check ntacl if ABE is enabled */
+		ret = get_dirent_meta(statex, dir_obj, ent_name);
+	} else if (file_number == 0) {
+		/* TODO should lock dir_obj */
+		*statex = dir_obj->statex;
+	} else if (file_number == 1) {
+		if (dir_obj->flags & x_smbd_disk_object_t::flag_root) {
+			/* TODO should lock dir_obj */
+			*statex = dir_obj->statex;
+		} else {
+			ret = get_dirent_meta_special(statex, dir_obj, ent_name);
+		}
+
+	} else {
+		/* .snapshot */
+		if (!(dir_obj->flags & x_smbd_disk_object_t::flag_root)) {
+			return false;
+		}
+		/* TODO if snapshot browsable */
+		ret = get_dirent_meta_special(statex, dir_obj, ent_name);
+	}
+
+	return ret;
+}
+
+
+static uint8_t *put_find_timespec(uint8_t *p, struct timespec ts)
+{
+	auto nttime = x_timespec_to_nttime(ts);
+	memcpy(p, &nttime, sizeof nttime); // TODO byte order
+	return p + sizeof nttime;
+}
+
+static uint8_t *marshall_entry(x_smbd_statex_t *statex, const char *fname,
+		uint8_t *pbegin, uint8_t *pend, uint32_t align,
+		int info_level)
+{
+	uint8_t *p = pbegin;
+	std::u16string name = x_convert_utf8_to_utf16(fname);
+	switch (info_level) {
+	case SMB2_FIND_ID_BOTH_DIRECTORY_INFO:
+		// TODO check size if (p + name.size() * 2 + 
+		if (p + 300 > pend) {
+			return nullptr;
+		}
+		SIVAL(p, 0, 0); p += 4;
+		SIVAL(p, 0, 0); p += 4;
+		p = put_find_timespec(p, statex->birth_time);
+		p = put_find_timespec(p, statex->stat.st_atim);
+		p = put_find_timespec(p, statex->stat.st_mtim);
+		p = put_find_timespec(p, statex->stat.st_ctim);
+		x_put_le64(p, statex->get_end_of_file()); p += 8;
+		x_put_le64(p, statex->get_allocation()); p += 8;
+		x_put_le32(p, statex->file_attributes); p += 4;
+		x_put_le32(p, name.size() * 2); p += 4;
+		if (statex->file_attributes & FILE_ATTRIBUTE_REPARSE_POINT) {
+			x_put_le32(p, IO_REPARSE_TAG_DFS);
+		} else {
+			/*
+			 * OS X specific SMB2 extension negotiated via
+			 * AAPL create context: return max_access in
+			 * ea_size field.
+			 */
+			x_put_le32(p, 0);
+		}
+		p += 4;
+		
+		memset(p, 0, 26); p += 26; // shortname
+		x_put_le16(p, 0); p += 2; // aapl mode
+
+		{
+			uint64_t file_index = statex->stat.st_ino; // TODO
+			x_put_le64(p, file_index); p += 8;
+			memcpy(p, name.data(), name.size() * 2);
+			p += name.size() * 2;
+			uint32_t len = p - pbegin;
+			uint8_t *ptmp = pbegin + ((len + (align - 1)) & ~(align - 1));
+			memset(p, 0, ptmp - p);
+			p = ptmp;
+		}
+
+		break;
+	default:
+		X_ASSERT(0);
+	}
+	return p;
+}
+
+static NTSTATUS x_smbd_disk_open_find(x_smbd_open_t *smbd_open,
+		const x_smb2_requ_find_t &requ,
+		std::vector<uint8_t> &output)
+{
+	x_smbd_disk_open_t *disk_open = from_smbd_open(smbd_open);
+	X_ASSERT(disk_open->disk_object);
+	x_smbd_disk_object_t *disk_object = disk_open->disk_object;
+	if (!disk_object->is_dir()) {
+		return NT_STATUS_INVALID_PARAMETER;
+	}
+	if (requ.in_flags & (SMB2_CONTINUE_FLAG_REOPEN | SMB2_CONTINUE_FLAG_RESTART)) {
+		if (disk_open->qdir) {
+			delete disk_open->qdir;
+			disk_open->qdir = nullptr;
+		}
+	}
+
+	if (!disk_open->qdir) {
+		disk_open->qdir = new qdir_t;
+	}
+
+	uint32_t max_count = 0x7fffffffu;
+	if (requ.in_flags & SMB2_CONTINUE_FLAG_SINGLE) {
+		max_count = 1;
+	}
+
+	qdir_t *qdir = disk_open->qdir;
+	output.resize(requ.in_output_buffer_length);
+	uint8_t *pbegin = output.data();
+	uint8_t *pend = output.data() + output.size();
+	uint8_t *pcurr =  pbegin, *plast = nullptr;
+	uint32_t num = 0, matched_count = 0;
+	while (num < max_count) {
+		qdir_pos_t qdir_pos;
+		const char *ent_name = qdir_get(*qdir, qdir_pos, disk_object);
+		if (!ent_name) {
+			break;
+		}
+
+		x_smbd_statex_t statex;
+		if (!process_entry(&statex, disk_object, ent_name, qdir_pos.file_number)) {
+			X_LOG_WARN("process_entry %s %d,0x%x %d errno=%d",
+					ent_name, qdir_pos.file_number, qdir_pos.filepos,
+					qdir_pos.data_offset, errno);
+			continue;
+		}
+
+		++matched_count;
+		uint8_t *p = marshall_entry(&statex, ent_name, pcurr, pend, 8, requ.in_info_level);
+		if (p) {
+			++num;
+			if (plast) {
+				x_put_le32(plast, pcurr - plast);
+			}
+			plast = pcurr;
+			pcurr = p;
+		} else {
+			qdir_unget(*qdir, qdir_pos);
+			max_count = num;
+		}
+	}
+
+	if (num > 0) {
+		output.resize(pcurr - pbegin);
+		// x_put_le32(plast, 0);
+		return NT_STATUS_OK;
+	}
+	
+	output.resize(0);
+	if (matched_count > 0) {
+		return NT_STATUS_INFO_LENGTH_MISMATCH;
+	} else {
+		return STATUS_NO_MORE_FILES;
+	}
+}
+
 static NTSTATUS x_smbd_disk_open_ioctl(x_smbd_open_t *smbd_open,
 		uint32_t ctl_code,
 		const uint8_t *in_input_data,
@@ -215,6 +535,17 @@ static NTSTATUS x_smbd_disk_open_ioctl(x_smbd_open_t *smbd_open,
 	return NT_STATUS_OK;
 }
 
+static void fill_out_info(x_smb2_create_close_info_t &info, const x_smbd_statex_t &statex)
+{
+	info.out_create_ts = x_timespec_to_nttime(statex.birth_time);
+	info.out_last_access_ts = x_timespec_to_nttime(statex.stat.st_atim);
+	info.out_last_write_ts = x_timespec_to_nttime(statex.stat.st_mtim);
+	info.out_change_ts = x_timespec_to_nttime(statex.stat.st_ctim);
+	info.out_file_attributes = statex.file_attributes;
+	info.out_allocation_size = statex.get_allocation();
+	info.out_end_of_file = statex.get_end_of_file();
+}
+
 static void reply_requ_create(x_smb2_requ_create_t &requ_create,
 		const x_smbd_disk_object_t *disk_object,
 		uint32_t create_action)
@@ -222,13 +553,7 @@ static void reply_requ_create(x_smb2_requ_create_t &requ_create,
 	requ_create.out_oplock_level = 0;
 	requ_create.out_create_flags = 0;
 	requ_create.out_create_action = create_action;
-	requ_create.out_create_ts = x_timespec_to_nttime(disk_object->statex.birth_time);
-	requ_create.out_last_access_ts = x_timespec_to_nttime(disk_object->statex.stat.st_atim);
-	requ_create.out_last_write_ts = x_timespec_to_nttime(disk_object->statex.stat.st_mtim);
-	requ_create.out_change_ts = x_timespec_to_nttime(disk_object->statex.stat.st_ctim);
-	requ_create.out_file_attributes = disk_object->statex.file_attributes;
-	requ_create.out_allocation_size = disk_object->statex.stat.st_blocks * 512;
-	requ_create.out_end_of_file = disk_object->statex.stat.st_size;
+	fill_out_info(requ_create.out_info, disk_object->statex);
 }
 
 static NTSTATUS x_smbd_disk_open_close(x_smbd_open_t *smbd_open,
@@ -240,13 +565,7 @@ static NTSTATUS x_smbd_disk_open_close(x_smbd_open_t *smbd_open,
 
 	if (requ.flags & SMB2_CLOSE_FLAGS_FULL_INFORMATION) {
 		std::unique_lock<std::mutex> lock(disk_object->mutex);
-		resp.out_create_ts = x_timespec_to_nttime(disk_object->statex.birth_time);
-		resp.out_last_access_ts = x_timespec_to_nttime(disk_object->statex.stat.st_atim);
-		resp.out_last_write_ts = x_timespec_to_nttime(disk_object->statex.stat.st_mtim);
-		resp.out_change_ts = x_timespec_to_nttime(disk_object->statex.stat.st_ctim);
-		resp.out_file_attributes = disk_object->statex.file_attributes;
-		resp.out_allocation_size = disk_object->statex.stat.st_blocks * 512;
-		resp.out_end_of_file = disk_object->statex.stat.st_size;
+		fill_out_info(resp.out_info, disk_object->statex);
 	}
 	resp.struct_size = 0x3c;
 
@@ -265,39 +584,11 @@ static const x_smbd_open_ops_t x_smbd_disk_open_ops = {
 	x_smbd_disk_open_write,
 	x_smbd_disk_open_getinfo,
 	nullptr,
+	x_smbd_disk_open_find,
 	x_smbd_disk_open_ioctl,
 	x_smbd_disk_open_close,
 	x_smbd_disk_open_destroy,
 };
-
-static NTSTATUS resolve_path(x_smbd_tcon_t *tcon, const char *in_path,
-		std::string &out_path, uint32_t &flags)
-{
-	flags = 0;
-	if (!*in_path) {
-		flags |= PATH_FLAG_ROOT;
-	} else {
-		out_path = in_path;
-		for (size_t i = 0; i < out_path.length(); ++i) {
-			if (out_path[i] == '\\') {
-				out_path[i] = '/';
-			}
-		}
-	}
-#if 0
-	if (disk_open->base.smbd_tcon->get_share_type() == TYPE_HOME) {
-		if (*path == '\0') {
-			disk_open->type = t_shard_root;
-		} else {
-			disk_open->type = ...;
-		}
-		return NT_STATUS_OK;
-	} else if (disk_conn->smbd_tcon->get_share_type() == DEFAULT) {
-		// TODO
-	}
-#endif
-	return NT_STATUS_OK;
-}
 
 static NTSTATUS check_parent_access(uint32_t access)
 {
@@ -310,7 +601,7 @@ static NTSTATUS check_access(x_smbd_disk_object_t *disk_object, uint32_t access)
 	// TODO
 	return NT_STATUS_OK;
 }
-
+#if 0
 static int get_full_path(const x_smbd_tcon_t *tcon,
 		const x_smbd_disk_object_t *disk_object, std::string &full_path)
 {
@@ -321,16 +612,22 @@ static int get_full_path(const x_smbd_tcon_t *tcon,
 	}
 	return 0;
 }
-
-static int get_metadata(x_smbd_disk_object_t *disk_object)
+#endif
+static uint32_t resolve_unix_path(x_smbd_tcon_t *tcon, const char *in_path,
+		std::string &out_path)
 {
-	// get stats as well as dos attr ...
-	X_ASSERT(fstat(disk_object->fd, &disk_object->statex.stat) == 0);
-	dos_attr_t dos_attr;
-	int err = ioctl(disk_object->fd, FS_IOC_GET_DOS_ATTR, &dos_attr);
-	X_ASSERT(err == 0);
-	disk_object->statex.birth_time = dos_attr.create_time;
-	disk_object->statex.file_attributes = dos_attr.file_attrs;
+	out_path = tcon->smbd_share->path;
+	if (!*in_path) {
+		return PATH_FLAG_ROOT;
+	}
+	out_path.push_back('/');
+	for ( ; *in_path; ++in_path) {
+		if (*in_path == '\\') {
+			out_path.push_back('/');
+		} else {
+			out_path.push_back(*in_path);
+		}
+	}
 
 	return 0;
 }
@@ -338,11 +635,9 @@ static int get_metadata(x_smbd_disk_object_t *disk_object)
 static NTSTATUS create_dir(x_smbd_tcon_t *smbd_tcon,
 		x_smbd_disk_object_t *disk_object)
 {
-	std::string full_path;
-	X_ASSERT(get_full_path(smbd_tcon, disk_object, full_path) == 0);
-	int err = mkdir(full_path.c_str(), 0777);
+	int err = mkdir(disk_object->unix_path.c_str(), 0777);
 	if (err == 0) {
-		int fd = open(full_path.c_str(), O_RDONLY);
+		int fd = open(disk_object->unix_path.c_str(), O_RDONLY);
 		X_ASSERT(fd >= 0);
 		disk_object->fd = fd;
 
@@ -357,9 +652,7 @@ static NTSTATUS create_dir(x_smbd_tcon_t *smbd_tcon,
 static NTSTATUS create_file(x_smbd_tcon_t *smbd_tcon,
 		x_smbd_disk_object_t *disk_object)
 {
-	std::string full_path;
-	X_ASSERT(get_full_path(smbd_tcon, disk_object, full_path) == 0);
-	int fd = open(full_path.c_str(), O_RDWR | O_CREAT | O_EXCL, 0666);
+	int fd = open(disk_object->unix_path.c_str(), O_RDWR | O_CREAT | O_EXCL, 0666);
 	if (fd >= 0) {
 		disk_object->fd = fd;
 		get_metadata(disk_object);
@@ -370,11 +663,11 @@ static NTSTATUS create_file(x_smbd_tcon_t *smbd_tcon,
 	return NT_STATUS_OBJECT_NAME_COLLISION;
 }
 
-static int open_exist_path(x_smbd_disk_object_t *disk_object, const std::string &full_path)
+static int open_exist_path(x_smbd_disk_object_t *disk_object)
 {
 	X_ASSERT(disk_object->fd == -1);
 
-	int fd = open(full_path.c_str(), O_RDWR);
+	int fd = open(disk_object->unix_path.c_str(), O_RDWR);
 	if (fd >= 0) {
 		disk_object->fd = fd;
 		return 0;
@@ -382,7 +675,7 @@ static int open_exist_path(x_smbd_disk_object_t *disk_object, const std::string 
 	if (errno != EISDIR) {
 		return -errno;
 	}
-	fd = open(full_path.c_str(), O_RDONLY);
+	fd = open(disk_object->unix_path.c_str(), O_RDONLY);
 	if (fd >= 0) {
 		disk_object->fd = fd;
 		return 0;
@@ -438,6 +731,11 @@ static x_smbd_open_t *open_object_exist(
 	return create_disk_open(smbd_tcon, disk_object);
 }
 
+static NTSTATUS normalize_path(const char *path)
+{
+	return NT_STATUS_OK;
+}
+
 /*
  * if CREATE then
  * 	if is root then
@@ -460,6 +758,7 @@ static x_smbd_open_t *x_smbd_tcon_disk_op_create(std::shared_ptr<x_smbd_tcon_t>&
 		NTSTATUS &status, uint32_t in_hdr_flags,
 		x_smb2_requ_create_t &requ_create)
 {
+	/* TODO case insenctive */
 	std::string in_name = x_convert_utf16_to_utf8(requ_create.in_name);
 	const char *path = in_name.data();
 	if (in_hdr_flags & SMB2_HDR_FLAG_DFS) {
@@ -481,22 +780,24 @@ static x_smbd_open_t *x_smbd_tcon_disk_op_create(std::shared_ptr<x_smbd_tcon_t>&
 		}
 	}
 
-	std::string unix_path;
-	uint32_t flags{0};
-
-	status = resolve_path(smbd_tcon.get(), path, unix_path, flags);
+	status = normalize_path(path);
 	if (!NT_STATUS_IS_OK(status)) {
 		return nullptr;
 	}
 
+	/*
+	std::string unix_path;
+	uint32_t flags{0};
+
+	status = resolve_path(smbd_tcon.get(), path, unix_path, flags);
+*/
 	x_auto_ref_t<x_smbd_disk_object_t> disk_object{smbd_disk_object_pool.find_or_create(
 			smbd_tcon->smbd_share->uuid, path)};
 	{
 		std::unique_lock<std::mutex> lock(disk_object->mutex);
-		if (disk_object->flags & x_smbd_disk_object_t::flag_unknown) {
-			std::string full_path;
-			X_ASSERT(get_full_path(smbd_tcon.get(), disk_object, full_path) == 0);
-			int err = open_exist_path(disk_object, full_path);
+		if (!(disk_object->flags & x_smbd_disk_object_t::flag_initialized)) {
+			disk_object->path_flags = resolve_unix_path(smbd_tcon.get(), path, disk_object->unix_path);
+			int err = open_exist_path(disk_object);
 			if (!err) {
 				get_metadata(disk_object);
 				disk_object->flags = 0;

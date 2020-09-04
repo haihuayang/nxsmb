@@ -28,6 +28,7 @@ extern "C" {
 #include "samba/libcli/smb/smb2_constants.h"
 #include "samba/libcli/util/ntstatus.h"
 #include "samba/lib/util/byteorder.h"
+#include "samba/source3/include/ntioctl.h"
 #include "samba/source4/heimdal/lib/gssapi/gssapi/gssapi.h"
 }
 
@@ -265,6 +266,17 @@ struct x_smbduser_t
 
 struct x_smbd_open_t;
 
+struct x_smb2_create_close_info_t
+{
+	idl::NTTIME out_create_ts;
+	idl::NTTIME out_last_access_ts;
+	idl::NTTIME out_last_write_ts;
+	idl::NTTIME out_change_ts;
+	uint64_t out_allocation_size{0};
+	uint64_t out_end_of_file{0};
+	uint32_t out_file_attributes{0};
+};
+
 struct x_smb2_requ_create_t
 {
 	uint8_t in_oplock_level;
@@ -281,13 +293,7 @@ struct x_smb2_requ_create_t
 	uint8_t out_oplock_level;
 	uint8_t out_create_flags;
 	uint32_t out_create_action;
-	idl::NTTIME out_create_ts;
-	idl::NTTIME out_last_access_ts;
-	idl::NTTIME out_last_write_ts;
-	idl::NTTIME out_change_ts;
-	uint64_t out_allocation_size;
-	uint64_t out_end_of_file;
-	uint32_t out_file_attributes;
+	x_smb2_create_close_info_t out_info;
 
 	// TODO out_contexts
 };
@@ -403,13 +409,7 @@ struct x_smb2_resp_close_t
 	uint16_t struct_size;
 	uint16_t flags{0};
 	uint32_t reserved{0};
-	idl::NTTIME out_create_ts;
-	idl::NTTIME out_last_access_ts;
-	idl::NTTIME out_last_write_ts;
-	idl::NTTIME out_change_ts;
-	uint64_t out_allocation_size{0};
-	uint64_t out_end_of_file{0};
-	uint32_t out_file_attributes{0};
+	x_smb2_create_close_info_t out_info;
 };
 
 struct x_smb2_requ_getinfo_t
@@ -427,6 +427,17 @@ struct x_smb2_requ_getinfo_t
 	uint64_t file_id_volatile;
 };
 
+struct x_smb2_requ_find_t
+{
+	uint8_t in_info_level;
+	uint8_t in_flags;
+	uint32_t in_file_index;
+	uint32_t in_output_buffer_length;
+	uint64_t in_file_id_persistent;
+	uint64_t in_file_id_volatile;
+	std::u16string in_name;
+};
+
 struct x_smbd_open_ops_t
 {
 	NTSTATUS (*read)(x_smbd_open_t *smbd_open, const x_smb2_requ_read_t &requ,
@@ -436,6 +447,8 @@ struct x_smbd_open_ops_t
 			x_smb2_resp_write_t &resp);
 	NTSTATUS (*getinfo)(x_smbd_open_t *smbd_open, const x_smb2_requ_getinfo_t &requ, std::vector<uint8_t> &output);
 	NTSTATUS (*setinfo)(x_smbd_open_t *smbd_open);
+	NTSTATUS (*find)(x_smbd_open_t *smbd_open, const x_smb2_requ_find_t &requ,
+			std::vector<uint8_t> &output);
 	NTSTATUS (*ioctl)(x_smbd_open_t *smbd_open,
 			uint32_t ctl_code,
 			const uint8_t *in_input_data,
@@ -482,6 +495,11 @@ static inline NTSTATUS x_smbd_open_op_write(x_smbd_open_t *smbd_open, const x_sm
 static inline NTSTATUS x_smbd_open_op_getinfo(x_smbd_open_t *smbd_open, const x_smb2_requ_getinfo_t &requ, std::vector<uint8_t> &output)
 {
 	return smbd_open->ops->getinfo(smbd_open, requ, output);
+}
+
+static inline NTSTATUS x_smbd_open_op_find(x_smbd_open_t *smbd_open, const x_smb2_requ_find_t &requ, std::vector<uint8_t> &output)
+{
+	return smbd_open->ops->find(smbd_open, requ, output);
 }
 
 static inline NTSTATUS x_smbd_open_op_ioctl(x_smbd_open_t *smbd_open,

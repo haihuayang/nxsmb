@@ -410,6 +410,13 @@ static NTSTATUS x_smbd_named_pipe_ioctl(x_smbd_open_t *smbd_open,
 	}
 }
 
+static NTSTATUS x_smbd_named_pipe_find(x_smbd_open_t *smbd_open,
+		const x_smb2_requ_find_t &requ,
+		std::vector<uint8_t> &output)
+{
+	return NT_STATUS_INVALID_PARAMETER;
+}
+
 static NTSTATUS x_smbd_named_pipe_close(x_smbd_open_t *smbd_open,
 		const x_smb2_requ_close_t &requ, x_smb2_resp_close_t &resp)
 {
@@ -428,6 +435,7 @@ static const x_smbd_open_ops_t x_smbd_named_pipe_ops = {
 	x_smbd_named_pipe_write,
 	x_smbd_named_pipe_getinfo,
 	nullptr,
+	x_smbd_named_pipe_find,
 	x_smbd_named_pipe_ioctl,
 	x_smbd_named_pipe_close,
 	x_smbd_named_pipe_destroy,
@@ -459,13 +467,8 @@ static x_smbd_open_t *x_smbd_tcon_ipc_op_create(std::shared_ptr<x_smbd_tcon_t> &
 
 	x_smbd_named_pipe_t *named_pipe = x_smbd_named_pipe_create(smbd_tcon, rpc);
 
-	requ_create.out_create_ts.val = 0;
-	requ_create.out_last_access_ts.val = 0;
-	requ_create.out_last_write_ts.val = 0;
-	requ_create.out_change_ts.val = 0;
-	requ_create.out_allocation_size = 4096;
-	requ_create.out_end_of_file = 0;
-	requ_create.out_file_attributes = FILE_ATTRIBUTE_NORMAL;
+	requ_create.out_info.out_allocation_size = 4096;
+	requ_create.out_info.out_file_attributes = FILE_ATTRIBUTE_NORMAL;
 	requ_create.out_oplock_level = 0;
 	requ_create.out_create_flags = 0;
 	requ_create.out_create_action = FILE_WAS_OPENED;
