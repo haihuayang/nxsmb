@@ -14,27 +14,7 @@ static int x_smb2_reply_logoff(x_smbd_conn_t *smbd_conn,
 	SSVAL(outbody, 0x00, 0x04);
 	SSVAL(outbody, 0x02, 0);
 
-	memset(outhdr, 0, 0x40);
-	SIVAL(outhdr, SMB2_HDR_PROTOCOL_ID,     SMB2_MAGIC);
-	SSVAL(outhdr, SMB2_HDR_LENGTH,	  SMB2_HDR_BODY);
-	SSVAL(outhdr, SMB2_HDR_CREDIT_CHARGE, 1); // TODO
-	SIVAL(outhdr, SMB2_HDR_STATUS, NT_STATUS_V(status));
-	SIVAL(outhdr, SMB2_HDR_OPCODE, SMB2_OP_LOGOFF);
-	SSVAL(outhdr, SMB2_HDR_CREDIT, 1); // TODO
-	SIVAL(outhdr, SMB2_HDR_FLAGS, SMB2_HDR_FLAG_REDIRECT); // TODO
-	SIVAL(outhdr, SMB2_HDR_NEXT_COMMAND, 0);
-	SBVAL(outhdr, SMB2_HDR_MESSAGE_ID, msg->mid);
-	SBVAL(outhdr, SMB2_HDR_SESSION_ID, smbd_sess->id);
-
-	uint8_t *outnbt = outbuf + 4;
-	x_put_be32(outnbt, 0x40 + 0x4);
-
-	msg->out_buf = outbuf;
-	msg->out_off = 4;
-	msg->out_len = 4 + 0x40 + 0x4;
-
-	msg->state = x_msg_t::STATE_COMPLETE;
-	x_smbd_conn_reply(smbd_conn, msg, smbd_sess);
+	x_smbd_conn_reply(smbd_conn, msg, smbd_sess, outbuf, 0, status, 4);
 	return 0;
 }
 
@@ -42,22 +22,22 @@ int x_smb2_process_LOGOFF(x_smbd_conn_t *smbd_conn, x_msg_t *msg,
 		const uint8_t *in_buf, size_t in_len)
 {
 	if (in_len < 0x40 + 0x4) {
-		return X_SMB2_REPLY_ERROR(smbd_conn, msg, nullptr, NT_STATUS_INVALID_PARAMETER);
+		return X_SMB2_REPLY_ERROR(smbd_conn, msg, nullptr, 0, NT_STATUS_INVALID_PARAMETER);
 	}
 
 	const uint8_t *inhdr = in_buf;
 	uint64_t in_session_id = BVAL(inhdr, SMB2_HDR_SESSION_ID);
 
 	if (in_session_id == 0) {
-		return X_SMB2_REPLY_ERROR(smbd_conn, msg, nullptr, NT_STATUS_USER_SESSION_DELETED);
+		return X_SMB2_REPLY_ERROR(smbd_conn, msg, nullptr, 0, NT_STATUS_USER_SESSION_DELETED);
 	}
 	
 	x_auto_ref_t<x_smbd_sess_t> smbd_sess{x_smbd_sess_find(in_session_id, smbd_conn)};
 	if (smbd_sess == nullptr) {
-		return X_SMB2_REPLY_ERROR(smbd_conn, msg, nullptr, NT_STATUS_USER_SESSION_DELETED);
+		return X_SMB2_REPLY_ERROR(smbd_conn, msg, nullptr, 0, NT_STATUS_USER_SESSION_DELETED);
 	}
 	if (smbd_sess->state != x_smbd_sess_t::S_ACTIVE) {
-		return X_SMB2_REPLY_ERROR(smbd_conn, msg, smbd_sess, NT_STATUS_INVALID_PARAMETER);
+		return X_SMB2_REPLY_ERROR(smbd_conn, msg, smbd_sess, 0, NT_STATUS_INVALID_PARAMETER);
 	}
 
 	/* TODO close tcon, opens ... */

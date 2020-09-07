@@ -45,10 +45,16 @@ struct x_smbd_statex_t
 	}
 
 	uint64_t get_end_of_file() const {
+		if (S_ISDIR(stat.st_mode)) {
+			return 0;
+		}
 		return stat.st_size;
 	}
 
 	uint64_t get_allocation() const {
+		if (S_ISDIR(stat.st_mode)) {
+			return 0;
+		}
 		return stat.st_blocks * 512;
 	}
 
@@ -197,6 +203,13 @@ static int get_metadata(x_smbd_disk_object_t *disk_object)
 	return get_metadata(disk_object->fd, &disk_object->statex);
 }
 
+static uint8_t *put_find_timespec(uint8_t *p, struct timespec ts)
+{
+	auto nttime = x_timespec_to_nttime(ts);
+	memcpy(p, &nttime, sizeof nttime); // TODO byte order
+	return p + sizeof nttime;
+}
+
 struct qdir_t
 {
 	uint64_t filepos = 0;
@@ -323,10 +336,59 @@ static NTSTATUS x_smbd_disk_open_write(x_smbd_open_t *smbd_open,
 	return NT_STATUS_OK;
 }
 
+static NTSTATUS getinfo_file(x_smbd_disk_open_t *disk_open, const x_smb2_requ_getinfo_t &requ, std::vector<uint8_t> &output)
+{
+	if (requ.info_level == 34) {
+		if (requ.output_buffer_length < 56) {
+			return STATUS_BUFFER_OVERFLOW;
+		}
+		output.resize(56);
+		uint8_t *p = output.data();
+		
+		const auto statex = &disk_open->disk_object->statex;
+		p = put_find_timespec(p, statex->birth_time);
+		p = put_find_timespec(p, statex->stat.st_atim);
+		p = put_find_timespec(p, statex->stat.st_mtim);
+		p = put_find_timespec(p, statex->stat.st_ctim);
+		x_put_le64(p, statex->get_allocation()); p += 8;
+		x_put_le64(p, statex->get_end_of_file()); p += 8;
+		x_put_le32(p, statex->file_attributes); p += 4;
+		x_put_le32(p, 0); p += 4;
+
+		return NT_STATUS_OK;
+	} else {
+		return NT_STATUS_INVALID_LEVEL;
+	}
+}
+
+static NTSTATUS getinfo_fs(x_smbd_disk_open_t *disk_open, const x_smb2_requ_getinfo_t &requ, std::vector<uint8_t> &output)
+{
+	return NT_STATUS_INVALID_LEVEL;
+}
+static NTSTATUS getinfo_security(x_smbd_disk_open_t *disk_open, const x_smb2_requ_getinfo_t &requ, std::vector<uint8_t> &output)
+{
+	return NT_STATUS_INVALID_LEVEL;
+}
+static NTSTATUS getinfo_quota(x_smbd_disk_open_t *disk_open, const x_smb2_requ_getinfo_t &requ, std::vector<uint8_t> &output)
+{
+	return NT_STATUS_INVALID_LEVEL;
+}
+
 static NTSTATUS x_smbd_disk_open_getinfo(x_smbd_open_t *smbd_open, const x_smb2_requ_getinfo_t &requ, std::vector<uint8_t> &output)
 {
-	X_TODO;
-	return NT_STATUS_OK;
+	x_smbd_disk_open_t *disk_open = from_smbd_open(smbd_open);
+	X_ASSERT(disk_open->disk_object);
+	if (requ.info_class == SMB2_GETINFO_FILE) {
+		return getinfo_file(disk_open, requ, output);
+	} else if (requ.info_class == SMB2_GETINFO_FS) {
+		return getinfo_fs(disk_open, requ, output);
+	} else if (requ.info_class == SMB2_GETINFO_SECURITY) {
+		return getinfo_security(disk_open, requ, output);
+	} else if (requ.info_class == SMB2_GETINFO_QUOTA) {
+		return getinfo_quota(disk_open, requ, output);
+	} else {
+		return NT_STATUS_INVALID_PARAMETER;
+	}
 }
 
 static bool get_dirent_meta(x_smbd_statex_t *statex,
@@ -386,13 +448,6 @@ static bool process_entry(x_smbd_statex_t *statex,
 }
 
 
-static uint8_t *put_find_timespec(uint8_t *p, struct timespec ts)
-{
-	auto nttime = x_timespec_to_nttime(ts);
-	memcpy(p, &nttime, sizeof nttime); // TODO byte order
-	return p + sizeof nttime;
-}
-
 static uint8_t *marshall_entry(x_smbd_statex_t *statex, const char *fname,
 		uint8_t *pbegin, uint8_t *pend, uint32_t align,
 		int info_level)
@@ -440,8 +495,46 @@ static uint8_t *marshall_entry(x_smbd_statex_t *statex, const char *fname,
 			memset(p, 0, ptmp - p);
 			p = ptmp;
 		}
-
 		break;
+
+	case SMB2_FIND_BOTH_DIRECTORY_INFO:
+		// TODO check size if (p + name.size() * 2 + 
+		if (p + 300 > pend) {
+			return nullptr;
+		}
+		SIVAL(p, 0, 0); p += 4;
+		SIVAL(p, 0, 0); p += 4;
+		p = put_find_timespec(p, statex->birth_time);
+		p = put_find_timespec(p, statex->stat.st_atim);
+		p = put_find_timespec(p, statex->stat.st_mtim);
+		p = put_find_timespec(p, statex->stat.st_ctim);
+		x_put_le64(p, statex->get_end_of_file()); p += 8;
+		x_put_le64(p, statex->get_allocation()); p += 8;
+		x_put_le32(p, statex->file_attributes); p += 4;
+		x_put_le32(p, name.size() * 2); p += 4;
+		if (statex->file_attributes & FILE_ATTRIBUTE_REPARSE_POINT) {
+			x_put_le32(p, IO_REPARSE_TAG_DFS);
+		} else {
+			/*
+			 * OS X specific SMB2 extension negotiated via
+			 * AAPL create context: return max_access in
+			 * ea_size field.
+			 */
+			x_put_le32(p, 0);
+		}
+		p += 4;
+		
+		memset(p, 0, 26); p += 26; // shortname
+		{
+			memcpy(p, name.data(), name.size() * 2);
+			p += name.size() * 2;
+			uint32_t len = p - pbegin;
+			uint8_t *ptmp = pbegin + ((len + (align - 1)) & ~(align - 1));
+			memset(p, 0, ptmp - p);
+			p = ptmp;
+		}
+		break;
+
 	default:
 		X_ASSERT(0);
 	}
@@ -800,9 +893,9 @@ static x_smbd_open_t *x_smbd_tcon_disk_op_create(std::shared_ptr<x_smbd_tcon_t>&
 			int err = open_exist_path(disk_object);
 			if (!err) {
 				get_metadata(disk_object);
-				disk_object->flags = 0;
+				disk_object->flags = x_smbd_disk_object_t::flag_initialized;
 			} else {
-				disk_object->flags = x_smbd_disk_object_t::flag_not_exist;
+				disk_object->flags = x_smbd_disk_object_t::flag_not_exist | x_smbd_disk_object_t::flag_initialized;
 			}
 		}
 	}

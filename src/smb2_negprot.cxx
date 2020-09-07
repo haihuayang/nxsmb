@@ -69,33 +69,12 @@ static int x_smbd_conn_reply_negprot(x_smbd_conn_t *smbd_conn, x_msg_t *msg,
 		dyn_off += nc.second;
 	}
 
-	// smbd_smb2_request_done_ex
-	memset(outhdr, 0, 0x40);
-	x_put_le32(outhdr + SMB2_HDR_PROTOCOL_ID, SMB2_MAGIC);
-	x_put_le16(outhdr + SMB2_HDR_LENGTH,  SMB2_HDR_BODY);
-	x_put_le16(outhdr + SMB2_HDR_CREDIT_CHARGE,  0);
-	x_put_le32(outhdr + SMB2_HDR_STATUS, 0);
-	x_put_le16(outhdr + SMB2_HDR_OPCODE, SMB2_OP_NEGPROT);
-	x_put_le16(outhdr + SMB2_HDR_CREDIT, 1);
-	x_put_le32(outhdr + SMB2_HDR_FLAGS, SMB2_HDR_FLAG_REDIRECT);
-	x_put_le32(outhdr + SMB2_HDR_NEXT_COMMAND, 0);
-	x_put_le64(outhdr + SMB2_HDR_MESSAGE_ID, msg->mid);
-
-	uint8_t *outnbt = outbuf + 4;
-	x_put_be32(outnbt, 0x80 + dyn_off);
-
-	msg->out_buf = outbuf;
-	msg->out_off = 4;
-	msg->out_len = 4 + 0x80 + dyn_off;
-
-	msg->state = x_msg_t::STATE_COMPLETE;
-
 	if (dialect != SMB2_DIALECT_REVISION_2FF) {
 		smbd_conn->server_security_mode = security_mode;
 		smbd_conn->server_capabilities = smbd->capabilities;
 	}
 
-	x_smbd_conn_reply(smbd_conn, msg, nullptr);
+	x_smbd_conn_reply(smbd_conn, msg, nullptr, outbuf, 0, NT_STATUS_OK, 0x40 + dyn_off);
 	return 0;
 }
 
@@ -153,11 +132,11 @@ int x_smb2_process_NEGPROT(x_smbd_conn_t *smbd_conn, x_msg_t *msg,
 	const uint8_t *in_body = in_buf + 0x40;
 	uint16_t dialect_count = x_get_le16(in_body + 0x2);
 	if (dialect_count == 0) {
-		return X_SMB2_REPLY_ERROR(smbd_conn, msg, nullptr, NT_STATUS_INVALID_PARAMETER);
+		return X_SMB2_REPLY_ERROR(smbd_conn, msg, nullptr, 0, NT_STATUS_INVALID_PARAMETER);
 	}
 	size_t dyn_len = in_len - SMB2_HDR_LENGTH - SMB2_NEGPROT_BODY_LEN;
 	if (dialect_count * 2 > dyn_len) {
-		return X_SMB2_REPLY_ERROR(smbd_conn, msg, nullptr, NT_STATUS_INVALID_PARAMETER);
+		return X_SMB2_REPLY_ERROR(smbd_conn, msg, nullptr, 0, NT_STATUS_INVALID_PARAMETER);
 	}
 
 	uint16_t in_security_mode = x_get_le16(in_body + 0x04);
@@ -168,7 +147,7 @@ int x_smb2_process_NEGPROT(x_smbd_conn_t *smbd_conn, x_msg_t *msg,
 	const uint8_t *in_dyn = in_body + SMB2_NEGPROT_BODY_LEN;
 	uint16_t dialect = x_smb2_dialect_match(smbd_conn, in_dyn, dialect_count);
 	if (dialect == SMB2_DIALECT_REVISION_000) {
-		return X_SMB2_REPLY_ERROR(smbd_conn, msg, nullptr, NT_STATUS_NOT_SUPPORTED);
+		return X_SMB2_REPLY_ERROR(smbd_conn, msg, nullptr, 0, NT_STATUS_NOT_SUPPORTED);
 	}
 
 	smbd_conn->client_security_mode = in_security_mode;

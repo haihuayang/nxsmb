@@ -214,7 +214,9 @@ struct x_msg_t
 	}
 	x_dlink_t dlink;
 	uint64_t mid;
+	uint32_t hdr_flags;
 	uint16_t opcode;
+	uint16_t credits_requested;
 	bool do_signing{false};
 	const uint32_t nbt_hdr;
 	enum {
@@ -685,12 +687,15 @@ x_auth_t *x_smbd_create_auth(x_smbd_t *smbd);
 void x_smbd_conn_remove_sessions(x_smbd_conn_t *smbd_conn);
 void x_smbd_conn_post_user(x_smbd_conn_t *smbd_conn, x_fdevt_user_t *fdevt_user);
 
-void x_smbd_conn_reply(x_smbd_conn_t *smbd_conn, x_msg_t *msg, x_smbd_sess_t *smbd_sess);
+void x_smbd_conn_reply(x_smbd_conn_t *smbd_conn, x_msg_t *msg, x_smbd_sess_t *smbd_sess,
+		uint8_t *outbuf,
+		uint32_t tid, NTSTATUS status, uint32_t body_size);
+// void x_smbd_conn_reply(x_smbd_conn_t *smbd_conn, x_msg_t *msg, x_smbd_sess_t *smbd_sess);
 int x_smb2_reply_error(x_smbd_conn_t *smbd_conn, x_msg_t *msg, x_smbd_sess_t *smbd_sess,
-		NTSTATUS status, const char *file, unsigned int line);
+		uint32_t tid, NTSTATUS status, const char *file, unsigned int line);
 
-#define X_SMB2_REPLY_ERROR(smbd_conn, msg, smbd_sess, status) \
-	x_smb2_reply_error((smbd_conn), (msg), (smbd_sess), (status), __FILE__, __LINE__)
+#define X_SMB2_REPLY_ERROR(smbd_conn, msg, smbd_sess, tid, status) \
+	x_smb2_reply_error((smbd_conn), (msg), (smbd_sess), (tid), (status), __FILE__, __LINE__)
 
 int x_smbd_conn_process_smb1negoprot(x_smbd_conn_t *smbd_conn, x_msg_t *msg,
 		const uint8_t *buf, size_t len);

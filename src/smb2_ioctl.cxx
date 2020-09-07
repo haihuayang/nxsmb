@@ -38,30 +38,8 @@ static int x_smb2_reply_ioctl(x_smbd_conn_t *smbd_conn,
 	SBVAL(outbody, 0x28, 0);
 
 	memcpy(outbody + X_SMB2_IOCTL_RESP_BODY_LEN, output.data(), output.size());
-
-	//smbd_smb2_request_setup_out
-	memset(outhdr, 0, 0x40);
-	SIVAL(outhdr, SMB2_HDR_PROTOCOL_ID,     SMB2_MAGIC);
-	SSVAL(outhdr, SMB2_HDR_LENGTH,	  SMB2_HDR_BODY);
-	SSVAL(outhdr, SMB2_HDR_CREDIT_CHARGE, 1); // TODO
-	SIVAL(outhdr, SMB2_HDR_STATUS, NT_STATUS_V(status));
-	SIVAL(outhdr, SMB2_HDR_OPCODE, SMB2_OP_IOCTL);
-	SSVAL(outhdr, SMB2_HDR_CREDIT, 1); // TODO
-	SIVAL(outhdr, SMB2_HDR_FLAGS, SMB2_HDR_FLAG_REDIRECT); // TODO
-	SIVAL(outhdr, SMB2_HDR_NEXT_COMMAND, 0);
-	SBVAL(outhdr, SMB2_HDR_MESSAGE_ID, msg->mid);
-	SIVAL(outhdr, SMB2_HDR_TID, tid);
-	SBVAL(outhdr, SMB2_HDR_SESSION_ID, smbd_sess->id);
-
-	uint8_t *outnbt = outbuf + 4;
-	x_put_be32(outnbt, 0x40 + X_SMB2_IOCTL_RESP_BODY_LEN + output.size());
-
-	msg->out_buf = outbuf;
-	msg->out_off = 4;
-	msg->out_len = 4 + 0x40 + X_SMB2_IOCTL_RESP_BODY_LEN + output.size();
-
-	msg->state = x_msg_t::STATE_COMPLETE;
-	x_smbd_conn_reply(smbd_conn, msg, smbd_sess);
+	x_smbd_conn_reply(smbd_conn, msg, smbd_sess, outbuf, tid, status,
+			X_SMB2_IOCTL_RESP_BODY_LEN + output.size());
 	return 0;
 }
 
@@ -114,11 +92,11 @@ static idl::x_ndr_off_t push_referral_v3(const x_referral_t &referral, idl::x_nd
 		idl::x_ndr_off_t bpos, idl::x_ndr_off_t epos, uint32_t ndr_flags)
 {
 	idl::x_ndr_off_t base_pos = bpos;
-	bpos = X_NDR_CHECK(idl::x_ndr_push_uint16(4, ndr, bpos, epos, ndr_flags)); // TODO version to be max_referral_level
+	bpos = X_NDR_CHECK(idl::x_ndr_push_uint16(3, ndr, bpos, epos, ndr_flags)); // TODO version to be max_referral_level
 	idl::x_ndr_off_t size_pos = bpos;
 	bpos = X_NDR_CHECK(idl::x_ndr_skip<uint16_t>(ndr, bpos, epos, ndr_flags));
 	bpos = X_NDR_CHECK(idl::x_ndr_push_uint16(DFS_SERVER_ROOT, ndr, bpos, epos, ndr_flags));
-	bpos = X_NDR_CHECK(idl::x_ndr_push_uint16(4, ndr, bpos, epos, ndr_flags)); // entry_flags
+	bpos = X_NDR_CHECK(idl::x_ndr_push_uint16(0, ndr, bpos, epos, ndr_flags)); // TODO entry_flags
 	bpos = X_NDR_CHECK(idl::x_ndr_push_uint32(referral.ttl, ndr, bpos, epos, ndr_flags));
 	idl::x_ndr_off_t path_pos = bpos;
 	bpos = X_NDR_CHECK(idl::x_ndr_skip<uint16_t>(ndr, bpos, epos, ndr_flags));
@@ -552,29 +530,29 @@ int x_smb2_process_IOCTL(x_smbd_conn_t *smbd_conn, x_msg_t *msg,
 		const uint8_t *in_buf, size_t in_len)
 {
 	if (in_len < 0x40 + X_SMB2_IOCTL_REQU_BODY_LEN + 1) {
-		return X_SMB2_REPLY_ERROR(smbd_conn, msg, nullptr, NT_STATUS_INVALID_PARAMETER);
+		return X_SMB2_REPLY_ERROR(smbd_conn, msg, nullptr, 0, NT_STATUS_INVALID_PARAMETER);
 	}
 
 	const uint8_t *inhdr = in_buf;
 	const uint8_t *inbody = in_buf + 0x40;
 
 	uint64_t in_session_id = BVAL(inhdr, SMB2_HDR_SESSION_ID);
+	uint32_t in_tid = IVAL(inhdr, SMB2_HDR_TID);
 	if (in_session_id == 0) {
-		return X_SMB2_REPLY_ERROR(smbd_conn, msg, nullptr, NT_STATUS_USER_SESSION_DELETED);
+		return X_SMB2_REPLY_ERROR(smbd_conn, msg, nullptr, in_tid, NT_STATUS_USER_SESSION_DELETED);
 	}
 	x_auto_ref_t<x_smbd_sess_t> smbd_sess{x_smbd_sess_find(in_session_id, smbd_conn)};
 	if (smbd_sess == nullptr) {
-		return X_SMB2_REPLY_ERROR(smbd_conn, msg, nullptr, NT_STATUS_USER_SESSION_DELETED);
+		return X_SMB2_REPLY_ERROR(smbd_conn, msg, nullptr, in_tid, NT_STATUS_USER_SESSION_DELETED);
 	}
 	if (smbd_sess->state != x_smbd_sess_t::S_ACTIVE) {
-		return X_SMB2_REPLY_ERROR(smbd_conn, msg, smbd_sess, NT_STATUS_INVALID_PARAMETER);
+		return X_SMB2_REPLY_ERROR(smbd_conn, msg, smbd_sess, in_tid, NT_STATUS_INVALID_PARAMETER);
 	}
 	/* TODO signing/encryption */
 
-	uint32_t in_tid = IVAL(inhdr, SMB2_HDR_TID);
 	auto it = smbd_sess->tcon_table.find(in_tid);
 	if (it == smbd_sess->tcon_table.end()) {
-		return X_SMB2_REPLY_ERROR(smbd_conn, msg, smbd_sess, NT_STATUS_NETWORK_NAME_DELETED);
+		return X_SMB2_REPLY_ERROR(smbd_conn, msg, smbd_sess, in_tid, NT_STATUS_NETWORK_NAME_DELETED);
 	}
 	std::shared_ptr<x_smbd_tcon_t> smbd_tcon = it->second;
 
@@ -595,12 +573,12 @@ int x_smb2_process_IOCTL(x_smbd_conn_t *smbd_conn, x_msg_t *msg,
 	// allowed_length_in = 0;
 	if (!x_check_range(requ_ioctl.input_offset, requ_ioctl.input_length,
 			0x40 + X_SMB2_IOCTL_REQU_BODY_LEN, in_len)) {
-		return X_SMB2_REPLY_ERROR(smbd_conn, msg, smbd_sess, NT_STATUS_INVALID_PARAMETER);
+		return X_SMB2_REPLY_ERROR(smbd_conn, msg, smbd_sess, in_tid, NT_STATUS_INVALID_PARAMETER);
 	}
 
 	if (!x_check_range(requ_ioctl.output_offset, requ_ioctl.output_length,
 			0x40 + X_SMB2_IOCTL_REQU_BODY_LEN, in_len)) {
-		return X_SMB2_REPLY_ERROR(smbd_conn, msg, smbd_sess, NT_STATUS_INVALID_PARAMETER);
+		return X_SMB2_REPLY_ERROR(smbd_conn, msg, smbd_sess, in_tid, NT_STATUS_INVALID_PARAMETER);
 	}
 #if 0
 	if (in_output_length > 0) {
@@ -644,7 +622,7 @@ int x_smb2_process_IOCTL(x_smbd_conn_t *smbd_conn, x_msg_t *msg,
 	 * server MUST fail the request with STATUS_NOT_SUPPORTED.
 	 */
 	if (requ_ioctl.flags != SMB2_IOCTL_FLAG_IS_FSCTL) {
-		return X_SMB2_REPLY_ERROR(smbd_conn, msg, smbd_sess, NT_STATUS_NOT_SUPPORTED);
+		return X_SMB2_REPLY_ERROR(smbd_conn, msg, smbd_sess, in_tid, NT_STATUS_NOT_SUPPORTED);
 	}
 
 	switch (requ_ioctl.ctl_code) {
@@ -665,7 +643,7 @@ int x_smb2_process_IOCTL(x_smbd_conn_t *smbd_conn, x_msg_t *msg,
 		if (requ_ioctl.file_id_persistent != UINT64_MAX ||
 				requ_ioctl.file_id_volatile != UINT64_MAX) {
 			return X_SMB2_REPLY_ERROR(smbd_conn, msg, smbd_sess,
-					NT_STATUS_INVALID_PARAMETER);
+					in_tid, NT_STATUS_INVALID_PARAMETER);
 		}
 		break;
 	default:
@@ -673,7 +651,7 @@ int x_smb2_process_IOCTL(x_smbd_conn_t *smbd_conn, x_msg_t *msg,
 				smbd_tcon.get()));
 		if (!smbd_open) {
 			return X_SMB2_REPLY_ERROR(smbd_conn, msg, smbd_sess,
-					NT_STATUS_FILE_CLOSED);
+					in_tid, NT_STATUS_FILE_CLOSED);
 		}
 		break;
 	}
