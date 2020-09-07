@@ -981,6 +981,65 @@ static inline x_ndr_off_t x_ndr_pull_bytes(std::vector<uint8_t> &t, x_ndr_pull_t
 void x_ndr_ostr_bytes(const void *addr, x_ndr_ostr_t &ndr, size_t size);
 
 
+struct x_ndr_bytes_t
+{
+	x_ndr_bytes_t(void *d, size_t l) : data(d), length(l) { }
+	x_ndr_off_t ndr_scalars(x_ndr_pull_t &ndr,
+			x_ndr_off_t bpos, x_ndr_off_t epos,
+			uint32_t flags, x_ndr_switch_t level) const {
+		return x_ndr_pull_bytes(data, ndr, bpos, epos, length);
+	}
+	void * const data;
+	size_t const length;
+};
+
+struct x_ndr_bytes_const_t
+{
+	x_ndr_bytes_const_t(const void *d, size_t l) : data(d), length(l) { }
+	x_ndr_off_t ndr_scalars(x_ndr_push_t &ndr,
+			x_ndr_off_t bpos, x_ndr_off_t epos,
+			uint32_t flags, x_ndr_switch_t level) const {
+		return x_ndr_push_bytes(data, ndr, bpos, epos, length);
+	}
+	const void * const data;
+	size_t const length;
+};
+
+struct x_ndr_string_with_null_t
+{
+	x_ndr_string_with_null_t(std::string &s) : str(s) { }
+	x_ndr_off_t ndr_scalars(x_ndr_pull_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos,
+			uint32_t flags, x_ndr_switch_t level) const {
+		X_ASSERT(level == X_NDR_SWITCH_NONE);
+		if (bpos == epos) {
+			str.clear();
+		} else {
+			const char *ndr_data = (const char *)ndr.get_data();
+			if (ndr_data[epos] != '\0') {
+				return -NDR_ERR_CHARCNV;
+			}
+			str.assign(ndr_data + bpos, ndr_data + epos - 1);
+		}
+		return epos;
+	}
+
+	std::string &str;
+};
+
+struct x_ndr_string_with_null_const_t
+{
+	x_ndr_string_with_null_const_t(const std::string &s) : str(s) { }
+	x_ndr_off_t ndr_scalars(x_ndr_push_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos,
+			uint32_t flags, x_ndr_switch_t level) const {
+		X_ASSERT(level == X_NDR_SWITCH_NONE);
+		if (str.empty()) {
+			return bpos;
+		}
+		return x_ndr_push_bytes(str.data(), ndr, bpos, epos, str.length() + 1);
+	}
+	const std::string &str;
+};
+
 x_ndr_off_t x_ndr_push_string(const std::string &v, x_ndr_push_t &ndr,
 		x_ndr_off_t bpos, x_ndr_off_t epos,
 		uint32_t flags);

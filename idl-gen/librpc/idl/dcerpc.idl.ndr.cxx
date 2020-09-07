@@ -292,12 +292,12 @@ void dcerpc_ack_ctx::ostr(x_ndr_ostr_t &__ndr, uint32_t __flags, x_ndr_switch_t 
 x_ndr_off_t dcerpc_bind_ack::ndr_scalars(x_ndr_push_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level) const
 {
 	X_NDR_HEADER_ALIGN(4, __ndr, __bpos, __epos, __flags);
-	x_ndr_off_t __base = __bpos; (void)__base;
-	x_ndr_off_t __ptr; (void)__ptr;
 	X_NDR_SCALARS(max_xmit_frag, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
 	X_NDR_SCALARS(max_recv_frag, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
 	X_NDR_SCALARS(assoc_group_id, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
-	X_NDR_SCALARS(secondary_address, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
+	X_NDR_SCALARS(uint16_t(secondary_address.size() + 1), __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
+	X_NDR_SCALARS(x_ndr_string_with_null_const_t(secondary_address),
+			__ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
 	X_NDR_HEADER_ALIGN(4, __ndr, __bpos, __epos, __flags);
 	X_NDR_SCALARS(uint8(get_size(ctx_list)), __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
 	X_NDR_SCALARS(ctx_list, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
@@ -306,16 +306,18 @@ x_ndr_off_t dcerpc_bind_ack::ndr_scalars(x_ndr_push_t &__ndr, x_ndr_off_t __bpos
 	return __bpos;
 }
 
-
 x_ndr_off_t dcerpc_bind_ack::ndr_scalars(x_ndr_pull_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level)
 {
 	X_NDR_HEADER_ALIGN(4, __ndr, __bpos, __epos, __flags);
-	x_ndr_off_t __base = __bpos; (void)__base;
-	x_ndr_off_t __ptr; (void)__ptr;
 	X_NDR_SCALARS(max_xmit_frag, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
 	X_NDR_SCALARS(max_recv_frag, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
 	X_NDR_SCALARS(assoc_group_id, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
-	X_NDR_SCALARS(secondary_address, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
+	uint16_t secondary_address_size;
+	X_NDR_SCALARS(secondary_address_size, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
+	x_ndr_string_with_null_t tmp{secondary_address};
+	X_NDR_SCALARS(tmp, // TODO allow const or tmp x_ndr_string_with_null_t(secondary_address),
+			__ndr, __bpos, X_NDR_CHECK_POS(__bpos + secondary_address_size, __bpos, __epos),
+			__flags, X_NDR_SWITCH_NONE);
 	X_NDR_HEADER_ALIGN(4, __ndr, __bpos, __epos, __flags);
 	uint8 num_results;
 	X_NDR_SCALARS(num_results, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
