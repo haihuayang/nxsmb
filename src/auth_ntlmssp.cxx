@@ -1190,6 +1190,7 @@ x_auth_ntlmssp_t::x_auth_ntlmssp_t(x_auth_context_t *context, const x_auth_ops_t
 		tmp_dns_name += dns_domain;
 	}
 
+	dns_name.resize(tmp_dns_name.size());
 	std::transform(tmp_dns_name.begin(), tmp_dns_name.end(), dns_name.begin(),
 			[](unsigned char c) { return std::tolower(c); });
 	/* TODO
