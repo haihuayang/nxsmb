@@ -661,6 +661,7 @@ struct x_smbd_conn_t
 };
 
 std::shared_ptr<x_smbd_share_t> x_smbd_share_find(const std::string &name);
+void x_smbd_shares_foreach(std::function<bool(std::shared_ptr<x_smbd_share_t> &share)>);
 int x_smbd_load_shares();
 
 int x_smbd_sess_pool_init(x_evtmgmt_t *ep, uint32_t count);

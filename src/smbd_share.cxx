@@ -36,3 +36,12 @@ int x_smbd_load_shares()
 	return 0;
 }
 
+void x_smbd_shares_foreach(std::function<bool(std::shared_ptr<x_smbd_share_t> &share)> visitor)
+{
+	std::lock_guard<std::mutex> lock(g_smbdshare_mutex);
+	for (auto it = g_smbdshare_map.begin(); it != g_smbdshare_map.end(); ++it) {
+		if (!visitor(it->second)) {
+			break;
+		}
+	}
+}

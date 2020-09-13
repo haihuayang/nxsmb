@@ -264,8 +264,12 @@ struct x_ndr_push_t {
 
 struct x_ndr_pull_buff_t {
 	x_ndr_pull_buff_t(const uint8_t *d, size_t l) : data(d), data_size(l) { }
+	void next_ptr() {
+		++ptr_count;
+	}
 	const uint8_t *data;
 	uint32_t data_size;
+	uint32_t ptr_count = 0;
 };
 
 struct x_ndr_pull_t {
@@ -277,6 +281,10 @@ struct x_ndr_pull_t {
 
 	x_ndr_pull_buff_t &buff;
 	x_ndr_off_t base;
+
+	void next_ptr() {
+		buff.next_ptr();
+	}
 
 	void save_pos(x_ndr_off_t pos) {
 		X_ASSERT(pos_index == pos_array.size());
@@ -727,6 +735,26 @@ inline x_ndr_off_t x_ndr_pull(T &t, const uint8_t *data, size_t size, uint32_t f
 	x_ndr_pull_buff_t ndr_data{data, size};
 	x_ndr_pull_t ndr{ndr_data, 0};
 	return x_ndr_handler_t<T, typename x_ndr_traits_t<T>::has_buffers>()(t, ndr, 0, size, flags, X_NDR_SWITCH_NONE);
+}
+
+template <typename T>
+inline x_ndr_off_t x_ndr_resp(const T &t, std::vector<uint8_t> &data, uint32_t flags)
+{
+	x_ndr_push_buff_t ndr_data{};
+	x_ndr_push_t ndr{ndr_data, 0};
+	x_ndr_off_t ret = t.ndr_resp(ndr, 0, X_NDR_MAX_SIZE, flags);
+	if (ret >= 0) {
+		std::swap(data, ndr_data.data);
+	}
+	return ret;
+}
+
+template <typename T>
+inline x_ndr_off_t x_ndr_requ(T &t, const uint8_t *data, size_t size, uint32_t flags)
+{
+	x_ndr_pull_buff_t ndr_data{data, size};
+	x_ndr_pull_t ndr{ndr_data, 0};
+	return t.ndr_requ(ndr, 0, size, flags);
 }
 
 static inline x_ndr_off_t x_ndr_do_align(x_ndr_push_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags)
@@ -1488,6 +1516,8 @@ static inline void x_ndr_ostr(const std::u16string &v, x_ndr_ostr_t &ndr, uint32
 {
 	x_ndr_ostr_u16string(v, ndr, flags);
 }
+
+
 
 template <typename T>
 static inline void x_ndr_ostr(const std::shared_ptr<T> &v, x_ndr_ostr_t &ndr, uint32_t flags, x_ndr_switch_t level)

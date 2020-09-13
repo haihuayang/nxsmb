@@ -274,24 +274,27 @@ struct dcerpc_bind_nak {
 template <> struct x_ndr_traits_t<dcerpc_bind_nak> {
 	using ndr_ostr_type = x_ndr_ostr_type_struct;
 };
+#endif
 
 const uint8 DCERPC_RESPONSE_LENGTH = 24;
 
 struct dcerpc_response {
-	x_ndr_off_t push(x_ndr_push_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level) const;
-	x_ndr_off_t pull(x_ndr_pull_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level);
+	x_ndr_off_t ndr_scalars(x_ndr_push_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level) const;
+	x_ndr_off_t ndr_scalars(x_ndr_pull_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level);
 	void ostr(x_ndr_ostr_t &__ndr, uint32_t __flags, x_ndr_switch_t __level) const;
 	uint32 alloc_hint;
 	uint16 context_id;
 	uint8 cancel_count;
-	DATA_BLOB _pad;/* [flag(LIBNDR_FLAG_ALIGN8)] */
-	DATA_BLOB stub_and_verifier;/* [flag(LIBNDR_FLAG_REMAINING)] */
+	uint8 _pad;
+	std::vector<uint8> stub_and_verifier;
+	// DATA_BLOB _pad;/* [flag(LIBNDR_FLAG_ALIGN8)] */
+	// DATA_BLOB stub_and_verifier;/* [flag(LIBNDR_FLAG_REMAINING)] */
 } ;
 
 template <> struct x_ndr_traits_t<dcerpc_response> {
-	using ndr_ostr_type = x_ndr_ostr_type_struct;
+	using has_buffers = std::false_type;
+	using ndr_ostr_type = x_ndr_type_struct;
 };
-
 
 enum dcerpc_nca_status : uint32 {
 	DCERPC_NCA_S_COMM_FAILURE=0x1C010001,
@@ -350,21 +353,21 @@ enum dcerpc_nca_status : uint32 {
 }/* [v1_enum] */;
 
 template <> struct x_ndr_traits_t<dcerpc_nca_status> {
-	using ndr_ostr_type = x_ndr_ostr_type_enum;
+	using ndr_type = x_ndr_type_enum;
 	using ndr_base_type = uint32;
 	static const std::array<std::pair<uint32, const char *>, 53> value_name_map;
 };
 
-template <> inline x_ndr_off_t x_ndr_data<dcerpc_nca_status>(const dcerpc_nca_status &__val, x_ndr_push_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level)
+template <> inline x_ndr_off_t x_ndr_scalars<dcerpc_nca_status>(const dcerpc_nca_status &__val, x_ndr_push_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level)
 {
 	X_ASSERT(__level == X_NDR_SWITCH_NONE);
 	return x_ndr_push_uint32(__val, __ndr, __bpos, __epos, __flags);
 }
 
-template <> inline x_ndr_off_t x_ndr_data<dcerpc_nca_status>(dcerpc_nca_status &__val, x_ndr_pull_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level)
+template <> inline x_ndr_off_t x_ndr_scalars<dcerpc_nca_status>(dcerpc_nca_status &__val, x_ndr_pull_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level)
 {
 	uint32_t v;
-	X_NDR_DATA(v, __ndr, __bpos, __epos, __flags, __level);
+	X_NDR_SCALARS(v, __ndr, __bpos, __epos, __flags, __level);
 	__val = dcerpc_nca_status(v);
 	return __bpos;
 }
@@ -378,21 +381,23 @@ const int DCERPC_FAULT_OTHER = 0x00000001;
 const int DCERPC_FAULT_TODO = 0x00000042;
 
 struct dcerpc_fault {
-	x_ndr_off_t push(x_ndr_push_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level) const;
-	x_ndr_off_t pull(x_ndr_pull_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level);
+	x_ndr_off_t ndr_scalars(x_ndr_push_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level) const;
+	x_ndr_off_t ndr_scalars(x_ndr_pull_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level);
 	void ostr(x_ndr_ostr_t &__ndr, uint32_t __flags, x_ndr_switch_t __level) const;
 	uint32 alloc_hint;
 	uint16 context_id;
 	uint8 cancel_count;
 	dcerpc_nca_status status;
-	DATA_BLOB _pad;/* [flag(LIBNDR_FLAG_REMAINING)] */
-} ;
-
-template <> struct x_ndr_traits_t<dcerpc_fault> {
-	using ndr_ostr_type = x_ndr_ostr_type_struct;
+	uint32 _pad;
+	// DATA_BLOB _pad;/* [flag(LIBNDR_FLAG_REMAINING)] */
 };
 
+template <> struct x_ndr_traits_t<dcerpc_fault> {
+	using has_buffers = std::false_type;
+	using ndr_ostr_type = x_ndr_type_struct;
+};
 
+#if 0
 enum dcerpc_AuthType : uint8 {
 	DCERPC_AUTH_TYPE_NONE=0,
 	DCERPC_AUTH_TYPE_KRB5_1=1,

@@ -3,10 +3,10 @@
 #include "include/charset.hxx"
 #if 0
 #include "include/librpc/dcerpc_ndr.hxx"
-#include "include/librpc/wkssvc_svc.hxx"
-#include "include/librpc/srvsvc_svc.hxx"
 #endif
-#include "include/librpc/dcerpc_x.hxx"
+#include "include/librpc/wkssvc.hxx"
+#include "include/librpc/srvsvc.hxx"
+// #include "include/librpc/dcerpc_x.hxx"
 
 namespace {
 
@@ -21,37 +21,16 @@ static const idl::ndr_syntax_id PNIO = {
 	0
 };
 
-static struct x_dcerpc_iface_t {
+typedef idl::dcerpc_nca_status (*x_dcerpc_rpc_fn_t)(idl::dcerpc_request request,
+		uint8_t &resp_type, std::vector<uint8_t> &body_output, uint32_t ndr_flags);
+
+
+struct x_dcerpc_iface_t {
 	idl::ndr_syntax_id syntax_id;
 	std::u16string iface_name;
 	uint32_t n_cmd;
-	const x_dcerpc_gen_t *cmds;
-} rpc_lookup[] = {
-	// { { WKSSVC_UUID, WKSSVC_VERSION }, u"wkssvc", WKSSVC_RPCGEN_N_CMD, x_dcerpc_wkssvc },
-	// { { NDR_SRVSVC_UUID, NDR_SRVSVC_VERSION }, u"srvsvc", },
+	const x_dcerpc_rpc_fn_t *cmds;
 };
-
-//static std::map<std::u16string, int> rpc_lookup;
-
-static const x_dcerpc_iface_t *find_rpc_by_name(const std::u16string &name)
-{
-	for (const auto &rpc: rpc_lookup) {
-		if (rpc.iface_name == name) {
-			return &rpc;
-		}
-	}
-	return nullptr;
-}
-
-static inline const x_dcerpc_iface_t *find_rpc_by_syntax(const idl::ndr_syntax_id &syntax)
-{
-	for (const auto &rpc: rpc_lookup) {
-		if (rpc.syntax_id == syntax) {
-			return &rpc;
-		}
-	}
-	return nullptr;
-}
 
 struct x_ncacn_packet_t
 {
@@ -87,6 +66,123 @@ struct x_smbd_named_pipe_t
 	std::vector<uint8_t> output;
 };
 }
+
+static uint32_t net_share_enum_all_1(std::shared_ptr<idl::srvsvc_NetShareCtr1> &ctr1)
+{
+	// TODO buffer size and resume handle
+	ctr1->array = std::make_shared<std::vector<idl::srvsvc_NetShareInfo1>>();
+	x_smbd_shares_foreach([&ctr1](std::shared_ptr<x_smbd_share_t> &share) -> bool {
+		idl::srvsvc_ShareType type = idl::STYPE_DISKTREE;
+		if (share->type == TYPE_IPC) {
+			type = idl::STYPE_IPC_HIDDEN;
+		}
+		idl::srvsvc_NetShareInfo1 info1{
+			std::make_shared<std::u16string>(x_convert_utf8_to_utf16(share->name)),
+			type,
+			std::make_shared<std::u16string>(x_convert_utf8_to_utf16("no comment"))
+		};
+
+		ctr1->array->push_back(info1); /*
+		ctr1->array->emplace_back(std::make_shared<std::u16string>(x_convert_utf8_to_utf16(share->name)),
+			type,
+			std::make_shared<std::u16string>(x_convert_utf8_to_utf16("no comment"))); */
+		return true;
+	});
+	return ctr1->array->size();
+}
+
+static idl::dcerpc_nca_status srvsvc_NetShareEnumAll(idl::dcerpc_request request,
+		uint8_t &resp_type, std::vector<uint8_t> &body_output, uint32_t ndr_flags)
+{
+	idl::srvsvc_NetShareEnumAll arg;
+#if 1
+	idl::x_ndr_pull_buff_t ndr_pull_buff{request.stub_and_verifier.val.data(),
+		request.stub_and_verifier.val.size()};
+	idl::x_ndr_pull_t ndr_pull{ndr_pull_buff, 0};
+	idl::x_ndr_off_t ret = arg.ndr_requ(ndr_pull, 0, request.stub_and_verifier.val.size(), ndr_flags);
+#else
+	idl::x_ndr_off_t ret = idl::x_ndr_requ(arg,
+			request.stub_and_verifier.val.data(),
+			request.stub_and_verifier.val.size(),
+			ndr_flags);
+#endif
+	if (ret < 0) {
+		return idl::DCERPC_NCA_S_PROTO_ERROR;
+	}
+	X_ASSERT(ret == (long)request.stub_and_verifier.val.size());
+
+	switch (arg.level) {
+	case 1:
+		arg.totalentries = net_share_enum_all_1(arg.ctr.ctr1);
+		break;
+
+	default:
+		X_TODO;
+	}
+#if 1
+	idl::x_ndr_push_buff_t ndr_push_buff{};
+	idl::x_ndr_push_t ndr_push{ndr_push_buff, 0};
+	ndr_push_buff.ptr_count = ndr_pull_buff.ptr_count;
+	ret = arg.ndr_resp(ndr_push, 0, idl::X_NDR_MAX_SIZE, ndr_flags);
+	if (ret >= 0) {
+		std::swap(body_output, ndr_push_buff.data);
+	}
+#else
+	ret = idl::x_ndr_resp(arg, body_output, ndr_flags);
+#endif
+	X_ASSERT(ret > 0);
+	resp_type = idl::DCERPC_PKT_RESPONSE;
+	return idl::dcerpc_nca_status(0);
+}
+
+static const x_dcerpc_rpc_fn_t srvsvc_fns[] = {
+	nullptr,
+	nullptr,
+	nullptr,
+	nullptr,
+
+	nullptr,
+	nullptr,
+	nullptr,
+	nullptr,
+
+	nullptr,
+	nullptr,
+	nullptr,
+	nullptr,
+
+	nullptr,
+	nullptr,
+	nullptr,
+	srvsvc_NetShareEnumAll,
+};
+
+//static std::map<std::u16string, int> rpc_lookup;
+static const x_dcerpc_iface_t rpc_lookup[] = {
+	{ { WKSSVC_UUID, WKSSVC_VERSION }, u"wkssvc", 0, nullptr, /*WKSSVC_RPCGEN_N_CMD, x_dcerpc_wkssvc */},
+	{ { NDR_SRVSVC_UUID, NDR_SRVSVC_VERSION }, u"srvsvc", X_ARRAY_SIZE(srvsvc_fns), srvsvc_fns },
+};
+
+static const x_dcerpc_iface_t *find_rpc_by_name(const std::u16string &name)
+{
+	for (const auto &rpc: rpc_lookup) {
+		if (rpc.iface_name == name) {
+			return &rpc;
+		}
+	}
+	return nullptr;
+}
+
+static inline const x_dcerpc_iface_t *find_rpc_by_syntax(const idl::ndr_syntax_id &syntax)
+{
+	for (const auto &rpc: rpc_lookup) {
+		if (rpc.syntax_id == syntax) {
+			return &rpc;
+		}
+	}
+	return nullptr;
+}
+
 
 static inline x_smbd_named_pipe_t *from_smbd_open(x_smbd_open_t *smbd_open)
 {
@@ -189,7 +285,8 @@ static bool x_smbd_named_pipe_bind(x_smbd_named_pipe_t *named_pipe,
 	return true;
 }
 
-static NTSTATUS process_dcerpc_bind(x_smbd_named_pipe_t *named_pipe, std::vector<uint8_t> &output)
+static NTSTATUS process_dcerpc_bind(x_smbd_named_pipe_t *named_pipe,
+		uint8_t &resp_type, std::vector<uint8_t> &body_output)
 {
 	idl::dcerpc_bind bind;
 	uint32_t ndr_flags = named_pipe->pkt.little_endian() ? 0 : LIBNDR_FLAG_BIGENDIAN;
@@ -218,7 +315,10 @@ static NTSTATUS process_dcerpc_bind(x_smbd_named_pipe_t *named_pipe, std::vector
 	}
 	bind_ack.secondary_address = "\\PIPE\\" + x_convert_utf16_to_utf8(named_pipe->iface->iface_name);
 
-
+	x_ndr_push(bind_ack, body_output, ndr_flags);
+	resp_type = idl::DCERPC_PKT_BIND_ACK;
+	
+#if 0
 	std::vector<uint8_t> body_output;
 	x_ndr_push(bind_ack, body_output, ndr_flags);
 	x_ncacn_packet_t resp_header = named_pipe->pkt;
@@ -234,6 +334,7 @@ static NTSTATUS process_dcerpc_bind(x_smbd_named_pipe_t *named_pipe, std::vector
 	}
 	memcpy(named_pipe->output.data(), &resp_header, sizeof(resp_header));
 	memcpy(named_pipe->output.data() + sizeof(resp_header), body_output.data(), body_output.size());
+#endif
 	return NT_STATUS_OK;
 }
 
@@ -247,7 +348,8 @@ static const x_dcerpc_iface_t *find_context(x_smbd_named_pipe_t *named_pipe, uin
 	return nullptr;
 }
 
-static NTSTATUS process_dcerpc_request(x_smbd_named_pipe_t *named_pipe, std::vector<uint8_t> &output)
+static NTSTATUS process_dcerpc_request(x_smbd_named_pipe_t *named_pipe,
+		uint8_t &resp_type, std::vector<uint8_t> &body_output)
 {
 	idl::dcerpc_request request;
 	uint32_t ndr_flags = named_pipe->pkt.little_endian() ? 0 : LIBNDR_FLAG_BIGENDIAN;
@@ -264,10 +366,31 @@ static NTSTATUS process_dcerpc_request(x_smbd_named_pipe_t *named_pipe, std::vec
 	}
 
 	uint32_t opnum = request.opnum;
-	if (opnum >= iface->n_cmd) {
-		X_TODO;
-		// setup_fault_pdu(p, NT_STATUS(DCERPC_FAULT_OP_RNG_ERROR));
+	if (opnum >= iface->n_cmd || !iface->cmds[opnum]) {
+		idl::dcerpc_fault fault;
+		memset(&fault, 0, sizeof fault);
+		fault.status = idl::DCERPC_NCA_S_OP_RNG_ERROR;
+		x_ndr_push(fault, body_output, ndr_flags);
+		resp_type = idl::DCERPC_PKT_FAULT;
 	} else {
+		std::vector<uint8_t> output;
+		idl::dcerpc_nca_status dce_status = iface->cmds[opnum](request, resp_type, output, ndr_flags);
+		X_TODO_ASSERT(resp_type == idl::DCERPC_PKT_RESPONSE);
+		X_TODO_ASSERT(dce_status == 0);
+		/* TODO WERROR */
+		output.push_back(0);
+		output.push_back(0);
+		output.push_back(0);
+		output.push_back(0);
+		idl::dcerpc_response response;
+		response.alloc_hint = output.size();
+		response.context_id = 0;
+		response.cancel_count = 0;
+		response._pad = 0;
+		response.stub_and_verifier = output;
+
+		x_ndr_push(response, body_output, ndr_flags);
+		/*
 		const x_dcerpc_gen_t *rpcgen = &iface->cmds[opnum];
 		x_dcerpc_arg_res_t arg_res = rpcgen->create();
 		rpcgen->decode_arg(arg_res, request);
@@ -275,27 +398,43 @@ static NTSTATUS process_dcerpc_request(x_smbd_named_pipe_t *named_pipe, std::vec
 		std::vector<uint8_t> output;
 		rpcgen->encode_res(arg_res, ret, output);
 		rpcgen->destroy(arg_res);
-
+		*/
 	}
 	return NT_STATUS_OK;
 }
 
 static inline NTSTATUS process_ncacn_pdu(x_smbd_named_pipe_t *named_pipe)
 {
-	std::vector<uint8_t> output;
+	std::vector<uint8_t> body_output;
+	uint8_t resp_type;
 	NTSTATUS status = NT_STATUS_INTERNAL_ERROR;
 	switch (named_pipe->pkt.type) {
 		case idl::DCERPC_PKT_BIND:
-			status = process_dcerpc_bind(named_pipe, output);
+			status = process_dcerpc_bind(named_pipe, resp_type, body_output);
 			break;
 		case idl::DCERPC_PKT_REQUEST:
-			status = process_dcerpc_request(named_pipe, output);
+			status = process_dcerpc_request(named_pipe, resp_type, body_output);
 			break;
 		default:
 			X_TODO;
 	}
 
-	/* TODO */
+	if (NT_STATUS_IS_OK(status)) {
+		x_ncacn_packet_t resp_header = named_pipe->pkt;
+		resp_header.type = resp_type;
+		resp_header.pfc_flags = idl::DCERPC_PFC_FLAG_FIRST | idl::DCERPC_PFC_FLAG_LAST;
+		resp_header.frag_length = sizeof(x_ncacn_packet_t) + body_output.size();
+		resp_header.auth_length = 0;
+
+		named_pipe->output.resize(resp_header.frag_length);
+
+		if (!named_pipe->pkt.little_endian()) {
+			resp_header.frag_length = htons(resp_header.frag_length);
+		}
+		memcpy(named_pipe->output.data(), &resp_header, sizeof(resp_header));
+		memcpy(named_pipe->output.data() + sizeof(resp_header), body_output.data(), body_output.size());
+		/* TODO */
+	}
 	named_pipe->packet_read = 0;
 	named_pipe->input.clear();
 	return status;

@@ -407,34 +407,31 @@ void dcerpc_bind_nak::ostr(x_ndr_ostr_t &__ndr, uint32_t __flags, x_ndr_switch_t
 	X_NDR_OSTR_NEXT(_pad, __ndr, x_ndr_set_flags(__flags, LIBNDR_FLAG_REMAINING), X_NDR_SWITCH_NONE);
 	(__ndr) << leave;
 }
+#endif
 
 
 
-x_ndr_off_t dcerpc_response::push(x_ndr_push_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level) const
+x_ndr_off_t dcerpc_response::ndr_scalars(x_ndr_push_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level) const
 {
 	X_NDR_HEADER_ALIGN(4, __ndr, __bpos, __epos, __flags);
-	x_ndr_off_t __base = __bpos; (void)__base;
-	x_ndr_off_t __ptr; (void)__ptr;
-	X_NDR_DATA(alloc_hint, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
-	X_NDR_DATA(context_id, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
-	X_NDR_DATA(cancel_count, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
-	X_NDR_DATA(_pad, __ndr, __bpos, __epos, x_ndr_set_flags(__flags, LIBNDR_FLAG_ALIGN8), X_NDR_SWITCH_NONE);
-	X_NDR_DATA(stub_and_verifier, __ndr, __bpos, __epos, x_ndr_set_flags(__flags, LIBNDR_FLAG_REMAINING), X_NDR_SWITCH_NONE);
+	X_NDR_SCALARS(alloc_hint, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
+	X_NDR_SCALARS(context_id, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
+	X_NDR_SCALARS(cancel_count, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
+	X_NDR_SCALARS(_pad, __ndr, __bpos, __epos, x_ndr_set_flags(__flags, LIBNDR_FLAG_ALIGN8), X_NDR_SWITCH_NONE);
+	X_NDR_SCALARS(stub_and_verifier, __ndr, __bpos, __epos, x_ndr_set_flags(__flags, LIBNDR_FLAG_REMAINING), X_NDR_SWITCH_NONE);
 	X_NDR_TRAILER_ALIGN(4, __ndr, __bpos, __epos, __flags);
 	return __bpos;
 }
 
 
-x_ndr_off_t dcerpc_response::pull(x_ndr_pull_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level)
+x_ndr_off_t dcerpc_response::ndr_scalars(x_ndr_pull_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level)
 {
 	X_NDR_HEADER_ALIGN(4, __ndr, __bpos, __epos, __flags);
-	x_ndr_off_t __base = __bpos; (void)__base;
-	x_ndr_off_t __ptr; (void)__ptr;
-	X_NDR_DATA(alloc_hint, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
-	X_NDR_DATA(context_id, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
-	X_NDR_DATA(cancel_count, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
-	X_NDR_DATA(_pad, __ndr, __bpos, __epos, x_ndr_set_flags(__flags, LIBNDR_FLAG_ALIGN8), X_NDR_SWITCH_NONE);
-	X_NDR_DATA(stub_and_verifier, __ndr, __bpos, __epos, x_ndr_set_flags(__flags, LIBNDR_FLAG_REMAINING), X_NDR_SWITCH_NONE);
+	X_NDR_SCALARS(alloc_hint, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
+	X_NDR_SCALARS(context_id, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
+	X_NDR_SCALARS(cancel_count, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
+	X_NDR_SCALARS(_pad, __ndr, __bpos, __epos, x_ndr_set_flags(__flags, LIBNDR_FLAG_ALIGN8), X_NDR_SWITCH_NONE);
+	X_NDR_SCALARS(stub_and_verifier, __ndr, __bpos, __epos, x_ndr_set_flags(__flags, LIBNDR_FLAG_REMAINING), X_NDR_SWITCH_NONE);
 	X_NDR_TRAILER_ALIGN(4, __ndr, __bpos, __epos, __flags);
 	return __bpos;
 }
@@ -449,7 +446,6 @@ void dcerpc_response::ostr(x_ndr_ostr_t &__ndr, uint32_t __flags, x_ndr_switch_t
 	X_NDR_OSTR_NEXT(stub_and_verifier, __ndr, x_ndr_set_flags(__flags, LIBNDR_FLAG_REMAINING), X_NDR_SWITCH_NONE);
 	(__ndr) << leave;
 }
-
 
 const std::array<std::pair<uint32, const char *>, 53> x_ndr_traits_t<dcerpc_nca_status>::value_name_map = { {
 	{ DCERPC_NCA_S_COMM_FAILURE, "DCERPC_NCA_S_COMM_FAILURE" },
@@ -509,31 +505,26 @@ const std::array<std::pair<uint32, const char *>, 53> x_ndr_traits_t<dcerpc_nca_
 
 
 
-x_ndr_off_t dcerpc_fault::push(x_ndr_push_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level) const
+x_ndr_off_t dcerpc_fault::ndr_scalars(x_ndr_push_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level) const
 {
 	X_NDR_HEADER_ALIGN(4, __ndr, __bpos, __epos, __flags);
-	x_ndr_off_t __base = __bpos; (void)__base;
-	x_ndr_off_t __ptr; (void)__ptr;
-	X_NDR_DATA(alloc_hint, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
-	X_NDR_DATA(context_id, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
-	X_NDR_DATA(cancel_count, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
-	X_NDR_DATA(status, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
-	X_NDR_DATA(_pad, __ndr, __bpos, __epos, x_ndr_set_flags(__flags, LIBNDR_FLAG_REMAINING), X_NDR_SWITCH_NONE);
+	X_NDR_SCALARS(alloc_hint, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
+	X_NDR_SCALARS(context_id, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
+	X_NDR_SCALARS(cancel_count, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
+	X_NDR_SCALARS(status, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
+	X_NDR_SCALARS(_pad, __ndr, __bpos, __epos, x_ndr_set_flags(__flags, LIBNDR_FLAG_REMAINING), X_NDR_SWITCH_NONE);
 	X_NDR_TRAILER_ALIGN(4, __ndr, __bpos, __epos, __flags);
 	return __bpos;
 }
 
-
-x_ndr_off_t dcerpc_fault::pull(x_ndr_pull_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level)
+x_ndr_off_t dcerpc_fault::ndr_scalars(x_ndr_pull_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level)
 {
 	X_NDR_HEADER_ALIGN(4, __ndr, __bpos, __epos, __flags);
-	x_ndr_off_t __base = __bpos; (void)__base;
-	x_ndr_off_t __ptr; (void)__ptr;
-	X_NDR_DATA(alloc_hint, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
-	X_NDR_DATA(context_id, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
-	X_NDR_DATA(cancel_count, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
-	X_NDR_DATA(status, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
-	X_NDR_DATA(_pad, __ndr, __bpos, __epos, x_ndr_set_flags(__flags, LIBNDR_FLAG_REMAINING), X_NDR_SWITCH_NONE);
+	X_NDR_SCALARS(alloc_hint, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
+	X_NDR_SCALARS(context_id, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
+	X_NDR_SCALARS(cancel_count, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
+	X_NDR_SCALARS(status, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
+	X_NDR_SCALARS(_pad, __ndr, __bpos, __epos, x_ndr_set_flags(__flags, LIBNDR_FLAG_REMAINING), X_NDR_SWITCH_NONE);
 	X_NDR_TRAILER_ALIGN(4, __ndr, __bpos, __epos, __flags);
 	return __bpos;
 }
@@ -549,7 +540,7 @@ void dcerpc_fault::ostr(x_ndr_ostr_t &__ndr, uint32_t __flags, x_ndr_switch_t __
 	(__ndr) << leave;
 }
 
-
+#if 0
 const std::array<std::pair<uint8, const char *>, 11> x_ndr_traits_t<dcerpc_AuthType>::value_name_map = { {
 	{ DCERPC_AUTH_TYPE_NONE, "DCERPC_AUTH_TYPE_NONE" },
 	{ DCERPC_AUTH_TYPE_KRB5_1, "DCERPC_AUTH_TYPE_KRB5_1" },

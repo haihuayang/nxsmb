@@ -246,6 +246,7 @@ inline x_ndr_off_t x_ndr_scalars_unique_ptr(std::shared_ptr<T> &t, x_ndr_pull_t 
 	X_NDR_SCALARS(ptr, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
 	if (ptr.val) {
 		t = x_ndr_allocate_ptr<T>(level);
+		ndr.next_ptr();
 	}
 	return bpos;
 }

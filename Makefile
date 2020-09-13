@@ -279,7 +279,8 @@ a=\
 		lib/librpc/lsa_ndr \
 		lib/librpc/dcerpc_ndr \
 
-TARGET_SET_m_idl := misc security lsa samr netlogon krb5pac ntlmssp dcerpc
+TARGET_SET_m_idl := misc security lsa samr netlogon krb5pac ntlmssp dcerpc \
+	srvsvc
 
 $(TARGET_DIR_out)/libnxsmb.a: $(TARGET_SRC_libnxsmb:%=$(TARGET_DIR_out)/%.o) $(TARGET_SET_idl:%=$(TARGET_DIR_out)/librpc/idl/%.idl.ndr.o) $(TARGET_SET_m_idl:%=$(TARGET_DIR_out)/librpc/idl/%.idl.ndr.o)
 	ar rcs $@ $^

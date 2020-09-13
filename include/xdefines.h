@@ -36,6 +36,13 @@
 #define X_DEVEL_ASSERT(...) 
 #endif
 
+#define X_TODO_ASSERT(cond) do { \
+	if (x_likely(cond)) { \
+	} else { \
+		X_PANIC("TODO !(%s)", #cond); \
+	} \
+} while (0)
+
 #define X_TODO X_PANIC("TODO")
 
 #define X_ASSERT_SYSCALL(call) do { \
@@ -110,6 +117,7 @@ void x_log(int level, const char *fmt, ...);
 
 #define PROJECT_NAME XSTR2(PROJECT)
 
+#define X_ARRAY_SIZE(x) (sizeof(x)/sizeof(x[0]))
 #define X_MALLOC malloc
 
 #define X_IPQUAD_BE(addr) \

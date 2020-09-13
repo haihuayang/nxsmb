@@ -13,6 +13,7 @@ namespace idl {
 
 }
 
+#include "librpc/idl/srvsvc.idl.hxx"
 
 
 #endif /* __ndr_srvsvc__hxx__ */
