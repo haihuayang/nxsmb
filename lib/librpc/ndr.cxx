@@ -528,6 +528,7 @@ static inline x_ndr_off_t x_ndr_pull_align_intl(size_t n, x_ndr_pull_t &ndr,
 #endif
 }
 
+#if 0
 x_ndr_off_t x_ndr_align(size_t alignment, x_ndr_pull_t &ndr,
 		x_ndr_off_t bpos, x_ndr_off_t epos,
 		uint32_t flags)
@@ -592,7 +593,6 @@ x_ndr_off_t x_ndr_scalars(x_ndr_subctx_t &t, x_ndr_pull_t &ndr,
 	return bpos;
 }
 
-#if 0
 x_ndr_ret_t x_ndr_hole_intl(uint32_t alignment, uint32_t size,
 		x_ndr_push_t &ndr,
 		x_ndr_ret_t bpos, x_ndr_ret_t epos, uint32_t extra_flags, size_t &pos)

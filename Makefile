@@ -36,8 +36,9 @@ TARGET_SET_dir := bin lib lib/librpc librpc/idl src tests \
 	$(TARGET_SET_samba_dir)
 
 .PHONY: all target_mkdir host_mkdir target_samba_gen
-TARGET_SET_tests := test-timer test-krb5pac test-ntlmssp test-security test-wbcli test-wbpool \
-	test-mbuf
+TARGET_SET_tests := test-timer  test-wbcli test-wbpool test-mbuf \
+	test-security
+a=test-krb5pac test-ntlmssp
 
 TARGET_SET_lib := nxsmb samba
 
@@ -50,7 +51,6 @@ TARGET_CFLAGS_EXTRA := \
 	-I$(TARGET_DIR_out)/samba/source4 \
 	-I$(TARGET_DIR_out)/samba \
 	-I$(TARGET_DIR_out) \
-	-Iidl-gen \
 	-Isamba/source4 \
 	-Isamba \
 	-Isamba/source4/heimdal_build\
@@ -78,7 +78,8 @@ TARGET_CFLAGS_EXTRA := \
 	-Isamba/source3 \
 	-D__X_DEVELOPER__=1
 
-all: $(TARGET_SET_tests:%=$(TARGET_DIR_out)/tests/%) $(TARGET_DIR_out)/bin/nxsmbd
+all: $(TARGET_SET_tests:%=$(TARGET_DIR_out)/tests/%)
+#$(TARGET_DIR_out)/bin/nxsmbd
 
 SET_src_nxsmbd := auth_ntlmssp auth_krb5 auth_spnego auth \
 	network misc \
@@ -261,6 +262,8 @@ TARGET_SRC_libnxsmb := \
 		lib/librpc/ndr_utils \
 		lib/librpc/ndr_string \
 		lib/librpc/misc \
+
+a=\
 		lib/librpc/security \
 		lib/xutils \
 		lib/string \
@@ -279,8 +282,8 @@ a=\
 		lib/librpc/lsa_ndr \
 		lib/librpc/dcerpc_ndr \
 
-TARGET_SET_m_idl := misc security lsa samr netlogon krb5pac ntlmssp dcerpc \
-	srvsvc
+TARGET_SET_m_idl :=
+#misc security lsa samr netlogon krb5pac ntlmssp dcerpc srvsvc
 
 $(TARGET_DIR_out)/libnxsmb.a: $(TARGET_SRC_libnxsmb:%=$(TARGET_DIR_out)/%.o) $(TARGET_SET_idl:%=$(TARGET_DIR_out)/librpc/idl/%.idl.ndr.o) $(TARGET_SET_m_idl:%=$(TARGET_DIR_out)/librpc/idl/%.idl.ndr.o)
 	ar rcs $@ $^
@@ -289,8 +292,8 @@ $(TARGET_SRC_libnxsmb:%=$(TARGET_DIR_out)/%.o): $(TARGET_DIR_out)/lib/%.o: lib/%
 	$(CXX) -c $(TARGET_CXXFLAGS) $(TARGET_CFLAGS_EXTRA) -o $@ $<
 
 
-$(TARGET_SET_m_idl:%=$(TARGET_DIR_out)/librpc/idl/%.idl.ndr.o) : $(TARGET_DIR_out)/librpc/idl/%.idl.ndr.o: idl-gen/librpc/idl/%.idl.ndr.cxx
-	$(CXX) -c $(TARGET_CXXFLAGS) $(TARGET_CFLAGS_EXTRA) -o $@ $<
+#$(TARGET_SET_m_idl:%=$(TARGET_DIR_out)/librpc/idl/%.idl.ndr.o) : $(TARGET_DIR_out)/librpc/idl/%.idl.ndr.o: idl-gen/librpc/idl/%.idl.ndr.cxx
+#	$(CXX) -c $(TARGET_CXXFLAGS) $(TARGET_CFLAGS_EXTRA) -o $@ $<
 
 $(TARGET_SET_idl:%=$(TARGET_DIR_out)/librpc/idl/%.idl.ndr.o) : $(TARGET_DIR_out)/librpc/idl/%.idl.ndr.o: $(TARGET_DIR_out)/librpc/idl/%.idl.ndr.cxx
 	$(CXX) -c $(TARGET_CXXFLAGS) $(TARGET_CFLAGS_EXTRA) -o $@ $<

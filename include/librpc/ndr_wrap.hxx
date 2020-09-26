@@ -6,12 +6,9 @@
 #error "Must be c++"
 #endif
 
-namespace idl {
+#include "ndr.hxx"
 
-struct x_ndr_I_t {
-	template <typename T>
-	T operator()(T t) const { return t; }
-};
+namespace idl {
 
 template <typename T>
 struct x_ndr_at_t
@@ -19,20 +16,88 @@ struct x_ndr_at_t
 	x_ndr_at_t(x_ndr_off_t __pos) : pos(__pos) { }
 	void operator()(x_ndr_off_t size, x_ndr_push_t &ndr, x_ndr_off_t epos, uint32_t flags) const {
 		x_ndr_off_t bpos = pos;
-		bpos = x_ndr_scalars(T(size), ndr, pos, epos, flags, X_NDR_SWITCH_NONE);
+		bpos = x_ndr_scalars_simple(T(size), ndr, pos, epos, flags, X_NDR_SWITCH_NONE);
 		X_ASSERT(bpos > 0);
 	}
 	T operator()(x_ndr_pull_t &ndr, x_ndr_off_t epos, uint32_t flags) const {
 		x_ndr_off_t bpos = pos;
 		T tmp;
-		bpos = x_ndr_scalars(tmp, ndr, pos, epos, flags, X_NDR_SWITCH_NONE);
+		bpos = x_ndr_scalars_simple(tmp, ndr, pos, epos, flags, X_NDR_SWITCH_NONE);
 		X_ASSERT(bpos > 0);
 		return tmp;
 	}
 
-	x_ndr_off_t pos;
+	const x_ndr_off_t pos;
 };
 
+#define X_NDR_BUFFERS_RELATIVE_PTR_SIMPLE(t, ndr, bpos, epos, flags, level, type_ptr, pos_ptr) \
+	X_NDR_VERIFY((bpos), x_ndr_buffers_relative_ptr_simple((t), (ndr), (bpos), (epos), (flags), (level), x_ndr_at_t<type_ptr>(pos_ptr)))
+
+template <typename T, typename PosPtr, typename NT = ndr_traits_t<T>>
+x_ndr_off_t x_ndr_buffers_relative_ptr(NT &&nt, const std::shared_ptr<T> &t,
+		x_ndr_push_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos,
+		uint32_t flags, x_ndr_switch_t level,
+		const PosPtr &pos_ptr)
+{
+	if (t) {
+		X_NDR_DO_ALIGN(ndr, bpos, epos, flags);
+		pos_ptr(bpos - ndr.base, ndr, epos, flags);
+
+		bpos = x_ndr_both_t<typename NT::has_buffers>()(nt, *t, ndr,
+				bpos, epos, flags, level);
+	}
+	return bpos;
+}
+
+template <typename T, typename PosPtr, typename NT = ndr_traits_t<T>>
+x_ndr_off_t x_ndr_buffers_relative_ptr(NT &&nt, std::shared_ptr<T> &t,
+		x_ndr_pull_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos,
+		uint32_t flags, x_ndr_switch_t level,
+		const PosPtr &pos_ptr)
+{
+	auto offset = pos_ptr(ndr, epos, flags);
+	if (offset) {
+		X_NDR_CHECK_ALIGN(ndr, flags, offset);
+		t = x_ndr_allocate_ptr<T>(level);
+
+		x_ndr_off_t tmp_bpos = X_NDR_CHECK_POS(ndr.base + offset, 0, epos);
+
+		tmp_bpos = x_ndr_both_t<typename NT::has_buffers>()(nt, *t, ndr,
+				tmp_bpos, epos, flags, level);
+		if (tmp_bpos < 0) {
+			return tmp_bpos;
+		}
+
+		if (bpos < tmp_bpos) {
+			bpos = tmp_bpos;
+		}
+	}
+	return bpos;
+}
+
+template <typename T, typename PosPtr>
+x_ndr_off_t x_ndr_buffers_relative_ptr_simple(const std::shared_ptr<T> &t,
+		x_ndr_push_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos,
+		uint32_t flags, x_ndr_switch_t level,
+		const PosPtr &pos_ptr)
+{
+	return x_ndr_buffers_relative_ptr(ndr_traits_t<T>(), t, ndr, bpos, epos, flags, level, pos_ptr);
+}
+
+template <typename T, typename PosPtr>
+x_ndr_off_t x_ndr_buffers_relative_ptr_simple(std::shared_ptr<T> &t,
+		x_ndr_pull_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos,
+		uint32_t flags, x_ndr_switch_t level,
+		const PosPtr &pos_ptr)
+{
+	return x_ndr_buffers_relative_ptr(ndr_traits_t<T>(), t, ndr, bpos, epos, flags, level, pos_ptr);
+}
+
+#if 0
+struct x_ndr_I_t {
+	template <typename T>
+	T operator()(T t) const { return t; }
+};
 inline void x_ndr_push_at(x_ndr_off_t length, x_ndr_push_t &ndr, x_ndr_off_t epos, uint32_t flags)
 {
 }
@@ -221,7 +286,7 @@ inline x_ndr_off_t x_ndr_scalars_unique_ptr(const std::shared_ptr<T> &t, x_ndr_p
 	} else {
 		ptr.val = 0;
 	}
-	X_NDR_SCALARS(ptr, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
+	X_NDR_SCALARS_SIMPLE(ptr, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
 	return bpos;
 }
 
@@ -569,7 +634,7 @@ inline x_ndr_off_t x_ndr_buffers_unique_vector(std::shared_ptr<std::vector<T>> &
 
 #define X_NDR_BUFFERS_UNIQUE_VECTOR(t, ndr, bpos, epos, flags, level, type_size, pos_size) \
 	X_NDR_VERIFY((bpos), x_ndr_buffers_unique_vector((t), (ndr), (bpos), (epos), (flags), (level), x_ndr_at_t<type_size>(pos_size)))
-
+#endif
 }
 
 #endif /* __ndr_wrap__hxx__ */

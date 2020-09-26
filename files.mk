@@ -1,16 +1,16 @@
 
 TARGET_SET_idl := \
+	misc \
+	security \
 
 a=\
+	lsa \
 	mytest_x_elem_size \
 	mytest_size_is \
 	mytest_length_is \
 	mytest_x_length \
 
 a=\
-	misc \
-	security \
-	lsa \
 	samr \
 	netlogon \
 	krb5pac \

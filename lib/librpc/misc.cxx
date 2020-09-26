@@ -2,80 +2,28 @@
 #include "include/librpc/misc.hxx"
 
 namespace idl {
-#if 0
-x_ndr_off_t GUID::ndr_scalars(x_ndr_push_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level) const
-{
-	X_NDR_HEADER_ALIGN(4, __ndr, __bpos, __epos, __flags);
-	X_NDR_SCALARS(time_low, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
-	X_NDR_SCALARS(time_mid, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
-	X_NDR_SCALARS(time_hi_and_version, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
-	X_NDR_SCALARS(clock_seq, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
-	X_NDR_SCALARS(node, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
-	X_NDR_TRAILER_ALIGN(4, __ndr, __bpos, __epos, __flags);
-	return __bpos;
-}
 
-
-x_ndr_off_t GUID::ndr_scalars(x_ndr_pull_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level)
+void ndr_traits_t<GUID>::ostr(const GUID &__val, x_ndr_ostr_t &__ndr, uint32_t __flags, x_ndr_switch_t __level) const
 {
-	X_NDR_HEADER_ALIGN(4, __ndr, __bpos, __epos, __flags);
-	X_NDR_SCALARS(time_low, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
-	X_NDR_SCALARS(time_mid, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
-	X_NDR_SCALARS(time_hi_and_version, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
-	X_NDR_SCALARS(clock_seq, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
-	X_NDR_SCALARS(node, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
-	X_NDR_TRAILER_ALIGN(4, __ndr, __bpos, __epos, __flags);
-	return __bpos;
-}
-#endif
-void x_ndr_ostr(const GUID &v, x_ndr_ostr_t &os, uint32_t flags, x_ndr_switch_t level)
-{
-	X_ASSERT(level == X_NDR_SWITCH_NONE);
+	X_ASSERT(__level == X_NDR_SWITCH_NONE);
 	char buf[80];
 	snprintf(buf, sizeof(buf),
 		 "%08x-%04x-%04x-%02x%02x-%02x%02x%02x%02x%02x%02x",
-		 v.time_low, v.time_mid,
-		 v.time_hi_and_version,
-		 v.clock_seq[0],
-		 v.clock_seq[1],
-		 v.node[0], v.node[1],
-		 v.node[2], v.node[3],
-		 v.node[4], v.node[5]);
-	os << buf;
-}
-#if 0
-x_ndr_off_t ndr_syntax_id::ndr_scalars(x_ndr_push_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level) const
-{
-	X_NDR_HEADER_ALIGN(4, __ndr, __bpos, __epos, __flags);
-	X_NDR_SCALARS(uuid, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
-	X_NDR_SCALARS(if_version, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
-	X_NDR_TRAILER_ALIGN(4, __ndr, __bpos, __epos, __flags);
-	return __bpos;
+		 __val.time_low, __val.time_mid,
+		 __val.time_hi_and_version,
+		 __val.clock_seq[0],
+		 __val.clock_seq[1],
+		 __val.node[0], __val.node[1],
+		 __val.node[2], __val.node[3],
+		 __val.node[4], __val.node[5]);
+	__ndr << buf;
 }
 
-
-x_ndr_off_t ndr_syntax_id::ndr_scalars(x_ndr_pull_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level)
+void ndr_traits_t<ndr_syntax_id>::ostr(const ndr_syntax_id &__val, x_ndr_ostr_t &__ndr, uint32_t __flags, x_ndr_switch_t __level) const
 {
-	X_NDR_HEADER_ALIGN(4, __ndr, __bpos, __epos, __flags);
-	X_NDR_SCALARS(uuid, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
-	X_NDR_SCALARS(if_version, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
-	X_NDR_TRAILER_ALIGN(4, __ndr, __bpos, __epos, __flags);
-	return __bpos;
-}
-
-void ndr_syntax_id::ostr(x_ndr_ostr_t &__ndr, uint32_t __flags, x_ndr_switch_t __level) const
-{
-	(__ndr) << enter;
-	X_NDR_OSTR_NEXT(uuid, __ndr, __flags, X_NDR_SWITCH_NONE);
-	X_NDR_OSTR_NEXT(if_version, __ndr, __flags, X_NDR_SWITCH_NONE);
-	(__ndr) << leave;
-}
-#endif
-
-void x_ndr_ostr(const ndr_syntax_id &v, x_ndr_ostr_t &os, uint32_t flags, x_ndr_switch_t level)
-{
-	x_ndr_ostr(v.uuid, os, flags, X_NDR_SWITCH_NONE);
-	os << '/' << v.if_version;
+	X_ASSERT(__level == X_NDR_SWITCH_NONE);
+	x_ndr_ostr_simple(__val.uuid, __ndr, __flags, X_NDR_SWITCH_NONE);
+	__ndr << '/' << __val.if_version;
 }
 
 }

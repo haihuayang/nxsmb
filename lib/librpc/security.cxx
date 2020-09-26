@@ -24,6 +24,35 @@ std::ostream &operator<<(std::ostream &os, const dom_sid &v)
 	return os;
 }
 
+x_ndr_off_t ndr_traits_t<dom_sid>::ndr_scalars(const dom_sid &__val, x_ndr_push_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level) const
+{
+	X_NDR_HEADER_ALIGN(4, __ndr, __bpos, __epos, __flags);
+	X_NDR_SCALARS_SIMPLE(__val.sid_rev_num, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
+	X_NDR_SCALARS_SIMPLE(__val.num_auths, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
+	X_NDR_SCALARS_SIMPLE(__val.id_auth, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
+	X_NDR_SCALARS_SIMPLE(__val.sub_auths, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
+	X_NDR_TRAILER_ALIGN(4, __ndr, __bpos, __epos, __flags);
+	return __bpos;
+}
+
+x_ndr_off_t ndr_traits_t<dom_sid>::ndr_scalars(dom_sid &__val, x_ndr_pull_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level) const
+{
+	X_NDR_HEADER_ALIGN(4, __ndr, __bpos, __epos, __flags);
+	X_NDR_SCALARS_SIMPLE(__val.sid_rev_num, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
+	X_NDR_SCALARS_SIMPLE(__val.num_auths, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
+	X_NDR_SCALARS_SIMPLE(__val.id_auth, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
+	X_NDR_SCALARS_SIMPLE(__val.sub_auths, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
+	X_NDR_TRAILER_ALIGN(4, __ndr, __bpos, __epos, __flags);
+	return __bpos;
+}
+
+void ndr_traits_t<dom_sid>::ostr(const dom_sid &__val, x_ndr_ostr_t &__ndr, uint32_t __flags, x_ndr_switch_t __level) const
+{
+	X_ASSERT(level == X_NDR_SWITCH_NONE);
+	ndr.os << v;
+}
+
+#if 0
 template <>
 void x_ndr_ostr<dom_sid>(const dom_sid &v, x_ndr_ostr_t &ndr, uint32_t flags, x_ndr_switch_t level)
 {
@@ -106,7 +135,7 @@ x_ndr_off_t x_ndr_scalars<dom_sid2>(dom_sid2 &t, x_ndr_pull_t &ndr,
 	}
 	return bpos;
 }
-
+#endif
 
 } /* namespace idl */
 

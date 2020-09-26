@@ -18,7 +18,7 @@ void verify(const uint8_t *data, size_t size, bool verify)
 	T msg;
 	idl::x_ndr_off_t ret = idl::x_ndr_pull(msg, data, size, 0);
 	assert(ret > 0);
-	idl::x_ndr_ostr(msg, std::cout, 8, 3);
+	idl::x_ndr_output(msg, std::cout, 8, 3);
 
 	assert((size_t)ret == size);
 

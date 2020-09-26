@@ -49,6 +49,34 @@ extern "C" {
 
 namespace idl {
 
+/* begin C++ helpers */
+template <typename T, typename... Args>
+void construct(T &t, Args&&... args)
+{
+	new (&t) T{std::forward<Args>(args)...};
+}
+
+template <typename T>
+void destruct(T &t) noexcept
+{
+	t.~T();
+}
+
+/* no std::size in c++14 */
+template <typename T>
+inline uint32_t get_size(const std::vector<T> &t)
+{
+	return t.size();
+}
+
+template <typename T, size_t N>
+inline uint32_t get_size(const std::array<T, N> &t)
+{
+	return N;
+}
+/* end c++ helpers */
+
+
 enum x_ndr_err_code_t : int {
 	NDR_ERR_SUCCESS = 0,
 	NDR_ERR_ARRAY_SIZE,
@@ -147,32 +175,6 @@ static inline uint32_t x_ndr_set_flags(uint32_t flags, uint32_t extra_flags)
 	return flags | extra_flags;
 }
 
-template <typename T, typename... Args>
-void construct(T &t, Args&&... args)
-{
-	new (&t) T{std::forward<Args>(args)...};
-}
-
-template <typename T>
-void destruct(T &t) noexcept
-{
-	t.~T();
-}
-
-/* no std::size in c++14 */
-template <typename T>
-inline uint32_t get_size(const std::vector<T> &t)
-{
-	return t.size();
-}
-
-template <typename T, size_t N>
-inline uint32_t get_size(const std::array<T, N> &t)
-{
-	return N;
-}
-
-
 typedef ssize_t x_ndr_off_t;
 enum { X_NDR_MAX_SIZE = SSIZE_MAX };
 
@@ -183,28 +185,6 @@ enum : uint32_t {
 
 NTSTATUS x_ndr_map_error2ntstatus(x_ndr_off_t ndr_off);
 
-typedef unsigned int uint;
-typedef int32_t int32;
-typedef uint32_t uint32;
-typedef uint16_t uint16;
-typedef int8_t int8;
-typedef uint8_t uint8;
-typedef uint64_t hyper;
-typedef uint64_t uint64;
-typedef uint32_t boolean32;
-struct uint3264 {
-	uint3264(uint32_t v = 0) : val(v) { }
-	bool operator==(uint3264 o) const {
-		return val == o.val;
-	}
-	bool operator==(unsigned long o) const {
-		return val == o;
-	}
-	uint32_t val;
-};
-typedef int64_t dlong;
-typedef uint64_t udlong;
-using string = const char *;
 
 struct x_ndr_push_buff_t {
 	enum { NDR_BASE_MARSHALL_SIZE = 1024, };
@@ -318,6 +298,127 @@ struct x_ndr_ostr_t {
 	int depth = 0;
 };
 
+
+template <typename T> struct ndr_traits_t { };
+
+template <typename T, typename NDR, typename NT = ndr_traits_t<T>>
+inline x_ndr_off_t x_ndr_scalars(NT &&nt, T &&t, NDR &ndr,
+		x_ndr_off_t bpos, x_ndr_off_t epos,
+		uint32_t flags, x_ndr_switch_t level)
+{
+	return nt.ndr_scalars(t, ndr, bpos, epos, flags, level);
+}
+
+template <typename T, typename NDR, typename NT = ndr_traits_t<T>>
+inline x_ndr_off_t x_ndr_buffers(NT &&nt, T &&t, NDR &ndr,
+		x_ndr_off_t bpos, x_ndr_off_t epos,
+		uint32_t flags, x_ndr_switch_t level)
+{
+	return nt.ndr_buffers(t, ndr, bpos, epos, flags, level);
+}
+
+template <typename HasBuffer>
+struct x_ndr_both_t
+{
+	template <typename T, typename NDR, typename NT>
+	x_ndr_off_t operator()(NT &&nt, T &&t, NDR &ndr,
+			x_ndr_off_t bpos, x_ndr_off_t epos,
+			uint32_t flags, x_ndr_switch_t level) {
+		bpos = nt.ndr_scalars(t, ndr, bpos, epos, flags, level);
+		if (bpos < 0) {
+			return bpos;
+		}
+		return nt.ndr_buffers(t, ndr, bpos, epos, flags, level);
+	}
+};
+
+template <>
+struct x_ndr_both_t<std::false_type>
+{
+	template <typename T, typename NDR, typename NT>
+	x_ndr_off_t operator()(NT &&nt, T &&t, NDR &ndr,
+			x_ndr_off_t bpos, x_ndr_off_t epos,
+			uint32_t flags, x_ndr_switch_t level) {
+		return nt.ndr_scalars(t, ndr, bpos, epos, flags, level);
+	}
+};
+
+template <typename T, typename NDR, typename NT = ndr_traits_t<T>>
+inline x_ndr_off_t x_ndr_both(NT &&nt, T &&t, NDR &ndr,
+		x_ndr_off_t bpos, x_ndr_off_t epos,
+		uint32_t flags, x_ndr_switch_t level)
+{
+	return x_ndr_both_t<typename NT::has_buffer>()(nt, t, ndr, bpos, epos, flags, level);
+}
+
+
+template <typename T, typename NT>
+inline void x_ndr_ostr(NT &&nt, T &&t, x_ndr_ostr_t &ndr, uint32_t flags, x_ndr_switch_t level)
+{
+	nt.ostr(t, ndr, flags, level);
+	// x_ndr_ostreamer_t<T, typename x_ndr_traits_t<T>::ndr_type>()(t, ndr, flags, level);
+}
+
+template <typename T, typename NDR>
+inline x_ndr_off_t x_ndr_scalars_simple(T &&t, NDR &ndr,
+		x_ndr_off_t bpos, x_ndr_off_t epos,
+		uint32_t flags, x_ndr_switch_t level)
+{
+	using base_type = typename std::remove_cv<typename std::remove_reference<T>::type>::type;
+	return ndr_traits_t<base_type>{}.ndr_scalars(t, ndr, bpos, epos, flags, level);
+}
+
+template <typename T, typename NDR>
+inline x_ndr_off_t x_ndr_buffers_simple(T &&t, NDR &ndr,
+		x_ndr_off_t bpos, x_ndr_off_t epos,
+		uint32_t flags, x_ndr_switch_t level)
+{
+	using base_type = typename std::remove_cv<typename std::remove_reference<T>::type>::type;
+	return ndr_traits_t<base_type>{}.ndr_buffers(t, ndr, bpos, epos, flags, level);
+}
+
+template <typename T>
+inline void x_ndr_ostr_simple(T &&t, x_ndr_ostr_t &ndr, uint32_t flags, x_ndr_switch_t level)
+{
+	using base_type = typename std::remove_cv<typename std::remove_reference<T>::type>::type;
+	ndr_traits_t<base_type>{}.ostr(t, ndr, flags, level);
+	// x_ndr_ostreamer_t<T, typename x_ndr_traits_t<T>::ndr_type>()(t, ndr, flags, level);
+}
+
+template <typename T>
+inline void x_ndr_ostr_simple(const std::shared_ptr<T> &t, x_ndr_ostr_t &ndr, uint32_t flags, x_ndr_switch_t level)
+{
+	if (t) {
+		x_ndr_ostr_simple(*t, ndr, flags, level);
+	} else {
+		ndr.os << "<NULL>";
+	}
+}
+
+
+typedef unsigned int uint;
+typedef int32_t int32;
+typedef uint32_t uint32;
+typedef uint16_t uint16;
+typedef int8_t int8;
+typedef uint8_t uint8;
+typedef uint64_t hyper;
+typedef uint64_t uint64;
+typedef uint32_t boolean32;
+struct uint3264 {
+	uint3264(uint32_t v = 0) : val(v) { }
+	bool operator==(uint3264 o) const {
+		return val == o.val;
+	}
+	bool operator==(unsigned long o) const {
+		return val == o;
+	}
+	uint32_t val;
+};
+typedef int64_t dlong;
+typedef uint64_t udlong;
+using string = const char *;
+
 struct x_ndr_type_default { };
 struct x_ndr_type_custom { };
 struct x_ndr_type_enum { };
@@ -372,7 +473,8 @@ struct x_ndr_ostreamer_t {
 template <typename T>
 struct x_ndr_ostreamer_t<T, x_ndr_type_enum> {
 	void operator()(const T& t, x_ndr_ostr_t &os, uint32_t flags, x_ndr_switch_t level) const {
-		typedef x_ndr_traits_t<T> traits_t;
+		X_ASSERT(level == X_NDR_SWITCH_NONE);
+		typedef ndr_traits_t<T> traits_t;
 		const char *enum_name = "<UNKNOWN>";
 		for (const auto &pair: traits_t::value_name_map) {
 			if (pair.first == t) {
@@ -384,38 +486,15 @@ struct x_ndr_ostreamer_t<T, x_ndr_type_enum> {
 	}
 };
 
-#if 0
-template <typename T>
-void x_ndr_ostr_bitmap(uint32_t v, x_ndr_ostr_t &os, uint32_t flags, )
-{
-		os << t << x_ndr_ostr_t::newline;
-		os.enter();
-		uint32_t nt = t;
-		for (const auto &pair: traits_t::value_name_map) {
-			if (pair.first & nt) {
-				ndr_output_name(ndr, flags, pair.second);
-				ndr.os << (uint32_t)pair.first << std::endl;
-				nt &= ~pair.first;
-				if (nt == 0) {
-					break;
-				}
-			}
-		}
-		if (nt) {
-			ndr_output_name(ndr, flags, "<UNKNOWN>");
-			ndr.os << (uint32_t)nt << std::endl;
-		}
-		ndr.leave();
-}
-#endif
 template <typename T>
 struct x_ndr_ostreamer_t<T, x_ndr_type_bitmap> {
 	void operator()(const T& t, x_ndr_ostr_t &os, uint32_t flags, x_ndr_switch_t level) const {
+		X_ASSERT(level == X_NDR_SWITCH_NONE);
 		if (t == 0) {
 			os << 0;
 			return;
 		}
-		using traits_t = x_ndr_traits_t<T>;
+		using traits_t = ndr_traits_t<T>;
 		using base_type = typename traits_t::ndr_base_type;
 		base_type nt = t;
 		os << x_hex_t<base_type>(nt) << enter;
@@ -434,6 +513,29 @@ struct x_ndr_ostreamer_t<T, x_ndr_type_bitmap> {
 		os << leave;
 	}
 };
+
+#define X_NDR_DECLARE_TRAITS_ENUM(name, base_type, num_value, ndr_type) \
+template <> struct ndr_traits_t<name> \
+{ \
+	using ndr_base_type = base_type; \
+	static const std::array<std::pair<base_type, const char *>, num_value> value_name_map; \
+ \
+	x_ndr_off_t ndr_scalars(name __val, x_ndr_push_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level) const { \
+		X_ASSERT(__level == X_NDR_SWITCH_NONE); \
+		return ndr_traits_t<base_type>().ndr_scalars(base_type(__val), __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE); \
+	} \
+ \
+	x_ndr_off_t ndr_scalars(name &__val, x_ndr_pull_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level) const { \
+		base_type v; \
+		__bpos = ndr_traits_t<base_type>().ndr_scalars(v, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE); \
+		__val = name(v); \
+		return __bpos; \
+	} \
+ \
+	void ostr(name __val, x_ndr_ostr_t &__ndr, uint32_t __flags, x_ndr_switch_t __level) const { \
+		x_ndr_ostreamer_t<name, ndr_type>()(__val, __ndr, __flags, __level); \
+	} \
+}; \
 
 template <typename T, typename Traits>
 struct x_ndr_ptr_allocator_t
@@ -480,11 +582,17 @@ static inline x_ndr_off_t x_ndr_check_range(ssize_t size, ssize_t min_num, ssize
 #define X_NDR_CHECK_RANGE(size, min_num, max_num) \
 	X_NDR_CHECK(x_ndr_check_range((size), (min_num), (max_num)))
 
-#define X_NDR_SCALARS(t, ndr, bpos, epos, ...) \
-	X_NDR_VERIFY((bpos), x_ndr_scalars((t), (ndr), (bpos), (epos), __VA_ARGS__))
+#define X_NDR_SCALARS(nt, t, ndr, bpos, epos, ...) \
+	X_NDR_VERIFY((bpos), x_ndr_scalars((nt), (t), (ndr), (bpos), (epos), __VA_ARGS__))
 
 #define X_NDR_BUFFERS(t, ndr, bpos, epos, ...) \
 	X_NDR_VERIFY((bpos), x_ndr_buffers((t), (ndr), (bpos), (epos), __VA_ARGS__))
+
+#define X_NDR_SCALARS_SIMPLE(t, ndr, bpos, epos, ...) \
+	X_NDR_VERIFY((bpos), x_ndr_scalars_simple((t), (ndr), (bpos), (epos), __VA_ARGS__))
+
+#define X_NDR_BUFFERS_SIMPLE(t, ndr, bpos, epos, ...) \
+	X_NDR_VERIFY((bpos), x_ndr_buffers_simple((t), (ndr), (bpos), (epos), __VA_ARGS__))
 
 #define X_NDR_VALUE(t, ndr, bpos, epos, ...) \
 	X_NDR_VERIFY((bpos), x_ndr_value((t), (ndr), (bpos), (epos), __VA_ARGS__))
@@ -498,57 +606,16 @@ x_ndr_off_t x_ndr_skip(x_ndr_pull_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, ui
 #define X_NDR_SKIP(type, ndr, bpos, epos, flags) \
 	X_NDR_VERIFY(bpos, x_ndr_skip<type>(ndr, bpos, epos, flags))
 
-template <typename T>
-inline x_ndr_off_t x_ndr_save_pos(x_ndr_push_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags)
+template <typename T, typename NDR>
+inline x_ndr_off_t x_ndr_save_pos(NDR &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags)
 {
 	ndr.save_pos(bpos);
-	T v{};
-	return x_ndr_scalars(v, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
-}
-
-template <typename T>
-inline x_ndr_off_t x_ndr_save_pos(x_ndr_pull_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags)
-{
-	ndr.save_pos(bpos);
-	T v;
-	return x_ndr_scalars(v, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
+	return x_ndr_scalars(ndr_traits_t<T>{}, T{}, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
 }
 
 #define X_NDR_SAVE_POS(type, ndr, bpos, epos, flags) \
 	X_NDR_VERIFY(bpos, x_ndr_save_pos<type>(ndr, bpos, epos, flags))
-
-template <typename T>
-inline x_ndr_off_t x_ndr_scalars(const T &t, x_ndr_push_t &ndr,
-		x_ndr_off_t bpos, x_ndr_off_t epos,
-		uint32_t flags, x_ndr_switch_t level)
-{
-	return t.ndr_scalars(ndr, bpos, epos, flags, level);
-}
-
-template <typename T>
-inline x_ndr_off_t x_ndr_buffers(const T &t, x_ndr_push_t &ndr,
-		x_ndr_off_t bpos, x_ndr_off_t epos,
-		uint32_t flags, x_ndr_switch_t level)
-{
-	return t.ndr_buffers(ndr, bpos, epos, flags, level);
-}
-
-template <typename T>
-inline x_ndr_off_t x_ndr_scalars(T &t, x_ndr_pull_t &ndr,
-		x_ndr_off_t bpos, x_ndr_off_t epos,
-		uint32_t flags, x_ndr_switch_t level)
-{
-	return t.ndr_scalars(ndr, bpos, epos, flags, level);
-}
-
-template <typename T>
-inline x_ndr_off_t x_ndr_buffers(T &t, x_ndr_pull_t &ndr,
-		x_ndr_off_t bpos, x_ndr_off_t epos,
-		uint32_t flags, x_ndr_switch_t level)
-{
-	return t.ndr_buffers(ndr, bpos, epos, flags, level);
-}
-
+#if 0
 template <typename T>
 inline x_ndr_off_t x_ndr_scalars(const std::vector<T> &t, x_ndr_push_t &ndr,
 		x_ndr_off_t bpos, x_ndr_off_t epos,
@@ -593,7 +660,6 @@ inline x_ndr_off_t x_ndr_buffers(std::vector<T> &t, x_ndr_pull_t &ndr,
 	return bpos;
 }
 
-#if 0
 template <typename T, typename HasBuffers>
 struct x_ndr_puller_t {
 	x_ndr_off_t operator()(T& t, x_ndr_pull_t &ndr,
@@ -627,7 +693,6 @@ struct x_ndr_pusher_t
 		return bpos;
 	}
 };
-#endif
 
 template <typename T, typename HasBuffers>
 struct x_ndr_handler_t
@@ -716,13 +781,15 @@ struct x_ndr_handler_t<std::vector<T>, std::true_type>
 		return bpos;
 	}
 };
+#endif
 
 template <typename T>
-inline x_ndr_off_t x_ndr_push(const T &t, std::vector<uint8_t> &data, uint32_t flags)
+inline x_ndr_off_t x_ndr_push(T &&t, std::vector<uint8_t> &data, uint32_t flags)
 {
 	x_ndr_push_buff_t ndr_data{};
 	x_ndr_push_t ndr{ndr_data, 0};
-	x_ndr_off_t ret = x_ndr_handler_t<T, typename x_ndr_traits_t<T>::has_buffers>()(t, ndr, 0, X_NDR_MAX_SIZE, flags, X_NDR_SWITCH_NONE);
+	using NT = ndr_traits_t<typename std::remove_cv<typename std::remove_reference<T>::type>::type>;
+	x_ndr_off_t ret = x_ndr_both_t<typename NT::has_buffers>()(NT{}, t, ndr, 0, X_NDR_MAX_SIZE, flags, X_NDR_SWITCH_NONE);
 	if (ret >= 0) {
 		std::swap(data, ndr_data.data);
 	}
@@ -730,11 +797,19 @@ inline x_ndr_off_t x_ndr_push(const T &t, std::vector<uint8_t> &data, uint32_t f
 }
 
 template <typename T>
-inline x_ndr_off_t x_ndr_pull(T &t, const uint8_t *data, size_t size, uint32_t flags)
+inline x_ndr_off_t x_ndr_pull(T &&t, const uint8_t *data, size_t size, uint32_t flags)
 {
 	x_ndr_pull_buff_t ndr_data{data, size};
 	x_ndr_pull_t ndr{ndr_data, 0};
-	return x_ndr_handler_t<T, typename x_ndr_traits_t<T>::has_buffers>()(t, ndr, 0, size, flags, X_NDR_SWITCH_NONE);
+	using NT = ndr_traits_t<typename std::remove_cv<typename std::remove_reference<T>::type>::type>;
+	return x_ndr_both_t<typename NT::has_buffers>()(NT{}, t, ndr, 0, size, flags, X_NDR_SWITCH_NONE);
+}
+
+template <typename T>
+inline void x_ndr_output(const T &t, std::ostream &os, uint32_t indent, uint32_t tabstop)
+{
+	x_ndr_ostr_t ndr(os, indent, tabstop);
+	x_ndr_ostr_simple(t, ndr, 0, X_NDR_SWITCH_NONE);
 }
 
 template <typename T>
@@ -1144,179 +1219,6 @@ static inline x_ndr_off_t x_ndr_fill(uint16_t v, x_ndr_push_t &ndr, x_ndr_off_t 
 #define X_NDR_FILL(v, ndr, bpos, epos, flags) X_NDR_CHECK(x_ndr_fill((v), (ndr), (bpos), (epos), (flags)))
 #endif
 
-static inline x_ndr_off_t x_ndr_scalars(uint3264 t, x_ndr_push_t &ndr,
-		x_ndr_off_t bpos, x_ndr_off_t epos,
-		uint32_t flags, x_ndr_switch_t level)
-{
-	if (unlikely(flags & LIBNDR_FLAG_NDR64)) {
-		return x_ndr_push_uint64_align(t.val, ndr, bpos, epos, flags, 8);
-	}
-	return x_ndr_push_uint32(t.val, ndr, bpos, epos, flags);
-}
-
-static inline x_ndr_off_t x_ndr_scalars(uint3264 &t, x_ndr_pull_t &ndr,
-		x_ndr_off_t bpos, x_ndr_off_t epos,
-		uint32_t flags, x_ndr_switch_t level)
-{
-	if (unlikely(flags & LIBNDR_FLAG_NDR64)) {
-		uint64_t val;
-		x_ndr_off_t ret = x_ndr_pull_uint64_align(val, ndr, bpos, epos, flags, 8);
-		if (ret == 0) {
-			t.val = val;
-		}
-		return ret;
-	}
-	return x_ndr_pull_uint32(t.val, ndr, bpos, epos, flags);
-}
-
-template <>
-inline x_ndr_off_t x_ndr_skip<uint3264>(x_ndr_push_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags)
-{
-	uint3264 tmp{0};
-	return x_ndr_scalars(tmp, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
-}
-
-template <>
-inline x_ndr_off_t x_ndr_skip<uint3264>(x_ndr_pull_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags)
-{
-	uint3264 tmp{0};
-	return x_ndr_scalars(tmp, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
-}
-
-static inline x_ndr_off_t x_ndr_scalars(uint64_t t, x_ndr_push_t &ndr,
-		x_ndr_off_t bpos, x_ndr_off_t epos,
-		uint32_t flags, x_ndr_switch_t level)
-{
-	return x_ndr_push_uint64(t, ndr, bpos, epos, flags);
-}
-
-static inline x_ndr_off_t x_ndr_scalars(uint64_t &t, x_ndr_pull_t &ndr,
-		x_ndr_off_t bpos, x_ndr_off_t epos,
-		uint32_t flags, x_ndr_switch_t level)
-{
-	return x_ndr_pull_uint64(t, ndr, bpos, epos, flags);
-}
-
-static inline x_ndr_off_t x_ndr_scalars(int64_t t, x_ndr_push_t &ndr,
-		x_ndr_off_t bpos, x_ndr_off_t epos,
-		uint32_t flags, x_ndr_switch_t level)
-{
-	return x_ndr_push_int64(t, ndr, bpos, epos, flags);
-}
-
-static inline x_ndr_off_t x_ndr_scalars(int64_t &t, x_ndr_pull_t &ndr,
-		x_ndr_off_t bpos, x_ndr_off_t epos,
-		uint32_t flags, x_ndr_switch_t level)
-{
-	return x_ndr_pull_int64(t, ndr, bpos, epos, flags);
-}
-
-static inline x_ndr_off_t x_ndr_scalars(uint32_t t, x_ndr_push_t &ndr,
-		x_ndr_off_t bpos, x_ndr_off_t epos,
-		uint32_t flags, x_ndr_switch_t level)
-{
-	return x_ndr_push_uint32(t, ndr, bpos, epos, flags);
-}
-
-static inline x_ndr_off_t x_ndr_scalars(uint32_t &t, x_ndr_pull_t &ndr,
-		x_ndr_off_t bpos, x_ndr_off_t epos,
-		uint32_t flags, x_ndr_switch_t level)
-{
-	return x_ndr_pull_uint32(t, ndr, bpos, epos, flags);
-}
-
-template <>
-inline x_ndr_off_t x_ndr_skip<uint32_t>(x_ndr_push_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags)
-{
-	uint32_t tmp{0};
-	return x_ndr_scalars(tmp, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
-}
-
-template <>
-inline x_ndr_off_t x_ndr_skip<uint32_t>(x_ndr_pull_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags)
-{
-	uint32_t tmp{0};
-	return x_ndr_scalars(tmp, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
-}
-
-static inline x_ndr_off_t x_ndr_scalars(int32_t t, x_ndr_push_t &ndr,
-		x_ndr_off_t bpos, x_ndr_off_t epos,
-		uint32_t flags, x_ndr_switch_t level)
-{
-	return x_ndr_push_uint32((uint32_t)t, ndr, bpos, epos, flags);
-}
-
-static inline x_ndr_off_t x_ndr_scalars(int32_t &t, x_ndr_pull_t &ndr,
-		x_ndr_off_t bpos, x_ndr_off_t epos,
-		uint32_t flags, x_ndr_switch_t level)
-{
-	uint32_t tmp;
-	x_ndr_off_t ret = x_ndr_pull_uint32(tmp, ndr, bpos, epos, flags);
-	t = (int32_t)tmp;
-	return ret;
-}
-
-static inline x_ndr_off_t x_ndr_scalars(uint16_t t, x_ndr_push_t &ndr,
-		x_ndr_off_t bpos, x_ndr_off_t epos,
-		uint32_t flags, x_ndr_switch_t level)
-{
-	return x_ndr_push_uint16(t, ndr, bpos, epos, flags);
-}
-
-static inline x_ndr_off_t x_ndr_scalars(uint16_t &t, x_ndr_pull_t &ndr,
-		x_ndr_off_t bpos, x_ndr_off_t epos,
-		uint32_t flags, x_ndr_switch_t level)
-{
-	return x_ndr_pull_uint16(t, ndr, bpos, epos, flags);
-}
-
-template <>
-inline x_ndr_off_t x_ndr_skip<uint16_t>(x_ndr_push_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags)
-{
-	uint16_t tmp{0};
-	return x_ndr_scalars(tmp, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
-}
-
-template <>
-inline x_ndr_off_t x_ndr_skip<uint16_t>(x_ndr_pull_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags)
-{
-	uint16_t tmp{0};
-	return x_ndr_scalars(tmp, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
-}
-
-static inline x_ndr_off_t x_ndr_scalars(uint8_t t, x_ndr_push_t &ndr,
-		x_ndr_off_t bpos, x_ndr_off_t epos,
-		uint32_t flags, x_ndr_switch_t level)
-{
-	return x_ndr_push_uint8(t, ndr, bpos, epos, flags);
-}
-
-static inline x_ndr_off_t x_ndr_scalars(uint8_t &t, x_ndr_pull_t &ndr,
-		x_ndr_off_t bpos, x_ndr_off_t epos,
-		uint32_t flags, x_ndr_switch_t level)
-{
-	return x_ndr_pull_uint8(t, ndr, bpos, epos, flags);
-}
-
-static inline x_ndr_off_t x_ndr_scalars(char t, x_ndr_push_t &ndr,
-		x_ndr_off_t bpos, x_ndr_off_t epos,
-		uint32_t flags, x_ndr_switch_t level)
-{
-	return x_ndr_push_uint8(t, ndr, bpos, epos, flags);
-}
-
-static inline x_ndr_off_t x_ndr_scalars(char &t, x_ndr_pull_t &ndr,
-		x_ndr_off_t bpos, x_ndr_off_t epos,
-		uint32_t flags, x_ndr_switch_t level)
-{
-	uint8_t tmp;
-	x_ndr_off_t ret = x_ndr_pull_uint8(tmp, ndr, bpos, epos, flags);
-	if (ret > 0) {
-		t = (char)tmp;
-	}
-	return ret;
-}
-
 static inline x_ndr_off_t x_ndr_scalars(const std::vector<uint8_t> &t, x_ndr_push_t &ndr,
 		x_ndr_off_t bpos, x_ndr_off_t epos,
 		uint32_t flags, x_ndr_switch_t level)
@@ -1456,6 +1358,7 @@ static inline uint32_t ndr_ntlmssp_negotiated_string_flags(uint32_t negotiate_fl
 }
 #endif
 
+#if 0
 static inline void x_ndr_ostr(uint32_t v, x_ndr_ostr_t &ndr, uint32_t flags, x_ndr_switch_t level)
 {
 	X_ASSERT(level == X_NDR_SWITCH_NONE);
@@ -1491,32 +1394,6 @@ static inline void x_ndr_ostr(int64_t v, x_ndr_ostr_t &ndr, uint32_t flags, x_nd
 }
 
 void x_ndr_ostr_u16string(const std::u16string &str, x_ndr_ostr_t &ndr, uint32_t flags);
-
-template <>
-inline x_ndr_off_t x_ndr_scalars(const std::u16string &t,
-		x_ndr_push_t &ndr,
-		x_ndr_off_t bpos, x_ndr_off_t epos,
-		uint32_t flags, x_ndr_switch_t level)
-{
-	X_ASSERT(level == X_NDR_SWITCH_NONE);
-	return x_ndr_push_u16string(t, ndr, bpos, epos, flags);
-}
-
-template <>
-inline x_ndr_off_t x_ndr_scalars(std::u16string &t,
-		x_ndr_pull_t &ndr,
-		x_ndr_off_t bpos, x_ndr_off_t epos,
-		uint32_t flags, x_ndr_switch_t level)
-{
-	X_ASSERT(level == X_NDR_SWITCH_NONE);
-	return x_ndr_pull_u16string(t, ndr, bpos, epos, flags); 
-}
-
-static inline void x_ndr_ostr(const std::u16string &v, x_ndr_ostr_t &ndr, uint32_t flags, x_ndr_switch_t level)
-{
-	x_ndr_ostr_u16string(v, ndr, flags);
-}
-
 
 
 template <typename T>
@@ -1567,30 +1444,18 @@ inline void x_ndr_ostr(const std::vector<uint8_t> &v, x_ndr_ostr_t &ndr, uint32_
 	x_ndr_ostr_uint8_array(v.data(), ndr, flags, level, v.size());
 }
 
-template <typename T>
-inline void x_ndr_ostr(const T &t, x_ndr_ostr_t &ndr, uint32_t flags, x_ndr_switch_t level)
-{
-	x_ndr_ostreamer_t<T, typename x_ndr_traits_t<T>::ndr_type>()(t, ndr, flags, level);
-}
-
-template <typename T>
-inline void x_ndr_ostr(const T &t, std::ostream &os, uint32_t indent, uint32_t tabstop)
-{
-	x_ndr_ostr_t ndr(os, indent, tabstop);
-	x_ndr_ostr(t, ndr, 0, X_NDR_SWITCH_NONE);
-}
-
+#endif
 #define X_NDR_OSTR(val, ndr, flags, level) do { \
 	(ndr) << #val << ": "; \
-	x_ndr_ostr(val, ndr, flags, level); \
+	x_ndr_ostr_simple(val, ndr, flags, level); \
 } while (0)
 
 #define X_NDR_OSTR_NEXT(val, ndr, flags, level) do { \
 	(ndr) << #val << ": "; \
-	x_ndr_ostr(val, ndr, flags, level); \
+	x_ndr_ostr_simple(val, ndr, flags, level); \
 	(ndr) << next; \
 } while (0)
-
+#if 0
 template <typename T, size_t C>
 inline x_ndr_off_t x_ndr_scalars(const std::array<T,C> &t, x_ndr_push_t &ndr,
 		x_ndr_off_t bpos, x_ndr_off_t epos,
@@ -1702,10 +1567,10 @@ struct x_ndr_handler_t<x_ndr_with_size_t<std::vector<uint8_t>>, std::false_type>
 		return x_ndr_pull_bytes(t.val, ndr, bpos, epos);
 	}
 };
-
-
+#endif
 }
 
+#include "ndr_types.hxx"
 
 #endif /* __ndr__hxx__ */
 
