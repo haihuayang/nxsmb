@@ -2,19 +2,19 @@
 TARGET_SET_idl := \
 	misc \
 	security \
+	lsa \
+	samr \
+	netlogon \
+	krb5pac \
+	ntlmssp \
 
 a=\
-	lsa \
 	mytest_x_elem_size \
 	mytest_size_is \
 	mytest_length_is \
 	mytest_x_length \
 
 a=\
-	samr \
-	netlogon \
-	krb5pac \
-	ntlmssp \
 
 a=\
 	wkssvc \

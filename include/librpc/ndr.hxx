@@ -324,10 +324,12 @@ struct x_ndr_both_t
 	x_ndr_off_t operator()(NT &&nt, T &&t, NDR &ndr,
 			x_ndr_off_t bpos, x_ndr_off_t epos,
 			uint32_t flags, x_ndr_switch_t level) {
+		ndr.pos_index = 0;
 		bpos = nt.ndr_scalars(t, ndr, bpos, epos, flags, level);
 		if (bpos < 0) {
 			return bpos;
 		}
+		ndr.pos_index = 0;
 		return nt.ndr_buffers(t, ndr, bpos, epos, flags, level);
 	}
 };
@@ -1443,15 +1445,15 @@ inline void x_ndr_ostr(const std::vector<uint8_t> &v, x_ndr_ostr_t &ndr, uint32_
 {
 	x_ndr_ostr_uint8_array(v.data(), ndr, flags, level, v.size());
 }
-
 #endif
-#define X_NDR_OSTR(val, ndr, flags, level) do { \
-	(ndr) << #val << ": "; \
+
+#define X_NDR_OSTR(name, val, ndr, flags, level) do { \
+	(ndr) << name << ": "; \
 	x_ndr_ostr_simple(val, ndr, flags, level); \
 } while (0)
 
-#define X_NDR_OSTR_NEXT(val, ndr, flags, level) do { \
-	(ndr) << #val << ": "; \
+#define X_NDR_OSTR_NEXT(name, val, ndr, flags, level) do { \
+	(ndr) << name << ": "; \
 	x_ndr_ostr_simple(val, ndr, flags, level); \
 	(ndr) << next; \
 } while (0)

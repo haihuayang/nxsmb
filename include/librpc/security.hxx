@@ -13,6 +13,10 @@ namespace idl {
 
 std::ostream &operator<<(std::ostream &os, const dom_sid &val);
 
+x_ndr_off_t dom_sid_ndr_scalars(const dom_sid &val, x_ndr_push_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, x_ndr_switch_t level);
+
+x_ndr_off_t dom_sid_ndr_scalars(dom_sid &val, x_ndr_pull_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, x_ndr_switch_t level);
+
 #if 0
 template <> struct ndr_traits_t<dom_sid>
 {

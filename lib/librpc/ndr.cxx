@@ -528,7 +528,6 @@ static inline x_ndr_off_t x_ndr_pull_align_intl(size_t n, x_ndr_pull_t &ndr,
 #endif
 }
 
-#if 0
 x_ndr_off_t x_ndr_align(size_t alignment, x_ndr_pull_t &ndr,
 		x_ndr_off_t bpos, x_ndr_off_t epos,
 		uint32_t flags)
@@ -539,6 +538,7 @@ x_ndr_off_t x_ndr_align(size_t alignment, x_ndr_pull_t &ndr,
 	return x_ndr_pull_align_intl(normalize_align(alignment, flags), ndr, bpos, epos);
 }
 
+#if 0
 x_ndr_off_t x_ndr_scalars(const x_ndr_subctx_t &t, x_ndr_push_t &ndr,
 		x_ndr_off_t bpos, x_ndr_off_t epos,
 		uint32_t flags, x_ndr_switch_t level)
