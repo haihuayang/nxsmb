@@ -232,7 +232,7 @@ TARGET_GEN_samba := \
 	$(TARGET_SET_et:%=$(TARGET_DIR_out)/samba/source4/heimdal/%.h) \
 	$(TARGET_SET_proto:%=$(TARGET_DIR_out)/samba/source4/heimdal/%-protos.h) \
 	$(TARGET_SET_proto:%=$(TARGET_DIR_out)/samba/source4/heimdal/%-private.h) \
-	$(TARGET_SET_idl:%=$(TARGET_DIR_out)/librpc/idl/%.h) \
+	$(TARGET_SET_idl:%=$(TARGET_DIR_out)/librpc/idl/%.idl.hxx) \
 	$(TARGET_DIR_out)/samba/source4/heimdal/lib/wind/bidi_table.h \
 	$(TARGET_DIR_out)/samba/source4/heimdal/lib/wind/map_table.h \
 	$(TARGET_DIR_out)/samba/source4/heimdal/lib/wind/errorlist_table.h \
@@ -298,11 +298,11 @@ $(TARGET_SRC_libnxsmb:%=$(TARGET_DIR_out)/%.o): $(TARGET_DIR_out)/lib/%.o: lib/%
 $(TARGET_SET_idl:%=$(TARGET_DIR_out)/librpc/idl/%.idl.ndr.o) : $(TARGET_DIR_out)/librpc/idl/%.idl.ndr.o: $(TARGET_DIR_out)/librpc/idl/%.idl.ndr.cxx
 	$(CXX) -c $(TARGET_CXXFLAGS) $(TARGET_CFLAGS_EXTRA) -o $@ $<
 
-$(TARGET_SET_idl:%=$(TARGET_DIR_out)/librpc/idl/%.h): %.h: %.json | $(TARGET_SET_idl:%=$(TARGET_DIR_out)/librpc/idl/%.json)
-	scripts/gen-rpc --depend --header --ndrcxx --outputdir $(dir $@) $<
+$(TARGET_SET_idl:%=$(TARGET_DIR_out)/librpc/idl/%.idl.hxx): %.idl.hxx: %.json | $(TARGET_SET_idl:%=$(TARGET_DIR_out)/librpc/idl/%.json)
+	scripts/gen-rpc --header --outputdir $(dir $@) $<
 
 $(TARGET_SET_idl:%=$(TARGET_DIR_out)/librpc/idl/%.idl.ndr.cxx): %.idl.ndr.cxx: %.json | $(TARGET_SET_idl:%=$(TARGET_DIR_out)/librpc/idl/%.json)
-	scripts/gen-rpc --depend --header --ndrcxx --outputdir $(dir $@) $<
+	scripts/gen-rpc --ndrcxx --outputdir $(dir $@) $<
 
 $(TARGET_SET_idl:%=$(TARGET_DIR_out)/librpc/idl/%.d) : %.d: %.json
 	scripts/gen-rpc --depend --outputdir $(dir $@) $<
