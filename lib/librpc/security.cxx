@@ -27,11 +27,11 @@ std::ostream &operator<<(std::ostream &os, const dom_sid &v)
 x_ndr_off_t dom_sid_ndr_scalars(const dom_sid &val, x_ndr_push_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, x_ndr_switch_t level)
 {
 	X_NDR_HEADER_ALIGN(4, ndr, bpos, epos, flags);
-	X_NDR_SCALARS_SIMPLE(val.sid_rev_num, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
-	X_NDR_SCALARS_SIMPLE(val.num_auths, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
-	X_NDR_SCALARS_SIMPLE(val.id_auth, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
+	X_NDR_SCALARS_DEFAULT(val.sid_rev_num, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
+	X_NDR_SCALARS_DEFAULT(val.num_auths, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
+	X_NDR_SCALARS_DEFAULT(val.id_auth, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
 	for (uint8_t i = 0; i < val.num_auths; ++i) {
-		X_NDR_SCALARS_SIMPLE(val.sub_auths[i], ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
+		X_NDR_SCALARS_DEFAULT(val.sub_auths[i], ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
 	}
 	X_NDR_TRAILER_ALIGN(4, ndr, bpos, epos, flags);
 	return bpos;
@@ -40,25 +40,25 @@ x_ndr_off_t dom_sid_ndr_scalars(const dom_sid &val, x_ndr_push_t &ndr, x_ndr_off
 x_ndr_off_t dom_sid_ndr_scalars(dom_sid &val, x_ndr_pull_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, x_ndr_switch_t level)
 {
 	X_NDR_HEADER_ALIGN(4, ndr, bpos, epos, flags);
-	X_NDR_SCALARS_SIMPLE(val.sid_rev_num, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
-	X_NDR_SCALARS_SIMPLE(val.num_auths, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
+	X_NDR_SCALARS_DEFAULT(val.sid_rev_num, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
+	X_NDR_SCALARS_DEFAULT(val.num_auths, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
 	if (val.num_auths > 15) {
 		return -NDR_ERR_RANGE;
 	}
-	X_NDR_SCALARS_SIMPLE(val.id_auth, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
+	X_NDR_SCALARS_DEFAULT(val.id_auth, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
 	for (uint8_t i = 0; i < val.num_auths; ++i) {
-		X_NDR_SCALARS_SIMPLE(val.sub_auths[i], ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
+		X_NDR_SCALARS_DEFAULT(val.sub_auths[i], ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
 	}
 	X_NDR_TRAILER_ALIGN(4, ndr, bpos, epos, flags);
 	return bpos;
 }
 
-x_ndr_off_t ndr_traits_t<dom_sid>::ndr_scalars(const dom_sid &val, x_ndr_push_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, x_ndr_switch_t level) const
+x_ndr_off_t ndr_traits_t<dom_sid>::scalars(const dom_sid &val, x_ndr_push_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, x_ndr_switch_t level) const
 {
 	X_ASSERT(level == X_NDR_SWITCH_NONE);
 	return dom_sid_ndr_scalars(val, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
 }
-x_ndr_off_t ndr_traits_t<dom_sid>::ndr_scalars(dom_sid &val, x_ndr_pull_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, x_ndr_switch_t level) const
+x_ndr_off_t ndr_traits_t<dom_sid>::scalars(dom_sid &val, x_ndr_pull_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, x_ndr_switch_t level) const
 {
 	X_ASSERT(level == X_NDR_SWITCH_NONE);
 	return dom_sid_ndr_scalars(val, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
@@ -72,16 +72,16 @@ void ndr_traits_t<dom_sid>::ostr(const dom_sid &val, x_ndr_ostr_t &ndr, uint32_t
 
 struct dom_sid2_ndr_traits
 {
-	x_ndr_off_t ndr_scalars(const dom_sid &val, x_ndr_push_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, x_ndr_switch_t level) const {
+	x_ndr_off_t scalars(const dom_sid &val, x_ndr_push_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, x_ndr_switch_t level) const {
 		X_ASSERT(level == X_NDR_SWITCH_NONE);
-		X_NDR_SCALARS_SIMPLE(uint3264{val.num_auths}, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
+		X_NDR_SCALARS_DEFAULT(uint3264{val.num_auths}, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
 		return dom_sid_ndr_scalars(val, ndr, bpos, epos, flags, level);
 	}
 
-	x_ndr_off_t ndr_scalars(dom_sid &val, x_ndr_pull_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, x_ndr_switch_t level) const {
+	x_ndr_off_t scalars(dom_sid &val, x_ndr_pull_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, x_ndr_switch_t level) const {
 		X_ASSERT(level == X_NDR_SWITCH_NONE);
 		uint3264 num_auths;
-		X_NDR_SCALARS_SIMPLE(num_auths, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
+		X_NDR_SCALARS_DEFAULT(num_auths, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
 		bpos = dom_sid_ndr_scalars(val, ndr, bpos, epos, flags, level);
 		if (num_auths.val != val.num_auths) {
 			return -NDR_ERR_ARRAY_SIZE;
@@ -96,7 +96,7 @@ struct dom_sid2_ndr_traits
 };
 
 #if 0
-x_ndr_off_t ndr_traits_t<dom_sid>::ndr_scalars(dom_sid &__val, x_ndr_pull_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level) const
+x_ndr_off_t ndr_traits_t<dom_sid>::scalars(dom_sid &__val, x_ndr_pull_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level) const
 {
 	X_NDR_HEADER_ALIGN(4, __ndr, __bpos, __epos, __flags);
 	X_NDR_SCALARS_SIMPLE(__val.sid_rev_num, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);

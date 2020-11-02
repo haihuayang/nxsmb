@@ -22,7 +22,7 @@ void ndr_traits_t<GUID>::ostr(const GUID &__val, x_ndr_ostr_t &__ndr, uint32_t _
 void ndr_traits_t<ndr_syntax_id>::ostr(const ndr_syntax_id &__val, x_ndr_ostr_t &__ndr, uint32_t __flags, x_ndr_switch_t __level) const
 {
 	X_ASSERT(__level == X_NDR_SWITCH_NONE);
-	x_ndr_ostr_simple(__val.uuid, __ndr, __flags, X_NDR_SWITCH_NONE);
+	x_ndr_ostr_default(__val.uuid, __ndr, __flags, X_NDR_SWITCH_NONE);
 	__ndr << '/' << __val.if_version;
 }
 

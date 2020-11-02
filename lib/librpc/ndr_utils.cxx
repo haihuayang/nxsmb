@@ -98,7 +98,7 @@ void blob_t::ostr(x_ndr_ostr_t &ndr, uint32_t flags, x_ndr_switch_t level) const
 	ndr.os << "blob(" << val.size() << ')';
 }
 #endif
-x_ndr_off_t DATA_BLOB::ndr_scalars(x_ndr_push_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, x_ndr_switch_t level) const
+x_ndr_off_t ndr_traits_t<DATA_BLOB>::scalars(const DATA_BLOB &val, x_ndr_push_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, x_ndr_switch_t level) const
 {
 	X_ASSERT(level == X_NDR_SWITCH_NONE);
 #if 0
@@ -111,20 +111,20 @@ x_ndr_off_t DATA_BLOB::ndr_scalars(x_ndr_push_t &ndr, x_ndr_off_t bpos, x_ndr_of
 		alignment = 2;
 	}
 #endif
-	return x_ndr_push_bytes(val.data(), ndr, bpos, epos, val.size());
+	return x_ndr_push_bytes(val.val.data(), ndr, bpos, epos, val.val.size());
 }
 
-x_ndr_off_t DATA_BLOB::ndr_scalars(x_ndr_pull_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, x_ndr_switch_t level)
+x_ndr_off_t ndr_traits_t<DATA_BLOB>::scalars(DATA_BLOB &val, x_ndr_pull_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, x_ndr_switch_t level) const
 {
 	X_ASSERT(level == X_NDR_SWITCH_NONE);
-	val.resize(epos - bpos);
-	return x_ndr_pull_bytes(val.data(), ndr, bpos, epos);
+	val.val.resize(epos - bpos);
+	return x_ndr_pull_bytes(val.val.data(), ndr, bpos, epos);
 }
 
-void DATA_BLOB::ostr(x_ndr_ostr_t &ndr, uint32_t flags, x_ndr_switch_t level) const
+void ndr_traits_t<DATA_BLOB>::ostr(const DATA_BLOB &val, x_ndr_ostr_t &ndr, uint32_t flags, x_ndr_switch_t level) const
 {
 	X_ASSERT(level == X_NDR_SWITCH_NONE);
-	ndr.os << "DATA_BLOB(" << val.size() << ')';
+	ndr.os << "DATA_BLOB(" << val.val.size() << ')';
 }
 
 }

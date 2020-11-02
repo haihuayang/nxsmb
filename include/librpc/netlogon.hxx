@@ -9,7 +9,7 @@
 #include "ndr.hxx"
 
 namespace idl {
-
+#if 0
 struct netr_DELTA_POLICY_OPTIONS
 {
 	x_ndr_off_t ndr_scalars(x_ndr_push_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level) const;
@@ -24,7 +24,7 @@ template <> struct x_ndr_traits_t<netr_DELTA_POLICY_OPTIONS> {
 	using has_buffers = std::true_type;
 	using ndr_type = x_ndr_type_struct;
 };
-
+#endif
 }
 
 #include "librpc/idl/netlogon.idl.hxx"

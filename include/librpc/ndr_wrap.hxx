@@ -7,7 +7,7 @@
 #endif
 
 #include "ndr.hxx"
-
+#if 0
 namespace idl {
 
 struct x_ndr_I_t {
@@ -641,6 +641,6 @@ inline x_ndr_off_t x_ndr_buffers_unique_vector(std::shared_ptr<std::vector<T>> &
 	X_NDR_VERIFY((bpos), x_ndr_buffers_unique_vector((t), (ndr), (bpos), (epos), (flags), (level), x_ndr_at_t<type_size>(pos_size)))
 #endif
 }
-
+#endif
 #endif /* __ndr_wrap__hxx__ */
 

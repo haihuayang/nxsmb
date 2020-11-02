@@ -20,24 +20,24 @@ struct NTTIME
 };
 
 std::ostream &operator<<(std::ostream &os, NTTIME v);
-
+#if 0
 template <>
 struct x_ndr_traits_t<NTTIME> {
 	using has_buffers = std::false_type;
 	using ndr_type = x_ndr_type_struct;
 };
-
+#endif
 template <>
 struct ndr_traits_t<NTTIME>
 {
-	x_ndr_off_t ndr_scalars(NTTIME t, x_ndr_push_t &ndr,
+	x_ndr_off_t scalars(NTTIME t, x_ndr_push_t &ndr,
 			x_ndr_off_t bpos, x_ndr_off_t epos,
 			uint32_t flags, x_ndr_switch_t level) const {
 		X_ASSERT(level == X_NDR_SWITCH_NONE);
 		return x_ndr_push_uint64_align(t.val, ndr, bpos, epos, flags, 4);
 	}
 
-	x_ndr_off_t ndr_scalars(NTTIME &t, x_ndr_pull_t &ndr,
+	x_ndr_off_t scalars(NTTIME &t, x_ndr_pull_t &ndr,
 			x_ndr_off_t bpos, x_ndr_off_t epos,
 			uint32_t flags, x_ndr_switch_t level) const {
 		X_ASSERT(level == X_NDR_SWITCH_NONE);
@@ -49,9 +49,31 @@ struct ndr_traits_t<NTTIME>
 		ndr.os << t;
 	}
 };
-typedef NTTIME NTTIME_hyper; // TODO different push/pull
+
+struct ndr_traits_NTTIME_hyper
+{
+	x_ndr_off_t scalars(NTTIME t, x_ndr_push_t &ndr,
+			x_ndr_off_t bpos, x_ndr_off_t epos,
+			uint32_t flags, x_ndr_switch_t level) const {
+		X_ASSERT(level == X_NDR_SWITCH_NONE);
+		return x_ndr_push_uint64_align(t.val, ndr, bpos, epos, flags, 8);
+	}
+
+	x_ndr_off_t scalars(NTTIME &t, x_ndr_pull_t &ndr,
+			x_ndr_off_t bpos, x_ndr_off_t epos,
+			uint32_t flags, x_ndr_switch_t level) const {
+		X_ASSERT(level == X_NDR_SWITCH_NONE);
+		return x_ndr_pull_uint64_align(t.val, ndr, bpos, epos, flags, 8);
+	}
+
+	void ostr(NTTIME t, x_ndr_ostr_t &ndr, uint32_t flags, x_ndr_switch_t level) const {
+		X_ASSERT(level == X_NDR_SWITCH_NONE);
+		ndr.os << t;
+	}
+};
 #if 0
-template <>
+typedef NTTIME NTTIME_hyper; // TODO different push/pull
+	template <>
 inline x_ndr_off_t x_ndr_scalars(
 		const ndr_traits_t<NTTIME> &ndr_traits,
 		NTTIME t, x_ndr_push_t &ndr,

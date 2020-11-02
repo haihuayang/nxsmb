@@ -263,14 +263,15 @@ TARGET_SRC_libnxsmb := \
 		lib/librpc/ndr_string \
 		lib/librpc/misc \
 		lib/librpc/security \
-
-a=\
+		lib/librpc/lsa \
 		lib/xutils \
-		lib/string \
-		lib/charset \
 		lib/threadpool \
 		lib/evtmgmt \
 		lib/wbpool \
+
+a=\
+		lib/string \
+		lib/charset \
 		lib/kerberos_pac \
 
 a=\
@@ -279,7 +280,6 @@ a=\
 		lib/librpc/krb5pac_ndr \
 		lib/librpc/netlogon_ndr \
 		lib/librpc/samr_ndr \
-		lib/librpc/lsa_ndr \
 		lib/librpc/dcerpc_ndr \
 
 TARGET_SET_m_idl :=
