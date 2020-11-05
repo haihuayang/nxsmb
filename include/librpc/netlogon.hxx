@@ -22,7 +22,7 @@ struct netr_DELTA_POLICY_OPTIONS
 
 template <> struct x_ndr_traits_t<netr_DELTA_POLICY_OPTIONS> {
 	using has_buffers = std::true_type;
-	using ndr_type = x_ndr_type_struct;
+	using ndr_data_type = x_ndr_type_struct;
 };
 #endif
 }

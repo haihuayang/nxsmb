@@ -70,30 +70,25 @@ void ndr_traits_t<dom_sid>::ostr(const dom_sid &val, x_ndr_ostr_t &ndr, uint32_t
 	ndr.os << val;
 }
 
-struct dom_sid2_ndr_traits
+x_ndr_off_t ndr_traits_dom_sid2::scalars(const dom_sid &val, x_ndr_push_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, x_ndr_switch_t level) const
 {
-	x_ndr_off_t scalars(const dom_sid &val, x_ndr_push_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, x_ndr_switch_t level) const {
-		X_ASSERT(level == X_NDR_SWITCH_NONE);
-		X_NDR_SCALARS_DEFAULT(uint3264{val.num_auths}, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
-		return dom_sid_ndr_scalars(val, ndr, bpos, epos, flags, level);
-	}
+	X_ASSERT(level == X_NDR_SWITCH_NONE);
+	X_NDR_SCALARS_DEFAULT(uint3264{val.num_auths}, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
+	return dom_sid_ndr_scalars(val, ndr, bpos, epos, flags, level);
+}
 
-	x_ndr_off_t scalars(dom_sid &val, x_ndr_pull_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, x_ndr_switch_t level) const {
-		X_ASSERT(level == X_NDR_SWITCH_NONE);
-		uint3264 num_auths;
-		X_NDR_SCALARS_DEFAULT(num_auths, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
-		bpos = dom_sid_ndr_scalars(val, ndr, bpos, epos, flags, level);
-		if (num_auths.val != val.num_auths) {
-			return -NDR_ERR_ARRAY_SIZE;
-		}
-		return bpos;
+x_ndr_off_t ndr_traits_dom_sid2::scalars(dom_sid &val, x_ndr_pull_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, x_ndr_switch_t level) const
+{
+	X_ASSERT(level == X_NDR_SWITCH_NONE);
+	uint3264 num_auths;
+	X_NDR_SCALARS_DEFAULT(num_auths, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
+	bpos = dom_sid_ndr_scalars(val, ndr, bpos, epos, flags, level);
+	if (num_auths.val != val.num_auths) {
+		return -NDR_ERR_ARRAY_SIZE;
 	}
+	return bpos;
+}
 
-	void ostr(const dom_sid &val, x_ndr_ostr_t &ndr, uint32_t flags, x_ndr_switch_t level) const {
-		X_ASSERT(level == X_NDR_SWITCH_NONE);
-		ndr.os << val;
-	}
-};
 
 #if 0
 x_ndr_off_t ndr_traits_t<dom_sid>::scalars(dom_sid &__val, x_ndr_pull_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level) const

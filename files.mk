@@ -6,6 +6,7 @@ TARGET_SET_idl := \
 	samr \
 	netlogon \
 	krb5pac \
+	ntlmssp \
 
 a=\
 	mytest_x_elem_size \
@@ -16,7 +17,6 @@ a=\
 a=\
 
 a=\
-	ntlmssp \
 	wkssvc \
 	srvsvc \
 	security \

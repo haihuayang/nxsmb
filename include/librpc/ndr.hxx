@@ -359,7 +359,7 @@ template <typename T, typename NT>
 inline void x_ndr_ostr(NT &&nt, T &&t, x_ndr_ostr_t &ndr, uint32_t flags, x_ndr_switch_t level)
 {
 	nt.ostr(t, ndr, flags, level);
-	// x_ndr_ostreamer_t<T, typename x_ndr_traits_t<T>::ndr_type>()(t, ndr, flags, level);
+	// x_ndr_ostreamer_t<T, typename x_ndr_traits_t<T>::ndr_data_type>()(t, ndr, flags, level);
 }
 #if 0
 template <typename T>
@@ -404,17 +404,8 @@ struct x_ndr_type_bitmap { };
 struct x_ndr_type_struct { };
 struct x_ndr_type_union { };
 
-#if 0
-template <typename T> struct x_ndr_traits_t {
-	using has_buffers = std::false_type;
-	using ndr_type = x_ndr_type_default;
-};
+using u16string = std::u16string;
 
-template <typename T> struct x_ndr_traits_t<std::vector<T>> {
-	using has_buffers = typename x_ndr_traits_t<T>::has_buffers;
-	using ndr_type = x_ndr_type_default;
-};
-#endif
 
 template <typename T>
 struct x_hex_t
@@ -494,10 +485,12 @@ struct x_ndr_ostreamer_t<T, x_ndr_type_bitmap> {
 	}
 };
 
-#define X_NDR_DECLARE_TRAITS_ENUM(name, base_type, num_value, ndr_type) \
+#define X_NDR_DECLARE_TRAITS_ENUM(name, base_type, num_value, data_type) \
 template <> struct ndr_traits_t<name> \
 { \
+	using has_buffers = std::false_type; \
 	using ndr_base_type = base_type; \
+	using ndr_data_type = data_type; \
 	static const std::array<std::pair<base_type, const char *>, num_value> value_name_map; \
  \
 	x_ndr_off_t scalars(name __val, x_ndr_push_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level) const { \
@@ -513,7 +506,7 @@ template <> struct ndr_traits_t<name> \
 	} \
  \
 	void ostr(name __val, x_ndr_ostr_t &__ndr, uint32_t __flags, x_ndr_switch_t __level) const { \
-		x_ndr_ostreamer_t<name, ndr_type>()(__val, __ndr, __flags, __level); \
+		x_ndr_ostreamer_t<name, ndr_data_type>()(__val, __ndr, __flags, __level); \
 	} \
 }; \
 
@@ -528,14 +521,18 @@ struct x_ndr_ptr_allocator_t
 template <typename T>
 inline std::shared_ptr<T> x_ndr_allocate_ptr(x_ndr_switch_t level)
 {
-	return x_ndr_ptr_allocator_t<T, typename ndr_traits_t<T>::ndr_type>()(level);
+	return x_ndr_ptr_allocator_t<T, typename ndr_traits_t<T>::ndr_data_type>()(level);
 }
 
 template <typename T>
 struct x_ndr_ptr_allocator_t<T, x_ndr_type_union>
 {
 	std::shared_ptr<T> operator()(x_ndr_switch_t level) const {
-		return std::make_shared<T>(level);
+		auto ret = std::make_shared<T>();
+		if (ret) {
+			ret->__init(level);
+		}
+		return ret;
 	}
 };
 
@@ -562,7 +559,7 @@ static inline void x_ndr_ostr_default(T &&t, x_ndr_ostr_t &ndr, uint32_t flags, 
 {
 	using base_type = typename std::remove_cv<typename std::remove_reference<T>::type>::type;
 	ndr_traits_t<base_type>{}.ostr(t, ndr, flags, level);
-	// x_ndr_ostreamer_t<T, typename x_ndr_traits_t<T>::ndr_type>()(t, ndr, flags, level);
+	// x_ndr_ostreamer_t<T, typename x_ndr_traits_t<T>::ndr_data_type>()(t, ndr, flags, level);
 }
 
 template <typename T>
@@ -1072,8 +1069,21 @@ static inline bool x_ndr_be(uint32_t flags)
 
 x_ndr_off_t x_ndr_push_uint32(uint32 v, x_ndr_push_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags);
 x_ndr_off_t x_ndr_pull_uint32(uint32 &v, x_ndr_pull_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags);
-x_ndr_off_t x_ndr_push_int32(int32 v, x_ndr_push_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags);
-x_ndr_off_t x_ndr_pull_int32(int32 &v, x_ndr_pull_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags);
+static inline x_ndr_off_t x_ndr_push_int32(int32 v, x_ndr_push_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags)
+{
+	return x_ndr_push_uint32(uint32(v), ndr, bpos, epos, flags);
+}
+
+static inline x_ndr_off_t x_ndr_pull_int32(int32 &v, x_ndr_pull_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags)
+{
+	uint32_t tmp;
+	bpos = x_ndr_pull_uint32(tmp, ndr, bpos, epos, flags);
+	if (bpos >= 0) {
+		v = int32(tmp);
+	}
+	return bpos;
+}
+
 x_ndr_off_t x_ndr_push_uint16(uint16 v, x_ndr_push_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags);
 x_ndr_off_t x_ndr_pull_uint16(uint16 &v, x_ndr_pull_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags);
 x_ndr_off_t x_ndr_push_uint8(uint8 v, x_ndr_push_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags);

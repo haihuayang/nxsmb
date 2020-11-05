@@ -161,6 +161,17 @@ def elem_is_property_of(elem, t, *args):
 				pass
 	return None
 
+def elem_is_expr_property_of(elem, t, *args):
+	ename = elem["NAME"]
+	for me in typedef_get_elements(t):
+		for prop in args:
+			value = elem_get_property(me, prop)
+			if value is None:
+				continue
+			if any([ename == operand for operand in re.split(r'[^0-9a-zA-Z_.]+', value)]):
+				return me
+	return None
+
 def elem_get_array_len(elem):
 	try:
 		array_len = elem['ARRAY_LEN']
@@ -254,12 +265,14 @@ known_simple_types = {
 	'NTTIME': [4, True, False],
 	'time_t': [4, True, False],
 	'DATA_BLOB': [4, False, False],
+        'u16string': [4, False, False],
 }
 
 alias_types = {
 	# alias, type_name, traits_type, align
         'NTTIME_hyper': ['NTTIME', 'ndr_traits_NTTIME_hyper', 8],
 	'dom_sid2': [ 'dom_sid', 'ndr_traits_dom_sid2', None],
+	's2u16string': [ 'u16string', 'ndr_traits_s2u16string', 1],
 }
 
 def find_type(idl, tname):
@@ -522,16 +535,26 @@ class FieldXSize(FieldDerived):
 	def __init__(self, json_elem, idl_tbl):
 		super().__init__(json_elem, idl_tbl)
 		assert self.base_type in [ 'uint8', 'uint16', 'uint32' ]
-	
 	def scalars__(self, func):
 		return f'X_NDR_XSIZE_{func}({self.base_type}, {self.name}, __ndr, __bpos, __epos, {self.get_ndr_flags()});'
+
+class FieldValue(FieldDerived):
+	def __init__(self, json_elem, idl_tbl, value, array_len):
+		super().__init__(json_elem, idl_tbl)
+		assert self.data_type in ['ENUM', 'BITMAP' ] or self.base_type in [ 'uint8', 'uint16', 'uint32' ]
+		self.value, self.array_len = value, array_len
+	def scalars__(self, func):
+		if self.array_len is not None:
+			ctype = f'std::array<{self.base_type}, {self.array_len}>'
+		else:
+			ctype = self.base_type
+		return f'X_NDR_SCALARS_VALUE({self.get_ndr_traits()}, {ctype}{{{self.value}}}, __ndr, __bpos, __epos, {self.get_ndr_flags()}, {self.get_switch_is()});'
 
 class FieldVectorLen(FieldDerived):
 	def __init__(self, json_elem, idl_tbl, vector_name):
 		super().__init__(json_elem, idl_tbl)
 		assert self.base_type in [ 'uint8', 'uint16', 'uint32' ]
 		self.vector_name = vector_name
-	
 	def scalars__(self, func):
 		return f'X_NDR_VECTOR_LEN_{func}({self.base_type}, {self.name}, {self.vector_name}, __ndr, __bpos, __epos, {self.get_ndr_flags()});'
 
@@ -540,7 +563,6 @@ class FieldXNdrSize(FieldDerived):
 		super().__init__(json_elem, idl_tbl)
 		self.ndr_size_elem = ndr_size_elem
 		assert self.get_property('switch_is') is None
-	
 	def scalars__(self, func):
 		if func == 'PUSH':
 			return f'X_NDR_SCALARS_DEFAULT({self.base_type}(), __ndr, __bpos, __epos, {self.get_ndr_flags()}, X_NDR_SWITCH_NONE);'
@@ -617,7 +639,8 @@ class FieldRelativePtr(FieldPtr):
 	def scalars__(self, func):
 		return f'X_NDR_SAVE_POS(uint32, __ndr, __bpos, __epos, {self.get_ndr_flags()});'
 	def buffers__(self, func):
-		return f'X_NDR_BUFFERS_RELATIVE_PTR({self.get_ndr_traits()}, __val.{self.name}, __ndr, __bpos, __epos, {self.get_ndr_flags()}, {self.get_switch_is()});'
+		return [ f'x_ndr_off_t __pos_{self.name} = __ndr.load_pos();',
+			f'X_NDR_BUFFERS_RELATIVE_PTR__0({self.get_ndr_traits()}, __val.{self.name}, __ndr, __bpos, __epos, {self.get_ndr_flags()}, {self.get_switch_is()}, ndr_traits_t<uint32>, __pos_{self.name});' ]
 
 class FieldUniquePtr(FieldPtr):
 	def scalars__(self, func):
@@ -628,10 +651,9 @@ class FieldUniquePtr(FieldPtr):
 class FieldUniqueVector(FieldPtr):
 	def __init__(self, json_elem, idl_tbl, size_is, length_is):
 		super().__init__(json_elem, idl_tbl)
-		self.has_buffers = True
 		self.size_is, self.length_is = size_is, length_is
 	def declare__(self):
-		return f'std::shared_ptr<std::vector<{self.base_type}>> {self.name};'
+		return f'std::shared_ptr<std::vector<{self.base_type}>> {self.name}; /* FieldUniqueVector */'
 	def scalars__(self, func):
 		return f'X_NDR_SCALARS_UNIQUE_VECTOR({self.get_ndr_traits()}, __val.{self.name}, __ndr, __bpos, __epos, {self.get_ndr_flags()}, {self.get_switch_is()});'
 	def buffers__(self, func):
@@ -677,10 +699,18 @@ class FieldRelativeString(FieldPtr):
 def make_field(elem, t, iface, idl_tbl):
 	elem_check_properties(elem, t)
 	pointer_type = elem_get_pointer_type(elem, iface)
+	array_len_name = elem_get_array_len(elem)
 
 	if elem_has_property(elem, 'x_size'):
 		assert not elem_get_pointers(elem)
 		return FieldXSize(elem, idl_tbl)
+
+	value = elem_get_property(elem, 'value')
+	if value:
+		assert not elem_get_pointers(elem)
+		if array_len_name:
+			array_len_name = int(array_len_name)
+		return FieldValue(elem, idl_tbl, value, array_len_name)
 
 	ndr_size_elem = elem_get_property(elem, 'x_ndr_size')
 	if ndr_size_elem:
@@ -692,12 +722,12 @@ def make_field(elem, t, iface, idl_tbl):
 		assert not elem_get_pointers(elem)
 		return FieldVectorLen(elem, idl_tbl, array_len_of_elem['NAME'])
 
-	size_is_of = elem_is_property_of(elem, t, "size_is")
+	size_is_of = elem_is_expr_property_of(elem, t, "size_is")
 	if size_is_of:
 		assert not elem_get_pointers(elem)
 		return FieldSizeIs(elem, idl_tbl, size_is_of['NAME'])
 
-	length_is_of = elem_is_property_of(elem, t, "length_is")
+	length_is_of = elem_is_expr_property_of(elem, t, "length_is")
 	if length_is_of:
 		assert not elem_get_pointers(elem)
 		return FieldLengthIs(elem, idl_tbl, length_is_of['NAME'])
@@ -721,7 +751,6 @@ def make_field(elem, t, iface, idl_tbl):
 		else:
 			assert False
 
-	array_len_name = elem_get_array_len(elem)
 	if array_len_name is not None:
 		assert not elem_get_pointers(elem)
 		try:
@@ -813,8 +842,9 @@ struct {tname} {{
 }} {typedef_tostring_properties(t)};
 
 template <> struct ndr_traits_t<{tname}> {{
+	using ndr_base_type = {tname};
 	using has_buffers = std::{"true" if has_buffers else "false"}_type;
-	using ndr_type = x_ndr_type_struct;
+	using ndr_data_type = x_ndr_type_struct;
 
 	x_ndr_off_t scalars(const {tname} &__val, x_ndr_push_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level) const;
 	x_ndr_off_t scalars({tname} &__val, x_ndr_pull_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level) const;
@@ -836,29 +866,6 @@ def get_first_case(typedef):
 		case = get_property(elem, "case")
 		if case is not None:
 			return case, elem
-	
-def nontrivial_union_foreach(fields, ):
-	for field in fields:
-		if len(field.nontrivial_unions) == 0:
-			continue
-		out(f'''
-void {tname}::set_{field.name}({field.base_type} v)
-{{''')
-		for uf in field.nontrivial_unions:
-			switch_is = uf.get_property("switch_is")
-			ref = '->' if isinstance(uf, FieldPtr) else '.'
-			out(f'''
-	{uf.name}{ref}__uninit(x_ndr_switch_t({switch_is}));''')
-		out(f'''
-	{field.name} = v;''')
-		for uf in field.nontrivial_unions:
-			switch_is = uf.get_property("switch_is")
-			ref = '->' if isinstance(uf, FieldPtr) else '.'
-			out(f'''
-	{uf.name}{ref}__init(x_ndr_switch_t({switch_is}));''')
-		out(f'''
-}}''')
-
 	
 def output_struct_functions(idl, tname, fields, out):
 	def union_field_iter(union_fields):
@@ -882,9 +889,8 @@ void {tname}::set_{field.name}({field.base_type} v)
 			out(f'''
 	{uf.name}{ref}__init(x_ndr_switch_t({switch_is}));''')
 		out(f'''
-}}''')
+}}
 
-	out(f'''
 {tname}::{tname}()''')
 	sep = ':'
 	for field in fields:
@@ -918,7 +924,7 @@ void {tname}::set_{field.name}({field.base_type} v)
 {tname}::{tname}(const {tname} &other)''')
 	sep = ':'
 	for field in fields:
-		if not isinstance(field, FieldDerived):
+		if not isinstance(field, FieldDerived) and (field.data_type != "UNION" or field.is_trivial):
 			out(f'''	{sep} {field.name}(other.{field.name})''')
 			sep = ','
 	out('{')		
@@ -937,7 +943,7 @@ void {tname}::set_{field.name}({field.base_type} v)
 		for uf, switch_is, ref, deref in union_field_iter(field.nontrivial_unions):
 			out(f'''
 	{uf.name}{ref}__uninit(x_ndr_switch_t({switch_is}));''')
-		if not isinstance(field, FieldDerived):
+		if not isinstance(field, FieldDerived) and (field.data_type != "UNION" or field.is_trivial):
 			out(f'''
 	{field.name} = other.{field.name};''')
 		for uf, switch_is, ref, deref in union_field_iter(field.nontrivial_unions):
@@ -945,7 +951,9 @@ void {tname}::set_{field.name}({field.base_type} v)
 	{uf.name}{ref}__init(x_ndr_switch_t({switch_is}), {deref}other.{uf.name});''')
 	out(f'''
 	return *this;
-}}''')
+}}
+
+''')
 
 def output_ndrcxx_struct_scalars(out, func, fields, t, iface, idl, idl_tbl):
 	flag = typedef_get_property(t, 'flag')
@@ -1109,8 +1117,9 @@ union {tname}
 }} {typedef_tostring_properties(t)};
 
 template <> struct ndr_traits_t<{tname}> {{
+	using ndr_base_type = {tname};
 	using has_buffers = std::{"true_type" if any([field.has_buffers for field in fields]) else "false_type"};
-	using ndr_type = x_ndr_type_union;
+	using ndr_data_type = x_ndr_type_union;
 
 	x_ndr_off_t scalars(const {tname} &__val, x_ndr_push_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level) const;
 	x_ndr_off_t scalars({tname} &__val, x_ndr_pull_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level) const;

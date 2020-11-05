@@ -20,7 +20,8 @@ x_ndr_off_t dom_sid_ndr_scalars(dom_sid &val, x_ndr_pull_t &ndr, x_ndr_off_t bpo
 struct ndr_traits_dom_sid2
 {
 	using has_buffers = std::false_type;
-	using ndr_type = x_ndr_type_primary;
+	using ndr_base_type = dom_sid;
+	using ndr_data_type = x_ndr_type_primary;
 
 	x_ndr_off_t scalars(const dom_sid &val, x_ndr_push_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, x_ndr_switch_t level) const;
 
