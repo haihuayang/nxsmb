@@ -861,7 +861,8 @@ inline x_ndr_off_t x_ndr_requ(T &t, const uint8_t *data, size_t size, uint32_t f
 	return t.ndr_requ(ndr, 0, size, flags);
 }
 
-static inline x_ndr_off_t x_ndr_do_align(x_ndr_push_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags)
+template <typename NDR>
+x_ndr_off_t x_ndr_do_align(NDR &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags)
 {
 	size_t offset = bpos - ndr.base;
 	size_t alignment = 0;
@@ -1603,7 +1604,77 @@ struct x_ndr_handler_t<x_ndr_with_size_t<std::vector<uint8_t>>, std::false_type>
 		return x_ndr_pull_bytes(t.val, ndr, bpos, epos);
 	}
 };
+
+#define X_NDR_SUBCONTEXT_START_PUSH(field, ndr, bpos, epos, flags) do { \
+	X_NDR_DO_ALIGN((ndr), (bpos), (epos), (flags)); \
+	x_ndr_off_t __pos_##field = (bpos); \
+	x_ndr_off_t __bpos_##field = (bpos); \
+	x_ndr_off_t __epos_##field = (epos); \
+	x_ndr_push_t __subndr_##field{(ndr).buff, (__bpos)}
+	
+#define X_NDR_SUBCONTEXT_END_PUSH(field, size_pos, size_traits, ndr, bpos, epos, flags) \
+	X_NDR_SCALARS_SIMPLE(size_traits, (size_pos), (epos), 
+
+} while (0)
+
+#define X_NDR_SUBCONTEXT_START_PULL(field, ndr, bpos, epos, flags) do { \
+	X_NDR_DO_ALIGN((ndr), (bpos), (epos), (flags)); \
+	size_type __tmp_size; \
+	X_NDR_SCALARS_SIMPLE(size_type, (ndr), (size_pos), ...); \
+	x_ndr_off_t __epos_##field = X_NDR_CHECK_POS((__bpos) + __tmp_size, (__bpos), (__epos)); \
+	
+	(__bpos) = x_ndr_pull_subctx(__subctx_##field, (__ndr), (__bpos), (__epos), (__flags)); \
+	x_ndr_off_t __bpos_##field = (__bpos); \
+	x_ndr_pull_t __subndr_##field{(__ndr).buff, (__bpos)}
+	
+#define X_NDR_SUBCONTEXT_END_PULL(field, ndr, bpos, epos, flags) \
+	X_NDR_DO_ALIGN((ndr), (bpos), (epos), (flags)); \
+} while (0)
 #endif
+
+
+struct x_ndr_subwrapper_t
+{
+	x_ndr_off_t ndr_scalars(x_ndr_push_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level) const;
+	x_ndr_off_t ndr_scalars(x_ndr_pull_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level);
+	uint32_t content_size;
+	uint32_t flags = 0;
+};
+
+x_ndr_off_t x_ndr_push_subwrapper(x_ndr_subwrapper_t val, x_ndr_push_t &ndr,
+		x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags);
+x_ndr_off_t x_ndr_pull_subwrapper(x_ndr_subwrapper_t &val, x_ndr_pull_t &ndr,
+		x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags);
+
+#define X_NDR_SUBWRAPPER_START_PUSH(field, __ndr, __bpos, __epos, __flags) do { \
+	x_ndr_subwrapper_t __subwrapper_##field; \
+	x_ndr_off_t __pos_##field = (__bpos); \
+	(__bpos) = x_ndr_push_subwrapper(__subwrapper_##field, (__ndr), (__bpos), (__epos), (__flags)); \
+	if ((__bpos) < 0) { \
+		return (__bpos); \
+	} \
+	x_ndr_off_t __bpos_##field = (__bpos); \
+	x_ndr_off_t __epos_##field = (__epos); \
+	x_ndr_push_t __subndr_##field{(__ndr).buff, (__bpos)}
+	
+#define X_NDR_SUBWRAPPER_END_PUSH(field, __ndr, __bpos, __epos, __flags) \
+	__subwrapper_##field.content_size = X_NDR_ROUND(__bpos_##field - (__bpos), 8); \
+	__subwrapper_##field.flags = (__flags); \
+	x_ndr_push_subwrapper(__subwrapper_##field, (__ndr), __pos_##field, (__epos), (__flags)); \
+	(__bpos) += __subwrapper_##field.content_size; \
+} while (0)
+
+#define X_NDR_SUBWRAPPER_START_PULL(field, __ndr, __bpos, __epos, __flags) do { \
+	x_ndr_subwrapper_t __subwrapper_##field; \
+	(__bpos) = x_ndr_pull_subwrapper(__subwrapper_##field, (__ndr), (__bpos), (__epos), (__flags)); \
+	x_ndr_off_t __bpos_##field = (__bpos); \
+	x_ndr_off_t __epos_##field = X_NDR_CHECK_POS((__bpos) + __subwrapper_##field.content_size, (__bpos), (__epos)); \
+	x_ndr_pull_t __subndr_##field{(__ndr).buff, (__bpos)}
+	
+#define X_NDR_SUBWRAPPER_END_PULL(field, __ndr, __bpos, __epos, __flags) \
+	(__bpos) = __epos_##field; \
+} while (0)
+
 }
 
 #include "ndr_types.hxx"

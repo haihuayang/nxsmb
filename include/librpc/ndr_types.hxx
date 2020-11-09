@@ -245,18 +245,18 @@ static inline x_ndr_off_t x_ndr_scalars_value(NT &&nt, T &&val, x_ndr_pull_t &nd
 	return bpos;
 }
 
-#define X_NDR_SCALARS_VALUE(nt, val, ndr, bpos, epos, ...) \
-	X_NDR_VERIFY((bpos), x_ndr_scalars_value((nt{}), (val), (ndr), (bpos), (epos), __VA_ARGS__))
+#define X_NDR_SCALARS_VALUE(nt, val, ndr, bpos, epos, flags, level) \
+	X_NDR_VERIFY((bpos), x_ndr_scalars_value((nt{}), (val), (ndr), (bpos), (epos), (flags), (level)))
 
-#define X_NDR_BUFFERS_VALUE(nt, val, ndr, bpos, epos, ...) \
-	X_NDR_VERIFY((bpos), x_ndr_scalars_value((nt{}), (val), (ndr), (bpos), (epos), __VA_ARGS__))
+#define X_NDR_BUFFERS_VALUE(nt, val, ndr, bpos, epos, flags, level) \
+	X_NDR_VERIFY((bpos), x_ndr_scalars_value((nt{}), (val), (ndr), (bpos), (epos), (flags), (level)))
 
 
-#define X_NDR_SCALARS_SIMPLE(nt, val, ndr, bpos, epos, ...) \
-	X_NDR_VERIFY((bpos), (nt{}).scalars((val), (ndr), (bpos), (epos), __VA_ARGS__))
+#define X_NDR_SCALARS_SIMPLE(nt, val, ndr, bpos, epos, flags, level) \
+	X_NDR_VERIFY((bpos), (nt{}).scalars((val), (ndr), (bpos), (epos), (flags), (level)))
 
-#define X_NDR_BUFFERS_SIMPLE(nt, val, ndr, bpos, epos, ...) \
-	X_NDR_VERIFY((bpos), (nt{}).buffers((val), (ndr), (bpos), (epos), __VA_ARGS__))
+#define X_NDR_BUFFERS_SIMPLE(nt, val, ndr, bpos, epos, flags, level) \
+	X_NDR_VERIFY((bpos), (nt{}).buffers((val), (ndr), (bpos), (epos), (flags), (level)))
 
 #define X_NDR_OSTR_SIMPLE(nt, val, ndr, ...) \
 	(nt{}).ostr((val), (ndr), __VA_ARGS__)

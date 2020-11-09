@@ -2,7 +2,7 @@
 #include "include/librpc/krb5pac.hxx"
 
 namespace idl {
-
+#if 0
 x_ndr_off_t PAC_INFO::ndr_scalars(x_ndr_push_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level) const
 {
 	X_NDR_UNION_ALIGN(4, __ndr, __bpos, __epos, __flags);
@@ -54,7 +54,7 @@ x_ndr_off_t PAC_INFO::ndr_scalars(x_ndr_pull_t &__ndr, x_ndr_off_t __bpos, x_ndr
 	}
 	return __bpos;
 }
-
+#endif
 x_ndr_off_t ndr_traits_t<PAC_BUFFER>::scalars(
 		const PAC_BUFFER &__val,
 		x_ndr_push_t &__ndr,

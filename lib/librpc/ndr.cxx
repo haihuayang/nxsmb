@@ -287,6 +287,53 @@ _PUBLIC_ x_ndr_off_t x_ndr_pull_uint1632(uint16_t &v,
 	return x_ndr_pull_uint16(v, ndr, bpos, epos, flags);
 }
 
+x_ndr_off_t x_ndr_push_subwrapper(x_ndr_subwrapper_t val, x_ndr_push_t &ndr,
+		x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags)
+{
+	bpos = X_NDR_CHECK(x_ndr_push_uint8(1, ndr, bpos, epos, flags));
+	bpos = X_NDR_CHECK(x_ndr_push_uint8((val.flags & LIBNDR_FLAG_BIGENDIAN) ? 0 : 0x10,
+			ndr, bpos, epos, flags));
+	bpos = X_NDR_CHECK(x_ndr_push_uint16(8, ndr, bpos, epos, flags));
+	bpos = X_NDR_CHECK(x_ndr_push_uint32(0xcccccccc, ndr, bpos, epos, flags));
+	bpos = X_NDR_CHECK(x_ndr_push_uint32(val.content_size, ndr, bpos, epos, flags));
+	bpos = X_NDR_CHECK(x_ndr_push_uint32(0, ndr, bpos, epos, flags));
+	return bpos;
+}
+
+x_ndr_off_t x_ndr_pull_subwrapper(x_ndr_subwrapper_t &val, x_ndr_pull_t &ndr,
+		x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags)
+{
+	uint8_t version, drep;
+	uint16_t hdrlen;
+	uint32_t filler;
+
+	bpos = X_NDR_CHECK(x_ndr_pull_uint8(version, ndr, bpos, epos, flags));
+	if (version != 1) {
+		return -NDR_ERR_SUBCONTEXT;
+	}
+
+	bpos = X_NDR_CHECK(x_ndr_pull_uint8(drep, ndr, bpos, epos, flags));
+	if (drep == 0x10) {
+		val.flags = LIBNDR_FLAG_LITTLE_ENDIAN;
+	} else if (drep == 0) {
+		val.flags = LIBNDR_FLAG_BIGENDIAN;
+	} else {
+		return -NDR_ERR_SUBCONTEXT;
+	}
+
+	bpos = X_NDR_CHECK(x_ndr_pull_uint16(hdrlen, ndr, bpos, epos, flags));
+	if (hdrlen != 8) {
+		return -NDR_ERR_SUBCONTEXT;
+	}
+	bpos = X_NDR_CHECK(x_ndr_pull_uint32(filler, ndr, bpos, epos, flags));
+	bpos = X_NDR_CHECK(x_ndr_pull_uint32(val.content_size, ndr, bpos, epos, flags));
+	if (val.content_size % 8 != 0) {
+		return -NDR_ERR_SUBCONTEXT;
+	}
+	bpos = X_NDR_CHECK(x_ndr_pull_uint32(filler, ndr, bpos, epos, flags));
+	return bpos;
+}
+
 #if 0
 void ndr_output_uint64(ndr_ostream_t &ndr, uint32_t flags, uint64_t val, const char *name);
 void ndr_output_uint32(ndr_ostream_t &ndr, uint32_t flags, uint32_t val, const char *name);
