@@ -906,7 +906,16 @@ def output_header_element(out, field):
 def output_header_STRUCT(out, t, iface, idl, idl_tbl):
 	fields = make_fields(t, iface, idl_tbl)
 	tname = t["NAME"]
-	has_buffers = any([field.has_buffers for field in fields])
+
+	has_buffers, has_nontrivial_unions, all_nontrivial_unions_are_ptr = False, False, True
+	for field in fields:
+		if field.has_buffers:
+			has_buffers = True
+		if field.nontrivial_unions:
+			has_nontrivial_unions = True
+			for nf in field.nontrivial_unions:
+				if not isinstance(nf, FieldPtr):
+					all_nontrivial_unions_are_ptr = False
 
 	out(f'''
 
@@ -916,8 +925,10 @@ struct {tname} {{
 		out(f'''
 	{tname}();
 	~{tname}();
-	{tname}(const {tname}& other);
-	{tname} &operator=(const {tname}& other);
+	{tname}(const {tname}& other) = delete;
+	{tname} &operator=(const {tname}& other) = delete;
+	{tname}({tname}&& other){" = default" if all_nontrivial_unions_are_ptr else ""};
+	{tname} &operator=({tname}&& other) = delete;
 ''')
 		for switch_field in fields:
 			if len(switch_field.nontrivial_unions) == 0:
@@ -963,8 +974,7 @@ def output_struct_functions(idl, tname, fields, out):
 	def union_field_iter(union_fields):
 		for uf in union_fields:
 			switch_is = uf.get_property("switch_is")
-			ref, deref = ('->', '*') if isinstance(uf, FieldPtr) else ('.', '')
-			yield uf, switch_is, ref, deref
+			yield uf, switch_is, isinstance(uf, FieldPtr)
 	
 	for field in fields:
 		if len(field.nontrivial_unions) == 0:
@@ -972,14 +982,14 @@ def output_struct_functions(idl, tname, fields, out):
 		out(f'''
 void {tname}::set_{field.name}({field.base_type} v)
 {{''')
-		for uf, switch_is, ref, deref in union_field_iter(field.nontrivial_unions):
+		for uf, switch_is, is_pointer in union_field_iter(field.nontrivial_unions):
 			out(f'''
-	{uf.name}{ref}__uninit(x_ndr_switch_t({switch_is}));''')
+	x_ndr_union_field_uninit({uf.name}, x_ndr_switch_t({switch_is}));''')
 		out(f'''
 	{field.name} = v;''')
-		for uf, switch_is, ref, deref in union_field_iter(field.nontrivial_unions):
+		for uf, switch_is, is_pointer in union_field_iter(field.nontrivial_unions):
 			out(f'''
-	{uf.name}{ref}__init(x_ndr_switch_t({switch_is}));''')
+	x_ndr_union_field_init({uf.name}, x_ndr_switch_t({switch_is}));''')
 		out(f'''
 }}
 
@@ -996,9 +1006,9 @@ void {tname}::set_{field.name}({field.base_type} v)
 	for field in fields:
 		if len(field.nontrivial_unions) == 0:
 			continue
-		for uf, switch_is, ref, deref in union_field_iter(field.nontrivial_unions):
+		for uf, switch_is, is_pointer in union_field_iter(field.nontrivial_unions):
 			out(f'''
-	{uf.name}{ref}__init(x_ndr_switch_t({switch_is}));''')
+	x_ndr_union_field_init({uf.name}, x_ndr_switch_t({switch_is}));''')
 	out(f'''
 }}
 
@@ -1007,12 +1017,14 @@ void {tname}::set_{field.name}({field.base_type} v)
 	for field in fields:
 		if len(field.nontrivial_unions) == 0:
 			continue
-		for uf, switch_is, ref, deref in union_field_iter(field.nontrivial_unions):
+		for uf, switch_is, is_pointer in union_field_iter(field.nontrivial_unions):
 			out(f'''
-	{uf.name}{ref}__uninit(x_ndr_switch_t({switch_is}));''')
+	x_ndr_union_field_uninit({uf.name}, x_ndr_switch_t({switch_is}));''')
 	out(f'''
 }}
 
+#if 0
+TODO
 {tname}::{tname}(const {tname} &other)''')
 	sep = ':'
 	for field in fields:
@@ -1023,27 +1035,28 @@ void {tname}::set_{field.name}({field.base_type} v)
 	for field in fields:
 		if len(field.nontrivial_unions) == 0:
 			continue
-		for uf, switch_is, ref, deref in union_field_iter(field.nontrivial_unions):
+		for uf, switch_is, is_pointer in union_field_iter(field.nontrivial_unions):
 			out(f'''
-	{uf.name}{ref}__init(x_ndr_switch_t({switch_is}), {deref}other.{uf.name});''')
+	x_ndr_union_field_init({uf.name}, x_ndr_switch_t({switch_is}), other.{uf.name});''')
 		out(f'''
 }}
 
 {tname} &{tname}::operator=(const {tname} &other)
 {{''')
 	for field in fields:
-		for uf, switch_is, ref, deref in union_field_iter(field.nontrivial_unions):
+		for uf, switch_is, is_pointer in union_field_iter(field.nontrivial_unions):
 			out(f'''
-	{uf.name}{ref}__uninit(x_ndr_switch_t({switch_is}));''')
+	x_ndr_union_field_uninit({uf.name}, x_ndr_switch_t({switch_is}));''')
 		if not isinstance(field, FieldDerived) and (field.data_type != "UNION" or field.is_trivial):
 			out(f'''
 	{field.name} = other.{field.name};''')
-		for uf, switch_is, ref, deref in union_field_iter(field.nontrivial_unions):
+		for uf, switch_is, is_pointer in union_field_iter(field.nontrivial_unions):
 			out(f'''
-	{uf.name}{ref}__init(x_ndr_switch_t({switch_is}), {deref}other.{uf.name});''')
+	x_ndr_union_field_init({uf.name}, x_ndr_switch_t({switch_is}), other.{uf.name});''')
 	out(f'''
 	return *this;
 }}
+#endif
 
 ''')
 
@@ -1191,7 +1204,7 @@ union {tname}
 	{tname}() {{ }}
 	~{tname}() {{ }}
 	void __init(x_ndr_switch_t __level);
-	void __init(x_ndr_switch_t __level, const {tname} &__other);
+	// void __init(x_ndr_switch_t __level, const {tname} &__other);
 	void __uninit(x_ndr_switch_t __level);
 ''')
 	# union member may has same name
@@ -1283,7 +1296,7 @@ void {tname}::__init(x_ndr_switch_t __level)
 		out(f'''
 	}}
 }}
-
+#if 0
 void {tname}::__init(x_ndr_switch_t __level, const {tname} &other)
 {{
 	switch (__level) {{''')
@@ -1297,7 +1310,7 @@ void {tname}::__init(x_ndr_switch_t __level, const {tname} &other)
 		out(f'''
 	}}
 }}
-
+#endif
 void {tname}::__uninit(x_ndr_switch_t __level)
 {{
 	switch (__level) {{''')

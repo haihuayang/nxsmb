@@ -764,7 +764,8 @@ x_ndr_off_t x_ndr_buffers_relative_ptr(NT &&nt,
 	auto offset = pos_at(ndr, epos, flags);
 	if (offset) {
 		X_NDR_CHECK_ALIGN(ndr, flags, offset);
-		val = x_ndr_allocate_ptr<T>(level);
+		val = std::make_shared<T>();
+		val->__init(level);
 
 		auto size = size_at(ndr, epos, flags);
 		x_ndr_off_t tmp_bpos = X_NDR_CHECK_POS(ndr.base + offset, 0, epos);

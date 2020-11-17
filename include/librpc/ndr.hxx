@@ -1675,6 +1675,34 @@ x_ndr_off_t x_ndr_pull_subwrapper(x_ndr_subwrapper_t &val, x_ndr_pull_t &ndr,
 	(__bpos) = __epos_##field; \
 } while (0)
 
+template <typename T>
+inline void x_ndr_union_field_init(T &val, x_ndr_switch_t level)
+{
+	val.__init(level);
+}
+
+template <typename T>
+inline void x_ndr_union_field_uninit(T &val, x_ndr_switch_t level)
+{
+	val.__uninit(level);
+}
+
+template <typename T>
+inline void x_ndr_union_field_init(std::shared_ptr<T> &val, x_ndr_switch_t level)
+{
+	if (val) {
+		val->__init(level);
+	}
+}
+
+template <typename T>
+inline void x_ndr_union_field_uninit(std::shared_ptr<T> &val, x_ndr_switch_t level)
+{
+	if (val) {
+		val->__uninit(level);
+	}
+}
+
 }
 
 #include "ndr_types.hxx"
