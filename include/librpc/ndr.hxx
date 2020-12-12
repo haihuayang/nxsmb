@@ -324,13 +324,14 @@ struct x_ndr_both_t
 	x_ndr_off_t operator()(NT &&nt, T &&t, NDR &ndr,
 			x_ndr_off_t bpos, x_ndr_off_t epos,
 			uint32_t flags, x_ndr_switch_t level) {
-		ndr.pos_index = 0;
-		bpos = nt.scalars(t, ndr, bpos, epos, flags, level);
+		NDR subndr{ndr.buff, ndr.base};
+		bpos = nt.scalars(t, subndr, bpos, epos, flags, level);
 		if (bpos < 0) {
 			return bpos;
 		}
-		ndr.pos_index = 0;
-		return nt.buffers(t, ndr, bpos, epos, flags, level);
+		subndr.pos_index = 0;
+		bpos = nt.buffers(t, subndr, bpos, epos, flags, level);
+		return bpos;
 	}
 };
 
@@ -561,26 +562,6 @@ static inline void x_ndr_ostr_default(T &&t, x_ndr_ostr_t &ndr, uint32_t flags, 
 	ndr_traits_t<base_type>{}.ostr(t, ndr, flags, level);
 	// x_ndr_ostreamer_t<T, typename x_ndr_traits_t<T>::ndr_data_type>()(t, ndr, flags, level);
 }
-
-template <typename T>
-struct x_ndr_at_t
-{
-	x_ndr_at_t(x_ndr_off_t __pos) : pos(__pos) { }
-	void operator()(T size, x_ndr_push_t &ndr, x_ndr_off_t epos, uint32_t flags) const {
-		x_ndr_off_t bpos = pos;
-		bpos = x_ndr_scalars_default(size, ndr, pos, epos, flags, X_NDR_SWITCH_NONE);
-		X_ASSERT(bpos > 0);
-	}
-	T operator()(x_ndr_pull_t &ndr, x_ndr_off_t epos, uint32_t flags) const {
-		x_ndr_off_t bpos = pos;
-		T tmp;
-		bpos = x_ndr_scalars_default(tmp, ndr, pos, epos, flags, X_NDR_SWITCH_NONE);
-		X_ASSERT(bpos > 0);
-		return tmp;
-	}
-
-	const x_ndr_off_t pos;
-};
 
 static inline x_ndr_off_t x_ndr_check_pos(x_ndr_off_t pos,
 		x_ndr_off_t bpos, x_ndr_off_t epos)

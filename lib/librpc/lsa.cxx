@@ -128,7 +128,7 @@ x_ndr_off_t ndr_traits_t<lsa_StringLarge>::scalars(
 		length = val.string->size() * 2;
 	}
 	X_NDR_SCALARS_DEFAULT(length, ndr, bpos, epos, flags, level);
-	X_NDR_SCALARS_DEFAULT(length + 2, ndr, bpos, epos, flags, level);
+	X_NDR_SCALARS_DEFAULT(uint16_t(length + 2), ndr, bpos, epos, flags, level);
 	uint3264 ptr{0};
 	if (val.string) {
 		ptr.val = ndr.next_ptr();
@@ -146,7 +146,7 @@ x_ndr_off_t ndr_traits_t<lsa_StringLarge>::buffers(
 	X_ASSERT(level == X_NDR_SWITCH_NONE);
 	if (val.string) {
 		uint32_t size = val.string->size();
-		X_NDR_SCALARS_DEFAULT(uint3264{size + 2}, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
+		X_NDR_SCALARS_DEFAULT(uint3264{size + 1}, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
 		X_NDR_SCALARS_DEFAULT(uint3264{0}, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
 		X_NDR_SCALARS_DEFAULT(uint3264{size}, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
 		X_NDR_SCALARS_DEFAULT(*val.string, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
@@ -297,6 +297,34 @@ x_ndr_off_t ndr_traits_t<lsa_AsciiStringLarge>::buffers(
 	X_TODO;
 	return bpos;
 }
+
+
+
+x_ndr_off_t ndr_traits_t<lsa_AuditEventsInfo>::scalars(const lsa_AuditEventsInfo &val, x_ndr_push_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, x_ndr_switch_t level) const
+{
+	X_TODO;
+	return bpos;
+}
+
+x_ndr_off_t ndr_traits_t<lsa_AuditEventsInfo>::scalars(lsa_AuditEventsInfo &val, x_ndr_pull_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, x_ndr_switch_t level) const
+{
+	X_TODO;
+	return bpos;
+}
+
+x_ndr_off_t ndr_traits_t<lsa_AuditEventsInfo>::buffers(const lsa_AuditEventsInfo &val, x_ndr_push_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, x_ndr_switch_t level) const
+{
+	X_TODO;
+	return bpos;
+}
+
+x_ndr_off_t ndr_traits_t<lsa_AuditEventsInfo>::buffers(lsa_AuditEventsInfo &val, x_ndr_pull_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, x_ndr_switch_t level) const
+{
+	X_TODO;
+	return bpos;
+}
+
+
 
 
 }

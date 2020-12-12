@@ -487,7 +487,8 @@ class FieldBase(object):
 			return ret
 
 		if isinstance(self, FieldRelativePtr): # TODO ugly
-			ret.append(f'x_ndr_off_t __relptr_pos_{self.name} = {ndr_arg}.load_pos();')
+			ret.append(f'ndr_traits_at_t<ndr_traits_t<uint32>> __at_{self.name}{{ndr_traits_t<uint32>(), {ndr_arg}.load_pos(),{self.get_ndr_flags()}}};')
+			#x_ndr_off_t __relptr_pos_{self.name} = {ndr_arg}.load_pos();')
 
 		new_epos_arg = epos_arg
 		new_ndr_arg = ndr_arg
@@ -679,14 +680,22 @@ class FieldSizeIs(FieldDerived):
 		assert self.base_type in [ 'uint8', 'uint16', 'uint32', 'uint3264' ]
 		assert self.get_property('switch_is') is None
 		self.size_is_of = size_is_of
-
+		self.has_buffers = True
 	def scalars__(self, func, ndr_arg, bpos_arg, epos_arg, flags_arg):
+		return f'X_NDR_SAVE_POS({self.base_type}, {ndr_arg}, {bpos_arg}, {epos_arg}, {self.get_ndr_flags()});'
+	def buffers__(self, func, ndr_arg, bpos_arg, epos_arg, flags_arg):
+		assert self.has_buffers
+		return f'ndr_traits_at_t<ndr_traits_t<{self.base_type}>> __at_{self.name}{{ndr_traits_t<{self.base_type}>(), {ndr_arg}.load_pos(), {self.get_ndr_flags()}}};'
+		'''
 		if func == 'PUSH':
-			ret = [ f'{self.base_type} __tmp_{self.name} = vector_ptr_get_size(__val.{self.size_is_of});' ]
+			ret = [ f'{self.base_type} __tmp_{self.name} = vector_ptr_get_size(__val.{self.size_is_of.name});' ]
 		else:
 			ret = [ f'{self.base_type} __tmp_{self.name};' ]
 		ret.append(f'X_NDR_SCALARS_SIMPLE({self.get_ndr_traits()}, __tmp_{self.name}, {ndr_arg}, {bpos_arg}, {epos_arg}, {self.get_ndr_flags()}, X_NDR_SWITCH_NONE);')
 		return ret
+	def buffers__(self, func, ndr_arg, bpos_arg, epos_arg, flags_arg):
+		return f'X_NDR_BUFFERS_VECTOR({self.get_ndr_traits()}, __val.{self.name}, {ndr_arg}, {bpos_arg}, {epos_arg}, {self.get_ndr_flags()}, {self.get_switch_is()});'
+		'''
 
 FieldLengthIs = FieldSizeIs
 
@@ -718,7 +727,7 @@ class FieldRelativePtr(FieldPtr):
 	def scalars__(self, func, ndr_arg, bpos_arg, epos_arg, flags_arg):
 		return f'X_NDR_SAVE_POS(uint32, {ndr_arg}, {bpos_arg}, {epos_arg}, {self.get_ndr_flags()});'
 	def buffers__(self, func, ndr_arg, bpos_arg, epos_arg, flags_arg):
-		return f'X_NDR_BUFFERS_RELATIVE_PTR__0({self.get_ndr_traits()}, __val.{self.name}, {ndr_arg}, {bpos_arg}, {epos_arg}, {self.get_ndr_flags()}, {self.get_switch_is()}, ndr_traits_t<uint32>, __relptr_pos_{self.name});'
+		return f'X_NDR_BUFFERS_RELATIVE_PTR__0({self.get_ndr_traits()}, __val.{self.name}, {ndr_arg}, {bpos_arg}, {epos_arg}, {self.get_ndr_flags()}, {self.get_switch_is()}, __at_{self.name});'
 
 class FieldUniquePtr(FieldPtr):
 	def scalars__(self, func, ndr_arg, bpos_arg, epos_arg, flags_arg):
@@ -735,11 +744,11 @@ class FieldUniqueVector(FieldPtr):
 	def scalars__(self, func, ndr_arg, bpos_arg, epos_arg, flags_arg):
 		return f'X_NDR_SCALARS_UNIQUE_VECTOR({self.get_ndr_traits()}, __val.{self.name}, {ndr_arg}, {bpos_arg}, {epos_arg}, {self.get_ndr_flags()}, {self.get_switch_is()});'
 	def buffers__(self, func, ndr_arg, bpos_arg, epos_arg, flags_arg):
-		return f'X_NDR_BUFFERS_UNIQUE_VECTOR({self.get_ndr_traits()}, __val.{self.name}, {ndr_arg}, {bpos_arg}, {epos_arg}, {self.get_ndr_flags()}, {self.get_switch_is()});'
+		#return f'X_NDR_BUFFERS_UNIQUE_VECTOR({self.get_ndr_traits()}, __val.{self.name}, {ndr_arg}, {bpos_arg}, {epos_arg}, {self.get_ndr_flags()}, {self.get_switch_is()});'
 		if self.length_is:
-			return f'X_NDR_BUFFERS_UNIQUE_LENGTH_IS({self.get_ndr_traits()}, __val.{self.name}, {ndr_arg}, {bpos_arg}, {epos_arg}, {self.get_ndr_flags()}, {self.get_switch_is()}, {self.size_is.base_type}, {self.size_is.name}, {self.length_is.base_type}, {self.length_is.name});'
+			return f'X_NDR_BUFFERS_UNIQUE_LENGTH_IS({self.get_ndr_traits()}, __val.{self.name}, {ndr_arg}, {bpos_arg}, {epos_arg}, {self.get_ndr_flags()}, {self.get_switch_is()}, __at_{self.size_is.name}, __at_{self.length_is.name});'
 		else:
-			return f'X_NDR_BUFFERS_UNIQUE_SIZE_IS({self.get_ndr_traits()}, __val.{self.name}, {ndr_arg}, {bpos_arg}, {epos_arg}, {self.get_ndr_flags()}, {self.get_switch_is()}, {self.size_is.base_type}, {self.size_is.name});'
+			return f'X_NDR_BUFFERS_UNIQUE_SIZE_IS({self.get_ndr_traits()}, __val.{self.name}, {ndr_arg}, {bpos_arg}, {epos_arg}, {self.get_ndr_flags()}, {self.get_switch_is()}, __at_{self.size_is.name});'
 	def ostr__(self):
 		return f'X_NDR_OSTR_UNIQUE_VECTOR({self.get_ndr_traits()}, __val.{self.name}, __ndr, {self.get_ndr_flags()}, {self.get_switch_is()});'
 
@@ -852,8 +861,7 @@ def make_field(elem, t, iface, idl_tbl):
 
 	if pointer_type == "relative":
 		return FieldRelativePtr(elem, idl_tbl)
-	else:
-		elem_get_pointer_type(elem, iface) == "unique"
+	elif pointer_type == "unique":
 		if size_is or length_is:
 			return FieldUniqueVector(elem, idl_tbl, size_is, length_is)
 		else:
@@ -872,12 +880,16 @@ def make_fields(t, iface, idl_tbl):
 					break
 			else:
 				assert False, f'Cannot find x_ndr_size {field.size_elem_name}'
-		elif isinstance(field, FieldSizeIs):
+		elif isinstance(field, FieldUniqueVector):
 			for f in fields:
-				if f.name == field.size_is_of:
-					break
-			else:
-				assert False
+				if f.name == field.size_is:
+					f.size_is_of = field
+					field.size_is = f
+				elif f.name == field.length_is:
+					f.size_is_of = field
+					field.length_is = f
+			#assert field.size_is is None or isinstance(field.size_is, FieldSizeIs)
+			#assert field.length_is is None or isinstance(field.length_is, FieldSizeIs)
 		elif isinstance(field, FieldSubctxSize):
 			for f in fields:
 				if f.name == field.subcontext_size_of:

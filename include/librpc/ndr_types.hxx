@@ -8,6 +8,7 @@
 
 #include <string>
 #include <memory>
+#include "include/charset.hxx"
 
 namespace idl {
 
@@ -24,12 +25,13 @@ static inline size_t vector_ptr_get_size(const std::shared_ptr<std::vector<T>> &
 template <typename NT>
 struct ndr_traits_at_t
 {
-	NT &nt;
+	NT nt;
 	x_ndr_off_t pos;
-	void operator()(x_ndr_push_t &ndr, typename NT::ndr_base_type val, x_ndr_off_t epos, uint32_t flags) const {
+	uint32_t flags;
+	void operator()(x_ndr_push_t &ndr, typename NT::ndr_base_type val, x_ndr_off_t epos) const {
 		X_ASSERT(x_ndr_scalars_default(val, ndr, pos, epos, flags, X_NDR_SWITCH_NONE) > 0);
 	}
-	typename NT::ndr_base_type operator()(x_ndr_pull_t &ndr, x_ndr_off_t epos, uint32_t flags) const {
+	typename NT::ndr_base_type operator()(x_ndr_pull_t &ndr, x_ndr_off_t epos) const {
 		typename NT::ndr_base_type val;
 		X_ASSERT(x_ndr_scalars_default(val, ndr, pos, epos, flags, X_NDR_SWITCH_NONE) > 0);
 		return val;
@@ -438,20 +440,28 @@ template <> struct ndr_traits_t<std::string>
 template <> struct ndr_traits_t<std::u16string>
 {
 	using has_buffers = std::false_type;
+
 	x_ndr_off_t scalars(const std::u16string &val, x_ndr_push_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, x_ndr_switch_t level) const {
 		X_ASSERT(level == X_NDR_SWITCH_NONE);
-		X_TODO;
-		return bpos;
+		X_ASSERT(!X_NDR_BE(flags)); // TODO support bigendian
+		return x_ndr_push_bytes(val.data(), ndr, bpos, epos, val.size() * 2);
 	}
+
 	x_ndr_off_t scalars(std::u16string &val, x_ndr_pull_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, x_ndr_switch_t level) const {
 		X_ASSERT(level == X_NDR_SWITCH_NONE);
-		X_TODO;
-		return bpos;
+		X_ASSERT(!X_NDR_BE(flags)); // TODO support bigendian
+		size_t length = epos - bpos;
+		if (length & 1) {
+			return -NDR_ERR_LENGTH;
+		}
+		val.assign((const char16_t *)(ndr.get_data() + bpos), (const char16_t *)(ndr.get_data() + epos)); 
+		return epos;
 	}
+
 	void ostr(const std::u16string &val, x_ndr_ostr_t &ndr, uint32_t flags, x_ndr_switch_t level) const {
 		X_ASSERT(level == X_NDR_SWITCH_NONE);
 		ndr << enter;
-		X_TODO;
+		ndr << "u'" << x_convert_utf16_to_utf8(val) << "'";
 		ndr << leave;
 	}
 };
@@ -605,7 +615,6 @@ inline x_ndr_off_t x_ndr_buffers_unique_string(NT &&nt, std::shared_ptr<T> &t, x
 
 #define X_NDR_OSTR_UNIQUE_STRING X_NDR_OSTR_STRING_PTR
 
-
 template <typename T>
 inline x_ndr_off_t x_ndr_scalars_unique_vector(const std::shared_ptr<T> &t, x_ndr_push_t &ndr,
 		x_ndr_off_t bpos, x_ndr_off_t epos,
@@ -635,26 +644,58 @@ inline x_ndr_off_t x_ndr_scalars_unique_vector(std::shared_ptr<T> &t, x_ndr_pull
 	return bpos;
 }
 
-template <typename T, typename NT>
-inline x_ndr_off_t x_ndr_buffers_unique_vector(NT &&nt, const std::shared_ptr<T> &t, x_ndr_push_t &ndr,
+template <typename T, typename NT, typename AT>
+inline x_ndr_off_t x_ndr_buffers_unique_size_is(
+		NT &&nt, const std::shared_ptr<T> &t, x_ndr_push_t &ndr,
 		x_ndr_off_t bpos, x_ndr_off_t epos,
-		uint32_t flags, x_ndr_switch_t level)
+		uint32_t flags, x_ndr_switch_t level,
+		AT &&size_is)
 {
-	X_TODO;
+	if (t) {
+		size_is(ndr, t->size(), epos);
+		bpos = x_ndr_scalars_default(uint3264(t->size()), ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
+		if (bpos < 0) {
+			return bpos;
+		}
+		for (auto &v: *t) {
+			bpos = x_ndr_both(nt, v, ndr, bpos, epos, flags, level);
+			if (bpos < 0) {
+				return bpos;
+			}
+		}
+	}
 	return bpos;
 }
 
-template <typename T, typename NT>
-inline x_ndr_off_t x_ndr_buffers_unique_vector(NT &&nt, std::shared_ptr<T> &t, x_ndr_pull_t &ndr,
+template <typename T, typename NT, typename AT>
+inline x_ndr_off_t x_ndr_buffers_unique_size_is(
+		NT &&nt, std::shared_ptr<T> &t, x_ndr_pull_t &ndr,
 		x_ndr_off_t bpos, x_ndr_off_t epos,
-		uint32_t flags, x_ndr_switch_t level)
+		uint32_t flags, x_ndr_switch_t level,
+		AT &&size_is)
 {
-	X_TODO;
+	if (t) {
+		// we ignore it for now since size is duplicated, auto s = size_is(ndr, epos);
+		uint3264 size;
+		bpos = x_ndr_scalars_default(size, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
+		if (bpos < 0) {
+			return bpos;
+		}
+
+		t->resize(size.val); // TODO check size valid, not exhaust memory
+		for (auto &v: *t) {
+			bpos = x_ndr_both(nt, v, ndr, bpos, epos, flags, level);
+			if (bpos < 0) {
+				return bpos;
+			}
+		}
+	}
 	return bpos;
 }
 
 template <typename T, typename NT, typename SizeIs, typename LengthIs>
-inline x_ndr_off_t x_ndr_buffers_unique_size_is(NT &&nt, const std::shared_ptr<T> &t, x_ndr_push_t &ndr,
+inline x_ndr_off_t x_ndr_buffers_unique_length_is(
+		NT &&nt, const std::shared_ptr<T> &t, x_ndr_push_t &ndr,
 		x_ndr_off_t bpos, x_ndr_off_t epos,
 		uint32_t flags, x_ndr_switch_t level,
 		SizeIs &&size_is, LengthIs &&length_is)
@@ -664,7 +705,8 @@ inline x_ndr_off_t x_ndr_buffers_unique_size_is(NT &&nt, const std::shared_ptr<T
 }
 
 template <typename T, typename NT, typename SizeIs, typename LengthIs>
-inline x_ndr_off_t x_ndr_buffers_unique_size_is(NT &&nt, std::shared_ptr<T> &t, x_ndr_pull_t &ndr,
+inline x_ndr_off_t x_ndr_buffers_unique_length_is(
+		NT &&nt, std::shared_ptr<T> &t, x_ndr_pull_t &ndr,
 		x_ndr_off_t bpos, x_ndr_off_t epos,
 		uint32_t flags, x_ndr_switch_t level,
 		SizeIs &&size_is, LengthIs &&length_is)
@@ -689,8 +731,11 @@ static inline void x_ndr_ostr_unique_vector(NT &&nt, const std::shared_ptr<std::
 #define X_NDR_BUFFERS_UNIQUE_VECTOR(nt, val, ndr, bpos, epos, flags, level) \
 	X_NDR_VERIFY((bpos), x_ndr_buffers_unique_vector((nt){}, (val), (ndr), (bpos), (epos), flags, level))
 
-#define X_NDR_BUFFERS_UNIQUE_LENGTH_IS(nt, val, ndr, bpos, epos, flags, level, size_is_type, size_is_name, length_is_type, length_is_name) \
-	X_NDR_VERIFY((bpos), x_ndr_buffers_unique_length_is((nt){}, (val), (ndr), (bpos), (epos), flags, level, x_ndr_at_t<size_is_type>(__pos_##size_is_name), x_ndr_at_t<length_is_type>(__pos_##length_is_name)))
+#define X_NDR_BUFFERS_UNIQUE_SIZE_IS(nt, val, ndr, bpos, epos, flags, level, at_size_is) \
+	X_NDR_VERIFY((bpos), x_ndr_buffers_unique_size_is((nt){}, (val), (ndr), (bpos), (epos), (flags), (level), (at_size_is)))
+
+#define X_NDR_BUFFERS_UNIQUE_LENGTH_IS(nt, val, ndr, bpos, epos, flags, level, at_size_is, at_length_is) \
+	X_NDR_VERIFY((bpos), x_ndr_buffers_unique_length_is((nt){}, (val), (ndr), (bpos), (epos), (flags), (level), (at_size_is), (at_length_is)))
 
 #define X_NDR_OSTR_UNIQUE_VECTOR(nt, val, ndr, flags, level) \
 	x_ndr_ostr_unique_vector((nt){}, (val), (ndr), (flags), (level))
@@ -704,7 +749,7 @@ x_ndr_off_t x_ndr_buffers_relative_ptr(NT &&nt,
 {
 	if (val) {
 		X_NDR_DO_ALIGN(ndr, bpos, epos, flags);
-		pos_at(ndr, bpos - ndr.base, epos, flags);
+		pos_at(ndr, bpos - ndr.base, epos);
 		bpos = x_ndr_both(nt, *val, ndr, bpos, epos, flags, level);
 	} 
 	return bpos;
@@ -717,7 +762,7 @@ x_ndr_off_t x_ndr_buffers_relative_ptr(NT &&nt,
 		uint32_t flags, x_ndr_switch_t level,
 		AT &&pos_at)
 {
-	auto offset = pos_at(ndr, epos, flags);
+	auto offset = pos_at(ndr, epos);
 	if (offset) {
 		X_NDR_CHECK_ALIGN(ndr, flags, offset);
 		val = x_ndr_allocate_ptr<T>(level);
@@ -744,13 +789,13 @@ x_ndr_off_t x_ndr_buffers_relative_ptr(NT &&nt,
 	x_ndr_off_t orig_bpos = bpos;
 	if (val) {
 		X_NDR_DO_ALIGN(ndr, bpos, epos, flags);
-		pos_at(ndr, bpos - ndr.base, epos, flags);
+		pos_at(ndr, bpos - ndr.base, epos);
 		bpos = x_ndr_both(nt, *val, ndr, bpos, epos, flags, level);
 		if (bpos < 0) {
 			return bpos;
 		}
 	}
-	size_at(ndr, bpos - orig_bpos, epos, flags);
+	size_at(ndr, bpos - orig_bpos, epos);
 	return bpos;
 }
 
@@ -761,13 +806,13 @@ x_ndr_off_t x_ndr_buffers_relative_ptr(NT &&nt,
 		uint32_t flags, x_ndr_switch_t level,
 		AT &&pos_at, SIZE_AT &&size_at)
 {
-	auto offset = pos_at(ndr, epos, flags);
+	auto offset = pos_at(ndr, epos);
 	if (offset) {
 		X_NDR_CHECK_ALIGN(ndr, flags, offset);
 		val = std::make_shared<T>();
 		val->__init(level);
 
-		auto size = size_at(ndr, epos, flags);
+		auto size = size_at(ndr, epos);
 		x_ndr_off_t tmp_bpos = X_NDR_CHECK_POS(ndr.base + offset, 0, epos);
 		tmp_bpos = x_ndr_both(nt, *val, ndr, tmp_bpos, epos, flags, level);
 		epos = X_NDR_CHECK_POS(tmp_bpos + size, tmp_bpos, epos);
@@ -781,8 +826,8 @@ x_ndr_off_t x_ndr_buffers_relative_ptr(NT &&nt,
 }
 
 
-#define X_NDR_BUFFERS_RELATIVE_PTR__0(nt, val, ndr, bpos, epos, flags, level, pos_nt, pos_ptr) \
-	X_NDR_VERIFY((bpos), x_ndr_buffers_relative_ptr((nt){}, (val), (ndr), (bpos), (epos), (flags), (level), (ndr_traits_at_t<const pos_nt>{pos_nt{}, (pos_ptr)})))
+#define X_NDR_BUFFERS_RELATIVE_PTR__0(nt, val, ndr, bpos, epos, flags, level, at_ptr) \
+	X_NDR_VERIFY((bpos), x_ndr_buffers_relative_ptr((nt){}, (val), (ndr), (bpos), (epos), (flags), (level), (at_ptr)))
 
 #define X_NDR_BUFFERS_RELATIVE_PTR__1(nt, val, ndr, bpos, epos, flags, level, pos_nt, pos_ptr, size_nt, size_ptr) \
 	X_NDR_VERIFY((bpos), x_ndr_buffers_relative_ptr((nt){}, (val), (ndr), (bpos), (epos), (flags), (level), (ndr_traits_at_t<const pos_nt>{pos_nt{}, (pos_ptr)}), (ndr_traits_at_t<const size_nt>{size_nt{}, (size_ptr)})))
