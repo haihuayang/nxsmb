@@ -405,8 +405,6 @@ struct x_ndr_type_bitmap { };
 struct x_ndr_type_struct { };
 struct x_ndr_type_union { };
 
-using u16string = std::u16string;
-
 
 template <typename T>
 struct x_hex_t
@@ -519,10 +517,10 @@ struct x_ndr_ptr_allocator_t
 	}
 };
 
-template <typename T>
+template <typename T, typename NT>
 inline std::shared_ptr<T> x_ndr_allocate_ptr(x_ndr_switch_t level)
 {
-	return x_ndr_ptr_allocator_t<T, typename ndr_traits_t<T>::ndr_data_type>()(level);
+	return x_ndr_ptr_allocator_t<T, typename NT::ndr_data_type>()(level);
 }
 
 template <typename T>
@@ -1299,9 +1297,8 @@ static inline x_ndr_off_t x_ndr_scalars(std::string &t, x_ndr_pull_t &ndr,
 {
 	return x_ndr_pull_string(t, ndr, bpos, epos, flags);
 }
-
-typedef uint32_t ipv4address;
 #endif
+
 x_ndr_off_t x_ndr_push_u16string(const std::u16string &str, x_ndr_push_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags);
 x_ndr_off_t x_ndr_pull_u16string(std::u16string &str, x_ndr_pull_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags);
 
@@ -1329,7 +1326,7 @@ struct astring
 	x_ndr_off_t ndr_scalars(x_ndr_pull_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, x_ndr_switch_t level);
 	std::string val;
 };
-#endif
+
 struct nstring
 {
 	x_ndr_off_t ndr_scalars(x_ndr_push_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, x_ndr_switch_t level) const;
@@ -1346,7 +1343,6 @@ struct nstring_array
 	std::vector<std::string> val;
 };
 
-#if 0
 struct blob_t
 {
 	x_ndr_off_t ndr_scalars(x_ndr_push_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, x_ndr_switch_t level) const;

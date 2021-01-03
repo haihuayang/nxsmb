@@ -7,6 +7,9 @@ TARGET_SET_idl := \
 	netlogon \
 	krb5pac \
 	ntlmssp \
+	dcerpc \
+	svcctl \
+	srvsvc \
 
 a=\
 	mytest_x_elem_size \
@@ -18,7 +21,6 @@ a=\
 
 a=\
 	wkssvc \
-	srvsvc \
 	security \
 	misc \
 	netlogon \
@@ -30,7 +32,6 @@ a=\
 	backupkey \
 	fscc \
 	bkupblobs \
-	svcctl \
 	srvsvc \
 	browser \
 	winreg \
@@ -87,7 +88,6 @@ a=\
 	wmi \
 	wzcsvc \
 	xattr \
-	dcerpc \
 
 a=\
 	dcom \

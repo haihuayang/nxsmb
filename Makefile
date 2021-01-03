@@ -37,8 +37,7 @@ TARGET_SET_dir := bin lib lib/librpc librpc/idl src tests \
 
 .PHONY: all target_mkdir host_mkdir target_samba_gen
 TARGET_SET_tests := test-timer  test-wbcli test-wbpool test-mbuf \
-	test-security test-krb5pac
-a=test-krb5pac test-ntlmssp
+	test-security test-krb5pac test-ntlmssp
 
 TARGET_SET_lib := nxsmb samba
 
@@ -78,8 +77,7 @@ TARGET_CFLAGS_EXTRA := \
 	-Isamba/source3 \
 	-D__X_DEVELOPER__=1
 
-all: $(TARGET_SET_tests:%=$(TARGET_DIR_out)/tests/%)
-#$(TARGET_DIR_out)/bin/nxsmbd
+all: $(TARGET_SET_tests:%=$(TARGET_DIR_out)/tests/%) $(TARGET_DIR_out)/bin/nxsmbd
 
 SET_src_nxsmbd := auth_ntlmssp auth_krb5 auth_spnego auth \
 	network misc \
@@ -268,6 +266,7 @@ TARGET_SRC_libnxsmb := \
 		lib/librpc/netlogon \
 		lib/librpc/krb5pac \
 		lib/librpc/ntlmssp \
+		lib/librpc/dcerpc \
 		lib/xutils \
 		lib/threadpool \
 		lib/evtmgmt \

@@ -72,25 +72,28 @@ template <> struct x_ndr_traits_t<ntlmssp_Version> {
 	using has_buffers = std::false_type;
 	using ndr_data_type x_ndr_type_union;
 };
-
+#endif
 
 struct NEGOTIATE_MESSAGE {
-	x_ndr_off_t ndr_scalars(x_ndr_push_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level) const;
-	x_ndr_off_t ndr_buffers(x_ndr_push_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level) const;
-	x_ndr_off_t ndr_scalars(x_ndr_pull_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level);
-	x_ndr_off_t ndr_buffers(x_ndr_pull_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level);
-	void ostr(x_ndr_ostr_t &__ndr, uint32_t __flags, x_ndr_switch_t __level) const;
 	NEGOTIATE NegotiateFlags;
 	std::shared_ptr<std::string> DomainName; // x_ndr_relative_ptr_t<sstring, uint16, uint16> DomainName;/* [relative] */
 	std::shared_ptr<std::string> Workstation; // x_ndr_relative_ptr_t<sstring, uint16, uint16> Workstation;/* [relative] */
 	ntlmssp_Version Version;/* [switch_is(NegotiateFlags&NTLMSSP_NEGOTIATE_VERSION)] */
 } /* [public] */;
 
-template <> struct x_ndr_traits_t<NEGOTIATE_MESSAGE> {
+template <> struct ndr_traits_t<NEGOTIATE_MESSAGE> {
+	using ndr_base_type = NEGOTIATE_MESSAGE;
 	using has_buffers = std::true_type;
-	using ndr_data_type x_ndr_type_struct;
+	using ndr_data_type = x_ndr_type_struct;
+
+	x_ndr_off_t scalars(const NEGOTIATE_MESSAGE &__val, x_ndr_push_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level) const;
+	x_ndr_off_t scalars(NEGOTIATE_MESSAGE &__val, x_ndr_pull_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level) const;
+	x_ndr_off_t buffers(const NEGOTIATE_MESSAGE &__val, x_ndr_push_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level) const;
+	x_ndr_off_t buffers(NEGOTIATE_MESSAGE &__val, x_ndr_pull_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level) const;
+	void ostr(const NEGOTIATE_MESSAGE &__val, x_ndr_ostr_t &__ndr, uint32_t __flags, x_ndr_switch_t __level) const;
 };
 
+#if 0
 enum ntlmssp_AvId : uint16 {
 	MsvAvEOL=0,
 	MsvAvNbComputerName=1,
@@ -227,13 +230,9 @@ template <> struct x_ndr_traits_t<AV_PAIR_LIST> {
 	using has_buffers = std::false_type;
 	using ndr_data_type x_ndr_type_struct;
 };
+#endif
 
 struct CHALLENGE_MESSAGE {
-	x_ndr_off_t ndr_scalars(x_ndr_push_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level) const;
-	x_ndr_off_t ndr_buffers(x_ndr_push_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level) const;
-	x_ndr_off_t ndr_scalars(x_ndr_pull_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level);
-	x_ndr_off_t ndr_buffers(x_ndr_pull_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level);
-	void ostr(x_ndr_ostr_t &__ndr, uint32_t __flags, x_ndr_switch_t __level) const;
 	std::shared_ptr<gstring> TargetName;/* [relative, flag(x_ndr_ntlmssp_negotiated_string_flags(NegotiateFlags))] */
 	NEGOTIATE NegotiateFlags;
 	std::array<uint8, 8> ServerChallenge;
@@ -242,11 +241,18 @@ struct CHALLENGE_MESSAGE {
 	ntlmssp_Version Version;/* [switch_is(NegotiateFlags&NTLMSSP_NEGOTIATE_VERSION)] */
 } /* [public, flag(LIBNDR_PRINT_ARRAY_HEX)] */;
 
-template <> struct x_ndr_traits_t<CHALLENGE_MESSAGE> {
+template <> struct ndr_traits_t<CHALLENGE_MESSAGE> {
+	using ndr_base_type = CHALLENGE_MESSAGE;
 	using has_buffers = std::true_type;
-	using ndr_data_type x_ndr_type_struct;
-};
+	using ndr_data_type = x_ndr_type_struct;
 
+	x_ndr_off_t scalars(const CHALLENGE_MESSAGE &__val, x_ndr_push_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level) const;
+	x_ndr_off_t scalars(CHALLENGE_MESSAGE &__val, x_ndr_pull_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level) const;
+	x_ndr_off_t buffers(const CHALLENGE_MESSAGE &__val, x_ndr_push_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level) const;
+	x_ndr_off_t buffers(CHALLENGE_MESSAGE &__val, x_ndr_pull_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level) const;
+	void ostr(const CHALLENGE_MESSAGE &__val, x_ndr_ostr_t &__ndr, uint32_t __flags, x_ndr_switch_t __level) const;
+};
+#if 0
 struct LM_RESPONSE {
 	x_ndr_off_t ndr_scalars(x_ndr_push_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level) const;
 	x_ndr_off_t ndr_scalars(x_ndr_pull_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level);
@@ -361,13 +367,8 @@ template <> struct x_ndr_traits_t<ntlmssp_MIC> {
 	using has_buffers = std::false_type;
 	using ndr_data_type x_ndr_type_struct;
 };
-
+#endif
 struct AUTHENTICATE_MESSAGE {
-	x_ndr_off_t ndr_scalars(x_ndr_push_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level) const;
-	x_ndr_off_t ndr_buffers(x_ndr_push_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level) const;
-	x_ndr_off_t ndr_scalars(x_ndr_pull_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level);
-	x_ndr_off_t ndr_buffers(x_ndr_pull_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level);
-	void ostr(x_ndr_ostr_t &__ndr, uint32_t __flags, x_ndr_switch_t __level) const;
 	std::shared_ptr<LM_RESPONSE> LmChallengeResponse; //x_ndr_relative_ptr_t<LM_RESPONSE, uint16, uint16> LmChallengeResponse;/* [relative] */
 	std::shared_ptr<DATA_BLOB> NtChallengeResponse;/* [relative] */
 	std::shared_ptr<gstring> DomainName; // x_ndr_relative_ptr_t<gstring, uint16, uint16> DomainName;/* [relative, flag(x_ndr_ntlmssp_negotiated_string_flags(NegotiateFlags))] */
@@ -379,10 +380,20 @@ struct AUTHENTICATE_MESSAGE {
 	ntlmssp_MIC mic;
 } /* [public, flag(LIBNDR_FLAG_REMAINING)] */;
 
-template <> struct x_ndr_traits_t<AUTHENTICATE_MESSAGE> {
+template <> struct ndr_traits_t<AUTHENTICATE_MESSAGE> {
+	using ndr_base_type = AUTHENTICATE_MESSAGE;
 	using has_buffers = std::true_type;
-	using ndr_data_type x_ndr_type_struct;
+	using ndr_data_type = x_ndr_type_struct;
+
+	x_ndr_off_t scalars(const AUTHENTICATE_MESSAGE &__val, x_ndr_push_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level) const;
+	x_ndr_off_t scalars(AUTHENTICATE_MESSAGE &__val, x_ndr_pull_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level) const;
+	x_ndr_off_t buffers(const AUTHENTICATE_MESSAGE &__val, x_ndr_push_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level) const;
+	x_ndr_off_t buffers(AUTHENTICATE_MESSAGE &__val, x_ndr_pull_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level) const;
+	void ostr(const AUTHENTICATE_MESSAGE &__val, x_ndr_ostr_t &__ndr, uint32_t __flags, x_ndr_switch_t __level) const;
 };
+
+
+#if 0
 const int NTLMSSP_SIGN_VERSION = 0x01;
 const int NTLMSSP_SIG_SIZE = 16;
 

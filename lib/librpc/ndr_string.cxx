@@ -287,30 +287,6 @@ void gstring::ostr(x_ndr_ostr_t &ndr, uint32_t flags, x_ndr_switch_t level) cons
 	ndr.os << '"' << val << '"';
 }
 
-x_ndr_off_t nstring::ndr_scalars(x_ndr_push_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, x_ndr_switch_t level) const
-{
-	X_ASSERT(false);
-	return bpos;
-}
-
-x_ndr_off_t nstring::ndr_scalars(x_ndr_pull_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, x_ndr_switch_t level)
-{
-	X_ASSERT(false);
-	return bpos;
-}
-
-x_ndr_off_t nstring_array::ndr_scalars(x_ndr_push_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, x_ndr_switch_t level) const
-{
-	X_ASSERT(false);
-	return bpos;
-}
-
-x_ndr_off_t nstring_array::ndr_scalars(x_ndr_pull_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, x_ndr_switch_t level)
-{
-	X_ASSERT(false);
-	return bpos;
-}
-
 x_ndr_off_t x_ndr_push_string(const std::string &str, x_ndr_push_t &ndr,
 		x_ndr_off_t bpos, x_ndr_off_t epos,
 		uint32_t extra_flags)

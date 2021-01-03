@@ -264,8 +264,12 @@ known_simple_types = {
 	'NTSTATUS': [4, True, False],
 	'NTTIME': [4, True, False],
 	'time_t': [4, True, False],
+	'ipv4address': [4, True, False],
+	'ipv6address': [4, True, False], #16?
+	'WERROR': [4, True, False],
 	'DATA_BLOB': [4, False, False],
-        'u16string': [4, False, False],
+        'u16string': [2, False, False],
+        'u8string': [1, False, False],
 }
 
 alias_types = {
@@ -273,6 +277,8 @@ alias_types = {
         'NTTIME_hyper': ['NTTIME', 'ndr_traits_NTTIME_hyper', 8],
 	'dom_sid2': [ 'dom_sid', 'ndr_traits_dom_sid2', None],
 	's2u16string': [ 'u16string', 'ndr_traits_s2u16string', 1],
+	'nstring': [ 'u16string', 'ndr_traits_nstring', 2],
+	'astring': [ 'u8string', 'ndr_traits_astring', 1],
 }
 
 def find_type(idl, tname):
@@ -333,6 +339,14 @@ def elem_get_info(elem, idl_tbl):
 			# an alignment of 4 for NDR and 8 for NDR64
 			align = 5
 			has_buffers = True
+			is_trivial = False
+
+		array_len = get_array_len(elem)
+		if array_len is not None:
+			try:
+				int(array_len)
+			except ValueError:
+				is_trivial = False
 
 		base_type = elem['TYPE']
 		try:
@@ -342,11 +356,13 @@ def elem_get_info(elem, idl_tbl):
 		except KeyError: pass
 
 		try:
-			align_, is_trivial, has_buffers_ = known_simple_types[base_type]
+			align_, is_trivial_, has_buffers_ = known_simple_types[base_type]
 			if align is None:
 				align = align_
 			if has_buffers is None:
 				has_buffers = has_buffers_
+			if is_trivial is None:
+				is_trivial = is_trivial_
 			return 'PRIMARY', None, base_type, ndr_traits, align, is_trivial, has_buffers
 		except KeyError: pass
 
@@ -438,7 +454,7 @@ class FieldBase(object):
 			if self.subcontext_level == 0:
 				self.subcontext_size = self.get_property("subcontext_size")
 				assert self.subcontext_size is not None
-				assert elem_get_pointers(self.json_elem)
+				# TODO assert elem_get_pointers(self.json_elem)
 			elif self.subcontext_level == 0xFFFFFC01:
 				self.has_buffers_in_subwrapper, self.has_buffers = self.has_buffers, False
 				assert not elem_get_pointers(self.json_elem)
@@ -486,12 +502,14 @@ class FieldBase(object):
 		if not self.has_buffers:
 			return ret
 
-		if isinstance(self, FieldRelativePtr): # TODO ugly
+		if isinstance(self, FieldRelativePtr) or isinstance(self, FieldRelativeVector):
 			ret.append(f'ndr_traits_at_t<ndr_traits_t<uint32>> __at_{self.name}{{ndr_traits_t<uint32>(), {ndr_arg}.load_pos(),{self.get_ndr_flags()}}};')
 			#x_ndr_off_t __relptr_pos_{self.name} = {ndr_arg}.load_pos();')
 
 		new_epos_arg = epos_arg
 		new_ndr_arg = ndr_arg
+		if self.x_ndr_sizes and func == 'PUSH':
+			ret.append(f'x_ndr_off_t __pos_{self.name} = {bpos_arg};')
 		if self.x_ndr_sizes and func == 'PULL':
 			ret.append(f'x_ndr_off_t __epos_{self.name} = {epos_arg};')
 			new_epos_arg = f'__epos_{self.name}';
@@ -558,7 +576,24 @@ class FieldBase(object):
 		if switch_is is None:
 			return 'X_NDR_SWITCH_NONE'
 		else:
-			return f'__val.{switch_is}'
+			ro = re.compile('[A-Za-z_][A-Za-z0-9_]*')
+			pos, comps = 0, []
+			while True:
+				m = ro.search(switch_is, pos)
+				if not m:
+					break
+				start, end = m.span()
+				if start != pos:
+					comps.append(switch_is[pos:start])
+				op_name = switch_is[start:end]
+				for f in self.fields:
+					if f.name == op_name:
+						comps.append('__val.')
+						break
+				comps.append(op_name)
+				pos = end
+			comps.append(switch_is[pos:])
+			return ''.join(comps)
 	def get_ndr_flags(self, flag_arg = '__flags'):
 		flag = self.get_property('flag')
 		if flag is None:
@@ -605,9 +640,10 @@ class FieldValue(FieldDerived):
 	def scalars__(self, func, ndr_arg, bpos_arg, epos_arg, flags_arg):
 		if self.array_len is not None:
 			ctype = f'std::array<{self.base_type}, {self.array_len}>'
+			return f'X_NDR_SCALARS_ARRAY_VALUE({self.get_ndr_traits()}, ({ctype}{{{self.value}}}), {ndr_arg}, {bpos_arg}, {epos_arg}, {self.get_ndr_flags()}, {self.get_switch_is()});'
 		else:
 			ctype = self.base_type
-		return f'X_NDR_SCALARS_VALUE({self.get_ndr_traits()}, {ctype}{{{self.value}}}, {ndr_arg}, {bpos_arg}, {epos_arg}, {self.get_ndr_flags()}, {self.get_switch_is()});'
+			return f'X_NDR_SCALARS_VALUE({self.get_ndr_traits()}, ({ctype}{{{self.value}}}), {ndr_arg}, {bpos_arg}, {epos_arg}, {self.get_ndr_flags()}, {self.get_switch_is()});'
 
 class FieldVectorLen(FieldDerived):
 	def __init__(self, json_elem, idl_tbl, vector_name):
@@ -643,9 +679,11 @@ class FieldSubctxSize(FieldDerived):
 		super().__init__(json_elem, idl_tbl)
 		self.subcontext_size_of = subcontext_size_of
 		assert self.get_property('switch_is') is None
-		self.has_buffers = True
 	def scalars__(self, func, ndr_arg, bpos_arg, epos_arg, flags_arg):
-		return f'X_NDR_SAVE_POS({self.base_type}, {ndr_arg}, {bpos_arg}, {epos_arg}, {self.get_ndr_flags()});'
+		if self.has_buffers:
+			return f'X_NDR_SAVE_POS({self.base_type}, {ndr_arg}, {bpos_arg}, {epos_arg}, {self.get_ndr_flags()});'
+		else:
+			assert False, 'TODO'
 	def buffers__(self, func, ndr_arg, bpos_arg, epos_arg, flags_arg):
 		assert self.has_buffers
 		return f'x_ndr_off_t __pos_{self.name} = {ndr_arg}.load_pos();'
@@ -729,6 +767,23 @@ class FieldRelativePtr(FieldPtr):
 	def buffers__(self, func, ndr_arg, bpos_arg, epos_arg, flags_arg):
 		return f'X_NDR_BUFFERS_RELATIVE_PTR__0({self.get_ndr_traits()}, __val.{self.name}, {ndr_arg}, {bpos_arg}, {epos_arg}, {self.get_ndr_flags()}, {self.get_switch_is()}, __at_{self.name});'
 
+class FieldRelativeVector(FieldPtr):
+	def __init__(self, json_elem, idl_tbl, size_is, length_is):
+		super().__init__(json_elem, idl_tbl)
+		self.size_is, self.length_is = size_is, length_is
+	def declare__(self):
+		return f'std::shared_ptr<std::vector<{self.base_type}>> {self.name}; /* FieldUniqueVector */'
+	def scalars__(self, func, ndr_arg, bpos_arg, epos_arg, flags_arg):
+		return f'X_NDR_SAVE_POS(uint32, {ndr_arg}, {bpos_arg}, {epos_arg}, {self.get_ndr_flags()});'
+	def buffers__(self, func, ndr_arg, bpos_arg, epos_arg, flags_arg):
+		if self.length_is:
+			assert False
+			return f'X_NDR_BUFFERS_RELATIVE_LENGTH_IS({self.get_ndr_traits()}, __val.{self.name}, {ndr_arg}, {bpos_arg}, {epos_arg}, {self.get_ndr_flags()}, {self.get_switch_is()}, __at_{self.size_is.name}, __at_{self.length_is.name});'
+		else:
+			return f'X_NDR_BUFFERS_RELATIVE_SIZE_IS({self.get_ndr_traits()}, __val.{self.name}, {ndr_arg}, {bpos_arg}, {epos_arg}, {self.get_ndr_flags()}, {self.get_switch_is()}, __at_{self.name}, __at_{self.size_is.name});'
+	def ostr__(self):
+		return f'X_NDR_OSTR_PTR_VECTOR({self.get_ndr_traits()}, __val.{self.name}, __ndr, {self.get_ndr_flags()}, {self.get_switch_is()});'
+
 class FieldUniquePtr(FieldPtr):
 	def scalars__(self, func, ndr_arg, bpos_arg, epos_arg, flags_arg):
 		return f'X_NDR_SCALARS_UNIQUE_PTR({self.get_ndr_traits()}, __val.{self.name}, {ndr_arg}, {bpos_arg}, {epos_arg}, {self.get_ndr_flags()}, {self.get_switch_is()});'
@@ -750,7 +805,7 @@ class FieldUniqueVector(FieldPtr):
 		else:
 			return f'X_NDR_BUFFERS_UNIQUE_SIZE_IS({self.get_ndr_traits()}, __val.{self.name}, {ndr_arg}, {bpos_arg}, {epos_arg}, {self.get_ndr_flags()}, {self.get_switch_is()}, __at_{self.size_is.name});'
 	def ostr__(self):
-		return f'X_NDR_OSTR_UNIQUE_VECTOR({self.get_ndr_traits()}, __val.{self.name}, __ndr, {self.get_ndr_flags()}, {self.get_switch_is()});'
+		return f'X_NDR_OSTR_PTR_VECTOR({self.get_ndr_traits()}, __val.{self.name}, __ndr, {self.get_ndr_flags()}, {self.get_switch_is()});'
 
 class FieldUniqueString(FieldPtr):
 	def __init__(self, json_elem, idl_tbl, string_type):
@@ -794,7 +849,7 @@ def make_field(elem, t, iface, idl_tbl):
 
 	master_elem = elem_is_property_of(elem, t, 'subcontext_size')
 	if master_elem:
-		assert elem_get_pointers(master_elem)
+		# TODO assert elem_get_pointers(master_elem)
 		return FieldSubctxSize(elem, idl_tbl, master_elem['NAME'])
 
 	value = elem_get_property(elem, 'value')
@@ -860,7 +915,10 @@ def make_field(elem, t, iface, idl_tbl):
 	assert not length_is or size_is
 
 	if pointer_type == "relative":
-		return FieldRelativePtr(elem, idl_tbl)
+		if size_is or length_is:
+			return FieldRelativeVector(elem, idl_tbl, size_is, length_is)
+		else:
+			return FieldRelativePtr(elem, idl_tbl)
 	elif pointer_type == "unique":
 		if size_is or length_is:
 			return FieldUniqueVector(elem, idl_tbl, size_is, length_is)
@@ -872,6 +930,7 @@ def make_field(elem, t, iface, idl_tbl):
 def make_fields(t, iface, idl_tbl):
 	fields = [ make_field(e, t, iface, idl_tbl) for e in typedef_get_elements(t) ]
 	for field in fields:
+		field.fields = fields
 		if isinstance(field, FieldXNdrSize):
 			for f in fields:
 				if f.name == field.ndr_size_elem:
@@ -880,12 +939,12 @@ def make_fields(t, iface, idl_tbl):
 					break
 			else:
 				assert False, f'Cannot find x_ndr_size {field.size_elem_name}'
-		elif isinstance(field, FieldUniqueVector):
+		elif isinstance(field, FieldUniqueVector) or isinstance(field, FieldRelativeVector):
 			for f in fields:
 				if f.name == field.size_is:
 					f.size_is_of = field
 					field.size_is = f
-				elif f.name == field.length_is:
+				if f.name == field.length_is: # length_is and size_is can be same field
 					f.size_is_of = field
 					field.length_is = f
 			#assert field.size_is is None or isinstance(field.size_is, FieldSizeIs)
@@ -894,6 +953,7 @@ def make_fields(t, iface, idl_tbl):
 			for f in fields:
 				if f.name == field.subcontext_size_of:
 					field.subcontext_size_of = f
+					field.has_buffers = f.has_buffers
 					f.subcontext_size = field
 					break
 			else:
@@ -1077,7 +1137,7 @@ def output_ndrcxx_struct_scalars(out, func, fields, t, iface, idl, idl_tbl):
 	if flag is not None: out(f'''
 	__flags = x_ndr_set_flags(__flags, {flag});
 ''')
-	alignment = max([f.alignment for f in fields])
+	alignment = max([field.alignment for field in fields]) if fields else 1
 	out(f'''
 	X_NDR_HEADER_ALIGN({alignment}, __ndr, __bpos, __epos, __flags);
 ''')
@@ -1120,7 +1180,6 @@ def output_ndrcxx_STRUCT(out, t, iface, idl, idl_tbl):
 	fields = make_fields(t, iface, idl_tbl)
 	tname = t["NAME"]
 	has_buffers = any([field.has_buffers for field in fields])
-	alignment = max([field.alignment for field in fields])
 	out(f'''
 
 /***** Generated function for {tname} *****/

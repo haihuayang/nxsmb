@@ -1363,28 +1363,28 @@ static inline NTSTATUS handle_negotiate(x_auth_ntlmssp_t &auth_ntlmssp,
 
 		pair.set_AvId(idl::MsvAvNbDomainName);
 		pair.Value.AvNbDomainName = target_name;
-		av_pair_list->pair.push_back(pair);
+		av_pair_list->pair.push_back(std::move(pair));
 
 		pair.set_AvId(idl::MsvAvNbComputerName);
 		pair.Value.AvNbComputerName = auth_ntlmssp.netbios_name;
-		av_pair_list->pair.push_back(pair);
+		av_pair_list->pair.push_back(std::move(pair));
 
 		pair.set_AvId(idl::MsvAvDnsDomainName);
 		pair.Value.AvDnsDomainName = auth_ntlmssp.dns_domain;
-		av_pair_list->pair.push_back(pair);
+		av_pair_list->pair.push_back(std::move(pair));
 
 		pair.set_AvId(idl::MsvAvDnsComputerName);
 		pair.Value.AvDnsComputerName = auth_ntlmssp.dns_name;
-		av_pair_list->pair.push_back(pair);
+		av_pair_list->pair.push_back(std::move(pair));
 
 		if (auth_ntlmssp.force_old_spnego) {
 			pair.set_AvId(idl::MsvAvTimestamp);
 			pair.Value.AvTimestamp = x_tick_to_nttime(tick_now);
-			av_pair_list->pair.push_back(pair);
+			av_pair_list->pair.push_back(std::move(pair));
 		}
 
 		pair.set_AvId(idl::MsvAvEOL);
-		av_pair_list->pair.push_back(pair);
+		av_pair_list->pair.push_back(std::move(pair));
 
 		auth_ntlmssp.server_av_pair_list = chal_msg.TargetInfo;
 	}
