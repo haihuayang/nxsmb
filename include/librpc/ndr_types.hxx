@@ -27,6 +27,7 @@ template <typename NT>
 struct ndr_traits_at_t
 {
 	NT nt;
+	typedef typename NT::ndr_base_type ndr_base_type;
 	x_ndr_off_t pos;
 	uint32_t flags;
 	void operator()(x_ndr_push_t &ndr, typename NT::ndr_base_type val, x_ndr_off_t epos) const {
@@ -38,6 +39,20 @@ struct ndr_traits_at_t
 		return val;
 	}
 };
+
+template <typename NT, typename T>
+static inline void x_ndr_size_at(const ndr_traits_at_t<NT> &at, x_ndr_push_t &ndr, const std::shared_ptr<std::vector<T>> &vector_ptr, x_ndr_off_t epos)
+{
+	if (vector_ptr) {
+		at(ndr, vector_ptr->size(), epos);
+	}
+}
+
+template <typename NT, typename T>
+static inline void x_ndr_size_at(const ndr_traits_at_t<NT> &at, x_ndr_pull_t &ndr, const std::shared_ptr<std::vector<T>> &vector_ptr, x_ndr_off_t epos)
+{
+}
+#define X_NDR_SIZE_AT x_ndr_size_at
 
 template <> struct ndr_traits_t<uint3264>
 {
@@ -756,14 +771,13 @@ inline x_ndr_off_t x_ndr_scalars_unique_vector(std::shared_ptr<T> &t, x_ndr_pull
 	return bpos;
 }
 
-template <typename T, typename NT, typename AT>
-x_ndr_off_t x_ndr_vector_size_is(
+template <typename T, typename NT>
+x_ndr_off_t x_ndr_vector(
 		NT &&nt, const std::vector<T> &t, x_ndr_push_t &ndr,
 		x_ndr_off_t bpos, x_ndr_off_t epos,
 		uint32_t flags, x_ndr_switch_t level,
-		AT &&size_is)
+		bool has_length_is)
 {
-	size_is(ndr, t.size(), epos);
 	bpos = x_ndr_scalars_default(uint3264(t.size()), ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
 	if (bpos < 0) {
 		return bpos;
@@ -777,12 +791,12 @@ x_ndr_off_t x_ndr_vector_size_is(
 	return bpos;
 }
 
-template <typename T, typename NT, typename AT>
-x_ndr_off_t x_ndr_vector_size_is(
+template <typename T, typename NT>
+x_ndr_off_t x_ndr_vector(
 		NT &&nt, std::vector<T> &t, x_ndr_pull_t &ndr,
 		x_ndr_off_t bpos, x_ndr_off_t epos,
 		uint32_t flags, x_ndr_switch_t level,
-		AT &&size_is)
+		bool has_length_is)
 {
 	// we ignore it for now since size is duplicated, auto s = size_is(ndr, epos);
 	uint3264 size;
@@ -801,51 +815,29 @@ x_ndr_off_t x_ndr_vector_size_is(
 	return bpos;
 }
 
-template <typename T, typename NT, typename AT>
-inline x_ndr_off_t x_ndr_buffers_unique_size_is(
+template <typename T, typename NT>
+inline x_ndr_off_t x_ndr_buffers_unique_vector(
 		NT &&nt, const std::shared_ptr<T> &t, x_ndr_push_t &ndr,
 		x_ndr_off_t bpos, x_ndr_off_t epos,
 		uint32_t flags, x_ndr_switch_t level,
-		AT &&size_is)
+		bool has_length_is)
 {
 	if (t) {
-		bpos = x_ndr_vector_size_is(nt, *t, ndr, bpos, epos, flags, level, size_is);
+		bpos = x_ndr_vector(nt, *t, ndr, bpos, epos, flags, level, has_length_is);
 	}
 	return bpos;
 }
 
-template <typename T, typename NT, typename AT>
-inline x_ndr_off_t x_ndr_buffers_unique_size_is(
+template <typename T, typename NT>
+inline x_ndr_off_t x_ndr_buffers_unique_vector(
 		NT &&nt, std::shared_ptr<T> &t, x_ndr_pull_t &ndr,
 		x_ndr_off_t bpos, x_ndr_off_t epos,
 		uint32_t flags, x_ndr_switch_t level,
-		AT &&size_is)
+		bool has_length_is)
 {
 	if (t) {
-		bpos = x_ndr_vector_size_is(nt, *t, ndr, bpos, epos, flags, level, size_is);
+		bpos = x_ndr_vector(nt, *t, ndr, bpos, epos, flags, level, has_length_is);
 	}
-	return bpos;
-}
-
-template <typename T, typename NT, typename SizeIs, typename LengthIs>
-inline x_ndr_off_t x_ndr_buffers_unique_length_is(
-		NT &&nt, const std::shared_ptr<T> &t, x_ndr_push_t &ndr,
-		x_ndr_off_t bpos, x_ndr_off_t epos,
-		uint32_t flags, x_ndr_switch_t level,
-		SizeIs &&size_is, LengthIs &&length_is)
-{
-	X_TODO;
-	return bpos;
-}
-
-template <typename T, typename NT, typename SizeIs, typename LengthIs>
-inline x_ndr_off_t x_ndr_buffers_unique_length_is(
-		NT &&nt, std::shared_ptr<T> &t, x_ndr_pull_t &ndr,
-		x_ndr_off_t bpos, x_ndr_off_t epos,
-		uint32_t flags, x_ndr_switch_t level,
-		SizeIs &&size_is, LengthIs &&length_is)
-{
-	X_TODO;
 	return bpos;
 }
 
@@ -862,14 +854,8 @@ static inline void x_ndr_ostr_ptr_vector(NT &&nt, const std::shared_ptr<std::vec
 #define X_NDR_SCALARS_UNIQUE_VECTOR(nt, val, ndr, bpos, epos, flags, level) \
 	X_NDR_VERIFY((bpos), x_ndr_scalars_unique_vector((val), (ndr), (bpos), (epos), flags, level))
 
-#define X_NDR_BUFFERS_UNIQUE_VECTOR(nt, val, ndr, bpos, epos, flags, level) \
-	X_NDR_VERIFY((bpos), x_ndr_buffers_unique_vector((nt){}, (val), (ndr), (bpos), (epos), flags, level))
-
-#define X_NDR_BUFFERS_UNIQUE_SIZE_IS(nt, val, ndr, bpos, epos, flags, level, at_size_is) \
-	X_NDR_VERIFY((bpos), x_ndr_buffers_unique_size_is((nt){}, (val), (ndr), (bpos), (epos), (flags), (level), (at_size_is)))
-
-#define X_NDR_BUFFERS_UNIQUE_LENGTH_IS(nt, val, ndr, bpos, epos, flags, level, at_size_is, at_length_is) \
-	X_NDR_VERIFY((bpos), x_ndr_buffers_unique_length_is((nt){}, (val), (ndr), (bpos), (epos), (flags), (level), (at_size_is), (at_length_is)))
+#define X_NDR_BUFFERS_UNIQUE_VECTOR(nt, val, ndr, bpos, epos, flags, level, has_length_is) \
+	X_NDR_VERIFY((bpos), x_ndr_buffers_unique_vector((nt){}, (val), (ndr), (bpos), (epos), (flags), (level), (has_length_is)))
 
 #define X_NDR_OSTR_PTR_VECTOR(nt, val, ndr, flags, level) \
 	x_ndr_ostr_ptr_vector((nt){}, (val), (ndr), (flags), (level))
@@ -966,27 +952,27 @@ x_ndr_off_t x_ndr_buffers_relative_ptr(NT &&nt,
 #define X_NDR_BUFFERS_RELATIVE_PTR__1(nt, val, ndr, bpos, epos, flags, level, pos_nt, pos_ptr, size_nt, size_ptr) \
 	X_NDR_VERIFY((bpos), x_ndr_buffers_relative_ptr((nt){}, (val), (ndr), (bpos), (epos), (flags), (level), (ndr_traits_at_t<const pos_nt>{pos_nt{}, (pos_ptr)}), (ndr_traits_at_t<const size_nt>{size_nt{}, (size_ptr)})))
 
-template <typename T, typename NT, typename AT_POS, typename AT_SIZE_IS>
-x_ndr_off_t x_ndr_buffers_relative_size_is(NT &&nt,
+template <typename T, typename NT, typename AT_POS>
+x_ndr_off_t x_ndr_buffers_relative_vector(NT &&nt,
 		const std::shared_ptr<T> &val, x_ndr_push_t &ndr,
 		x_ndr_off_t bpos, x_ndr_off_t epos,
 		uint32_t flags, x_ndr_switch_t level,
-		AT_POS &&at_pos, AT_SIZE_IS && at_size_is)
+		AT_POS &&at_pos, bool has_length_is)
 {
 	if (val) {
 		X_NDR_DO_ALIGN(ndr, bpos, epos, flags);
 		at_pos(ndr, bpos - ndr.base, epos);
-		bpos = x_ndr_vector_size_is(nt, *val, ndr, bpos, epos, flags, level, at_size_is);
+		bpos = x_ndr_vector(nt, *val, ndr, bpos, epos, flags, level, has_length_is);
 	} 
 	return bpos;
 }
 
-template <typename T, typename NT, typename AT_POS, typename AT_SIZE_IS>
-x_ndr_off_t x_ndr_buffers_relative_size_is(NT &&nt,
+template <typename T, typename NT, typename AT_POS>
+x_ndr_off_t x_ndr_buffers_relative_vector(NT &&nt,
 		std::shared_ptr<T> &val, x_ndr_pull_t &ndr,
 		x_ndr_off_t bpos, x_ndr_off_t epos,
 		uint32_t flags, x_ndr_switch_t level,
-		AT_POS &&at_pos, AT_SIZE_IS && at_size_is)
+		AT_POS &&at_pos, bool has_length_is)
 {
 	auto offset = at_pos(ndr, epos);
 	if (offset) {
@@ -994,7 +980,7 @@ x_ndr_off_t x_ndr_buffers_relative_size_is(NT &&nt,
 		val = x_ndr_allocate_ptr<T, NT>(level);
 
 		x_ndr_off_t tmp_bpos = X_NDR_CHECK_POS(ndr.base + offset, 0, epos);
-		tmp_bpos = x_ndr_vector_size_is(nt, *val, ndr, tmp_bpos, epos, flags, level, at_size_is);
+		tmp_bpos = x_ndr_vector(nt, *val, ndr, tmp_bpos, epos, flags, level, has_length_is);
 		if (tmp_bpos < 0) {
 			return tmp_bpos;
 		}
@@ -1004,8 +990,8 @@ x_ndr_off_t x_ndr_buffers_relative_size_is(NT &&nt,
 	return bpos;
 }
 
-#define X_NDR_BUFFERS_RELATIVE_SIZE_IS(nt, val, ndr, bpos, epos, flags, level, at_ptr, at_size_is) \
-	X_NDR_VERIFY((bpos), x_ndr_buffers_relative_size_is((nt){}, (val), (ndr), (bpos), (epos), (flags), (level), (at_ptr), (at_size_is)))
+#define X_NDR_BUFFERS_RELATIVE_VECTOR(nt, val, ndr, bpos, epos, flags, level, at_ptr, has_length_is) \
+	X_NDR_VERIFY((bpos), x_ndr_buffers_relative_vector((nt){}, (val), (ndr), (bpos), (epos), (flags), (level), (at_ptr), (has_length_is)))
 
 #if 0
 template <typename T>

@@ -723,8 +723,12 @@ class FieldSizeIs(FieldDerived):
 		return f'X_NDR_SAVE_POS({self.base_type}, {ndr_arg}, {bpos_arg}, {epos_arg}, {self.get_ndr_flags()});'
 	def buffers__(self, func, ndr_arg, bpos_arg, epos_arg, flags_arg):
 		assert self.has_buffers
-		return f'ndr_traits_at_t<ndr_traits_t<{self.base_type}>> __at_{self.name}{{ndr_traits_t<{self.base_type}>(), {ndr_arg}.load_pos(), {self.get_ndr_flags()}}};'
+		ret = [ f'ndr_traits_at_t<ndr_traits_t<{self.base_type}>> __at_{self.name}{{ndr_traits_t<{self.base_type}>(), {ndr_arg}.load_pos(), {self.get_ndr_flags()}}};' ]
+		if self.order > self.size_is_of.order:
+			ret.append(f'X_NDR_SIZE_AT(__at_{self.name}, {ndr_arg}, __val.{self.size_is_of.name}, {epos_arg});')
+		return ret
 		'''
+		return f'ndr_traits_at_t<ndr_traits_t<{self.base_type}>> __at_{self.name}{{ndr_traits_t<{self.base_type}>(), {ndr_arg}.load_pos(), {self.get_ndr_flags()}}};'
 		if func == 'PUSH':
 			ret = [ f'{self.base_type} __tmp_{self.name} = vector_ptr_get_size(__val.{self.size_is_of.name});' ]
 		else:
@@ -776,11 +780,12 @@ class FieldRelativeVector(FieldPtr):
 	def scalars__(self, func, ndr_arg, bpos_arg, epos_arg, flags_arg):
 		return f'X_NDR_SAVE_POS(uint32, {ndr_arg}, {bpos_arg}, {epos_arg}, {self.get_ndr_flags()});'
 	def buffers__(self, func, ndr_arg, bpos_arg, epos_arg, flags_arg):
-		if self.length_is:
-			assert False
-			return f'X_NDR_BUFFERS_RELATIVE_LENGTH_IS({self.get_ndr_traits()}, __val.{self.name}, {ndr_arg}, {bpos_arg}, {epos_arg}, {self.get_ndr_flags()}, {self.get_switch_is()}, __at_{self.size_is.name}, __at_{self.length_is.name});'
-		else:
-			return f'X_NDR_BUFFERS_RELATIVE_SIZE_IS({self.get_ndr_traits()}, __val.{self.name}, {ndr_arg}, {bpos_arg}, {epos_arg}, {self.get_ndr_flags()}, {self.get_switch_is()}, __at_{self.name}, __at_{self.size_is.name});'
+		ret = [f'X_NDR_BUFFERS_RELATIVE_VECTOR({self.get_ndr_traits()}, __val.{self.name}, {ndr_arg}, {bpos_arg}, {epos_arg}, {self.get_ndr_flags()}, {self.get_switch_is()}, __at_{self.name}, {"true" if self.length_is else "false"});' ]
+		if self.order > self.size_is.order:
+			ret.append(f'X_NDR_SIZE_AT(__at_{self.size_is.name}, {ndr_arg}, __val.{self.name}, {epos_arg});')
+		if self.length_is and self.order > self.length_is.order:
+			ret.append(f'X_NDR_SIZE_AT(__at_{self.length_is.name}, {ndr_arg}, __val.{self.name}, {epos_arg});')
+		return ret
 	def ostr__(self):
 		return f'X_NDR_OSTR_PTR_VECTOR({self.get_ndr_traits()}, __val.{self.name}, __ndr, {self.get_ndr_flags()}, {self.get_switch_is()});'
 
@@ -800,10 +805,12 @@ class FieldUniqueVector(FieldPtr):
 		return f'X_NDR_SCALARS_UNIQUE_VECTOR({self.get_ndr_traits()}, __val.{self.name}, {ndr_arg}, {bpos_arg}, {epos_arg}, {self.get_ndr_flags()}, {self.get_switch_is()});'
 	def buffers__(self, func, ndr_arg, bpos_arg, epos_arg, flags_arg):
 		#return f'X_NDR_BUFFERS_UNIQUE_VECTOR({self.get_ndr_traits()}, __val.{self.name}, {ndr_arg}, {bpos_arg}, {epos_arg}, {self.get_ndr_flags()}, {self.get_switch_is()});'
-		if self.length_is:
-			return f'X_NDR_BUFFERS_UNIQUE_LENGTH_IS({self.get_ndr_traits()}, __val.{self.name}, {ndr_arg}, {bpos_arg}, {epos_arg}, {self.get_ndr_flags()}, {self.get_switch_is()}, __at_{self.size_is.name}, __at_{self.length_is.name});'
-		else:
-			return f'X_NDR_BUFFERS_UNIQUE_SIZE_IS({self.get_ndr_traits()}, __val.{self.name}, {ndr_arg}, {bpos_arg}, {epos_arg}, {self.get_ndr_flags()}, {self.get_switch_is()}, __at_{self.size_is.name});'
+		ret = [ f'X_NDR_BUFFERS_UNIQUE_VECTOR({self.get_ndr_traits()}, __val.{self.name}, {ndr_arg}, {bpos_arg}, {epos_arg}, {self.get_ndr_flags()}, {self.get_switch_is()}, {"true" if self.length_is else "false"});' ]
+		if self.order > self.size_is.order:
+			ret.append(f'X_NDR_SIZE_AT(__at_{self.size_is.name}, {ndr_arg}, __val.{self.name}, {epos_arg});')
+		if self.length_is and self.order > self.length_is.order:
+			ret.append(f'X_NDR_SIZE_AT(__at_{self.length_is.name}, {ndr_arg}, __val.{self.name}, {epos_arg});')
+		return ret
 	def ostr__(self):
 		return f'X_NDR_OSTR_PTR_VECTOR({self.get_ndr_traits()}, __val.{self.name}, __ndr, {self.get_ndr_flags()}, {self.get_switch_is()});'
 
@@ -929,8 +936,8 @@ def make_field(elem, t, iface, idl_tbl):
 
 def make_fields(t, iface, idl_tbl):
 	fields = [ make_field(e, t, iface, idl_tbl) for e in typedef_get_elements(t) ]
-	for field in fields:
-		field.fields = fields
+	for order, field in enumerate(fields):
+		field.order, field.fields = order, fields
 		if isinstance(field, FieldXNdrSize):
 			for f in fields:
 				if f.name == field.ndr_size_elem:
