@@ -300,6 +300,8 @@ struct x_ndr_ostr_t {
 
 
 template <typename T> struct ndr_traits_t { };
+template <typename T> struct ndr_requ_traits_t { };
+template <typename T> struct ndr_resp_traits_t { };
 
 template <typename T, typename NDR, typename NT = ndr_traits_t<T>>
 inline x_ndr_off_t x_ndr_scalars(NT &&nt, T &&t, NDR &ndr,
@@ -821,11 +823,12 @@ inline void x_ndr_output(const T &t, std::ostream &os, uint32_t indent, uint32_t
 }
 
 template <typename T>
-inline x_ndr_off_t x_ndr_resp(const T &t, std::vector<uint8_t> &data, uint32_t flags)
+inline x_ndr_off_t x_ndr_resp_push(T &&t, std::vector<uint8_t> &data, uint32_t flags)
 {
 	x_ndr_push_buff_t ndr_data{};
 	x_ndr_push_t ndr{ndr_data, 0};
-	x_ndr_off_t ret = t.ndr_resp(ndr, 0, X_NDR_MAX_SIZE, flags);
+	using NT = ndr_resp_traits_t<typename std::remove_cv<typename std::remove_reference<T>::type>::type>;
+	x_ndr_off_t ret = x_ndr_both_t<typename NT::has_buffers>()(NT{}, t, ndr, 0, X_NDR_MAX_SIZE, flags, X_NDR_SWITCH_NONE);
 	if (ret >= 0) {
 		std::swap(data, ndr_data.data);
 	}
@@ -833,11 +836,12 @@ inline x_ndr_off_t x_ndr_resp(const T &t, std::vector<uint8_t> &data, uint32_t f
 }
 
 template <typename T>
-inline x_ndr_off_t x_ndr_requ(T &t, const uint8_t *data, size_t size, uint32_t flags)
+inline x_ndr_off_t x_ndr_requ_pull(T &&t, const uint8_t *data, size_t size, uint32_t flags)
 {
 	x_ndr_pull_buff_t ndr_data{data, size};
 	x_ndr_pull_t ndr{ndr_data, 0};
-	return t.ndr_requ(ndr, 0, size, flags);
+	using NT = ndr_requ_traits_t<typename std::remove_cv<typename std::remove_reference<T>::type>::type>;
+	return x_ndr_both_t<typename NT::has_buffers>()(NT{}, t, ndr, 0, size, flags, X_NDR_SWITCH_NONE);
 }
 
 template <typename NDR>

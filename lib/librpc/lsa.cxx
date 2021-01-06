@@ -300,31 +300,6 @@ x_ndr_off_t ndr_traits_t<lsa_AsciiStringLarge>::buffers(
 
 
 
-x_ndr_off_t ndr_traits_t<lsa_AuditEventsInfo>::scalars(const lsa_AuditEventsInfo &val, x_ndr_push_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, x_ndr_switch_t level) const
-{
-	X_TODO;
-	return bpos;
-}
-
-x_ndr_off_t ndr_traits_t<lsa_AuditEventsInfo>::scalars(lsa_AuditEventsInfo &val, x_ndr_pull_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, x_ndr_switch_t level) const
-{
-	X_TODO;
-	return bpos;
-}
-
-x_ndr_off_t ndr_traits_t<lsa_AuditEventsInfo>::buffers(const lsa_AuditEventsInfo &val, x_ndr_push_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, x_ndr_switch_t level) const
-{
-	X_TODO;
-	return bpos;
-}
-
-x_ndr_off_t ndr_traits_t<lsa_AuditEventsInfo>::buffers(lsa_AuditEventsInfo &val, x_ndr_pull_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, x_ndr_switch_t level) const
-{
-	X_TODO;
-	return bpos;
-}
-
-
 
 
 }

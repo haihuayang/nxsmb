@@ -602,6 +602,59 @@ template <> struct ndr_traits_t<std::u16string>
 
 
 template <typename T, typename NT>
+struct ndr_traits_unique_ptr_t
+{
+	using ndr_base_type = std::shared_ptr<T>;
+	using has_buffers = std::true_type;
+	using ndr_data_type = x_ndr_type_struct;
+
+	x_ndr_off_t scalars(const std::shared_ptr<T> &val, x_ndr_push_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, x_ndr_switch_t level) const {
+		uint3264 ptr;
+		if (val) {
+			ptr.val = ndr.next_ptr();
+		} else {
+			ptr.val = 0;
+		}
+		X_NDR_SCALARS_DEFAULT(ptr, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
+		return bpos;
+	}
+
+	x_ndr_off_t scalars(std::shared_ptr<T> &val, x_ndr_pull_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, x_ndr_switch_t level) const {
+		uint3264 ptr;
+		X_NDR_SCALARS_DEFAULT(ptr, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
+		if (ptr.val) {
+			val = x_ndr_allocate_ptr<T, NT>(level);
+			ndr.next_ptr();
+		}
+		return bpos;
+	}
+
+	x_ndr_off_t buffers(const std::shared_ptr<T> &val, x_ndr_push_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, x_ndr_switch_t level) const {
+		if (val) {
+			bpos = x_ndr_both(NT{}, *val, ndr,
+					bpos, epos, flags, level);
+		}
+		return bpos;
+	}
+
+	x_ndr_off_t buffers(std::shared_ptr<T> &val, x_ndr_pull_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, x_ndr_switch_t level) const {
+		if (val) {
+			bpos = x_ndr_both(NT{}, *val, ndr,
+					bpos, epos, flags, level);
+		}
+		return bpos;
+	}
+
+	void ostr(const std::shared_ptr<T> &val, x_ndr_ostr_t &ndr, uint32_t flags, x_ndr_switch_t level) const {
+		if (val) {
+			NT{}.ostr(*val, ndr, flags, level);
+		} else {
+			ndr << "NULL";
+		}
+	}
+};
+	
+template <typename T, typename NT>
 inline x_ndr_off_t x_ndr_scalars_unique_ptr(NT &&nt,
 		const std::shared_ptr<T> &t, x_ndr_push_t &ndr,
 		x_ndr_off_t bpos, x_ndr_off_t epos,

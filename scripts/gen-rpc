@@ -58,6 +58,9 @@ def elem_tostring_properties(e):
 def typedef_tostring_properties(t):
 	return tostring_properties__(t['DATA'])
 
+def function_tostring_properties(t):
+	return tostring_properties__(t)
+
 def elem_get_ndr_flags(elem):
 	ndr_flags = elem_get_property(elem, "flag")
 	if ndr_flags is not None:
@@ -80,29 +83,31 @@ def elem_get_pointer_type(elem, iface):
 
 F_STRUCT = 0x1
 F_UNION  = 0x2
+F_FUNCTION = 0x4
 know_properties = {
 	'case': F_UNION,
 	'default': F_UNION,
 	'flag': F_STRUCT | F_UNION,
-	'range': F_STRUCT,
+	'range': F_STRUCT | F_FUNCTION,
 	'value': F_STRUCT | F_UNION,
-	'charset': F_STRUCT | F_UNION,
-	'switch_is': F_STRUCT,
+	'charset': F_STRUCT | F_UNION | F_FUNCTION,
+	'switch_is': F_STRUCT | F_FUNCTION,
 	'switch_type': F_STRUCT,
-	'size_is': F_STRUCT,
-	'in': F_STRUCT, # TODO
-	'unique': F_STRUCT, # TODO
-	'length_is': F_STRUCT, # TODO
+	'size_is': F_STRUCT | F_FUNCTION,
+	'in': F_FUNCTION, # TODO
+	'out': F_FUNCTION, # TODO
+	'unique': F_STRUCT | F_FUNCTION, # TODO
+	'length_is': F_STRUCT | F_FUNCTION, # TODO
 	'noprint': F_STRUCT | F_UNION, # TODO
 	#'ignore': F_STRUCT | F_UNION, # TODO
 	'x_ignored': F_STRUCT,
-	'string': F_STRUCT | F_UNION, # TODO
+	'string': F_STRUCT | F_UNION | F_FUNCTION, # TODO
 	'compression': F_STRUCT | F_UNION, # TODO
 	'subcontext': F_STRUCT | F_UNION, # TODO rewrite
 	'subcontext_size': F_STRUCT | F_UNION, # TODO rewrite
 	'relative': F_STRUCT | F_UNION, # TODO rewrite
 	'relative_short': F_STRUCT | F_UNION, # TODO rewrite
-	'ref': F_STRUCT | F_UNION, # TODO rewrite
+	'ref': F_STRUCT | F_UNION | F_FUNCTION, # TODO rewrite
 	#'x_offset': F_STRUCT,
 	'x_skip': F_STRUCT,
 	'x_size': F_STRUCT,
@@ -116,9 +121,14 @@ know_properties = {
 }
 
 def elem_check_properties(elem, t):
-	flag = F_STRUCT if typedef_get_realtype(t) == 'STRUCT' else F_UNION
 	if not 'PROPERTIES' in elem:
 		return
+	if t['TYPE'] == 'TYPEDEF':
+		flag = F_STRUCT if typedef_get_realtype(t) == 'STRUCT' else F_UNION
+	elif t['TYPE'] == 'FUNCTION':
+		flag = F_FUNCTION
+	else:
+		assert False
 	for name, value in elem['PROPERTIES'].items():
 		try:
 			flags = know_properties[name]
@@ -187,7 +197,10 @@ def elem_get_pointers(elem):
 		v = elem['POINTERS']
 	except KeyError:
 		return 0
-	assert v in [0, 1]
+	if get_property(elem, 'ref'):
+		assert v > 0
+		v -= 1
+	assert v in [0, 1, 2]
 	return v
 
 def elem_is_switch(f, union_fields):
@@ -217,11 +230,18 @@ def typedef_has_property(t, prop):
 	return has_property(t['DATA'], prop);
 
 def typedef_get_elements(t):
-	assert t['TYPE'] == 'TYPEDEF'
-	try:
-		return t['DATA']['ELEMENTS']
-	except:
-		return []
+	if t['TYPE'] == 'TYPEDEF':
+		try:
+			return t['DATA']['ELEMENTS']
+		except:
+			return []
+	elif t['TYPE'] == 'FUNCTION':
+		try:
+			return t['ELEMENTS']
+		except:
+			return []
+	else:
+		assert False
 
 def typedef_get_elem_by_name(t, name):
 	for elem in typedef_get_elements(t):
@@ -772,11 +792,14 @@ class FieldRelativePtr(FieldPtr):
 		return f'X_NDR_BUFFERS_RELATIVE_PTR__0({self.get_ndr_traits()}, __val.{self.name}, {ndr_arg}, {bpos_arg}, {epos_arg}, {self.get_ndr_flags()}, {self.get_switch_is()}, __at_{self.name});'
 
 class FieldRelativeVector(FieldPtr):
-	def __init__(self, json_elem, idl_tbl, size_is, length_is):
+	def __init__(self, json_elem, idl_tbl, pointers, size_is, length_is):
 		super().__init__(json_elem, idl_tbl)
-		self.size_is, self.length_is = size_is, length_is
+		self.pointers, self.size_is, self.length_is = pointers, size_is, length_is
 	def declare__(self):
-		return f'std::shared_ptr<std::vector<{self.base_type}>> {self.name}; /* FieldUniqueVector */'
+		base_type = self.base_type
+		for _ in range(self.pointers - 1):
+			base_type = f'std::shared_ptr<{base_type}>'
+		return f'std::shared_ptr<std::vector<{base_type}>> {self.name}; /* FieldRelativeVector */'
 	def scalars__(self, func, ndr_arg, bpos_arg, epos_arg, flags_arg):
 		return f'X_NDR_SAVE_POS(uint32, {ndr_arg}, {bpos_arg}, {epos_arg}, {self.get_ndr_flags()});'
 	def buffers__(self, func, ndr_arg, bpos_arg, epos_arg, flags_arg):
@@ -787,7 +810,8 @@ class FieldRelativeVector(FieldPtr):
 			ret.append(f'X_NDR_SIZE_AT(__at_{self.length_is.name}, {ndr_arg}, __val.{self.name}, {epos_arg});')
 		return ret
 	def ostr__(self):
-		return f'X_NDR_OSTR_PTR_VECTOR({self.get_ndr_traits()}, __val.{self.name}, __ndr, {self.get_ndr_flags()}, {self.get_switch_is()});'
+		return f'x_ndr_ostr_ptr_vector({self.get_ndr_traits()}{{}}, __val.{self.name}, __ndr, {self.get_ndr_flags()}, {self.get_switch_is()});'
+		#return f'X_NDR_OSTR_PTR_VECTOR({self.get_ndr_traits()}, __val.{self.name}, __ndr, {self.get_ndr_flags()}, {self.get_switch_is()});'
 
 class FieldUniquePtr(FieldPtr):
 	def scalars__(self, func, ndr_arg, bpos_arg, epos_arg, flags_arg):
@@ -796,23 +820,37 @@ class FieldUniquePtr(FieldPtr):
 		return f'X_NDR_BUFFERS_UNIQUE_PTR({self.get_ndr_traits()}, __val.{self.name}, {ndr_arg}, {bpos_arg}, {epos_arg}, {self.get_ndr_flags()}, {self.get_switch_is()});'
 
 class FieldUniqueVector(FieldPtr):
-	def __init__(self, json_elem, idl_tbl, size_is, length_is):
+	def __init__(self, json_elem, idl_tbl, pointers, size_is, length_is):
 		super().__init__(json_elem, idl_tbl)
-		self.size_is, self.length_is = size_is, length_is
+		self.pointers, self.size_is, self.length_is = pointers, size_is, length_is
 	def declare__(self):
-		return f'std::shared_ptr<std::vector<{self.base_type}>> {self.name}; /* FieldUniqueVector */'
+		base_type = self.base_type
+		for _ in range(self.pointers - 1):
+			base_type = f'std::shared_ptr<{base_type}>'
+		return f'std::shared_ptr<std::vector<{base_type}>> {self.name}; /* FieldUniqueVector */'
+	def get_ndr_traits(self):
+		assert self.ndr_traits is None, 'TODO'
+
+		ndr_traits = super().get_ndr_traits()
+		base_type = self.base_type
+		for _ in range(self.pointers - 1):
+			ndr_traits = f'ndr_traits_unique_ptr_t<{base_type}, {ndr_traits}>'
+			base_type = f'std::shared_ptr<{base_type}>'
+		return ndr_traits
 	def scalars__(self, func, ndr_arg, bpos_arg, epos_arg, flags_arg):
-		return f'X_NDR_SCALARS_UNIQUE_VECTOR({self.get_ndr_traits()}, __val.{self.name}, {ndr_arg}, {bpos_arg}, {epos_arg}, {self.get_ndr_flags()}, {self.get_switch_is()});'
+		return f'X_NDR_VERIFY(({bpos_arg}), x_ndr_scalars_unique_vector(__val.{self.name}, {ndr_arg}, {bpos_arg}, {epos_arg}, {self.get_ndr_flags()}, {self.get_switch_is()}));'
+		#return f'X_NDR_SCALARS_UNIQUE_VECTOR({self.get_ndr_traits()}, __val.{self.name}, {ndr_arg}, {bpos_arg}, {epos_arg}, {self.get_ndr_flags()}, {self.get_switch_is()});'
 	def buffers__(self, func, ndr_arg, bpos_arg, epos_arg, flags_arg):
-		#return f'X_NDR_BUFFERS_UNIQUE_VECTOR({self.get_ndr_traits()}, __val.{self.name}, {ndr_arg}, {bpos_arg}, {epos_arg}, {self.get_ndr_flags()}, {self.get_switch_is()});'
-		ret = [ f'X_NDR_BUFFERS_UNIQUE_VECTOR({self.get_ndr_traits()}, __val.{self.name}, {ndr_arg}, {bpos_arg}, {epos_arg}, {self.get_ndr_flags()}, {self.get_switch_is()}, {"true" if self.length_is else "false"});' ]
+		ret = [ f'X_NDR_VERIFY(({bpos_arg}), x_ndr_buffers_unique_vector({self.get_ndr_traits()}{{}}, __val.{self.name}, {ndr_arg}, {bpos_arg}, {epos_arg}, {self.get_ndr_flags()}, {self.get_switch_is()}, {"true" if self.length_is else "false"}));' ]
+		#ret = [ f'X_NDR_BUFFERS_UNIQUE_VECTOR({self.get_ndr_traits()}, __val.{self.name}, {ndr_arg}, {bpos_arg}, {epos_arg}, {self.get_ndr_flags()}, {self.get_switch_is()}, {"true" if self.length_is else "false"});' ]
 		if self.order > self.size_is.order:
 			ret.append(f'X_NDR_SIZE_AT(__at_{self.size_is.name}, {ndr_arg}, __val.{self.name}, {epos_arg});')
 		if self.length_is and self.order > self.length_is.order:
 			ret.append(f'X_NDR_SIZE_AT(__at_{self.length_is.name}, {ndr_arg}, __val.{self.name}, {epos_arg});')
 		return ret
 	def ostr__(self):
-		return f'X_NDR_OSTR_PTR_VECTOR({self.get_ndr_traits()}, __val.{self.name}, __ndr, {self.get_ndr_flags()}, {self.get_switch_is()});'
+		return f'x_ndr_ostr_ptr_vector({self.get_ndr_traits()}{{}}, __val.{self.name}, __ndr, {self.get_ndr_flags()}, {self.get_switch_is()});'
+		#return f'X_NDR_OSTR_PTR_VECTOR({self.get_ndr_traits()}, __val.{self.name}, __ndr, {self.get_ndr_flags()}, {self.get_switch_is()});'
 
 class FieldUniqueString(FieldPtr):
 	def __init__(self, json_elem, idl_tbl, string_type):
@@ -849,9 +887,10 @@ def make_field(elem, t, iface, idl_tbl):
 	elem_check_properties(elem, t)
 	pointer_type = elem_get_pointer_type(elem, iface)
 	array_len_name = elem_get_array_len(elem)
+	pointers = elem_get_pointers(elem)
 
 	if elem_has_property(elem, 'x_size'):
-		assert not elem_get_pointers(elem)
+		assert pointers == 0
 		return FieldXSize(elem, idl_tbl)
 
 	master_elem = elem_is_property_of(elem, t, 'subcontext_size')
@@ -861,29 +900,29 @@ def make_field(elem, t, iface, idl_tbl):
 
 	value = elem_get_property(elem, 'value')
 	if value:
-		assert not elem_get_pointers(elem)
+		assert pointers == 0
 		if array_len_name:
 			array_len_name = int(array_len_name)
 		return FieldValue(elem, idl_tbl, value, array_len_name)
 
 	ndr_size_elem = elem_get_property(elem, 'x_ndr_size')
 	if ndr_size_elem:
-		assert not elem_get_pointers(elem)
+		assert pointers == 0
 		return FieldXNdrSize(elem, idl_tbl, ndr_size_elem)
 
 	array_len_of_elem = elem_is_array_len_of(elem, t)
 	if array_len_of_elem:
-		assert not elem_get_pointers(elem)
+		assert pointers == 0
 		return FieldVectorLen(elem, idl_tbl, array_len_of_elem['NAME'])
 
 	size_is_of = elem_is_expr_property_of(elem, t, "size_is")
 	if size_is_of:
-		assert not elem_get_pointers(elem)
+		assert pointers == 0
 		return FieldSizeIs(elem, idl_tbl, size_is_of['NAME'])
 
 	length_is_of = elem_is_expr_property_of(elem, t, "length_is")
 	if length_is_of:
-		assert not elem_get_pointers(elem)
+		assert pointers == 0
 		return FieldLengthIs(elem, idl_tbl, length_is_of['NAME'])
 
 	charset = elem_get_property(elem, "charset")
@@ -895,9 +934,10 @@ def make_field(elem, t, iface, idl_tbl):
 		string_type = "std::string"
 	else:
 		assert charset is None
-	if charset and not elem_get_pointers(elem):
+	if charset and pointers == 0:
 		return FieldString(elem, idl_tbl, string_type)
-	elif charset and elem_get_pointers(elem):
+	elif charset and pointers > 0:
+		assert pointers == 1
 		if pointer_type == "relative":
 			return FieldRelativeString(elem, idl_tbl, string_type)
 		elif pointer_type == "unique":
@@ -906,14 +946,14 @@ def make_field(elem, t, iface, idl_tbl):
 			assert False
 
 	if array_len_name is not None:
-		assert not elem_get_pointers(elem)
+		assert pointers == 0
 		try:
 			array_len = int(array_len_name)
 			return FieldArray(elem, idl_tbl, array_len)
 		except:
 			return FieldVector(elem, idl_tbl, array_len_name)
 
-	if elem_get_pointers(elem) == 0:
+	if pointers == 0:
 		return FieldSimple(elem, idl_tbl)
 
 	assert pointer_type in [ "relative", "unique" ]
@@ -922,16 +962,17 @@ def make_field(elem, t, iface, idl_tbl):
 	assert not length_is or size_is
 
 	if pointer_type == "relative":
+		assert pointers == 1
 		if size_is or length_is:
-			return FieldRelativeVector(elem, idl_tbl, size_is, length_is)
+			return FieldRelativeVector(elem, idl_tbl, pointers, size_is, length_is)
 		else:
 			return FieldRelativePtr(elem, idl_tbl)
 	elif pointer_type == "unique":
 		if size_is or length_is:
-			return FieldUniqueVector(elem, idl_tbl, size_is, length_is)
+			return FieldUniqueVector(elem, idl_tbl, pointers, size_is, length_is)
 		else:
+			assert pointers == 1
 			return FieldUniquePtr(elem, idl_tbl)
-
 	assert False
 
 def make_fields(t, iface, idl_tbl):
@@ -1354,6 +1395,31 @@ def output_ndrcxx_union_scalars(out, func, fields, t, iface, idl, idl_tbl):
 	}
 ''')
 
+def output_ndrcxx_union_buffers(out, func, fields, t, iface, idl, idl_tbl):
+	flag = typedef_get_property(t, 'flag')
+	if flag is not None: out(f'''
+	__flags = x_ndr_set_flags(__flags, {flag});
+''')
+	out(f'''
+	switch (__level) {{
+''')
+	for field in fields:
+		stmts = None
+		if field.name != '' and field.has_buffers:
+			stmts = field.buffers(func)
+		if stmts:
+			out(f'''
+		{get_case_str(field)}: {{''')
+			for stmt in stmts:
+				out(f'''
+			{stmt}''')
+			out(f'''
+		}} break;
+''')
+	out('''
+	}
+''')
+
 def output_ndrcxx_UNION(out, t, iface, idl, idl_tbl):
 	fields = make_fields(t, iface, idl_tbl)
 	tname = t["NAME"]
@@ -1404,6 +1470,8 @@ void {tname}::__uninit(x_ndr_switch_t __level)
 }}
 ''')
 
+	has_buffers = any([field.has_buffers for field in fields])
+
 	if not typedef_get_property(t, "nopush"):
 		out(f'''
 
@@ -1412,6 +1480,18 @@ x_ndr_off_t ndr_traits_t<{tname}>::scalars(const {tname} &__val, x_ndr_push_t &_
 ''')
 		output_ndrcxx_union_scalars(out, 'PUSH', fields, t, iface, idl, idl_tbl)
 		out(f'''
+	return __bpos;
+}}
+
+''')
+		if has_buffers:
+			out(f'''
+
+x_ndr_off_t ndr_traits_t<{tname}>::buffers(const {tname} &__val, x_ndr_push_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level) const
+{{
+''')
+			output_ndrcxx_union_buffers(out, 'PUSH', fields, t, iface, idl, idl_tbl)
+			out(f'''
 	return __bpos;
 }}
 
@@ -1427,6 +1507,18 @@ x_ndr_off_t ndr_traits_t<{tname}>::scalars({tname} &__val, x_ndr_pull_t &__ndr, 
 }}
 
 ''')
+		if has_buffers:
+			out(f'''
+x_ndr_off_t ndr_traits_t<{tname}>::buffers({tname} &__val, x_ndr_pull_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level) const
+{{
+''')
+			output_ndrcxx_union_buffers(out, 'PULL', fields, t, iface, idl, idl_tbl)
+			out(f'''
+	return __bpos;
+}}
+
+''')
+
 	if not typedef_has_property(t, "noprint"):
 		out(f'''
 void ndr_traits_t<{tname}>::ostr(const {tname} &__val, x_ndr_ostr_t &__ndr, uint32_t __flags, x_ndr_switch_t __level) const
@@ -1555,6 +1647,69 @@ const std::array<std::pair<{etype}, const char *>, {len(elements)}> ndr_traits_t
 
 ''')
 
+def output_header_FUNCTION(out, t, iface, idl, idl_tbl):
+	fields = make_fields(t, iface, idl_tbl)
+	tname = t["NAME"]
+
+	has_nontrivial_unions, all_nontrivial_unions_are_ptr = False, False
+	for field in fields:
+		if field.nontrivial_unions:
+			has_nontrivial_unions = True
+			for nf in field.nontrivial_unions:
+				if not isinstance(nf, FieldPtr):
+					all_nontrivial_unions_are_ptr = False
+
+	out(f'''
+
+struct {tname} {{
+''')
+	if any([len(f.nontrivial_unions) > 0 for f in fields]):
+		out(f'''
+	{tname}();
+	~{tname}();
+	{tname}(const {tname}& other) = delete;
+	{tname} &operator=(const {tname}& other) = delete;
+	{tname}({tname}&& other){" = default" if all_nontrivial_unions_are_ptr else ""};
+	{tname} &operator=({tname}&& other) = delete;
+''')
+		for switch_field in fields:
+			if len(switch_field.nontrivial_unions) == 0:
+				continue
+			# TODO if elem_has_property(switch_field, 'value'):
+			#	continue
+			out(f'''
+	void set_{switch_field.name}({switch_field.base_type} v);
+''')
+
+	for field in fields:
+		output_header_element(out, field)
+	out(f'''
+}} {function_tostring_properties(t)};
+
+template <> struct ndr_requ_traits_t<{tname}> {{
+	using ndr_base_type = {tname};
+	using has_buffers = std::false_type;
+	using ndr_data_type = x_ndr_type_struct;
+
+	x_ndr_off_t scalars(const {tname} &__val, x_ndr_push_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level) const;
+	x_ndr_off_t scalars({tname} &__val, x_ndr_pull_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level) const;
+	void ostr(const {tname} &__val, x_ndr_ostr_t &__ndr, uint32_t __flags, x_ndr_switch_t __level) const;
+}};
+
+template <> struct ndr_resp_traits_t<{tname}> {{
+	using ndr_base_type = {tname};
+	using has_buffers = std::false_type;
+	using ndr_data_type = x_ndr_type_struct;
+
+	x_ndr_off_t scalars(const {tname} &__val, x_ndr_push_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level) const;
+	x_ndr_off_t scalars({tname} &__val, x_ndr_pull_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level) const;
+	void ostr(const {tname} &__val, x_ndr_ostr_t &__ndr, uint32_t __flags, x_ndr_switch_t __level) const;
+}};
+
+
+''')
+
+
 
 def output_header_INTERFACE(out, iface, idl, idl_tbl):
 
@@ -1579,8 +1734,7 @@ def output_header_INTERFACE(out, iface, idl, idl_tbl):
 const {dtype}{'*' if t['POINTERS'] == 1 else ''} {t['NAME']} = {t['VALUE']};
 ''')
 		elif t["TYPE"] in [ "FUNCTION" ]:
-			pass
-			#output_header_FUNCTION(out, idl, t);
+			output_header_FUNCTION(out, t, iface, idl, idl_tbl)
 		else:
 			error(f'''Unknown type "{t['TYPE']}" at {t['FILE']}:{t['LINE']}''')
 			assert False

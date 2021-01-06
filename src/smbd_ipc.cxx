@@ -95,13 +95,13 @@ static idl::dcerpc_nca_status srvsvc_NetShareEnumAll(idl::dcerpc_request request
 		uint8_t &resp_type, std::vector<uint8_t> &body_output, uint32_t ndr_flags)
 {
 	idl::srvsvc_NetShareEnumAll arg;
-#if 1
+#if 0
 	idl::x_ndr_pull_buff_t ndr_pull_buff{request.stub_and_verifier.val.data(),
 		request.stub_and_verifier.val.size()};
 	idl::x_ndr_pull_t ndr_pull{ndr_pull_buff, 0};
 	idl::x_ndr_off_t ret = arg.ndr_requ(ndr_pull, 0, request.stub_and_verifier.val.size(), ndr_flags);
 #else
-	idl::x_ndr_off_t ret = idl::x_ndr_requ(arg,
+	idl::x_ndr_off_t ret = idl::x_ndr_requ_pull(arg,
 			request.stub_and_verifier.val.data(),
 			request.stub_and_verifier.val.size(),
 			ndr_flags);
@@ -111,15 +111,15 @@ static idl::dcerpc_nca_status srvsvc_NetShareEnumAll(idl::dcerpc_request request
 	}
 	X_ASSERT(ret == (long)request.stub_and_verifier.val.size());
 
-	switch (arg.level) {
+	switch (arg.info_ctr.level) {
 	case 1:
-		arg.totalentries = net_share_enum_all_1(arg.ctr.ctr1);
+		arg.totalentries = net_share_enum_all_1(arg.info_ctr.ctr.ctr1);
 		break;
 
 	default:
 		X_TODO;
 	}
-#if 1
+#if 0
 	idl::x_ndr_push_buff_t ndr_push_buff{};
 	idl::x_ndr_push_t ndr_push{ndr_push_buff, 0};
 	ndr_push_buff.ptr_count = ndr_pull_buff.ptr_count;
@@ -128,7 +128,7 @@ static idl::dcerpc_nca_status srvsvc_NetShareEnumAll(idl::dcerpc_request request
 		std::swap(body_output, ndr_push_buff.data);
 	}
 #else
-	ret = idl::x_ndr_resp(arg, body_output, ndr_flags);
+	ret = idl::x_ndr_resp_push(arg, body_output, ndr_flags);
 #endif
 	X_ASSERT(ret > 0);
 	resp_type = idl::DCERPC_PKT_RESPONSE;
@@ -368,7 +368,9 @@ static NTSTATUS process_dcerpc_request(x_smbd_named_pipe_t *named_pipe,
 	uint32_t opnum = request.opnum;
 	if (opnum >= iface->n_cmd || !iface->cmds[opnum]) {
 		idl::dcerpc_fault fault;
-		memset(&fault, 0, sizeof fault);
+		fault.alloc_hint = 0;
+		fault.context_id = 0;
+		fault.cancel_count = 0;
 		fault.status = idl::DCERPC_NCA_S_OP_RNG_ERROR;
 		x_ndr_push(fault, body_output, ndr_flags);
 		resp_type = idl::DCERPC_PKT_FAULT;
@@ -387,7 +389,7 @@ static NTSTATUS process_dcerpc_request(x_smbd_named_pipe_t *named_pipe,
 		response.context_id = 0;
 		response.cancel_count = 0;
 		response._pad = 0;
-		response.stub_and_verifier = output;
+		response.stub_and_verifier.val.swap(output);
 
 		x_ndr_push(response, body_output, ndr_flags);
 		/*
