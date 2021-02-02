@@ -5,24 +5,75 @@
 
 namespace idl {
 
+template <typename T, typename NT>
+static x_ndr_off_t ntlmssp_buffers_relative_ptr(NT &&nt, const std::shared_ptr<T> &val, x_ndr_push_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32 flags, x_ndr_switch_t level)
+{
+	x_ndr_off_t pos_len = ndr.load_pos();
+	x_ndr_off_t pos_max_len = ndr.load_pos();
+	ndr_traits_at_t<ndr_traits_t<uint32>> at_field{ndr_traits_t<uint32>(), ndr.load_pos(), (flags)};
+	x_ndr_off_t orig_bpos = bpos;
+	bpos = x_ndr_buffers_relative_ptr(std::forward<NT>(nt), val, ndr, bpos, epos, flags, level, at_field);
+	if (bpos < 0) {
+		return bpos;
+	}
+	x_ndr_scalars_default(uint16(bpos - orig_bpos), ndr, pos_len, epos, flags, X_NDR_SWITCH_NONE);
+	x_ndr_scalars_default(uint16(bpos - orig_bpos), ndr, pos_max_len, epos, flags, X_NDR_SWITCH_NONE);
+	return bpos;
+}
+
+template <typename T, typename NT>
+static x_ndr_off_t ntlmssp_buffers_relative_ptr(NT &&nt, std::shared_ptr<T> &val, x_ndr_pull_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32 flags, x_ndr_switch_t level)
+{
+	ndr_traits_at_t<ndr_traits_t<uint16>> at_len{ndr_traits_t<uint16>{}, ndr.load_pos(), flags};
+	ndr.load_pos();
+	ndr_traits_at_t<ndr_traits_t<uint32>> at_field{ndr_traits_t<uint32>(), ndr.load_pos(), (flags)};
+	bpos = x_ndr_buffers_relative_ptr(std::forward<NT>(nt), val, ndr, bpos, epos, flags, level, at_field, at_len);
+	return bpos;
+}
+
 #define NTLMSSP_SCALARS_RELATIVE_PTR() do { \
-	X_NDR_SAVE_POS(uint16, __ndr, __bpos, __epos, __flags); \
-	X_NDR_SAVE_POS(uint16, __ndr, __bpos, __epos, __flags); \
-	X_NDR_SAVE_POS(uint32, __ndr, __bpos, __epos, __flags); \
+	X_NDR_SAVE_POS(uint16, ndr, bpos, epos, flags); \
+	X_NDR_SAVE_POS(uint16, ndr, bpos, epos, flags); \
+	X_NDR_SAVE_POS(uint32, ndr, bpos, epos, flags); \
 } while (0)
 
-#define NTLMSSP_BUFFERS_RELATIVE_PTR(field, flags) do { \
-	x_ndr_off_t __pos_len = __ndr.load_pos(); \
-	x_ndr_off_t __pos_max_len = __ndr.load_pos(); \
-	x_ndr_off_t __pos_field = __ndr.load_pos(); \
-	X_NDR_BUFFERS_RELATIVE_PTR_SIZE_2((field), __ndr, __bpos, __epos, (flags), X_NDR_SWITCH_NONE, \
-			uint32, __pos_field, \
-			uint16, __pos_len, x_ndr_I_t(), \
-			uint16, __pos_max_len, x_ndr_I_t()); \
-} while (0)
+#define NTLMSSP_BUFFERS_RELATIVE_PTR(NT, field, flags) \
+	X_NDR_VERIFY(bpos, ntlmssp_buffers_relative_ptr((NT){}, (field), ndr, bpos, epos, (flags), level))
 
+template <typename T>
+static inline x_ndr_off_t ntlmssp_buffers_relative_ptr_default(const std::shared_ptr<T> &val, x_ndr_push_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32 flags, x_ndr_switch_t level)
+{
+	return ntlmssp_buffers_relative_ptr(ndr_traits_t<T>{}, val, ndr, bpos, epos, flags, level);
+}
 
+template <typename T>
+static inline x_ndr_off_t ntlmssp_buffers_relative_ptr_default(std::shared_ptr<T> &val, x_ndr_pull_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32 flags, x_ndr_switch_t level)
+{
+	return ntlmssp_buffers_relative_ptr(ndr_traits_t<T>{}, val, ndr, bpos, epos, flags, level);
+}
 
+#define NTLMSSP_BUFFERS_RELATIVE_PTR_DEFAULT(field, flags) \
+	X_NDR_VERIFY(bpos, ntlmssp_buffers_relative_ptr_default((field), ndr, bpos, epos, (flags), level))
+
+struct ndr_traits_ntlmssp_string_t
+{
+	using ndr_base_type = std::string;
+	using has_buffers = std::false_type;
+	using ndr_data_type = x_ndr_type_primary;
+
+	x_ndr_off_t scalars(const std::string &val, x_ndr_push_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, x_ndr_switch_t level) const {
+		X_ASSERT(level == X_NDR_SWITCH_NONE);
+		return x_ndr_push_gstring(val, ndr, bpos, epos, flags);
+	}
+	x_ndr_off_t scalars(std::string &val, x_ndr_pull_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, x_ndr_switch_t level) const {
+		X_ASSERT(level == X_NDR_SWITCH_NONE);
+		return x_ndr_pull_gstring(val, ndr, bpos, epos, flags);
+	}
+	void ostr(const std::string &val, x_ndr_ostr_t &ndr, uint32_t flags, x_ndr_switch_t level) const {
+		X_ASSERT(level == X_NDR_SWITCH_NONE);
+		return x_ndr_ostr_gstring(val, ndr, flags);
+	}
+};
 
 #if 0
 x_ndr_off_t ntlmssp_Version::ndr_scalars(x_ndr_push_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level) const
@@ -60,63 +111,6 @@ void ntlmssp_Version::ostr(x_ndr_ostr_t &__ndr, uint32_t __flags, x_ndr_switch_t
 		default: {
 		} break;
 	}
-}
-
-
-x_ndr_off_t NEGOTIATE_MESSAGE::ndr_scalars(x_ndr_push_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level) const
-{
-	X_NDR_HEADER_ALIGN(5, __ndr, __bpos, __epos, __flags);
-	x_ndr_off_t __base = __bpos; (void)__base;
-	std::array<uint8, 8> Signature{"NTLMSSP"};
-	X_NDR_SCALARS(Signature, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
-	ntlmssp_MessageType MessageType{NtLmNegotiate};
-	X_NDR_SCALARS(MessageType, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
-	X_NDR_SCALARS(NegotiateFlags, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
-	NTLMSSP_SCALARS_RELATIVE_PTR();
-	NTLMSSP_SCALARS_RELATIVE_PTR();
-	X_NDR_SCALARS(Version, __ndr, __bpos, __epos, __flags, NegotiateFlags&NTLMSSP_NEGOTIATE_VERSION);
-	X_NDR_TRAILER_ALIGN(5, __ndr, __bpos, __epos, __flags);
-	return __bpos;
-}
-
-x_ndr_off_t NEGOTIATE_MESSAGE::ndr_buffers(x_ndr_push_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level) const
-{
-	NTLMSSP_BUFFERS_RELATIVE_PTR(DomainName, x_ndr_set_flags(__flags, x_ndr_ntlmssp_negotiated_string_flags(NTLMSSP_NEGOTIATE_OEM)));
-	NTLMSSP_BUFFERS_RELATIVE_PTR(Workstation, x_ndr_set_flags(__flags, x_ndr_ntlmssp_negotiated_string_flags(NTLMSSP_NEGOTIATE_OEM)));
-	return __bpos;
-}
-
-x_ndr_off_t NEGOTIATE_MESSAGE::ndr_scalars(x_ndr_pull_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level)
-{
-	X_NDR_HEADER_ALIGN(5, __ndr, __bpos, __epos, __flags);
-	x_ndr_off_t __base = __bpos; (void)__base;
-	std::array<uint8, 8> Signature;
-	X_NDR_SCALARS(Signature, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
-	ntlmssp_MessageType MessageType;
-	X_NDR_SCALARS(MessageType, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
-	X_NDR_SCALARS(NegotiateFlags, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
-	NTLMSSP_SCALARS_RELATIVE_PTR();
-	NTLMSSP_SCALARS_RELATIVE_PTR();
-	X_NDR_SCALARS(Version, __ndr, __bpos, __epos, __flags, NegotiateFlags&NTLMSSP_NEGOTIATE_VERSION);
-	X_NDR_TRAILER_ALIGN(5, __ndr, __bpos, __epos, __flags);
-	return __bpos;
-}
-
-x_ndr_off_t NEGOTIATE_MESSAGE::ndr_buffers(x_ndr_pull_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level)
-{
-	NTLMSSP_BUFFERS_RELATIVE_PTR(DomainName, x_ndr_set_flags(__flags, x_ndr_ntlmssp_negotiated_string_flags(NTLMSSP_NEGOTIATE_OEM)));
-	NTLMSSP_BUFFERS_RELATIVE_PTR(Workstation, x_ndr_set_flags(__flags, x_ndr_ntlmssp_negotiated_string_flags(NTLMSSP_NEGOTIATE_OEM)));
-	return __bpos;
-}
-
-void NEGOTIATE_MESSAGE::ostr(x_ndr_ostr_t &__ndr, uint32_t __flags, x_ndr_switch_t __level) const
-{
-	(__ndr) << enter;
-	X_NDR_OSTR_NEXT(NegotiateFlags, __ndr, __flags, X_NDR_SWITCH_NONE);
-	X_NDR_OSTR_NEXT(DomainName, __ndr, __flags, X_NDR_SWITCH_NONE);
-	X_NDR_OSTR_NEXT(Workstation, __ndr, __flags, X_NDR_SWITCH_NONE);
-	X_NDR_OSTR_NEXT(Version, __ndr, __flags, NegotiateFlags&NTLMSSP_NEGOTIATE_VERSION);
-	(__ndr) << leave;
 }
 
 
@@ -464,72 +458,6 @@ void AV_PAIR_LIST::ostr(x_ndr_ostr_t &__ndr, uint32_t __flags, x_ndr_switch_t __
 
 
 
-x_ndr_off_t CHALLENGE_MESSAGE::ndr_scalars(x_ndr_push_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level) const
-{
-	__flags = x_ndr_set_flags(__flags, LIBNDR_PRINT_ARRAY_HEX);
-	X_NDR_HEADER_ALIGN(5, __ndr, __bpos, __epos, __flags);
-	std::array<uint8, 8> Signature{"NTLMSSP"};
-	X_NDR_SCALARS(Signature, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
-	ntlmssp_MessageType MessageType{NtLmChallenge};
-	X_NDR_SCALARS(MessageType, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
-	NTLMSSP_SCALARS_RELATIVE_PTR();
-	X_NDR_SCALARS(NegotiateFlags, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
-	X_NDR_SCALARS(ServerChallenge, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
-	X_NDR_SCALARS(Reserved, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
-	NTLMSSP_SCALARS_RELATIVE_PTR();
-	X_NDR_SCALARS(Version, __ndr, __bpos, __epos, __flags, NegotiateFlags&NTLMSSP_NEGOTIATE_VERSION);
-	X_NDR_TRAILER_ALIGN(5, __ndr, __bpos, __epos, __flags);
-	return __bpos;
-}
-
-x_ndr_off_t CHALLENGE_MESSAGE::ndr_buffers(x_ndr_push_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level) const
-{
-	__flags = x_ndr_set_flags(__flags, LIBNDR_PRINT_ARRAY_HEX);
-	NTLMSSP_BUFFERS_RELATIVE_PTR(TargetName, x_ndr_set_flags(__flags, x_ndr_ntlmssp_negotiated_string_flags(NegotiateFlags)));
-	NTLMSSP_BUFFERS_RELATIVE_PTR(TargetInfo, __flags);
-	return __bpos;
-}
-
-x_ndr_off_t CHALLENGE_MESSAGE::ndr_scalars(x_ndr_pull_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level)
-{
-	__flags = x_ndr_set_flags(__flags, LIBNDR_PRINT_ARRAY_HEX);
-	X_NDR_HEADER_ALIGN(5, __ndr, __bpos, __epos, __flags);
-	x_ndr_off_t __base = __bpos; (void)__base;
-	std::array<uint8, 8> Signature;
-	X_NDR_SCALARS(Signature, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
-	ntlmssp_MessageType MessageType;
-	X_NDR_SCALARS(MessageType, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
-	NTLMSSP_SCALARS_RELATIVE_PTR();
-	X_NDR_SCALARS(NegotiateFlags, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
-	X_NDR_SCALARS(ServerChallenge, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
-	X_NDR_SCALARS(Reserved, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
-	NTLMSSP_SCALARS_RELATIVE_PTR();
-	X_NDR_SCALARS(Version, __ndr, __bpos, __epos, __flags, NegotiateFlags&NTLMSSP_NEGOTIATE_VERSION);
-	X_NDR_TRAILER_ALIGN(5, __ndr, __bpos, __epos, __flags);
-	return __bpos;
-}
-
-x_ndr_off_t CHALLENGE_MESSAGE::ndr_buffers(x_ndr_pull_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level)
-{
-	__flags = x_ndr_set_flags(__flags, LIBNDR_PRINT_ARRAY_HEX);
-	NTLMSSP_BUFFERS_RELATIVE_PTR(TargetName, x_ndr_set_flags(__flags, x_ndr_ntlmssp_negotiated_string_flags(NegotiateFlags)));
-	NTLMSSP_BUFFERS_RELATIVE_PTR(TargetInfo, __flags);
-	return __bpos;
-}
-
-void CHALLENGE_MESSAGE::ostr(x_ndr_ostr_t &__ndr, uint32_t __flags, x_ndr_switch_t __level) const
-{
-	__flags = x_ndr_set_flags(__flags, LIBNDR_PRINT_ARRAY_HEX);
-	(__ndr) << enter;
-	X_NDR_OSTR_NEXT(TargetName, __ndr, x_ndr_set_flags(__flags, x_ndr_ntlmssp_negotiated_string_flags(NegotiateFlags)), X_NDR_SWITCH_NONE);
-	X_NDR_OSTR_NEXT(NegotiateFlags, __ndr, __flags, X_NDR_SWITCH_NONE);
-	X_NDR_OSTR_NEXT(ServerChallenge, __ndr, __flags, X_NDR_SWITCH_NONE);
-	X_NDR_OSTR_NEXT(TargetInfo, __ndr, __flags, X_NDR_SWITCH_NONE);
-	X_NDR_OSTR_NEXT(Version, __ndr, __flags, NegotiateFlags&NTLMSSP_NEGOTIATE_VERSION);
-	(__ndr) << leave;
-}
-
-
 
 x_ndr_off_t LM_RESPONSE::ndr_scalars(x_ndr_push_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level) const
 {
@@ -844,90 +772,6 @@ void ntlmssp_MIC::ostr(x_ndr_ostr_t &__ndr, uint32_t __flags, x_ndr_switch_t __l
 
 
 
-x_ndr_off_t AUTHENTICATE_MESSAGE::ndr_scalars(x_ndr_push_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level) const
-{
-	__flags = x_ndr_set_flags(__flags, LIBNDR_FLAG_REMAINING);
-	X_NDR_HEADER_ALIGN(5, __ndr, __bpos, __epos, __flags);
-	x_ndr_off_t __base = __bpos; (void)__base;
-	std::array<uint8, 8> Signature{"NTLMSSP"};
-	X_NDR_SCALARS(Signature, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
-	ntlmssp_MessageType MessageType{NtLmAuthenticate};
-	X_NDR_SCALARS(MessageType, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
-	NTLMSSP_SCALARS_RELATIVE_PTR();
-	NTLMSSP_SCALARS_RELATIVE_PTR();
-	NTLMSSP_SCALARS_RELATIVE_PTR();
-	NTLMSSP_SCALARS_RELATIVE_PTR();
-	NTLMSSP_SCALARS_RELATIVE_PTR();
-	NTLMSSP_SCALARS_RELATIVE_PTR();
-	X_NDR_SCALARS(NegotiateFlags, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
-	X_NDR_SCALARS(Version, __ndr, __bpos, __epos, __flags, NegotiateFlags&NTLMSSP_NEGOTIATE_VERSION);
-	X_NDR_SCALARS(mic, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
-	X_NDR_TRAILER_ALIGN(5, __ndr, __bpos, __epos, __flags);
-	return __bpos;
-}
-
-x_ndr_off_t AUTHENTICATE_MESSAGE::ndr_buffers(x_ndr_push_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level) const
-{
-	__flags = x_ndr_set_flags(__flags, LIBNDR_FLAG_REMAINING);
-	NTLMSSP_BUFFERS_RELATIVE_PTR(LmChallengeResponse, __flags);
-	NTLMSSP_BUFFERS_RELATIVE_PTR(NtChallengeResponse, __flags);
-	NTLMSSP_BUFFERS_RELATIVE_PTR(DomainName, x_ndr_set_flags(__flags, x_ndr_ntlmssp_negotiated_string_flags(NegotiateFlags)));
-	NTLMSSP_BUFFERS_RELATIVE_PTR(UserName, x_ndr_set_flags(__flags, x_ndr_ntlmssp_negotiated_string_flags(NegotiateFlags)));
-	NTLMSSP_BUFFERS_RELATIVE_PTR(Workstation, x_ndr_set_flags(__flags, x_ndr_ntlmssp_negotiated_string_flags(NegotiateFlags)));
-	NTLMSSP_BUFFERS_RELATIVE_PTR(EncryptedRandomSessionKey, __flags);
-	return __bpos;
-}
-
-x_ndr_off_t AUTHENTICATE_MESSAGE::ndr_scalars(x_ndr_pull_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level)
-{
-	__flags = x_ndr_set_flags(__flags, LIBNDR_FLAG_REMAINING);
-	X_NDR_HEADER_ALIGN(5, __ndr, __bpos, __epos, __flags);
-	x_ndr_off_t __base = __bpos; (void)__base;
-	std::array<uint8, 8> Signature;
-	X_NDR_SCALARS(Signature, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
-	ntlmssp_MessageType MessageType;
-	X_NDR_SCALARS(MessageType, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
-	NTLMSSP_SCALARS_RELATIVE_PTR();
-	NTLMSSP_SCALARS_RELATIVE_PTR();
-	NTLMSSP_SCALARS_RELATIVE_PTR();
-	NTLMSSP_SCALARS_RELATIVE_PTR();
-	NTLMSSP_SCALARS_RELATIVE_PTR();
-	NTLMSSP_SCALARS_RELATIVE_PTR();
-	X_NDR_SCALARS(NegotiateFlags, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
-	X_NDR_SCALARS(Version, __ndr, __bpos, __epos, __flags, NegotiateFlags&NTLMSSP_NEGOTIATE_VERSION);
-	X_NDR_SCALARS(mic, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
-	X_NDR_TRAILER_ALIGN(5, __ndr, __bpos, __epos, __flags);
-	return __bpos;
-}
-
-x_ndr_off_t AUTHENTICATE_MESSAGE::ndr_buffers(x_ndr_pull_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level)
-{
-	NTLMSSP_BUFFERS_RELATIVE_PTR(LmChallengeResponse, __flags);
-	NTLMSSP_BUFFERS_RELATIVE_PTR(NtChallengeResponse, __flags);
-	NTLMSSP_BUFFERS_RELATIVE_PTR(DomainName, x_ndr_set_flags(__flags, x_ndr_ntlmssp_negotiated_string_flags(NegotiateFlags)));
-	NTLMSSP_BUFFERS_RELATIVE_PTR(UserName, x_ndr_set_flags(__flags, x_ndr_ntlmssp_negotiated_string_flags(NegotiateFlags)));
-	NTLMSSP_BUFFERS_RELATIVE_PTR(Workstation, x_ndr_set_flags(__flags, x_ndr_ntlmssp_negotiated_string_flags(NegotiateFlags)));
-	NTLMSSP_BUFFERS_RELATIVE_PTR(EncryptedRandomSessionKey, __flags);
-	return __bpos;
-}
-
-void AUTHENTICATE_MESSAGE::ostr(x_ndr_ostr_t &__ndr, uint32_t __flags, x_ndr_switch_t __level) const
-{
-	__flags = x_ndr_set_flags(__flags, LIBNDR_FLAG_REMAINING);
-	(__ndr) << enter;
-	X_NDR_OSTR_NEXT(LmChallengeResponse, __ndr, __flags, X_NDR_SWITCH_NONE);
-	X_NDR_OSTR_NEXT(NtChallengeResponse, __ndr, __flags, X_NDR_SWITCH_NONE);
-	X_NDR_OSTR_NEXT(DomainName, __ndr, x_ndr_set_flags(__flags, x_ndr_ntlmssp_negotiated_string_flags(NegotiateFlags)), X_NDR_SWITCH_NONE);
-	X_NDR_OSTR_NEXT(UserName, __ndr, x_ndr_set_flags(__flags, x_ndr_ntlmssp_negotiated_string_flags(NegotiateFlags)), X_NDR_SWITCH_NONE);
-	X_NDR_OSTR_NEXT(Workstation, __ndr, x_ndr_set_flags(__flags, x_ndr_ntlmssp_negotiated_string_flags(NegotiateFlags)), X_NDR_SWITCH_NONE);
-	X_NDR_OSTR_NEXT(EncryptedRandomSessionKey, __ndr, __flags, X_NDR_SWITCH_NONE);
-	X_NDR_OSTR_NEXT(NegotiateFlags, __ndr, __flags, X_NDR_SWITCH_NONE);
-	X_NDR_OSTR_NEXT(Version, __ndr, __flags, NegotiateFlags&NTLMSSP_NEGOTIATE_VERSION);
-	X_NDR_OSTR_NEXT(mic, __ndr, __flags, X_NDR_SWITCH_NONE);
-	(__ndr) << leave;
-}
-
-
 
 x_ndr_off_t NTLMSSP_MESSAGE_SIGNATURE::ndr_scalars(x_ndr_push_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level) const
 {
@@ -1006,4 +850,223 @@ void NTLMSSP_MESSAGE_SIGNATURE_NTLMv2::ostr(x_ndr_ostr_t &__ndr, uint32_t __flag
 
 
 #endif
+
+x_ndr_off_t ndr_traits_t<NEGOTIATE_MESSAGE>::scalars(const NEGOTIATE_MESSAGE &val,
+	x_ndr_push_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, x_ndr_switch_t level) const
+{
+	X_NDR_HEADER_ALIGN(5, ndr, bpos, epos, flags);
+	std::array<uint8, 8> Signature{"NTLMSSP"};
+	X_NDR_SCALARS_DEFAULT(Signature, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
+	ntlmssp_MessageType MessageType{NtLmNegotiate};
+	X_NDR_SCALARS_DEFAULT(MessageType, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
+	X_NDR_SCALARS_DEFAULT(val.NegotiateFlags, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
+	NTLMSSP_SCALARS_RELATIVE_PTR();
+	NTLMSSP_SCALARS_RELATIVE_PTR();
+	X_NDR_SCALARS_DEFAULT(val.Version, ndr, bpos, epos, flags, val.NegotiateFlags&NTLMSSP_NEGOTIATE_VERSION);
+	X_NDR_TRAILER_ALIGN(5, ndr, bpos, epos, flags);
+	return bpos;
+}
+
+x_ndr_off_t ndr_traits_t<NEGOTIATE_MESSAGE>::buffers(const NEGOTIATE_MESSAGE &val,
+		x_ndr_push_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, x_ndr_switch_t level) const
+{
+	NTLMSSP_BUFFERS_RELATIVE_PTR(ndr_traits_ntlmssp_string_t, val.DomainName, x_ndr_set_flags(flags, ndr_ntlmssp_negotiated_string_flags(NTLMSSP_NEGOTIATE_OEM)));
+	NTLMSSP_BUFFERS_RELATIVE_PTR(ndr_traits_ntlmssp_string_t, val.Workstation, x_ndr_set_flags(flags, ndr_ntlmssp_negotiated_string_flags(NTLMSSP_NEGOTIATE_OEM)));
+	return bpos;
+}
+
+x_ndr_off_t ndr_traits_t<NEGOTIATE_MESSAGE>::scalars(NEGOTIATE_MESSAGE &val,
+	x_ndr_pull_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, x_ndr_switch_t level) const
+{
+	X_NDR_HEADER_ALIGN(5, ndr, bpos, epos, flags);
+	std::array<uint8, 8> Signature;
+	X_NDR_SCALARS_DEFAULT(Signature, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
+	ntlmssp_MessageType MessageType;
+	X_NDR_SCALARS_DEFAULT(MessageType, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
+	X_NDR_SCALARS_DEFAULT(val.NegotiateFlags, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
+	NTLMSSP_SCALARS_RELATIVE_PTR();
+	NTLMSSP_SCALARS_RELATIVE_PTR();
+	X_NDR_SCALARS_DEFAULT(val.Version, ndr, bpos, epos, flags, val.NegotiateFlags&NTLMSSP_NEGOTIATE_VERSION);
+	X_NDR_TRAILER_ALIGN(5, ndr, bpos, epos, flags);
+	return bpos;
+}
+
+x_ndr_off_t ndr_traits_t<NEGOTIATE_MESSAGE>::buffers(NEGOTIATE_MESSAGE &val,
+		x_ndr_pull_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, x_ndr_switch_t level) const
+{
+	NTLMSSP_BUFFERS_RELATIVE_PTR(ndr_traits_ntlmssp_string_t, val.DomainName, x_ndr_set_flags(flags, ndr_ntlmssp_negotiated_string_flags(NTLMSSP_NEGOTIATE_OEM)));
+	NTLMSSP_BUFFERS_RELATIVE_PTR(ndr_traits_ntlmssp_string_t, val.Workstation, x_ndr_set_flags(flags, ndr_ntlmssp_negotiated_string_flags(NTLMSSP_NEGOTIATE_OEM)));
+	return bpos;
+}
+
+void ndr_traits_t<NEGOTIATE_MESSAGE>::ostr(const NEGOTIATE_MESSAGE &val,
+		x_ndr_ostr_t &ndr, uint32_t flags, x_ndr_switch_t level) const
+{
+	ndr << enter;
+	X_NDR_OSTR_FIELD_DEFAULT(NegotiateFlags, val, ndr, flags, X_NDR_SWITCH_NONE);
+	X_NDR_OSTR_FIELD_PTR(ndr_traits_ntlmssp_string_t, DomainName, val, ndr, flags, X_NDR_SWITCH_NONE);
+	X_NDR_OSTR_FIELD_PTR(ndr_traits_ntlmssp_string_t, Workstation, val, ndr, flags, X_NDR_SWITCH_NONE);
+	X_NDR_OSTR_FIELD_DEFAULT(Version, val, ndr, flags, val.NegotiateFlags&NTLMSSP_NEGOTIATE_VERSION);
+	ndr << leave;
+}
+
+
+x_ndr_off_t ndr_traits_t<CHALLENGE_MESSAGE>::scalars(const CHALLENGE_MESSAGE &val,
+	x_ndr_push_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, x_ndr_switch_t level) const
+{
+	flags = x_ndr_set_flags(flags, LIBNDR_PRINT_ARRAY_HEX);
+	X_NDR_HEADER_ALIGN(5, ndr, bpos, epos, flags);
+	std::array<uint8, 8> Signature{"NTLMSSP"};
+	X_NDR_SCALARS_DEFAULT(Signature, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
+	ntlmssp_MessageType MessageType{NtLmChallenge};
+	X_NDR_SCALARS_DEFAULT(MessageType, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
+	NTLMSSP_SCALARS_RELATIVE_PTR();
+	X_NDR_SCALARS_DEFAULT(val.NegotiateFlags, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
+	X_NDR_SCALARS_DEFAULT(val.ServerChallenge, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
+	X_NDR_SCALARS_DEFAULT(val.Reserved, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
+	NTLMSSP_SCALARS_RELATIVE_PTR();
+	X_NDR_SCALARS_DEFAULT(val.Version, ndr, bpos, epos, flags, val.NegotiateFlags&NTLMSSP_NEGOTIATE_VERSION);
+	X_NDR_TRAILER_ALIGN(5, ndr, bpos, epos, flags);
+	return bpos;
+}
+
+x_ndr_off_t ndr_traits_t<CHALLENGE_MESSAGE>::buffers(const CHALLENGE_MESSAGE &val,
+	x_ndr_push_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, x_ndr_switch_t level) const
+{
+	flags = x_ndr_set_flags(flags, LIBNDR_PRINT_ARRAY_HEX);
+	NTLMSSP_BUFFERS_RELATIVE_PTR(ndr_traits_ntlmssp_string_t, val.TargetName, x_ndr_set_flags(flags, ndr_ntlmssp_negotiated_string_flags(val.NegotiateFlags)));
+	NTLMSSP_BUFFERS_RELATIVE_PTR_DEFAULT(val.TargetInfo, flags);
+	return bpos;
+}
+
+x_ndr_off_t ndr_traits_t<CHALLENGE_MESSAGE>::scalars(CHALLENGE_MESSAGE &val,
+	x_ndr_pull_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, x_ndr_switch_t level) const
+{
+	flags = x_ndr_set_flags(flags, LIBNDR_PRINT_ARRAY_HEX);
+	X_NDR_HEADER_ALIGN(5, ndr, bpos, epos, flags);
+	std::array<uint8, 8> Signature;
+	X_NDR_SCALARS_DEFAULT(Signature, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
+	ntlmssp_MessageType MessageType;
+	X_NDR_SCALARS_DEFAULT(MessageType, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
+	NTLMSSP_SCALARS_RELATIVE_PTR();
+	X_NDR_SCALARS_DEFAULT(val.NegotiateFlags, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
+	X_NDR_SCALARS_DEFAULT(val.ServerChallenge, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
+	X_NDR_SCALARS_DEFAULT(val.Reserved, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
+	NTLMSSP_SCALARS_RELATIVE_PTR();
+	X_NDR_SCALARS_DEFAULT(val.Version, ndr, bpos, epos, flags, val.NegotiateFlags&NTLMSSP_NEGOTIATE_VERSION);
+	X_NDR_TRAILER_ALIGN(5, ndr, bpos, epos, flags);
+	return bpos;
+}
+
+x_ndr_off_t ndr_traits_t<CHALLENGE_MESSAGE>::buffers(CHALLENGE_MESSAGE &val,
+	x_ndr_pull_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, x_ndr_switch_t level) const
+{
+	flags = x_ndr_set_flags(flags, LIBNDR_PRINT_ARRAY_HEX);
+	NTLMSSP_BUFFERS_RELATIVE_PTR(ndr_traits_ntlmssp_string_t, val.TargetName, x_ndr_set_flags(flags, ndr_ntlmssp_negotiated_string_flags(val.NegotiateFlags)));
+	NTLMSSP_BUFFERS_RELATIVE_PTR_DEFAULT(val.TargetInfo, flags);
+	return bpos;
+}
+
+void ndr_traits_t<CHALLENGE_MESSAGE>::ostr(const CHALLENGE_MESSAGE &val,
+		x_ndr_ostr_t &ndr, uint32_t flags, x_ndr_switch_t level) const
+{
+	flags = x_ndr_set_flags(flags, LIBNDR_PRINT_ARRAY_HEX);
+	ndr << enter;
+	X_NDR_OSTR_FIELD_PTR(ndr_traits_ntlmssp_string_t, TargetName, val, ndr, x_ndr_set_flags(flags, ndr_ntlmssp_negotiated_string_flags(val.NegotiateFlags)), X_NDR_SWITCH_NONE);
+	X_NDR_OSTR_FIELD_DEFAULT(NegotiateFlags, val, ndr, flags, X_NDR_SWITCH_NONE);
+	X_NDR_OSTR_FIELD_DEFAULT(ServerChallenge, val, ndr, flags, X_NDR_SWITCH_NONE);
+	X_NDR_OSTR_FIELD_PTR_DEFAULT(TargetInfo, val, ndr, flags, X_NDR_SWITCH_NONE);
+	X_NDR_OSTR_FIELD_DEFAULT(Version, val, ndr, flags, val.NegotiateFlags&NTLMSSP_NEGOTIATE_VERSION);
+	ndr << leave;
+}
+
+
+x_ndr_off_t ndr_traits_t<AUTHENTICATE_MESSAGE>::scalars(const AUTHENTICATE_MESSAGE &val,
+	x_ndr_push_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, x_ndr_switch_t level) const
+{
+	flags = x_ndr_set_flags(flags, LIBNDR_FLAG_REMAINING);
+	X_NDR_HEADER_ALIGN(5, ndr, bpos, epos, flags);
+	std::array<uint8, 8> Signature{"NTLMSSP"};
+	X_NDR_SCALARS_DEFAULT(Signature, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
+	ntlmssp_MessageType MessageType{NtLmAuthenticate};
+	X_NDR_SCALARS_DEFAULT(MessageType, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
+	NTLMSSP_SCALARS_RELATIVE_PTR();
+	NTLMSSP_SCALARS_RELATIVE_PTR();
+	NTLMSSP_SCALARS_RELATIVE_PTR();
+	NTLMSSP_SCALARS_RELATIVE_PTR();
+	NTLMSSP_SCALARS_RELATIVE_PTR();
+	NTLMSSP_SCALARS_RELATIVE_PTR();
+	X_NDR_SCALARS_DEFAULT(val.NegotiateFlags, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
+	X_NDR_SCALARS_DEFAULT(val.Version, ndr, bpos, epos, flags, val.NegotiateFlags&NTLMSSP_NEGOTIATE_VERSION);
+	X_NDR_SCALARS_DEFAULT(val.mic, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
+	X_NDR_TRAILER_ALIGN(5, ndr, bpos, epos, flags);
+	return bpos;
+}
+
+x_ndr_off_t ndr_traits_t<AUTHENTICATE_MESSAGE>::buffers(const AUTHENTICATE_MESSAGE &val,
+	x_ndr_push_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, x_ndr_switch_t level) const
+{
+	flags = x_ndr_set_flags(flags, LIBNDR_FLAG_REMAINING);
+	NTLMSSP_BUFFERS_RELATIVE_PTR_DEFAULT(val.LmChallengeResponse, flags);
+	NTLMSSP_BUFFERS_RELATIVE_PTR_DEFAULT(val.NtChallengeResponse, flags);
+	NTLMSSP_BUFFERS_RELATIVE_PTR(ndr_traits_ntlmssp_string_t, val.DomainName, x_ndr_set_flags(flags, ndr_ntlmssp_negotiated_string_flags(val.NegotiateFlags)));
+	NTLMSSP_BUFFERS_RELATIVE_PTR(ndr_traits_ntlmssp_string_t, val.UserName, x_ndr_set_flags(flags, ndr_ntlmssp_negotiated_string_flags(val.NegotiateFlags)));
+	NTLMSSP_BUFFERS_RELATIVE_PTR(ndr_traits_ntlmssp_string_t, val.Workstation, x_ndr_set_flags(flags, ndr_ntlmssp_negotiated_string_flags(val.NegotiateFlags)));
+	NTLMSSP_BUFFERS_RELATIVE_PTR_DEFAULT(val.EncryptedRandomSessionKey, flags);
+	return bpos;
+}
+
+x_ndr_off_t ndr_traits_t<AUTHENTICATE_MESSAGE>::scalars(AUTHENTICATE_MESSAGE &val,
+	x_ndr_pull_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, x_ndr_switch_t level) const
+{
+	flags = x_ndr_set_flags(flags, LIBNDR_FLAG_REMAINING);
+	X_NDR_HEADER_ALIGN(5, ndr, bpos, epos, flags);
+	x_ndr_off_t base = bpos; (void)base;
+	std::array<uint8, 8> Signature;
+	X_NDR_SCALARS_DEFAULT(Signature, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
+	ntlmssp_MessageType MessageType;
+	X_NDR_SCALARS_DEFAULT(MessageType, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
+	NTLMSSP_SCALARS_RELATIVE_PTR();
+	NTLMSSP_SCALARS_RELATIVE_PTR();
+	NTLMSSP_SCALARS_RELATIVE_PTR();
+	NTLMSSP_SCALARS_RELATIVE_PTR();
+	NTLMSSP_SCALARS_RELATIVE_PTR();
+	NTLMSSP_SCALARS_RELATIVE_PTR();
+	X_NDR_SCALARS_DEFAULT(val.NegotiateFlags, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
+	X_NDR_SCALARS_DEFAULT(val.Version, ndr, bpos, epos, flags, val.NegotiateFlags&NTLMSSP_NEGOTIATE_VERSION);
+	X_NDR_SCALARS_DEFAULT(val.mic, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
+	X_NDR_TRAILER_ALIGN(5, ndr, bpos, epos, flags);
+	return bpos;
+}
+
+x_ndr_off_t ndr_traits_t<AUTHENTICATE_MESSAGE>::buffers(AUTHENTICATE_MESSAGE &val,
+	x_ndr_pull_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, x_ndr_switch_t level) const
+{
+	NTLMSSP_BUFFERS_RELATIVE_PTR_DEFAULT(val.LmChallengeResponse, flags);
+	NTLMSSP_BUFFERS_RELATIVE_PTR_DEFAULT(val.NtChallengeResponse, flags);
+	NTLMSSP_BUFFERS_RELATIVE_PTR(ndr_traits_ntlmssp_string_t, val.DomainName, x_ndr_set_flags(flags, ndr_ntlmssp_negotiated_string_flags(val.NegotiateFlags)));
+	NTLMSSP_BUFFERS_RELATIVE_PTR(ndr_traits_ntlmssp_string_t, val.UserName, x_ndr_set_flags(flags, ndr_ntlmssp_negotiated_string_flags(val.NegotiateFlags)));
+	NTLMSSP_BUFFERS_RELATIVE_PTR(ndr_traits_ntlmssp_string_t, val.Workstation, x_ndr_set_flags(flags, ndr_ntlmssp_negotiated_string_flags(val.NegotiateFlags)));
+	NTLMSSP_BUFFERS_RELATIVE_PTR_DEFAULT(val.EncryptedRandomSessionKey, flags);
+	return bpos;
+}
+
+void ndr_traits_t<AUTHENTICATE_MESSAGE>::ostr(const AUTHENTICATE_MESSAGE &val,
+		x_ndr_ostr_t &ndr, uint32_t flags, x_ndr_switch_t level) const
+{
+	flags = x_ndr_set_flags(flags, LIBNDR_FLAG_REMAINING);
+	(ndr) << enter;
+	X_NDR_OSTR_FIELD_PTR_DEFAULT(LmChallengeResponse, val, ndr, flags, X_NDR_SWITCH_NONE);
+	X_NDR_OSTR_FIELD_PTR_DEFAULT(NtChallengeResponse, val, ndr, flags, X_NDR_SWITCH_NONE);
+	X_NDR_OSTR_FIELD_PTR(ndr_traits_ntlmssp_string_t, DomainName, val, ndr, x_ndr_set_flags(flags, ndr_ntlmssp_negotiated_string_flags(val.NegotiateFlags)), X_NDR_SWITCH_NONE);
+	X_NDR_OSTR_FIELD_PTR(ndr_traits_ntlmssp_string_t, UserName, val, ndr, x_ndr_set_flags(flags, ndr_ntlmssp_negotiated_string_flags(val.NegotiateFlags)), X_NDR_SWITCH_NONE);
+	X_NDR_OSTR_FIELD_PTR(ndr_traits_ntlmssp_string_t, Workstation, val, ndr, x_ndr_set_flags(flags, ndr_ntlmssp_negotiated_string_flags(val.NegotiateFlags)), X_NDR_SWITCH_NONE);
+	X_NDR_OSTR_FIELD_PTR_DEFAULT(EncryptedRandomSessionKey, val, ndr, flags, X_NDR_SWITCH_NONE);
+	X_NDR_OSTR_FIELD_DEFAULT(NegotiateFlags, val, ndr, flags, X_NDR_SWITCH_NONE);
+	X_NDR_OSTR_FIELD_DEFAULT(Version, val, ndr, flags, val.NegotiateFlags&NTLMSSP_NEGOTIATE_VERSION);
+	X_NDR_OSTR_FIELD_DEFAULT(mic, val, ndr, flags, X_NDR_SWITCH_NONE);
+	(ndr) << leave;
+}
+
+
 }

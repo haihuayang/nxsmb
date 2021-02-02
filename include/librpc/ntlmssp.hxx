@@ -12,25 +12,29 @@
 
 namespace idl {
 
-struct ndr_traits_s2u16string
+struct ndr_traits_u16string_remain
 {
 	using has_buffers = std::false_type;
 	using ndr_base_type = u16string;
 	using ndr_data_type = x_ndr_type_primary;
 
-	x_ndr_off_t scalars(const u16string &val, x_ndr_push_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, x_ndr_switch_t level) const;
+	x_ndr_off_t scalars(const u16string &val, x_ndr_push_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, x_ndr_switch_t level) const {
+		X_ASSERT(level == X_NDR_SWITCH_NONE);
+		return x_ndr_push_u16string(val, ndr, bpos, epos, flags);
+	}
 
-	x_ndr_off_t scalars(u16string &val, x_ndr_pull_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, x_ndr_switch_t level) const;
+	x_ndr_off_t scalars(u16string &val, x_ndr_pull_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, x_ndr_switch_t level) const {
+		X_ASSERT(level == X_NDR_SWITCH_NONE);
+		return x_ndr_pull_u16string_remain(val, ndr, bpos, epos, flags);
+	}
 
 	void ostr(const u16string &val, x_ndr_ostr_t &ndr, uint32_t flags, x_ndr_switch_t level) const {
 		X_ASSERT(level == X_NDR_SWITCH_NONE);
-		X_TODO;
-		// ndr.os << val;
+		x_ndr_ostr_u16string(val, ndr, flags);
 	}
 };
 
-#if 0
-static inline uint32_t x_ndr_ntlmssp_negotiated_string_flags(uint32_t negotiate_flags)
+static inline uint32_t ndr_ntlmssp_negotiated_string_flags(uint32_t negotiate_flags)
 {
 	uint32_t flags = LIBNDR_FLAG_STR_NOTERM |
 			 LIBNDR_FLAG_STR_CHARLEN |
@@ -44,6 +48,7 @@ static inline uint32_t x_ndr_ntlmssp_negotiated_string_flags(uint32_t negotiate_
 }
 
 
+#if 0
 struct ntlmssp_VERSION {
 	x_ndr_off_t ndr_scalars(x_ndr_push_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level) const;
 	x_ndr_off_t ndr_scalars(x_ndr_pull_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level);
@@ -233,7 +238,7 @@ template <> struct x_ndr_traits_t<AV_PAIR_LIST> {
 #endif
 
 struct CHALLENGE_MESSAGE {
-	std::shared_ptr<gstring> TargetName;/* [relative, flag(x_ndr_ntlmssp_negotiated_string_flags(NegotiateFlags))] */
+	std::shared_ptr<std::string> TargetName;/* [relative, flag(x_ndr_ntlmssp_negotiated_string_flags(NegotiateFlags))] */
 	NEGOTIATE NegotiateFlags;
 	std::array<uint8, 8> ServerChallenge;
 	std::array<uint8, 8> Reserved;/* [noprint] */
@@ -371,9 +376,9 @@ template <> struct x_ndr_traits_t<ntlmssp_MIC> {
 struct AUTHENTICATE_MESSAGE {
 	std::shared_ptr<LM_RESPONSE> LmChallengeResponse; //x_ndr_relative_ptr_t<LM_RESPONSE, uint16, uint16> LmChallengeResponse;/* [relative] */
 	std::shared_ptr<DATA_BLOB> NtChallengeResponse;/* [relative] */
-	std::shared_ptr<gstring> DomainName; // x_ndr_relative_ptr_t<gstring, uint16, uint16> DomainName;/* [relative, flag(x_ndr_ntlmssp_negotiated_string_flags(NegotiateFlags))] */
-	std::shared_ptr<gstring> UserName; // x_ndr_relative_ptr_t<gstring, uint16, uint16> UserName;/* [relative, flag(x_ndr_ntlmssp_negotiated_string_flags(NegotiateFlags))] */
-	std::shared_ptr<gstring> Workstation; // x_ndr_relative_ptr_t<gstring, uint16, uint16> Workstation;/* [relative, flag(x_ndr_ntlmssp_negotiated_string_flags(NegotiateFlags))] */
+	std::shared_ptr<std::string> DomainName; // x_ndr_relative_ptr_t<gstring, uint16, uint16> DomainName;/* [relative, flag(x_ndr_ntlmssp_negotiated_string_flags(NegotiateFlags))] */
+	std::shared_ptr<std::string> UserName; // x_ndr_relative_ptr_t<gstring, uint16, uint16> UserName;/* [relative, flag(x_ndr_ntlmssp_negotiated_string_flags(NegotiateFlags))] */
+	std::shared_ptr<std::string> Workstation; // x_ndr_relative_ptr_t<gstring, uint16, uint16> Workstation;/* [relative, flag(x_ndr_ntlmssp_negotiated_string_flags(NegotiateFlags))] */
 	std::shared_ptr<DATA_BLOB> EncryptedRandomSessionKey; // x_ndr_relative_ptr_t<DATA_BLOB, uint16, uint16> EncryptedRandomSessionKey;/* [relative] */
 	NEGOTIATE NegotiateFlags;
 	ntlmssp_Version Version;/* [switch_is(NegotiateFlags&NTLMSSP_NEGOTIATE_VERSION)] */
@@ -424,6 +429,7 @@ template <> struct x_ndr_traits_t<NTLMSSP_MESSAGE_SIGNATURE_NTLMv2> {
 	using ndr_data_type x_ndr_type_struct;
 };
 #endif
+
 }
 
 #endif /* __librpc__ntlmssp__hxx__ */

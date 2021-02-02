@@ -543,6 +543,8 @@ static inline x_ndr_off_t x_ndr_scalars_array_value(NT &&nt,
 template <> struct ndr_traits_t<std::string>
 {
 	using has_buffers = std::false_type;
+	using ndr_data_type = std::string;
+
 	x_ndr_off_t scalars(const std::string &val, x_ndr_push_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, x_ndr_switch_t level) const {
 		X_ASSERT(level == X_NDR_SWITCH_NONE);
 		X_TODO;
@@ -568,26 +570,17 @@ template <> struct ndr_traits_t<std::u16string>
 
 	x_ndr_off_t scalars(const std::u16string &val, x_ndr_push_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, x_ndr_switch_t level) const {
 		X_ASSERT(level == X_NDR_SWITCH_NONE);
-		X_ASSERT(!X_NDR_BE(flags)); // TODO support bigendian
-		return x_ndr_push_bytes(val.data(), ndr, bpos, epos, val.size() * 2);
+		return x_ndr_push_u16string(val, ndr, bpos, epos, flags);
 	}
 
 	x_ndr_off_t scalars(std::u16string &val, x_ndr_pull_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, x_ndr_switch_t level) const {
 		X_ASSERT(level == X_NDR_SWITCH_NONE);
-		X_ASSERT(!X_NDR_BE(flags)); // TODO support bigendian
-		size_t length = epos - bpos;
-		if (length & 1) {
-			return -NDR_ERR_LENGTH;
-		}
-		val.assign((const char16_t *)(ndr.get_data() + bpos), (const char16_t *)(ndr.get_data() + epos)); 
-		return epos;
+		return x_ndr_pull_u16string_remain(val, ndr, bpos, epos, flags);
 	}
 
 	void ostr(const std::u16string &val, x_ndr_ostr_t &ndr, uint32_t flags, x_ndr_switch_t level) const {
 		X_ASSERT(level == X_NDR_SWITCH_NONE);
-		ndr << enter;
-		ndr << "u'" << x_convert_utf16_to_utf8(val) << "'";
-		ndr << leave;
+		x_ndr_ostr_u16string(val, ndr, flags);
 	}
 };
 
@@ -715,6 +708,26 @@ inline x_ndr_off_t x_ndr_buffers_unique_ptr(NT &&nt, std::shared_ptr<T> &t, x_nd
 	} else { \
 		ndr << "NULL"; \
 	} \
+} while (0)
+
+#define X_NDR_OSTR_FIELD_PTR(NT, name, val, ndr, flags, level) do { \
+	(ndr) << #name << ": "; \
+	if ((val).name) { \
+		x_ndr_ostr((NT){}, *(val).name, (ndr), (flags), (level)); \
+	} else { \
+		ndr << "NULL"; \
+	} \
+	(ndr) << next; \
+} while (0)
+
+#define X_NDR_OSTR_FIELD_PTR_DEFAULT(name, val, ndr, flags, level) do { \
+	(ndr) << #name << ": "; \
+	if ((val).name) { \
+		x_ndr_ostr_default(*(val).name, (ndr), (flags), (level)); \
+	} else { \
+		ndr << "NULL"; \
+	} \
+	(ndr) << next; \
 } while (0)
 
 #define X_NDR_SCALARS_UNIQUE_PTR(nt, val, ndr, bpos, epos, flags, level) \
@@ -982,8 +995,7 @@ x_ndr_off_t x_ndr_buffers_relative_ptr(NT &&nt,
 	auto offset = pos_at(ndr, epos);
 	if (offset) {
 		X_NDR_CHECK_ALIGN(ndr, flags, offset);
-		val = std::make_shared<T>();
-		val->__init(level);
+		val = x_ndr_allocate_ptr<T, NT>(level);
 
 		auto size = size_at(ndr, epos);
 		x_ndr_off_t tmp_bpos = X_NDR_CHECK_POS(ndr.base + offset, 0, epos);

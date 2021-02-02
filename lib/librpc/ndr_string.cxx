@@ -174,6 +174,17 @@ x_ndr_off_t x_ndr_pull_u16string(std::u16string &str, x_ndr_pull_t &ndr, x_ndr_o
 	return nepos;
 }
 
+x_ndr_off_t x_ndr_pull_u16string_remain(std::u16string &str, x_ndr_pull_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags)
+{
+	X_ASSERT((flags & LIBNDR_FLAG_BIGENDIAN) == 0); // TODO
+	size_t length = epos - bpos;
+	if (length & 1) {
+		return -NDR_ERR_LENGTH;
+	}
+	str.assign((const char16_t *)(ndr.get_data() + bpos), (const char16_t *)(ndr.get_data() + epos)); 
+	return epos;
+}
+
 #if 0
 x_ndr_off_t x_ndr_pull_u16string(std::u16string &str, x_ndr_pull_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, size_t size)
 {
@@ -192,7 +203,7 @@ x_ndr_off_t x_ndr_pull_u16string(std::u16string &str, x_ndr_pull_t &ndr, x_ndr_o
 
 void x_ndr_ostr_u16string(const std::u16string &str, x_ndr_ostr_t &ndr, uint32_t flags)
 {
-	ndr.os << '"' << x_convert_utf16_to_utf8(str) << '"';
+	ndr.os << "u\"" << x_convert_utf16_to_utf8(str) << '"';
 }
 
 #if 0
@@ -230,7 +241,7 @@ void u16string::ostr(x_ndr_ostr_t &ndr, uint32_t flags, x_ndr_switch_t level) co
 	// TODO
 	ndr.os << "u16string(" << val.size() << ")";
 }
-#endif
+
 x_ndr_off_t sstring::ndr_scalars(x_ndr_push_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, x_ndr_switch_t level) const
 {
 	X_ASSERT(level == X_NDR_SWITCH_NONE);
@@ -286,7 +297,7 @@ void gstring::ostr(x_ndr_ostr_t &ndr, uint32_t flags, x_ndr_switch_t level) cons
 	X_ASSERT(level == X_NDR_SWITCH_NONE);
 	ndr.os << '"' << val << '"';
 }
-
+#endif
 x_ndr_off_t x_ndr_push_string(const std::string &str, x_ndr_push_t &ndr,
 		x_ndr_off_t bpos, x_ndr_off_t epos,
 		uint32_t extra_flags)
@@ -306,6 +317,35 @@ x_ndr_off_t x_ndr_pull_string(std::string &str, x_ndr_pull_t &ndr,
 {
 	str = std::string(ndr.get_data() + bpos, ndr.get_data() + epos);
 	return epos;
+}
+
+x_ndr_off_t x_ndr_push_gstring(const std::string &val, x_ndr_push_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags)
+{
+	if ((flags & LIBNDR_FLAG_STR_ASCII) != 0) {
+		return push_utf8(val, ndr, bpos, epos);
+	}
+	return x_ndr_push_u16string(x_convert_utf8_to_utf16(val), ndr, bpos, epos, flags);
+}
+
+x_ndr_off_t x_ndr_pull_gstring(std::string &val, x_ndr_pull_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags)
+{
+	if ((flags & LIBNDR_FLAG_STR_ASCII) != 0) {
+		return pull_utf8(val, ndr, bpos, epos);
+	}
+
+	std::u16string u16s;
+	bpos = x_ndr_pull_u16string_remain(u16s, ndr, bpos, epos, flags);
+	if (bpos < 0) {
+		return bpos;
+	}
+
+	val = x_convert_utf16_to_utf8(u16s);
+	return bpos;
+}
+
+void x_ndr_ostr_gstring(const std::string &val, x_ndr_ostr_t &ndr, uint32_t flags)
+{
+	ndr.os << '"' << val << '"';
 }
 
 } /* namespace idl */

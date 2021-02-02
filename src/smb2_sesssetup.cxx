@@ -79,7 +79,7 @@ static std::ostream &operator<<(std::ostream &os, const x_auth_info_t &auth_info
 	os << "primary_sid: " << auth_info.domain_sid << ", " << auth_info.rid << ", " << auth_info.primary_gid << std::endl;
 	uint32_t i = 0;
 	for (const auto &group_rid: auth_info.group_rids) {
-		os << "\t#" << i << ": " << group_rid << std::endl;
+		os << "\t#" << i << ": " << group_rid.rid << " " << group_rid.attributes << std::endl;
 		++i;
 	}
 

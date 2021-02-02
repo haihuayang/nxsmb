@@ -1389,8 +1389,7 @@ static inline NTSTATUS handle_negotiate(x_auth_ntlmssp_t &auth_ntlmssp,
 		auth_ntlmssp.server_av_pair_list = chal_msg.TargetInfo;
 	}
 
-	chal_msg.TargetName = std::make_shared<idl::gstring>();
-	chal_msg.TargetName->val = x_convert_utf16_to_utf8(target_name);
+	chal_msg.TargetName = std::make_shared<std::string>(x_convert_utf16_to_utf8(target_name));
 	chal_msg.NegotiateFlags = idl::NEGOTIATE(chal_flags);
 	chal_msg.ServerChallenge = cryptkey;
 
@@ -1575,13 +1574,13 @@ static inline NTSTATUS handle_authenticate(x_auth_ntlmssp_t &auth_ntlmssp,
 
 	/* ntlmssp_server_check_password */
 	if (msg.DomainName) {
-		auth_ntlmssp.client_domain = msg.DomainName->val;
+		auth_ntlmssp.client_domain = *msg.DomainName;
 	}
 	if (msg.UserName) {
-		auth_ntlmssp.client_user = msg.UserName->val;
+		auth_ntlmssp.client_user = *msg.UserName;
 	}
 	if (msg.Workstation) {
-		auth_ntlmssp.client_workstation = msg.Workstation->val;
+		auth_ntlmssp.client_workstation = *msg.Workstation;
 	}
 	if (msg.LmChallengeResponse) {
 		auth_ntlmssp.client_lm_resp = msg.LmChallengeResponse;

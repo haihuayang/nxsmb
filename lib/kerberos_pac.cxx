@@ -201,11 +201,11 @@ NTSTATUS kerberos_decode_pac(gss_const_buffer_t pac_buf,
 			break;
 		case idl::PAC_TYPE_SRV_CHECKSUM:
 			srv_sig_ptr = &data_buf.info->srv_cksum;
-			srv_sig_blob = raw_buf.info.get();
+			srv_sig_blob = &raw_buf.info->remaining;
 			break;
 		case idl::PAC_TYPE_KDC_CHECKSUM:
 			kdc_sig_ptr = &data_buf.info->kdc_cksum;
-			kdc_sig_blob = raw_buf.info.get();
+			kdc_sig_blob = &raw_buf.info->remaining;
 			break;
 		case idl::PAC_TYPE_LOGON_NAME:
 			logon_name = &data_buf.info->logon_name;

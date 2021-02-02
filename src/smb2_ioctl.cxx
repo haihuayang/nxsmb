@@ -94,14 +94,14 @@ static idl::x_ndr_off_t push_referral_v3(const x_referral_t &referral, idl::x_nd
 	idl::x_ndr_off_t base_pos = bpos;
 	bpos = X_NDR_CHECK(idl::x_ndr_push_uint16(3, ndr, bpos, epos, ndr_flags)); // TODO version to be max_referral_level
 	idl::x_ndr_off_t size_pos = bpos;
-	bpos = X_NDR_CHECK(idl::x_ndr_skip<uint16_t>(ndr, bpos, epos, ndr_flags));
+	bpos = X_NDR_CHECK(idl::x_ndr_push_uint16(0, ndr, bpos, epos, ndr_flags));
 	bpos = X_NDR_CHECK(idl::x_ndr_push_uint16(DFS_SERVER_ROOT, ndr, bpos, epos, ndr_flags));
 	bpos = X_NDR_CHECK(idl::x_ndr_push_uint16(0, ndr, bpos, epos, ndr_flags)); // TODO entry_flags
 	bpos = X_NDR_CHECK(idl::x_ndr_push_uint32(referral.ttl, ndr, bpos, epos, ndr_flags));
 	idl::x_ndr_off_t path_pos = bpos;
-	bpos = X_NDR_CHECK(idl::x_ndr_skip<uint16_t>(ndr, bpos, epos, ndr_flags));
-	bpos = X_NDR_CHECK(idl::x_ndr_skip<uint16_t>(ndr, bpos, epos, ndr_flags));
-	bpos = X_NDR_CHECK(idl::x_ndr_skip<uint16_t>(ndr, bpos, epos, ndr_flags));
+	bpos = X_NDR_CHECK(idl::x_ndr_push_uint16(0, ndr, bpos, epos, ndr_flags));
+	bpos = X_NDR_CHECK(idl::x_ndr_push_uint16(0, ndr, bpos, epos, ndr_flags));
+	bpos = X_NDR_CHECK(idl::x_ndr_push_uint16(0, ndr, bpos, epos, ndr_flags));
 	const uint8_t zeroes[16] = {0, };
 	bpos = X_NDR_CHECK(idl::x_ndr_push_bytes(zeroes, ndr, bpos, epos, 16));
 

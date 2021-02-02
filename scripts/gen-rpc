@@ -296,7 +296,7 @@ alias_types = {
 	# alias, type_name, traits_type, align
         'NTTIME_hyper': ['NTTIME', 'ndr_traits_NTTIME_hyper', 8],
 	'dom_sid2': [ 'dom_sid', 'ndr_traits_dom_sid2', None],
-	's2u16string': [ 'u16string', 'ndr_traits_s2u16string', 1],
+	'u16string_remain': [ 'u16string', 'ndr_traits_u16string_remain', 1],
 	'nstring': [ 'u16string', 'ndr_traits_nstring', 2],
 	'astring': [ 'u8string', 'ndr_traits_astring', 1],
 }
@@ -1045,9 +1045,9 @@ struct {tname} {{
 		out(f'''
 	{tname}();
 	~{tname}();
-	{tname}(const {tname}& other) = delete;
-	{tname} &operator=(const {tname}& other) = delete;
 	{tname}({tname}&& other){" = default" if all_nontrivial_unions_are_ptr else ""};
+	{tname}(const {tname}& other){" = default" if all_nontrivial_unions_are_ptr else ""};
+	{tname} &operator=(const {tname}& other) = delete;
 	{tname} &operator=({tname}&& other) = delete;
 ''')
 		for switch_field in fields:
@@ -1096,6 +1096,16 @@ def output_struct_functions(idl, tname, fields, out):
 			switch_is = uf.get_property("switch_is")
 			yield uf, switch_is, isinstance(uf, FieldPtr)
 	
+	has_buffers, has_nontrivial_unions, all_nontrivial_unions_are_ptr = False, False, True
+	for field in fields:
+		if field.has_buffers:
+			has_buffers = True
+		if field.nontrivial_unions:
+			has_nontrivial_unions = True
+			for nf in field.nontrivial_unions:
+				if not isinstance(nf, FieldPtr):
+					all_nontrivial_unions_are_ptr = False
+
 	for field in fields:
 		if len(field.nontrivial_unions) == 0:
 			continue
@@ -1145,22 +1155,6 @@ void {tname}::set_{field.name}({field.base_type} v)
 
 #if 0
 TODO
-{tname}::{tname}(const {tname} &other)''')
-	sep = ':'
-	for field in fields:
-		if not isinstance(field, FieldDerived) and (field.data_type != "UNION" or field.is_trivial):
-			out(f'''	{sep} {field.name}(other.{field.name})''')
-			sep = ','
-	out('{')		
-	for field in fields:
-		if len(field.nontrivial_unions) == 0:
-			continue
-		for uf, switch_is, is_pointer in union_field_iter(field.nontrivial_unions):
-			out(f'''
-	x_ndr_union_field_init({uf.name}, x_ndr_switch_t({switch_is}), other.{uf.name});''')
-		out(f'''
-}}
-
 {tname} &{tname}::operator=(const {tname} &other)
 {{''')
 	for field in fields:
@@ -1177,6 +1171,40 @@ TODO
 	return *this;
 }}
 #endif
+''')
+	if not all_nontrivial_unions_are_ptr:
+		out(f'''
+{tname}::{tname}({tname} &&other)''')
+		sep = ':'
+		for field in fields:
+			if not isinstance(field, FieldDerived) and (field.data_type != "UNION" or field.is_trivial):
+				out(f'''	{sep} {field.name}(other.{field.name})''')
+				sep = ','
+		out('{')		
+		for field in fields:
+			if len(field.nontrivial_unions) == 0:
+				continue
+			for uf, switch_is, is_pointer in union_field_iter(field.nontrivial_unions):
+				out(f'''
+	x_ndr_union_field_init({uf.name}, x_ndr_switch_t({switch_is}), std::move(other.{uf.name}));''')
+		out(f'''
+}}
+
+{tname}::{tname}(const {tname} &other)''')
+		sep = ':'
+		for field in fields:
+			if not isinstance(field, FieldDerived) and (field.data_type != "UNION" or field.is_trivial):
+				out(f'''	{sep} {field.name}(other.{field.name})''')
+				sep = ','
+		out('{')		
+		for field in fields:
+			if len(field.nontrivial_unions) == 0:
+				continue
+			for uf, switch_is, is_pointer in union_field_iter(field.nontrivial_unions):
+				out(f'''
+	x_ndr_union_field_init({uf.name}, x_ndr_switch_t({switch_is}), other.{uf.name});''')
+		out(f'''
+}}
 
 ''')
 
@@ -1323,7 +1351,8 @@ union {tname}
 	{tname}() {{ }}
 	~{tname}() {{ }}
 	void __init(x_ndr_switch_t __level);
-	// void __init(x_ndr_switch_t __level, const {tname} &__other);
+	void __init(x_ndr_switch_t __level, {tname} &&__other);
+	void __init(x_ndr_switch_t __level, const {tname} &__other);
 	void __uninit(x_ndr_switch_t __level);
 ''')
 	# union member may has same name
@@ -1440,7 +1469,21 @@ void {tname}::__init(x_ndr_switch_t __level)
 		out(f'''
 	}}
 }}
-#if 0
+
+void {tname}::__init(x_ndr_switch_t __level, {tname} &&other)
+{{
+	switch (__level) {{''')
+		for field in fields:
+			if field.name != '':
+				in_case_str = f' construct({field.name}, std::move(other.{field.name}));'
+			else:
+				in_case_str = ''
+			out(f'''
+		{get_case_str(field)}:{in_case_str} break;''')
+		out(f'''
+	}}
+}}
+
 void {tname}::__init(x_ndr_switch_t __level, const {tname} &other)
 {{
 	switch (__level) {{''')
@@ -1454,7 +1497,7 @@ void {tname}::__init(x_ndr_switch_t __level, const {tname} &other)
 		out(f'''
 	}}
 }}
-#endif
+
 void {tname}::__uninit(x_ndr_switch_t __level)
 {{
 	switch (__level) {{''')

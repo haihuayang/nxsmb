@@ -267,15 +267,16 @@ TARGET_SRC_libnxsmb := \
 		lib/librpc/krb5pac \
 		lib/librpc/ntlmssp \
 		lib/librpc/dcerpc \
+		lib/librpc/srvsvc \
 		lib/xutils \
 		lib/threadpool \
 		lib/evtmgmt \
 		lib/wbpool \
+		lib/kerberos_pac \
+		lib/charset \
 
 a=\
 		lib/string \
-		lib/charset \
-		lib/kerberos_pac \
 
 a=\
 		lib/librpc/security_ndr \

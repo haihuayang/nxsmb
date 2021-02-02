@@ -1305,7 +1305,13 @@ static inline x_ndr_off_t x_ndr_scalars(std::string &t, x_ndr_pull_t &ndr,
 
 x_ndr_off_t x_ndr_push_u16string(const std::u16string &str, x_ndr_push_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags);
 x_ndr_off_t x_ndr_pull_u16string(std::u16string &str, x_ndr_pull_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags);
+x_ndr_off_t x_ndr_pull_u16string_remain(std::u16string &str, x_ndr_pull_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags);
+void x_ndr_ostr_u16string(const std::u16string &str, x_ndr_ostr_t &ndr, uint32_t flags);
 
+x_ndr_off_t x_ndr_push_gstring(const std::string &val, x_ndr_push_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags);
+x_ndr_off_t x_ndr_pull_gstring(std::string &val, x_ndr_pull_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags);
+void x_ndr_ostr_gstring(const std::string &val, x_ndr_ostr_t &ndr, uint32_t flags);
+#if 0
 /* simple ascill string */
 struct sstring
 {
@@ -1323,7 +1329,7 @@ struct gstring
 	void ostr(x_ndr_ostr_t &ndr, uint32_t flags, x_ndr_switch_t level) const;
 	std::string val;
 };
-#if 0
+
 struct astring
 {
 	x_ndr_off_t ndr_scalars(x_ndr_push_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, x_ndr_switch_t level) const;
@@ -1411,8 +1417,6 @@ static inline void x_ndr_ostr(int64_t v, x_ndr_ostr_t &ndr, uint32_t flags, x_nd
 	ndr.os << v;
 }
 
-void x_ndr_ostr_u16string(const std::u16string &str, x_ndr_ostr_t &ndr, uint32_t flags);
-
 
 template <typename T>
 static inline void x_ndr_ostr(const std::shared_ptr<T> &v, x_ndr_ostr_t &ndr, uint32_t flags, x_ndr_switch_t level)
@@ -1461,16 +1465,16 @@ inline void x_ndr_ostr(const std::vector<uint8_t> &v, x_ndr_ostr_t &ndr, uint32_
 {
 	x_ndr_ostr_uint8_array(v.data(), ndr, flags, level, v.size());
 }
-#endif
 
 #define X_NDR_OSTR(name, val, ndr, flags, level) do { \
 	(ndr) << name << ": "; \
 	x_ndr_ostr_simple(val, ndr, flags, level); \
 } while (0)
+#endif
 
-#define X_NDR_OSTR_NEXT(name, val, ndr, flags, level) do { \
-	(ndr) << name << ": "; \
-	x_ndr_ostr_simple(val, ndr, flags, level); \
+#define X_NDR_OSTR_FIELD_DEFAULT(name, val, ndr, flags, level) do { \
+	(ndr) << #name << ": "; \
+	x_ndr_ostr_default((val).name, (ndr), (flags), (level)); \
 	(ndr) << next; \
 } while (0)
 #if 0
@@ -1660,6 +1664,12 @@ template <typename T>
 inline void x_ndr_union_field_init(T &val, x_ndr_switch_t level)
 {
 	val.__init(level);
+}
+
+template <typename T, typename OT>
+inline void x_ndr_union_field_init(T &val, x_ndr_switch_t level, OT &&other)
+{
+	val.__init(level, std::forward<OT>(other));
 }
 
 template <typename T>
