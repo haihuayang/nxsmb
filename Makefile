@@ -254,7 +254,7 @@ $(TARGET_SET_tests:%=$(TARGET_DIR_out)/tests/%.o) : $(TARGET_DIR_out)/tests/%.o:
 	$(CXX) -c $(TARGET_CXXFLAGS) $(TARGET_CFLAGS_EXTRA) -o $@ $<
 
 
-TARGET_SRC_libnxsmb := \
+TARGET_SRC_libnxsmb_tmp_disable := \
 		lib/librpc/ndr \
 		lib/librpc/ndr_smb \
 		lib/librpc/ndr_utils \
@@ -315,7 +315,7 @@ $(TARGET_SET_idl:%=$(TARGET_DIR_out)/librpc/idl/%.idl.ndr.cxx): scripts/gen-rpc
 $(TARGET_SET_idl:%=$(TARGET_DIR_out)/librpc/idl/%.idl.hxx): scripts/gen-rpc
 
 $(TARGET_SET_idl:%=$(TARGET_DIR_out)/librpc/idl/%.json): $(TARGET_DIR_out)/librpc/idl/%.json: samba/librpc/idl/%.idl | target_mkdir
-	CPP=/usr/bin/cpp CC=/usr/bin/gcc /usr/bin/perl samba/pidl/pidl --quiet --dump-json $< > $@
+	CPP=cpp CC=gcc /usr/bin/perl samba/pidl/pidl --quiet --dump-json $< > $@
 
 target_samba_gen: $(TARGET_GEN_samba)
 

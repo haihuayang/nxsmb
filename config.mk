@@ -23,3 +23,7 @@ endif
 #
 HOSTCC := /usr/bin/gcc
 HOST_CFLAGS := 
+
+CXX := g++
+CC := gcc
+HOSTCC := gcc

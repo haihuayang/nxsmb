@@ -30,6 +30,10 @@ struct x_ndr_traits_t<NTTIME> {
 template <>
 struct ndr_traits_t<NTTIME>
 {
+	using ndr_base_type = NTTIME;
+	using has_buffers = std::false_type;
+	using ndr_data_type = x_ndr_type_primary;
+
 	x_ndr_off_t scalars(NTTIME t, x_ndr_push_t &ndr,
 			x_ndr_off_t bpos, x_ndr_off_t epos,
 			uint32_t flags, x_ndr_switch_t level) const {
@@ -52,6 +56,10 @@ struct ndr_traits_t<NTTIME>
 
 struct ndr_traits_NTTIME_hyper
 {
+	using ndr_base_type = NTTIME;
+	using has_buffers = std::false_type;
+	using ndr_data_type = x_ndr_type_primary;
+
 	x_ndr_off_t scalars(NTTIME t, x_ndr_push_t &ndr,
 			x_ndr_off_t bpos, x_ndr_off_t epos,
 			uint32_t flags, x_ndr_switch_t level) const {

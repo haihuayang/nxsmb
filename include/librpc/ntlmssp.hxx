@@ -360,19 +360,20 @@ template <> struct x_ndr_traits_t<ntlmssp_NTLM_RESPONSE> {
 
 const int NTLMSSP_MIC_OFFSET = 72;
 const int NTLMSSP_MIC_SIZE = 16;
-
+#endif
 struct ntlmssp_MIC {
-	x_ndr_off_t ndr_scalars(x_ndr_push_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level) const;
-	x_ndr_off_t ndr_scalars(x_ndr_pull_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level);
-	void ostr(x_ndr_ostr_t &__ndr, uint32_t __flags, x_ndr_switch_t __level) const;
-	std::vector<uint8> MIC; // x_ndr_vector_with_count_t<uint8> MIC;
+	std::array<uint8, NTLMSSP_MIC_SIZE> MIC;
 } /* [flag(LIBNDR_PRINT_ARRAY_HEX)] */;
 
-template <> struct x_ndr_traits_t<ntlmssp_MIC> {
+template <> struct ndr_traits_t<ntlmssp_MIC> {
 	using has_buffers = std::false_type;
-	using ndr_data_type x_ndr_type_struct;
+	using ndr_data_type = x_ndr_type_struct;
+
+	x_ndr_off_t scalars(const ntlmssp_MIC &__val, x_ndr_push_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level) const;
+	x_ndr_off_t scalars(ntlmssp_MIC &__val, x_ndr_pull_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level);
+	void ostr(const ntlmssp_MIC &__val, x_ndr_ostr_t &__ndr, uint32_t __flags, x_ndr_switch_t __level) const;
 };
-#endif
+
 struct AUTHENTICATE_MESSAGE {
 	std::shared_ptr<LM_RESPONSE> LmChallengeResponse; //x_ndr_relative_ptr_t<LM_RESPONSE, uint16, uint16> LmChallengeResponse;/* [relative] */
 	std::shared_ptr<DATA_BLOB> NtChallengeResponse;/* [relative] */

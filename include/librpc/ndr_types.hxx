@@ -647,11 +647,11 @@ struct ndr_traits_unique_ptr_t
 	}
 };
 	
-template <typename T, typename NT>
-inline x_ndr_off_t x_ndr_scalars_unique_ptr(NT &&nt,
+template <typename T>
+inline x_ndr_off_t x_ndr_scalars_unique_ptr(
 		const std::shared_ptr<T> &t, x_ndr_push_t &ndr,
 		x_ndr_off_t bpos, x_ndr_off_t epos,
-		uint32_t flags, x_ndr_switch_t level)
+		uint32_t flags)
 {
 	uint3264 ptr;
 	if (t) {
@@ -730,8 +730,8 @@ inline x_ndr_off_t x_ndr_buffers_unique_ptr(NT &&nt, std::shared_ptr<T> &t, x_nd
 	(ndr) << next; \
 } while (0)
 
-#define X_NDR_SCALARS_UNIQUE_PTR(nt, val, ndr, bpos, epos, flags, level) \
-	X_NDR_VERIFY((bpos), x_ndr_scalars_unique_ptr((nt){}, (val), (ndr), (bpos), (epos), flags, level))
+#define X_NDR_SCALARS_UNIQUE_PTR(val, ndr, bpos, epos, flags) \
+	X_NDR_VERIFY((bpos), x_ndr_scalars_unique_ptr((val), (ndr), (bpos), (epos), flags))
 
 #define X_NDR_BUFFERS_UNIQUE_PTR(nt, val, ndr, bpos, epos, flags, level) \
 	X_NDR_VERIFY((bpos), x_ndr_buffers_unique_ptr((nt){}, (val), (ndr), (bpos), (epos), flags, level))
