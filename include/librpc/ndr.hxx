@@ -395,6 +395,7 @@ struct uint3264 {
 	}
 	uint32_t val;
 };
+
 typedef int64_t dlong;
 typedef uint64_t udlong;
 using string = const char *;
@@ -511,7 +512,8 @@ template <> struct ndr_traits_t<name> \
 	} \
 }; \
 
-template <typename T, typename Traits>
+
+template <typename T, typename IsUnion>
 struct x_ndr_ptr_allocator_t
 {
 	std::shared_ptr<T> operator()(x_ndr_switch_t level) const {
@@ -519,14 +521,8 @@ struct x_ndr_ptr_allocator_t
 	}
 };
 
-template <typename T, typename NT>
-inline std::shared_ptr<T> x_ndr_allocate_ptr(x_ndr_switch_t level)
-{
-	return x_ndr_ptr_allocator_t<T, typename NT::ndr_data_type>()(level);
-}
-
 template <typename T>
-struct x_ndr_ptr_allocator_t<T, x_ndr_type_union>
+struct x_ndr_ptr_allocator_t<T, std::true_type>
 {
 	std::shared_ptr<T> operator()(x_ndr_switch_t level) const {
 		auto ret = std::make_shared<T>();
@@ -537,6 +533,24 @@ struct x_ndr_ptr_allocator_t<T, x_ndr_type_union>
 	}
 };
 
+template <typename T>
+inline void x_ndr_allocate_ptr(std::shared_ptr<T> &val, x_ndr_switch_t level)
+{
+	val = x_ndr_ptr_allocator_t<T, std::is_union<T>>()(level);
+}
+
+#if 0
+	
+	template <typename T>
+inline std::shared_ptr<T> x_ndr_allocate_union(x_ndr_switch_t level)
+{
+	auto ret = std::make_shared<T>();
+	if (ret) {
+		ret->__init(level);
+	}
+	return ret;
+}
+#endif
 template <typename T, typename NDR>
 static inline x_ndr_off_t x_ndr_scalars_default(T &&t, NDR &ndr,
 		x_ndr_off_t bpos, x_ndr_off_t epos,
@@ -625,7 +639,22 @@ inline x_ndr_off_t x_ndr_save_pos(NDR &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, 
 
 #define X_NDR_SAVE_POS(type, ndr, bpos, epos, flags) \
 	X_NDR_VERIFY(bpos, x_ndr_save_pos<type>(ndr, bpos, epos, flags))
+
+#define X_NDR_SUBNDR_DECL(subndr, ndr, bpos) \
+	decltype(ndr) (subndr){(ndr).buff, (bpos)}
+
 #if 0
+template <typename T, typename NDR>
+inline x_ndr_off_t x_ndr_load_pos(T &val, NDR &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags)
+{
+	x_ndr_off_t pos = ndr.load_pos();
+	return x_ndr_scalars(ndr_traits_t<T>{}, T{}, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
+}
+
+#define X_NDR_LOAD_POS(val, ndr, bpos, epos, flags) \
+	x_ndr_off_t pos = (ndr).load_pos(); \
+	(pos) 
+
 template <typename T>
 inline x_ndr_off_t x_ndr_scalars(const std::vector<T> &t, x_ndr_push_t &ndr,
 		x_ndr_off_t bpos, x_ndr_off_t epos,
