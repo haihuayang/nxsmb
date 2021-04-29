@@ -16,6 +16,37 @@ namespace idl {
 #define X_NDR_SCALARS_DEFAULT(val, ndr, bpos, epos, flags, switch_is) \
 	X_NDR_VERIFY((bpos), x_ndr_scalars_default((val), (ndr), (bpos), (epos), (flags), (switch_is)))
 
+
+#define X_NDR_XSIZE_PRE_PUSH(type, order, ndr, bpos, epos, flags) \
+	x_ndr_off_t __base_##order = (bpos);
+
+#define X_NDR_XSIZE_PRE_PULL(type, order, ndr, bpos, epos, flags) \
+	x_ndr_off_t __base_##order = (bpos);
+
+#define X_NDR_XSIZE_PUSH(type, order, ndr, bpos, epos, flags) \
+	x_ndr_off_t __pos_##order = (bpos); \
+	X_NDR_SKIP(type, ndr, bpos, epos, flags);
+
+#define X_NDR_XSIZE_PULL(type, order, ndr, bpos, epos, flags) \
+	type __tmp_##order; \
+	X_NDR_SCALARS_DEFAULT(__tmp_##order, (ndr), (bpos), (epos), (flags), X_NDR_SWITCH_NONE); \
+	(epos) = X_NDR_CHECK_POS(__base_##order + __tmp_##order, __base_##order, (epos));
+
+#define X_NDR_XSIZE_POST_PUSH(type, order, ndr, bpos, epos, flags) \
+	X_NDR_SCALARS_DEFAULT(type((bpos) - __base_##order), (ndr), __pos_##order, (epos), (flags), X_NDR_SWITCH_NONE);
+
+#define X_NDR_XSIZE_POST_PULL(type, order, ndr, bpos, epos, flags) \
+	(bpos) = (epos);
+
+
+#define X_NDR_VECTOR_LEN_PUSH(type, vector_name, ndr, bpos, epos, flags) \
+	X_NDR_VERIFY((bpos), x_ndr_scalars_default(type(__val.vector_name.size()), (ndr), (bpos), (epos), (flags), X_NDR_SWITCH_NONE)); \
+
+#define X_NDR_VECTOR_LEN_PULL(type, vector_name, ndr, bpos, epos, flags) \
+	type __tmp_len_##vector_name; \
+	X_NDR_VERIFY((bpos), x_ndr_scalars_default(__tmp_len_##vector_name, (ndr), (bpos), (epos), (flags), X_NDR_SWITCH_NONE)); \
+	__val.vector_name.resize(__tmp_len_##vector_name);
+
 template <typename T>
 inline x_ndr_off_t x_ndr_scalars_unique_ptr(
 		const std::shared_ptr<T> &t, x_ndr_push_t &ndr,
@@ -172,21 +203,25 @@ inline x_ndr_off_t x_ndr_scalars_unique_ptr(
 #define X_NDR_BUFFERS_SIZE_IS_PULL(name, ndr) \
 	x_ndr_off_t __pos_##name = (ndr).load_pos(); \
 
-#define X_NDR_SCALARS_SIZE_IS_VECTOR_PUSH(size_is_type, size_is_pos, val, ndr, bpos, epos, flags) do { \
-	X_NDR_SCALARS_DEFAULT(size_is_type((val).size()), (ndr), (size_is_pos), (epos), (flags), X_NDR_SWITCH_NONE); \
-	X_NDR_SCALARS_DEFAULT(uint3264((val).size()), (ndr), (bpos), (epos), (flags), X_NDR_SWITCH_NONE); \
-} while (0)
 
-#define X_NDR_SCALARS_SIZE_IS_VECTOR_PULL(size_is_type, size_is_pos, __val, ndr, bpos, epos, flags) do {\
+#define X_NDR_SCALARS_SIZE_IS_VECTOR_STEP0_PUSH(val, ndr, bpos, epos, flags) \
+	X_NDR_SCALARS_DEFAULT(uint3264((val).size()), (ndr), (bpos), (epos), (flags), X_NDR_SWITCH_NONE)
+
+#define X_NDR_SCALARS_SIZE_IS_VECTOR_STEP0_PULL(__val, ndr, bpos, epos, flags) \
+	uint3264 __tmp_size_is_2; \
+	X_NDR_SCALARS_DEFAULT(__tmp_size_is_2, (ndr), (bpos), (epos), (flags), X_NDR_SWITCH_NONE);
+
+#define X_NDR_SCALARS_SIZE_IS_VECTOR_PUSH(size_is_type, size_is_pos, val, ndr, bpos, epos, flags) \
+	X_NDR_SCALARS_DEFAULT(size_is_type((val).size()), (ndr), (size_is_pos), (epos), (flags), X_NDR_SWITCH_NONE)
+
+#define X_NDR_SCALARS_SIZE_IS_VECTOR_PULL(size_is_type, size_is_pos, __val, ndr, bpos, epos, flags) \
 	size_is_type __tmp_size_is; \
 	X_NDR_SCALARS_DEFAULT(__tmp_size_is, (ndr), (size_is_pos), (epos), (flags), X_NDR_SWITCH_NONE); \
-	uint3264 __tmp_size_is_2; \
-	X_NDR_SCALARS_DEFAULT(__tmp_size_is_2, (ndr), (bpos), (epos), (flags), X_NDR_SWITCH_NONE); \
-	if (__tmp_size_is != __tmp_size_is_2.val) { \
+	if (int_val(__tmp_size_is) != int_val(__tmp_size_is_2)) { \
 		return -NDR_ERR_LENGTH; \
 	} \
-	(__val).resize(__tmp_size_is_2.val); \
-} while (0)
+	(__val).resize(int_val(__tmp_size_is_2));
+
 
 #define X_NDR_SCALARS_LENGTH_IS_VECTOR_2_PUSH(size_is_type, size_is_pos, length_is_type, length_is_pos, __val, ndr, bpos, epos, flags) do { \
 	X_NDR_SCALARS_DEFAULT(size_is_type((__val).size()), (ndr), (size_is_pos), (epos), (flags), X_NDR_SWITCH_NONE); \
@@ -205,10 +240,10 @@ inline x_ndr_off_t x_ndr_scalars_unique_ptr(
 	X_NDR_SCALARS_DEFAULT(__tmp_size_is_2, (ndr), (bpos), (epos), (flags), X_NDR_SWITCH_NONE); \
 	X_NDR_SCALARS_DEFAULT(__tmp_offset_2, (ndr), (bpos), (epos), (flags), X_NDR_SWITCH_NONE); \
 	X_NDR_SCALARS_DEFAULT(__tmp_length_is_2, (ndr), (bpos), (epos), (flags), X_NDR_SWITCH_NONE); \
-	if (__tmp_offset_2.val != 0 || __tmp_size_is != __tmp_size_is_2.val || __tmp_length_is != __tmp_length_is_2.val) { \
+	if (int_val(__tmp_offset_2) != 0 || int_val(__tmp_size_is) != int_val(__tmp_size_is_2) || int_val(__tmp_length_is) != int_val(__tmp_length_is_2)) { \
 		return -NDR_ERR_LENGTH; \
 	} \
-	(__val).resize(__tmp_length_is_2.val); \
+	(__val).resize(int_val(__tmp_length_is_2)); \
 } while (0)
 
 #define X_NDR_SCALARS_LENGTH_IS_VECTOR_1_PUSH(size_is, length_is_type, length_is_pos, val, ndr, bpos, epos, flags) do { \
@@ -225,10 +260,10 @@ inline x_ndr_off_t x_ndr_scalars_unique_ptr(
 	X_NDR_SCALARS_DEFAULT(__tmp_size_is_2, (ndr), (bpos), (epos), (flags), X_NDR_SWITCH_NONE); \
 	X_NDR_SCALARS_DEFAULT(__tmp_offset_2, (ndr), (bpos), (epos), (flags), X_NDR_SWITCH_NONE); \
 	X_NDR_SCALARS_DEFAULT(__tmp_length_is_2, (ndr), (bpos), (epos), (flags), X_NDR_SWITCH_NONE); \
-	if (__tmp_offset_2.val != 0 || __tmp_length_is > __tmp_size_is_2.val || __tmp_length_is != __tmp_length_is_2.val) { \
+	if (int_val(__tmp_offset_2) != 0 || _int_val(__tmp_length_is) > _int_val(_tmp_size_is_2) || _int_val(_tmp_length_is) != _int_val(_tmp_length_is_2)) { \
 		return -NDR_ERR_LENGTH; \
 	} \
-	(__val).resize(__tmp_length_is_2.val); \
+	(__val).resize(__tmp_length_is_2)); \
 } while (0)
 
 template <typename T>

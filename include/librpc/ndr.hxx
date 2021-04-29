@@ -396,6 +396,12 @@ struct uint3264 {
 	uint32_t val;
 };
 
+template <typename T>
+auto int_val(T t) { return t; }
+
+template <>
+auto int_val(uint3264 t) { return t.val; }
+
 typedef int64_t dlong;
 typedef uint64_t udlong;
 using string = const char *;
@@ -611,23 +617,6 @@ x_ndr_off_t x_ndr_skip(x_ndr_pull_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, ui
 
 #define X_NDR_SKIP(type, ndr, bpos, epos, flags) \
 	X_NDR_VERIFY(bpos, x_ndr_scalars_default(type(), ndr, bpos, epos, flags, X_NDR_SWITCH_NONE))
-
-#define X_NDR_XSIZE_PUSH(type, order, ndr, bpos, epos, flags) \
-	x_ndr_off_t __pos_##order = (bpos); \
-	X_NDR_VERIFY(bpos, x_ndr_scalars_default(type(), ndr, bpos, epos, flags, X_NDR_SWITCH_NONE))
-
-#define X_NDR_XSIZE_PULL(type, order, ndr, bpos, epos, flags) \
-	type __tmp_##order; \
-	X_NDR_VERIFY((bpos), x_ndr_scalars_default(__tmp_##order, (ndr), (bpos), (epos), (flags), X_NDR_SWITCH_NONE)); \
-	(epos) = X_NDR_CHECK_POS(__base + __tmp_##order, __base, (epos));
-
-#define X_NDR_VECTOR_LEN_PUSH(type, vector_name, ndr, bpos, epos, flags) \
-	X_NDR_VERIFY((bpos), x_ndr_scalars_default(type(__val.vector_name.size()), (ndr), (bpos), (epos), (flags), X_NDR_SWITCH_NONE)); \
-
-#define X_NDR_VECTOR_LEN_PULL(type, vector_name, ndr, bpos, epos, flags) \
-	type __tmp_len_##vector_name; \
-	X_NDR_VERIFY((bpos), x_ndr_scalars_default(__tmp_len_##vector_name, (ndr), (bpos), (epos), (flags), X_NDR_SWITCH_NONE)); \
-	__val.vector_name.resize(__tmp_len_##vector_name);
 
 
 template <typename T, typename NDR>

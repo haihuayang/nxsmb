@@ -533,11 +533,27 @@ class FieldTypeBase(object):
 	def dereferenced(self):
 		return False
 	def both(self, order, func, name, ndr_arg, bpos_arg, epos_arg, ndr_flags, switch_is):
-		ret = self.scalars(order, func, name, ndr_arg, bpos_arg, epos_arg, ndr_flags, switch_is)
+		ret = self.scalars_step0(order, func, name, ndr_arg, bpos_arg, epos_arg, ndr_flags, switch_is)
+		ret += self.scalars_pre(order, func, name, ndr_arg, bpos_arg, epos_arg, ndr_flags, switch_is)
+		ret += self.scalars_body(order, func, name, ndr_arg, bpos_arg, epos_arg, ndr_flags, switch_is)
+		ret += self.scalars_post(order, func, name, ndr_arg, bpos_arg, epos_arg, ndr_flags, switch_is)
 		if self.has_buffers():
-			ret += self.buffers(order, func, name, ndr_arg, bpos_arg, epos_arg, ndr_flags, switch_is)
+			ret += self.buffers_pre(order, func, name, ndr_arg, bpos_arg, epos_arg, ndr_flags, switch_is)
+			ret += self.buffers_body(order, func, name, ndr_arg, bpos_arg, epos_arg, ndr_flags, switch_is)
 		return ret
-	
+	def scalars_step0(self, order, func, name, ndr_arg, bpos_arg, epos_arg, ndr_flags, switch_is):
+		return []
+	def scalars_pre(self, order, func, name, ndr_arg, bpos_arg, epos_arg, ndr_flags, switch_is):
+		return []
+	def scalars_body(self, order, func, name, ndr_arg, bpos_arg, epos_arg, ndr_flags, switch_is):
+		raise NotImplementedError
+	def scalars_post(self, order, func, name, ndr_arg, bpos_arg, epos_arg, ndr_flags, switch_is):
+		return []
+	def buffers_pre(self, order, func, name, ndr_arg, bpos_arg, epos_arg, ndr_flags, switch_is):
+		return []
+	def buffers_body(self, order, func, name, ndr_arg, bpos_arg, epos_arg, ndr_flags, switch_is):
+		raise NotImplementedError
+
 class FieldTypeSubctxBase(FieldTypeBase):
 	def __init__(self, inner):
 		self.inner = inner
@@ -556,7 +572,7 @@ class FieldTypeSubctxLevel(FieldTypeSubctxBase):
 		self.size_field = size_field
 	def get_alignment(self):
 		return self.inner.get_alignment()
-	def scalars(self, order, func, name, ndr_arg, bpos_arg, epos_arg, ndr_flags, switch_is):
+	def scalars_body(self, order, func, name, ndr_arg, bpos_arg, epos_arg, ndr_flags, switch_is):
 		if self.level == 4:
 			size_type = 'uint32'
 		elif self.level == 2:
@@ -589,7 +605,7 @@ class FieldTypeSubctxFFFFFC01(FieldTypeSubctxBase):
 		return 1
 	def is_trivial(self):
 		return self.inner.is_trivial()
-	def scalars(self, order, func, name, ndr_arg, bpos_arg, epos_arg, ndr_flags, switch_is):
+	def scalars_body(self, order, func, name, ndr_arg, bpos_arg, epos_arg, ndr_flags, switch_is):
 		return append_stmts([f'X_NDR_SUBCTXFFFFFC01_START_{func}(__sub_ndr, ndr_arg, bpos_arg, epos_arg, ndr_flags) {{'],
 			self.inner.both(order, func, name, '__sub_ndr', bpos_arg, epos_arg, ndr_flags, switch_is), '\t') + [
 			f'}} X_NDR_SUBCTXFFFFFC01_END_{func}(__sub_ndr, ndr_arg, bpos_arg, epos_arg, ndr_flags)' ]
@@ -666,10 +682,10 @@ class FieldTypeSimple(FieldTypeBase):
 	def get_alignment(self):
 		return self.alignment
 
-	def scalars(self, order, func, name, ndr_arg, bpos_arg, epos_arg, ndr_flags, switch_is):
+	def scalars_body(self, order, func, name, ndr_arg, bpos_arg, epos_arg, ndr_flags, switch_is):
 		return [f'X_NDR_SCALARS_SIMPLE({self.get_ndr_traits()}, {name}, {ndr_arg}, {bpos_arg}, {epos_arg}, {ndr_flags}, {switch_is});']
 
-	def buffers(self, order, func, name, ndr_arg, bpos_arg, epos_arg, ndr_flags, switch_is):
+	def buffers_body(self, order, func, name, ndr_arg, bpos_arg, epos_arg, ndr_flags, switch_is):
 		return [f'X_NDR_BUFFERS_SIMPLE({self.get_ndr_traits()}, {name}, {ndr_arg}, {bpos_arg}, {epos_arg}, {ndr_flags}, {switch_is});']
 
 	def ostr(self, order, name, ndr_flags, switch_is):
@@ -697,7 +713,7 @@ class FieldTypeString(FieldTypeBase):
 	def get_alignment(self):
 		return self.alignment
 
-	def scalars(self, order, func, name, ndr_arg, bpos_arg, epos_arg, ndr_flags, switch_is):
+	def scalars_body(self, order, func, name, ndr_arg, bpos_arg, epos_arg, ndr_flags, switch_is):
 		return [f'X_NDR_SCALARS_STRING({self.ndr_traits}, {name}, {ndr_arg}, {bpos_arg}, {epos_arg}, {ndr_flags}, {switch_is});']
 
 	def ostr(self, order, name, ndr_flags, switch_is):
@@ -719,9 +735,9 @@ class FieldTypeArray(FieldTypeBase):
 		return f'std::array<{self.inner.get_ctype()}, {self.array_size}>'
 	def get_alignment(self):
 		return self.inner.get_alignment()
-	def scalars(self, order, func, name, ndr_arg, bpos_arg, epos_arg, ndr_flags, switch_is):
+	def scalars_body(self, order, func, name, ndr_arg, bpos_arg, epos_arg, ndr_flags, switch_is):
 		return [f'X_NDR_SCALARS_ARRAY({self.get_ndr_traits()}, {name}, {ndr_arg}, {bpos_arg}, {epos_arg}, {ndr_flags}, {switch_is});']
-	def buffers(self, order, func, name, ndr_arg, bpos_arg, epos_arg, ndr_flags, switch_is):
+	def buffers_body(self, order, func, name, ndr_arg, bpos_arg, epos_arg, ndr_flags, switch_is):
 		return [f'X_NDR_BUFFERS_ARRAY({self.get_ndr_traits()}, {name}, {ndr_arg}, {bpos_arg}, {epos_arg}, {ndr_flags}, {switch_is});']
 	def ostr(self, order, name, ndr_flags, switch_is):
 		return append_stmts([ f'X_ASSERT({switch_is} == X_NDR_SWITCH_NONE);',
@@ -757,10 +773,10 @@ class FieldTypeVector(FieldTypeBase):
 			'__ndr << leave;']
 
 class FieldTypeUnboundVector(FieldTypeVector):
-	def scalars(self, order, func, name, ndr_arg, bpos_arg, epos_arg, ndr_flags, switch_is):
+	def scalars_body(self, order, func, name, ndr_arg, bpos_arg, epos_arg, ndr_flags, switch_is):
 		return ['TODO;']
 		return f'X_NDR_SCALARS_VECTOR({self.get_ndr_traits()}, {self.name}, {ndr_arg}, {bpos_arg}, {epos_arg}, {self.get_ndr_flags()}, {self.get_switch_is()});'
-	def buffers(self, order, func, name, ndr_arg, bpos_arg, epos_arg, ndr_flags, switch_is):
+	def buffers_body(self, order, func, name, ndr_arg, bpos_arg, epos_arg, ndr_flags, switch_is):
 		assert False, "Not supported"
 	def __str__(self):
 		return '%s[]' % self.inner
@@ -769,12 +785,12 @@ class FieldTypeSimpleVector(FieldTypeVector):
 	def __init__(self, inner, array_len_field):
 		super().__init__(inner)
 		self.array_len_field = array_len_field
-	def scalars(self, order, func, name, ndr_arg, bpos_arg, epos_arg, ndr_flags, switch_is):
+	def scalars_body(self, order, func, name, ndr_arg, bpos_arg, epos_arg, ndr_flags, switch_is):
 		return append_stmts([ f'for (auto &__tmp_order: {name}) {{' ],
-			self.inner.scalars(order, func, '__tmp_order', ndr_arg, bpos_arg, epos_arg, ndr_flags, switch_is), '\t') + [ '}' ]
-	def buffers(self, order, func, name, ndr_arg, bpos_arg, epos_arg, ndr_flags, switch_is):
+			self.inner.scalars_body(order, func, '__tmp_order', ndr_arg, bpos_arg, epos_arg, ndr_flags, switch_is), '\t') + [ '}' ]
+	def buffers_body(self, order, func, name, ndr_arg, bpos_arg, epos_arg, ndr_flags, switch_is):
 		return append_stmts([ f'for (auto &__tmp_order: {name}) {{' ],
-			self.inner.buffers(order, func, '__tmp_order', ndr_arg, bpos_arg, epos_arg, ndr_flags, switch_is), '\t') + [ '}' ]
+			self.inner.buffers_body(order, func, '__tmp_order', ndr_arg, bpos_arg, epos_arg, ndr_flags, switch_is), '\t') + [ '}' ]
 	def __str__(self):
 		return '%s[%s]' % (self.inner, self.array_len_field.name)
 
@@ -783,15 +799,17 @@ class FieldTypeSizeIsVector(FieldTypeVector):
 		super().__init__(inner)
 		assert isinstance(size_is_field, Field)
 		self.size_is_field = size_is_field
-	def scalars(self, order, func, name, ndr_arg, bpos_arg, epos_arg, ndr_flags, switch_is):
+	def scalars_step0(self, order, func, name, ndr_arg, bpos_arg, epos_arg, ndr_flags, switch_is):
+		return [ f'X_NDR_SCALARS_SIZE_IS_VECTOR_STEP0_{func}({name}, {ndr_arg}, {bpos_arg}, {epos_arg}, {ndr_flags});']
+	def scalars_body(self, order, func, name, ndr_arg, bpos_arg, epos_arg, ndr_flags, switch_is):
 		return append_stmts([
 			f'X_NDR_SCALARS_SIZE_IS_VECTOR_{func}({self.size_is_field.field_type.base_type}, __pos_{self.size_is_field.name}, {name}, {ndr_arg}, {bpos_arg}, {epos_arg}, {ndr_flags});',
 			f'for (auto &__tmp_iter_{order}: {name}) {{',
 			],
-			self.inner.scalars(order, func, f'__tmp_iter_{order}', ndr_arg, bpos_arg, epos_arg, ndr_flags, switch_is), '\t') + [ '}' ]
-	def buffers(self, order, func, name, ndr_arg, bpos_arg, epos_arg, ndr_flags, switch_is):
+			self.inner.scalars_body(order, func, f'__tmp_iter_{order}', ndr_arg, bpos_arg, epos_arg, ndr_flags, switch_is), '\t') + [ '}' ]
+	def buffers_body(self, order, func, name, ndr_arg, bpos_arg, epos_arg, ndr_flags, switch_is):
 		return append_stmts([ f'for (auto &__tmp_order: {name}) {{' ],
-			self.inner.buffers(order, func, '__tmp_order', ndr_arg, bpos_arg, epos_arg, ndr_flags, switch_is), '\t') + [ '}' ]
+			self.inner.buffers_body(order, func, '__tmp_order', ndr_arg, bpos_arg, epos_arg, ndr_flags, switch_is), '\t') + [ '}' ]
 	def __str__(self):
 		return "SizeIsVector(%s,%s)" % (self.inner, self.size_is_field)
 
@@ -801,17 +819,17 @@ class FieldTypeLengthIsVector(FieldTypeVector):
 		assert isinstance(length_is_field, Field)
 		self.size_is_field = size_is_field
 		self.length_is_field = length_is_field
-	def scalars(self, order, func, name, ndr_arg, bpos_arg, epos_arg, ndr_flags, switch_is):
+	def scalars_body(self, order, func, name, ndr_arg, bpos_arg, epos_arg, ndr_flags, switch_is):
 		if isinstance(self.size_is_field, Field):
 			ret = [f'X_NDR_SCALARS_LENGTH_IS_VECTOR_2_{func}({self.size_is_field.field_type.base_type}, __pos_{self.size_is_field.name}, {self.length_is_field.field_type.base_type}, __pos_{self.length_is_field.name}, {name}, {ndr_arg}, {bpos_arg}, {epos_arg}, {ndr_flags});']
 		else:
 			ret = [f'X_NDR_SCALARS_LENGTH_IS_VECTOR_1_{func}({self.size_is_field}, {self.length_is_field.field_type.base_type}, __pos_{self.length_is_field.name}, {name}, {ndr_arg}, {bpos_arg}, {epos_arg}, {ndr_flags});']
 		ret.append(f'for (auto &__tmp_order: {name}) {{')
 		return append_stmts(ret,
-			self.inner.scalars(order, func, '__tmp_order', ndr_arg, bpos_arg, epos_arg, ndr_flags, switch_is), '\t') + [ '}' ]
-	def buffers(self, order, func, name, ndr_arg, bpos_arg, epos_arg, ndr_flags, switch_is):
+			self.inner.scalars_body(order, func, '__tmp_order', ndr_arg, bpos_arg, epos_arg, ndr_flags, switch_is), '\t') + [ '}' ]
+	def buffers_body(self, order, func, name, ndr_arg, bpos_arg, epos_arg, ndr_flags, switch_is):
 		return append_stmts([ f'for (auto &__tmp_order: {name}) {{' ],
-			self.inner.buffers(order, func, '__tmp_order', ndr_arg, bpos_arg, epos_arg, ndr_flags, switch_is), '\t') + [ '}' ]
+				self.inner.buffers_body(order, func, '__tmp_order', ndr_arg, bpos_arg, epos_arg, ndr_flags, switch_is), '\t') + [ '}' ]
 	def __str__(self):
 		return "LengthIsVector(%s,%s,%s)" % (self.inner, self.size_is_field, self.length_is_field)
 
@@ -841,18 +859,18 @@ class FieldTypePtr(FieldTypeBase):
 		return ret
 
 class FieldTypeUniquePtr(FieldTypePtr):
-	def scalars(self, order, func, name, ndr_arg, bpos_arg, epos_arg, ndr_flags, switch_is):
+	def scalars_body(self, order, func, name, ndr_arg, bpos_arg, epos_arg, ndr_flags, switch_is):
 		return [f'X_NDR_SCALARS_UNIQUE_PTR({name}, {ndr_arg}, {bpos_arg}, {epos_arg}, {ndr_flags}, {switch_is});']
-	def buffers(self, order, func, name, ndr_arg, bpos_arg, epos_arg, ndr_flags, switch_is):
+	def buffers_body(self, order, func, name, ndr_arg, bpos_arg, epos_arg, ndr_flags, switch_is):
 		inner_stmts = self.inner.both(order, func, f'*{name}', ndr_arg, bpos_arg, epos_arg, ndr_flags, switch_is)
 		return  append_stmts([ f'if ({name}) {{' ], inner_stmts, '\t') + ['}']
 	def __str__(self):
 		return "Unique(%s)" % self.inner
 
 class FieldTypeRelativePtr(FieldTypePtr):
-	def scalars(self, order, func, name, ndr_arg, bpos_arg, epos_arg, ndr_flags, switch_is):
+	def scalars_body(self, order, func, name, ndr_arg, bpos_arg, epos_arg, ndr_flags, switch_is):
 		return [f'X_NDR_SAVE_POS(uint32, {ndr_arg}, {bpos_arg}, {epos_arg}, {ndr_flags});']
-	def buffers(self, order, func, name, ndr_arg, bpos_arg, epos_arg, ndr_flags, switch_is):
+	def buffers_body(self, order, func, name, ndr_arg, bpos_arg, epos_arg, ndr_flags, switch_is):
 		inner_stmts = self.inner.both(order, func, f'*{name}', ndr_arg, bpos_arg, epos_arg, ndr_flags, switch_is)
 		
 		return append_stmts([ f'X_NDR_BUFFERS_RELATIVE_PTR_START_{func}({name}, {ndr_arg}, {bpos_arg}, {epos_arg}, {ndr_flags}, {switch_is}); {{'],
@@ -865,10 +883,13 @@ class FieldTypeXSize(FieldTypeDerived):
 	def __init__(self, json_elem, iface, idl_tbl, dereferenced):
 		super().__init__(json_elem, iface, idl_tbl, dereferenced)
 		assert self.base_type in [ 'uint8', 'uint16', 'uint32' ]
-	def scalars(self, order, func, name, ndr_arg, bpos_arg, epos_arg, ndr_flags, switch_is):
+	def scalars_pre(self, order, func, name, ndr_arg, bpos_arg, epos_arg, ndr_flags, switch_is):
+		return [f'X_NDR_XSIZE_PRE_{func}({self.base_type}, {order}, {ndr_arg}, {bpos_arg}, {epos_arg}, {ndr_flags});']
+	def scalars_body(self, order, func, name, ndr_arg, bpos_arg, epos_arg, ndr_flags, switch_is):
 		return [f'X_NDR_XSIZE_{func}({self.base_type}, {order}, {ndr_arg}, {bpos_arg}, {epos_arg}, {ndr_flags});']
 	def scalars_post(self, order, func, name, ndr_arg, bpos_arg, epos_arg, ndr_flags, switch_is):
-		return [f'X_NDR_SCALARS_SIMPLE({self.get_ndr_traits()}, (__bpos - __base), {ndr_arg}, __pos_{order}, {epos_arg}, {ndr_flags}, {switch_is});''']
+		return [f'X_NDR_XSIZE_POST_{func}({self.base_type}, {order}, {ndr_arg}, {bpos_arg}, {epos_arg}, {ndr_flags});']
+		#return [f'X_NDR_SCALARS_SIMPLE({self.get_ndr_traits()}, (__bpos - __base), {ndr_arg}, __pos_{order}, {epos_arg}, {ndr_flags}, {switch_is});''']
 	def str(self):
 		return "XSize(%s)" % self.base_type
 
@@ -877,7 +898,7 @@ class FieldTypeValue(FieldTypeDerived):
 		super().__init__(json_elem, iface, idl_tbl, dereferenced)
 		assert self.data_type in ['ENUM', 'BITMAP' ] or self.base_type in [ 'uint8', 'uint16', 'uint32' ]
 		self.value, self.array_len = value, array_len
-	def scalars(self, order, func, name, ndr_arg, bpos_arg, epos_arg, ndr_flags, switch_is):
+	def scalars_body(self, order, func, name, ndr_arg, bpos_arg, epos_arg, ndr_flags, switch_is):
 		if self.array_len is not None:
 			ctype = f'std::array<{self.base_type}, {self.array_len}>'
 			return [f'X_NDR_SCALARS_ARRAY_VALUE({self.get_ndr_traits()}, ({ctype}{{{self.value}}}), {ndr_arg}, {bpos_arg}, {epos_arg}, {ndr_flags}, {switch_is});']
@@ -886,7 +907,7 @@ class FieldTypeValue(FieldTypeDerived):
 			return [f'X_NDR_SCALARS_VALUE({self.get_ndr_traits()}, ({ctype}{{{self.value}}}), {ndr_arg}, {bpos_arg}, {epos_arg}, {ndr_flags}, {switch_is});']
 
 class FieldTypeVectorLen(FieldTypeSlave):
-	def scalars(self, order, func, name, ndr_arg, bpos_arg, epos_arg, ndr_flags, switch_is):
+	def scalars_body(self, order, func, name, ndr_arg, bpos_arg, epos_arg, ndr_flags, switch_is):
 		return [f'X_NDR_VECTOR_LEN_{func}({self.base_type}, {self.master_field.name}, {ndr_arg}, {bpos_arg}, {epos_arg}, {ndr_flags});']
 	def __str__(self):
 		return "VectorLen(%s)" % self.base_type
@@ -895,7 +916,7 @@ class FieldTypeXNdrSize(FieldTypeSlave):
 	def set_size_field(self, field):
 		self.ndr_size_field = field
 		self.has_buffers = field.has_buffers
-	def scalars(self, order, func, name, ndr_arg, bpos_arg, epos_arg, ndr_flags, switch_is):
+	def scalars_body(self, order, func, name, ndr_arg, bpos_arg, epos_arg, ndr_flags, switch_is):
 		if func == 'PUSH':
 			return [ f'x_ndr_off_t __pos_{self.name} = {bpos_arg};',
 				f'X_NDR_SCALARS_SIMPLE({self.get_ndr_traits()}, {self.base_type}(), {ndr_arg}, {bpos_arg}, {epos_arg}, {ndr_flags}, X_NDR_SWITCH_NONE);' ]
@@ -909,23 +930,25 @@ class FieldTypeXNdrSize(FieldTypeSlave):
 class FieldTypeSubctxSize(FieldTypeSlave):
 	def has_buffers(self):
 		return self.master_field.has_buffers()
-	def scalars(self, order, func, name, ndr_arg, bpos_arg, epos_arg, ndr_flags, switch_is):
+	def scalars_body(self, order, func, name, ndr_arg, bpos_arg, epos_arg, ndr_flags, switch_is):
 		if self.has_buffers():
 			return [f'X_NDR_SAVE_POS({self.base_type}, {ndr_arg}, {bpos_arg}, {epos_arg}, {ndr_flags});']
 		else:
 			return [f'x_ndr_off_t __pos_{self.name} = {bpos_arg};',
 				f'X_NDR_SKIP({self.base_type}, {ndr_arg}, {bpos_arg}, {epos_arg}, {ndr_flags});']
-	def buffers(self, order, func, name, ndr_arg, bpos_arg, epos_arg, ndr_flags, switch_is):
+	def buffers_body(self, order, func, name, ndr_arg, bpos_arg, epos_arg, ndr_flags, switch_is):
 		return [f'x_ndr_off_t __pos_{self.name} = {ndr_arg}.load_pos();']
 
 class FieldTypeSizeIs(FieldTypeSlave):
 	def has_buffers(self):
 		return self.master_field.has_buffers()
-	def scalars(self, order, func, name, ndr_arg, bpos_arg, epos_arg, ndr_flags, switch_is):
+	def scalars_body(self, order, func, name, ndr_arg, bpos_arg, epos_arg, ndr_flags, switch_is):
 		assert self.has_buffers(), "TODO lsa_PrivilegeSet"
 		return [f'X_NDR_SAVE_POS({self.base_type}, {ndr_arg}, {bpos_arg}, {epos_arg}, {ndr_flags});']
-	def buffers(self, order, func, name, ndr_arg, bpos_arg, epos_arg, ndr_flags, switch_is):
+	def buffers_pre(self, order, func, name, ndr_arg, bpos_arg, epos_arg, ndr_flags, switch_is):
 		return [ f'x_ndr_off_t __pos_{self.name} = {ndr_arg}.load_pos();']
+	def buffers_body(self, order, func, name, ndr_arg, bpos_arg, epos_arg, ndr_flags, switch_is):
+		return []
 
 FieldTypeLengthIs = FieldTypeSizeIs
 
@@ -961,14 +984,26 @@ class Field(object):
 	def get_alignment(self):
 		return self.field_type.get_alignment()
 
-	def scalars(self, func):
-		ret = self.field_type.scalars(self.order, func, f'__val.{self.name}', '__ndr', '__bpos', '__epos', self.ndr_flags, self.switch_is)
+	def scalars_step0(self, func):
+		ret = self.field_type.scalars_step0(self.order, func, f'__val.{self.name}', '__ndr', '__bpos', '__epos', self.ndr_flags, self.switch_is)
+		assert isinstance(ret, list)
+		return ret
+	def scalars_pre(self, func):
+		ret = self.field_type.scalars_pre(self.order, func, f'__val.{self.name}', '__ndr', '__bpos', '__epos', self.ndr_flags, self.switch_is)
+		assert isinstance(ret, list)
+		return ret
+	def scalars_body(self, func):
+		ret = self.field_type.scalars_body(self.order, func, f'__val.{self.name}', '__ndr', '__bpos', '__epos', self.ndr_flags, self.switch_is)
 		assert isinstance(ret, list)
 		return ret
 	def scalars_post(self, func):
 		return self.field_type.scalars_post(self.order, func, f'__val.{self.name}', '__ndr', '__bpos', '__epos', self.ndr_flags, self.switch_is)
-	def buffers(self, func):
-		ret = self.field_type.buffers(self.order, func, f'__val.{self.name}', '__ndr', '__bpos', '__epos', self.ndr_flags, self.switch_is)
+	def buffers_pre(self, func):
+		ret = self.field_type.buffers_pre(self.order, func, f'__val.{self.name}', '__ndr', '__bpos', '__epos', self.ndr_flags, self.switch_is)
+		assert isinstance(ret, list)
+		return ret
+	def buffers_body(self, func):
+		ret = self.field_type.buffers_body(self.order, func, f'__val.{self.name}', '__ndr', '__bpos', '__epos', self.ndr_flags, self.switch_is)
 		assert isinstance(ret, list)
 		return ret
 	def ostr(self):
@@ -1356,20 +1391,31 @@ def output_ndrcxx_struct_scalars(out, func, fields, t, iface, idl, idl_tbl):
 	if flag is not None: out(f'''
 	__flags = x_ndr_set_flags(__flags, {flag});
 ''')
+	for field in fields:
+		for stmt in field.scalars_step0(func):
+			out(f'''
+	{stmt}''')
+
 	alignment = max([field.get_alignment() for field in fields]) if fields else 1
 	out(f'''
 	X_NDR_HEADER_ALIGN({alignment}, __ndr, __bpos, __epos, __flags);
 ''')
-	if any([field.is_type(FieldTypeXSize) for field in fields]):
-		out(f'''
-	x_ndr_off_t __base = __bpos;
-''')
-
 	for field in fields:
-		for stmt in field.scalars(func):
+		for stmt in field.scalars_pre(func):
 			out(f'''
 	{stmt}''')
 
+	for field in fields:
+		for stmt in field.scalars_body(func):
+			out(f'''
+	{stmt}''')
+
+	for field in fields:
+		for stmt in field.scalars_post(func):
+			out(f'''
+	{stmt}''')
+
+	"""
 	if func == 'PUSH':
 		for field in fields:
 			if field.is_type(FieldTypeXSize):
@@ -1380,6 +1426,8 @@ def output_ndrcxx_struct_scalars(out, func, fields, t, iface, idl, idl_tbl):
 		if any([field.is_type(FieldTypeXSize) for field in fields]):
 			out(f'''
 	__bpos = __epos;''')
+	"""
+
 
 	out(f'''
 	X_NDR_TRAILER_ALIGN({alignment}, __ndr, __bpos, __epos, __flags);''')
@@ -1393,7 +1441,13 @@ def find_elem_by_name(elems, name):
 def output_ndrcxx_struct_buffers(out, func, fields, t, iface, idl, idl_tbl):
 	for field in fields:
 		if field.has_buffers():
-			for stmt in field.buffers(func):
+			for stmt in field.buffers_pre(func):
+				out(f'''
+	{stmt}''')
+
+	for field in fields:
+		if field.has_buffers():
+			for stmt in field.buffers_body(func):
 				out(f'''
 	{stmt}''')
 
@@ -1555,7 +1609,7 @@ def output_ndrcxx_union_scalars(out, func, fields, t, iface, idl, idl_tbl):
 	for field in fields:
 		stmts = None
 		if field.name != '':
-			stmts = field.scalars(func)
+			stmts = field.scalars_step0(func) + field.scalars_pre(func) + field.scalars_body(func) + field.scalars_post(func)
 		if stmts:
 			out(f'''
 		{get_case_str(field)}: {{''')
@@ -1580,7 +1634,7 @@ def output_ndrcxx_union_buffers(out, func, fields, t, iface, idl, idl_tbl):
 	for field in fields:
 		stmts = None
 		if field.name != '' and field.has_buffers():
-			stmts = field.buffers(func)
+			stmts = field.buffers_pre(func) + field.buffers_body(func)
 		if stmts:
 			out(f'''
 		{get_case_str(field)}: {{''')
