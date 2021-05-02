@@ -5,6 +5,7 @@ import os, sys
 from io import StringIO
 import re, argparse, json
 
+# is_trivial false requires construct for union
 # TODO
 # [size_is(count) uint32 field[*]
 # ref pointer
@@ -423,6 +424,10 @@ def elem_get_info(elem, iface, idl_tbl):
 	def get_info_1(elem, base):
 		ndr_traits, align, is_trivial, has_buffers = None, None, None, None
 		if not base:
+			TODO 
+			subcontext = elem_get_property(elem, 'subcontext')
+			if subcontext:
+				has_buffers = False
 			pointer_count, _, _ = elem_get_pointer_info(elem, iface)
 			if pointer_count:
 				# this is a hack for NDR64
@@ -530,6 +535,8 @@ def append_stmts(orig_stmts, new_stmts, indent):
 class FieldTypeBase(object):
 	def has_buffers(self):
 		raise NotImplementedError
+	def get_typedef(self):
+		raise NotImplementedError
 	def dereferenced(self):
 		return False
 	def both(self, order, func, name, ndr_arg, bpos_arg, epos_arg, ndr_flags, switch_is):
@@ -559,6 +566,10 @@ class FieldTypeSubctxBase(FieldTypeBase):
 		self.inner = inner
 	def has_buffers(self):
 		return False
+	def is_trivial(self):
+		return self.inner.is_trivial()
+	def get_typedef(self):
+		return self.inner.get_typedef()
 	def get_ctype(self):
 		return self.inner.get_ctype()
 	def ostr(self, order, name, ndr_flags, switch_is):
@@ -583,7 +594,10 @@ class FieldTypeSubctxLevel(FieldTypeSubctxBase):
 
 		ret = []
 		if self.level == 0:
+			assert not self.size_field is None
 			ret += [f'X_NDR_SUBCTX_LEVEL0_SIZE_START_{func}({self.size_field.field_type.base_type}, __pos_{self.size_field.name}, {ndr_arg}, {bpos_arg}, {epos_arg}, {ndr_flags});']
+		elif self.size_field is None:
+			ret += [f'X_NDR_SUBCTX_LEVEL_NOSIZE_START_{func}({size_type}, {ndr_arg}, {bpos_arg}, {epos_arg}, {ndr_flags});']
 		else:
 			ret += [f'X_NDR_SUBCTX_LEVEL_SIZE_START_{func}({self.size_field.field_type.base_type}, __pos_{self.size_field.name}, {size_type}, {ndr_arg}, {bpos_arg}, {epos_arg}, {ndr_flags});']
 		ret += [f'X_NDR_SUBCTXLEVEL_START_{func}(__sub_ndr, {ndr_arg}, {bpos_arg}, {epos_arg}) {{']
@@ -591,6 +605,8 @@ class FieldTypeSubctxLevel(FieldTypeSubctxBase):
 			self.inner.both(order, func, name, '__sub_ndr', bpos_arg, epos_arg, ndr_flags, switch_is), '\t') + [f'}} X_NDR_SUBCTXLEVEL_END_{func}(__sub_ndr, {ndr_arg}, {bpos_arg}, {epos_arg});']
 		if self.level == 0:
 			ret += [f'X_NDR_SUBCTX_LEVEL0_SIZE_END_{func}({self.size_field.field_type.base_type}, __pos_{self.size_field.name}, {ndr_arg}, {bpos_arg}, {epos_arg}, {ndr_flags});']
+		elif self.size_field is None:
+			ret += [f'X_NDR_SUBCTX_LEVEL_NOSIZE_END_{func}({size_type}, {ndr_arg}, {bpos_arg}, {epos_arg}, {ndr_flags});']
 		else:
 			ret += [f'X_NDR_SUBCTX_LEVEL_SIZE_END_{func}({self.size_field.field_type.base_type}, __pos_{self.size_field.name}, {size_type}, {ndr_arg}, {bpos_arg}, {epos_arg}, {ndr_flags});']
 			
@@ -603,12 +619,10 @@ class FieldTypeSubctxLevel(FieldTypeSubctxBase):
 class FieldTypeSubctxFFFFFC01(FieldTypeSubctxBase):
 	def get_alignment(self):
 		return 1
-	def is_trivial(self):
-		return self.inner.is_trivial()
 	def scalars_body(self, order, func, name, ndr_arg, bpos_arg, epos_arg, ndr_flags, switch_is):
-		return append_stmts([f'X_NDR_SUBCTXFFFFFC01_START_{func}(__sub_ndr, ndr_arg, bpos_arg, epos_arg, ndr_flags) {{'],
+		return append_stmts([f'X_NDR_SUBCTXFFFFFC01_START_{func}(__sub_ndr, {ndr_arg}, {bpos_arg}, {epos_arg}, {ndr_flags}) {{'],
 			self.inner.both(order, func, name, '__sub_ndr', bpos_arg, epos_arg, ndr_flags, switch_is), '\t') + [
-			f'}} X_NDR_SUBCTXFFFFFC01_END_{func}(__sub_ndr, ndr_arg, bpos_arg, epos_arg, ndr_flags)' ]
+			f'}} X_NDR_SUBCTXFFFFFC01_END_{func}(__sub_ndr, {ndr_arg}, {bpos_arg}, {epos_arg}, {ndr_flags});' ]
 	def __str__(self):
 		return 'SubctxFFFFFC01(%s)' % self.inner
 
@@ -626,7 +640,10 @@ class FieldTypeDerived(FieldTypeBase):
 		return self.alignment
 
 	def get_ctype(self):
-		return self.base_type
+		return self.base_type, self.data_type
+
+	def get_typedef(self):
+		return self.typedef
 
 	def get_ndr_traits(self):
 		if self.ndr_traits:
@@ -651,8 +668,11 @@ class FieldTypeSimple(FieldTypeBase):
 		self.dereferenced_ = dereferenced
 		DBG(f'FieldTypeSimple name={self.name}, data_type={self.data_type}, typedef={self.typedef}, base_type={self.base_type}, ndr_traits={self.ndr_traits}, alignment={self.alignment}, is_trivial={self.is_trivial_}, has_buffers={self.has_buffers_}')
 	
+	def get_typedef(self):
+		return self.typedef
+
 	def get_ctype(self):
-		return self.base_type
+		return self.base_type, self.data_type
 
 	def has_buffers(self):
 		return self.has_buffers_
@@ -705,7 +725,7 @@ class FieldTypeString(FieldTypeBase):
 		if self.ndr_traits is None:
 			self.ndr_traits = f'ndr_traits_t<{string_type}>'
 	def get_ctype(self):
-		return f'{self.string_type}'
+		return f'{self.string_type}', self.data_type
 
 	def has_buffers(self):
 		return False
@@ -732,7 +752,8 @@ class FieldTypeArray(FieldTypeBase):
 	def is_trivial(self):
 		return self.inner.is_trivial()
 	def get_ctype(self):
-		return f'std::array<{self.inner.get_ctype()}, {self.array_size}>'
+		ctype, data_type = self.inner.get_ctype()
+		return f'std::array<{ctype}, {self.array_size}>', data_type
 	def get_alignment(self):
 		return self.inner.get_alignment()
 	def scalars_body(self, order, func, name, ndr_arg, bpos_arg, epos_arg, ndr_flags, switch_is):
@@ -756,7 +777,8 @@ class FieldTypeVector(FieldTypeBase):
 	def __init__(self, inner):
 		self.inner = inner
 	def get_ctype(self):
-		return f'std::vector<{self.inner.get_ctype()}>'
+		ctype, data_type = self.inner.get_ctype()
+		return f'std::vector<{ctype}>', data_type
 	def has_buffers(self):
 		return self.inner.has_buffers()
 	def get_alignment(self):
@@ -774,8 +796,15 @@ class FieldTypeVector(FieldTypeBase):
 
 class FieldTypeUnboundVector(FieldTypeVector):
 	def scalars_body(self, order, func, name, ndr_arg, bpos_arg, epos_arg, ndr_flags, switch_is):
-		return ['TODO;']
-		return f'X_NDR_SCALARS_VECTOR({self.get_ndr_traits()}, {self.name}, {ndr_arg}, {bpos_arg}, {epos_arg}, {self.get_ndr_flags()}, {self.get_switch_is()});'
+		if func == 'PUSH':
+			return append_stmts([ f'for (auto &__tmp_{order}: {name}) {{' ],
+				self.inner.scalars_body({order}, func, f'__tmp_{order}', ndr_arg, bpos_arg, epos_arg, ndr_flags, switch_is), '\t') + [ '}' ]
+		else:
+			return append_stmts([f'while ({bpos_arg} < {epos_arg}) {{',
+					f'\t{self.inner.get_ctype()[0]} __tmp_{order};'],
+				self.inner.scalars_body(order, func, f'__tmp_{order}', ndr_arg, bpos_arg, epos_arg, ndr_flags, switch_is), '\t') + [
+					f'\t{name}.push_back(__tmp_{order});',
+					'}' ]
 	def buffers_body(self, order, func, name, ndr_arg, bpos_arg, epos_arg, ndr_flags, switch_is):
 		assert False, "Not supported"
 	def __str__(self):
@@ -786,11 +815,11 @@ class FieldTypeSimpleVector(FieldTypeVector):
 		super().__init__(inner)
 		self.array_len_field = array_len_field
 	def scalars_body(self, order, func, name, ndr_arg, bpos_arg, epos_arg, ndr_flags, switch_is):
-		return append_stmts([ f'for (auto &__tmp_order: {name}) {{' ],
-			self.inner.scalars_body(order, func, '__tmp_order', ndr_arg, bpos_arg, epos_arg, ndr_flags, switch_is), '\t') + [ '}' ]
+		return append_stmts([ f'for (auto &__tmp_{order}: {name}) {{' ],
+			self.inner.scalars_body(order, func, f'__tmp_{order}', ndr_arg, bpos_arg, epos_arg, ndr_flags, switch_is), '\t') + [ '}' ]
 	def buffers_body(self, order, func, name, ndr_arg, bpos_arg, epos_arg, ndr_flags, switch_is):
-		return append_stmts([ f'for (auto &__tmp_order: {name}) {{' ],
-			self.inner.buffers_body(order, func, '__tmp_order', ndr_arg, bpos_arg, epos_arg, ndr_flags, switch_is), '\t') + [ '}' ]
+		return append_stmts([ f'for (auto &__tmp_{order}: {name}) {{' ],
+			self.inner.buffers_body(order, func, f'__tmp_{order}', ndr_arg, bpos_arg, epos_arg, ndr_flags, switch_is), '\t') + [ '}' ]
 	def __str__(self):
 		return '%s[%s]' % (self.inner, self.array_len_field.name)
 
@@ -843,8 +872,12 @@ class FieldTypePtr(FieldTypeBase):
 	def is_trivial(self):
 		return False
 
+	def get_typedef(self):
+		return self.inner.get_typedef()
+
 	def get_ctype(self):
-		return f'std::shared_ptr<{self.inner.get_ctype()}>'
+		ctype, data_type = self.inner.get_ctype()
+		return f'std::shared_ptr<{ctype}>', data_type
 
 	def get_alignment(self):
 		return 5
@@ -962,18 +995,28 @@ class Field(object):
 		self.sibling = fields
 		self.ndr_flags = self.get_ndr_flags()
 		self.switch_is = self.get_switch_is()
-	def is_type(self, t):
+	def field_type_is(self, t):
 		return isinstance(self.field_type, t)
 	def has_buffers(self):
 		return self.field_type.has_buffers()
+	def is_nontrivial_union(self):
+		return self.get_data_type() == "UNION" and not self.is_trivial()
 	def is_trivial(self):
 		return self.field_type.is_trivial()
+	def get_ctype(self):
+		ctype, _ = self.field_type.get_ctype()
+		return ctype
+	def get_data_type(self):
+		_, data_type = self.field_type.get_ctype()
+		return data_type
+	def get_typedef(self):
+		return self.field_type.get_typedef()
 	def dereferenced(self):
 		return self.field_type.dereferenced()
 	def get_properties_string__(self):
 		return elem_tostring_properties(self.elem)
 	def declare(self):
-		ctype = self.field_type.get_ctype()
+		ctype, _ = self.field_type.get_ctype()
 		declare = f'{ctype} {self.name};'
 		if isinstance(self.field_type, FieldTypeDerived):
 			declare = f'/* {declare} */'
@@ -1146,11 +1189,10 @@ def make_field_type(field, fields, t, iface, idl_tbl, in_function):
 	subcontext = elem_get_property(elem, 'subcontext')
 	if subcontext is not None:
 		subcontext_level = int(subcontext, 0)
-		if subcontext_level in [0, 4]:
+		if subcontext_level in [0, 2, 4]:
 			subcontext_size = elem_get_property(elem, "subcontext_size")
-			assert subcontext_size is not None
 			field_type = FieldTypeSubctxLevel(field_type, subcontext_level,
-					find_field(fields, subcontext_size))
+					None if subcontext_size is None else find_field(fields, subcontext_size))
 		elif subcontext_level == 0xFFFFFC01:
 			field_type = FieldTypeSubctxFFFFFC01(field_type)
 		else:
@@ -1172,7 +1214,15 @@ def make_fields(t, iface, idl_tbl, is_function):
 
 	for field in fields:
 		field.set_sibling(fields)
-	
+		if field.is_nontrivial_union():
+			switch_is = field.get_property('switch_is')
+			switch_is = switch_is.split('&')[0] # TODO
+			for f in fields:
+				if f.name == switch_is:
+					f.nontrivial_unions.append(field)
+					break
+			else:
+				assert False
 
 	'''
 	def find_master_field(field_type):
@@ -1189,6 +1239,7 @@ def make_fields(t, iface, idl_tbl, is_function):
 			mf = find_master_field(field.field_type)
 			field.field_type.master_field = mf
 	'''
+
 
 	def dbg_output_fields(fields):
 		return '\n\t'.join([ str(x) for x in fields ])
@@ -1212,7 +1263,7 @@ def output_header_STRUCT(out, t, iface, idl, idl_tbl):
 		if field.nontrivial_unions:
 			has_nontrivial_unions = True
 			for nf in field.nontrivial_unions:
-				if not nf.is_type(FieldTypePtr):
+				if not nf.field_type_is(FieldTypePtr):
 					all_nontrivial_unions_are_ptr = False
 
 	out(f'''
@@ -1234,7 +1285,7 @@ struct {tname} {{
 			# TODO if elem_has_property(switch_field, 'value'):
 			#	continue
 			out(f'''
-	void set_{switch_field.name}({switch_field.base_type} v);
+	void set_{switch_field.name}({switch_field.get_ctype()} v);
 ''')
 
 	for field in fields:
@@ -1272,7 +1323,7 @@ def output_struct_functions(idl, tname, fields, out):
 	def union_field_iter(union_fields):
 		for uf in union_fields:
 			switch_is = uf.get_property("switch_is")
-			yield uf, switch_is, uf.is_type(FieldTypePtr)
+			yield uf, switch_is, uf.field_type_is(FieldTypePtr)
 	
 	has_buffers, has_nontrivial_unions, all_nontrivial_unions_are_ptr = False, False, True
 	for field in fields:
@@ -1281,14 +1332,14 @@ def output_struct_functions(idl, tname, fields, out):
 		if field.nontrivial_unions:
 			has_nontrivial_unions = True
 			for nf in field.nontrivial_unions:
-				if not nf.is_type(FieldTypePtr):
+				if not nf.field_type_is(FieldTypePtr):
 					all_nontrivial_unions_are_ptr = False
 
 	for field in fields:
 		if len(field.nontrivial_unions) == 0:
 			continue
 		out(f'''
-void {tname}::set_{field.name}({field.base_type} v)
+void {tname}::set_{field.name}({field.get_ctype()} v)
 {{''')
 		for uf, switch_is, is_pointer in union_field_iter(field.nontrivial_unions):
 			out(f'''
@@ -1306,9 +1357,9 @@ void {tname}::set_{field.name}({field.base_type} v)
 	for field in fields:
 		if len(field.nontrivial_unions) == 0:
 			continue
-		first_case, _ = get_first_case(field.nontrivial_unions[0].typedef)
+		first_case, _ = get_first_case(field.nontrivial_unions[0].get_typedef())
 		out(f'''
-	{sep} {field.name}(({field.base_type}){first_case})''')
+	{sep} {field.name}(({field.get_ctype()}){first_case})''')
 		sep = ','
 	out('{')
 	for field in fields:
@@ -1339,7 +1390,7 @@ TODO
 		for uf, switch_is, is_pointer in union_field_iter(field.nontrivial_unions):
 			out(f'''
 	x_ndr_union_field_uninit({uf.name}, x_ndr_switch_t({switch_is}));''')
-		if not field.is_type(FieldTypeDerived) and (field.data_type != "UNION" or field.is_trivial()):
+		if not field.field_type_is(FieldTypeDerived) and not field.is_nontrivial_union():
 			out(f'''
 	{field.name} = other.{field.name};''')
 		for uf, switch_is, is_pointer in union_field_iter(field.nontrivial_unions):
@@ -1355,7 +1406,7 @@ TODO
 {tname}::{tname}({tname} &&other)''')
 		sep = ':'
 		for field in fields:
-			if not field.is_type(FieldTypeDerived) and (field.data_type != "UNION" or field.is_trivial()):
+			if not field.field_type_is(FieldTypeDerived) and not field.is_nontrivial_union():
 				out(f'''	{sep} {field.name}(other.{field.name})''')
 				sep = ','
 		out('{')		
@@ -1371,7 +1422,7 @@ TODO
 {tname}::{tname}(const {tname} &other)''')
 		sep = ':'
 		for field in fields:
-			if not field.is_type(FieldTypeDerived) and (field.data_type != "UNION" or field.is_trivial()):
+			if not field.field_type_is(FieldTypeDerived) and not field.is_nontrivial_union():
 				out(f'''	{sep} {field.name}(other.{field.name})''')
 				sep = ','
 		out('{')		
@@ -1418,12 +1469,12 @@ def output_ndrcxx_struct_scalars(out, func, fields, t, iface, idl, idl_tbl):
 	"""
 	if func == 'PUSH':
 		for field in fields:
-			if field.is_type(FieldTypeXSize):
+			if field.field_type_is(FieldTypeXSize):
 				for stmt in field.scalars_post(func):
 					out(f'''
 	{stmt}''')
 	else:
-		if any([field.is_type(FieldTypeXSize) for field in fields]):
+		if any([field.field_type_is(FieldTypeXSize) for field in fields]):
 			out(f'''
 	__bpos = __epos;''')
 	"""
@@ -1906,7 +1957,7 @@ def output_header_FUNCTION(out, t, iface, idl, idl_tbl):
 		if field.nontrivial_unions:
 			has_nontrivial_unions = True
 			for nf in field.nontrivial_unions:
-				if not nf.is_type(FieldTypePtr):
+				if not nf.field_type_is(FieldTypePtr):
 					all_nontrivial_unions_are_ptr = False
 
 	out(f'''
@@ -1928,7 +1979,7 @@ struct {tname} {{
 			# TODO if elem_has_property(switch_field, 'value'):
 			#	continue
 			out(f'''
-	void set_{switch_field.name}({switch_field.base_type} v);
+	void set_{switch_field.name}({switch_field.get_ctype()} v);
 ''')
 
 	for field in fields:

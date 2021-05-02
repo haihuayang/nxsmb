@@ -1517,23 +1517,25 @@ inline x_ndr_off_t x_ndr_scalars(std::array<T,C> &t, x_ndr_pull_t &ndr,
 	}
 	return bpos;
 }
+#endif
 
 struct x_ndr_subctx_t
 {
-	x_ndr_off_t ndr_scalars(x_ndr_push_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level) const;
-	x_ndr_off_t ndr_scalars(x_ndr_pull_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level);
 	uint32_t content_size;
 	uint32_t flags = 0;
 };
 
-x_ndr_off_t x_ndr_scalars(const x_ndr_subctx_t &t, x_ndr_push_t &ndr,
-		x_ndr_off_t bpos, x_ndr_off_t epos,
-		uint32_t flags, x_ndr_switch_t level);
+template <> struct ndr_traits_t<x_ndr_subctx_t> {
+	using ndr_base_type = x_ndr_subctx_t;
+	using has_buffers = std::false_type;
+	using ndr_data_type = x_ndr_type_struct;
 
-x_ndr_off_t x_ndr_scalars(x_ndr_subctx_t &t, x_ndr_pull_t &ndr,
-		x_ndr_off_t bpos, x_ndr_off_t epos,
-		uint32_t flags, x_ndr_switch_t level);
+	x_ndr_off_t scalars(const x_ndr_subctx_t &__val, x_ndr_push_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level) const;
+	x_ndr_off_t scalars(x_ndr_subctx_t &__val, x_ndr_pull_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level) const;
+	void ostr(const x_ndr_subctx_t &__val, x_ndr_ostr_t &__ndr, uint32_t __flags, x_ndr_switch_t __level) const;
+};
 
+#if 0
 template <typename T>
 inline x_ndr_off_t x_ndr_subctx(const T &t, x_ndr_push_t &ndr,
 		x_ndr_off_t bpos, x_ndr_off_t epos,

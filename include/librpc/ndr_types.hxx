@@ -107,7 +107,6 @@ inline x_ndr_off_t x_ndr_scalars_unique_ptr(
 
 
 #define X_NDR_SUBCTX_LEVEL0_SIZE_START_PUSH(subctx_size_type, subctx_size_pos, ndr, bpos, epos, flags) do { \
-	x_ndr_off_t __tmp_size_pos = (bpos); \
 	x_ndr_off_t __tmp_subctx_pos = (bpos);
 
 #define X_NDR_SUBCTX_LEVEL0_SIZE_END_PUSH(subctx_size_type, subctx_size_pos, ndr, bpos, epos, flags) \
@@ -115,17 +114,33 @@ inline x_ndr_off_t x_ndr_scalars_unique_ptr(
 } while (0)
 
 #define X_NDR_SUBCTX_LEVEL0_SIZE_START_PULL(subctx_size_type, subctx_size_pos, ndr, bpos, epos, flags) do { \
-	(subctx_size_type) __tmp_subctx_size; \
+	subctx_size_type __tmp_subctx_size; \
 	X_NDR_SCALARS_DEFAULT(__tmp_subctx_size, (ndr), (subctx_size_pos), (epos), (flags), X_NDR_SWITCH_NONE); \
-	(type) __tmp_size; \
+	x_ndr_off_t __tmp_save_epos = (epos); \
+	(epos) = X_NDR_CHECK_POS((bpos) + __tmp_subctx_size, (bpos), (epos));
+
+#define X_NDR_SUBCTX_LEVEL0_SIZE_END_PULL(subctx_size_type, subctx_size_pos, ndr, bpos, epos, flags) \
+	(bpos) = (epos); \
+	(epos) = __tmp_save_epos; \
+} while (0)
+
+
+#define X_NDR_SUBCTX_LEVEL_NOSIZE_START_PUSH(size_type, ndr, bpos, epos, flags) do { \
+	x_ndr_off_t __tmp_size_pos = (bpos); \
+	X_NDR_SKIP(size_type, (ndr), (bpos), (epos), (flags)); \
+	x_ndr_off_t __tmp_subctx_pos = (bpos);
+
+#define X_NDR_SUBCTX_LEVEL_NOSIZE_END_PUSH(size_type, ndr, bpos, epos, flags) \
+	X_NDR_SCALARS_DEFAULT((size_type)((bpos) - (__tmp_subctx_pos)), (ndr), __tmp_size_pos, (epos), (flags), X_NDR_SWITCH_NONE); \
+} while (0)
+
+#define X_NDR_SUBCTX_LEVEL_NOSIZE_START_PULL(size_type, ndr, bpos, epos, flags) do { \
+	size_type __tmp_size; \
 	X_NDR_SCALARS_DEFAULT(__tmp_size, (ndr), (bpos), (epos), (flags), X_NDR_SWITCH_NONE); \
-	if (__tmp_size != __tmp_subctx_size) { \
-		return -NDR_ERR_LENGTH; \
-	} \
 	x_ndr_off_t __tmp_save_epos = (epos); \
 	(epos) = X_NDR_CHECK_POS((bpos) + __tmp_size, (bpos), (epos));
 
-#define X_NDR_SUBCTX_LEVEL0_SIZE_END_PULL(subctx_size_type, subctx_size_pos, ndr, bpos, epos, flag) \
+#define X_NDR_SUBCTX_LEVEL_NOSIZE_END_PULL(size_type, ndr, bpos, epos, flags) \
 	(bpos) = (epos); \
 	(epos) = __tmp_save_epos; \
 } while (0)
@@ -176,22 +191,22 @@ inline x_ndr_off_t x_ndr_scalars_unique_ptr(
 	x_ndr_off_t __pos_subctx = (bpos); \
 	X_NDR_SCALARS_DEFAULT(__subctx, (ndr), (bpos), (epos), (flags), X_NDR_SWITCH_NONE); \
 	x_ndr_off_t __tmp_bpos = (bpos); \
-	x_ndr_push_t (subndr){(ndr).buff, (bpos)};
+	x_ndr_push_t subndr{(ndr).buff, (bpos)};
 
-#define X_NDR_SUBCTXFFFFFC01_END_PUSH(subndr, ndr, bpos, epos, flag) \
+#define X_NDR_SUBCTXFFFFFC01_END_PUSH(subndr, ndr, bpos, epos, _flags) \
 	__subctx.content_size = X_NDR_ROUND((bpos) - __tmp_bpos, 8); \
-	__subctx.flags = (flags); \
-	X_NDR_SCALARS_DEFAULT(__subctx, (ndr), __pos_subctx, (epos), (flags), X_NDR_SWITCH_NONE); \
+	__subctx.flags = (_flags); \
+	X_NDR_SCALARS_DEFAULT(__subctx, (ndr), __pos_subctx, (epos), (_flags), X_NDR_SWITCH_NONE); \
 } while (0)
 
 #define X_NDR_SUBCTXFFFFFC01_START_PULL(subndr, ndr, bpos, epos, flags) do { \
 	x_ndr_subctx_t __subctx; \
 	X_NDR_SCALARS_DEFAULT(__subctx, (ndr), (bpos), (epos), (flags), X_NDR_SWITCH_NONE); \
-	x_ndr_pull_t (subndr){(ndr).buff, (bpos)}; \
+	x_ndr_pull_t subndr{(ndr).buff, (bpos)}; \
 	x_ndr_off_t __tmp_save_epos = (epos); \
-	(epos) = X_NDR_CHECK_POS((bpos) + __subctx.contenxt_size, (bpos), (epos));
+	(epos) = X_NDR_CHECK_POS((bpos) + __subctx.content_size, (bpos), (epos));
 
-#define X_NDR_SUBCTXFFFFFC01_END_PULL(subndr, ndr, bpos, epos, flag) \
+#define X_NDR_SUBCTXFFFFFC01_END_PULL(subndr, ndr, bpos, epos, flags) \
 	(bpos) = (epos); \
 	(epos) = __tmp_save_epos; \
 } while (0)
