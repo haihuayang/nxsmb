@@ -77,7 +77,8 @@ TARGET_CFLAGS_EXTRA := \
 	-Isamba/source3 \
 	-D__X_DEVELOPER__=1
 
-all: $(TARGET_SET_tests:%=$(TARGET_DIR_out)/tests/%) $(TARGET_DIR_out)/bin/nxsmbd
+all: $(TARGET_SET_tests:%=$(TARGET_DIR_out)/tests/%)
+#$(TARGET_DIR_out)/bin/nxsmbd
 
 SET_src_nxsmbd := auth_ntlmssp auth_krb5 auth_spnego auth \
 	network misc \
@@ -254,7 +255,7 @@ $(TARGET_SET_tests:%=$(TARGET_DIR_out)/tests/%.o) : $(TARGET_DIR_out)/tests/%.o:
 	$(CXX) -c $(TARGET_CXXFLAGS) $(TARGET_CFLAGS_EXTRA) -o $@ $<
 
 
-TARGET_SRC_libnxsmb_tmp_disable := \
+TARGET_SRC_libnxsmb := \
 		lib/librpc/ndr \
 		lib/librpc/ndr_smb \
 		lib/librpc/ndr_utils \
@@ -265,9 +266,9 @@ TARGET_SRC_libnxsmb_tmp_disable := \
 		lib/librpc/samr \
 		lib/librpc/netlogon \
 		lib/librpc/krb5pac \
-		lib/librpc/ntlmssp \
 		lib/librpc/dcerpc \
 		lib/librpc/srvsvc \
+		lib/librpc/ntlmssp \
 		lib/xutils \
 		lib/threadpool \
 		lib/evtmgmt \

@@ -48,37 +48,6 @@ static inline uint32_t ndr_ntlmssp_negotiated_string_flags(uint32_t negotiate_fl
 }
 
 
-#if 0
-struct ntlmssp_VERSION {
-	x_ndr_off_t ndr_scalars(x_ndr_push_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level) const;
-	x_ndr_off_t ndr_scalars(x_ndr_pull_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level);
-	void ostr(x_ndr_ostr_t &__ndr, uint32_t __flags, x_ndr_switch_t __level) const;
-	ntlmssp_WindowsMajorVersion ProductMajorVersion;
-	ntlmssp_WindowsMinorVersion ProductMinorVersion;
-	uint16 ProductBuild;
-	std::array<uint8, 3> Reserved;
-	ntlmssp_NTLMRevisionCurrent NTLMRevisionCurrent;
-} /* [public] */;
-
-template <> struct x_ndr_traits_t<ntlmssp_VERSION> {
-	using has_buffers = std::false_type;
-	using ndr_data_type x_ndr_type_struct;
-};
-
-union ntlmssp_Version
-{
-	x_ndr_off_t ndr_scalars(x_ndr_push_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level) const;
-	x_ndr_off_t ndr_scalars(x_ndr_pull_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level);
-	void ostr(x_ndr_ostr_t &__ndr, uint32_t __flags, x_ndr_switch_t __level) const;
-	ntlmssp_VERSION version;/* [case(NTLMSSP_NEGOTIATE_VERSION)] */
-} /* [nodiscriminant] */;
-
-template <> struct x_ndr_traits_t<ntlmssp_Version> {
-	using has_buffers = std::false_type;
-	using ndr_data_type x_ndr_type_union;
-};
-#endif
-
 struct NEGOTIATE_MESSAGE {
 	NEGOTIATE NegotiateFlags;
 	std::shared_ptr<std::string> DomainName; // x_ndr_relative_ptr_t<sstring, uint16, uint16> DomainName;/* [relative] */
@@ -360,7 +329,6 @@ template <> struct x_ndr_traits_t<ntlmssp_NTLM_RESPONSE> {
 
 const int NTLMSSP_MIC_OFFSET = 72;
 const int NTLMSSP_MIC_SIZE = 16;
-#endif
 struct ntlmssp_MIC {
 	std::array<uint8, NTLMSSP_MIC_SIZE> MIC;
 } /* [flag(LIBNDR_PRINT_ARRAY_HEX)] */;
@@ -373,6 +341,7 @@ template <> struct ndr_traits_t<ntlmssp_MIC> {
 	x_ndr_off_t scalars(ntlmssp_MIC &__val, x_ndr_pull_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level);
 	void ostr(const ntlmssp_MIC &__val, x_ndr_ostr_t &__ndr, uint32_t __flags, x_ndr_switch_t __level) const;
 };
+#endif
 
 struct AUTHENTICATE_MESSAGE {
 	std::shared_ptr<LM_RESPONSE> LmChallengeResponse; //x_ndr_relative_ptr_t<LM_RESPONSE, uint16, uint16> LmChallengeResponse;/* [relative] */

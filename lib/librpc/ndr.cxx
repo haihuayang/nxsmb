@@ -287,229 +287,6 @@ _PUBLIC_ x_ndr_off_t x_ndr_pull_uint1632(uint16_t &v,
 	return x_ndr_pull_uint16(v, ndr, bpos, epos, flags);
 }
 
-x_ndr_off_t x_ndr_push_subwrapper(x_ndr_subwrapper_t val, x_ndr_push_t &ndr,
-		x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags)
-{
-	bpos = X_NDR_CHECK(x_ndr_push_uint8(1, ndr, bpos, epos, flags));
-	bpos = X_NDR_CHECK(x_ndr_push_uint8((val.flags & LIBNDR_FLAG_BIGENDIAN) ? 0 : 0x10,
-			ndr, bpos, epos, flags));
-	bpos = X_NDR_CHECK(x_ndr_push_uint16(8, ndr, bpos, epos, flags));
-	bpos = X_NDR_CHECK(x_ndr_push_uint32(0xcccccccc, ndr, bpos, epos, flags));
-	bpos = X_NDR_CHECK(x_ndr_push_uint32(val.content_size, ndr, bpos, epos, flags));
-	bpos = X_NDR_CHECK(x_ndr_push_uint32(0, ndr, bpos, epos, flags));
-	return bpos;
-}
-
-x_ndr_off_t x_ndr_pull_subwrapper(x_ndr_subwrapper_t &val, x_ndr_pull_t &ndr,
-		x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags)
-{
-	uint8_t version, drep;
-	uint16_t hdrlen;
-	uint32_t filler;
-
-	bpos = X_NDR_CHECK(x_ndr_pull_uint8(version, ndr, bpos, epos, flags));
-	if (version != 1) {
-		return -NDR_ERR_SUBCONTEXT;
-	}
-
-	bpos = X_NDR_CHECK(x_ndr_pull_uint8(drep, ndr, bpos, epos, flags));
-	if (drep == 0x10) {
-		val.flags = LIBNDR_FLAG_LITTLE_ENDIAN;
-	} else if (drep == 0) {
-		val.flags = LIBNDR_FLAG_BIGENDIAN;
-	} else {
-		return -NDR_ERR_SUBCONTEXT;
-	}
-
-	bpos = X_NDR_CHECK(x_ndr_pull_uint16(hdrlen, ndr, bpos, epos, flags));
-	if (hdrlen != 8) {
-		return -NDR_ERR_SUBCONTEXT;
-	}
-	bpos = X_NDR_CHECK(x_ndr_pull_uint32(filler, ndr, bpos, epos, flags));
-	bpos = X_NDR_CHECK(x_ndr_pull_uint32(val.content_size, ndr, bpos, epos, flags));
-	if (val.content_size % 8 != 0) {
-		return -NDR_ERR_SUBCONTEXT;
-	}
-	bpos = X_NDR_CHECK(x_ndr_pull_uint32(filler, ndr, bpos, epos, flags));
-	return bpos;
-}
-
-#if 0
-void ndr_output_uint64(ndr_ostream_t &ndr, uint32_t flags, uint64_t val, const char *name);
-void ndr_output_uint32(ndr_ostream_t &ndr, uint32_t flags, uint32_t val, const char *name);
-void ndr_output_uint16(ndr_ostream_t &ndr, uint32_t flags, uint16_t val, const char *name);
-void ndr_output_uint8(ndr_ostream_t &ndr, uint32_t flags, uint8_t val, const char *name);
-#endif
-
-#if 0
-#define NDR_BASE_MARSHALL_SIZE 1024
-
-typedef std::vector<std::pair<const void *, uint32_t>> ndr_token_list_t;
-
-/* structure passed to functions that generate NDR formatted data */
-struct ndr_push_t {
-	ndr_push_t() {
-		data.reserve(NDR_BASE_MARSHALL_SIZE);
-	}
-	uint32_t flags = 0; /* LIBNDR_FLAG_* */
-	std::vector<uint8_t> data;
-	bool fixed_buf_size;
-
-	uint32_t relative_base_offset;
-	uint32_t relative_end_offset;
-	ndr_token_list_t relative_base_list;
-
-	ndr_token_list_t switch_list;
-	ndr_token_list_t relative_list;
-	ndr_token_list_t relative_begin_list;
-	ndr_token_list_t nbt_string_list;
-	ndr_token_list_t dns_string_list;
-	ndr_token_list_t full_ptr_list;
-
-	// struct ndr_compression_state *cstate;
-
-	/* this is used to ensure we generate unique reference IDs */
-	uint32_t ptr_count = 0;
-};
-
-_PUBLIC_ x_ndr_push_t &ndr_push_create(void)
-{
-	return new ndr_push_t;
-}
-
-_PUBLIC_ void ndr_push_delete(x_ndr_push_t &ndr)
-{
-	delete ndr;
-}
-
-static x_ndr_ret_t ndr_token_store(ndr_token_list_t &list, const void *p, uint32_t val)
-{
-	list.emplace_back(std::make_pair(p, val));
-	return NDR_ERR_SUCCESS;
-}
-
-static uint32_t ndr_token_peek(const ndr_token_list_t &list, const void *key)
-{
-	for (auto it = list.rbegin(); it != list.rend(); ++it) {
-		if (it->first == key) {
-			return it->second;
-		}
-	}
-	return 0;
-}
-
-_PUBLIC_ uint32_t ndr_set_flags(x_ndr_push_t &ndr, uint32_t flags)
-{
-	uint32_t orig = ndr.flags;
-	ndr.flags = flags;
-	return orig;
-}
-
-_PUBLIC_ uint32_t ndr_get_flags(const x_ndr_push_t &ndr)
-{
-	return ndr.flags;
-}
-
-/*
-   store a switch value
- */
-_PUBLIC_ x_ndr_ret_t ndr_set_switch_value(x_ndr_push_t &ndr, const void *p, uint32_t val)
-{
-	return ndr_token_store(ndr.switch_list, p, val);
-}
-
-
-/*
-   retrieve a switch value
- */
-_PUBLIC_ uint32_t ndr_push_get_switch_value(x_ndr_push_t &ndr, const void *p)
-{
-	return ndr_token_peek(ndr.switch_list, p);
-}
-
-/*
-   store a switch value
- */
-_PUBLIC_ x_ndr_ret_t ndr_set_switch_value(x_ndr_pull_t &ndr, const void *p, uint32_t val)
-{
-	return ndr_token_store(ndr.switch_list, p, val);
-}
-
-
-_PUBLIC_ uint32_t ndr_set_flags(x_ndr_pull_t &ndr, uint32_t flags)
-{
-	uint32_t orig = ndr.flags;
-	ndr.flags = flags;
-	return orig;
-}
-
-_PUBLIC_ uint32_t ndr_get_flags(const x_ndr_pull_t &ndr)
-{
-	return ndr.flags;
-}
-
-/*
-   retrieve a switch value
- */
-_PUBLIC_ uint32_t ndr_pull_get_switch_value(x_ndr_pull_t &ndr, const void *p)
-{
-	return ndr_token_peek(ndr.switch_list, p);
-}
-
-const void *ndr_push_get_data(x_ndr_push_t &ndr, size_t &length)
-{
-	length = ndr.data.size();
-	return ndr.data.data();
-}
-
-/*
-  return and possibly log an NDR error
-*/
-_PUBLIC_ x_ndr_ret_t ndr_error(unsigned int ndr_err,
-		const char *format, ...)
-{
-	char *s=NULL;
-	va_list ap;
-	int ret;
-
-	va_start(ap, format);
-	ret = vasprintf(&s, format, ap);
-	va_end(ap);
-
-	if (ret == -1) {
-		return -NDR_ERR_ALLOC;
-	}
-
-	DEBUG(1,("ndr_push_error(%u): %s\n", ndr_err, s));
-
-	free(s);
-
-	return -ndr_err;
-}
-
-#define ndr_error(err, fmt, ...) -(err)
-
-/*
-   work out the number of bytes needed to align on a n byte boundary
- */
-_PUBLIC_ size_t ndr_align_size(uint32_t offset, size_t n)
-{
-	if ((offset & (n-1)) == 0) return 0;
-	return n - (offset & (n-1));
-}
-
-static size_t ndr_align_size_intl(const x_ndr_push_t &ndr, size_t n)
-{
-	return ndr_align_size(ndr.data.size(), n);
-}
-
-static size_t ndr_align_size_intl(const x_ndr_pull_t &ndr, size_t n)
-{
-	return ndr_align_size(ndr.offset, n);
-}
-
-#define NDR_ALIGN(ndr, n) ndr_align_size_intl(ndr, n)
-#endif
 
 static inline size_t normalize_align(size_t size, uint32_t flags)
 {
@@ -585,41 +362,40 @@ x_ndr_off_t x_ndr_align(size_t alignment, x_ndr_pull_t &ndr,
 	return x_ndr_pull_align_intl(normalize_align(alignment, flags), ndr, bpos, epos);
 }
 
-#if 0
-x_ndr_off_t x_ndr_scalars(const x_ndr_subctx_t &t, x_ndr_push_t &ndr,
+x_ndr_off_t ndr_traits_t<x_ndr_subctx_t>::scalars(const x_ndr_subctx_t &t, x_ndr_push_t &ndr,
 		x_ndr_off_t bpos, x_ndr_off_t epos,
-		uint32_t flags, x_ndr_switch_t level)
+		uint32_t flags, x_ndr_switch_t level) const
 {
 	X_ASSERT(level == X_NDR_SWITCH_NONE);
-	X_NDR_SCALARS(uint8_t{1}, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
+	X_NDR_SCALARS_DEFAULT(uint8_t{1}, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
 	uint8_t drep;
 	if (t.flags & LIBNDR_FLAG_BIGENDIAN) {
 		drep = 0;
 	} else {
 		drep = 0x10;
 	}
-	X_NDR_SCALARS(drep, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
-	X_NDR_SCALARS(uint16_t{8}, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
-	X_NDR_SCALARS(uint32_t{0xcccccccc}, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
-	X_NDR_SCALARS(t.content_size, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
-	X_NDR_SCALARS(uint32_t{0}, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
+	X_NDR_SCALARS_DEFAULT(drep, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
+	X_NDR_SCALARS_DEFAULT(uint16_t{8}, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
+	X_NDR_SCALARS_DEFAULT(uint32_t{0xcccccccc}, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
+	X_NDR_SCALARS_DEFAULT(t.content_size, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
+	X_NDR_SCALARS_DEFAULT(uint32_t{0}, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
 	return bpos;
 }
 
-x_ndr_off_t x_ndr_scalars(x_ndr_subctx_t &t, x_ndr_pull_t &ndr,
+x_ndr_off_t ndr_traits_t<x_ndr_subctx_t>::scalars(x_ndr_subctx_t &t, x_ndr_pull_t &ndr,
 		x_ndr_off_t bpos, x_ndr_off_t epos,
-		uint32_t flags, x_ndr_switch_t level)
+		uint32_t flags, x_ndr_switch_t level) const
 {
 	X_ASSERT(level == X_NDR_SWITCH_NONE);
 	uint8_t version;
 	uint8_t drep;
 	uint16_t hdrlen;
 	uint32_t filler;
-	X_NDR_SCALARS(version, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
+	X_NDR_SCALARS_DEFAULT(version, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
 	if (version != 1) {
 		return -NDR_ERR_SUBCONTEXT;
 	}
-	X_NDR_SCALARS(drep, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
+	X_NDR_SCALARS_DEFAULT(drep, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
 	if (drep == 0x10) {
 		t.flags = LIBNDR_FLAG_LITTLE_ENDIAN;
 	} else if (drep == 0) {
@@ -627,19 +403,20 @@ x_ndr_off_t x_ndr_scalars(x_ndr_subctx_t &t, x_ndr_pull_t &ndr,
 	} else {
 		return -NDR_ERR_SUBCONTEXT;
 	}
-	X_NDR_SCALARS(hdrlen, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
+	X_NDR_SCALARS_DEFAULT(hdrlen, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
 	if (hdrlen != 8) {
 		return -NDR_ERR_SUBCONTEXT;
 	}
-	X_NDR_SCALARS(filler, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
-	X_NDR_SCALARS(t.content_size, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
+	X_NDR_SCALARS_DEFAULT(filler, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
+	X_NDR_SCALARS_DEFAULT(t.content_size, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
 	if (t.content_size % 8 != 0) {
 		return -NDR_ERR_SUBCONTEXT;
 	}
-	X_NDR_SCALARS(filler, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
+	X_NDR_SCALARS_DEFAULT(filler, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
 	return bpos;
 }
 
+#if 0
 x_ndr_ret_t x_ndr_hole_intl(uint32_t alignment, uint32_t size,
 		x_ndr_push_t &ndr,
 		x_ndr_ret_t bpos, x_ndr_ret_t epos, uint32_t extra_flags, size_t &pos)
