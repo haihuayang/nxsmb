@@ -118,12 +118,11 @@ static inline std::string x_convert_utf16_to_upper_utf8(const std::u16string &sr
 template <class InputIt, class OutputIt>
 OutputIt x_convert_utf8_to_utf16(InputIt begin, InputIt end, OutputIt oi)
 {
-	while (begin != end) {
+	for ( ; begin != end; ++begin) {
 		unsigned char c = *begin;
 		X_ASSERT(c < 0x80); // TODO
 		*oi = c;
-		++oi = c;
-		++begin;
+		++oi;
 	}
 	return oi;
 }

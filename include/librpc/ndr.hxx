@@ -507,7 +507,7 @@ template <> struct ndr_traits_t<name> \
 }; \
 
 
-template <typename T, typename IsUnion>
+template <typename T, bool IsUnion>
 struct x_ndr_ptr_allocator_t
 {
 	std::shared_ptr<T> operator()(x_ndr_switch_t level) const {
@@ -516,7 +516,7 @@ struct x_ndr_ptr_allocator_t
 };
 
 template <typename T>
-struct x_ndr_ptr_allocator_t<T, std::true_type>
+struct x_ndr_ptr_allocator_t<T, true>
 {
 	std::shared_ptr<T> operator()(x_ndr_switch_t level) const {
 		auto ret = std::make_shared<T>();
@@ -530,7 +530,7 @@ struct x_ndr_ptr_allocator_t<T, std::true_type>
 template <typename T>
 inline void x_ndr_allocate_ptr(std::shared_ptr<T> &val, x_ndr_switch_t level)
 {
-	val = x_ndr_ptr_allocator_t<T, std::is_union<T>>()(level);
+	val = x_ndr_ptr_allocator_t<T, std::is_union<T>::value>()(level);
 }
 
 template <typename T, typename NDR>
