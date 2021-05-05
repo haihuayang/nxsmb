@@ -280,11 +280,6 @@ TARGET_SRC_libnxsmb := \
 a=\
 		lib/string \
 
-a=\
-		lib/librpc/security_ndr \
-		lib/librpc/krb5pac_ndr \
-		lib/librpc/netlogon_ndr \
-		lib/librpc/dcerpc_ndr \
 
 TARGET_SET_m_idl :=
 #misc security lsa samr netlogon krb5pac ntlmssp dcerpc srvsvc
@@ -440,3 +435,8 @@ clean_target:
 clean:
 	rm -rf $(HOST_DIR_out) $(TARGET_DIR_out)
 
+test: $(TARGET_SET_tests:%=$(TARGET_DIR_out)/tests/%)
+	$(TARGET_DIR_out)/tests/test-krb5pac
+	$(TARGET_DIR_out)/tests/test-security
+	$(TARGET_DIR_out)/tests/test-ntlmssp
+	

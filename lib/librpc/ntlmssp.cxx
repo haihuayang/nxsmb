@@ -5,6 +5,36 @@
 
 namespace idl {
 
+#define NTLMSSP_OSTR_FIELD_PTR(ndr_traits, name, val, ndr, flags, level) do { \
+	(ndr) << #name << ": "; \
+	if (!(val).name) { \
+		(ndr) << "NULL"; \
+	} else { \
+		X_NDR_
+
+
+#define X_NDR_OSTR_FIELD_PTR(NT, name, val, ndr, flags, level) do { \
+	(ndr) << #name << ": "; \
+	if ((val).name) { \
+		x_ndr_ostr((NT){}, *(val).name, (ndr), (flags), (level)); \
+	} else { \
+		ndr << "NULL"; \
+	} \
+	(ndr) << next; \
+} while (0)
+
+#define X_NDR_OSTR_FIELD_PTR_DEFAULT(name, val, ndr, flags, level) do { \
+	(ndr) << #name << ": "; \
+	if ((val).name) { \
+		x_ndr_ostr_default(*(val).name, (ndr), (flags), (level)); \
+	} else { \
+		ndr << "NULL"; \
+	} \
+	(ndr) << next; \
+} while (0)
+
+
+
 template <typename T, typename NT>
 static x_ndr_off_t ntlmssp_buffers_relative_ptr(NT &&nt, const std::shared_ptr<T> &val, x_ndr_push_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32 flags, x_ndr_switch_t level)
 {
@@ -98,7 +128,7 @@ x_ndr_off_t ndr_traits_t<NEGOTIATE_MESSAGE>::scalars(const NEGOTIATE_MESSAGE &va
 {
 	X_NDR_HEADER_ALIGN(5, ndr, bpos, epos, flags);
 	std::array<uint8, 8> Signature{"NTLMSSP"};
-	X_NDR_SCALARS_DEFAULT(Signature, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
+	X_NDR_SCALARS_BYTE_ARRAY(Signature, ndr, bpos, epos);
 	ntlmssp_MessageType MessageType{NtLmNegotiate};
 	X_NDR_SCALARS_DEFAULT(MessageType, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
 	X_NDR_SCALARS_DEFAULT(val.NegotiateFlags, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
@@ -122,7 +152,7 @@ x_ndr_off_t ndr_traits_t<NEGOTIATE_MESSAGE>::scalars(NEGOTIATE_MESSAGE &val,
 {
 	X_NDR_HEADER_ALIGN(5, ndr, bpos, epos, flags);
 	std::array<uint8, 8> Signature;
-	X_NDR_SCALARS_DEFAULT(Signature, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
+	X_NDR_SCALARS_BYTE_ARRAY(Signature, ndr, bpos, epos);
 	ntlmssp_MessageType MessageType;
 	X_NDR_SCALARS_DEFAULT(MessageType, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
 	X_NDR_SCALARS_DEFAULT(val.NegotiateFlags, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
@@ -159,13 +189,13 @@ x_ndr_off_t ndr_traits_t<CHALLENGE_MESSAGE>::scalars(const CHALLENGE_MESSAGE &va
 	flags = x_ndr_set_flags(flags, LIBNDR_PRINT_ARRAY_HEX);
 	X_NDR_HEADER_ALIGN(5, ndr, bpos, epos, flags);
 	std::array<uint8, 8> Signature{"NTLMSSP"};
-	X_NDR_SCALARS_DEFAULT(Signature, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
+	X_NDR_SCALARS_BYTE_ARRAY(Signature, ndr, bpos, epos);
 	ntlmssp_MessageType MessageType{NtLmChallenge};
 	X_NDR_SCALARS_DEFAULT(MessageType, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
 	NTLMSSP_SCALARS_RELATIVE_PTR();
 	X_NDR_SCALARS_DEFAULT(val.NegotiateFlags, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
-	X_NDR_SCALARS_DEFAULT(val.ServerChallenge, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
-	X_NDR_SCALARS_DEFAULT(val.Reserved, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
+	X_NDR_SCALARS_BYTE_ARRAY(val.ServerChallenge, ndr, bpos, epos);
+	X_NDR_SCALARS_BYTE_ARRAY(val.Reserved, ndr, bpos, epos);
 	NTLMSSP_SCALARS_RELATIVE_PTR();
 	X_NDR_SCALARS_DEFAULT(val.Version, ndr, bpos, epos, flags, val.NegotiateFlags&NTLMSSP_NEGOTIATE_VERSION);
 	X_NDR_TRAILER_ALIGN(5, ndr, bpos, epos, flags);
@@ -187,13 +217,13 @@ x_ndr_off_t ndr_traits_t<CHALLENGE_MESSAGE>::scalars(CHALLENGE_MESSAGE &val,
 	flags = x_ndr_set_flags(flags, LIBNDR_PRINT_ARRAY_HEX);
 	X_NDR_HEADER_ALIGN(5, ndr, bpos, epos, flags);
 	std::array<uint8, 8> Signature;
-	X_NDR_SCALARS_DEFAULT(Signature, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
+	X_NDR_SCALARS_BYTE_ARRAY(Signature, ndr, bpos, epos);
 	ntlmssp_MessageType MessageType;
 	X_NDR_SCALARS_DEFAULT(MessageType, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
 	NTLMSSP_SCALARS_RELATIVE_PTR();
 	X_NDR_SCALARS_DEFAULT(val.NegotiateFlags, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
-	X_NDR_SCALARS_DEFAULT(val.ServerChallenge, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
-	X_NDR_SCALARS_DEFAULT(val.Reserved, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
+	X_NDR_SCALARS_BYTE_ARRAY(val.ServerChallenge, ndr, bpos, epos);
+	X_NDR_SCALARS_BYTE_ARRAY(val.Reserved, ndr, bpos, epos);
 	NTLMSSP_SCALARS_RELATIVE_PTR();
 	X_NDR_SCALARS_DEFAULT(val.Version, ndr, bpos, epos, flags, val.NegotiateFlags&NTLMSSP_NEGOTIATE_VERSION);
 	X_NDR_TRAILER_ALIGN(5, ndr, bpos, epos, flags);
@@ -216,7 +246,7 @@ void ndr_traits_t<CHALLENGE_MESSAGE>::ostr(const CHALLENGE_MESSAGE &val,
 	ndr << enter;
 	X_NDR_OSTR_FIELD_PTR(ndr_traits_ntlmssp_string_t, TargetName, val, ndr, x_ndr_set_flags(flags, ndr_ntlmssp_negotiated_string_flags(val.NegotiateFlags)), X_NDR_SWITCH_NONE);
 	X_NDR_OSTR_FIELD_DEFAULT(NegotiateFlags, val, ndr, flags, X_NDR_SWITCH_NONE);
-	X_NDR_OSTR_FIELD_DEFAULT(ServerChallenge, val, ndr, flags, X_NDR_SWITCH_NONE);
+	X_NDR_OSTR_FIELD(ServerChallenge, x_ndr_ostr_byte_array(val.ServerChallenge, ndr));
 	X_NDR_OSTR_FIELD_PTR_DEFAULT(TargetInfo, val, ndr, flags, X_NDR_SWITCH_NONE);
 	X_NDR_OSTR_FIELD_DEFAULT(Version, val, ndr, flags, val.NegotiateFlags&NTLMSSP_NEGOTIATE_VERSION);
 	ndr << leave;
@@ -229,7 +259,7 @@ x_ndr_off_t ndr_traits_t<AUTHENTICATE_MESSAGE>::scalars(const AUTHENTICATE_MESSA
 	flags = x_ndr_set_flags(flags, LIBNDR_FLAG_REMAINING);
 	X_NDR_HEADER_ALIGN(5, ndr, bpos, epos, flags);
 	std::array<uint8, 8> Signature{"NTLMSSP"};
-	X_NDR_SCALARS_DEFAULT(Signature, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
+	X_NDR_SCALARS_BYTE_ARRAY(Signature, ndr, bpos, epos);
 	ntlmssp_MessageType MessageType{NtLmAuthenticate};
 	X_NDR_SCALARS_DEFAULT(MessageType, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
 	NTLMSSP_SCALARS_RELATIVE_PTR();
@@ -265,7 +295,7 @@ x_ndr_off_t ndr_traits_t<AUTHENTICATE_MESSAGE>::scalars(AUTHENTICATE_MESSAGE &va
 	X_NDR_HEADER_ALIGN(5, ndr, bpos, epos, flags);
 	x_ndr_off_t base = bpos; (void)base;
 	std::array<uint8, 8> Signature;
-	X_NDR_SCALARS_DEFAULT(Signature, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
+	X_NDR_SCALARS_BYTE_ARRAY(Signature, ndr, bpos, epos);
 	ntlmssp_MessageType MessageType;
 	X_NDR_SCALARS_DEFAULT(MessageType, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
 	NTLMSSP_SCALARS_RELATIVE_PTR();
