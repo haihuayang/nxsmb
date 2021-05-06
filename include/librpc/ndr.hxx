@@ -1117,6 +1117,12 @@ inline void x_ndr_union_field_init(std::shared_ptr<T> &val, x_ndr_switch_t level
 	}
 }
 
+template <typename T, typename OT>
+inline void x_ndr_union_field_init(std::shared_ptr<T> &val, x_ndr_switch_t level, OT &&other)
+{
+	val = other;
+}
+
 template <typename T>
 inline void x_ndr_union_field_uninit(std::shared_ptr<T> &val, x_ndr_switch_t level)
 {

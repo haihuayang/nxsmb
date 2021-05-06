@@ -874,6 +874,23 @@ struct ndr_traits_t<DATA_BLOB>
 	void ostr(const DATA_BLOB &val, x_ndr_ostr_t &ndr, uint32_t flags, x_ndr_switch_t level) const;
 };
 
+x_ndr_off_t x_ndr_scalars_idlstring(const std::u16string &val, x_ndr_push_t &ndr, x_ndr_off_t bpos,  x_ndr_off_t epos, uint32_t flags);
+x_ndr_off_t x_ndr_scalars_idlstring(std::u16string &val, x_ndr_pull_t &ndr, x_ndr_off_t bpos,  x_ndr_off_t epos, uint32_t flags);
+
+
+#define X_NDR_SCALARS_IDLSTRING(__val, __ndr, __bpos, __epos, __flags, __level) do { \
+	X_ASSERT((__level) == X_NDR_SWITCH_NONE); \
+	X_NDR_VERIFY((__bpos), x_ndr_scalars_idlstring((__val), (__ndr), (__bpos), (__epos), (__flags))); \
+} while (0)
+
+static inline void x_ndr_ostr(const std::u16string &val, x_ndr_ostr_t &ndr,
+		uint32_t flags, x_ndr_switch_t level)
+{
+	X_ASSERT(level == X_NDR_SWITCH_NONE);
+	x_ndr_ostr_u16string(val, ndr, flags);
+}
+
+#define X_NDR_OSTR_IDLSTRING(__val, __ndr, __flags, __level) x_ndr_ostr((__val), (__ndr), (__flags), (__level))
 }
 
 #endif /* __ndr_types__hxx__ */

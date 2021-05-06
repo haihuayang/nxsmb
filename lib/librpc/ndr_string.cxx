@@ -207,34 +207,6 @@ void x_ndr_ostr_u16string(const std::u16string &str, x_ndr_ostr_t &ndr, uint32_t
 }
 
 #if 0
-x_ndr_off_t u16string::ndr_scalars(x_ndr_push_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, x_ndr_switch_t level) const
-{
-	X_ASSERT(level == X_NDR_SWITCH_NONE);
-	x_ndr_off_t new_pos = bpos + val.size() * 2;
-	if (new_pos < 0 || new_pos > epos) {
-		return -NDR_ERR_LENGTH;
-	}
-	ndr.reserve(new_pos);
-	memcpy(ndr.get_data() + bpos, val.data(), val.size() * 2);
-	return new_pos;
-}
-
-x_ndr_off_t u16string::ndr_scalars(x_ndr_pull_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, x_ndr_switch_t level)
-{
-	X_ASSERT(level == X_NDR_SWITCH_NONE);
-	if (((epos - bpos) % 2) != 0) {
-		return -NDR_ERR_STRING;
-	}
-	char16_t *beg = (char16_t *)(ndr.get_data() + bpos);
-	char16_t *end = (char16_t *)(ndr.get_data() + epos);
-	char16_t *p;
-	for (p = beg; p < end && *p; ++p) {
-	}
-	val.assign(beg, p);
-	// val.assign((const char16_t *)(ndr.get_data() + bpos), (const char16_t *)(ndr.get_data() + epos));
-	return epos;
-}
-
 void u16string::ostr(x_ndr_ostr_t &ndr, uint32_t flags, x_ndr_switch_t level) const
 {
 	X_ASSERT(level == X_NDR_SWITCH_NONE);
@@ -346,6 +318,46 @@ x_ndr_off_t x_ndr_pull_gstring(std::string &val, x_ndr_pull_t &ndr, x_ndr_off_t 
 void x_ndr_ostr_gstring(const std::string &val, x_ndr_ostr_t &ndr, uint32_t flags)
 {
 	ndr.os << '"' << val << '"';
+}
+
+x_ndr_off_t x_ndr_scalars_idlstring(const std::u16string &val, x_ndr_push_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags)
+{
+	uint3264 tmp(val.size() + 1);
+	X_NDR_SCALARS_DEFAULT(tmp, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
+	X_NDR_SCALARS_DEFAULT(uint3264(0), ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
+	X_NDR_SCALARS_DEFAULT(tmp, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
+	bpos = x_ndr_push_u16string(val, ndr, bpos, epos, flags);
+	if (bpos < 0) {
+		return bpos;
+	}
+	X_NDR_SCALARS_DEFAULT(uint16(0), ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
+	return bpos;
+}
+
+x_ndr_off_t x_ndr_scalars_idlstring(std::u16string &val, x_ndr_pull_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags)
+{
+	uint3264 size, offset, length;
+	X_NDR_SCALARS_DEFAULT(size, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
+	X_NDR_SCALARS_DEFAULT(offset, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
+	X_NDR_SCALARS_DEFAULT(length, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
+	if (offset.val != 0) {
+		return -NDR_ERR_LENGTH;
+	}
+	uint32_t len = length.val;
+	if (len == 0 || len > size.val) {
+		return -NDR_ERR_LENGTH;
+	}
+
+	x_ndr_off_t tmp_epos = X_NDR_CHECK_POS(bpos + 2 * (len - 1), bpos, epos);
+	val.assign((const char16_t *)(ndr.get_data() + bpos), (const char16_t *)(ndr.get_data() + tmp_epos)); 
+	bpos = tmp_epos;
+	uint16_t eos;
+	X_NDR_SCALARS_DEFAULT(eos, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
+	if (eos != 0) {
+		return -NDR_ERR_ARRAY_SIZE;
+	}
+
+	return bpos;
 }
 
 } /* namespace idl */
