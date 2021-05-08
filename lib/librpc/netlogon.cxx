@@ -3,29 +3,28 @@
 
 namespace idl {
 
-x_ndr_off_t ndr_traits_t<netr_USER_KEY16>::scalars(const netr_USER_KEY16 &__val, x_ndr_push_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level) const
+x_ndr_off_t ndr_traits_t<netr_OsVersionContainer>::scalars(const netr_OsVersionContainer &val, x_ndr_push_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, x_ndr_switch_t level) const
 {
 	X_TODO;
-	return __bpos;
+	return bpos;
 }
 
-x_ndr_off_t ndr_traits_t<netr_USER_KEY16>::scalars(netr_USER_KEY16 &__val, x_ndr_pull_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level) const
+x_ndr_off_t ndr_traits_t<netr_OsVersionContainer>::scalars(netr_OsVersionContainer &val, x_ndr_pull_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, x_ndr_switch_t level) const
 {
 	X_TODO;
-	return __bpos;
+	return bpos;
 }
 
-
-x_ndr_off_t ndr_traits_t<netr_PasswordHistory>::scalars(const netr_PasswordHistory &__val, x_ndr_push_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level) const
+x_ndr_off_t ndr_traits_t<netr_OsVersionContainer>::buffers(const netr_OsVersionContainer &val, x_ndr_push_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, x_ndr_switch_t level) const
 {
 	X_TODO;
-	return __bpos;
+	return bpos;
 }
 
-x_ndr_off_t ndr_traits_t<netr_PasswordHistory>::scalars(netr_PasswordHistory &__val, x_ndr_pull_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level) const
+x_ndr_off_t ndr_traits_t<netr_OsVersionContainer>::buffers(netr_OsVersionContainer &val, x_ndr_pull_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, x_ndr_switch_t level) const
 {
 	X_TODO;
-	return __bpos;
+	return bpos;
 }
 
 }

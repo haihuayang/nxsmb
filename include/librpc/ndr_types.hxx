@@ -39,13 +39,13 @@ namespace idl {
 	(bpos) = (epos);
 
 
-#define X_NDR_VECTOR_LEN_PUSH(type, vector_name, ndr, bpos, epos, flags) \
+#define X_NDR_VECTOR_LEN_PUSH(type, order, vector_name, ndr, bpos, epos, flags) \
 	X_NDR_VERIFY((bpos), x_ndr_scalars_default(type(__val.vector_name.size()), (ndr), (bpos), (epos), (flags), X_NDR_SWITCH_NONE)); \
 
-#define X_NDR_VECTOR_LEN_PULL(type, vector_name, ndr, bpos, epos, flags) \
-	type __tmp_len_##vector_name; \
-	X_NDR_VERIFY((bpos), x_ndr_scalars_default(__tmp_len_##vector_name, (ndr), (bpos), (epos), (flags), X_NDR_SWITCH_NONE)); \
-	__val.vector_name.resize(__tmp_len_##vector_name);
+#define X_NDR_VECTOR_LEN_PULL(type, order, vector_name, ndr, bpos, epos, flags) \
+	type __tmp_len_##order; \
+	X_NDR_VERIFY((bpos), x_ndr_scalars_default(__tmp_len_##order, (ndr), (bpos), (epos), (flags), X_NDR_SWITCH_NONE)); \
+	__val.vector_name.resize(__tmp_len_##order);
 
 template <typename T>
 inline x_ndr_off_t x_ndr_scalars_unique_ptr(
@@ -104,6 +104,25 @@ inline x_ndr_off_t x_ndr_scalars_unique_ptr(
 #define X_NDR_BUFFERS_RELATIVE_PTR_END_PULL(val, ndr, bpos, epos, flags, switch_is) \
 		(bpos) = std::max((bpos), __tmp_bpos); \
 	} \
+} while (0)
+
+
+#define X_NDR_SUBCTX_LEVEL0_INT_SIZE_START_PUSH(subctx_size, ndr, bpos, epos, flags) do { \
+	x_ndr_off_t __tmp_save_epos = (epos); \
+	(epos) = X_NDR_CHECK_POS((bpos) + (subctx_size), (bpos), (epos));
+
+#define X_NDR_SUBCTX_LEVEL0_INT_SIZE_END_PUSH(subctx_size, ndr, bpos, epos, flags) \
+	(bpos) = (epos); \
+	(epos) = __tmp_save_epos; \
+} while (0)
+
+#define X_NDR_SUBCTX_LEVEL0_INT_SIZE_START_PULL(subctx_size, ndr, bpos, epos, flags) do { \
+	x_ndr_off_t __tmp_save_epos = (epos); \
+	(epos) = X_NDR_CHECK_POS((bpos) + (subctx_size), (bpos), (epos));
+
+#define X_NDR_SUBCTX_LEVEL0_INT_SIZE_END_PULL(subctx_size, ndr, bpos, epos, flags) \
+	(bpos) = (epos); \
+	(epos) = __tmp_save_epos; \
 } while (0)
 
 
@@ -765,7 +784,7 @@ static inline x_ndr_off_t x_ndr_scalars_array_value(NT &&nt,
 
 template <typename T, size_t C, typename NT = ndr_traits_t<T>>
 static inline x_ndr_off_t x_ndr_scalars_array_value(NT &&nt,
-		std::array<T, C> &&val, x_ndr_pull_t &ndr,
+		const std::array<T, C> &val, x_ndr_pull_t &ndr,
 		x_ndr_off_t bpos, x_ndr_off_t epos,
 		uint32_t flags, x_ndr_switch_t level)
 {

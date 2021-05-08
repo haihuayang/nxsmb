@@ -360,4 +360,26 @@ x_ndr_off_t x_ndr_scalars_idlstring(std::u16string &val, x_ndr_pull_t &ndr, x_nd
 	return bpos;
 }
 
+
+x_ndr_off_t ndr_traits_nstring::scalars(const std::u16string &val, x_ndr_push_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, x_ndr_switch_t level) const
+{
+	X_ASSERT(level == X_NDR_SWITCH_NONE);
+	X_TODO;
+	return bpos;
+}
+
+x_ndr_off_t ndr_traits_nstring::scalars(std::u16string &val, x_ndr_pull_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, x_ndr_switch_t level)
+{
+	X_ASSERT(level == X_NDR_SWITCH_NONE);
+	X_TODO;
+	return bpos;
+}
+
+void ndr_traits_nstring::ostr(const std::u16string &val, x_ndr_ostr_t &ndr, uint32_t flags, x_ndr_switch_t level) const
+{
+	X_ASSERT(level == X_NDR_SWITCH_NONE);
+	x_ndr_ostr_u16string(val, ndr, flags);
+}
+
+
 } /* namespace idl */

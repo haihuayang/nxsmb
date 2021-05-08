@@ -163,8 +163,8 @@ know_properties = {
 	'x_ignored': F_STRUCT,
 	'string': F_STRUCT | F_UNION | F_FUNCTION, # TODO
 	'compression': F_STRUCT | F_UNION, # TODO
-	'subcontext': F_STRUCT | F_UNION, # TODO rewrite
-	'subcontext_size': F_STRUCT | F_UNION, # TODO rewrite
+	'subcontext': F_STRUCT | F_UNION | F_FUNCTION,
+	'subcontext_size': F_STRUCT | F_UNION | F_FUNCTION,
 	'relative': F_STRUCT | F_UNION, # TODO rewrite
 	'relative_short': F_STRUCT | F_UNION, # TODO rewrite
 	'ref': F_FUNCTION, # TODO rewrite
@@ -357,7 +357,7 @@ class FieldTypeSlave(FieldTypeDerived):
 
 class FieldTypeVectorLen(FieldTypeSlave):
 	def scalars_body(self, order, func, name, ndr_arg, bpos_arg, epos_arg, ndr_flags, switch_is):
-		return [f'X_NDR_VECTOR_LEN_{func}({self.get_ctype()}, {self.master_field.name}, {ndr_arg}, {bpos_arg}, {epos_arg}, {ndr_flags});']
+		return [f'X_NDR_VECTOR_LEN_{func}({self.get_ctype()}, {order}, {self.master_field.name}, {ndr_arg}, {bpos_arg}, {epos_arg}, {ndr_flags});']
 	def __str__(self):
 		return "VectorLen(%s)" % self.get_ctype()
 
@@ -453,7 +453,10 @@ class FieldTypeSubctxLevel(FieldTypeSubctxBase):
 		ret = []
 		if self.level == 0:
 			assert not self.size_field is None
-			ret += [f'X_NDR_SUBCTX_LEVEL0_SIZE_START_{func}({self.size_field.get_ctype()}, __pos_{self.size_field.order}, {ndr_arg}, {bpos_arg}, {epos_arg}, {ndr_flags});']
+			if isinstance(self.size_field, int):
+				ret += [f'X_NDR_SUBCTX_LEVEL0_INT_SIZE_START_{func}({self.size_field}, {ndr_arg}, {bpos_arg}, {epos_arg}, {ndr_flags});']
+			else:
+				ret += [f'X_NDR_SUBCTX_LEVEL0_SIZE_START_{func}({self.size_field.get_ctype()}, __pos_{self.size_field.order}, {ndr_arg}, {bpos_arg}, {epos_arg}, {ndr_flags});']
 		elif self.size_field is None:
 			ret += [f'X_NDR_SUBCTX_LEVEL_NOSIZE_START_{func}({size_type}, {ndr_arg}, {bpos_arg}, {epos_arg}, {ndr_flags});']
 		else:
@@ -462,7 +465,10 @@ class FieldTypeSubctxLevel(FieldTypeSubctxBase):
 		ret = append_stmts(ret, 
 			self.inner.both(order, func, name, '__sub_ndr', bpos_arg, epos_arg, ndr_flags, switch_is), '\t') + [f'}} X_NDR_SUBCTXLEVEL_END_{func}(__sub_ndr, {ndr_arg}, {bpos_arg}, {epos_arg});']
 		if self.level == 0:
-			ret += [f'X_NDR_SUBCTX_LEVEL0_SIZE_END_{func}({self.size_field.get_ctype()}, __pos_{self.size_field.order}, {ndr_arg}, {bpos_arg}, {epos_arg}, {ndr_flags});']
+			if isinstance(self.size_field, int):
+				ret += [f'X_NDR_SUBCTX_LEVEL0_INT_SIZE_END_{func}({self.size_field}, {ndr_arg}, {bpos_arg}, {epos_arg}, {ndr_flags});']
+			else:
+				ret += [f'X_NDR_SUBCTX_LEVEL0_SIZE_END_{func}({self.size_field.get_ctype()}, __pos_{self.size_field.order}, {ndr_arg}, {bpos_arg}, {epos_arg}, {ndr_flags});']
 		elif self.size_field is None:
 			ret += [f'X_NDR_SUBCTX_LEVEL_NOSIZE_END_{func}({size_type}, {ndr_arg}, {bpos_arg}, {epos_arg}, {ndr_flags});']
 		else:
@@ -702,13 +708,32 @@ class FieldTypeValue(FieldTypeDerived):
 		self.value, self.array_len = value, array_len
 	def scalars_body(self, order, func, name, ndr_arg, bpos_arg, epos_arg, ndr_flags, switch_is):
 		if self.array_len is not None:
-			ctype = f'std::array<{self.get_ctype()}, {self.array_len}>'
-			return [f'X_NDR_SCALARS_ARRAY_VALUE({self.get_ndr_traits()}, ({ctype}{{{self.value}}}), {ndr_arg}, {bpos_arg}, {epos_arg}, {ndr_flags}, {switch_is});']
+			return [f'std::array<{self.get_ctype()}, {self.array_len}> __tmp_value_{order} = {self.value};',
+				f'X_NDR_SCALARS_ARRAY_VALUE({self.get_ndr_traits()}, __tmp_value_{order}, {ndr_arg}, {bpos_arg}, {epos_arg}, {ndr_flags}, {switch_is});']
+			#ctype = f'std::array<{self.get_ctype()}, {self.array_len}> __tmp_value = {self.value};'
+			#return [f'X_NDR_SCALARS_ARRAY_VALUE({self.get_ndr_traits()}, ({ctype}{{{self.value}}}), {ndr_arg}, {bpos_arg}, {epos_arg}, {ndr_flags}, {switch_is});']
 		else:
 			ctype = self.get_ctype()
 			return [f'X_NDR_SCALARS_VALUE({self.get_ndr_traits()}, ({ctype}{{{self.value}}}), {ndr_arg}, {bpos_arg}, {epos_arg}, {ndr_flags}, {switch_is});']
 	def __str__(self):
 		return "Value(%s)" % self.value
+
+class FieldTypeValueField(FieldTypeSlave):
+	def scalars_body(self, order, func, name, ndr_arg, bpos_arg, epos_arg, ndr_flags, switch_is):
+		assert order > self.master_field.order
+		if self.master_field.field_type_is(FieldTypeSlave):
+			return self.master_field.field_type.scalars_body(order, func, name, ndr_arg, bpos_arg, epos_arg, ndr_flags, switch_is)
+
+		ctype = self.get_ctype()
+		return [f'X_NDR_SCALARS_VALUE({self.get_ndr_traits()}, {ctype}(__val.{self.master_field.name}), {ndr_arg}, {bpos_arg}, {epos_arg}, {ndr_flags}, {switch_is});']
+		# TODO remove
+		if func == 'PUSH':
+			return [f'X_NDR_SCALARS_VALUE({self.get_ndr_traits()}, {ctype}(__val.{self.master_field.name}), {ndr_arg}, {bpos_arg}, {epos_arg}, {ndr_flags}, {switch_is});']
+		else:
+			return [f'{ctype} __tmp_value_{order};',
+				f'X_NDR_SCALARS_VALUE({self.get_ndr_traits()}, __tmp_value_{order}, {ndr_arg}, {bpos_arg}, {epos_arg}, {ndr_flags}, {switch_is});']
+	def __str__(self):
+		return "ValueField(%s)" % self.master_field
 
 def load_idl_with_import(infp):
 	imports = []
@@ -737,6 +762,10 @@ def load_all(infp, name, path, recur):
 			imports += new_imports
 	return idl, idl_tbl
 
+def is_forward_declare(t):
+	tdata = t['DATA']
+	return tdata['TYPE'] in [ 'ENUM', 'BITMAP' ] and not 'ELEMENTS' in tdata
+
 class Globals:
 	idltype_table = { }
 	elem_table = { }
@@ -750,7 +779,13 @@ class Globals:
 					continue
 				for t in o['DATA']:
 					ttype = t['TYPE']
-					if ttype in [ "TYPEDEF", "CONST" ]:
+					if ttype in [ "CONST" ]:
+						name = t['NAME']
+						assert not name in self.elem_table
+						self.elem_table[t['NAME']] = (ttype, t, o)
+					if ttype in [ "TYPEDEF" ]:
+						if is_forward_declare(t):
+							continue
 						name = t['NAME']
 						assert not name in self.elem_table
 						self.elem_table[t['NAME']] = (ttype, t, o)
@@ -1191,9 +1226,17 @@ def make_field_type(field, idltype, elems, iface, in_function):
 	if value:
 		assert pointer_count == 0
 		assert not pointer_deref
+		try:
+			master_field = find_field(idltype.fields, value)
+		except:
+			master_field = None
 		if array_len_name:
+			assert master_field is None
 			array_len_name = int(array_len_name)
-		return FieldTypeValue(elem, field_idltype, pointer_deref, value, array_len_name)
+		if master_field:
+			return FieldTypeValueField(elem, field_idltype, pointer_deref, master_field)
+		else:
+			return FieldTypeValue(elem, field_idltype, pointer_deref, value, array_len_name)
 
 	master_elem = elem_get_property(elem, 'x_ndr_size')
 	if master_elem:
@@ -1281,8 +1324,12 @@ def make_field_type(field, idltype, elems, iface, in_function):
 		subcontext_level = int(subcontext, 0)
 		if subcontext_level in [0, 2, 4]:
 			subcontext_size = elem_get_property(elem, "subcontext_size")
+			if subcontext_size is not None:
+				slave_field = int_or_field(idltype.fields, subcontext_size)
+			else:
+				slave_field = None
 			field_type = FieldTypeSubctxLevel(field_type, subcontext_level,
-					None if subcontext_size is None else find_field(idltype.fields, subcontext_size))
+					slave_field)
 		elif subcontext_level == 0xFFFFFC01:
 			field_type = FieldTypeSubctxFFFFFC01(field_type)
 		else:
@@ -1823,8 +1870,10 @@ struct {self.get_ctype()} {{
 			out(f'''
 	{field.declare()}
 ''')
+		if self.jsobj['RETURN_TYPE'] != 'void':
+			out(f'''
+	{self.jsobj['RETURN_TYPE']} __result;''')
 		out(f'''
-	{self.jsobj['RETURN_TYPE']} __result;
 }} {self.tostring_properties()};
 
 template <> struct ndr_requ_traits_t<{self.get_ctype()}> {{
@@ -1975,20 +2024,45 @@ def const_get_pointers(elem):
 	assert v == 0
 	return v
 
+def output_header_CONST(out, t):
+	dtype = t['DTYPE']
+	array_suffix = '[]' if 'ARRAY_LEN' in t else ''
+	out(f'''
+const {dtype}{'*' if t['POINTERS'] == 1 else ''} {t['NAME']}{array_suffix} = {t['VALUE']};
+''')
+
 def output_header_INTERFACE(out, iface, idl):
 	for t in iface['DATA']:
 		if t['TYPE'] == 'TYPEDEF':
-			idltype = idltype_get_by_jsobj(t, iface)
-			idltype.header(out)
+			if t['DATA']['TYPE'] in [ 'ENUM', 'BITMAP' ]:
+				if is_forward_declare(t):
+					continue
+				idltype_get_by_jsobj(t, iface).header(out)
 		elif t['TYPE'] == 'CONST':
-			dtype = t['DTYPE']
 			assert const_get_pointers(t) == 0
-			out(f'''
-const {dtype}{'*' if t['POINTERS'] == 1 else ''} {t['NAME']} = {t['VALUE']};
-''')
+			output_header_CONST(out, t)
 		elif t["TYPE"] in [ "FUNCTION" ]:
-			idltype = idltype_create_function(t, iface)
-			idltype.header(out)
+			pass
+		else:
+			error(f'''Unknown type "{t['TYPE']}" at {t['FILE']}:{t['LINE']}''')
+			assert False
+
+	for t in iface['DATA']:
+		if t['TYPE'] == 'TYPEDEF':
+			if not t['DATA']['TYPE'] in [ 'ENUM', 'BITMAP' ]:
+				idltype_get_by_jsobj(t, iface).header(out)
+		elif t["TYPE"] in [ "FUNCTION", "CONST" ]:
+			pass
+		else:
+			error(f'''Unknown type "{t['TYPE']}" at {t['FILE']}:{t['LINE']}''')
+			assert False
+
+
+	for t in iface['DATA']:
+		if t["TYPE"] in [ "TYPEDEF", "CONST" ]:
+			pass
+		elif t["TYPE"] in [ "FUNCTION" ]:
+			idltype_create_function(t, iface).header(out)
 		else:
 			error(f'''Unknown type "{t['TYPE']}" at {t['FILE']}:{t['LINE']}''')
 			assert False
@@ -2007,6 +2081,8 @@ namespace idl {{
 ''')
 	for t in iface['DATA']:
 		if t['TYPE'] == 'TYPEDEF':
+			if is_forward_declare(t):
+				continue
 			idltype = idltype_get_by_jsobj(t, iface)
 			idltype.ndrcxx(out)
 		elif t['TYPE'] in [ "FUNCTION" ]:
@@ -2027,6 +2103,11 @@ def output_header_IMPORT(out, o):
 	for path in o['PATHS']:
 		import_name = re.sub('^"(.*)\.idl"$', r'\1', path)
 		out(f'#include "include/librpc/{import_name}.hxx"')
+	out()
+
+def output_header_QUOTE(out, o):
+	quote = o['DATA']
+	out(re.sub('^"(.*)"$', r'\1', quote))
 	out()
 
 def process_header(out, name, idl, outdir):
@@ -2053,7 +2134,7 @@ namespace idl {{
 ''')
 
 	for o in idl:
-		#if o['TYPE'] == "CPP_QUOTE": output_header_QUOTE(out, o)
+		if o['TYPE'] == "CPP_QUOTE": output_header_QUOTE(out, o)
 		if o['TYPE'] == "INTERFACE": output_header_INTERFACE(out, o, idl)
 			
 	out(f'''
