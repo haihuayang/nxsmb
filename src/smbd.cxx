@@ -504,7 +504,7 @@ static void x_smbd_init(x_smbd_t &smbd, int port)
 	x_auth_ntlmssp_init(smbd.auth_context);
 	x_auth_spnego_init(smbd.auth_context);
 
-	std::unique_ptr<x_auth_t> spnego{x_smbd_create_auth(&smbd)};
+	x_auth_t *spnego(x_smbd_create_auth(&smbd));
 
 	if (spnego) {
 		std::vector<uint8_t> negprot_spnego;
@@ -512,6 +512,7 @@ static void x_smbd_init(x_smbd_t &smbd, int port)
 		NTSTATUS status = spnego->update(NULL, 0, negprot_spnego, NULL, auth_info);
 		X_ASSERT(NT_STATUS_IS_OK(status));
 		smbd.negprot_spnego.swap(negprot_spnego);
+		x_auth_destroy(spnego);
 	}
 
 	x_smbd_load_shares();
@@ -583,5 +584,4 @@ void x_smbd_conn_post_user(x_smbd_conn_t *smbd_conn, x_fdevt_user_t *evt_user)
 		x_evtmgmt_post_events(globals.evtmgmt, smbd_conn->ep_id, FDEVT_USER);
 	}
 }
-
 
