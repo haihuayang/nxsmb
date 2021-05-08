@@ -228,6 +228,7 @@ alias_types = {
 	'u16string_remain': [ 'u16string', 'ndr_traits_u16string_remain', 1],
 	'nstring': [ 'u16string', 'ndr_traits_nstring', 2],
 	'astring': [ 'u8string', 'ndr_traits_astring', 1],
+	'string': [ 'u8string', None, None],
 }
 
 
@@ -2026,7 +2027,14 @@ def const_get_pointers(elem):
 
 def output_header_CONST(out, t):
 	dtype = t['DTYPE']
+	if dtype == 'string':
+		assert not 'ARRAY_LEN' in t
+		assert t['POINTERS'] == 0
+		out(f'''
+const char *{t['NAME']} = {t['VALUE']};''')
+		return
 	array_suffix = '[]' if 'ARRAY_LEN' in t else ''
+	assert dtype != 'string' or not 'ARRAY_LEN' in t
 	out(f'''
 const {dtype}{'*' if t['POINTERS'] == 1 else ''} {t['NAME']}{array_suffix} = {t['VALUE']};
 ''')
@@ -2039,7 +2047,6 @@ def output_header_INTERFACE(out, iface, idl):
 					continue
 				idltype_get_by_jsobj(t, iface).header(out)
 		elif t['TYPE'] == 'CONST':
-			assert const_get_pointers(t) == 0
 			output_header_CONST(out, t)
 		elif t["TYPE"] in [ "FUNCTION" ]:
 			pass
