@@ -388,10 +388,12 @@ class FieldTypeSubctxSize(FieldTypeSlave):
 				f'X_NDR_SKIP({self.get_ctype()}, {ndr_arg}, {bpos_arg}, {epos_arg}, {ndr_flags});']
 	def buffers_body(self, order, func, name, ndr_arg, bpos_arg, epos_arg, ndr_flags, switch_is):
 		return [f'x_ndr_off_t __pos_{order} = {ndr_arg}.load_pos();']
+	def __str__(self):
+		return "SubctxSize(%s)" % self.idltype
 
 class FieldTypeSizeIs(FieldTypeSlave):
 	def has_buffers(self):
-		return self.master_field.has_buffers()
+		return self.master_field.field_type_is(FieldTypePtr)
 	def scalars_pre(self, order, func, name, ndr_arg, bpos_arg, epos_arg, ndr_flags, switch_is):
 		if self.has_buffers():
 			return []
@@ -2031,12 +2033,12 @@ def output_header_CONST(out, t):
 		assert not 'ARRAY_LEN' in t
 		assert t['POINTERS'] == 0
 		out(f'''
-const char *{t['NAME']} = {t['VALUE']};''')
+const char * const {t['NAME']} = {t['VALUE']};''')
 		return
 	array_suffix = '[]' if 'ARRAY_LEN' in t else ''
 	assert dtype != 'string' or not 'ARRAY_LEN' in t
 	out(f'''
-const {dtype}{'*' if t['POINTERS'] == 1 else ''} {t['NAME']}{array_suffix} = {t['VALUE']};
+const {dtype}{'* const' if t['POINTERS'] == 1 else ''} {t['NAME']}{array_suffix} = {t['VALUE']};
 ''')
 
 def output_header_INTERFACE(out, iface, idl):

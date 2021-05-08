@@ -263,7 +263,6 @@ SET_SRC_roken := \
 	signal \
 	socket \
 	strcollect \
-	strerror_r \
 	strlwr \
 	strpool \
 	strsep \

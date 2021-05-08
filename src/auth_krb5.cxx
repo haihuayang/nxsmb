@@ -7,6 +7,7 @@ extern "C" {
 #include "heimdal/lib/asn1/der.h"
 #include "heimdal/lib/gssapi/spnego/spnego_asn1.h"
 #include "heimdal/lib/ntlm/heimntlm.h"
+#include "samba/libcli/util/ntstatus.h"
 #include "samba/libcli/util/hresult.h"
 #include "samba/lib/util/samba_util.h"
 #include "samba/lib/crypto/md5.h"
@@ -921,10 +922,10 @@ static void auth_info_from_pac_logon_info(x_auth_info_t &auth_info, const idl::P
 			auth_info.other_sids.push_back(x_dom_sid_with_attrs_t{*sa.sid, (uint32_t)sa.attributes});
 		}
 	}
-	if (logon_info.res_group_dom_sid) {
-		const idl::dom_sid &res_group_dom_sid = *logon_info.res_group_dom_sid;
-		if (logon_info.res_groups.rids) {
-			for (const auto &rid_with_attr : *logon_info.res_groups.rids) {
+	if (logon_info.resource_groups.domain_sid) {
+		const idl::dom_sid &res_group_dom_sid = *logon_info.resource_groups.domain_sid;
+		if (logon_info.resource_groups.groups.rids) {
+			for (const auto &rid_with_attr : *logon_info.resource_groups.groups.rids) {
 				auth_info.other_sids.push_back(sid_attr_compose(res_group_dom_sid,
 							rid_with_attr.rid, rid_with_attr.attributes));
 			}
@@ -1485,7 +1486,7 @@ static krb5_error_code get_node_principals(krb5_context krbctx, krb5_principals 
 
 	return ret;
 fail:
-	krb5_free_principals(krbctx, ret_princs);
+	free_Principals(ret_princs);
 	return -1;
 }
 
@@ -1615,7 +1616,7 @@ static const char *secrets_fetch_machine_password(const char *domain)
 //				     time_t *pass_last_set_time,
 //				     enum netr_SchannelType *channel)
 {
-	return "vbcuHU1Y6cTd,_";
+	return "nxsmbd12345";
 }
 
 static const char *secrets_fetch_prev_machine_password(const char *domain)
@@ -1727,7 +1728,7 @@ static krb5_error_code fill_mem_keytab_from_secrets(krb5_context krbctx,
 		return ret;
 	}
 	auto unique_princs = x_krb5_principals_ptr_t(node_princs, [krbctx](krb5_principals p) {
-		krb5_free_principals(krbctx, p);
+		free_Principals(p);
 	});
 
 	ret = fill_keytab_from_password(krbctx, keytab,

@@ -19,6 +19,8 @@
 #include <iomanip>
 #include <limits.h>
 
+#include "libndr.h"
+
 extern "C" {
 #include "samba/libcli/util/ntstatus.h"
 #include "samba/lib/util/time.h"
@@ -101,73 +103,6 @@ enum x_ndr_err_code_t : int {
 	NDR_ERR_FLAGS,
 	NDR_ERR_INCOMPLETE_BUFFER
 };
-
-#define LIBNDR_FLAG_BIGENDIAN  (1<<0)
-#define LIBNDR_FLAG_NOALIGN    (1<<1)
-
-#define LIBNDR_FLAG_STR_ASCII		(1<<2)
-#define LIBNDR_FLAG_STR_LEN4		(1<<3)
-#define LIBNDR_FLAG_STR_SIZE4		(1<<4)
-#define LIBNDR_FLAG_STR_NOTERM		(1<<5)
-#define LIBNDR_FLAG_STR_NULLTERM	(1<<6)
-#define LIBNDR_FLAG_STR_SIZE2		(1<<7)
-#define LIBNDR_FLAG_STR_BYTESIZE	(1<<8)
-#define LIBNDR_FLAG_STR_CONFORMANT	(1<<10)
-#define LIBNDR_FLAG_STR_CHARLEN		(1<<11)
-#define LIBNDR_FLAG_STR_UTF8		(1<<12)
-#define LIBNDR_FLAG_STR_RAW8		(1<<13)
-#define LIBNDR_STRING_FLAGS		(0x7FFC)
-
-/*
- * don't debug NDR_ERR_BUFSIZE failures,
- * as the available buffer might be incomplete.
- *
- * return NDR_ERR_INCOMPLETE_BUFFER instead.
- */
-#define LIBNDR_FLAG_INCOMPLETE_BUFFER (1<<16)
-
-/*
- * This lets ndr_pull_subcontext_end() return
- * NDR_ERR_UNREAD_BYTES.
- */
-#define LIBNDR_FLAG_SUBCONTEXT_NO_UNREAD_BYTES (1<<17)
-
-/* set if relative pointers should *not* be marshalled in reverse order */
-#define LIBNDR_FLAG_NO_RELATIVE_REVERSE	(1<<18)
-
-/* set if relative pointers are marshalled in reverse order */
-#define LIBNDR_FLAG_RELATIVE_REVERSE	(1<<19)
-
-#define LIBNDR_FLAG_REF_ALLOC    (1<<20)
-#define LIBNDR_FLAG_REMAINING    (1<<21)
-#define LIBNDR_FLAG_ALIGN2       (1<<22)
-#define LIBNDR_FLAG_ALIGN4       (1<<23)
-#define LIBNDR_FLAG_ALIGN8       (1<<24)
-
-#define LIBNDR_ALIGN_FLAGS ( 0	| \
-		LIBNDR_FLAG_NOALIGN   | \
-		LIBNDR_FLAG_REMAINING | \
-		LIBNDR_FLAG_ALIGN2    | \
-		LIBNDR_FLAG_ALIGN4    | \
-		LIBNDR_FLAG_ALIGN8    | \
-		0)
-
-#define LIBNDR_PRINT_ARRAY_HEX   (1<<25)
-#define LIBNDR_PRINT_SET_VALUES  (1<<26)
-
-/* used to force a section of IDL to be little-endian */
-#define LIBNDR_FLAG_LITTLE_ENDIAN (1<<27)
-
-/* used to check if alignment padding is zero */
-#define LIBNDR_FLAG_PAD_CHECK     (1<<28)
-
-#define LIBNDR_FLAG_NDR64	 (1<<29)
-
-/* set if an object uuid will be present */
-#define LIBNDR_FLAG_OBJECT_PRESENT    (1<<30)
-
-/* set to avoid recursion in ndr_size_*() calculation */
-#define LIBNDR_FLAG_NO_NDR_SIZE		(1<<31)
 
 static inline uint32_t x_ndr_set_flags(uint32_t flags, uint32_t extra_flags)
 {
@@ -392,7 +327,7 @@ inline auto int_val(uint3264 t) { return t.val; }
 
 typedef int64_t dlong;
 typedef uint64_t udlong;
-using string = const char *;
+// using string = const char *;
 
 struct x_ndr_type_default { };
 struct x_ndr_type_custom { };

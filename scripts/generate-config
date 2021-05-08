@@ -1,22 +1,26 @@
 #!/bin/sh
 
 cat << 'EOF'
-/* Configuration header created by Waf - do not edit */
-#ifndef _INCLUDE_CONFIG_H_WAF
-#define _INCLUDE_CONFIG_H_WAF
+/* WARNING! All changes made to this file will be lost! */
+
+#ifndef W_DEFAULT_INCLUDE_CONFIG_H_WAF
+#define W_DEFAULT_INCLUDE_CONFIG_H_WAF
 
 #define CONFIG_H_IS_FROM_SAMBA 1
 #define _SAMBA_BUILD_ 4
-/* #undef HAVE_CONFIG_H */
-#define BUILD_SYSTEM "Linux samba-builder 3.10.0-514.16.1.el6.nutanix.20170430.cvm.x86_64 #1 SMP Sat Apr 29 22:13:11 PDT 2017 x86_64 x86_64 x86_64 GNU/Linux"
+#define HAVE_CONFIG_H 1
+#define SRCDIR "/home/nutanix/ws/samba-v4-10"
 #define HAVE_SYS_UTSNAME_H 1
 #define SYSTEM_UNAME_SYSNAME "Linux"
 #define SYSTEM_UNAME_MACHINE "x86_64"
-#define SYSTEM_UNAME_RELEASE "3.10.0-514.16.1.el6.nutanix.20170430.cvm.x86_64"
-#define SYSTEM_UNAME_VERSION "#1 SMP Sat Apr 29 22:13:11 PDT 2017"
+#define SYSTEM_UNAME_RELEASE "4.15.0-135-generic"
+#define SYSTEM_UNAME_VERSION "#139-Ubuntu SMP Mon Jan 18 17:38:24 UTC 2021"
 #define HAVE_STDIO_H 1
 #define HAVE_SIMPLE_C_PROG 1
 #define HAVE_VISIBILITY_ATTR 1
+#define HAVE_CONSTRUCTOR_ATTRIBUTE 1
+#define HAVE_DESTRUCTOR_ATTRIBUTE 1
+#define HAVE___ATTRIBUTE__ 1
 #define INLINE_MACRO 1
 #define _GNU_SOURCE 1
 #define _XOPEN_SOURCE_EXTENDED 1
@@ -63,7 +67,6 @@ cat << 'EOF'
 #define HAVE_GLOB_H 1
 #define HAVE_KRB5_H 1
 #define HAVE_LANGINFO_H 1
-#define HAVE_LIBAIO_H 1
 #define HAVE_PWD_H 1
 #define HAVE_SHADOW_H 1
 #define HAVE_SYS_ACL_H 1
@@ -86,7 +89,7 @@ cat << 'EOF'
 #define HAVE_SYS_FILE_H 1
 #define HAVE_SYS_UCONTEXT_H 1
 #define HAVE_SYS_WAIT_H 1
-#define HAVE_MALLOC_H 1
+#define HAVE_DECL_MALLOC 1
 #define HAVE_GRP_H 1
 #define HAVE_SYS_SELECT_H 1
 #define HAVE_SETJMP_H 1
@@ -118,21 +121,26 @@ cat << 'EOF'
 #define HAVE_ASM_UNISTD_H 1
 #define HAVE_AIO_H 1
 #define HAVE_SYS_UNISTD_H 1
-#define HAVE_RPC_RPC_H 1
 #define HAVE_ALLOCA_H 1
 #define HAVE_FLOAT_H 1
+#define HAVE_RPC_RPC_H 1
+/* #undef HAVE_RPC_RPC_HEADERS */
+#define HAVE_RPCSVC_YP_PROT_H 1
 #define HAVE_RPCSVC_NIS_H 1
 #define HAVE_RPCSVC_YPCLNT_H 1
 #define HAVE_SYS_SYSCTL_H 1
 #define HAVE_SYS_SYSMACROS_H 1
-#define HAVE_RPCSVC_YP_PROT_H 1
 #define HAVE_SYS_CDEFS_H 1
 #define HAVE_UTMP_H 1
 #define HAVE_UTMPX_H 1
 #define HAVE_LASTLOG_H 1
 #define HAVE_SYSCALL_H 1
 #define HAVE_SYS_SYSCALL_H 1
+#define HAVE_STDATOMIC_H 1
 #define HAVE_LIBGEN_H 1
+#define HAVE_WNO_FORMAT_TRUNCATION "1"
+#define HAVE_WNO_UNUSED_FUNCTION "1"
+#define HAVE_WNO_STRICT_OVERFLOW "1"
 #define HAVE_SYS_PRCTL_H 1
 #define HAVE_PRCTL 1
 #define HAVE_OPEN_O_DIRECT 1
@@ -208,11 +216,18 @@ cat << 'EOF'
 #define HAVE_FREEADDRINFO 1
 #define HAVE_GAI_STRERROR 1
 #define HAVE_SOCKETPAIR 1
+/* #undef HAVE_MEMSET_S */
+/* #undef HAVE_MEMSET_EXPLICIT */
+#define HAVE_GCC_VOLATILE_MEMORY_PROTECTION 1
 #define HAVE_IPV6_V6ONLY 1
+#define HAVE_NET_IF_H 1
 #define HAVE_IPV6 1
 #define HAVE_UCONTEXT_T 1
 #define HAVE___SYNC_FETCH_AND_ADD 1
 /* #undef HAVE_ATOMIC_ADD_32 */
+#define HAVE_ATOMIC_THREAD_FENCE 1
+#define HAVE_ATOMIC_THREAD_FENCE_SUPPORT 1
+#define HAVE_FALLTHROUGH_ATTRIBUTE 1
 #define HAVE_STRDUP 1
 #define HAVE_MEMMEM 1
 #define HAVE_PRINTF 1
@@ -288,6 +303,10 @@ cat << 'EOF'
 #define HAVE_STRTOQ 1
 #define HAVE_MEMALIGN 1
 #define HAVE_POSIX_MEMALIGN 1
+#define HAVE_MALLOC_H 1
+#define HAVE_DECL_MEMALIGN 1
+#define _POSIX_FALLOCATE_CAPABLE_LIBC 1
+#define HAVE_POSIX_FALLOCATE 1
 #define HAVE_DIRNAME 1
 #define HAVE_BASENAME 1
 /* #undef HAVE_STRLCPY */
@@ -295,6 +314,8 @@ cat << 'EOF'
 #define HAVE_LIBBSD 1
 /* #undef HAVE_GETPEEREID */
 /* #undef HAVE_SETPROCTITLE */
+/* #undef HAVE_SETPROCTITLE_INIT */
+/* #undef HAVE_CLOSEFROM */
 #define HAVE_PEERCRED 1
 /* #undef HAVE_BSD_STRTOLL */
 #define HAVE_IF_NAMETOINDEX 1
@@ -320,17 +341,10 @@ cat << 'EOF'
 #define HAVE_GETPWUID_R 1
 #define HAVE_EPOLL_CREATE 1
 /* #undef HAVE_PORT_CREATE */
-#define HAVE_FGETXATTR 1
-/* #undef HAVE_FLISTEA */
-#define HAVE_FLISTXATTR 1
-#define HAVE_FREMOVEXATTR 1
-#define HAVE_FSETXATTR 1
-#define HAVE_GETXATTR 1
-#define HAVE_LISTXATTR 1
-#define HAVE_REMOVEXATTR 1
-#define HAVE_SETXATTR 1
-#define HAVE_LIBATTR 1
+/* #undef HAVE_GETPROGNAME */
 #define HAVE_XATTR_SUPPORT 1
+#define HAVE_GETXATTR 1
+#define HAVE_XATTR_XATTR 1
 /* #undef XATTR_ADDITIONAL_OPTIONS */
 #define HAVE_DLFCN_H 1
 #define HAVE_DLOPEN 1
@@ -347,7 +361,6 @@ cat << 'EOF'
 #define HAVE_CLOCK_PROCESS_CPUTIME_ID 1
 #define HAVE_CLOCK_REALTIME 1
 #define HAVE_STRUCT_TIMESPEC 1
-#define HAVE_NET_IF_H 1
 #define HAVE_ARPA_NAMESER_H 1
 #define HAVE_RESOLV_H 1
 #define HAVE_RES_SEARCH 1
@@ -372,11 +385,12 @@ cat << 'EOF'
 #define HAVE_DECL_PTHREAD_MUTEX_ROBUST 1
 #define HAVE_PTHREAD_MUTEX_CONSISTENT 1
 #define HAVE_ROBUST_MUTEXES 1
+#define HAVE___THREAD 1
 #define HAVE_CRYPT 1
 #define HAVE_LIBCRYPT 1
-#define HAVE_READLINE_READLINE_H 1
-#define HAVE_READLINE_HISTORY_H 1
-#define HAVE_DECL_RL_EVENT_HOOK 1
+#define HAVE_CRYPT_R 1
+#define HAVE_DECL_RL_EVENT_HOOK 0
+#define HAVE_PROGRAM_INVOCATION_SHORT_NAME 1
 #define HAVE_DECL_SNPRINTF 1
 #define HAVE_DECL_VSNPRINTF 1
 #define HAVE_DECL_ASPRINTF 1
@@ -392,12 +406,16 @@ cat << 'EOF'
 #define HAVE_SETRESGID_DECL 1
 #define HAVE_SETRESUID_DECL 1
 #define HAVE_EPOLL 1
+#define HAVE_SYS_EVENTFD_H 1
+#define HAVE_EVENTFD 1
 #define HAVE_POLL_H 1
 #define HAVE_POLL 1
 #define HAVE_STRPTIME 1
 #define HAVE_DECL_STRPTIME 1
 #define HAVE_WORKING_STRPTIME 1
+#define HAVE_DECL_GETTIMEOFDAY 1
 #define HAVE_GETTIMEOFDAY_TZ 1
+/* #undef HAVE_GETTIMEOFDAY_TZ_VOID */
 #define HAVE_C99_VSNPRINTF 1
 #define HAVE_SHARED_MMAP 1
 #define HAVE_MREMAP 1
@@ -411,6 +429,7 @@ cat << 'EOF'
 /* #undef HAVE___SS_FAMILY */
 /* #undef HAVE_SOCKADDR_SA_LEN */
 /* #undef HAVE_SOCK_SIN_LEN */
+/* #undef HAVE_SOCK_SIN6_LEN */
 #define HAVE_UNIXSOCKET 1
 #define HAVE_SECURE_MKSTEMP 1
 #define HAVE_IFACE_GETIFADDRS 1
@@ -418,7 +437,13 @@ cat << 'EOF'
 /* #undef SOLARIS_GETPWENT_R */
 #define HAVE_DECL_GETGRENT_R 1
 /* #undef SOLARIS_GETGRENT_R */
-#define HAVE_PYTHON_H 1
+/* #undef STRERROR_R_XSI_NOT_GNU */
+/* #undef HAVE_FUSE_FUSE_LOWLEVEL_H */
+#define WINEXE_LDFLAGS -s -Wall -Wl,-Bstatic -Wl,-Bdynamic -luserenv
+/* #undef PYTHONDIR */
+/* #undef PYTHONARCHDIR */
+#define HAVE_LONGJMP 1
+#define HAVE_SIGLONGJMP 1
 #define HAVE_POPT_H 1
 #define HAVE_LIBPOPT 1
 #define HAVE_POPTGETCONTEXT 1
@@ -429,22 +454,25 @@ cat << 'EOF'
 #define CHECK_BUNDLED_SYSTEM_Z 1
 #define USING_SYSTEM_ZLIB 1
 #define USE_TDB_MUTEX_LOCKING 1
+#define TALLOC_BUILD_VERSION_MAJOR 2
+#define TALLOC_BUILD_VERSION_MINOR 1
+#define TALLOC_BUILD_VERSION_RELEASE 16
+#define HAVE_SYS_AUXV_H 1
+#define HAVE_GETAUXVAL 1
 #define VALUEOF_NSIG 65
 #define VALUEOF__NSIG 65
 #define VALUEOF_SIGRTMAX 64
 #define VALUEOF_SIGRTMIN 34
 #define TEVENT_NUM_SIGNALS 68
+#define HAVE_64_BIT_SIZE_T_FOR_LMDB 1
+#define HAVE_LDWRAP 1
 #define HAVE_U_CHAR 1
 #define HAVE_U_INT32_T 1
 #define HAVE_ERR_H 1
 #define HAVE_SYS_TIMEB_H 1
 #define HAVE_SYS_TIMES_H 1
-#define HAVE_CURSES_H 1
-#define HAVE_TERM_H 1
-#define HAVE_TERMCAP_H 1
 #define HAVE_ATEXIT 1
 /* #undef HAVE_CGETENT */
-/* #undef HAVE_GETPROGNAME */
 /* #undef HAVE_SETPROGNAME */
 #define HAVE_GETHOSTNAME 1
 #define HAVE_PUTENV 1
@@ -459,14 +487,12 @@ cat << 'EOF'
 #define HAVE_SWAB 1
 #define HAVE_UMASK 1
 #define HAVE_UNAME 1
-/* #undef HAVE_CLOSEFROM */
 #define HAVE_ERR 1
 #define HAVE_WARN 1
 #define HAVE_ERRX 1
 #define HAVE_WARNX 1
 #define HAVE_FLOCK 1
 #define HAVE_WRITEV 1
-/* #undef STRERROR_R_PROTO_COMPATIBLE */
 #define HAVE_HSTRERROR 1
 #define HAVE_SOCKET 1
 /* #undef HAVE_GETIPNODEBYNAME */
@@ -504,7 +530,6 @@ cat << 'EOF'
 #define HAVE_GSSAPI_GSSAPI_H 1
 #define HAVE_GSSAPI_GSSAPI_KRB5_H 1
 #define HAVE_AP_OPTS_USE_SUBKEY 1
-#define HAVE_KRB5_ADDRESSES 1
 #define HAVE_KRB5_KEYTAB_ENTRY_KEYBLOCK 1
 #define HAVE_KRB5_SET_REAL_TIME 1
 #define HAVE_COM_ERR_H 1
@@ -526,8 +551,10 @@ cat << 'EOF'
 #define HAVE_DECL_KRB5_GET_CREDENTIALS_FOR_USER 0
 #define HAVE_E_DATA_POINTER_IN_KRB5_ERROR 1
 #define HAVE_INITIALIZE_KRB5_ERROR_TABLE 1
+#define HAVE_KRB5_ADDRESSES 1
 #define HAVE_KRB5_AUTH_CON_SETKEY 1
 #define HAVE_KRB5_CC_GET_LIFETIME 1
+#define HAVE_KRB5_CC_COPY_CACHE 1
 #define HAVE_KRB5_CREATE_CHECKSUM 1
 #define HAVE_KRB5_CRYPTO 1
 #define HAVE_KRB5_CRYPTO_DESTROY 1
@@ -588,10 +615,16 @@ cat << 'EOF'
 #define HAVE_KRB5_PRINCIPAL_GET_TYPE 1
 #define HAVE_KRB5_WARNX 1
 #define HAVE_KRB5_PROMPT_TYPE 1
-#define HAVE_COM_ERR 1
-#define HAVE_LIBCOM_ERR 1
-#define HAVE_COM_RIGHT_R 1
-#define USING_SYSTEM_COM_ERR 1
+#define HEIMDAL_KRB5_TYPES_PATH "/usr/include/krb5-types.h"
+/* #undef HAVE_GNUTLS_GLOBAL_INIT */
+/* #undef HAVE_GNUTLS_CERTIFICATE_VERIFY_PEERS3 */
+/* #undef HAVE_DECL_GNUTLS_CERT_EXPIRED */
+/* #undef HAVE_DECL_GNUTLS_CERT_NOT_ACTIVATED */
+/* #undef HAVE_DECL_GNUTLS_CERT_UNEXPECTED_OWNER */
+/* #undef HAVE_GNUTLS_X509_CRT_SET_VERSION */
+/* #undef HAVE_GNUTLS_X509_CRT_SET_SUBJECT_KEY_ID */
+/* #undef HAVE_GNUTLS_DATUM */
+/* #undef HAVE_GNUTLS_DATUM_T */
 #define HAVE_LINUX_INOTIFY 1
 #define HAVE_LINUX_FCNTL_H 1
 #define HAVE_F_SETLEASE_DECL 1
@@ -599,114 +632,36 @@ cat << 'EOF'
 #define HAVE_EXECINFO_H 1
 #define HAVE_BACKTRACE 1
 #define HAVE_BACKTRACE_SYMBOLS 1
+#define HAVE_LIBUNWIND_H 1
 #define HAVE_FRSIZE 1
 #define STAT_STATVFS 1
 /* #undef BSD_STYLE_STATVFS */
 #define HAVE_FSID_INT 1
 #define HAVE_STATVFS_F_FLAG 1
 /* #undef HAVE_STATVFS_F_FLAGS */
-/* #undef HAVE_LTTNG_TRACEF */
+#define HAVE_LIBSYSTEMD_DAEMON 1
+#define HAVE_LIBSYSTEMD_JOURNAL 1
 #define HAVE_ICONV_OPEN 1
 #define HAVE_NATIVE_ICONV 1
+#define HAVE_ICONV_ERRNO_ILLEGAL_MULTIBYTE 1
 /* #undef HAVE_PAM_START */
 /* #undef HAVE_NSS_XBYY_KEY_IPNODE */
 /* #undef HAVE_PASSWD_PW_COMMENT */
 /* #undef HAVE_PASSWD_PW_AGE */
-#define HAVE_LIBNCURSES 1
-#define HAVE_TGETENT 1
+/* #undef HAVE_STRUCT_SECMETHOD_TABLE_METHOD_ATTRLIST */
+/* #undef HAVE_STRUCT_SECMETHOD_TABLE_METHOD_VERSION */
+/* #undef HAVE_TGETENT */
 /* #undef HAVE_RL_COMPLETION_FUNC_T */
-#define HAVE_CPPFUNCTION 1
-#define HAVE_LIBREADLINE 1
-#define HAVE_RL_COMPLETION_MATCHES 1
-#define HAVE_NEW_LIBREADLINE 1
-#define HAVE_HISTORY_LIST 1
+/* #undef HAVE_CPPFUNCTION */
+/* #undef HAVE_RL_COMPLETION_MATCHES */
+/* #undef HAVE_HISTORY_LIST */
 /* #undef HAVE_MD5INIT */
 /* #undef HAVE_CC_MD5_INIT */
 /* #undef HAVE_SHA1_UPDATE */
 /* #undef HAVE_SHA256_UPDATE */
 /* #undef HAVE_SHA512_UPDATE */
-#define ENABLE_SELFTEST 1
-#define HAVE_GCC_THREAD_LOCAL_STORAGE 1
-#define HAVE_DESTRUCTOR_ATTRIBUTE 1
-#define HAVE_GETHOSTBYADDR_R 1
-/* #undef HAVE___POSIX_GETPWNAM_R */
-/* #undef HAVE___POSIX_GETPWUID_R */
-/* #undef HAVE___POSIX_GETGRGID_R */
-/* #undef HAVE___POSIX_GETGRNAM_R */
-/* #undef HAVE_NSL */
-/* #undef HAVE_SOLARIS_GETPWENT_R */
-#define HAVE_DECL_GETPWNAM_R 1
-/* #undef HAVE_SOLARIS_GETPWNAM_R */
-#define HAVE_DECL_GETPWUID_R 1
-/* #undef HAVE_SOLARIS_GETPWUID_R */
-/* #undef HAVE_SOLARIS_GETGRENT_R */
-#define HAVE_DECL_GETGRNAM_R 1
-/* #undef HAVE_SOLARIS_GETGRNAM_R */
-#define HAVE_DECL_GETGRGID_R 1
-/* #undef HAVE_SOLARIS_GETGRGID_R */
-#define HAVE_DECL_SETHOSTENT 1
-/* #undef HAVE_SOLARIS_SETHOSTENT */
-#define HAVE_DECL_ENDHOSTENT 1
-/* #undef HAVE_SOLARIS_ENDHOSTENT */
-#define HAVE_DECL_GETHOSTNAME 1
-/* #undef HAVE_SOLARIS_GETHOSTNAME */
-#define HAVE_DECL_SETGRENT 1
-/* #undef HAVE_BSD_SETGRENT */
-#define HAVE_DECL_GETNAMEINFO 1
-#define HAVE_LINUX_GETNAMEINFO 1
-/* #undef HAVE_LINUX_GETNAMEINFO_UNSIGNED */
-#define LIBNSS_WRAPPER_SO_PATH /home/haihua.yang/ws/samba-dev1/bin/default/lib/nss_wrapper/libnss-wrapper.so
-#define NSS_WRAPPER 1
-#define HAVE_FUNCTION_ATTRIBUTE_FORMAT 1
-/* #undef HAVE_RESOLV_IPV6_NSADDRS */
-/* #undef HAVE_RES_NINIT */
-/* #undef HAVE_RES_NCLOSE */
-/* #undef HAVE_RES_INIT */
-#define HAVE___RES_INIT 1
-#define HAVE___RES_NINIT 1
-/* #undef HAVE_RES_CLOSE */
-#define HAVE___RES_CLOSE 1
-#define HAVE___RES_NCLOSE 1
-/* #undef HAVE_RES_QUERY */
-#define HAVE___RES_QUERY 1
-/* #undef HAVE_RES_NQUERY */
-#define HAVE___RES_NQUERY 1
-#define HAVE___RES_SEARCH 1
-#define HAVE___RES_NSEARCH 1
-#define HAVE_DECL_NS_NAME_COMPRESS 1
-#define HAVE_NS_NAME_COMPRESS 1
-#define LIBRESOLV_WRAPPER_SO_PATH /home/haihua.yang/ws/samba-dev1/bin/default/lib/resolv_wrapper/libresolv-wrapper.so
-#define RESOLV_WRAPPER 1
-#define HAVE_SYS_SIGNALFD_H 1
-#define HAVE_SYS_EVENTFD_H 1
-#define HAVE_SYS_TIMERFD_H 1
-#define HAVE_GNU_LIB_NAMES_H 1
-#define HAVE_STRUCT_MSGHDR_MSG_CONTROL 1
-#define HAVE_STRUCT_IN_PKTINFO 1
-#define HAVE_STRUCT_IN6_PKTINFO 1
-#define HAVE_SIGNALFD 1
-#define HAVE_EVENTFD 1
-#define HAVE_TIMERFD_CREATE 1
-#define HAVE_BINDRESVPORT 1
-#define HAVE_BIND 1
-#define HAVE_DECL_ACCEPT 1
-/* #undef HAVE_ACCEPT_PSOCKLEN_T */
-#define HAVE_DECL_IOCTL 1
-/* #undef HAVE_IOCTL_INT */
-#define HAVE_DECL_EVENTFD 1
-/* #undef HAVE_EVENTFD_UNSIGNED_INT */
-#define LIBSOCKET_WRAPPER_SO_PATH /home/haihua.yang/ws/samba-dev1/bin/default/lib/socket_wrapper/libsocket-wrapper.so
-#define SOCKET_WRAPPER 1
-/* #undef HAVE_GCC_ATOMIC_BUILTINS */
-#define HAVE_CONSTRUCTOR_ATTRIBUTE 1
-/* #undef HAVE_DECL_SETGROUPS */
-#define HAVE_DECL_SYSCALL 1
-/* #undef HAVE_SYSCALL_INT */
-#define HAVE_GETRESUID 1
-#define HAVE_GETRESGID 1
-#define LIBUID_WRAPPER_SO_PATH /home/haihua.yang/ws/samba-dev1/bin/default/lib/uid_wrapper/libuid-wrapper.so
-#define UID_WRAPPER 1
-#define HAVE_LIBUNWIND_H 1
+#define HAVE_PERL_MAKEMAKER 1
+#define WITH_PTHREADPOOL 1
 #define HAVE_LINUX_FALLOC_H 1
 #define HAVE_LINUX_IOCTL_H 1
 #define HAVE_GETCWD 1
@@ -737,7 +692,6 @@ cat << 'EOF'
 #define HAVE_GRANTPT 1
 #define HAVE_POSIX_OPENPT 1
 #define HAVE_FALLOCATE 1
-#define HAVE_POSIX_FALLOCATE 1
 #define HAVE_FSEEKO 1
 /* #undef HAVE_SETLUID */
 #define HAVE_GETPWNAM 1
@@ -748,8 +702,6 @@ cat << 'EOF'
 #define HAVE_FCVT 1
 /* #undef HAVE_FCVTL */
 #define HAVE_SETLOCALE 1
-#define HAVE_LIBRT 1
-#define HAVE_NANOSLEEP 1
 #define HAVE_LUTIMES 1
 #define HAVE_FUTIMES 1
 #define HAVE_UTIMENSAT 1
@@ -758,8 +710,6 @@ cat << 'EOF'
 #define HAVE_MUNLOCK 1
 #define HAVE_MLOCKALL 1
 #define HAVE_MUNLOCKALL 1
-#define HAVE_SHMGET 1
-#define HAVE_SHM_OPEN 1
 #define HAVE_YP_GET_DEFAULT_DOMAIN 1
 /* #undef HAVE__DN_EXPAND */
 #define HAVE___DN_EXPAND 1
@@ -770,7 +720,6 @@ cat << 'EOF'
 #define HAVE_INOTIFY 1
 #define HAVE_KERNEL_CHANGE_NOTIFY 1
 #define HAVE_KERNEL_OPLOCKS_LINUX 1
-/* #undef HAVE_KERNEL_OPLOCKS_IRIX */
 #define HAVE_KERNEL_SHARE_MODES 1
 /* #undef HAVE_DM_GET_EVENTLIST */
 #define HAVE_STAT_ST_BLOCKS 1
@@ -870,29 +819,17 @@ cat << 'EOF'
 #define HAVE_LINUX_READAHEAD 1
 #define HAVE_DECL_READAHEAD 1
 #define HAVE_OPENAT 1
-#define HAVE_LIBAIO 1
-#define HAVE_AIO_READ 1
-#define HAVE_AIO 1
-#define HAVE_AIO_WRITE 1
-#define HAVE_AIO_FSYNC 1
-#define HAVE_AIO_RETURN 1
-#define HAVE_AIO_ERROR 1
-#define HAVE_AIO_CANCEL 1
-#define HAVE_AIO_SUSPEND 1
-#define HAVE_IO_SUBMIT 1
-#define HAVE_LINUX_KERNEL_AIO 1
+#define HAVE_STRUCT_MSGHDR_MSG_CONTROL 1
 /* #undef HAVE_STRUCT_MSGHDR_MSG_ACCRIGHTS */
 #define WITH_WINBIND 1
 #define HAVE_ASM_TYPES_H 1
 #define HAVE_DEVICE_MAJOR_FN 1
 #define HAVE_DEVICE_MINOR_FN 1
 #define HAVE_DIRENT_D_OFF 1
-#define HAVE_SETNETGRENT 1
-#define HAVE_GETNETGRENT 1
-#define HAVE_ENDNETGRENT 1
-#define HAVE_SETNETGRENT_PROTOTYPE 1
-#define HAVE_GETNETGRENT_PROTOTYPE 1
-#define HAVE_ENDNETGRENT_PROTOTYPE 1
+#define HAVE_NETGROUP 1
+/* #undef HAVE_HTTPCONNECT */
+/* #undef HAVE_HTTPCONNECTENCRYPT */
+/* #undef HAVE_CUPS */
 #define WITH_SYSLOG 1
 #define WITH_AUTOMOUNT 1
 #define HAVE_LDAP_H 1
@@ -930,22 +867,20 @@ cat << 'EOF'
 #define HAVE_UT_UT_PID 1
 #define HAVE_UT_UT_EXIT 1
 /* #undef HAVE_UX_UT_SYSLEN */
+#define HAVE_UX_UT_HOST 1
 #define PUTUTLINE_RETURNS_UTMP 1
 #define SIZEOF_UTMP_UT_LINE 32
 #define WITH_UTMP 1
+/* #undef HAVE_AVAHI_CLIENT_NEW */
+/* #undef HAVE_AVAHI_STRERROR */
 #define HAVE_ICONV 1
-/* #undef HAVE_PAM_GET_DATA */
-/* #undef HAVE_PAM_VSYSLOG */
-/* #undef HAVE_PAM_RHOST */
-/* #undef HAVE_PAM_TTY */
-/* #undef HAVE_PAM_RADIO_TYPE */
 /* #undef USE_LINUX_32BIT_SYSCALLS */
-#define USE_LINUX_THREAD_CREDENTIALS 1
+#define HAVE_LINUX_THREAD_CREDENTIALS 1
 #define WITH_DNS_UPDATES 1
 #define HAVE_LINUX_NETLINK_H 1
 #define HAVE_LINUX_RTNETLINK_H 1
 #define HAVE_FCNTL_LOCK 1
-#define _HAVE_UNBROKEN_POSIX_FALLOCATE 1
+/* #undef HAVE_OFD_LOCKS */
 #define HAVE_STRUCT_STAT_ST_MTIM_TV_NSEC 1
 /* #undef HAVE_STRUCT_STAT_ST_MTIMENSEC */
 /* #undef HAVE_STRUCT_STAT_ST_MTIMESPEC_TV_NSEC */
@@ -975,7 +910,6 @@ cat << 'EOF'
 #define _HAVE_SENDFILE 1
 #define HAVE_SENDFILE 1
 #define LINUX_SENDFILE_API 1
-#define WITH_SENDFILE 1
 #define GETCWD_TAKES_NULL 1
 #define HAVE_GETSPNAM 1
 #define HAVE_SYS_QUOTA_H 1
@@ -983,50 +917,37 @@ cat << 'EOF'
 /* #undef HAVE_DQB_FSOFTLIMIT */
 /* #undef HAVE_STRUCT_DQBLK_DQB_CURBYTES */
 #define HAVE_QUOTACTL_LINUX 1
-#define HAVE_RPC_TYPES_H 1
-#define HAVE_RPC_XDR_H 1
-/* #undef HAVE_NFS_QUOTAS */
 #define HAVE_SYS_QUOTAS 1
 #define WITH_QUOTAS 1
-#define HAVE_FUNCTION_ATTRIBUTE_DESTRUCTOR 1
+#define HAVE_SCHED_H 1
+#define HAVE_UNSHARE_CLONE_FS 1
 #define SEEKDIR_RETURNS_VOID 1
-#define WITH_PROFILE 1
-#define HAVE_GETRUSAGE 1
-#define WITH_PTHREADPOOL 1
 #define HAVE_LINUX_FS_H 1
 #define HAVE_DECL_FS_IOC_GETFLAGS 1
 #define HAVE_DECL_FS_COMPR_FL 1
 #define HAVE_LINUX_IOCTL 1
-#define HAVE_LIBMINERVA_CLIENT 1
-#define HAVE_LIBJEMALLOC 1
-#define HAVE_LIBPCAP 1
-#define HAVE_LIBUNWIND 1
-#define HAVE_LIBUNWIND_X86_64 1
 /* #undef HAVE_GLUSTERFS */
 #define HAVE_DBUS_1 1
 #define HAVE_DBUS_DBUS_H 1
 #define HAVE_LIBDBUS_1 1
 #define HAVE_DBUS 1
-#define HAVE_NCURSES 1
-#define HAVE_NCURSES_H 1
-#define HAVE_MENU_H 1
-#define HAVE_PANEL_H 1
-#define HAVE_FORM_H 1
-#define HAVE_INITSCR 1
-#define HAVE_LIBMENU 1
-#define HAVE_SET_MENU_ITEMS 1
-#define HAVE_ITEM_COUNT 1
-#define HAVE_LIBPANEL 1
-#define HAVE_NEW_PANEL 1
-#define HAVE_SHOW_PANEL 1
-#define HAVE_LIBFORM 1
-#define HAVE_NEW_FIELD 1
-#define HAVE_NEW_FORM 1
+/* #undef HAVE_INITSCR */
+/* #undef HAVE_SET_MENU_ITEMS */
+/* #undef HAVE_ITEM_COUNT */
+/* #undef HAVE_NEW_PANEL */
+/* #undef HAVE_SHOW_PANEL */
+/* #undef HAVE_NEW_FIELD */
+/* #undef HAVE_NEW_FORM */
+/* #undef HAVE_NCURSES */
+#define HAVE_FTW_H 1
+#define HAVE_NFTW 1
 #define HAVE_LIBCRYPTO 1
 #define HAVE_DES_PCBC_ENCRYPT 1
-#define STRING_STATIC_MODULES "vfs_posixacl auth_sam auth_winbind auth_domain auth_builtin vfs_default nss_info_template idmap_tdb idmap_passdb idmap_nss idmap_ldap"
-#define static_decl_vfs extern NTSTATUS vfs_posixacl_init(void); extern NTSTATUS vfs_default_init(void);
-#define static_init_vfs { vfs_posixacl_init();  vfs_default_init(); }
+#define HAVE_RPC_XDR_H 1
+/* #undef HAVE_NSCD_FLUSH_CACHE */
+#define STRING_STATIC_MODULES "vfs_default vfs_not_implemented vfs_posixacl auth_builtin auth_sam auth_winbind pdb_smbpasswd pdb_tdbsam auth_unix nss_info_template idmap_tdb idmap_passdb idmap_nss pdb_ldapsam idmap_ldap"
+#define static_decl_vfs extern NTSTATUS vfs_default_init(TALLOC_CTX *mem_ctx); extern NTSTATUS vfs_not_implemented_init(TALLOC_CTX *mem_ctx); extern NTSTATUS vfs_posixacl_init(TALLOC_CTX *mem_ctx);
+#define static_init_vfs(mem_ctx) { vfs_default_init((mem_ctx));  vfs_not_implemented_init((mem_ctx));  vfs_posixacl_init((mem_ctx)); }
 #define vfs_recycle_init samba_init_module
 #define vfs_audit_init samba_init_module
 #define vfs_extd_audit_init samba_init_module
@@ -1041,15 +962,12 @@ cat << 'EOF'
 #define vfs_shadow_copy2_init samba_init_module
 #define vfs_readahead_init samba_init_module
 #define vfs_xattr_tdb_init samba_init_module
-#define vfs_posix_eadb_init samba_init_module
 #define vfs_streams_xattr_init samba_init_module
 #define vfs_streams_depot_init samba_init_module
 #define vfs_acl_xattr_init samba_init_module
 #define vfs_acl_tdb_init samba_init_module
-#define vfs_smb_traffic_analyzer_init samba_init_module
 #define vfs_preopen_init samba_init_module
 #define vfs_catia_init samba_init_module
-#define vfs_scannedonly_init samba_init_module
 #define vfs_media_harmony_init samba_init_module
 #define vfs_unityed_media_init samba_init_module
 #define vfs_fruit_init samba_init_module
@@ -1059,59 +977,49 @@ cat << 'EOF'
 #define vfs_crossrename_init samba_init_module
 #define vfs_linux_xfs_sgid_init samba_init_module
 #define vfs_time_audit_init samba_init_module
-#define vfs_fake_acls_init samba_init_module
-#define vfs_nfs4acl_xattr_init samba_init_module
+#define vfs_offline_init samba_init_module
+#define vfs_virusfilter_init samba_init_module
 #define vfs_syncops_init samba_init_module
 #define vfs_dirsort_init samba_init_module
 #define vfs_fileid_init samba_init_module
 #define vfs_aio_fork_init samba_init_module
 #define vfs_aio_pthread_init samba_init_module
-#define vfs_aio_posix_init samba_init_module
-#define vfs_aio_linux_init samba_init_module
 #define vfs_btrfs_init samba_init_module
+#define vfs_glusterfs_fuse_init samba_init_module
 #define vfs_snapper_init samba_init_module
-#define vfs_minerva_path_init samba_init_module
-#define vfs_minerva_init samba_init_module
-#define vfs_minerva_shadow_copy_init samba_init_module
-#define vfs_minerva_audit_init samba_init_module
-#define static_decl_pdb 
-#define static_init_pdb {}
-#define pdb_tdbsam_init samba_init_module
-#define pdb_ldapsam_init samba_init_module
-#define pdb_ads_init samba_init_module
-#define pdb_smbpasswd_init samba_init_module
-#define pdb_wbc_sam_init samba_init_module
-#define pdb_samba4_init samba_init_module
-#define static_decl_auth extern NTSTATUS auth_sam_init(void); extern NTSTATUS auth_winbind_init(void); extern NTSTATUS auth_domain_init(void); extern NTSTATUS auth_builtin_init(void);
-#define static_init_auth { auth_sam_init();  auth_winbind_init();  auth_domain_init();  auth_builtin_init(); }
+#define static_decl_pdb extern NTSTATUS pdb_smbpasswd_init(TALLOC_CTX *mem_ctx); extern NTSTATUS pdb_tdbsam_init(TALLOC_CTX *mem_ctx); extern NTSTATUS pdb_ldapsam_init(TALLOC_CTX *mem_ctx);
+#define static_init_pdb(mem_ctx) { pdb_smbpasswd_init((mem_ctx));  pdb_tdbsam_init((mem_ctx));  pdb_ldapsam_init((mem_ctx)); }
+#define static_decl_auth extern NTSTATUS auth_builtin_init(TALLOC_CTX *mem_ctx); extern NTSTATUS auth_sam_init(TALLOC_CTX *mem_ctx); extern NTSTATUS auth_winbind_init(TALLOC_CTX *mem_ctx); extern NTSTATUS auth_unix_init(TALLOC_CTX *mem_ctx);
+#define static_init_auth(mem_ctx) { auth_builtin_init((mem_ctx));  auth_sam_init((mem_ctx));  auth_winbind_init((mem_ctx));  auth_unix_init((mem_ctx)); }
 #define auth_script_init samba_init_module
-#define auth_unix_init samba_init_module
-#define auth_wbc_init samba_init_module
-#define auth_server_init samba_init_module
-#define auth_netlogond_init samba_init_module
-#define auth_samba4_init samba_init_module
-#define static_decl_nss_info extern NTSTATUS nss_info_template_init(void);
-#define static_init_nss_info { nss_info_template_init(); }
+#define static_decl_nss_info extern NTSTATUS nss_info_template_init(TALLOC_CTX *mem_ctx);
+#define static_init_nss_info(mem_ctx) { nss_info_template_init((mem_ctx)); }
 #define static_decl_charset 
-#define static_init_charset {}
-#define static_decl_idmap extern NTSTATUS idmap_tdb_init(void); extern NTSTATUS idmap_passdb_init(void); extern NTSTATUS idmap_nss_init(void); extern NTSTATUS idmap_ldap_init(void);
-#define static_init_idmap { idmap_tdb_init();  idmap_passdb_init();  idmap_nss_init();  idmap_ldap_init(); }
-#define idmap_autorid_init samba_init_module
-#define idmap_tdb2_init samba_init_module
+#define static_init_charset(mem_ctx) {}
+#define static_decl_idmap extern NTSTATUS idmap_tdb_init(TALLOC_CTX *mem_ctx); extern NTSTATUS idmap_passdb_init(TALLOC_CTX *mem_ctx); extern NTSTATUS idmap_nss_init(TALLOC_CTX *mem_ctx); extern NTSTATUS idmap_ldap_init(TALLOC_CTX *mem_ctx);
+#define static_init_idmap(mem_ctx) { idmap_tdb_init((mem_ctx));  idmap_passdb_init((mem_ctx));  idmap_nss_init((mem_ctx));  idmap_ldap_init((mem_ctx)); }
 #define idmap_ad_init samba_init_module
-#define idmap_script_init samba_init_module
+#define idmap_rfc2307_init samba_init_module
+#define idmap_autorid_init samba_init_module
 #define idmap_rid_init samba_init_module
 #define idmap_hash_init samba_init_module
-#define idmap_rfc2307_init samba_init_module
-#define idmap_adex_init samba_init_module
+#define idmap_tdb2_init samba_init_module
+#define idmap_script_init samba_init_module
 #define static_decl_gpext 
-#define static_init_gpext {}
+#define static_init_gpext(mem_ctx) {}
 #define static_decl_perfcount 
-#define static_init_perfcount {}
+#define static_init_perfcount(mem_ctx) {}
+#define static_decl_rpc 
+#define static_init_rpc(mem_ctx) {}
 #define HAVE_PTY_H 1
 #define HAVE_OPENPTY 1
 #define HAVE_LIBUTIL 1
+#define HAVE_LINUX_SOCKIOS_H 1
+#define HAVE_LINUX_ETHTOOL_H 1
+#define HAVE_ETHTOOL 1
+/* #undef HAVE_GNUTLS_PKCS7_GET_EMBEDDED_DATA_OID */
 #define SUMMARY_PASSES 1
-#endif /* _INCLUDE_CONFIG_H_WAF */
+
+#endif /* W_DEFAULT_INCLUDE_CONFIG_H_WAF */
 
 EOF

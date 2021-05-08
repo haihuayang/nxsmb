@@ -388,7 +388,6 @@ static NTSTATUS process_dcerpc_request(x_smbd_named_pipe_t *named_pipe,
 		response.alloc_hint = output.size();
 		response.context_id = 0;
 		response.cancel_count = 0;
-		response._pad = 0;
 		response.stub_and_verifier.val.swap(output);
 
 		x_ndr_push(response, body_output, ndr_flags);

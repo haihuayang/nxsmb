@@ -12,7 +12,7 @@ extern "C" {
 #include "samba/lib/crypto/md5.h"
 #include "samba/lib/crypto/arcfour.h"
 #include "samba/lib/crypto/hmacmd5.h"
-#include "samba/lib/crypto/crc32.h"
+#include "samba/third_party/zlib/zlib.h"
 #include "./samba/nsswitch/libwbclient/wbclient.h"
 
 // #include "samba/auth/gensec/gensec.h"
@@ -34,6 +34,12 @@ extern "C" {
 #define DEBUG(...) do { } while (0)
 #define dump_data_pw(...) do { } while (0)
 #define dump_data(...) do { } while (0)
+
+static uint32_t crc32_calc_buffer(const uint8_t *data, size_t size)
+{
+	uint32_t ret = crc32(0, Z_NULL, 0);
+	return crc32(ret, data, size);
+}
 
 struct str_const_t {
 	const uint8_t *data;
