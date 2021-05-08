@@ -313,7 +313,7 @@ static NTSTATUS process_dcerpc_bind(x_smbd_named_pipe_t *named_pipe,
 	} else {
 		bind_ack.assoc_group_id = 0x53f0;
 	}
-	bind_ack.secondary_address = "\\PIPE\\" + x_convert_utf16_to_utf8(named_pipe->iface->iface_name);
+	bind_ack.secondary_address.push_back("\\PIPE\\" + x_convert_utf16_to_utf8(named_pipe->iface->iface_name));
 
 	x_ndr_push(bind_ack, body_output, ndr_flags);
 	resp_type = idl::DCERPC_PKT_BIND_ACK;

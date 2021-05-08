@@ -78,8 +78,8 @@ TARGET_CFLAGS_EXTRA := \
 	-Isamba/source3 \
 	-D__X_DEVELOPER__=1
 
-all: $(TARGET_SET_tests:%=$(TARGET_DIR_out)/tests/%)
-#$(TARGET_DIR_out)/bin/nxsmbd
+all: $(TARGET_SET_tests:%=$(TARGET_DIR_out)/tests/%) \
+	$(TARGET_DIR_out)/bin/nxsmbd
 
 SET_src_nxsmbd := auth_ntlmssp auth_krb5 auth_spnego auth \
 	network misc \
