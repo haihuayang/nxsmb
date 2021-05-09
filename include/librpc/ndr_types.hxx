@@ -82,18 +82,18 @@ inline x_ndr_off_t x_ndr_scalars_unique_ptr(
 	X_NDR_VERIFY((bpos), x_ndr_scalars_unique_ptr((val), (ndr), (bpos), (epos), (flags), (switch_is)))
 
 
-#define X_NDR_BUFFERS_RELATIVE_PTR_START_PUSH(val, ndr, bpos, epos, flags, switch_is) do { \
+#define X_NDR_BUFFERS_RELATIVE_PTR_START_PUSH(ptr_type, val, ndr, bpos, epos, flags, switch_is) do { \
 	x_ndr_off_t __tmp_pos = (ndr).load_pos(); \
 	if (val) { \
 		X_NDR_DO_ALIGN((ndr), (bpos), (epos), (flags)); \
-		X_NDR_SCALARS_DEFAULT(uint32((bpos) - (ndr).base), (ndr), __tmp_pos, (epos), (flags), X_NDR_SWITCH_NONE);
+		X_NDR_SCALARS_DEFAULT((ptr_type)((bpos) - (ndr).base), (ndr), __tmp_pos, (epos), (flags), X_NDR_SWITCH_NONE);
 
 #define X_NDR_BUFFERS_RELATIVE_PTR_END_PUSH(val, ndr, bpos, epos, flags, switch_is) \
 } } while (0)
 
-#define X_NDR_BUFFERS_RELATIVE_PTR_START_PULL(val, ndr, bpos, epos, flags, switch_is) do { \
+#define X_NDR_BUFFERS_RELATIVE_PTR_START_PULL(ptr_type, val, ndr, bpos, epos, flags, switch_is) do { \
 	x_ndr_off_t __tmp_pos = (ndr).load_pos(); \
-	uint32 __tmp_rel_pos; \
+	ptr_type __tmp_rel_pos; \
 	X_NDR_SCALARS_DEFAULT(__tmp_rel_pos, (ndr), __tmp_pos, (epos), (flags), X_NDR_SWITCH_NONE); \
 	if (__tmp_rel_pos) { \
 		X_NDR_CHECK_ALIGN((ndr), (flags), __tmp_rel_pos); \
