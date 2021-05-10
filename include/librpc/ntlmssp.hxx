@@ -12,6 +12,20 @@
 
 namespace idl {
 
+static inline uint32_t ndr_ntlmssp_negotiated_string_flags(uint32_t negotiate_flags)
+{
+	uint32_t flags = LIBNDR_FLAG_STR_NOTERM |
+			 LIBNDR_FLAG_STR_CHARLEN |
+			 LIBNDR_FLAG_REMAINING;
+
+	if (!(negotiate_flags & NTLMSSP_NEGOTIATE_UNICODE)) {
+		flags |= LIBNDR_FLAG_STR_ASCII;
+	}
+
+	return flags;
+}
+
+#if 0
 struct ndr_traits_u16string_remain
 {
 	using has_buffers = std::false_type;
@@ -34,20 +48,6 @@ struct ndr_traits_u16string_remain
 	}
 };
 
-static inline uint32_t ndr_ntlmssp_negotiated_string_flags(uint32_t negotiate_flags)
-{
-	uint32_t flags = LIBNDR_FLAG_STR_NOTERM |
-			 LIBNDR_FLAG_STR_CHARLEN |
-			 LIBNDR_FLAG_REMAINING;
-
-	if (!(negotiate_flags & NTLMSSP_NEGOTIATE_UNICODE)) {
-		flags |= LIBNDR_FLAG_STR_ASCII;
-	}
-
-	return flags;
-}
-
-
 struct NEGOTIATE_MESSAGE {
 	NEGOTIATE NegotiateFlags;
 	std::shared_ptr<std::string> DomainName; // x_ndr_relative_ptr_t<sstring, uint16, uint16> DomainName;/* [relative] */
@@ -67,7 +67,6 @@ template <> struct ndr_traits_t<NEGOTIATE_MESSAGE> {
 	void ostr(const NEGOTIATE_MESSAGE &__val, x_ndr_ostr_t &__ndr, uint32_t __flags, x_ndr_switch_t __level) const;
 };
 
-#if 0
 enum ntlmssp_AvId : uint16 {
 	MsvAvEOL=0,
 	MsvAvNbComputerName=1,

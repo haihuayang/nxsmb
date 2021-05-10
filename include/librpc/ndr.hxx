@@ -327,7 +327,6 @@ inline auto int_val(uint3264 t) { return t.val; }
 
 typedef int64_t dlong;
 typedef uint64_t udlong;
-// using string = const char *;
 
 struct x_ndr_type_default { };
 struct x_ndr_type_custom { };
@@ -910,7 +909,6 @@ static inline x_ndr_off_t x_ndr_fill(uint16_t v, x_ndr_push_t &ndr, x_ndr_off_t 
 }
 
 #define X_NDR_FILL(v, ndr, bpos, epos, flags) X_NDR_CHECK(x_ndr_fill((v), (ndr), (bpos), (epos), (flags)))
-#endif
 
 static inline x_ndr_off_t x_ndr_scalars(const std::vector<uint8_t> &t, x_ndr_push_t &ndr,
 		x_ndr_off_t bpos, x_ndr_off_t epos,
@@ -960,7 +958,6 @@ void x_ndr_ostr_u16string(const std::u16string &str, x_ndr_ostr_t &ndr, uint32_t
 x_ndr_off_t x_ndr_push_gstring(const std::string &val, x_ndr_push_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags);
 x_ndr_off_t x_ndr_pull_gstring(std::string &val, x_ndr_pull_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags);
 void x_ndr_ostr_gstring(const std::string &val, x_ndr_ostr_t &ndr, uint32_t flags);
-#if 0
 struct blob_t
 {
 	x_ndr_off_t ndr_scalars(x_ndr_push_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, x_ndr_switch_t level) const;

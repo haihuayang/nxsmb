@@ -523,58 +523,6 @@ template <> struct ndr_traits_t<struct in6_addr>
 using u8string = std::string;
 using u16string = std::u16string;
 
-struct ndr_traits_astring
-{
-	using has_buffers = std::false_type;
-	using ndr_data_type = x_ndr_type_primary;
-	using ndr_base_type = std::string;
-
-	x_ndr_off_t scalars(const std::string &val, x_ndr_push_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level) const;
-	x_ndr_off_t scalars(std::string &val, x_ndr_pull_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level);
-	void ostr(const std::string &val, x_ndr_ostr_t &ndr, uint32_t flags, x_ndr_switch_t level) const;
-};
-
-struct ndr_traits_nstring
-{
-	using has_buffers = std::false_type;
-	using ndr_data_type = x_ndr_type_primary;
-	using ndr_base_type = std::u16string;
-
-	x_ndr_off_t scalars(const std::u16string &val, x_ndr_push_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level) const;
-	x_ndr_off_t scalars(std::u16string &val, x_ndr_pull_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level);
-	void ostr(const std::u16string &val, x_ndr_ostr_t &ndr, uint32_t flags, x_ndr_switch_t level) const;
-};
-
-
-template <> struct ndr_traits_t<std::vector<uint16_t>>
-{
-	using has_buffers = std::false_type;
-	using ndr_data_type = x_ndr_type_primary;
-	using ndr_base_type = std::vector<uint16_t>;
-
-	x_ndr_off_t scalars(const std::vector<uint16_t> &val, x_ndr_push_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, x_ndr_switch_t level) const {
-		X_ASSERT(level == X_NDR_SWITCH_NONE);
-		X_ASSERT(!x_ndr_be(flags)); // TODO
-		return x_ndr_push_bytes(val.data(), ndr, bpos, epos, val.size() * 2);
-	}
-	x_ndr_off_t scalars(std::vector<uint16_t> &val, x_ndr_pull_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, x_ndr_switch_t level) const {
-		X_ASSERT(level == X_NDR_SWITCH_NONE);
-		X_ASSERT(!x_ndr_be(flags)); // TODO
-		size_t length = epos - bpos;
-		if (length % 2 != 0) {
-			return -NDR_ERR_LENGTH;
-		}
-		val.assign((const uint16_t *)(ndr.get_data() + bpos), (const uint16_t *)(ndr.get_data() + epos));
-		return epos;
-	}
-	void ostr(const std::vector<uint16_t> &val, x_ndr_ostr_t &ndr, uint32_t flags, x_ndr_switch_t level) const {
-		X_ASSERT(level == X_NDR_SWITCH_NONE);
-		X_TODO;
-		// ndr.os << val;
-	}
-};
-
-
 #define X_NDR_BUFFERS_DEFAULT(val, ndr, bpos, epos, ...) \
 	X_NDR_VERIFY((bpos), x_ndr_buffers_default((val), (ndr), (bpos), (epos), __VA_ARGS__))
 
@@ -800,42 +748,52 @@ static inline x_ndr_off_t x_ndr_scalars_array_value(NT &&nt,
 	X_NDR_VERIFY((bpos), x_ndr_scalars_array_value((nt{}), (val), (ndr), (bpos), (epos), (flags), (level)))
 
 
+
+x_ndr_off_t x_ndr_scalars_u8string(const std::string &str, x_ndr_push_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags);
+x_ndr_off_t x_ndr_scalars_u8string(std::string &str, x_ndr_pull_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags);
+void x_ndr_ostr_u8string(const std::string &str, x_ndr_ostr_t &ndr, uint32_t flags);
+
+x_ndr_off_t x_ndr_scalars_u16string(const std::u16string &str, x_ndr_push_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags);
+x_ndr_off_t x_ndr_scalars_u16string(std::u16string &str, x_ndr_pull_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags);
+void x_ndr_ostr_u16string(const std::u16string &str, x_ndr_ostr_t &ndr, uint32_t flags);
+
+
 template <> struct ndr_traits_t<std::string>
 {
 	using has_buffers = std::false_type;
-	using ndr_data_type = std::string;
+	using ndr_base_type = std::string;
+	using ndr_data_type = x_ndr_type_primary;
 
 	x_ndr_off_t scalars(const std::string &val, x_ndr_push_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, x_ndr_switch_t level) const {
 		X_ASSERT(level == X_NDR_SWITCH_NONE);
-		X_TODO;
-		return bpos;
+		return x_ndr_scalars_u8string(val, ndr, bpos, epos, flags);
 	}
+
 	x_ndr_off_t scalars(std::string &val, x_ndr_pull_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, x_ndr_switch_t level) const {
 		X_ASSERT(level == X_NDR_SWITCH_NONE);
-		X_TODO;
-		return bpos;
+		return x_ndr_scalars_u8string(val, ndr, bpos, epos, flags);
 	}
+
 	void ostr(const std::string &val, x_ndr_ostr_t &ndr, uint32_t flags, x_ndr_switch_t level) const {
 		X_ASSERT(level == X_NDR_SWITCH_NONE);
-		ndr << enter;
-		X_TODO;
-		ndr << leave;
+		x_ndr_ostr_u8string(val, ndr, flags);
 	}
 };
-
 
 template <> struct ndr_traits_t<std::u16string>
 {
 	using has_buffers = std::false_type;
+	using ndr_base_type = std::string;
+	using ndr_data_type = x_ndr_type_primary;
 
 	x_ndr_off_t scalars(const std::u16string &val, x_ndr_push_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, x_ndr_switch_t level) const {
 		X_ASSERT(level == X_NDR_SWITCH_NONE);
-		return x_ndr_push_u16string(val, ndr, bpos, epos, flags);
+		return x_ndr_scalars_u16string(val, ndr, bpos, epos, flags);
 	}
 
 	x_ndr_off_t scalars(std::u16string &val, x_ndr_pull_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, x_ndr_switch_t level) const {
 		X_ASSERT(level == X_NDR_SWITCH_NONE);
-		return x_ndr_pull_u16string_remain(val, ndr, bpos, epos, flags);
+		return x_ndr_scalars_u16string(val, ndr, bpos, epos, flags);
 	}
 
 	void ostr(const std::u16string &val, x_ndr_ostr_t &ndr, uint32_t flags, x_ndr_switch_t level) const {
@@ -843,36 +801,6 @@ template <> struct ndr_traits_t<std::u16string>
 		x_ndr_ostr_u16string(val, ndr, flags);
 	}
 };
-
-#if 0
-#define X_NDR_OSTR_PTR(nt, val, ndr, ...) do { \
-	if (val) { \
-		(nt{}).ostr(*(val), (ndr), __VA_ARGS__); \
-	} else { \
-		ndr << "NULL"; \
-	} \
-} while (0)
-
-#define X_NDR_OSTR_FIELD_PTR(name, val, inner_ostr, nt, ndr, flags, level) do { \
-	(ndr) << #name << ": "; \
-	if ((val).name) { \
-		(inner_ostr)(nt, *(val).name, (ndr), (flags), (level)); \
-	} else { \
-		ndr << "NULL"; \
-	} \
-	(ndr) << next; \
-} while (0)
-
-#define X_NDR_OSTR_FIELD_PTR_DEFAULT(name, val, ndr, flags, level) do { \
-	(ndr) << #name << ": "; \
-	if ((val).name) { \
-		x_ndr_ostr_default(*(val).name, (ndr), (flags), (level)); \
-	} else { \
-		ndr << "NULL"; \
-	} \
-	(ndr) << next; \
-} while (0)
-#endif
 
 struct DATA_BLOB
 {
@@ -893,23 +821,33 @@ struct ndr_traits_t<DATA_BLOB>
 	void ostr(const DATA_BLOB &val, x_ndr_ostr_t &ndr, uint32_t flags, x_ndr_switch_t level) const;
 };
 
-x_ndr_off_t x_ndr_scalars_idlstring(const std::u16string &val, x_ndr_push_t &ndr, x_ndr_off_t bpos,  x_ndr_off_t epos, uint32_t flags);
-x_ndr_off_t x_ndr_scalars_idlstring(std::u16string &val, x_ndr_pull_t &ndr, x_ndr_off_t bpos,  x_ndr_off_t epos, uint32_t flags);
-
-
-#define X_NDR_SCALARS_IDLSTRING(__val, __ndr, __bpos, __epos, __flags, __level) do { \
-	X_ASSERT((__level) == X_NDR_SWITCH_NONE); \
-	X_NDR_VERIFY((__bpos), x_ndr_scalars_idlstring((__val), (__ndr), (__bpos), (__epos), (__flags))); \
+#define X_NDR_SCALARS_CHARSET(__val, __ndr, __bpos, __epos, __flags, __level) do { \
+	X_NDR_VERIFY((__bpos), x_ndr_scalars_default((__val), (__ndr), (__bpos), (__epos), (__flags)|LIBNDR_FLAG_STR_NOTERM, (__level))); \
 } while (0)
 
-static inline void x_ndr_ostr(const std::u16string &val, x_ndr_ostr_t &ndr,
-		uint32_t flags, x_ndr_switch_t level)
-{
-	X_ASSERT(level == X_NDR_SWITCH_NONE);
-	x_ndr_ostr_u16string(val, ndr, flags);
-}
+#define X_NDR_OSTR_CHARSET(__val, __ndr, __flags, __level) do { \
+	x_ndr_ostr_default((__val), (__ndr), (__flags), (__level)); \
+} while (0)
 
-#define X_NDR_OSTR_IDLSTRING(__val, __ndr, __flags, __level) x_ndr_ostr((__val), (__ndr), (__flags), (__level))
+
+enum {
+	str_size_noterm = 1,
+	str_length_noterm = 2,
+};
+
+x_ndr_off_t x_ndr_scalars_size_length_string(const std::u16string &val, x_ndr_push_t &ndr, x_ndr_off_t bpos,  x_ndr_off_t epos, uint32_t flags, uint32_t size_length_flags);
+x_ndr_off_t x_ndr_scalars_size_length_string(std::u16string &val, x_ndr_pull_t &ndr, x_ndr_off_t bpos,  x_ndr_off_t epos, uint32_t flags, uint32_t size_length_flags);
+
+#define X_NDR_SCALARS_STRING_CHARSET(__val, __ndr, __bpos, __epos, __flags, __level) do { \
+	X_ASSERT((__level) == X_NDR_SWITCH_NONE); \
+	X_NDR_VERIFY((__bpos), x_ndr_scalars_size_length_string((__val), (__ndr), (__bpos), (__epos), (__flags)|LIBNDR_FLAG_STR_NOTERM, str_size_noterm|str_length_noterm)); \
+} while (0)
+
+#define X_NDR_OSTR_STRING_CHARSET(__val, __ndr, __flags, __level) do { \
+	X_ASSERT((__level) == X_NDR_SWITCH_NONE); \
+	x_ndr_ostr_u16string((__val), (__ndr), (__flags)); \
+} while (0)
+
 }
 
 #endif /* __ndr_types__hxx__ */

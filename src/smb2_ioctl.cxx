@@ -109,13 +109,11 @@ static idl::x_ndr_off_t push_referral_v3(const x_referral_t &referral, idl::x_nd
 	idl::x_ndr_push_uint16(size, ndr, size_pos, epos, ndr_flags);
 	for (uint32_t i = 0; i < 2; ++i) {
 		path_pos = idl::x_ndr_push_uint16(bpos - base_pos, ndr, path_pos, epos, ndr_flags);
-		bpos = X_NDR_CHECK(idl::x_ndr_push_u16string(referral.path, ndr, bpos, epos, ndr_flags));
-		bpos = X_NDR_CHECK(idl::x_ndr_push_uint16(0, ndr, bpos, epos, ndr_flags));
+		bpos = X_NDR_CHECK(idl::x_ndr_scalars_u16string(referral.path, ndr, bpos, epos, ndr_flags));
 	}
 
 	path_pos = idl::x_ndr_push_uint16(bpos - base_pos, ndr, path_pos, epos, ndr_flags);
-	bpos = X_NDR_CHECK(idl::x_ndr_push_u16string(referral.node, ndr, bpos, epos, ndr_flags));
-	bpos = X_NDR_CHECK(idl::x_ndr_push_uint16(0, ndr, bpos, epos, ndr_flags));
+	bpos = X_NDR_CHECK(idl::x_ndr_scalars_u16string(referral.node, ndr, bpos, epos, ndr_flags));
 
 	return bpos;
 }

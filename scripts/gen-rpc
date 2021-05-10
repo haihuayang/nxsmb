@@ -199,7 +199,6 @@ known_simple_types = (
 	('WORD', 2, True, False),
 	('uint32', 4, True, False),
 	('mode_t', 4, True, False), # uint32
-	('boolean8', 1, True, False),
 	('boolean32', 4, True, False), # uint32
 	('int3264', 5, True, False),
 	('uint3264', 5, True, False),
@@ -225,11 +224,14 @@ alias_types = {
 	# alias, type_name, traits_type, align
         'NTTIME_hyper': ['NTTIME', 'ndr_traits_NTTIME_hyper', 8],
 	'dom_sid2': [ 'dom_sid', 'ndr_traits_dom_sid2', None],
+	'string': [ 'u8string', None, None],
+	'boolean8': [ 'uint8', None, None ],
+}
+'''
 	'u16string_remain': [ 'u16string', 'ndr_traits_u16string_remain', 1],
 	'nstring': [ 'u16string', 'ndr_traits_nstring', 2],
 	'astring': [ 'u8string', 'ndr_traits_astring', 1],
-	'string': [ 'u8string', None, None],
-}
+	'''
 
 
 class FieldTypeBase(object):
@@ -317,7 +319,7 @@ class FieldTypeSimple(FieldTypeBase):
 
 class FieldTypeDerived(FieldTypeBase):
 	def __init__(self, jsobj, idltype, dereferenced):
-		assert isinstance(idltype, IdlTypePrimary)
+		assert isinstance(idltype, IdlTypePrimary) or isinstance(idltype, IdlTypeEnum)
 		assert not idltype.has_buffers()
 		self.jsobj, self.idltype = jsobj, idltype
 		self.dereferenced_ = dereferenced
@@ -493,7 +495,7 @@ class FieldTypeSubctxFFFFFC01(FieldTypeSubctxBase):
 	def __str__(self):
 		return 'SubctxFFFFFC01(%s)' % self.inner
 
-class FieldTypeIdlString(FieldTypeBase):
+class FieldTypeCharset(FieldTypeBase):
 	def __init__(self, jsobj, idltype, dereferenced):
 		self.idltype = idltype 
 		self.jsobj = jsobj
@@ -518,13 +520,46 @@ class FieldTypeIdlString(FieldTypeBase):
 		return self.idltype.get_alignment()
 
 	def scalars_body(self, order, func, name, ndr_arg, bpos_arg, epos_arg, ndr_flags, switch_is):
-		return [f'X_NDR_SCALARS_IDLSTRING({name}, {ndr_arg}, {bpos_arg}, {epos_arg}, {ndr_flags}, {switch_is});']
+		return [f'X_NDR_SCALARS_CHARSET({name}, {ndr_arg}, {bpos_arg}, {epos_arg}, {ndr_flags}, {switch_is});']
 
 	def ostr(self, order, name, ndr_flags, switch_is):
-		return [f'X_NDR_OSTR_IDLSTRING({name}, __ndr, {ndr_flags}, {switch_is});']
+		return [f'X_NDR_OSTR_CHARSET({name}, __ndr, {ndr_flags}, {switch_is});']
 
 	def __str__(self):
-		return "IdlString(%s)" % self.get_ctype()
+		return "Charset(%s)" % self.get_ctype()
+
+class FieldTypeStringCharset(FieldTypeBase):
+	def __init__(self, jsobj, idltype, dereferenced):
+		self.idltype = idltype 
+		self.jsobj = jsobj
+		self.dereferenced_ = dereferenced
+
+		#if self.ndr_traits is None:
+		#	self.ndr_traits = f'ndr_traits_t<{string_type}>'
+	def get_idltype(self):
+		return self.idltype
+	def is_union(self):
+		return False
+	def get_ctype(self):
+		return self.idltype.get_ctype()
+
+	def is_trivial(self):
+		return False
+
+	def has_buffers(self):
+		return False
+
+	def get_alignment(self):
+		return self.idltype.get_alignment()
+
+	def scalars_body(self, order, func, name, ndr_arg, bpos_arg, epos_arg, ndr_flags, switch_is):
+		return [f'X_NDR_SCALARS_STRING_CHARSET({name}, {ndr_arg}, {bpos_arg}, {epos_arg}, {ndr_flags}, {switch_is});']
+
+	def ostr(self, order, name, ndr_flags, switch_is):
+		return [f'X_NDR_OSTR_STRING_CHARSET({name}, __ndr, {ndr_flags}, {switch_is});']
+
+	def __str__(self):
+		return "StringCharset(%s)" % self.get_ctype()
 
 class FieldTypeArray(FieldTypeBase):
 	def __init__(self, inner, array_size):
@@ -714,7 +749,7 @@ class FieldTypeValue(FieldTypeDerived):
 		self.value, self.array_len = value, array_len
 	def scalars_body(self, order, func, name, ndr_arg, bpos_arg, epos_arg, ndr_flags, switch_is):
 		if self.array_len is not None:
-			return [f'std::array<{self.get_ctype()}, {self.array_len}> __tmp_value_{order} = {self.value};',
+			return [f'std::array<{self.get_ctype()}, {self.array_len}> __tmp_value_{order}{{{self.value}}};',
 				f'X_NDR_SCALARS_ARRAY_VALUE({self.get_ndr_traits()}, __tmp_value_{order}, {ndr_arg}, {bpos_arg}, {epos_arg}, {ndr_flags}, {switch_is});']
 			#ctype = f'std::array<{self.get_ctype()}, {self.array_len}> __tmp_value = {self.value};'
 			#return [f'X_NDR_SCALARS_ARRAY_VALUE({self.get_ndr_traits()}, ({ctype}{{{self.value}}}), {ndr_arg}, {bpos_arg}, {epos_arg}, {ndr_flags}, {switch_is});']
@@ -799,10 +834,7 @@ class Globals:
 
 	@classmethod
 	def find_elem(self, name, ttype):
-		try:
-			ttype_, elem, iface = self.elem_table[name]
-		except KeyError:
-			raise "Cannot find type '%s'" % name
+		ttype_, elem, iface = self.elem_table[name]
 		assert ttype == ttype_
 		return elem, iface
 
@@ -813,6 +845,13 @@ class Globals:
 	@classmethod
 	def find_const(self, name):
 		return self.find_elem(name, 'CONST')
+		'''
+		try:
+		except KeyError: pass
+		for _, (ttype, elem, _) in self.elem_table.items():
+			if ttype != 'TYPEDEF' or not elem['DATA']['TYPE'] in ['ENUM', 'BITMAP']:
+				continue
+		'''
 
 
 def get_array_len(elem):
@@ -1242,8 +1281,7 @@ def make_field_type(field, idltype, elems, iface, in_function):
 			array_len_name = int(array_len_name)
 		if master_field:
 			return FieldTypeValueField(elem, field_idltype, pointer_deref, master_field)
-		else:
-			return FieldTypeValue(elem, field_idltype, pointer_deref, value, array_len_name)
+		return FieldTypeValue(elem, field_idltype, pointer_deref, value, array_len_name)
 
 	master_elem = elem_get_property(elem, 'x_ndr_size')
 	if master_elem:
@@ -1293,9 +1331,11 @@ def make_field_type(field, idltype, elems, iface, in_function):
 		# need to manually implement push/pull
 		length_is = None
 		size_is = None
-	if elem_get_property(elem, "string"):
-		assert charset == "UTF16"
-		field_type = FieldTypeIdlString(elem, field_idltype, pointer_deref)
+		if elem_get_property(elem, "string"):
+			assert charset == "UTF16"
+			field_type = FieldTypeStringCharset(elem, field_idltype, pointer_deref)
+		else:
+			field_type = FieldTypeCharset(elem, field_idltype, pointer_deref)
 	else:
 		field_type = FieldTypeSimple(elem, field_idltype, pointer_deref)
 

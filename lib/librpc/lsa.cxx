@@ -96,7 +96,13 @@ x_ndr_off_t ndr_traits_t<lsa_String>::buffers(
 		x_ndr_off_t bpos, x_ndr_off_t epos,
 		uint32_t flags, x_ndr_switch_t level) const
 {
-	return lsa_u16string_buffers(val.string, ndr, bpos, epos, flags, level);
+	X_ASSERT(level == X_NDR_SWITCH_NONE);
+	if (val.string) {
+		bpos = x_ndr_scalars_size_length_string(*val.string, ndr, bpos, epos,
+				flags|LIBNDR_FLAG_STR_NOTERM,
+				str_size_noterm | str_length_noterm);
+	}
+	return bpos;
 }
 
 x_ndr_off_t ndr_traits_t<lsa_String>::scalars(
@@ -112,7 +118,13 @@ x_ndr_off_t ndr_traits_t<lsa_String>::buffers(
 		x_ndr_off_t bpos, x_ndr_off_t epos,
 		uint32_t flags, x_ndr_switch_t level) const
 {
-	return lsa_u16string_buffers(val.string, ndr, bpos, epos, flags, level);
+	X_ASSERT(level == X_NDR_SWITCH_NONE);
+	if (val.string) {
+		bpos = x_ndr_scalars_size_length_string(*val.string, ndr, bpos, epos,
+				flags|LIBNDR_FLAG_STR_NOTERM,
+				str_size_noterm | str_length_noterm);
+	}
+	return bpos;
 }
 
 
@@ -145,11 +157,9 @@ x_ndr_off_t ndr_traits_t<lsa_StringLarge>::buffers(
 {
 	X_ASSERT(level == X_NDR_SWITCH_NONE);
 	if (val.string) {
-		uint32_t size = val.string->size();
-		X_NDR_SCALARS_DEFAULT(uint3264{size + 1}, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
-		X_NDR_SCALARS_DEFAULT(uint3264{0}, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
-		X_NDR_SCALARS_DEFAULT(uint3264{size}, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
-		X_NDR_SCALARS_DEFAULT(*val.string, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
+		bpos = x_ndr_scalars_size_length_string(*val.string, ndr, bpos, epos,
+				flags|LIBNDR_FLAG_STR_NOTERM,
+				str_length_noterm);
 	}
 	return bpos;
 }
@@ -179,19 +189,13 @@ x_ndr_off_t ndr_traits_t<lsa_StringLarge>::buffers(
 {
 	X_ASSERT(level == X_NDR_SWITCH_NONE);
 	if (val.string) {
-		uint3264 array_size, array_offset, array_length;
-		X_NDR_SCALARS_DEFAULT(array_size, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
-		X_NDR_SCALARS_DEFAULT(array_offset, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
-		X_NDR_SCALARS_DEFAULT(array_length, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
-		if (array_length.val > array_size.val || array_offset.val != 0) {
-			return -NDR_ERR_ARRAY_SIZE;
-		}
-		epos = X_NDR_CHECK_POS(bpos + array_length.val * 2, bpos, epos);
-		X_NDR_SCALARS_DEFAULT(*val.string, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
+		bpos = x_ndr_scalars_size_length_string(*val.string, ndr, bpos, epos,
+				flags|LIBNDR_FLAG_STR_NOTERM,
+				str_length_noterm);
 	}
 	return bpos;
 }
-
+#if 0
 x_ndr_off_t ndr_traits_t<lsa_BinaryString>::scalars(
 		const lsa_BinaryString &val, x_ndr_push_t &ndr,
 		x_ndr_off_t bpos, x_ndr_off_t epos,
@@ -223,7 +227,7 @@ x_ndr_off_t ndr_traits_t<lsa_BinaryString>::buffers(
 {
 	return lsa_u16string_buffers(val.array, ndr, bpos, epos, flags, level);
 }
-
+#endif
 
 x_ndr_off_t ndr_traits_t<lsa_AsciiString>::scalars(
 		const lsa_AsciiString &val, x_ndr_push_t &ndr,
