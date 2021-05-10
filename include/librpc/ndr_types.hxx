@@ -300,11 +300,10 @@ inline x_ndr_off_t x_ndr_scalars_unique_ptr(
 	X_NDR_SCALARS_DEFAULT(__tmp_size_is_2, (ndr), (bpos), (epos), (flags), X_NDR_SWITCH_NONE); \
 	X_NDR_SCALARS_DEFAULT(__tmp_offset_2, (ndr), (bpos), (epos), (flags), X_NDR_SWITCH_NONE); \
 	X_NDR_SCALARS_DEFAULT(__tmp_length_is_2, (ndr), (bpos), (epos), (flags), X_NDR_SWITCH_NONE); \
-	if (int_val(__tmp_offset_2) != 0 || _int_val(__tmp_length_is) > _int_val(_tmp_size_is_2)) { \
+	if (int_val(__tmp_offset_2) != 0 || int_val(tmp_lengthis) > int_val(__tmp_size_is_2)) { \
 		return -NDR_ERR_LENGTH; \
 	} \
-	(val).resize(__tmp_length_is_2)); \
-	(tmp_lengthis) = (val).size(); \
+	(val).resize(int_val(__tmp_length_is_2)); \
 } while (0)
 
 template <typename T>
