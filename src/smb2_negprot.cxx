@@ -8,14 +8,14 @@ static int x_smbd_conn_reply_negprot(x_smbd_conn_t *smbd_conn, x_msg_t *msg,
 	X_LOG_OP("%ld RESP SUCCESS dialect=%x", msg->mid, dialect);
 
 	const x_smbd_t *smbd = smbd_conn->smbd;
-	const x_smbconf_t &conf = smbd_conn->get_conf();
+	const std::shared_ptr<x_smbconf_t> smbconf = smbd_conn->get_smbconf();
 	idl::NTTIME now = x_tick_to_nttime(tick_now);
 	// x_nttime_t now = x_nttime_current();
 
 	smbd_conn->dialect = dialect;
 
 	uint16_t security_mode = SMB2_NEGOTIATE_SIGNING_ENABLED;
-	if (lpcfg_server_signing_required()) {
+	if (smbconf->signing_required) {
 		security_mode |= SMB2_NEGOTIATE_SIGNING_REQUIRED;
 	}
 
@@ -37,11 +37,11 @@ static int x_smbd_conn_reply_negprot(x_smbd_conn_t *smbd_conn, x_msg_t *msg,
 	x_put_le16(outbody + 2, security_mode);
 	x_put_le16(outbody + 4, dialect);
 	x_put_le16(outbody + 6, negotiate_context.size());
-	memcpy(outbody + 8, conf.guid, 16);
+	memcpy(outbody + 8, smbconf->guid, 16);
 	x_put_le32(outbody + 0x18, smbd->capabilities);
-	x_put_le32(outbody + 0x1c, conf.max_trans);
-	x_put_le32(outbody + 0x20, conf.max_read);
-	x_put_le32(outbody + 0x24, conf.max_write);
+	x_put_le32(outbody + 0x1c, smbconf->max_trans);
+	x_put_le32(outbody + 0x20, smbconf->max_read);
+	x_put_le32(outbody + 0x24, smbconf->max_write);
 
 	x_put_le64(outbody + 0x28, now.val);	 /* system time */
 	x_put_le64(outbody + 0x30, 0);	   /* server start time */
@@ -106,8 +106,8 @@ uint16_t x_smb2_dialect_match(x_smbd_conn_t *smbd_conn,
 		const void *dialects,
 		size_t dialect_count)
 {
-	const x_smbconf_t &smbconf = smbd_conn->get_conf();
-	for (auto sdialect: smbconf.dialects) {
+	const std::shared_ptr<x_smbconf_t> smbconf = smbd_conn->get_smbconf();
+	for (auto sdialect: smbconf->dialects) {
 		const uint8_t *data = (const uint8_t *)dialects;
 		for (unsigned int di = 0; di < dialect_count; ++di) {
 			uint16_t cdialect = x_get_le16(data);

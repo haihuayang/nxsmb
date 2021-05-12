@@ -50,6 +50,7 @@ extern "C" {
 #define X_NT_STATUS_INTERNAL_TERMINATE	NT_STATUS(2)
 
 struct x_auth_context_t;
+const std::shared_ptr<x_smbconf_t> x_auth_context_get_smbconf(const x_auth_context_t *);
 
 struct x_auth_t;
 
@@ -158,6 +159,10 @@ struct x_auth_t
 		return ops->sign_packet(this, data, data_len, whole_pdu, pdu_length, sig);
 	}
 
+	const std::shared_ptr<x_smbconf_t> get_smbconf() const {
+		return x_auth_context_get_smbconf(context);
+	}
+
 	x_auth_context_t * const context;
 	const x_auth_ops_t * const ops;
 };
@@ -173,31 +178,19 @@ struct x_auth_mech_t
 };
 
 
-struct x_smbconf_t
-{
-	x_smbconf_t() {
-		strcpy((char *)guid, "rio-svr1");
-	}
-	std::vector<uint16_t> dialects{0x302, 0x210, 0x202};
-	// std::vector<uint16_t> dialects{0x201};
-	size_t max_trans = 1024 * 1024;
-	size_t max_read = 1024 * 1024;
-	size_t max_write = 1024 * 1024;
-	uint8_t guid[16];
-};
-
 struct x_smbd_t
 {
 	x_epoll_upcall_t upcall;
 	uint64_t ep_id;
 	int fd;
 
-	x_smbconf_t conf;
+	std::shared_ptr<x_smbconf_t> smbconf;
 	uint32_t capabilities;
 
 	x_auth_context_t *auth_context;
 	std::vector<uint8_t> negprot_spnego;
 };
+int x_smbd_parse_cmdline(std::shared_ptr<x_smbconf_t> &smbconf, int argc, char **argv);
 
 struct x_msg_t
 {
@@ -233,32 +226,6 @@ struct x_msg_t
 	uint8_t *out_buf = NULL;
 };
 X_DECLARE_MEMBER_TRAITS(msg_dlink_traits, x_msg_t, dlink)
-
-enum x_smbd_share_type_t {
-	TYPE_IPC,
-	TYPE_DEFAULT,
-	TYPE_HOME,
-};
-
-struct x_smbd_share_t
-{
-	std::string name;
-	x_smbd_share_type_t type;
-	bool read_only;
-	uuid_t uuid;
-	std::string path;
-	std::string msdfs_proxy;
-	uint32_t max_referral_ttl = 300;
-
-	bool is_msdfs_root() const {
-		// TODO
-		return type != TYPE_IPC;
-	}
-	bool abe_enabled() const {
-		// TODO
-		return false;
-	}
-};
 
 
 struct x_smbduser_t
@@ -310,15 +277,15 @@ struct x_smbd_tcon_ops_t
 
 struct x_smbd_tcon_t
 { 
-	x_smbd_tcon_t(const std::shared_ptr<x_smbd_share_t> &share) : smbd_share(share) { }
-	x_smbd_share_type_t get_share_type() const {
-		return smbd_share->type;
+	x_smbd_tcon_t(const std::shared_ptr<x_smbshare_t> &share) : smbshare(share) { }
+	x_smbshare_type_t get_share_type() const {
+		return smbshare->type;
 	}
 
 	const x_smbd_tcon_ops_t *ops;
 	uint32_t tid;
 	uint32_t share_access;
-	std::shared_ptr<x_smbd_share_t> smbd_share;
+	std::shared_ptr<x_smbshare_t> smbshare;
 	// std::vector<std::shared_ptr<x_smbd_open_t>> smbd_opens;
 };
 
@@ -613,8 +580,8 @@ struct x_smbd_conn_t
 		: smbd(smbd), fd(fd_), sin(sin_) { }
 	~x_smbd_conn_t();
 
-	const x_smbconf_t &get_conf() const {
-		return smbd->conf;
+	const std::shared_ptr<x_smbconf_t> get_smbconf() const {
+		return smbd->smbconf;
 	}
 
 	void incref() {
@@ -648,7 +615,7 @@ struct x_smbd_conn_t
 	uint64_t credit_seq_low = 0;
 	uint64_t credit_seq_range = 1;
 	uint64_t credit_granted = 1;
-	uint64_t credit_max = lp_smb2_max_credits();
+	uint64_t credit_max;
 	// xconn->smb2.credits.bitmap = bitmap_talloc(xconn, xconn->smb2.credits.max);
 	uint32_t read_length = 0;
 	uint32_t nbt_hdr;
@@ -660,9 +627,9 @@ struct x_smbd_conn_t
 	x_tp_ddlist_t<fdevt_user_conn_traits> fdevt_user_list;
 };
 
-std::shared_ptr<x_smbd_share_t> x_smbd_share_find(const std::string &name);
-void x_smbd_shares_foreach(std::function<bool(std::shared_ptr<x_smbd_share_t> &share)>);
-int x_smbd_load_shares();
+std::shared_ptr<x_smbshare_t> x_smbd_find_share(x_smbd_t *smbd, const std::string &name);
+// void x_smbshares_foreach(std::function<bool(std::shared_ptr<x_smbshare_t> &share)>);
+// int x_smbd_load_shares();
 
 int x_smbd_sess_pool_init(x_evtmgmt_t *ep, uint32_t count);
 x_smbd_sess_t *x_smbd_sess_create(x_smbd_conn_t *smbd_conn);
@@ -675,7 +642,7 @@ int x_auth_ntlmssp_init(x_auth_context_t *context);
 x_auth_t *x_auth_create_krb5(x_auth_context_t *context);
 int x_auth_krb5_init(x_auth_context_t *context);
 
-x_auth_context_t *x_auth_create_context();
+x_auth_context_t *x_auth_create_context(x_smbd_t *smbd);
 x_auth_t *x_auth_create_by_oid(x_auth_context_t *context, gss_const_OID oid);
 int x_auth_register(x_auth_context_t *context, const x_auth_mech_t *mech);
 

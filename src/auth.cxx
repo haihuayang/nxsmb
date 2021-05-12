@@ -4,13 +4,18 @@
 
 struct x_auth_context_t
 {
+	x_auth_context_t(x_smbd_t *smbd) : smbd(smbd) { }
+	x_smbd_t * const smbd;
 	std::vector<const x_auth_mech_t *> mechs;
 	x_auth_t *create_by_oid(const char *oid);
+	const std::shared_ptr<x_smbconf_t> get_smbconf() const {
+		return smbd->smbconf;
+	}
 };
 
-x_auth_context_t *x_auth_create_context()
+x_auth_context_t *x_auth_create_context(x_smbd_t *smbd)
 {
-	x_auth_context_t *ret = new x_auth_context_t();
+	x_auth_context_t *ret = new x_auth_context_t(smbd);
 	return ret;
 }
 
@@ -42,4 +47,41 @@ x_auth_t *x_auth_create_by_oid(x_auth_context_t *context, gss_const_OID oid)
 	}
 	return mech->create(context);
 }
+
+const std::shared_ptr<x_smbconf_t> x_auth_context_get_smbconf(const x_auth_context_t *context)
+{
+	return context->get_smbconf();
+}
+#if 0
+bool x_auth_context_lpcfg_lanman_auth(const x_auth_context_t *context);
+const std::string x_auth_context_lpcfg_netbios_name(const x_auth_context_t *context);
+const std::string x_auth_context_lpcfg_workgroup(const x_auth_context_t *context);
+const std::string x_auth_context_lpcfg_dns_domain(const x_auth_context_t *context);
+const std::string x_auth_context_lpcfg_realm(const x_auth_context_t *context);
+
+bool x_auth_context_lpcfg_lanman_auth(x_auth_context_t *context)
+{
+	return context->get_smbconf()->lanman_auth;
+}
+
+const std::string x_auth_context_lpcfg_netbios_name(x_auth_context_t *context)
+{
+	return context->get_smbconf()->netbios_name;
+}
+
+const std::string x_auth_context_lpcfg_workgroup(x_auth_context_t *context)
+{
+	return context->get_smbconf()->workgroup;
+}
+
+const std::string x_auth_context_lpcfg_realm(x_auth_context_t *context)
+{
+	return context->get_smbconf()->realm;
+}
+
+const std::string x_auth_context_lpcfg_dns_domain(x_auth_context_t *context)
+{
+	return context->get_smbconf()->dns_domain;
+}
+#endif
 

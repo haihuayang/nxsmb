@@ -7,6 +7,7 @@
 #endif
 
 #include <string>
+#include <array>
 #include <cstring>
 
 /* unit is nsec */
@@ -84,13 +85,7 @@ static inline size_t x_next_2_power(size_t num)
 	return ret;
 }
 
-struct uuid_t
-{
-	uint8_t val[16];
-	bool operator==(const uuid_t &other) const {
-		return std::memcmp(val, other.val, sizeof val) == 0;
-	}
-};
+using uuid_t = std::array<uint8_t, 16>;
 
 #endif /* __utils__hxx__ */
 

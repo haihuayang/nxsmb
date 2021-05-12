@@ -77,12 +77,12 @@ int x_smb2_process_GETINFO(x_smbd_conn_t *smbd_conn, x_msg_t *msg,
 		return X_SMB2_REPLY_ERROR(smbd_conn, msg, smbd_sess, in_tid, NT_STATUS_INVALID_PARAMETER);
 	}
 
-	const x_smbconf_t &conf = smbd_conn->get_conf();
-	if (requ_getinfo.input_buffer_length > conf.max_trans) {
+	const std::shared_ptr<x_smbconf_t> smbconf = smbd_conn->get_smbconf();
+	if (requ_getinfo.input_buffer_length > smbconf->max_trans) {
 		return X_SMB2_REPLY_ERROR(smbd_conn, msg, smbd_sess, in_tid, NT_STATUS_INVALID_PARAMETER);
 	}
 
-	if (requ_getinfo.output_buffer_length > conf.max_trans) {
+	if (requ_getinfo.output_buffer_length > smbconf->max_trans) {
 		return X_SMB2_REPLY_ERROR(smbd_conn, msg, smbd_sess, in_tid, NT_STATUS_INVALID_PARAMETER);
 	}
 

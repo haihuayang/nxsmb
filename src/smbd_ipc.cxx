@@ -71,6 +71,7 @@ static uint32_t net_share_enum_all_1(std::shared_ptr<idl::srvsvc_NetShareCtr1> &
 {
 	// TODO buffer size and resume handle
 	ctr1->array = std::make_shared<std::vector<idl::srvsvc_NetShareInfo1>>();
+#if 0
 	x_smbd_shares_foreach([&ctr1](std::shared_ptr<x_smbd_share_t> &share) -> bool {
 		idl::srvsvc_ShareType type = idl::STYPE_DISKTREE;
 		if (share->type == TYPE_IPC) {
@@ -88,6 +89,7 @@ static uint32_t net_share_enum_all_1(std::shared_ptr<idl::srvsvc_NetShareCtr1> &
 			std::make_shared<std::u16string>(x_convert_utf8_to_utf16("no comment"))); */
 		return true;
 	});
+#endif
 	return ctr1->array->size();
 }
 

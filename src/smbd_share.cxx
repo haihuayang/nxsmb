@@ -1,21 +1,21 @@
 
 #include "smbd.hxx"
-#include <map>
 
-static std::mutex g_smbdshare_mutex;
-static std::map<std::string, std::shared_ptr<x_smbd_share_t>> g_smbdshare_map;
-
-std::shared_ptr<x_smbd_share_t> x_smbd_share_find(const std::string &name)
+std::shared_ptr<x_smbshare_t> x_smbd_find_share(x_smbd_t *smbd, const std::string &name)
 {
-	std::lock_guard<std::mutex> lock(g_smbdshare_mutex);
-	auto it = g_smbdshare_map.find(name);
-	if (it != g_smbdshare_map.end()) {
+	std::shared_ptr<x_smbconf_t> smbconf = smbd->smbconf;
+	auto it = smbconf->shares.find(name);
+	if (it != smbconf->shares.end()) {
 		return it->second;
 	}
 	return nullptr;
 	/* TODO USER_SHARE */
 }
+#if 0
+#include <map>
 
+static std::mutex g_smbdshare_mutex;
+static std::map<std::string, std::shared_ptr<x_smbd_share_t>> g_smbdshare_map;
 int x_smbd_load_shares()
 {
 	/* TODO read from conf */
@@ -45,3 +45,4 @@ void x_smbd_shares_foreach(std::function<bool(std::shared_ptr<x_smbd_share_t> &s
 		}
 	}
 }
+#endif

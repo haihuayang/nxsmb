@@ -143,7 +143,9 @@ static NTSTATUS push_ref_resp(const x_dfs_referral_resp_t &resp, size_t in_max_o
 	return NT_STATUS_OK;
 }
 
-static NTSTATUS fsctl_dfs_get_refers_internal(x_smbd_tcon_t *smbd_tcon,
+static NTSTATUS fsctl_dfs_get_refers_internal(
+		x_smbd_conn_t *smbd_conn,
+		x_smbd_tcon_t *smbd_tcon,
 		uint16_t in_max_referral_level,
 		const uint8_t *in_file_name_data,
 		uint32_t in_file_name_size,
@@ -181,13 +183,14 @@ static NTSTATUS fsctl_dfs_get_refers_internal(x_smbd_tcon_t *smbd_tcon,
 		return status;
 	}
 
-	for (auto const& node: lpcfg_cluster_nodes()) {
+	auto smbconf = smbd_conn->get_smbconf();
+	for (auto const& node: smbconf->cluster_nodes) {
 		if (host == node) {
 			return NT_STATUS_NOT_FOUND;
 		}
 	}
 
-	std::shared_ptr<x_smbd_share_t> smbd_share = x_smbd_share_find(share);
+	std::shared_ptr<x_smbshare_t> smbd_share = x_smbd_find_share(smbd_conn->smbd, share);
 	if (!smbd_share) {
 		X_TODO;
 		// find_service user_share
@@ -199,13 +202,13 @@ static NTSTATUS fsctl_dfs_get_refers_internal(x_smbd_tcon_t *smbd_tcon,
 	if (true || reqpath.size() == 0) {
 		std::u16string in_file_name{in_file_name_ptr, in_file_name_end};
 		if (smbd_share->msdfs_proxy.size() == 0) {
-			dfs_referral_resp.referrals.push_back(x_referral_t{0, lpcfg_max_referral_ttl(), in_file_name, in_file_name});
+			dfs_referral_resp.referrals.push_back(x_referral_t{0, smbconf->max_referral_ttl, in_file_name, in_file_name});
 		} else {
 			std::string alt_path = "\\";
 			alt_path += smbd_share->msdfs_proxy;
-			if (lpcfg_dns_domain()) {
+			if (!smbconf->dns_domain.empty()) {
 				alt_path += '.';
-				alt_path += lpcfg_dns_domain();
+				alt_path += smbconf->dns_domain;
 			}
 			alt_path += '\\';
 			alt_path += share;
@@ -213,7 +216,7 @@ static NTSTATUS fsctl_dfs_get_refers_internal(x_smbd_tcon_t *smbd_tcon,
 				alt_path += '\\';
 				alt_path += reqpath;
 			}
-			dfs_referral_resp.referrals.push_back(x_referral_t{0, lpcfg_max_referral_ttl(), in_file_name, x_convert_utf8_to_utf16(alt_path)});
+			dfs_referral_resp.referrals.push_back(x_referral_t{0, smbconf->max_referral_ttl, in_file_name, x_convert_utf8_to_utf16(alt_path)});
 		}
 
 	} else {
@@ -223,7 +226,9 @@ static NTSTATUS fsctl_dfs_get_refers_internal(x_smbd_tcon_t *smbd_tcon,
 	return push_ref_resp(dfs_referral_resp, in_max_output, output);
 }
 
-static NTSTATUS fsctl_dfs_get_refers(x_smbd_tcon_t *smbd_tcon,
+static NTSTATUS fsctl_dfs_get_refers(
+		x_smbd_conn_t *smbd_conn,
+		x_smbd_tcon_t *smbd_tcon,
 		const uint8_t *in_input_data,
 		uint32_t in_input_size,
 		uint32_t in_max_output,
@@ -237,11 +242,13 @@ static NTSTATUS fsctl_dfs_get_refers(x_smbd_tcon_t *smbd_tcon,
 	const uint8_t *in_file_name_data = in_input_data + 2;
 	uint32_t in_file_name_size = in_input_size - 2;
 
-	return fsctl_dfs_get_refers_internal(smbd_tcon, in_max_referral_level,
+	return fsctl_dfs_get_refers_internal(smbd_conn, smbd_tcon, in_max_referral_level,
 			in_file_name_data, in_file_name_size, in_max_output, output);
 }
 
-static NTSTATUS fsctl_dfs_get_refers_ex(x_smbd_tcon_t *smbd_tcon,
+static NTSTATUS fsctl_dfs_get_refers_ex(
+		x_smbd_conn_t *smbd_conn,
+		x_smbd_tcon_t *smbd_tcon,
 		const uint8_t *in_input_data,
 		uint32_t in_input_size,
 		uint32_t in_max_output,
@@ -273,14 +280,17 @@ static NTSTATUS fsctl_dfs_get_refers_ex(x_smbd_tcon_t *smbd_tcon,
 		return NT_STATUS_INVALID_PARAMETER;
 	}
 
-	return fsctl_dfs_get_refers_internal(smbd_tcon, in_max_referral_level,
+	return fsctl_dfs_get_refers_internal(smbd_conn,
+			smbd_tcon, in_max_referral_level,
 			in_input_data + DFS_GET_REFERS_EX_HEADER + 2,
 			in_file_name_size, in_max_output, output);
 }
 
 /* FSCTL_DFS_GET_REFERRALS_EX References: [MS-DFSC]: 2.2.3
  */
-static NTSTATUS x_smb2_ioctl_dfs(x_smbd_tcon_t *smbd_tcon,
+static NTSTATUS x_smb2_ioctl_dfs(
+		x_smbd_conn_t *smbd_conn,
+		x_smbd_tcon_t *smbd_tcon,
 		x_smbd_open_t *smbd_open,
 		uint32_t ctl_code,
 		const uint8_t *in_input_data,
@@ -288,10 +298,12 @@ static NTSTATUS x_smb2_ioctl_dfs(x_smbd_tcon_t *smbd_tcon,
 		uint32_t in_max_output,
 		std::vector<uint8_t>& output)
 {
-	if (smbd_tcon->smbd_share->type != TYPE_IPC) {
+	auto smbconf = smbd_conn->get_smbconf();
+
+	if (smbd_tcon->smbshare->type != TYPE_IPC) {
 		return NT_STATUS_INVALID_DEVICE_REQUEST;
 	}
-	if (!lpcfg_host_msdfs()) {
+	if (!smbconf->host_msdfs) {
 		return NT_STATUS_FS_DRIVER_REQUIRED;
 	}
 
@@ -300,11 +312,13 @@ static NTSTATUS x_smb2_ioctl_dfs(x_smbd_tcon_t *smbd_tcon,
 	switch (ctl_code) {
 	case FSCTL_DFS_GET_REFERRALS:
 		X_ASSERT(!smbd_open);
-		status = fsctl_dfs_get_refers(smbd_tcon, in_input_data, in_input_size, in_max_output, output);
+		status = fsctl_dfs_get_refers(smbd_conn,
+				smbd_tcon, in_input_data, in_input_size, in_max_output, output);
 		break;
 	case FSCTL_DFS_GET_REFERRALS_EX:
 		X_ASSERT(!smbd_open);
-		status = fsctl_dfs_get_refers_ex(smbd_tcon, in_input_data, in_input_size, in_max_output, output);
+		status = fsctl_dfs_get_refers_ex(smbd_conn,
+				smbd_tcon, in_input_data, in_input_size, in_max_output, output);
 		break;
 	default: {
 		X_TODO;
@@ -419,10 +433,11 @@ static NTSTATUS fsctl_validate_neg_info(x_smbd_conn_t *smbd_conn,
 		return NT_STATUS_BUFFER_TOO_SMALL;
 	}
 
+	const std::shared_ptr<x_smbconf_t> smbconf = smbd_conn->get_smbconf();
 	output.resize(0x18);
 	uint8_t *outbody = output.data();
 	x_put_le32(outbody + 0x00, smbd_conn->server_capabilities);
-	memcpy(outbody + 4, smbd_conn->smbd->conf.guid, 16);
+	memcpy(outbody + 4, smbconf->guid, 16);
 	x_put_le16(outbody + 0x14, smbd_conn->server_security_mode);
 	x_put_le16(outbody + 0x16, smbd_conn->dialect);
 
@@ -658,7 +673,8 @@ int x_smb2_process_IOCTL(x_smbd_conn_t *smbd_conn, x_msg_t *msg,
 	NTSTATUS status;
 	switch (requ_ioctl.ctl_code & IOCTL_DEV_TYPE_MASK) {
 	case FSCTL_DFS:
-		status = x_smb2_ioctl_dfs(smbd_tcon.get(), smbd_open,
+		status = x_smb2_ioctl_dfs(smbd_conn,
+				smbd_tcon.get(), smbd_open,
 				requ_ioctl.ctl_code,
 				in_buf + requ_ioctl.input_offset,
 				requ_ioctl.input_length,

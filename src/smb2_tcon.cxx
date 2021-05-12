@@ -5,10 +5,10 @@
 
 
 static std::shared_ptr<x_smbd_tcon_t> make_tcon(x_smbd_sess_t *smbd_sess,
-		const std::shared_ptr<x_smbd_share_t> &smbd_share)
+		const std::shared_ptr<x_smbshare_t> &smbshare)
 {
-	auto smbd_tcon = std::make_shared<x_smbd_tcon_t>(smbd_share);
-	if (smbd_share->type == TYPE_IPC) {
+	auto smbd_tcon = std::make_shared<x_smbd_tcon_t>(smbshare);
+	if (smbshare->type == TYPE_IPC) {
 		x_smbd_tcon_init_ipc(smbd_tcon.get());
 	} else {
 		x_smbd_tcon_init_disk(smbd_tcon.get());
@@ -33,7 +33,7 @@ static std::shared_ptr<x_smbd_tcon_t> make_tcon(x_smbd_sess_t *smbd_sess,
  Can this user access with share with the required permissions ?
 ********************************************************************/
 
-static uint32_t share_get_maximum_access(const std::shared_ptr<x_smbd_share_t> &share)
+static uint32_t share_get_maximum_access(const std::shared_ptr<x_smbshare_t> &share)
 {
 	return idl::SEC_RIGHTS_DIR_ALL;
 }
@@ -42,7 +42,7 @@ static uint32_t share_get_maximum_access(const std::shared_ptr<x_smbd_share_t> &
   Setup the share access mask for a connection.
 ****************************************************************************/
 
-static uint32_t create_share_access_mask(const std::shared_ptr<x_smbd_share_t> &share,
+static uint32_t create_share_access_mask(const std::shared_ptr<x_smbshare_t> &share,
 		x_smbd_sess_t *smbd_sess)
 {
 	uint32_t share_access = share_get_maximum_access(share);
@@ -213,12 +213,12 @@ int x_smb2_process_TCON(x_smbd_conn_t *smbd_conn, x_msg_t *msg,
 
 	X_LOG_OP("%ld TCON %s", msg->mid, in_path.c_str());
 
-	auto smbd_share = x_smbd_share_find(share);
-	if (!smbd_share) {
+	auto smbshare = x_smbd_find_share(smbd_conn->smbd, share);
+	if (!smbshare) {
 		return X_SMB2_REPLY_ERROR(smbd_conn, msg, smbd_sess, 0,  NT_STATUS_BAD_NETWORK_NAME);
 	}
 
-	uint32_t share_access = create_share_access_mask(smbd_share,
+	uint32_t share_access = create_share_access_mask(smbshare,
 			smbd_sess);
 
 	if ((share_access & (idl::SEC_FILE_READ_DATA|idl::SEC_FILE_WRITE_DATA)) == 0) {
@@ -230,19 +230,19 @@ int x_smb2_process_TCON(x_smbd_conn_t *smbd_conn, x_msg_t *msg,
 		return X_SMB2_REPLY_ERROR(smbd_conn, msg, smbd_sess, 0,  NT_STATUS_ACCESS_DENIED);
 	}
 
-	auto smbd_tcon = make_tcon(smbd_sess, smbd_share);
+	auto smbd_tcon = make_tcon(smbd_sess, smbshare);
 	smbd_tcon->share_access = share_access;
 
 	uint32_t out_share_flags = 0;
 	uint32_t out_capabilities = 0;
-	if (smbd_share->is_msdfs_root()) {
+	if (smbshare->is_msdfs_root()) {
 		out_share_flags |= SMB2_SHAREFLAG_DFS|SMB2_SHAREFLAG_DFS_ROOT;
 		out_capabilities |= SMB2_SHARE_CAP_DFS;
 	}
-	if (smbd_share->abe_enabled()) {
+	if (smbshare->abe_enabled()) {
 		out_share_flags |= SMB2_SHAREFLAG_ACCESS_BASED_DIRECTORY_ENUM;
 	}
-	if (smbd_share->type != TYPE_IPC) {
+	if (smbshare->type != TYPE_IPC) {
 		out_capabilities |= SMB2_SHARE_CAP_SCALEOUT | SMB2_SHARE_CAP_CLUSTER;
 	}
 #if 0
@@ -276,7 +276,7 @@ int x_smb2_process_TCON(x_smbd_conn_t *smbd_conn, x_msg_t *msg,
 
 	return x_smb2_reply_tcon(smbd_conn, smbd_sess, msg, NT_STATUS_OK,
 			smbd_tcon->tid,
-			smbd_share->type == TYPE_IPC ? SMB2_SHARE_TYPE_PIPE : SMB2_SHARE_TYPE_DISK,
+			smbshare->type == TYPE_IPC ? SMB2_SHARE_TYPE_PIPE : SMB2_SHARE_TYPE_DISK,
 			out_share_flags,
 			out_capabilities, share_access);
 

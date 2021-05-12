@@ -709,7 +709,7 @@ static int get_full_path(const x_smbd_tcon_t *tcon,
 static uint32_t resolve_unix_path(x_smbd_tcon_t *tcon, const char *in_path,
 		std::string &out_path)
 {
-	out_path = tcon->smbd_share->path;
+	out_path = tcon->smbshare->path;
 	if (!*in_path) {
 		return PATH_FLAG_ROOT;
 	}
@@ -885,7 +885,7 @@ static x_smbd_open_t *x_smbd_tcon_disk_op_create(std::shared_ptr<x_smbd_tcon_t>&
 	status = resolve_path(smbd_tcon.get(), path, unix_path, flags);
 */
 	x_auto_ref_t<x_smbd_disk_object_t> disk_object{smbd_disk_object_pool.find_or_create(
-			smbd_tcon->smbd_share->uuid, path)};
+			smbd_tcon->smbshare->uuid, path)};
 	{
 		std::unique_lock<std::mutex> lock(disk_object->mutex);
 		if (!(disk_object->flags & x_smbd_disk_object_t::flag_initialized)) {

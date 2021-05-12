@@ -497,9 +497,9 @@ static const x_epoll_upcall_cbs_t x_smbd_upcall_cbs = {
 	x_smbd_upcall_cb_unmonitor,
 };
 
-static void x_smbd_init(x_smbd_t &smbd, int port)
+static void x_smbd_init(x_smbd_t &smbd)
 {
-	smbd.auth_context = x_auth_create_context();
+	smbd.auth_context = x_auth_create_context(&smbd);
 	x_auth_krb5_init(smbd.auth_context);
 	x_auth_ntlmssp_init(smbd.auth_context);
 	x_auth_spnego_init(smbd.auth_context);
@@ -515,12 +515,10 @@ static void x_smbd_init(x_smbd_t &smbd, int port)
 		x_auth_destroy(spnego);
 	}
 
-	x_smbd_load_shares();
-
 	// TODO
 	smbd.capabilities = SMB2_CAP_DFS | SMB2_CAP_LARGE_MTU | SMB2_CAP_LEASING;
 
-	int fd = tcplisten(port);
+	int fd = tcplisten(smbd.smbconf->port);
 	assert(fd >= 0);
 
 	smbd.fd = fd;
@@ -539,13 +537,16 @@ enum {
 
 int main(int argc, char **argv)
 {
-	argv++;
-	unsigned int count = atoi(*argv);
-	int port = 445;
+	x_smbd_t smbd;
+	int err = x_smbd_parse_cmdline(smbd.smbconf, argc, argv);
+	if (err < 0) {
+		fprintf(stderr, "parse_cmdline failed %d\n", err);
+		exit(1);
+	}
 
 	signal(SIGPIPE, SIG_IGN);
 
-	x_threadpool_t *tpool = x_threadpool_create(count);
+	x_threadpool_t *tpool = x_threadpool_create(smbd.smbconf->thread_count);
 	globals.tpool = tpool;
 
 	globals.evtmgmt = x_evtmgmt_create(tpool, 2000000000);
@@ -557,8 +558,7 @@ int main(int argc, char **argv)
 	x_smbd_ipc_init();
 	x_smbd_disk_init(X_SMBD_MAX_OPEN);
 
-	x_smbd_t smbd;
-	x_smbd_init(smbd, port);
+	x_smbd_init(smbd);
 
 
 	main_loop();

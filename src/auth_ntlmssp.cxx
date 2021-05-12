@@ -1127,8 +1127,9 @@ x_auth_ntlmssp_t::x_auth_ntlmssp_t(x_auth_context_t *context, const x_auth_ops_t
 	wbcli.requ = &wbrequ;
 	wbcli.resp = &wbresp;
 
+	auto smbconf = x_auth_context_get_smbconf(context);
 	// gensec_ntlmssp_server_start
-	allow_lm_response = lpcfg_lanman_auth();
+	allow_lm_response = smbconf->lanman_auth;
 	allow_lm_key = (allow_lm_response && lpcfg_param_bool(NULL, "ntlmssp_server", "allow_lm_key", false));
 	force_old_spnego = lpcfg_param_bool(NULL, "ntlmssp_server", "force_old_spnego", false);
 
@@ -1186,10 +1187,10 @@ x_auth_ntlmssp_t::x_auth_ntlmssp_t(x_auth_context_t *context, const x_auth_ops_t
 	   }
 	   */
 	is_standalone = false;
-	netbios_name = x_convert_utf8_to_utf16(lpcfg_netbios_name());
-	netbios_domain = x_convert_utf8_to_utf16(lpcfg_workgroup());
+	netbios_name = x_convert_utf8_to_utf16(smbconf->netbios_name);
+	netbios_domain = x_convert_utf8_to_utf16(smbconf->workgroup);
 
-	dns_domain = x_convert_utf8_to_utf16(lpcfg_dns_domain());
+	dns_domain = x_convert_utf8_to_utf16(smbconf->dns_domain);
 	std::u16string tmp_dns_name = netbios_name;
 	if (dns_domain.size()) {
 		tmp_dns_name += u".";
