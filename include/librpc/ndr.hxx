@@ -585,6 +585,28 @@ inline x_ndr_off_t x_ndr_resp_push(T &&t, std::vector<uint8_t> &data, uint32_t f
 }
 
 template <typename T>
+inline x_ndr_off_t x_ndr_resp_pull(T &&t, const uint8_t *data, size_t size, uint32_t flags)
+{
+	x_ndr_pull_buff_t ndr_data{data, size};
+	x_ndr_pull_t ndr{ndr_data, 0};
+	using NT = ndr_resp_traits_t<typename std::remove_cv<typename std::remove_reference<T>::type>::type>;
+	return x_ndr_both_t<typename NT::has_buffers>()(NT{}, t, ndr, 0, size, flags, X_NDR_SWITCH_NONE);
+}
+
+template <typename T>
+inline x_ndr_off_t x_ndr_requ_push(T &&t, std::vector<uint8_t> &data, uint32_t flags)
+{
+	x_ndr_push_buff_t ndr_data{};
+	x_ndr_push_t ndr{ndr_data, 0};
+	using NT = ndr_requ_traits_t<typename std::remove_cv<typename std::remove_reference<T>::type>::type>;
+	x_ndr_off_t ret = x_ndr_both_t<typename NT::has_buffers>()(NT{}, t, ndr, 0, X_NDR_MAX_SIZE, flags, X_NDR_SWITCH_NONE);
+	if (ret >= 0) {
+		std::swap(data, ndr_data.data);
+	}
+	return ret;
+}
+
+template <typename T>
 inline x_ndr_off_t x_ndr_requ_pull(T &&t, const uint8_t *data, size_t size, uint32_t flags)
 {
 	x_ndr_pull_buff_t ndr_data{data, size};

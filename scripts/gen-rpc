@@ -412,7 +412,7 @@ class FieldTypeSizeIs(FieldTypeSlave):
 		else:
 			return [ f'X_NDR_SIZE_IS_POST_{func}(__tmp_sizeis_{order}, __pos_{order}, {ndr_arg}, {bpos_arg}, {epos_arg}, {ndr_flags});']
 	def buffers_pre(self, order, func, name, ndr_arg, bpos_arg, epos_arg, ndr_flags, switch_is):
-		return [f'{self.get_ctype()} __tmp_sizeis_{order};']
+		return [f'{self.get_ctype()} __tmp_sizeis_{order} = 0;']
 	def buffers_body(self, order, func, name, ndr_arg, bpos_arg, epos_arg, ndr_flags, switch_is):
 		return [ f'x_ndr_off_t __pos_{order} = {ndr_arg}.load_pos();']
 	def buffers_post(self, order, func, name, ndr_arg, bpos_arg, epos_arg, ndr_flags, switch_is):
@@ -1325,10 +1325,13 @@ def make_field_type(field, idltype, elems, iface, in_function):
 	if charset:
 		assert not size_is_of
 		assert not length_is_of
+		assert array_len_name is None or pointer_count == 0
 		if array_len_name == '*' and pointer_count == 0:
 			array_len_name = None
 		# TODO string with length_is or size_is is different to vector,
 		# need to manually implement push/pull
+		if pointer_count == 0:
+			array_len_name = None
 		length_is = None
 		size_is = None
 		if elem_get_property(elem, "string"):
@@ -1713,7 +1716,6 @@ class IdlTypeUnion(TypedefBase):
 	NAME = "UNION"
 	def __init__(self, name, jsobj, iface):
 		super().__init__(name, jsobj)
-		self.jsobj = jsobj
 		make_fields(self, name, typedef_get_elements(jsobj), iface, False)
 	def is_trivial(self):
 		return all([f.is_trivial() for f in self.fields])
@@ -1790,6 +1792,9 @@ x_ndr_off_t ndr_traits_t<{self.get_ctype()}>::scalars({constness}{self.get_ctype
 			if flag is not None: out(f'''
 	__flags = x_ndr_set_flags(__flags, {flag});
 ''')
+			if not self.has_property('nodiscriminant'):
+				out(f'''
+	X_NDR_SCALARS_DEFAULT(__level, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);''')
 			out(f'''
 	X_NDR_UNION_ALIGN({self.get_alignment()}, __ndr, __bpos, __epos, __flags);
 	switch (__level) {{
@@ -1964,9 +1969,9 @@ x_ndr_off_t ndr_{in_out_name}_traits_t<{self.get_ctype()}>::scalars({constness}{
 					field.scalars_body(upfunc):
 				out(f'''
 	{stmt}''')
-		for field in [ x for x in self.fields if (x.arg_flags & in_out_flag) and x.has_buffers() ]:
-			for stmt in field.buffers_body(upfunc):
-				out(f'''
+			if field.has_buffers():
+				for stmt in field.buffers_body(upfunc):
+					out(f'''
 	{stmt}''')
 		for field in [ x for x in self.fields if x.arg_flags & in_out_flag ]:
 			for stmt in field.scalars_post(upfunc):
