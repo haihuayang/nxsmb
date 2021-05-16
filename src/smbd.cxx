@@ -59,6 +59,7 @@ static inline bool msg_is_signed(const x_msg_t *msg)
 }
 
 void x_smbd_conn_reply(x_smbd_conn_t *smbd_conn, x_msg_t *msg, x_smbd_sess_t *smbd_sess,
+		x_smb2_preauth_t *preauth,
 		uint8_t *outbuf,
 		uint32_t tid, NTSTATUS status, uint32_t body_size)
 {
@@ -84,6 +85,10 @@ void x_smbd_conn_reply(x_smbd_conn_t *smbd_conn, x_msg_t *msg, x_smbd_sess_t *sm
 	msg->out_off = 4;
 	msg->out_len = 4 + 0x40 + body_size;
 	msg->state = x_msg_t::STATE_COMPLETE;
+
+	if (preauth) {
+		preauth->update(outbuf + 8, msg->out_len - 4);
+	}
 
 	bool orig_empty = smbd_conn->send_queue.empty();
 	if (msg->do_signing || msg_is_signed(msg)) {
@@ -162,7 +167,7 @@ int x_smb2_reply_error(x_smbd_conn_t *smbd_conn, x_msg_t *msg,
 	// X_DEVEL_ASSERT(false);
 	x_smbd_conn_reply(smbd_conn, msg, smbd_sess);
 #else
-	x_smbd_conn_reply(smbd_conn, msg, smbd_sess, outbuf, tid, status, 9);
+	x_smbd_conn_reply(smbd_conn, msg, smbd_sess, nullptr, outbuf, tid, status, 9);
 #endif
 	return 0;
 }

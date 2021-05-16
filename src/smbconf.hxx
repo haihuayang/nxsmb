@@ -140,7 +140,7 @@ struct x_smbconf_t
 	std::string netbios_name, workgroup, dns_domain, realm;
 	std::vector<std::string> cluster_nodes;
 
-	std::vector<uint16_t> dialects{0x302, 0x210, 0x202};
+	std::vector<uint16_t> dialects{0x311, 0x310, 0x302, 0x210, 0x202};
 	std::map<std::string, std::shared_ptr<x_smbshare_t>> shares;
 };
 

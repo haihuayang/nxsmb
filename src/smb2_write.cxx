@@ -26,7 +26,7 @@ static int x_smb2_reply_write(x_smbd_conn_t *smbd_conn,
 	SIVAL(outbody, 0x04, resp.write_count);
 	SIVAL(outbody, 0x08, resp.write_remaining);
 	SIVAL(outbody, 0x0c, 0); // channel info
-	x_smbd_conn_reply(smbd_conn, msg, smbd_sess, outbuf, tid, status, X_SMB2_WRITE_RESP_BODY_LEN);
+	x_smbd_conn_reply(smbd_conn, msg, smbd_sess, nullptr, outbuf, tid, status, X_SMB2_WRITE_RESP_BODY_LEN);
 	return 0;
 }
 

@@ -93,6 +93,7 @@ SET_src_nxsmbd := auth_ntlmssp auth_krb5 auth_spnego auth \
 	smbd smbd_sess smbd_conn smbd_share smbd_open \
 	smbd_ipc smbd_disk smbconf \
 	smb2_signing \
+	smb2_preauth \
 	smb2_negprot \
 	smb2_sesssetup smb2_logoff \
 	smb2_tcon smb2_tdis \
@@ -210,6 +211,7 @@ TARGET_SRC_libsamba := \
 		lib/crypto/md4 \
 		lib/crypto/md5 \
 		lib/crypto/sha256 \
+		lib/crypto/sha512 \
 		lib/crypto/hmacmd5 \
 		lib/crypto/hmacsha256 \
 		lib/crypto/aes_cmac_128 \
@@ -493,6 +495,7 @@ clean:
 	rm -rf $(HOST_DIR_out) $(TARGET_DIR_out)
 
 test: $(TARGET_SET_tests:%=$(TARGET_DIR_out)/tests/%)
+	$(TARGET_DIR_out)/tests/test-srvsvc
 	$(TARGET_DIR_out)/tests/test-krb5pac
 	$(TARGET_DIR_out)/tests/test-security
 	$(TARGET_DIR_out)/tests/test-ntlmssp

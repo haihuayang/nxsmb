@@ -21,7 +21,7 @@ static int x_smb2_reply_tdis(x_smbd_conn_t *smbd_conn,
 	SSVAL(outbody, 0x00, X_SMB2_TDIS_RESP_BODY_LEN);
 	SSVAL(outbody, 0x02, 0);
 
-	x_smbd_conn_reply(smbd_conn, msg, smbd_sess, outbuf, tid, status, X_SMB2_TDIS_RESP_BODY_LEN);
+	x_smbd_conn_reply(smbd_conn, msg, smbd_sess, nullptr, outbuf, tid, status, X_SMB2_TDIS_RESP_BODY_LEN);
 	return 0;
 }
 

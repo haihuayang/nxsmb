@@ -151,7 +151,7 @@ static int x_smb2_reply_tcon(x_smbd_conn_t *smbd_conn,
 	SIVAL(outbody, 0x08, out_share_capabilities);
 	SIVAL(outbody, 0x0c, out_access_mask);
 
-	x_smbd_conn_reply(smbd_conn, msg, smbd_sess, outbuf, tid, status, 0x10);
+	x_smbd_conn_reply(smbd_conn, msg, smbd_sess, nullptr, outbuf, tid, status, 0x10);
 	return 0;
 }
 
@@ -242,10 +242,10 @@ int x_smb2_process_TCON(x_smbd_conn_t *smbd_conn, x_msg_t *msg,
 	if (smbshare->abe_enabled()) {
 		out_share_flags |= SMB2_SHAREFLAG_ACCESS_BASED_DIRECTORY_ENUM;
 	}
+#if 0
 	if (smbshare->type != TYPE_IPC) {
 		out_capabilities |= SMB2_SHARE_CAP_SCALEOUT | SMB2_SHARE_CAP_CLUSTER;
 	}
-#if 0
 	switch(lp_csc_policy(SNUM(tcon->compat))) {
 		case CSC_POLICY_MANUAL:
 			break;

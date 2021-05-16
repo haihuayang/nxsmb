@@ -18,7 +18,7 @@ static int x_smb2_reply_keepalive(x_smbd_conn_t *smbd_conn,
 	SSVAL(outbody, 0x00, X_SMB2_KEEPALIVE_RESP_BODY_LEN);
 	SSVAL(outbody, 0x02, 0);
 
-	x_smbd_conn_reply(smbd_conn, msg, smbd_sess, outbuf, 0, status, X_SMB2_KEEPALIVE_RESP_BODY_LEN);
+	x_smbd_conn_reply(smbd_conn, msg, smbd_sess, nullptr, outbuf, 0, status, X_SMB2_KEEPALIVE_RESP_BODY_LEN);
 	return 0;
 }
 

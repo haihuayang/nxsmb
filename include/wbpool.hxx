@@ -43,6 +43,7 @@ struct x_wbcli_t
 		cbs->cb_reply(this, status);
 	}
 	x_dlink_t dlink;
+	uint64_t timeout;
 	const x_wb_cbs_t *cbs;
 	x_wbrequ_t *requ;
 	x_wbresp_t *resp;

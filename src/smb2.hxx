@@ -27,5 +27,13 @@
 	X_SMB2_OP_DECL(SETINFO) \
 	X_SMB2_OP_DECL(BREAK) \
 
+struct x_smb2_preauth_t
+{
+	std::array<char, 64> data{};
+	void update(const void *data, size_t length);
+};
+
+
+
 #endif /* __smb2__hxx__ */
 

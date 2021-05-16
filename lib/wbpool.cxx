@@ -13,6 +13,7 @@ enum {
 	TIMER_INTERVAL = 1000000000ul,
 	RECONNECT_INTERVAL = 2000000000ul,
 	PING_INTERVAL = 10 * 1000000000ul,
+	WBCLI_TIMEOUT = 3 * 1000000000ul,
 };
 
 struct simple_wbcli_t
@@ -246,6 +247,12 @@ static long wbpool_timer_func(x_timer_t *timer)
 			wbpool->ready_list.remove(wbconn_ready);
 		} else {
 			wbconn_ready = nullptr;
+		}
+
+		x_wbcli_t *wbcli = wbpool->queue.get_front();
+		if (wbcli && x_tick_cmp(tick_now, wbcli->timeout) > 0) {
+			wbpool->queue.remove(wbcli);
+			wbcli->on_reply(-1); // TODO timeout error
 		}
 	}
 
@@ -484,6 +491,7 @@ int x_wbpool_request(x_wbpool_t *wbpool, x_wbcli_t *wbcli)
 		std::unique_lock<std::mutex> lock(wbpool->mutex);
 		wbconn = wbpool->ready_list.get_front();
 		if (!wbconn) {
+			wbcli->timeout = x_tick_add(tick_now, WBCLI_TIMEOUT);
 			wbpool->queue.push_back(wbcli);
 			return 0;
 		} else {

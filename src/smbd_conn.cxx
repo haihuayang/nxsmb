@@ -1,5 +1,9 @@
 
 #include "smbd.hxx"
+extern "C" {
+#include "samba/include/config.h"
+#include "samba/lib/crypto/sha512.h"
+}
 
 x_smbd_conn_t::~x_smbd_conn_t() {
 	if (recving_msg) {
@@ -49,5 +53,4 @@ void x_smbd_conn_remove_sessions(x_smbd_conn_t *smbd_conn)
 		smbd_sess->decref();
 	}
 }
-
 

@@ -18,6 +18,7 @@
 #include <netinet/in.h>
 #include <unistd.h>
 #include "smbconf.hxx"
+#include "smb2.hxx"
 #include "misc.hxx"
 #include "include/utils.hxx"
 #include "include/librpc/misc.hxx"
@@ -445,6 +446,8 @@ struct x_smbd_open_t
 	// x_dlink_t tcon_link;
 	const x_smbd_open_ops_t *ops;
 	uint64_t id;
+
+	uint32_t access_mask, share_access;
 	std::shared_ptr<x_smbd_tcon_t> smbd_tcon;
 	std::atomic<int> refcnt{1};
 };
@@ -557,6 +560,7 @@ struct x_smbd_sess_t
 	x_auth_t *auth{nullptr};
 	x_msg_t *authmsg{nullptr};
 
+	x_smb2_preauth_t preauth;
 	x_smb2_key_t signing_key, decryption_key, encryption_key, application_key;
 
 	uint32_t next_tcon_id = 1;
@@ -603,11 +607,12 @@ struct x_smbd_conn_t
 	int fd;
 	unsigned int count_msg = 0;
 	const struct sockaddr_in sin;
+	uint16_t cipher = 0;
 	uint16_t dialect;
 
 	uint16_t server_security_mode;
-	uint32_t server_capabilities;
 	uint16_t client_security_mode;
+	uint32_t server_capabilities;
 	uint32_t client_capabilities;
 
 	idl::GUID client_guid;
@@ -619,6 +624,7 @@ struct x_smbd_conn_t
 	// xconn->smb2.credits.bitmap = bitmap_talloc(xconn, xconn->smb2.credits.max);
 	uint32_t read_length = 0;
 	uint32_t nbt_hdr;
+	x_smb2_preauth_t preauth;
 	x_msg_t *recving_msg = NULL;
 	x_msg_t *sending_msg = NULL;
 	x_tp_ddlist_t<msg_dlink_traits> send_queue;
@@ -656,9 +662,8 @@ void x_smbd_conn_remove_sessions(x_smbd_conn_t *smbd_conn);
 void x_smbd_conn_post_user(x_smbd_conn_t *smbd_conn, x_fdevt_user_t *fdevt_user);
 
 void x_smbd_conn_reply(x_smbd_conn_t *smbd_conn, x_msg_t *msg, x_smbd_sess_t *smbd_sess,
-		uint8_t *outbuf,
+		x_smb2_preauth_t *preauth, uint8_t *outbuf,
 		uint32_t tid, NTSTATUS status, uint32_t body_size);
-// void x_smbd_conn_reply(x_smbd_conn_t *smbd_conn, x_msg_t *msg, x_smbd_sess_t *smbd_sess);
 int x_smb2_reply_error(x_smbd_conn_t *smbd_conn, x_msg_t *msg, x_smbd_sess_t *smbd_sess,
 		uint32_t tid, NTSTATUS status, const char *file, unsigned int line);
 

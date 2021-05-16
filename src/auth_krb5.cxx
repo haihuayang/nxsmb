@@ -1415,7 +1415,8 @@ krb5_principal kerberos_fetch_salt_princ_for_host_princ(
 	krb5_principal ret_princ = NULL;
 
 	/* lookup new key first */
-	const char *salt_princ_s = "host/hhnxsmb.child4.afs.minerva.com@CHILD4.AFS.MINERVA.COM";
+	// const char *salt_princ_s = "host/hhnxsmb.child4.afs.minerva.com@CHILD4.AFS.MINERVA.COM";
+	const char *salt_princ_s = "host/hhnxsmb2.hhdom2.hhlab@HHDOM2.HHLAB";
 #if 0
 	char *unparsed_name = NULL, *salt_princ_s = NULL;
 	if ( (salt_princ_s = kerberos_secrets_fetch_des_salt()) == NULL ) {
@@ -1622,7 +1623,7 @@ static const char *secrets_fetch_machine_password(const std::string &domain)
 //				     time_t *pass_last_set_time,
 //				     enum netr_SchannelType *channel)
 {
-	return "nxsmbd12345";
+	return "nxsmb12345";
 }
 
 static const char *secrets_fetch_prev_machine_password(const std::string &domain)

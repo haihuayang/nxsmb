@@ -38,7 +38,7 @@ static int x_smb2_reply_ioctl(x_smbd_conn_t *smbd_conn,
 	SBVAL(outbody, 0x28, 0);
 
 	memcpy(outbody + X_SMB2_IOCTL_RESP_BODY_LEN, output.data(), output.size());
-	x_smbd_conn_reply(smbd_conn, msg, smbd_sess, outbuf, tid, status,
+	x_smbd_conn_reply(smbd_conn, msg, smbd_sess, nullptr, outbuf, tid, status,
 			X_SMB2_IOCTL_RESP_BODY_LEN + output.size());
 	return 0;
 }

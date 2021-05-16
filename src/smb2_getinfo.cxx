@@ -30,7 +30,7 @@ static int x_smb2_reply_getinfo(x_smbd_conn_t *smbd_conn,
 	SIVAL(outbody, 0x04, output.size());
 
 	memcpy(outbody + X_SMB2_GETINFO_RESP_BODY_LEN, output.data(), output.size());
-	x_smbd_conn_reply(smbd_conn, msg, smbd_sess, outbuf, tid, NT_STATUS_OK,
+	x_smbd_conn_reply(smbd_conn, msg, smbd_sess, nullptr, outbuf, tid, NT_STATUS_OK,
 		       	X_SMB2_GETINFO_RESP_BODY_LEN + output.size());
 	return 0;
 }

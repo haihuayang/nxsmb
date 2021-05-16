@@ -40,7 +40,7 @@ static int x_smb2_reply_create(x_smbd_conn_t *smbd_conn,
 	SIVAL(outbody, 0x54, output.size());	/* create contexts length */
 
 	memcpy(outbody + X_SMB2_CREATE_RESP_BODY_LEN, output.data(), output.size());
-	x_smbd_conn_reply(smbd_conn, msg, smbd_sess, outbuf, tid, status,
+	x_smbd_conn_reply(smbd_conn, msg, smbd_sess, nullptr, outbuf, tid, status,
 			X_SMB2_CREATE_RESP_BODY_LEN + output.size());
 	return 0;
 }

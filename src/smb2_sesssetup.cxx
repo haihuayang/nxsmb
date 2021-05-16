@@ -12,6 +12,7 @@ enum {
 
 static int x_smb2_reply_sesssetup(x_smbd_conn_t *smbd_conn,
 		x_smbd_sess_t *smbd_sess,
+		x_smb2_preauth_t *preauth,
 		x_msg_t *msg, NTSTATUS status,
 		const std::vector<uint8_t> &out_security)
 {
@@ -33,7 +34,7 @@ static int x_smb2_reply_sesssetup(x_smbd_conn_t *smbd_conn,
 
 	memcpy(outbody + 0x08, out_security.data(), out_security.size());
 
-	x_smbd_conn_reply(smbd_conn, msg, smbd_sess, outbuf, 0, status, 0x8 + out_security.size());
+	x_smbd_conn_reply(smbd_conn, msg, smbd_sess, preauth, outbuf, 0, status, 0x8 + out_security.size());
 	return 0;
 }
 
@@ -45,6 +46,11 @@ static constexpr x_array_const_t<char> SMB2_24_encryption_label{"SMB2AESCCM"};
 static constexpr x_array_const_t<char> SMB2_24_encryption_context{"ServerOut "};
 static constexpr x_array_const_t<char> SMB2_24_application_label{"SMB2APP"};
 static constexpr x_array_const_t<char> SMB2_24_application_context{"SmbRpc"};
+
+static constexpr x_array_const_t<char> SMB3_10_signing_label{"SMBSigningKey"};
+static constexpr x_array_const_t<char> SMB3_10_decryption_label{"SMBC2SCipherKey"};
+static constexpr x_array_const_t<char> SMB3_10_encryption_label{"SMBS2CCipherKey"};
+static constexpr x_array_const_t<char> SMB3_10_application_label{"SMBAppKey"};
 #if 0
 static const uint8_t SMB2_24_signing_label[] = "SMB2AESCMAC";
 static const uint8_t SMB2_24_signing_context[] = "SmbSign";
@@ -123,6 +129,7 @@ static void smbd_sess_auth_succeeded(x_smbd_conn_t *smbd_conn, x_smbd_sess_t *sm
 	global_sid_Builtin_Backup_Operators
 
 	*/
+	/* TODO set user token ... */
 
 
 	const x_array_const_t<char> *derivation_sign_label, *derivation_sign_context,
@@ -130,9 +137,17 @@ static void smbd_sess_auth_succeeded(x_smbd_conn_t *smbd_conn, x_smbd_sess_t *sm
 	      *derivation_decryption_label, *derivation_decryption_context,
 	      *derivation_application_label, *derivation_application_context;
 
-	/* TODO set user token ... */
+	const x_array_const_t<char> smb3_context{smbd_sess->preauth.data};
 	if (smbd_conn->dialect >= SMB3_DIALECT_REVISION_310) {
-		X_TODO; // preauth
+		derivation_sign_label = &SMB3_10_signing_label;
+		derivation_sign_context = &smb3_context;
+		derivation_encryption_label = &SMB3_10_encryption_label;
+		derivation_encryption_context = &smb3_context;
+		derivation_decryption_label = &SMB3_10_decryption_label;
+		derivation_decryption_context = &smb3_context;
+		derivation_application_label = &SMB3_10_application_label;
+		derivation_application_context = &smb3_context;
+
 	} else if (smbd_conn->dialect >= SMB2_DIALECT_REVISION_224) {
 		derivation_sign_label = &SMB2_24_signing_label;
 		derivation_sign_context = &SMB2_24_signing_context;
@@ -186,12 +201,13 @@ static void smbd_sess_auth_updated(x_smbd_sess_t *smbd_sess, NTSTATUS status,
 		smbd_conn->session_list.push_back(smbd_sess);
 		smbd_sess_auth_succeeded(smbd_conn, smbd_sess, *auth_info);
 		msg->do_signing = true;
-		x_smb2_reply_sesssetup(smbd_conn, smbd_sess, msg, status, out_security);
+		x_smb2_reply_sesssetup(smbd_conn, smbd_sess, NULL, msg, status, out_security);
 	} else if (NT_STATUS_EQUAL(status, NT_STATUS_MORE_PROCESSING_REQUIRED)) {
 		smbd_sess->state = x_smbd_sess_t::S_WAIT_INPUT;
 		smbd_sess->timeout = x_tick_add(tick_now, SESSSETUP_TIMEOUT);
 		smbd_conn->session_wait_input_list.push_back(smbd_sess);
-		x_smb2_reply_sesssetup(smbd_conn, smbd_sess, msg, status, out_security);
+		x_smb2_reply_sesssetup(smbd_conn, smbd_sess, &smbd_sess->preauth,
+				msg, status, out_security);
 	} else {
 		X_SMB2_REPLY_ERROR(smbd_conn, msg, smbd_sess, 0, status);
 		/* release the session */
@@ -283,6 +299,10 @@ int x_smb2_process_SESSSETUP(x_smbd_conn_t *smbd_conn, x_msg_t *msg,
 		/* TODO too many session */
 		smbd_sess->auth = x_smbd_create_auth(smbd_conn->smbd);
 		smbd_sess->auth_upcall.cbs = &smbd_sess_auth_upcall_cbs;
+		if (smbd_conn->dialect >= SMB3_DIALECT_REVISION_310) {
+			smbd_sess->preauth = smbd_conn->preauth;
+		}
+
 	} else {
 		smbd_sess = x_smbd_sess_find(in_session_id, smbd_conn);
 		if (smbd_sess == nullptr) {
@@ -295,6 +315,10 @@ int x_smb2_process_SESSSETUP(x_smbd_conn_t *smbd_conn, x_msg_t *msg,
 		}
 		smbd_sess->decref();
 		smbd_conn->session_wait_input_list.remove(smbd_sess);
+	}
+
+	if (smbd_conn->dialect >= SMB3_DIALECT_REVISION_310) {
+		smbd_sess->preauth.update(in_buf, in_len);
 	}
 
 	X_ASSERT(smbd_sess->authmsg == nullptr);
@@ -314,5 +338,4 @@ int x_smb2_process_SESSSETUP(x_smbd_conn_t *smbd_conn, x_msg_t *msg,
 	smbd_sess->decref(); // release create or find
 	return 0;
 }
-
 

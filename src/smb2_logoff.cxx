@@ -14,7 +14,7 @@ static int x_smb2_reply_logoff(x_smbd_conn_t *smbd_conn,
 	SSVAL(outbody, 0x00, 0x04);
 	SSVAL(outbody, 0x02, 0);
 
-	x_smbd_conn_reply(smbd_conn, msg, smbd_sess, outbuf, 0, status, 4);
+	x_smbd_conn_reply(smbd_conn, msg, smbd_sess, nullptr, outbuf, 0, status, 4);
 	return 0;
 }
 

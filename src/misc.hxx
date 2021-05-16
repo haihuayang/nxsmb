@@ -14,6 +14,8 @@ struct x_array_const_t
 {
 	template <std::size_t N>
 	constexpr x_array_const_t(const T(&array)[N]) : data(array), size(N) { }
+	template <std::size_t N>
+	constexpr x_array_const_t(const std::array<T, N> &array) : data(array.data()), size(N) { }
 	const T *data;
 	size_t size;
 };
