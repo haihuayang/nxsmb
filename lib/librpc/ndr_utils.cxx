@@ -101,14 +101,14 @@ void blob_t::ostr(x_ndr_ostr_t &ndr, uint32_t flags, x_ndr_switch_t level) const
 x_ndr_off_t ndr_traits_t<DATA_BLOB>::scalars(const DATA_BLOB &val, x_ndr_push_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, x_ndr_switch_t level) const
 {
 	X_ASSERT(level == X_NDR_SWITCH_NONE);
-	X_NDR_HEADER_ALIGN(4, ndr, bpos, epos, flags);
+	// X_NDR_HEADER_ALIGN(4, ndr, bpos, epos, flags);
 	return x_ndr_push_bytes(val.val.data(), ndr, bpos, epos, val.val.size());
 }
 
 x_ndr_off_t ndr_traits_t<DATA_BLOB>::scalars(DATA_BLOB &val, x_ndr_pull_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, x_ndr_switch_t level) const
 {
 	X_ASSERT(level == X_NDR_SWITCH_NONE);
-	X_NDR_HEADER_ALIGN(4, ndr, bpos, epos, flags);
+	// X_NDR_HEADER_ALIGN(4, ndr, bpos, epos, flags);
 	val.val.resize(epos - bpos);
 	return x_ndr_pull_bytes(val.val.data(), ndr, bpos, epos);
 }
