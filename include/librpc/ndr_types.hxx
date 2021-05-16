@@ -854,9 +854,14 @@ enum {
 x_ndr_off_t x_ndr_scalars_size_length_string(const std::u16string &val, x_ndr_push_t &ndr, x_ndr_off_t bpos,  x_ndr_off_t epos, uint32_t flags, uint32_t size_length_flags);
 x_ndr_off_t x_ndr_scalars_size_length_string(std::u16string &val, x_ndr_pull_t &ndr, x_ndr_off_t bpos,  x_ndr_off_t epos, uint32_t flags, uint32_t size_length_flags);
 
+#define X_NDR_SCALARS_STRING_CHARSET_unused(__val, __ndr, __bpos, __epos, __flags, __level) do { \
+	X_ASSERT((__level) == X_NDR_SWITCH_NONE); \
+	X_NDR_VERIFY((__bpos), x_ndr_scalars_size_length_string((__val), (__ndr), (__bpos), (__epos), (__flags), str_size_noterm|str_length_noterm)); \
+} while (0)
+
 #define X_NDR_SCALARS_STRING_CHARSET(__val, __ndr, __bpos, __epos, __flags, __level) do { \
 	X_ASSERT((__level) == X_NDR_SWITCH_NONE); \
-	X_NDR_VERIFY((__bpos), x_ndr_scalars_size_length_string((__val), (__ndr), (__bpos), (__epos), (__flags)|LIBNDR_FLAG_STR_NOTERM, str_size_noterm|str_length_noterm)); \
+	X_NDR_VERIFY((__bpos), x_ndr_scalars_size_length_string((__val), (__ndr), (__bpos), (__epos), (__flags), 0)); \
 } while (0)
 
 #define X_NDR_OSTR_STRING_CHARSET(__val, __ndr, __flags, __level) do { \

@@ -94,7 +94,7 @@ int x_smb2_process_GETINFO(x_smbd_conn_t *smbd_conn, x_msg_t *msg,
 	}
 
 	std::vector<uint8_t> output;
-	NTSTATUS status = x_smbd_open_op_getinfo(smbd_open, requ_getinfo, output);
+	NTSTATUS status = x_smbd_open_op_getinfo(smbd_conn, smbd_open, requ_getinfo, output);
 	if (NT_STATUS_IS_OK(status)) {
 		return x_smb2_reply_getinfo(smbd_conn, smbd_sess, msg, in_tid,
 				output);

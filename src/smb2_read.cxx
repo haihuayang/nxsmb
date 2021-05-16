@@ -74,7 +74,7 @@ int x_smb2_process_READ(x_smbd_conn_t *smbd_conn, x_msg_t *msg,
 	}
 
 	std::vector<uint8_t> output;
-	NTSTATUS status = x_smbd_open_op_read(smbd_open, requ_read, output);
+	NTSTATUS status = x_smbd_open_op_read(smbd_conn, smbd_open, requ_read, output);
 	if (NT_STATUS_IS_OK(status)) {
 		x_smb2_resp_read_t resp_read;
 		resp_read.struct_size = 0x11;

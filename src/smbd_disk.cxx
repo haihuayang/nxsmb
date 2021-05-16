@@ -185,16 +185,37 @@ void x_smbd_disk_object_t::decref()
 	smbd_disk_object_pool.release(this);
 }
 
+static bool operator<(const timespec &t1, const timespec &t2)
+{
+	if (t1.tv_sec < t2.tv_sec) {
+		return true;
+	} else if (t1.tv_sec == t2.tv_sec) {
+		return t1.tv_nsec < t2.tv_nsec;
+	} else {
+		return false;
+	}
+}
+
 static int get_metadata(int fd, x_smbd_statex_t *statex)
 {
 	// get stats as well as dos attr ...
 	X_ASSERT(fstat(fd, &statex->stat) == 0);
+#if 0
+	TODO
 	dos_attr_t dos_attr;
 	int err = ioctl(fd, FS_IOC_GET_DOS_ATTR, &dos_attr);
 	X_ASSERT(err == 0);
 	statex->birth_time = dos_attr.create_time;
 	statex->file_attributes = dos_attr.file_attrs;
-
+#else
+	statex->birth_time = std::min(statex->stat.st_ctim, statex->stat.st_mtim);
+	statex->birth_time = std::min(statex->birth_time, statex->stat.st_atim);
+	statex->file_attributes = 0;
+	// dos_mode_from_sbuf
+	if (S_ISDIR(statex->stat.st_mode)) {
+		statex->file_attributes |= FILE_ATTRIBUTE_DIRECTORY;
+	}
+#endif
 	return 0;
 }
 
@@ -321,14 +342,16 @@ static inline x_smbd_disk_open_t *from_smbd_open(x_smbd_open_t *smbd_open)
 	return X_CONTAINER_OF(smbd_open, x_smbd_disk_open_t, base);
 }
 
-static NTSTATUS x_smbd_disk_open_read(x_smbd_open_t *smbd_open, const x_smb2_requ_read_t &requ,
+static NTSTATUS x_smbd_disk_open_read(x_smbd_conn_t *smbd_conn,
+		x_smbd_open_t *smbd_open, const x_smb2_requ_read_t &requ,
 			std::vector<uint8_t> &output)
 {
 	X_TODO;
 	return NT_STATUS_OK;
 }
 
-static NTSTATUS x_smbd_disk_open_write(x_smbd_open_t *smbd_open,
+static NTSTATUS x_smbd_disk_open_write(x_smbd_conn_t *smbd_conn,
+		x_smbd_open_t *smbd_open,
 		const x_smb2_requ_write_t &requ,
 		const uint8_t *data, x_smb2_resp_write_t &resp)
 {
@@ -374,7 +397,8 @@ static NTSTATUS getinfo_quota(x_smbd_disk_open_t *disk_open, const x_smb2_requ_g
 	return NT_STATUS_INVALID_LEVEL;
 }
 
-static NTSTATUS x_smbd_disk_open_getinfo(x_smbd_open_t *smbd_open, const x_smb2_requ_getinfo_t &requ, std::vector<uint8_t> &output)
+static NTSTATUS x_smbd_disk_open_getinfo(x_smbd_conn_t *smbd_conn,
+		x_smbd_open_t *smbd_open, const x_smb2_requ_getinfo_t &requ, std::vector<uint8_t> &output)
 {
 	x_smbd_disk_open_t *disk_open = from_smbd_open(smbd_open);
 	X_ASSERT(disk_open->disk_object);
@@ -541,7 +565,8 @@ static uint8_t *marshall_entry(x_smbd_statex_t *statex, const char *fname,
 	return p;
 }
 
-static NTSTATUS x_smbd_disk_open_find(x_smbd_open_t *smbd_open,
+static NTSTATUS x_smbd_disk_open_find(x_smbd_conn_t *smbd_conn,
+		x_smbd_open_t *smbd_open,
 		const x_smb2_requ_find_t &requ,
 		std::vector<uint8_t> &output)
 {
@@ -617,7 +642,8 @@ static NTSTATUS x_smbd_disk_open_find(x_smbd_open_t *smbd_open,
 	}
 }
 
-static NTSTATUS x_smbd_disk_open_ioctl(x_smbd_open_t *smbd_open,
+static NTSTATUS x_smbd_disk_open_ioctl(x_smbd_conn_t *smbd_conn,
+		x_smbd_open_t *smbd_open,
 		uint32_t ctl_code,
 		const uint8_t *in_input_data,
 		uint32_t in_input_size,
@@ -649,7 +675,8 @@ static void reply_requ_create(x_smb2_requ_create_t &requ_create,
 	fill_out_info(requ_create.out_info, disk_object->statex);
 }
 
-static NTSTATUS x_smbd_disk_open_close(x_smbd_open_t *smbd_open,
+static NTSTATUS x_smbd_disk_open_close(x_smbd_conn_t *smbd_conn,
+		x_smbd_open_t *smbd_open,
 		const x_smb2_requ_close_t &requ, x_smb2_resp_close_t &resp)
 {
 	x_smbd_disk_open_t *disk_open = from_smbd_open(smbd_open);

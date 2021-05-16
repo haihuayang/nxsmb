@@ -39,9 +39,7 @@ TARGET_SET_dir := bin lib lib/librpc librpc/idl src tests \
 	$(TARGET_SET_samba_dir)
 
 .PHONY: all target_mkdir host_mkdir target_samba_gen
-TARGET_SET_tests := test-srvsvc
-
-a=\
+TARGET_SET_tests := test-srvsvc \
 	test-timer  test-wbcli test-wbpool test-mbuf \
 	test-security test-krb5pac test-ntlmssp \
 

@@ -109,7 +109,7 @@ struct x_smbshare_t
 
 	bool is_msdfs_root() const {
 		// TODO
-		return type != TYPE_IPC;
+		return false && type != TYPE_IPC;
 	}
 	bool abe_enabled() const {
 		// TODO

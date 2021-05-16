@@ -66,7 +66,7 @@ int x_smb2_process_CLOSE(x_smbd_conn_t *smbd_conn, x_msg_t *msg,
 	}
 
 	x_smb2_resp_close_t resp_close;
-	NTSTATUS status = x_smbd_open_op_close(smbd_open, requ_close, resp_close);
+	NTSTATUS status = x_smbd_open_op_close(smbd_conn, smbd_open, requ_close, resp_close);
 	if (NT_STATUS_IS_OK(status)) {
 		x_smbd_open_release(smbd_open);
 		return x_smb2_reply_close(smbd_conn, smbd_sess, msg, status, in_tid,

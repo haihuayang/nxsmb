@@ -364,7 +364,8 @@ static NTSTATUS x_smb2_ioctl_dfs(
 }
 
 // FSCTL_NETWORK_FILESYSTEM
-static NTSTATUS x_smb2_ioctl_named_pipe(x_smbd_open_t *smbd_open,
+static NTSTATUS x_smb2_ioctl_named_pipe(x_smbd_conn_t *smbd_conn,
+		x_smbd_open_t *smbd_open,
 		uint32_t ctl_code,
 		const uint8_t *in_input_data,
 		uint32_t in_input_size,
@@ -375,7 +376,7 @@ static NTSTATUS x_smb2_ioctl_named_pipe(x_smbd_open_t *smbd_open,
 		return NT_STATUS_NOT_SUPPORTED;
 	}
 
-	return x_smbd_open_op_ioctl(smbd_open, ctl_code, in_input_data, in_input_size, in_max_output, output);
+	return x_smbd_open_op_ioctl(smbd_conn, smbd_open, ctl_code, in_input_data, in_input_size, in_max_output, output);
 }
 
 // FSCTL_NETWORK_FILESYSTEM
@@ -686,7 +687,7 @@ int x_smb2_process_IOCTL(x_smbd_conn_t *smbd_conn, x_msg_t *msg,
 		break;
 #endif
 	case FSCTL_NAMED_PIPE:
-		status = x_smb2_ioctl_named_pipe(smbd_open,
+		status = x_smb2_ioctl_named_pipe(smbd_conn, smbd_open,
 				requ_ioctl.ctl_code, in_buf + requ_ioctl.input_offset,
 				requ_ioctl.input_length,
 				requ_ioctl.max_output_length, output);

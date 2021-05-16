@@ -88,7 +88,7 @@ int x_smb2_process_WRITE(x_smbd_conn_t *smbd_conn, x_msg_t *msg,
 
 	x_smb2_resp_write_t resp_write;
 	std::vector<uint8_t> output;
-	NTSTATUS status = x_smbd_open_op_write(smbd_open, requ_write, in_buf + requ_write.data_offset,
+	NTSTATUS status = x_smbd_open_op_write(smbd_conn, smbd_open, requ_write, in_buf + requ_write.data_offset,
 			resp_write);
 	if (NT_STATUS_IS_OK(status)) {
 		return x_smb2_reply_write(smbd_conn, smbd_sess, msg, status, in_tid,

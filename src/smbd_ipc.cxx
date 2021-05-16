@@ -21,7 +21,9 @@ static const idl::ndr_syntax_id PNIO = {
 	0
 };
 
-typedef idl::dcerpc_nca_status (*x_dcerpc_rpc_fn_t)(idl::dcerpc_request request,
+typedef idl::dcerpc_nca_status (*x_dcerpc_rpc_fn_t)(
+		x_smbd_conn_t *smbd_conn,
+		idl::dcerpc_request request,
 		uint8_t &resp_type, std::vector<uint8_t> &body_output, uint32_t ndr_flags);
 
 
@@ -67,12 +69,13 @@ struct x_smbd_named_pipe_t
 };
 }
 
-static uint32_t net_share_enum_all_1(std::shared_ptr<idl::srvsvc_NetShareCtr1> &ctr1)
+static uint32_t net_share_enum_all_1(x_smbd_conn_t *smbd_conn, std::shared_ptr<idl::srvsvc_NetShareCtr1> &ctr1)
 {
 	// TODO buffer size and resume handle
 	ctr1->array = std::make_shared<std::vector<idl::srvsvc_NetShareInfo1>>();
-#if 0
-	x_smbd_shares_foreach([&ctr1](std::shared_ptr<x_smbd_share_t> &share) -> bool {
+	const std::shared_ptr<x_smbconf_t> smbconf = smbd_conn->get_smbconf();
+	for (auto &it: smbconf->shares) {
+		auto &share = it.second;
 		idl::srvsvc_ShareType type = idl::STYPE_DISKTREE;
 		if (share->type == TYPE_IPC) {
 			type = idl::STYPE_IPC_HIDDEN;
@@ -88,12 +91,13 @@ static uint32_t net_share_enum_all_1(std::shared_ptr<idl::srvsvc_NetShareCtr1> &
 			type,
 			std::make_shared<std::u16string>(x_convert_utf8_to_utf16("no comment"))); */
 		return true;
-	});
-#endif
+	};
 	return ctr1->array->size();
 }
 
-static idl::dcerpc_nca_status srvsvc_NetShareEnumAll(idl::dcerpc_request request,
+static idl::dcerpc_nca_status srvsvc_NetShareEnumAll(
+		x_smbd_conn_t *smbd_conn,
+		idl::dcerpc_request request,
 		uint8_t &resp_type, std::vector<uint8_t> &body_output, uint32_t ndr_flags)
 {
 	idl::srvsvc_NetShareEnumAll arg;
@@ -115,7 +119,7 @@ static idl::dcerpc_nca_status srvsvc_NetShareEnumAll(idl::dcerpc_request request
 
 	switch (arg.info_ctr.level) {
 	case 1:
-		arg.totalentries = net_share_enum_all_1(arg.info_ctr.ctr.ctr1);
+		arg.totalentries = net_share_enum_all_1(smbd_conn, arg.info_ctr.ctr.ctr1);
 		break;
 
 	default:
@@ -191,8 +195,9 @@ static inline x_smbd_named_pipe_t *from_smbd_open(x_smbd_open_t *smbd_open)
 	return X_CONTAINER_OF(smbd_open, x_smbd_named_pipe_t, base);
 }
 
-static NTSTATUS named_pipe_read(x_smbd_named_pipe_t *named_pipe, uint32_t requ_length,
-			std::vector<uint8_t> &output)
+static NTSTATUS named_pipe_read(x_smbd_conn_t *smbd_conn,
+		x_smbd_named_pipe_t *named_pipe, uint32_t requ_length,
+		std::vector<uint8_t> &output)
 {
 	if (named_pipe->output.size() == 0) {
 		X_TODO;
@@ -350,7 +355,8 @@ static const x_dcerpc_iface_t *find_context(x_smbd_named_pipe_t *named_pipe, uin
 	return nullptr;
 }
 
-static NTSTATUS process_dcerpc_request(x_smbd_named_pipe_t *named_pipe,
+static NTSTATUS process_dcerpc_request(x_smbd_conn_t *smbd_conn,
+		x_smbd_named_pipe_t *named_pipe,
 		uint8_t &resp_type, std::vector<uint8_t> &body_output)
 {
 	idl::dcerpc_request request;
@@ -378,7 +384,8 @@ static NTSTATUS process_dcerpc_request(x_smbd_named_pipe_t *named_pipe,
 		resp_type = idl::DCERPC_PKT_FAULT;
 	} else {
 		std::vector<uint8_t> output;
-		idl::dcerpc_nca_status dce_status = iface->cmds[opnum](request, resp_type, output, ndr_flags);
+		idl::dcerpc_nca_status dce_status = iface->cmds[opnum](smbd_conn,
+				request, resp_type, output, ndr_flags);
 		X_TODO_ASSERT(resp_type == idl::DCERPC_PKT_RESPONSE);
 		X_TODO_ASSERT(dce_status == 0);
 		/* TODO WERROR */
@@ -406,7 +413,7 @@ static NTSTATUS process_dcerpc_request(x_smbd_named_pipe_t *named_pipe,
 	return NT_STATUS_OK;
 }
 
-static inline NTSTATUS process_ncacn_pdu(x_smbd_named_pipe_t *named_pipe)
+static inline NTSTATUS process_ncacn_pdu(x_smbd_conn_t *smbd_conn, x_smbd_named_pipe_t *named_pipe)
 {
 	std::vector<uint8_t> body_output;
 	uint8_t resp_type;
@@ -416,7 +423,7 @@ static inline NTSTATUS process_ncacn_pdu(x_smbd_named_pipe_t *named_pipe)
 			status = process_dcerpc_bind(named_pipe, resp_type, body_output);
 			break;
 		case idl::DCERPC_PKT_REQUEST:
-			status = process_dcerpc_request(named_pipe, resp_type, body_output);
+			status = process_dcerpc_request(smbd_conn, named_pipe, resp_type, body_output);
 			break;
 		default:
 			X_TODO;
@@ -443,7 +450,8 @@ static inline NTSTATUS process_ncacn_pdu(x_smbd_named_pipe_t *named_pipe)
 	return status;
 }
 
-static int named_pipe_write(x_smbd_named_pipe_t *named_pipe,
+static int named_pipe_write(x_smbd_conn_t *smbd_conn,
+		x_smbd_named_pipe_t *named_pipe,
 		const uint8_t *_input_data,
 		uint32_t input_size)
 {
@@ -489,22 +497,24 @@ static int named_pipe_write(x_smbd_named_pipe_t *named_pipe,
 
 	if (named_pipe->packet_read == named_pipe->pkt.frag_length) {
 		/* complete pdu */
-		named_pipe->return_status = process_ncacn_pdu(named_pipe);
+		named_pipe->return_status = process_ncacn_pdu(smbd_conn, named_pipe);
 	}
 	return data - _input_data;
 }
 
-static NTSTATUS x_smbd_named_pipe_read(x_smbd_open_t *smbd_open, const x_smb2_requ_read_t &requ,
-			std::vector<uint8_t> &output)
+static NTSTATUS x_smbd_named_pipe_read(x_smbd_conn_t *smbd_conn,
+		x_smbd_open_t *smbd_open, const x_smb2_requ_read_t &requ,
+		std::vector<uint8_t> &output)
 {
-	return named_pipe_read(from_smbd_open(smbd_open), requ.length, output);
+	return named_pipe_read(smbd_conn, from_smbd_open(smbd_open), requ.length, output);
 }
 
-static NTSTATUS x_smbd_named_pipe_write(x_smbd_open_t *smbd_open,
+static NTSTATUS x_smbd_named_pipe_write(x_smbd_conn_t *smbd_conn,
+		x_smbd_open_t *smbd_open,
 		const x_smb2_requ_write_t &requ,
 		const uint8_t *data, x_smb2_resp_write_t &resp)
 {
-	int ret = named_pipe_write(from_smbd_open(smbd_open),
+	int ret = named_pipe_write(smbd_conn, from_smbd_open(smbd_open),
 			data + requ.offset,
 			requ.data_length);
 	resp.write_count = ret;
@@ -512,7 +522,8 @@ static NTSTATUS x_smbd_named_pipe_write(x_smbd_open_t *smbd_open,
 	return NT_STATUS_OK;
 }
 
-static NTSTATUS x_smbd_named_pipe_getinfo(x_smbd_open_t *smbd_open, const x_smb2_requ_getinfo_t &requ, std::vector<uint8_t> &output)
+static NTSTATUS x_smbd_named_pipe_getinfo(x_smbd_conn_t *smbd_conn,
+		x_smbd_open_t *smbd_open, const x_smb2_requ_getinfo_t &requ, std::vector<uint8_t> &output)
 {
 	/* SMB2_GETINFO_FILE, SMB2_FILE_STANDARD_INFO */
 	if (requ.info_class == 0x01 && requ.info_level == 0x05) {
@@ -534,7 +545,8 @@ static NTSTATUS x_smbd_named_pipe_getinfo(x_smbd_open_t *smbd_open, const x_smb2
 	}
 }
 
-static NTSTATUS x_smbd_named_pipe_ioctl(x_smbd_open_t *smbd_open,
+static NTSTATUS x_smbd_named_pipe_ioctl(x_smbd_conn_t *smbd_conn,
+		x_smbd_open_t *smbd_open,
 		uint32_t ctl_code,
 		const uint8_t *in_input_data,
 		uint32_t in_input_size,
@@ -544,22 +556,24 @@ static NTSTATUS x_smbd_named_pipe_ioctl(x_smbd_open_t *smbd_open,
 	x_smbd_named_pipe_t *named_pipe = from_smbd_open(smbd_open);
 	switch (ctl_code) {
 	case FSCTL_PIPE_TRANSCEIVE:
-		named_pipe_write(named_pipe, in_input_data, in_input_size);
-		return named_pipe_read(named_pipe, in_max_output, output);
+		named_pipe_write(smbd_conn, named_pipe, in_input_data, in_input_size);
+		return named_pipe_read(smbd_conn, named_pipe, in_max_output, output);
 	default:
 		X_TODO;
 		return NT_STATUS_NOT_SUPPORTED;
 	}
 }
 
-static NTSTATUS x_smbd_named_pipe_find(x_smbd_open_t *smbd_open,
+static NTSTATUS x_smbd_named_pipe_find(x_smbd_conn_t *smbd_conn,
+		x_smbd_open_t *smbd_open,
 		const x_smb2_requ_find_t &requ,
 		std::vector<uint8_t> &output)
 {
 	return NT_STATUS_INVALID_PARAMETER;
 }
 
-static NTSTATUS x_smbd_named_pipe_close(x_smbd_open_t *smbd_open,
+static NTSTATUS x_smbd_named_pipe_close(x_smbd_conn_t *smbd_conn,
+		x_smbd_open_t *smbd_open,
 		const x_smb2_requ_close_t &requ, x_smb2_resp_close_t &resp)
 {
 	resp.struct_size = 0x3c;
