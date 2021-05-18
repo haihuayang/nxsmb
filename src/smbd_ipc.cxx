@@ -526,7 +526,8 @@ static NTSTATUS x_smbd_named_pipe_getinfo(x_smbd_conn_t *smbd_conn,
 		x_smbd_open_t *smbd_open, const x_smb2_requ_getinfo_t &requ, std::vector<uint8_t> &output)
 {
 	/* SMB2_GETINFO_FILE, SMB2_FILE_STANDARD_INFO */
-	if (requ.info_class == 0x01 && requ.info_level == 0x05) {
+	if (requ.info_class == SMB2_GETINFO_FILE &&
+			requ.info_level == SMB2_FILE_INFO_FILE_STANDARD_INFORMATION) {
 		/* only little endian */
 		struct {
 			uint64_t allocation_size;
@@ -543,6 +544,14 @@ static NTSTATUS x_smbd_named_pipe_getinfo(x_smbd_conn_t *smbd_conn,
 	} else {
 		return NT_STATUS_NOT_SUPPORTED;
 	}
+}
+
+static NTSTATUS x_smbd_named_pipe_setinfo(x_smbd_conn_t *smbd_conn,
+		x_smbd_open_t *smbd_open,
+		const x_smb2_requ_setinfo_t &requ,
+		const uint8_t *data)
+{
+	return NT_STATUS_NOT_SUPPORTED;
 }
 
 static NTSTATUS x_smbd_named_pipe_ioctl(x_smbd_conn_t *smbd_conn,
@@ -572,6 +581,14 @@ static NTSTATUS x_smbd_named_pipe_find(x_smbd_conn_t *smbd_conn,
 	return NT_STATUS_INVALID_PARAMETER;
 }
 
+static NTSTATUS x_smbd_named_pipe_notify(x_smbd_conn_t *smbd_conn,
+		x_smbd_open_t *smbd_open,
+		const x_smb2_requ_notify_t &requ,
+		std::vector<uint8_t> &output)
+{
+	return NT_STATUS_INVALID_PARAMETER;
+}
+
 static NTSTATUS x_smbd_named_pipe_close(x_smbd_conn_t *smbd_conn,
 		x_smbd_open_t *smbd_open,
 		const x_smb2_requ_close_t &requ, x_smb2_resp_close_t &resp)
@@ -590,9 +607,10 @@ static const x_smbd_open_ops_t x_smbd_named_pipe_ops = {
 	x_smbd_named_pipe_read,
 	x_smbd_named_pipe_write,
 	x_smbd_named_pipe_getinfo,
-	nullptr,
+	x_smbd_named_pipe_setinfo,
 	x_smbd_named_pipe_find,
 	x_smbd_named_pipe_ioctl,
+	x_smbd_named_pipe_notify,
 	x_smbd_named_pipe_close,
 	x_smbd_named_pipe_destroy,
 };

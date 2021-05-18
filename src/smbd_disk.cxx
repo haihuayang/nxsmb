@@ -12,6 +12,8 @@
 #include <sys/statvfs.h>
 #include <dirent.h>
 
+#define NOTIFY_WATCH_TREE_FLAG		0x80000000u
+
 #define FS_IOC_GET_DOS_ATTR             _IOR('t', 1, dos_attr_t)
 #define FS_IOC_SET_DOS_ATTR             _IOW('t', 2, dos_attr_t)
 typedef struct dos_attr_s {
@@ -66,6 +68,11 @@ struct x_smbd_disk_open_t
 	qdir_t *qdir = nullptr;
 	x_auto_ref_t<x_smbd_disk_object_t> disk_object;
 	x_dlink_t link_disk_object;
+
+	uint32_t notify_filter = 0;
+	uint32_t notify_len = 0;
+	uint64_t notify_mid = 0;
+	std::vector<std::pair<uint32_t, std::u16string>> notifies;
 };
 X_DECLARE_MEMBER_TRAITS(smbd_open_object_traits, x_smbd_disk_open_t, object_link)
 
@@ -157,7 +164,6 @@ X_DECLARE_MEMBER_TRAITS(smbd_disk_object_free_traits, x_smbd_disk_object_t, free
 
 struct x_smbd_disk_object_pool_t
 {
-	x_smbd_disk_object_t *find_or_create(const uuid_t &share_uuid, const std::string &path);
 	void release(x_smbd_disk_object_t *disk_object);
 
 	x_hashtable_t<smbd_disk_object_hash_traits> hashtable;
@@ -169,19 +175,24 @@ struct x_smbd_disk_object_pool_t
 
 static x_smbd_disk_object_pool_t smbd_disk_object_pool;
 
-x_smbd_disk_object_t *x_smbd_disk_object_pool_t::find_or_create(
+static x_smbd_disk_object_t *x_smbd_disk_object_pool_find(
+		x_smbd_disk_object_pool_t &pool,
 		const uuid_t &share_uuid,
-		const std::string &path)
+		const std::string &path
+		bool create)
 {
 	auto hash = std::hash<std::string>()(path);
-	std::unique_lock<std::mutex> lock(mutex);
-	x_smbd_disk_object_t *disk_object = hashtable.find(hash, [&share_uuid, &path](const x_smbd_disk_object_t &o) {
+	std::unique_lock<std::mutex> lock(pool.mutex);
+	x_smbd_disk_object_t *disk_object = pool.hashtable.find(hash, [&share_uuid, &path](const x_smbd_disk_object_t &o) {
 			return o.share_uuid == share_uuid && o.req_path == path;
 			});
 
 	if (!disk_object) {
-		if (count == capacity) {
-			disk_object = free_list.get_front();
+		if (!create) {
+			return nullptr;
+		}
+		if (pool.count == pool.capacity) {
+			disk_object = pool.free_list.get_front();
 			if (!disk_object) {
 				return nullptr;
 			}
@@ -190,7 +201,7 @@ x_smbd_disk_object_t *x_smbd_disk_object_pool_t::find_or_create(
 			return disk_object;
 		}
 		disk_object = new x_smbd_disk_object_t(share_uuid, path);
-		++count;
+		++pool.count;
 		smbd_disk_object_pool.hashtable.insert(disk_object, hash);
 	}
 
@@ -349,9 +360,22 @@ static inline x_smbd_disk_open_t *from_smbd_open(x_smbd_open_t *smbd_open)
 
 static NTSTATUS x_smbd_disk_open_read(x_smbd_conn_t *smbd_conn,
 		x_smbd_open_t *smbd_open, const x_smb2_requ_read_t &requ,
-			std::vector<uint8_t> &output)
+		std::vector<uint8_t> &output)
 {
-	X_TODO;
+	x_smbd_disk_open_t *disk_open = from_smbd_open(smbd_open);
+	X_ASSERT(disk_open->disk_object);
+
+	uint32_t length = std::min(requ.length, 1024u * 1024);
+	output.resize(requ.length);
+	ssize_t ret = pread(disk_open->disk_object->fd, output.data(), length, requ.offset);
+	if (ret < 0) {
+		X_TODO;
+	} else if (ret == 0) {
+		output.resize(0);
+		return NT_STATUS_END_OF_FILE;
+	} else {
+		output.resize(ret);
+	}
 	return NT_STATUS_OK;
 }
 
@@ -360,13 +384,18 @@ static NTSTATUS x_smbd_disk_open_write(x_smbd_conn_t *smbd_conn,
 		const x_smb2_requ_write_t &requ,
 		const uint8_t *data, x_smb2_resp_write_t &resp)
 {
-	X_TODO;
+	x_smbd_disk_open_t *disk_open = from_smbd_open(smbd_open);
+	X_ASSERT(disk_open->disk_object);
+
+	ssize_t ret = pwrite(disk_open->disk_object->fd, data, requ.data_length, requ.data_offset);
+	if (ret < 0) {
+		X_TODO;
+	} else {
+		resp.write_count = ret;
+		resp.write_remaining = 0;
+	}
 	return NT_STATUS_OK;
 }
-
-enum {
-	SMB2_FILE_INFO_FILE_NETWORK_OPEN_INFORMATION,
-};
 
 static NTSTATUS getinfo_file(x_smbd_disk_open_t *disk_open, const x_smb2_requ_getinfo_t &requ, std::vector<uint8_t> &output)
 {
@@ -393,9 +422,16 @@ static NTSTATUS getinfo_file(x_smbd_disk_open_t *disk_open, const x_smb2_requ_ge
 	}
 }
 
-enum {
-	SMB2_FILE_INFO_FS_SIZE_INFORMATION = 3,
-};
+static NTSTATUS setinfo_file(x_smbd_disk_open_t *disk_open, const x_smb2_requ_setinfo_t &requ, const uint8_t *data)
+{
+	X_TODO;
+	if (requ.info_level == SMB2_FILE_INFO_FILE_BASIC_INFORMATION) {
+
+		return NT_STATUS_OK;
+	} else {
+		return NT_STATUS_INVALID_LEVEL;
+	}
+}
 
 static NTSTATUS getinfo_fs(x_smbd_disk_open_t *disk_open, const x_smb2_requ_getinfo_t &requ, std::vector<uint8_t> &output)
 {
@@ -442,6 +478,25 @@ static NTSTATUS x_smbd_disk_open_getinfo(x_smbd_conn_t *smbd_conn,
 		return getinfo_security(disk_open, requ, output);
 	} else if (requ.info_class == SMB2_GETINFO_QUOTA) {
 		return getinfo_quota(disk_open, requ, output);
+	} else {
+		return NT_STATUS_INVALID_PARAMETER;
+	}
+}
+
+static NTSTATUS x_smbd_disk_open_setinfo(x_smbd_conn_t *smbd_conn,
+		x_smbd_open_t *smbd_open,
+		const x_smb2_requ_setinfo_t &requ,
+		const uint8_t *data)
+{
+	x_smbd_disk_open_t *disk_open = from_smbd_open(smbd_open);
+	X_ASSERT(disk_open->disk_object);
+
+	if (requ.info_class == SMB2_GETINFO_FILE) {
+		return setinfo_file(disk_open, requ, output);
+	} else if (requ.info_class == SMB2_GETINFO_FS) {
+		return setinfo_fs(disk_open, requ, output);
+	} else if (requ.info_class == SMB2_GETINFO_SECURITY) {
+		return setinfo_security(disk_open, requ, data);
 	} else {
 		return NT_STATUS_INVALID_PARAMETER;
 	}
@@ -686,6 +741,114 @@ static NTSTATUS x_smbd_disk_open_ioctl(x_smbd_conn_t *smbd_conn,
 	return NT_STATUS_OK;
 }
 
+static uint32_t notify_marshall(
+		const std::vector<std::pair<uint32_t, std::u16string>> notifies,
+		std::vector<uint8_t> &output, uint32_t max_offset)
+{
+	output.resize(std::min(max_offset, 1024));
+
+	uint32_t offset = 0;
+	uint32_t rec_size = 0;
+	for (auto &change: notifies) {
+		uint32_t pad_len = x_pad_len(rec_size, 4);
+		uint32_t new_size = offset + pad_len + 12 + 2 * change.second.size();
+		if (new_size > max_offset) {
+			return 0;
+		}
+		if (new_size > output.size()) {
+			output.resize(new_size);
+		}
+		x_put_le32(output.data() + offset, pad_len); // last rec's next offset
+		offset += padlen;
+		x_put_le32(output.data() + offset + 4, change.first);
+		x_put_le32(output.data() + offset + 8, change.second.size() * 2);
+		memcpy(out.data () + offset + 12, change.second.data(), change.second.size() * 2);
+	}
+	return offset + rec_size;
+}
+
+static NTSTATUS x_smbd_disk_open_notify(x_smbd_conn_t *smbd_conn,
+		x_smbd_open_t *smbd_open,
+		const x_smb2_requ_notify_t &requ,
+		std::vector<uint8_t> &output)
+{
+	x_smbd_disk_open_t *disk_open = from_smbd_open(smbd_open);
+	X_ASSERT(disk_open->disk_object);
+	x_smbd_disk_object_t *disk_object = disk_open->disk_object;
+	if (!disk_object.is_dir()) {
+		return NT_STATUS_INVALID_PARAMETER;
+	}
+
+	disk_open.notify_filter = requ.filter;
+	if (requ.in_flags & SMB2_WATCH_TREE) {
+		disk_open.notify_filter |= NOTIFY_WATCH_TREE_FLAG;
+	}
+
+	if (disk_open.notifies.empty()) {
+		// TODO smbd_conn add Cancels
+		disk_open.notify_mid.append(mid);
+		return NT_STATUS_PENDING;
+	} else {
+		uint32_t ret = notify_marshall(disk_open.notifies, output, requ.output_length);
+		disk_open.notifies.clear();
+		output.resize(ret);
+		if (ret == 0) {
+			return NT_STATUS_NOTIFY_ENUM_DIR;
+		} else {
+			return NT_STATUS_OK;
+		}
+	}
+}
+
+struct smbd_notify_evt_t
+{
+	x_fdevt_user_t base;
+	x_smbd_disk_open_t *disk_open;
+};
+
+static void smbd_notify_func(x_smbd_conn_t *smbd_conn, x_fdevt_user_t *fdevt_user)
+{
+	smbd_notify_evt_t *evt = X_CONTAINER_OF(fdevt_user, smbd_notify_evt_t, base);
+
+	x_smbd_disk_open_t *disk_open = evt->disk_open;
+	if (disk_open->notify_mid != 0) {
+		if (disk_open->notify_output_size == 0) {
+			x_smb2_reply_notify(smbd_conn, disk_open->tcon->sess,
+					disk_open->tcon->tid, 
+					
+
+
+	       	&& (disk_open->notify_output_size == 0 disk_open->notifies.size() > 0) {
+
+
+
+
+	if (smbd_sess->state == x_smbd_sess_t::S_BLOCKED) {
+		smbd_conn->session_list.remove(smbd_sess);
+		smbd_sess_auth_updated(smbd_sess, evt->status, evt->out_security, evt->auth_info);
+	}
+
+	disk_open->decref();
+	delete evt;
+}
+
+
+static void x_smbd_disk_open_append_notify(x_smbd_disk_open_t *disk_open,
+		uint32_t action,
+		const std::string &path)
+{
+	disk_open->notifies.append(std::make_pair(action, path));
+
+	smbd_sess_auth_updated_evt_t *updated_evt = new smbd_sess_auth_updated_evt_t;
+	updated_evt->base.func = smbd_sess_auth_updated_func;
+	updated_evt->smbd_sess = smbd_sess;
+	updated_evt->status = status;
+	std::swap(updated_evt->out_security, out_security);
+	updated_evt->auth_info = auth_info;
+	x_smbd_conn_post_user(smbd_sess->smbd_conn, &updated_evt->base);
+
+}
+
 static void fill_out_info(x_smb2_create_close_info_t &info, const x_smbd_statex_t &statex)
 {
 	info.out_create_ts = x_timespec_to_nttime(statex.birth_time);
@@ -707,6 +870,62 @@ static void reply_requ_create(x_smb2_requ_create_t &requ_create,
 	fill_out_info(requ_create.out_info, disk_object->statex);
 }
 
+static void notify_fname_one(const uuid_t &share_uuid, const std::string &path,
+		const std::string &fullpath,
+		uint32_t action,
+		uint32_t notify_filter,
+		bool last_level)
+{
+	x_auto_ref_t<x_smbd_disk_object_t> disk_object{x_smbd_disk_object_pool_find(
+			smbd_disk_object_pool,
+			uuid, path,
+			false)};
+
+	if (!disk_object) {
+		return;
+	}
+
+	std::string subpath;
+	/* TODO change to read lock */
+	std::unique_lock<std::mutex> lock(disk_object->mutex);
+	auto &open_list = disk_object->open_list;
+	x_smbd_disk_open_t *disk_open;
+	for (disk_open = open_list.get_front(); disk_open; disk_open = open_list.next(disk_open)) {
+		if (!(disk_open->notify_filter & notify_filter)) {
+			continue;
+		}
+		if (!last_level && !(disk_open->notify_filter & NOTIFY_WATCH_TREE_FLAG)) {
+			continue;
+		}
+		if (subpath.empty()) {
+			if (path.empty()) {
+				subpath = fullpath;
+			} else {
+				subpath = fullpath.substr(path.size() + 1);
+			}
+		}
+		x_smbd_disk_open_append_notify(disk_open, action, subpath);
+	}
+}
+
+static void notify_fname(x_smbd_conn_t *smbd_conn, 
+		x_smbd_disk_object_t *disk_object)
+{
+	std::size_t curr_pos = 0, last_sep_pos = 0;
+	for (;;) {
+		std::size_t found = disk_object->req_path.find('/', curr_pos);
+		if (found != std::string::npos) {
+			break;
+		}
+		
+		notify_fname_one(last_sep_pos, false);
+		last_sep_pos = found;
+		curr_pos = found + 1;
+	}
+
+	notify_fname_one(last_sep_pos, true);
+
+
 static NTSTATUS x_smbd_disk_open_close(x_smbd_conn_t *smbd_conn,
 		x_smbd_open_t *smbd_open,
 		const x_smb2_requ_close_t &requ, x_smb2_resp_close_t &resp)
@@ -715,6 +934,9 @@ static NTSTATUS x_smbd_disk_open_close(x_smbd_conn_t *smbd_conn,
 	x_auto_ref_t<x_smbd_disk_object_t> disk_object{std::move(disk_open->disk_object)};
 	X_ASSERT(disk_object);
 
+	if (disk_open.written) {
+		notify_fname(smbd_conn, disk_object);
+	}
 	if (requ.flags & SMB2_CLOSE_FLAGS_FULL_INFORMATION) {
 		std::unique_lock<std::mutex> lock(disk_object->mutex);
 		fill_out_info(resp.out_info, disk_object->statex);
@@ -735,9 +957,10 @@ static const x_smbd_open_ops_t x_smbd_disk_open_ops = {
 	x_smbd_disk_open_read,
 	x_smbd_disk_open_write,
 	x_smbd_disk_open_getinfo,
-	nullptr,
+	x_smbd_disk_open_setinfo,
 	x_smbd_disk_open_find,
 	x_smbd_disk_open_ioctl,
+	x_smbd_disk_open_notify,
 	x_smbd_disk_open_close,
 	x_smbd_disk_open_destroy,
 };
@@ -947,8 +1170,10 @@ static x_smbd_open_t *x_smbd_tcon_disk_op_create(std::shared_ptr<x_smbd_tcon_t>&
 
 	status = resolve_path(smbd_tcon.get(), path, unix_path, flags);
 */
-	x_auto_ref_t<x_smbd_disk_object_t> disk_object{smbd_disk_object_pool.find_or_create(
-			smbd_tcon->smbshare->uuid, path)};
+	x_auto_ref_t<x_smbd_disk_object_t> disk_object{x_smbd_disk_object_pool_find(
+			smbd_disk_object_pool,
+			smbd_tcon->smbshare->uuid, path,
+			create)};
 	{
 		std::unique_lock<std::mutex> lock(disk_object->mutex);
 		if (!(disk_object->flags & x_smbd_disk_object_t::flag_initialized)) {
@@ -965,6 +1190,7 @@ static x_smbd_open_t *x_smbd_tcon_disk_op_create(std::shared_ptr<x_smbd_tcon_t>&
 
 	if (requ_create.in_create_disposition == FILE_CREATE) {
 		std::unique_lock<std::mutex> lock(disk_object->mutex);
+
 		if (disk_object->exists()) {
 			status = NT_STATUS_OBJECT_NAME_COLLISION;
 			return nullptr;
@@ -989,8 +1215,22 @@ static x_smbd_open_t *x_smbd_tcon_disk_op_create(std::shared_ptr<x_smbd_tcon_t>&
 			return open_object_new(smbd_tcon, disk_object, requ_create, status);
 		}
 
-	} else if (requ_create.in_create_disposition == FILE_OVERWRITE_IF) {
-		X_TODO;
+	} else if (requ_create.in_create_disposition == FILE_OVERWRITE_IF ||
+			requ_create.in_create_disposition == FILE_SUPERSEDE) {
+		/* TODO
+		 * Currently we're using FILE_SUPERSEDE as the same as
+		 * FILE_OVERWRITE_IF but they really are
+		 * different. FILE_SUPERSEDE deletes an existing file
+		 * (requiring delete access) then recreates it.
+		 */
+		std::unique_lock<std::mutex> lock(disk_object->mutex);
+		if (disk_object->exists()) {
+			int err = ftruncate(disk_object->fd, 0);
+			X_ASSERT(err == 0); // TODO
+			return open_object_exist(smbd_tcon, disk_object, requ_create, status);
+		} else {
+			return open_object_new(smbd_tcon, disk_object, requ_create, status);
+		}
 
 	} else {
 		X_TODO;

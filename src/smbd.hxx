@@ -399,6 +399,19 @@ struct x_smb2_requ_getinfo_t
 	uint64_t file_id_volatile;
 };
 
+struct x_smb2_requ_setinfo_t
+{
+	uint16_t struct_size;
+	uint8_t  info_class;
+	uint8_t  info_level;
+	uint32_t input_buffer_length;
+	uint16_t input_buffer_offset;
+	uint16_t reserve;
+	uint32_t additional;
+	uint64_t file_id_persistent;
+	uint64_t file_id_volatile;
+};
+
 struct x_smb2_requ_find_t
 {
 	uint8_t in_info_level;
@@ -410,6 +423,17 @@ struct x_smb2_requ_find_t
 	std::u16string in_name;
 };
 
+struct x_smb2_requ_notify_t
+{
+	uint16_t struct_size;
+	uint16_t flags;
+	uint32_t output_length;
+	uint64_t file_id_persistent;
+	uint64_t file_id_volatile;
+	uint32_t filter;
+	uint32_t reserved;
+};
+
 struct x_smbd_open_ops_t
 {
 	NTSTATUS (*read)(x_smbd_conn_t *smbd_conn, x_smbd_open_t *smbd_open, const x_smb2_requ_read_t &requ,
@@ -418,7 +442,7 @@ struct x_smbd_open_ops_t
 			const uint8_t *data,
 			x_smb2_resp_write_t &resp);
 	NTSTATUS (*getinfo)(x_smbd_conn_t *smbd_conn, x_smbd_open_t *smbd_open, const x_smb2_requ_getinfo_t &requ, std::vector<uint8_t> &output);
-	NTSTATUS (*setinfo)(x_smbd_conn_t *smbd_conn, x_smbd_open_t *smbd_open);
+	NTSTATUS (*setinfo)(x_smbd_conn_t *smbd_conn, x_smbd_open_t *smbd_open, const x_smb2_requ_setinfo_t &requ, const uint8_t *data);
 	NTSTATUS (*find)(x_smbd_conn_t *smbd_conn, x_smbd_open_t *smbd_open, const x_smb2_requ_find_t &requ,
 			std::vector<uint8_t> &output);
 	NTSTATUS (*ioctl)(x_smbd_conn_t *smbd_conn, x_smbd_open_t *smbd_open,
@@ -427,6 +451,7 @@ struct x_smbd_open_ops_t
 			uint32_t in_input_size,
 			uint32_t in_max_output,
 			std::vector<uint8_t> &output);
+	NTSTATUS (*notify)(x_smbd_conn_t *smbd_conn, x_smbd_open_t *smbd_open, const x_smb2_requ_notify_t &requ, std::vector<uint8_t> &output);
 	NTSTATUS (*close)(x_smbd_conn_t *smbd_conn, x_smbd_open_t *smbd_open, const x_smb2_requ_close_t &requ,
 			x_smb2_resp_close_t &resp);
 	void (*destroy)(x_smbd_open_t *smbd_open);
@@ -471,6 +496,11 @@ static inline NTSTATUS x_smbd_open_op_getinfo(x_smbd_conn_t *smbd_conn, x_smbd_o
 	return smbd_open->ops->getinfo(smbd_conn, smbd_open, requ, output);
 }
 
+static inline NTSTATUS x_smbd_open_op_setinfo(x_smbd_conn_t *smbd_conn, x_smbd_open_t *smbd_open, const x_smb2_requ_setinfo_t &requ, const uint8_t *data)
+{
+	return smbd_open->ops->setinfo(smbd_conn, smbd_open, requ, data);
+}
+
 static inline NTSTATUS x_smbd_open_op_find(x_smbd_conn_t *smbd_conn, x_smbd_open_t *smbd_open, const x_smb2_requ_find_t &requ, std::vector<uint8_t> &output)
 {
 	return smbd_open->ops->find(smbd_conn, smbd_open, requ, output);
@@ -484,6 +514,11 @@ static inline NTSTATUS x_smbd_open_op_ioctl(x_smbd_conn_t *smbd_conn, x_smbd_ope
 		std::vector<uint8_t> &output)
 {
 	return smbd_open->ops->ioctl(smbd_conn, smbd_open, ctl_code, in_input_data, in_input_size, in_max_output, output);
+}
+
+static inline NTSTATUS x_smbd_open_op_notify(x_smbd_conn_t *smbd_conn, x_smbd_open_t *smbd_open, const x_smb2_requ_notify_t &requ, std::vector<uint8_t> &output)
+{
+	return smbd_open->ops->notify(smbd_conn, smbd_open, requ, output);
 }
 
 static inline NTSTATUS x_smbd_open_op_close(x_smbd_conn_t *smbd_conn, x_smbd_open_t *smbd_open, const x_smb2_requ_close_t &requ,
