@@ -11,7 +11,7 @@ enum {
 
 static int x_smb2_reply_notify(x_smbd_conn_t *smbd_conn,
 		x_smbd_sess_t *smbd_sess,
-		x_msg_t *msg, uint32_t tid,
+		x_msg_ptr_t &msg, uint32_t tid,
 		const std::vector<uint8_t> &output)
 {
 	X_LOG_OP("%ld RESP SUCCESS", msg->mid);
@@ -29,7 +29,7 @@ static int x_smb2_reply_notify(x_smbd_conn_t *smbd_conn,
 	return 0;
 }
 
-int x_smb2_process_NOTIFY(x_smbd_conn_t *smbd_conn, x_msg_t *msg,
+int x_smb2_process_NOTIFY(x_smbd_conn_t *smbd_conn, x_msg_ptr_t &msg,
 		const uint8_t *in_buf, size_t in_len)
 {
 	if (in_len < 0x40 + X_SMB2_NOTIFY_REQU_BODY_LEN) {
@@ -75,7 +75,7 @@ int x_smb2_process_NOTIFY(x_smbd_conn_t *smbd_conn, x_msg_t *msg,
 	}
 
 	std::vector<uint8_t> output;
-	NTSTATUS status = x_smbd_open_op_notify(smbd_conn, smbd_open, requ_notify, output);
+	NTSTATUS status = x_smbd_open_op_notify(smbd_conn, msg, smbd_open, requ_notify, output);
 	if (NT_STATUS_IS_OK(status)) {
 		return x_smb2_reply_notify(smbd_conn, smbd_sess, msg, in_tid,
 				output);

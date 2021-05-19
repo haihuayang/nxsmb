@@ -9,7 +9,7 @@ enum {
 
 static int x_smb2_reply_tdis(x_smbd_conn_t *smbd_conn,
 		x_smbd_sess_t *smbd_sess,
-		x_msg_t *msg, NTSTATUS status,
+		x_msg_ptr_t &msg, NTSTATUS status,
 		uint32_t tid)
 {
 	X_LOG_OP("%ld RESP SUCCESS %x", msg->mid, tid);
@@ -25,7 +25,7 @@ static int x_smb2_reply_tdis(x_smbd_conn_t *smbd_conn,
 	return 0;
 }
 
-int x_smb2_process_TDIS(x_smbd_conn_t *smbd_conn, x_msg_t *msg,
+int x_smb2_process_TDIS(x_smbd_conn_t *smbd_conn, x_msg_ptr_t &msg,
 		const uint8_t *in_buf, size_t in_len)
 {
 	if (in_len < 0x40 + X_SMB2_TDIS_REQU_BODY_LEN) {

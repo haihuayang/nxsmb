@@ -503,6 +503,7 @@ static int named_pipe_write(x_smbd_conn_t *smbd_conn,
 }
 
 static NTSTATUS x_smbd_named_pipe_read(x_smbd_conn_t *smbd_conn,
+		x_msg_ptr_t &msg,
 		x_smbd_open_t *smbd_open, const x_smb2_requ_read_t &requ,
 		std::vector<uint8_t> &output)
 {
@@ -510,6 +511,7 @@ static NTSTATUS x_smbd_named_pipe_read(x_smbd_conn_t *smbd_conn,
 }
 
 static NTSTATUS x_smbd_named_pipe_write(x_smbd_conn_t *smbd_conn,
+		x_msg_ptr_t &msg,
 		x_smbd_open_t *smbd_open,
 		const x_smb2_requ_write_t &requ,
 		const uint8_t *data, x_smb2_resp_write_t &resp)
@@ -523,6 +525,7 @@ static NTSTATUS x_smbd_named_pipe_write(x_smbd_conn_t *smbd_conn,
 }
 
 static NTSTATUS x_smbd_named_pipe_getinfo(x_smbd_conn_t *smbd_conn,
+		x_msg_ptr_t &msg,
 		x_smbd_open_t *smbd_open, const x_smb2_requ_getinfo_t &requ, std::vector<uint8_t> &output)
 {
 	/* SMB2_GETINFO_FILE, SMB2_FILE_STANDARD_INFO */
@@ -547,6 +550,7 @@ static NTSTATUS x_smbd_named_pipe_getinfo(x_smbd_conn_t *smbd_conn,
 }
 
 static NTSTATUS x_smbd_named_pipe_setinfo(x_smbd_conn_t *smbd_conn,
+		x_msg_ptr_t &msg,
 		x_smbd_open_t *smbd_open,
 		const x_smb2_requ_setinfo_t &requ,
 		const uint8_t *data)
@@ -555,6 +559,7 @@ static NTSTATUS x_smbd_named_pipe_setinfo(x_smbd_conn_t *smbd_conn,
 }
 
 static NTSTATUS x_smbd_named_pipe_ioctl(x_smbd_conn_t *smbd_conn,
+		x_msg_ptr_t &msg,
 		x_smbd_open_t *smbd_open,
 		uint32_t ctl_code,
 		const uint8_t *in_input_data,
@@ -574,6 +579,7 @@ static NTSTATUS x_smbd_named_pipe_ioctl(x_smbd_conn_t *smbd_conn,
 }
 
 static NTSTATUS x_smbd_named_pipe_find(x_smbd_conn_t *smbd_conn,
+		x_msg_ptr_t &msg,
 		x_smbd_open_t *smbd_open,
 		const x_smb2_requ_find_t &requ,
 		std::vector<uint8_t> &output)
@@ -582,6 +588,7 @@ static NTSTATUS x_smbd_named_pipe_find(x_smbd_conn_t *smbd_conn,
 }
 
 static NTSTATUS x_smbd_named_pipe_notify(x_smbd_conn_t *smbd_conn,
+		x_msg_ptr_t &msg,
 		x_smbd_open_t *smbd_open,
 		const x_smb2_requ_notify_t &requ,
 		std::vector<uint8_t> &output)
@@ -590,6 +597,7 @@ static NTSTATUS x_smbd_named_pipe_notify(x_smbd_conn_t *smbd_conn,
 }
 
 static NTSTATUS x_smbd_named_pipe_close(x_smbd_conn_t *smbd_conn,
+		x_msg_ptr_t &msg,
 		x_smbd_open_t *smbd_open,
 		const x_smb2_requ_close_t &requ, x_smb2_resp_close_t &resp)
 {

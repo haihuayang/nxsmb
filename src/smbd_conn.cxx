@@ -6,6 +6,7 @@ extern "C" {
 }
 
 x_smbd_conn_t::~x_smbd_conn_t() {
+#if 0
 	if (recving_msg) {
 		delete recving_msg;
 	}
@@ -17,7 +18,7 @@ x_smbd_conn_t::~x_smbd_conn_t() {
 		send_queue.remove(msg);
 		delete msg;
 	}
-
+#endif
 	X_ASSERT(!session_list.get_front());
 	X_ASSERT(!session_wait_input_list.get_front());
 

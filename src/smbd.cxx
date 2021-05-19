@@ -52,13 +52,13 @@ x_auth_t *x_smbd_create_auth(x_smbd_t *smbd)
 	return x_auth_create_by_oid(smbd->auth_context, GSS_SPNEGO_MECHANISM);
 }
 
-static inline bool msg_is_signed(const x_msg_t *msg)
+static inline bool msg_is_signed(const x_msg_ptr_t &msg)
 {
 	uint32_t flags = x_get_le32(msg->in_buf + SMB2_HDR_FLAGS);
 	return flags & SMB2_HDR_FLAG_SIGNED;
 }
 
-void x_smbd_conn_reply(x_smbd_conn_t *smbd_conn, x_msg_t *msg, x_smbd_sess_t *smbd_sess,
+void x_smbd_conn_reply(x_smbd_conn_t *smbd_conn, x_msg_ptr_t &msg, x_smbd_sess_t *smbd_sess,
 		x_smb2_preauth_t *preauth,
 		uint8_t *outbuf,
 		uint32_t tid, NTSTATUS status, uint32_t body_size)
@@ -131,7 +131,7 @@ void x_smbd_conn_reply(x_smbd_conn_t *smbd_conn, x_msg_t *msg, x_smbd_sess_t *sm
 #define SMB2_MAGIC 0x424D53FE /* 0xFE 'S' 'M' 'B' */
 #define SMB2_TF_MAGIC 0x424D53FD /* 0xFD 'S' 'M' 'B' */
 
-int x_smb2_reply_error(x_smbd_conn_t *smbd_conn, x_msg_t *msg,
+int x_smb2_reply_error(x_smbd_conn_t *smbd_conn, x_msg_ptr_t &msg,
 		x_smbd_sess_t *smbd_sess, uint32_t tid,
 		NTSTATUS status, const char *file, unsigned int line)
 {
@@ -173,19 +173,19 @@ int x_smb2_reply_error(x_smbd_conn_t *smbd_conn, x_msg_t *msg,
 }
 
 #define X_SMB2_OP_DECL(X) \
-	extern int x_smb2_process_##X(x_smbd_conn_t *cli, x_msg_t *msg, const uint8_t *in_buf, size_t in_len);
+	extern int x_smb2_process_##X(x_smbd_conn_t *cli, x_msg_ptr_t &msg, const uint8_t *in_buf, size_t in_len);
 	X_SMB2_OP_ENUM
 #undef X_SMB2_OP_DECL
 
 static const struct {
-	int (*op_func)(x_smbd_conn_t *cli, x_msg_t *msg, const uint8_t *in_buf, size_t in_len);
+	int (*op_func)(x_smbd_conn_t *cli, x_msg_ptr_t &msg, const uint8_t *in_buf, size_t in_len);
 } x_smb2_op_table[] = {
 #define X_SMB2_OP_DECL(X) { x_smb2_process_##X },
 	X_SMB2_OP_ENUM
 #undef X_SMB2_OP_DECL
 };
 
-static int x_smbd_conn_process_smb2(x_smbd_conn_t *smbd_conn, x_msg_t *msg)
+static int x_smbd_conn_process_smb2(x_smbd_conn_t *smbd_conn, x_msg_ptr_t &msg)
 {
 
 	const uint8_t *in_buf = msg->in_buf;
@@ -205,7 +205,7 @@ static int x_smbd_conn_process_smb2(x_smbd_conn_t *smbd_conn, x_msg_t *msg)
 	return x_smb2_op_table[opcode].op_func(smbd_conn, msg, in_buf, in_len);
 }
 
-static int x_smbd_conn_process_smb(x_smbd_conn_t *smbd_conn, x_msg_t *msg)
+static int x_smbd_conn_process_smb(x_smbd_conn_t *smbd_conn, x_msg_ptr_t &msg)
 {
 	uint32_t offset = 0;
 	for (; offset < msg->in_len;) {
@@ -237,9 +237,8 @@ static int x_smbd_conn_process_smb(x_smbd_conn_t *smbd_conn, x_msg_t *msg)
 
 static int x_smbd_conn_process_msg(x_smbd_conn_t *smbd_conn)
 {
-	x_msg_t *msg = smbd_conn->recving_msg;
+	x_msg_ptr_t msg{std::move(smbd_conn->recving_msg)};
 	X_ASSERT(msg);
-	smbd_conn->recving_msg = NULL;
 	int err;
 
 	if ((msg->nbt_hdr >> 24) == NBSSmessage) {
@@ -318,7 +317,7 @@ static bool x_smbd_conn_do_recv(x_smbd_conn_t *smbd_conn, x_fdevents_t &fdevents
 				} else {
 					return true;
 				}	
-				smbd_conn->recving_msg = x_msg_create(smbd_conn->nbt_hdr);
+				smbd_conn->recving_msg = std::make_shared<x_msg_t>(smbd_conn->nbt_hdr);
 				smbd_conn->count_msg++;
 			}
 		} else if (err == 0) {
@@ -353,16 +352,16 @@ static bool x_smbd_conn_do_recv(x_smbd_conn_t *smbd_conn, x_fdevents_t &fdevents
 
 static bool x_smbd_conn_do_send(x_smbd_conn_t *smbd_conn, x_fdevents_t &fdevents)
 {
-	x_msg_t *msg;
+	x_msg_ptr_t msg;
 	X_DBG("%s %p x%llx", task_name, smbd_conn, fdevents);
 	for (;;) {
 		msg = smbd_conn->sending_msg;
 		if (msg == NULL) {
-			msg = smbd_conn->send_queue.get_front();
-			if (msg == NULL) {
+			if (smbd_conn->send_queue.empty()) {
 				break;
 			}
-			smbd_conn->send_queue.remove(msg);
+			msg = smbd_conn->send_queue.front();
+			smbd_conn->send_queue.pop_front();
 			// TODO msg_encode(msg);
 			smbd_conn->sending_msg = msg;
 		}
@@ -371,9 +370,9 @@ static bool x_smbd_conn_do_send(x_smbd_conn_t *smbd_conn, x_fdevents_t &fdevents
 		if (err > 0) {
 			msg->out_len -= err;
 			if (msg->out_len == 0) {
-				delete msg;
+				msg = nullptr;
 				smbd_conn->count_msg--;
-				smbd_conn->sending_msg = NULL;
+				smbd_conn->sending_msg = nullptr;
 			} else {
 				msg->out_off += err;
 			}
@@ -388,7 +387,7 @@ static bool x_smbd_conn_do_send(x_smbd_conn_t *smbd_conn, x_fdevents_t &fdevents
 			}
 		}
 	}
-	if (msg == NULL) {
+	if (!msg) {
 		fdevents = x_fdevents_disable(fdevents, FDEVT_OUT);
 	}
 	if (smbd_conn->count_msg < x_smbd_conn_t::MAX_MSG) {

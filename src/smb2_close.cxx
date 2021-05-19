@@ -9,7 +9,7 @@ enum {
 
 static int x_smb2_reply_close(x_smbd_conn_t *smbd_conn,
 		x_smbd_sess_t *smbd_sess,
-		x_msg_t *msg, NTSTATUS status,
+		x_msg_ptr_t &msg, NTSTATUS status,
 		uint32_t tid,
 		const x_smb2_resp_close_t &resp)
 {
@@ -22,7 +22,7 @@ static int x_smb2_reply_close(x_smbd_conn_t *smbd_conn,
 	return 0;
 }
 
-int x_smb2_process_CLOSE(x_smbd_conn_t *smbd_conn, x_msg_t *msg,
+int x_smb2_process_CLOSE(x_smbd_conn_t *smbd_conn, x_msg_ptr_t &msg,
 		const uint8_t *in_buf, size_t in_len)
 {
 	if (in_len < 0x40 + X_SMB2_CLOSE_REQU_BODY_LEN) {
@@ -66,7 +66,7 @@ int x_smb2_process_CLOSE(x_smbd_conn_t *smbd_conn, x_msg_t *msg,
 	}
 
 	x_smb2_resp_close_t resp_close;
-	NTSTATUS status = x_smbd_open_op_close(smbd_conn, smbd_open, requ_close, resp_close);
+	NTSTATUS status = x_smbd_open_op_close(smbd_conn, msg, smbd_open, requ_close, resp_close);
 	if (NT_STATUS_IS_OK(status)) {
 		x_smbd_open_release(smbd_open);
 		return x_smb2_reply_close(smbd_conn, smbd_sess, msg, status, in_tid,

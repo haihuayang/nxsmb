@@ -11,7 +11,7 @@ enum {
 
 static int x_smb2_reply_read(x_smbd_conn_t *smbd_conn,
 		x_smbd_sess_t *smbd_sess,
-		x_msg_t *msg, uint32_t tid,
+		x_msg_ptr_t &msg, uint32_t tid,
 		x_smb2_resp_read_t &resp,
 		const std::vector<uint8_t> &output)
 {
@@ -28,7 +28,7 @@ static int x_smb2_reply_read(x_smbd_conn_t *smbd_conn,
 	return 0;
 }
 
-int x_smb2_process_READ(x_smbd_conn_t *smbd_conn, x_msg_t *msg,
+int x_smb2_process_READ(x_smbd_conn_t *smbd_conn, x_msg_ptr_t &msg,
 		const uint8_t *in_buf, size_t in_len)
 {
 	if (in_len < 0x40 + X_SMB2_READ_REQU_BODY_LEN) {
@@ -74,7 +74,7 @@ int x_smb2_process_READ(x_smbd_conn_t *smbd_conn, x_msg_t *msg,
 	}
 
 	std::vector<uint8_t> output;
-	NTSTATUS status = x_smbd_open_op_read(smbd_conn, smbd_open, requ_read, output);
+	NTSTATUS status = x_smbd_open_op_read(smbd_conn, msg, smbd_open, requ_read, output);
 	if (NT_STATUS_IS_OK(status)) {
 		x_smb2_resp_read_t resp_read;
 		resp_read.struct_size = 0x11;

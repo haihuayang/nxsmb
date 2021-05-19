@@ -9,7 +9,7 @@ enum {
 
 static int x_smb2_reply_keepalive(x_smbd_conn_t *smbd_conn,
 		x_smbd_sess_t *smbd_sess,
-		x_msg_t *msg, NTSTATUS status)
+		x_msg_ptr_t &msg, NTSTATUS status)
 {
 	uint8_t *outbuf = new uint8_t[8 + 0x40 + X_SMB2_KEEPALIVE_RESP_BODY_LEN];
 	uint8_t *outhdr = outbuf + 8;
@@ -22,7 +22,7 @@ static int x_smb2_reply_keepalive(x_smbd_conn_t *smbd_conn,
 	return 0;
 }
 
-int x_smb2_process_KEEPALIVE(x_smbd_conn_t *smbd_conn, x_msg_t *msg,
+int x_smb2_process_KEEPALIVE(x_smbd_conn_t *smbd_conn, x_msg_ptr_t &msg,
 		const uint8_t *in_buf, size_t in_len)
 {
 	if (in_len < 0x40 + X_SMB2_KEEPALIVE_REQU_BODY_LEN) {

@@ -13,7 +13,7 @@ enum {
 static int x_smb2_reply_sesssetup(x_smbd_conn_t *smbd_conn,
 		x_smbd_sess_t *smbd_sess,
 		x_smb2_preauth_t *preauth,
-		x_msg_t *msg, NTSTATUS status,
+		x_msg_ptr_t &msg, NTSTATUS status,
 		const std::vector<uint8_t> &out_security)
 {
 #if 0
@@ -191,10 +191,9 @@ static inline NTSTATUS x_smbd_sess_update_auth(x_smbd_sess_t *smbd_sess, const u
 static void smbd_sess_auth_updated(x_smbd_sess_t *smbd_sess, NTSTATUS status,
 		std::vector<uint8_t> &out_security, std::shared_ptr<x_auth_info_t> &auth_info)
 {
-	x_msg_t *msg = smbd_sess->authmsg;
+	x_msg_ptr_t msg{std::move(smbd_sess->authmsg)};
 	X_LOG_OP("%ld RESP 0x%x", msg->mid, status.v);
 
-	smbd_sess->authmsg = nullptr;
 	x_smbd_conn_t *smbd_conn = smbd_sess->smbd_conn;
 	if (NT_STATUS_IS_OK(status)) {
 		smbd_sess->state = x_smbd_sess_t::S_ACTIVE;
@@ -259,7 +258,7 @@ static const struct x_auth_cbs_t smbd_sess_auth_upcall_cbs = {
 	x_smbd_sess_auth_updated,
 };
 
-int x_smb2_process_SESSSETUP(x_smbd_conn_t *smbd_conn, x_msg_t *msg,
+int x_smb2_process_SESSSETUP(x_smbd_conn_t *smbd_conn, x_msg_ptr_t &msg,
 		const uint8_t *in_buf, size_t in_len)
 {
 	// x_smb2_verify_size(msg, X_SMB2_NEGPROT_BODY_LEN);

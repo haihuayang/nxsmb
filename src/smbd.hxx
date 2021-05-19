@@ -10,6 +10,7 @@
 #include "include/evtmgmt.hxx"
 #include "include/wbpool.hxx"
 #include <vector>
+#include <list>
 #include <map>
 #include <memory>
 #include <mutex>
@@ -207,7 +208,7 @@ struct x_msg_t
 			delete[] out_buf;
 		}
 	}
-	x_dlink_t dlink;
+	// x_dlink_t dlink;
 	uint64_t mid;
 	uint32_t hdr_flags;
 	uint16_t opcode;
@@ -227,7 +228,9 @@ struct x_msg_t
 	unsigned int out_off;
 	uint8_t *out_buf = NULL;
 };
-X_DECLARE_MEMBER_TRAITS(msg_dlink_traits, x_msg_t, dlink)
+//X_DECLARE_MEMBER_TRAITS(msg_dlink_traits, x_msg_t, dlink)
+
+using x_msg_ptr_t = std::shared_ptr<x_msg_t>;
 
 
 struct x_smbduser_t
@@ -436,23 +439,39 @@ struct x_smb2_requ_notify_t
 
 struct x_smbd_open_ops_t
 {
-	NTSTATUS (*read)(x_smbd_conn_t *smbd_conn, x_smbd_open_t *smbd_open, const x_smb2_requ_read_t &requ,
+	NTSTATUS (*read)(x_smbd_conn_t *smbd_conn,
+			x_msg_ptr_t &msg,
+			x_smbd_open_t *smbd_open, const x_smb2_requ_read_t &requ,
 			std::vector<uint8_t> &output);
-	NTSTATUS (*write)(x_smbd_conn_t *smbd_conn, x_smbd_open_t *smbd_open, const x_smb2_requ_write_t &requ,
+	NTSTATUS (*write)(x_smbd_conn_t *smbd_conn,
+			x_msg_ptr_t &msg,
+			x_smbd_open_t *smbd_open, const x_smb2_requ_write_t &requ,
 			const uint8_t *data,
 			x_smb2_resp_write_t &resp);
-	NTSTATUS (*getinfo)(x_smbd_conn_t *smbd_conn, x_smbd_open_t *smbd_open, const x_smb2_requ_getinfo_t &requ, std::vector<uint8_t> &output);
-	NTSTATUS (*setinfo)(x_smbd_conn_t *smbd_conn, x_smbd_open_t *smbd_open, const x_smb2_requ_setinfo_t &requ, const uint8_t *data);
-	NTSTATUS (*find)(x_smbd_conn_t *smbd_conn, x_smbd_open_t *smbd_open, const x_smb2_requ_find_t &requ,
+	NTSTATUS (*getinfo)(x_smbd_conn_t *smbd_conn,
+			x_msg_ptr_t &msg,
+			x_smbd_open_t *smbd_open, const x_smb2_requ_getinfo_t &requ, std::vector<uint8_t> &output);
+	NTSTATUS (*setinfo)(x_smbd_conn_t *smbd_conn,
+			x_msg_ptr_t &msg,
+			x_smbd_open_t *smbd_open, const x_smb2_requ_setinfo_t &requ, const uint8_t *data);
+	NTSTATUS (*find)(x_smbd_conn_t *smbd_conn,
+			x_msg_ptr_t &msg,
+			x_smbd_open_t *smbd_open, const x_smb2_requ_find_t &requ,
 			std::vector<uint8_t> &output);
-	NTSTATUS (*ioctl)(x_smbd_conn_t *smbd_conn, x_smbd_open_t *smbd_open,
+	NTSTATUS (*ioctl)(x_smbd_conn_t *smbd_conn,
+			x_msg_ptr_t &msg,
+			x_smbd_open_t *smbd_open,
 			uint32_t ctl_code,
 			const uint8_t *in_input_data,
 			uint32_t in_input_size,
 			uint32_t in_max_output,
 			std::vector<uint8_t> &output);
-	NTSTATUS (*notify)(x_smbd_conn_t *smbd_conn, x_smbd_open_t *smbd_open, const x_smb2_requ_notify_t &requ, std::vector<uint8_t> &output);
-	NTSTATUS (*close)(x_smbd_conn_t *smbd_conn, x_smbd_open_t *smbd_open, const x_smb2_requ_close_t &requ,
+	NTSTATUS (*notify)(x_smbd_conn_t *smbd_conn,
+			x_msg_ptr_t &msg,
+			x_smbd_open_t *smbd_open, const x_smb2_requ_notify_t &requ, std::vector<uint8_t> &output);
+	NTSTATUS (*close)(x_smbd_conn_t *smbd_conn,
+			x_msg_ptr_t &msg,
+			x_smbd_open_t *smbd_open, const x_smb2_requ_close_t &requ,
 			x_smb2_resp_close_t &resp);
 	void (*destroy)(x_smbd_open_t *smbd_open);
 };
@@ -479,52 +498,68 @@ struct x_smbd_open_t
 };
 X_DECLARE_MEMBER_TRAITS(smbd_open_hash_traits, x_smbd_open_t, hash_link)
 
-static inline NTSTATUS x_smbd_open_op_read(x_smbd_conn_t *smbd_conn, x_smbd_open_t *smbd_open, const x_smb2_requ_read_t &requ, std::vector<uint8_t> &output)
+static inline NTSTATUS x_smbd_open_op_read(x_smbd_conn_t *smbd_conn,
+		x_msg_ptr_t &msg,
+		x_smbd_open_t *smbd_open, const x_smb2_requ_read_t &requ, std::vector<uint8_t> &output)
 {
-	return smbd_open->ops->read(smbd_conn, smbd_open, requ, output);
+	return smbd_open->ops->read(smbd_conn, msg, smbd_open, requ, output);
 }
 
-static inline NTSTATUS x_smbd_open_op_write(x_smbd_conn_t *smbd_conn, x_smbd_open_t *smbd_open, const x_smb2_requ_write_t &requ,
+static inline NTSTATUS x_smbd_open_op_write(x_smbd_conn_t *smbd_conn,
+		x_msg_ptr_t &msg,
+		x_smbd_open_t *smbd_open, const x_smb2_requ_write_t &requ,
 		const uint8_t *data,
 		x_smb2_resp_write_t &resp)
 {
-	return smbd_open->ops->write(smbd_conn, smbd_open, requ, data, resp);
+	return smbd_open->ops->write(smbd_conn, msg, smbd_open, requ, data, resp);
 }
 
-static inline NTSTATUS x_smbd_open_op_getinfo(x_smbd_conn_t *smbd_conn, x_smbd_open_t *smbd_open, const x_smb2_requ_getinfo_t &requ, std::vector<uint8_t> &output)
+static inline NTSTATUS x_smbd_open_op_getinfo(x_smbd_conn_t *smbd_conn,
+		x_msg_ptr_t &msg,
+		x_smbd_open_t *smbd_open, const x_smb2_requ_getinfo_t &requ, std::vector<uint8_t> &output)
 {
-	return smbd_open->ops->getinfo(smbd_conn, smbd_open, requ, output);
+	return smbd_open->ops->getinfo(smbd_conn, msg, smbd_open, requ, output);
 }
 
-static inline NTSTATUS x_smbd_open_op_setinfo(x_smbd_conn_t *smbd_conn, x_smbd_open_t *smbd_open, const x_smb2_requ_setinfo_t &requ, const uint8_t *data)
+static inline NTSTATUS x_smbd_open_op_setinfo(x_smbd_conn_t *smbd_conn,
+		x_msg_ptr_t &msg,
+		x_smbd_open_t *smbd_open, const x_smb2_requ_setinfo_t &requ, const uint8_t *data)
 {
-	return smbd_open->ops->setinfo(smbd_conn, smbd_open, requ, data);
+	return smbd_open->ops->setinfo(smbd_conn, msg, smbd_open, requ, data);
 }
 
-static inline NTSTATUS x_smbd_open_op_find(x_smbd_conn_t *smbd_conn, x_smbd_open_t *smbd_open, const x_smb2_requ_find_t &requ, std::vector<uint8_t> &output)
+static inline NTSTATUS x_smbd_open_op_find(x_smbd_conn_t *smbd_conn,
+		x_msg_ptr_t &msg,
+		x_smbd_open_t *smbd_open, const x_smb2_requ_find_t &requ, std::vector<uint8_t> &output)
 {
-	return smbd_open->ops->find(smbd_conn, smbd_open, requ, output);
+	return smbd_open->ops->find(smbd_conn, msg, smbd_open, requ, output);
 }
 
-static inline NTSTATUS x_smbd_open_op_ioctl(x_smbd_conn_t *smbd_conn, x_smbd_open_t *smbd_open,
+static inline NTSTATUS x_smbd_open_op_ioctl(x_smbd_conn_t *smbd_conn,
+		x_msg_ptr_t &msg,
+		x_smbd_open_t *smbd_open,
 		uint32_t ctl_code,
 		const uint8_t *in_input_data,
 		uint32_t in_input_size,
 		uint32_t in_max_output,
 		std::vector<uint8_t> &output)
 {
-	return smbd_open->ops->ioctl(smbd_conn, smbd_open, ctl_code, in_input_data, in_input_size, in_max_output, output);
+	return smbd_open->ops->ioctl(smbd_conn, msg, smbd_open, ctl_code, in_input_data, in_input_size, in_max_output, output);
 }
 
-static inline NTSTATUS x_smbd_open_op_notify(x_smbd_conn_t *smbd_conn, x_smbd_open_t *smbd_open, const x_smb2_requ_notify_t &requ, std::vector<uint8_t> &output)
+static inline NTSTATUS x_smbd_open_op_notify(x_smbd_conn_t *smbd_conn,
+		x_msg_ptr_t &msg,
+		x_smbd_open_t *smbd_open, const x_smb2_requ_notify_t &requ, std::vector<uint8_t> &output)
 {
-	return smbd_open->ops->notify(smbd_conn, smbd_open, requ, output);
+	return smbd_open->ops->notify(smbd_conn, msg, smbd_open, requ, output);
 }
 
-static inline NTSTATUS x_smbd_open_op_close(x_smbd_conn_t *smbd_conn, x_smbd_open_t *smbd_open, const x_smb2_requ_close_t &requ,
+static inline NTSTATUS x_smbd_open_op_close(x_smbd_conn_t *smbd_conn,
+		x_msg_ptr_t &msg,
+		x_smbd_open_t *smbd_open, const x_smb2_requ_close_t &requ,
 		x_smb2_resp_close_t &resp)
 {
-	return smbd_open->ops->close(smbd_conn, smbd_open, requ, resp);
+	return smbd_open->ops->close(smbd_conn, msg, smbd_open, requ, resp);
 }
 
 void x_smbd_open_insert_local(x_smbd_open_t *smbd_open);
@@ -594,7 +629,7 @@ struct x_smbd_sess_t
 	std::mutex mutex;
 	std::shared_ptr<x_smbduser_t> user;
 	x_auth_t *auth{nullptr};
-	x_msg_t *authmsg{nullptr};
+	x_msg_ptr_t authmsg;
 
 	x_smb2_preauth_t preauth;
 	x_smb2_key_t signing_key, decryption_key, encryption_key, application_key;
@@ -661,9 +696,10 @@ struct x_smbd_conn_t
 	uint32_t read_length = 0;
 	uint32_t nbt_hdr;
 	x_smb2_preauth_t preauth;
-	x_msg_t *recving_msg = NULL;
-	x_msg_t *sending_msg = NULL;
-	x_tp_ddlist_t<msg_dlink_traits> send_queue;
+	x_msg_ptr_t recving_msg;
+	x_msg_ptr_t sending_msg;
+	std::list<x_msg_ptr_t> send_queue;
+	// x_tp_ddlist_t<msg_dlink_traits> send_queue;
 	x_tp_ddlist_t<smbd_sess_conn_traits> session_list;
 	x_tp_ddlist_t<smbd_sess_conn_traits> session_wait_input_list;
 	x_tp_ddlist_t<fdevt_user_conn_traits> fdevt_user_list;
@@ -697,16 +733,16 @@ x_auth_t *x_smbd_create_auth(x_smbd_t *smbd);
 void x_smbd_conn_remove_sessions(x_smbd_conn_t *smbd_conn);
 void x_smbd_conn_post_user(x_smbd_conn_t *smbd_conn, x_fdevt_user_t *fdevt_user);
 
-void x_smbd_conn_reply(x_smbd_conn_t *smbd_conn, x_msg_t *msg, x_smbd_sess_t *smbd_sess,
+void x_smbd_conn_reply(x_smbd_conn_t *smbd_conn, x_msg_ptr_t &msg, x_smbd_sess_t *smbd_sess,
 		x_smb2_preauth_t *preauth, uint8_t *outbuf,
 		uint32_t tid, NTSTATUS status, uint32_t body_size);
-int x_smb2_reply_error(x_smbd_conn_t *smbd_conn, x_msg_t *msg, x_smbd_sess_t *smbd_sess,
+int x_smb2_reply_error(x_smbd_conn_t *smbd_conn, x_msg_ptr_t &msg, x_smbd_sess_t *smbd_sess,
 		uint32_t tid, NTSTATUS status, const char *file, unsigned int line);
 
 #define X_SMB2_REPLY_ERROR(smbd_conn, msg, smbd_sess, tid, status) \
 	x_smb2_reply_error((smbd_conn), (msg), (smbd_sess), (tid), (status), __FILE__, __LINE__)
 
-int x_smbd_conn_process_smb1negoprot(x_smbd_conn_t *smbd_conn, x_msg_t *msg,
+int x_smbd_conn_process_smb1negoprot(x_smbd_conn_t *smbd_conn, x_msg_ptr_t &msg,
 		const uint8_t *buf, size_t len);
 
 void x_smbd_wbpool_request(x_wbcli_t *wbcli);

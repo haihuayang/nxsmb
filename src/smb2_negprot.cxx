@@ -4,7 +4,7 @@ extern "C" {
 #include "samba/lib/util/samba_util.h"
 }
 
-static int x_smbd_conn_reply_negprot(x_smbd_conn_t *smbd_conn, x_msg_t *msg,
+static int x_smbd_conn_reply_negprot(x_smbd_conn_t *smbd_conn, x_msg_ptr_t &msg,
 		uint16_t dialect, uint16_t negotiate_context_count,
 		const std::vector<uint8_t> &negotiate_context)
 {
@@ -96,7 +96,7 @@ static int x_smbd_conn_reply_negprot(x_smbd_conn_t *smbd_conn, x_msg_t *msg,
 	return 0;
 }
 
-int x_smbd_conn_process_smb1negoprot(x_smbd_conn_t *smbd_conn, x_msg_t *msg,
+int x_smbd_conn_process_smb1negoprot(x_smbd_conn_t *smbd_conn, x_msg_ptr_t &msg,
 		const uint8_t *buf, size_t len)
 {
 	uint8_t wct = buf[HDR_WCT];
@@ -252,7 +252,7 @@ static uint16_t generate_context(
 
 
 enum { SMB2_NEGPROT_BODY_LEN = 0x24, };
-int x_smb2_process_NEGPROT(x_smbd_conn_t *smbd_conn, x_msg_t *msg,
+int x_smb2_process_NEGPROT(x_smbd_conn_t *smbd_conn, x_msg_ptr_t &msg,
 		const uint8_t *in_buf, size_t in_len)
 {
 	// x_smb2_verify_size(msg, X_SMB2_NEGPROT_BODY_LEN);
