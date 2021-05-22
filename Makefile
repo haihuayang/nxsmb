@@ -77,6 +77,7 @@ TARGET_CFLAGS_heimdal = \
 TARGET_CFLAGS_samba = \
 	-I$(TARGET_DIR_out)/samba/source4 \
 	-I$(TARGET_DIR_out)/samba \
+	-I$(TARGET_DIR_out)/samba/include \
 	-I$(TARGET_DIR_out) \
 	-Isamba/source4 \
 	-Isamba \
