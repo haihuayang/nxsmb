@@ -6,9 +6,21 @@
 #error "Must be c++"
 #endif
 
-#include "smbd.hxx"
+#include "include/xdefines.h"
+#include <string>
 #include <sys/socket.h>
+#include <netinet/in.h>
 #include <sys/ioctl.h>
+
+union x_sockaddr_t
+{
+	uint16_t family;
+	struct sockaddr sa;
+	struct sockaddr_in sin;
+	struct sockaddr_in6 sin6;
+
+	std::string tostring() const;
+};
 
 static inline void set_reuse(int s, int on)
 {

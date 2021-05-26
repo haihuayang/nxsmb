@@ -20,6 +20,7 @@
 #include "smbconf.hxx"
 #include "smb2.hxx"
 #include "misc.hxx"
+#include "network.hxx"
 #include "include/utils.hxx"
 #include "include/librpc/misc.hxx"
 #include "include/librpc/security.hxx"
@@ -580,8 +581,8 @@ X_DECLARE_MEMBER_TRAITS(fdevt_user_conn_traits, x_fdevt_user_t, link)
 struct x_smbd_conn_t
 {
 	enum { MAX_MSG = 4 };
-	x_smbd_conn_t(x_smbd_t *smbd, int fd_, const struct sockaddr_in &sin_)
-		: smbd(smbd), fd(fd_), sin(sin_) { }
+	x_smbd_conn_t(x_smbd_t *smbd, int fd, const x_sockaddr_t &saddr)
+		: smbd(smbd), fd(fd), saddr(saddr) { }
 	~x_smbd_conn_t();
 
 	const std::shared_ptr<x_smbconf_t> get_smbconf() const {
@@ -606,7 +607,7 @@ struct x_smbd_conn_t
 	enum { STATE_RUNNING, STATE_DONE } state{STATE_RUNNING};
 	int fd;
 	unsigned int count_msg = 0;
-	const struct sockaddr_in sin;
+	const x_sockaddr_t saddr;
 	uint16_t cipher = 0;
 	uint16_t dialect;
 

@@ -447,13 +447,11 @@ static const x_epoll_upcall_cbs_t x_smbd_conn_upcall_cbs = {
 	x_smbd_conn_upcall_cb_unmonitor,
 };
 
-static void x_smbd_accepted(x_smbd_t *smbd, int fd, const struct sockaddr_in &sin)
+static void x_smbd_accepted(x_smbd_t *smbd, int fd, const x_sockaddr_t &saddr)
 {
-	X_LOG_CONN("accept %d from %d.%d.%d.%d:%d", fd,
-			X_IPQUAD_BE(sin.sin_addr), ntohs(sin.sin_port));
-
+	X_LOG_CONN("accept %d from %s", fd, saddr.tostring().c_str());
 	set_nbio(fd, 1);
-	x_smbd_conn_t *smbd_conn = new x_smbd_conn_t(smbd, fd, sin);
+	x_smbd_conn_t *smbd_conn = new x_smbd_conn_t(smbd, fd, saddr);
 	X_ASSERT(smbd_conn != NULL);
 	smbd_conn->upcall.cbs = &x_smbd_conn_upcall_cbs;
 	smbd_conn->ep_id = x_evtmgmt_monitor(globals.evtmgmt, fd, FDEVT_IN | FDEVT_OUT, &smbd_conn->upcall);
@@ -472,12 +470,12 @@ static bool x_smbd_upcall_cb_getevents(x_epoll_upcall_t *upcall, x_fdevents_t &f
 	uint32_t events = x_fdevents_processable(fdevents);
 
 	if (events & FDEVT_IN) {
-		struct sockaddr_in sin;
-		socklen_t slen = sizeof(sin);
-		int fd = accept(smbd->fd, (struct sockaddr *)&sin, &slen);
+		x_sockaddr_t saddr;
+		socklen_t slen = sizeof(saddr);
+		int fd = accept(smbd->fd, &saddr.sa, &slen);
 		X_DBG("%s accept %d, %d", task_name, fd, errno);
 		if (fd >= 0) {
-			x_smbd_accepted(smbd, fd, sin);
+			x_smbd_accepted(smbd, fd, saddr);
 		} else if (errno == EINTR) {
 		} else if (errno == EMFILE) {
 		} else if (errno == EAGAIN) {
