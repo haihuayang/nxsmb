@@ -748,18 +748,18 @@ static inline x_ndr_off_t x_ndr_scalars_array_value(NT &&nt,
 
 
 
-x_ndr_off_t x_ndr_scalars_string_intl(const std::string &str, x_ndr_push_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags);
-x_ndr_off_t x_ndr_scalars_string_intl(std::string &str, x_ndr_pull_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags);
+x_ndr_off_t x_ndr_scalars_string_intl(const std::string &str, x_ndr_push_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, bool add_nul_empty);
+x_ndr_off_t x_ndr_scalars_string_intl(std::string &str, x_ndr_pull_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, bool add_nul_empty);
 
-x_ndr_off_t x_ndr_scalars_string_intl(const std::u16string &str, x_ndr_push_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags);
-x_ndr_off_t x_ndr_scalars_string_intl(std::u16string &str, x_ndr_pull_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags);
+x_ndr_off_t x_ndr_scalars_string_intl(const std::u16string &str, x_ndr_push_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, bool add_nul_empty);
+x_ndr_off_t x_ndr_scalars_string_intl(std::u16string &str, x_ndr_pull_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, bool add_nul_empty);
 
-x_ndr_off_t x_ndr_scalars_string(const std::string &str, x_ndr_push_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags);
-x_ndr_off_t x_ndr_scalars_string(std::string &str, x_ndr_pull_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags);
+x_ndr_off_t x_ndr_scalars_string(const std::string &str, x_ndr_push_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, bool add_nul_empty);
+x_ndr_off_t x_ndr_scalars_string(std::string &str, x_ndr_pull_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, bool add_nul_empty);
 void x_ndr_ostr_string(const std::string &str, x_ndr_ostr_t &ndr, uint32_t flags);
 
-x_ndr_off_t x_ndr_scalars_string(const std::u16string &str, x_ndr_push_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags);
-x_ndr_off_t x_ndr_scalars_string(std::u16string &str, x_ndr_pull_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags);
+x_ndr_off_t x_ndr_scalars_string(const std::u16string &str, x_ndr_push_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, bool add_nul_empty);
+x_ndr_off_t x_ndr_scalars_string(std::u16string &str, x_ndr_pull_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, bool add_nul_empty);
 void x_ndr_ostr_string(const std::u16string &str, x_ndr_ostr_t &ndr, uint32_t flags);
 
 
@@ -771,12 +771,12 @@ template <> struct ndr_traits_t<std::string>
 
 	x_ndr_off_t scalars(const std::string &val, x_ndr_push_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, x_ndr_switch_t level) const {
 		X_ASSERT(level == X_NDR_SWITCH_NONE);
-		return x_ndr_scalars_string(val, ndr, bpos, epos, flags);
+		return x_ndr_scalars_string(val, ndr, bpos, epos, flags, true);
 	}
 
 	x_ndr_off_t scalars(std::string &val, x_ndr_pull_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, x_ndr_switch_t level) const {
 		X_ASSERT(level == X_NDR_SWITCH_NONE);
-		return x_ndr_scalars_string(val, ndr, bpos, epos, flags);
+		return x_ndr_scalars_string(val, ndr, bpos, epos, flags, true);
 	}
 
 	void ostr(const std::string &val, x_ndr_ostr_t &ndr, uint32_t flags, x_ndr_switch_t level) const {
@@ -793,12 +793,12 @@ template <> struct ndr_traits_t<std::u16string>
 
 	x_ndr_off_t scalars(const std::u16string &val, x_ndr_push_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, x_ndr_switch_t level) const {
 		X_ASSERT(level == X_NDR_SWITCH_NONE);
-		return x_ndr_scalars_string(val, ndr, bpos, epos, flags);
+		return x_ndr_scalars_string(val, ndr, bpos, epos, flags, true);
 	}
 
 	x_ndr_off_t scalars(std::u16string &val, x_ndr_pull_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, x_ndr_switch_t level) const {
 		X_ASSERT(level == X_NDR_SWITCH_NONE);
-		return x_ndr_scalars_string(val, ndr, bpos, epos, flags);
+		return x_ndr_scalars_string(val, ndr, bpos, epos, flags, true);
 	}
 
 	void ostr(const std::u16string &val, x_ndr_ostr_t &ndr, uint32_t flags, x_ndr_switch_t level) const {
@@ -832,7 +832,7 @@ inline x_ndr_off_t x_ndr_scalars_charset(T &&val, NDR &ndr, x_ndr_off_t bpos, x_
 	if ((flags & LIBNDR_FLAG_STR_NULLTERM) == 0) {
 		flags |= LIBNDR_FLAG_STR_NOTERM;
 	}
-	return x_ndr_scalars_string_intl(std::forward<T>(val), ndr, bpos, epos, flags);
+	return x_ndr_scalars_string_intl(std::forward<T>(val), ndr, bpos, epos, flags, false);
 }
 
 #define X_NDR_SCALARS_CHARSET(__val, __ndr, __bpos, __epos, __flags, __level) do { \

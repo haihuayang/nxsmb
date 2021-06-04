@@ -15,19 +15,19 @@
 
 namespace idl {
 
-x_ndr_off_t x_ndr_scalars_string_intl(const std::string &val, x_ndr_push_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags)
+x_ndr_off_t x_ndr_scalars_string_intl(const std::string &val, x_ndr_push_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, bool add_nul_empty)
 {
 	bpos = x_ndr_push_bytes(val.data(), ndr, bpos, epos, val.size());
 	if (bpos < 0) {
 		return bpos;
 	}
-	if (!(flags & LIBNDR_FLAG_STR_NOTERM)) {
+	if ((add_nul_empty && val.size() == 0) || !(flags & LIBNDR_FLAG_STR_NOTERM)) {
 		X_NDR_SCALARS_DEFAULT(uint8(0), ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
 	}
 	return bpos;
 }
 
-x_ndr_off_t x_ndr_scalars_string_intl(std::string &val, x_ndr_pull_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags)
+x_ndr_off_t x_ndr_scalars_string_intl(std::string &val, x_ndr_pull_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, bool add_nul_empty)
 {
 	size_t length = epos - bpos;
 	if (!(flags & LIBNDR_FLAG_STR_NOTERM)) {
@@ -42,25 +42,31 @@ x_ndr_off_t x_ndr_scalars_string_intl(std::string &val, x_ndr_pull_t &ndr, x_ndr
 			return -NDR_ERR_ARRAY_SIZE;
 		}
 	} else {
-		val.assign((const char16_t *)(ndr.get_data() + bpos), (const char16_t *)(ndr.get_data() + epos)); 
+		const char *end = (const char *)(ndr.get_data() + epos);
+		if (length > 0) {
+			if (end[-1] == '\0') {
+				--end;
+			}
+		}
+		val.assign((const char *)(ndr.get_data() + bpos), end);
 	}
 	return epos;
 }
 
-x_ndr_off_t x_ndr_scalars_string_intl(const std::u16string &val, x_ndr_push_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags)
+x_ndr_off_t x_ndr_scalars_string_intl(const std::u16string &val, x_ndr_push_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, bool add_nul_empty)
 {
 	X_ASSERT((flags & LIBNDR_FLAG_BIGENDIAN) == 0); // TODO
 	bpos = x_ndr_push_bytes(val.data(), ndr, bpos, epos, val.size() * 2);
 	if (bpos < 0) {
 		return bpos;
 	}
-	if (!(flags & LIBNDR_FLAG_STR_NOTERM)) {
+	if ((add_nul_empty && val.size() == 0) || !(flags & LIBNDR_FLAG_STR_NOTERM)) {
 		X_NDR_SCALARS_DEFAULT(uint16(0), ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
 	}
 	return bpos;
 }
 
-x_ndr_off_t x_ndr_scalars_string_intl(std::u16string &val, x_ndr_pull_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags)
+x_ndr_off_t x_ndr_scalars_string_intl(std::u16string &val, x_ndr_pull_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, bool add_nul_empty)
 {
 	X_ASSERT((flags & LIBNDR_FLAG_BIGENDIAN) == 0); // TODO
 	size_t length = epos - bpos;
@@ -79,32 +85,38 @@ x_ndr_off_t x_ndr_scalars_string_intl(std::u16string &val, x_ndr_pull_t &ndr, x_
 			return -NDR_ERR_ARRAY_SIZE;
 		}
 	} else {
-		val.assign((const char16_t *)(ndr.get_data() + bpos), (const char16_t *)(ndr.get_data() + epos)); 
+		const char16_t *end = (const char16_t *)(ndr.get_data() + epos);
+		if (length > 0) {
+			if (end[-1] == 0) {
+				--end;
+			}
+		}
+		val.assign((const char16_t *)(ndr.get_data() + bpos), end);
 	}
 	return epos;
 }
 
-x_ndr_off_t x_ndr_scalars_string(const std::u16string &val, x_ndr_push_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags)
+x_ndr_off_t x_ndr_scalars_string(const std::u16string &val, x_ndr_push_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, bool add_nul_empty)
 {
 	if (flags & (LIBNDR_FLAG_STR_ASCII|LIBNDR_FLAG_STR_UTF8)) {
-		return x_ndr_scalars_string_intl(x_convert_utf16_to_utf8(val), ndr, bpos, epos, flags);
+		return x_ndr_scalars_string_intl(x_convert_utf16_to_utf8(val), ndr, bpos, epos, flags, add_nul_empty);
 	} else {
-		return x_ndr_scalars_string_intl(val, ndr, bpos, epos, flags);
+		return x_ndr_scalars_string_intl(val, ndr, bpos, epos, flags, add_nul_empty);
 	}
 }
 
-x_ndr_off_t x_ndr_scalars_string(std::u16string &val, x_ndr_pull_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags)
+x_ndr_off_t x_ndr_scalars_string(std::u16string &val, x_ndr_pull_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, bool add_nul_empty)
 {
 	if (flags & (LIBNDR_FLAG_STR_ASCII|LIBNDR_FLAG_STR_UTF8)) {
 		std::string tmp;
-		bpos = x_ndr_scalars_string_intl(tmp, ndr, bpos, epos, flags);
+		bpos = x_ndr_scalars_string_intl(tmp, ndr, bpos, epos, flags, add_nul_empty);
 		if (bpos < 0) {
 			return bpos;
 		}
 		val = x_convert_utf8_to_utf16(tmp);
 		return bpos;
 	} else {
-		return x_ndr_scalars_string_intl(val, ndr, bpos, epos, flags);
+		return x_ndr_scalars_string_intl(val, ndr, bpos, epos, flags, add_nul_empty);
 	}
 }
 
@@ -113,22 +125,22 @@ void x_ndr_ostr_string(const std::u16string &val, x_ndr_ostr_t &ndr, uint32_t fl
 	ndr.os << "u\"" << x_convert_utf16_to_utf8(val) << '"';
 }
 
-x_ndr_off_t x_ndr_scalars_string(const std::string &val, x_ndr_push_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags)
+x_ndr_off_t x_ndr_scalars_string(const std::string &val, x_ndr_push_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, bool add_nul_empty)
 {
 	if (flags & (LIBNDR_FLAG_STR_ASCII|LIBNDR_FLAG_STR_UTF8)) {
-		return x_ndr_scalars_string_intl(val, ndr, bpos, epos, flags);
+		return x_ndr_scalars_string_intl(val, ndr, bpos, epos, flags, add_nul_empty);
 	} else {
-		return x_ndr_scalars_string_intl(x_convert_utf8_to_utf16(val), ndr, bpos, epos, flags);
+		return x_ndr_scalars_string_intl(x_convert_utf8_to_utf16(val), ndr, bpos, epos, flags, add_nul_empty);
 	}
 }
 
-x_ndr_off_t x_ndr_scalars_string(std::string &val, x_ndr_pull_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags)
+x_ndr_off_t x_ndr_scalars_string(std::string &val, x_ndr_pull_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, bool add_nul_empty)
 {
 	if (flags & (LIBNDR_FLAG_STR_ASCII|LIBNDR_FLAG_STR_UTF8)) {
-		return x_ndr_scalars_string_intl(val, ndr, bpos, epos, flags);
+		return x_ndr_scalars_string_intl(val, ndr, bpos, epos, flags, add_nul_empty);
 	} else {
 		std::u16string tmp;
-		bpos = x_ndr_scalars_string_intl(tmp, ndr, bpos, epos, flags);
+		bpos = x_ndr_scalars_string_intl(tmp, ndr, bpos, epos, flags, add_nul_empty);
 		if (bpos < 0) {
 			return bpos;
 		}
@@ -151,7 +163,7 @@ x_ndr_off_t x_ndr_scalars_size_length_string(const std::u16string &val, x_ndr_pu
 	X_NDR_SCALARS_DEFAULT(uint3264(0), ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
 	tmp.val = length + (((size_length_flags & str_length_noterm) == 0) ? 1 : 0);
 	X_NDR_SCALARS_DEFAULT(tmp, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
-	return x_ndr_scalars_string(val, ndr, bpos, epos, flags);
+	return x_ndr_scalars_string(val, ndr, bpos, epos, flags, false);
 }
 
 x_ndr_off_t x_ndr_scalars_size_length_string(std::u16string &val, x_ndr_pull_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, uint32_t size_length_flags)
@@ -169,7 +181,7 @@ x_ndr_off_t x_ndr_scalars_size_length_string(std::u16string &val, x_ndr_pull_t &
 	}
 
 	epos = X_NDR_CHECK_POS(bpos + 2 * len, bpos, epos);
-	return x_ndr_scalars_string(val, ndr, bpos, epos, flags);
+	return x_ndr_scalars_string(val, ndr, bpos, epos, flags, false);
 }
 
 } /* namespace idl */

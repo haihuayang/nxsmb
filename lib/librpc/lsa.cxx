@@ -38,7 +38,7 @@ static x_ndr_off_t lsa_u16string_buffers(
 		X_NDR_SCALARS_DEFAULT(uint3264{size}, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
 		X_NDR_SCALARS_DEFAULT(uint3264{0}, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
 		X_NDR_SCALARS_DEFAULT(uint3264{size}, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
-		X_NDR_SCALARS_DEFAULT(*val, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
+		X_NDR_SCALARS_CHARSET(*val, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
 	}
 	return bpos;
 }
@@ -78,7 +78,7 @@ static x_ndr_off_t lsa_u16string_buffers(
 			return -NDR_ERR_ARRAY_SIZE;
 		}
 		epos = X_NDR_CHECK_POS(bpos + array_length.val * 2, bpos, epos);
-		X_NDR_SCALARS_DEFAULT(*val, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
+		X_NDR_SCALARS_CHARSET(*val, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
 	}
 	return bpos;
 }
