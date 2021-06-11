@@ -3,30 +3,26 @@
 #include "core.hxx"
 #include "include/charset.hxx"
 
+enum {
+	X_SMB2_TCON_REQU_BODY_LEN = 0x08,
+	X_SMB2_TCON_RESP_BODY_LEN = 0x10,
+};
 
-static std::shared_ptr<x_smbd_tcon_t> make_tcon(x_smbd_sess_t *smbd_sess,
+
+static x_smbd_tcon_t *make_tcon(x_smbd_sess_t *smbd_sess,
 		const std::shared_ptr<x_smbshare_t> &smbshare)
 {
-	auto smbd_tcon = std::make_shared<x_smbd_tcon_t>(smbshare);
+	auto smbd_tcon = new x_smbd_tcon_t(smbd_sess, smbshare);
 	if (smbshare->type == TYPE_IPC) {
-		x_smbd_tcon_init_ipc(smbd_tcon.get());
+		x_smbd_tcon_init_ipc(smbd_tcon);
 	} else {
-		x_smbd_tcon_init_disk(smbd_tcon.get());
+		x_smbd_tcon_init_disk(smbd_tcon);
 	}
 
-	std::lock_guard<std::mutex> lock(smbd_sess->mutex);
-	while (true) {
-		uint32_t id = smbd_sess->next_tcon_id++;
-		if (id == 0) {
-			continue;
-		}
-		if (smbd_sess->tcon_table.find(id) != smbd_sess->tcon_table.end()) {
-			continue;
-		}
-		smbd_tcon->tid = id;
-		smbd_sess->tcon_table[id] = smbd_tcon;
-		return smbd_tcon;
-	}
+	x_smbd_tcon_insert(smbd_tcon);
+	smbd_tcon->incref();
+	smbd_sess->tcon_list.push_back(smbd_tcon);
+	return smbd_tcon;
 }
 
 /*******************************************************************
@@ -125,77 +121,65 @@ static NTSTATUS check_user_share_access(x_smbd_share_t *smbd_share,
 }
 #endif
 
-enum {
-	X_SMB2_TCON_BODY_LEN = 0x8,
-};
-
-static int x_smb2_reply_tcon(x_smbd_conn_t *smbd_conn,
-		x_smbd_sess_t *smbd_sess,
-		x_msg_ptr_t &msg, NTSTATUS status,
-		uint32_t tid,
+static void x_smb2_reply_tcon(x_smbd_conn_t *smbd_conn,
+		x_smbd_tcon_t *smbd_tcon,
+		x_smb2_msg_t *msg, NTSTATUS status,
 		uint8_t out_share_type,
 		uint32_t out_share_flags,
 		uint32_t out_share_capabilities,
 		uint32_t out_access_mask)
 {
-	X_LOG_OP("%ld RESP SUCCESS tid=%x", msg->mid, tid);
+	X_LOG_OP("%ld RESP SUCCESS tid=%x", msg->in_mid, smbd_tcon->tid);
+	x_bufref_t *bufref = x_bufref_alloc(X_SMB2_TCON_RESP_BODY_LEN);
 
-	uint8_t *outbuf = new uint8_t[8 + 0x40 + 0x10];
-	uint8_t *outhdr = outbuf + 8;
-	uint8_t *outbody = outhdr + 0x40;
+	uint8_t *out_hdr = bufref->get_data();
+	uint8_t *out_body = out_hdr + SMB2_HDR_BODY;
 
-	SSVAL(outbody, 0x00, 0x10);
-	SCVAL(outbody, 0x02, out_share_type);
-	SCVAL(outbody, 0x03, 0); // reserved
-	SIVAL(outbody, 0x04, out_share_flags);
-	SIVAL(outbody, 0x08, out_share_capabilities);
-	SIVAL(outbody, 0x0c, out_access_mask);
+	x_put_le16(out_body, X_SMB2_TCON_RESP_BODY_LEN);
+	x_put_le8(out_body + 0x02, out_share_type);
+	x_put_le8(out_body + 0x03, 0);
+	x_put_le32(out_body + 0x04, out_share_flags);
+	x_put_le32(out_body + 0x08, out_share_capabilities);
+	x_put_le32(out_body + 0x0c, out_access_mask);
 
-	x_smbd_conn_reply(smbd_conn, msg, smbd_sess, nullptr, outbuf, tid, status, 0x10);
-	return 0;
+	msg->smbd_tcon = smbd_tcon;
+	x_smb2_reply(smbd_conn, msg, bufref, bufref, status, 
+			SMB2_HDR_BODY + X_SMB2_TCON_RESP_BODY_LEN);
 }
 
-int x_smb2_process_TCON(x_smbd_conn_t *smbd_conn, x_msg_ptr_t &msg,
-		const uint8_t *in_buf, size_t in_len)
+NTSTATUS x_smb2_process_TCON(x_smbd_conn_t *smbd_conn, x_smb2_msg_t *msg)
 {
-	if (in_len < 0x40 + 0x9) {
-		return X_SMB2_REPLY_ERROR(smbd_conn, msg, nullptr, 0,  NT_STATUS_INVALID_PARAMETER);
+	X_LOG_OP("%ld TCON", msg->in_mid);
+
+	if (msg->in_requ_len < SMB2_HDR_BODY + X_SMB2_TCON_REQU_BODY_LEN + 1) {
+		RETURN_OP_STATUS(msg, NT_STATUS_INVALID_PARAMETER);
 	}
 
-	const uint8_t *inhdr = in_buf;
-	const uint8_t *inbody = in_buf + 0x40;
-	uint64_t in_session_id = BVAL(inhdr, SMB2_HDR_SESSION_ID);
+	const uint8_t *in_hdr = msg->get_in_data();
+	const uint8_t *in_body = in_hdr + SMB2_HDR_BODY;
 
-	if (in_session_id == 0) {
-		return X_SMB2_REPLY_ERROR(smbd_conn, msg, nullptr, 0,  NT_STATUS_USER_SESSION_DELETED);
+	if (!msg->smbd_sess) {
+		RETURN_OP_STATUS(msg, NT_STATUS_USER_SESSION_DELETED);
 	}
 	
-	x_auto_ref_t<x_smbd_sess_t> smbd_sess{x_smbd_sess_find(in_session_id, smbd_conn)};
-	if (smbd_sess == nullptr) {
-		return X_SMB2_REPLY_ERROR(smbd_conn, msg, nullptr, 0,  NT_STATUS_USER_SESSION_DELETED);
-	}
-	if (smbd_sess->state != x_smbd_sess_t::S_ACTIVE) {
-		return X_SMB2_REPLY_ERROR(smbd_conn, msg, smbd_sess, 0,  NT_STATUS_INVALID_PARAMETER);
+	if (msg->smbd_sess->state != x_smbd_sess_t::S_ACTIVE) {
+		RETURN_OP_STATUS(msg, NT_STATUS_INVALID_PARAMETER);
 	}
 	/* TODO signing/encryption */
 
-	uint16_t in_path_offset = SVAL(inbody, 0x04);
-	uint16_t in_path_length = SVAL(inbody, 0x06);
+	uint16_t in_path_offset = SVAL(in_body, 0x04);
+	uint16_t in_path_length = SVAL(in_body, 0x06);
 	if (in_path_length % 2 != 0) {
-		return X_SMB2_REPLY_ERROR(smbd_conn, msg, smbd_sess, 0,  NT_STATUS_INVALID_PARAMETER);
+		RETURN_OP_STATUS(msg, NT_STATUS_INVALID_PARAMETER);
 	}
 
-	if (in_path_offset != (SMB2_HDR_BODY + X_SMB2_TCON_BODY_LEN)) {
-		return X_SMB2_REPLY_ERROR(smbd_conn, msg, smbd_sess, 0,  NT_STATUS_INVALID_PARAMETER);
-	}
-	
-	if (in_path_offset + in_path_length > in_len) {
-		return X_SMB2_REPLY_ERROR(smbd_conn, msg, smbd_sess, 0,  NT_STATUS_INVALID_PARAMETER);
+	if (!x_check_range<uint32_t>(in_path_offset, in_path_length, SMB2_HDR_BODY + X_SMB2_TCON_REQU_BODY_LEN, msg->in_requ_len)) {
+		RETURN_OP_STATUS(msg, NT_STATUS_INVALID_PARAMETER);
 	}
 
 	/* convert lower case utf8 */
-	std::string in_path = x_convert_utf16_to_lower_utf8((char16_t *)(in_buf + in_path_offset),
-			(char16_t *)(in_buf + in_path_offset + in_path_length));
+	std::string in_path = x_convert_utf16_to_lower_utf8((char16_t *)(in_hdr + in_path_offset),
+			(char16_t *)(in_hdr + in_path_offset + in_path_length));
 	/* TODO fail with NT_STATUS_ILLEGAL_CHARACTER */
 
 	// smbd_smb2_tree_connect
@@ -205,21 +189,21 @@ int x_smb2_process_TCON(x_smbd_conn_t *smbd_conn, x_msg_ptr_t &msg,
 	}
 	const char *in_share_s = strchr(in_path_s, '\\');
 	if (!in_share_s) {
-		return X_SMB2_REPLY_ERROR(smbd_conn, msg, smbd_sess, 0,  NT_STATUS_INVALID_PARAMETER);
+		RETURN_OP_STATUS(msg, NT_STATUS_INVALID_PARAMETER);
 	}
 
 	std::string host{in_path_s, in_share_s};
 	std::string share{in_share_s + 1};
 
-	X_LOG_OP("%ld TCON %s", msg->mid, in_path.c_str());
+	X_LOG_OP("%ld TCON %s", msg->in_mid, in_path.c_str());
 
 	auto smbshare = x_smbd_find_share(smbd_conn->smbd, share);
 	if (!smbshare) {
-		return X_SMB2_REPLY_ERROR(smbd_conn, msg, smbd_sess, 0,  NT_STATUS_BAD_NETWORK_NAME);
+		RETURN_OP_STATUS(msg, NT_STATUS_BAD_NETWORK_NAME);
 	}
 
 	uint32_t share_access = create_share_access_mask(smbshare,
-			smbd_sess);
+			msg->smbd_sess);
 
 	if ((share_access & (idl::SEC_FILE_READ_DATA|idl::SEC_FILE_WRITE_DATA)) == 0) {
 		/* No access, read or write. */
@@ -227,10 +211,10 @@ int x_smb2_process_TCON(x_smbd_conn_t *smbd_conn, x_msg_ptr_t &msg,
 			 "security descriptor.\n",
 			 session_info->unix_info->unix_name,
 			 lp_servicename(talloc_tos(), snum)));
-		return X_SMB2_REPLY_ERROR(smbd_conn, msg, smbd_sess, 0,  NT_STATUS_ACCESS_DENIED);
+		RETURN_OP_STATUS(msg, NT_STATUS_ACCESS_DENIED);
 	}
 
-	auto smbd_tcon = make_tcon(smbd_sess, smbshare);
+	auto smbd_tcon = make_tcon(msg->smbd_sess, smbshare);
 	smbd_tcon->share_access = share_access;
 
 	uint32_t out_share_flags = 0;
@@ -274,12 +258,10 @@ int x_smb2_process_TCON(x_smbd_conn_t *smbd_conn, x_msg_ptr_t &msg,
 
 	/* make_connection_snum *out_maximal_access = tcon->compat->share_access; */
 
-	return x_smb2_reply_tcon(smbd_conn, smbd_sess, msg, NT_STATUS_OK,
-			smbd_tcon->tid,
+	x_smb2_reply_tcon(smbd_conn, smbd_tcon, msg, NT_STATUS_OK,
 			smbshare->type == TYPE_IPC ? SMB2_SHARE_TYPE_PIPE : SMB2_SHARE_TYPE_DISK,
 			out_share_flags,
 			out_capabilities, share_access);
-
-	return 0;
+	return NT_STATUS_OK;
 }
 

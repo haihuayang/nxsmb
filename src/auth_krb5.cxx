@@ -96,7 +96,7 @@ static void auth_krb5_domain_info_cb_reply(x_wbcli_t *wbcli, int err)
 
 	if (err == 0) {
 		const auto &domain_info = auth->wbresp.header.data.domain_info;
-		X_DBG("err=%d, result=%d, name='%s', alt_name='%s', sid=%s, native_mode=%d, active_directory=%d, primary=%d",
+		X_LOG_DBG("err=%d, result=%d, name='%s', alt_name='%s', sid=%s, native_mode=%d, active_directory=%d, primary=%d",
 				err, auth->wbresp.header.result,
 				domain_info.name, domain_info.alt_name,
 				domain_info.sid,
@@ -944,13 +944,13 @@ static NTSTATUS auth_krb5_accepted(x_auth_krb5_t &auth, gss_ctx_id_t gss_ctx,
 	gss_maj = gssapi_obtain_pac_blob(gss_min, gss_ctx,
 			pac_buffer_set);
 	if (gss_maj == GSS_S_UNAVAILABLE) {
-		X_DBG("unable to obtain a PAC against this GSSAPI library.  "
+		X_LOG_DBG("unable to obtain a PAC against this GSSAPI library.  "
 				"GSSAPI secured connections are available only with Heimdal or MIT Kerberos >= 1.8\n");
 	} else if (gss_maj != 0) {
 		DEBUG("obtaining PAC via GSSAPI gss_inqiure_sec_context_by_oid (Heimdal OID) failed: %s\n",
 				gssapi_error_string(NULL, gss_maj, gss_min, gss_mech_krb5));
 	} else if (pac_buffer_set == GSS_C_NO_BUFFER_SET) {
-		X_DBG("gss_inquire_sec_context_by_oid returned unknown "
+		X_LOG_DBG("gss_inquire_sec_context_by_oid returned unknown "
 				"data in results.\n");
 		return NT_STATUS_INTERNAL_ERROR;
 	}

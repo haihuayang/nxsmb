@@ -5,24 +5,27 @@ extern "C" {
 #include "samba/lib/crypto/sha512.h"
 }
 
-x_smbd_conn_t::~x_smbd_conn_t() {
-#if 0
-	if (recving_msg) {
-		delete recving_msg;
-	}
-	if (sending_msg) {
-		delete sending_msg;
-	}
-	while (!send_queue.empty()) {
-		x_msg_t *msg = send_queue.get_front();
-		send_queue.remove(msg);
-		delete msg;
-	}
-#endif
+x_smbd_conn_t::x_smbd_conn_t(x_smbd_t *smbd, int fd, const x_sockaddr_t &saddr)
+	: smbd(smbd), fd(fd), saddr(saddr)
+	, seq_bitmap(smbd->smbconf->smb2_max_credits)
+{
+}
+
+x_smbd_conn_t::~x_smbd_conn_t()
+{
+	X_LOG_DBG("x_smbd_conn_t %p destroy", this);
 	X_ASSERT(!session_list.get_front());
 	X_ASSERT(!session_wait_input_list.get_front());
+	X_ASSERT(fd == -1);
 
-	X_ASSERT_SYSCALL(close(fd));
+	if (recv_buf) {
+		x_buf_release(recv_buf);
+	}
+	while (send_buf_head) {
+		auto next = send_buf_head->next;
+		delete send_buf_head;
+		send_buf_head = next;
+	}
 }
 
 #if 0

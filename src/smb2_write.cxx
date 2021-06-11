@@ -1,5 +1,5 @@
 
-#include "smbd.hxx"
+#include "smbd_open.hxx"
 #include "core.hxx"
 
 namespace {
@@ -7,94 +7,128 @@ enum {
 	X_SMB2_WRITE_REQU_BODY_LEN = 0x30,
 	X_SMB2_WRITE_RESP_BODY_LEN = 0x10,
 };
+
+struct x_smb2_in_write_t
+{
+	uint16_t struct_size;
+	uint16_t data_offset;
+	uint32_t length;
+	uint64_t offset;
+	uint64_t file_id_persistent;
+	uint64_t file_id_volatile;
+	uint32_t channel;
+	uint32_t remaining_bytes;
+	uint16_t write_channel_info_offset;
+	uint16_t write_channel_info_length;
+	uint32_t flags;
+};
+
+struct x_smb2_out_write_t
+{
+	uint16_t struct_size;
+	uint16_t reserved0;
+	uint32_t count;
+	uint32_t remaining;
+	uint16_t write_channel_info_offset;
+	uint16_t write_channel_info_length;
+};
+
 }
 
-static int x_smb2_reply_write(x_smbd_conn_t *smbd_conn,
-		x_smbd_sess_t *smbd_sess,
-		x_msg_ptr_t &msg, NTSTATUS status,
-		uint32_t tid,
-		x_smb2_resp_write_t &resp)
+static bool decode_in_write(x_smb2_state_write_t &state,
+		const uint8_t *in_hdr, uint32_t in_len)
 {
-	X_LOG_OP("%ld WRITE SUCCESS", msg->mid);
+	const x_smb2_in_write_t *in_write = (const x_smb2_in_write_t *)(in_hdr + SMB2_HDR_BODY);
+	uint16_t in_data_offset = X_LE2H16(in_write->data_offset);
+	uint32_t in_length = X_LE2H32(in_write->length);
 
-	uint8_t *outbuf = new uint8_t[8 + 0x40 + X_SMB2_WRITE_RESP_BODY_LEN];
-	uint8_t *outhdr = outbuf + 8;
-	uint8_t *outbody = outhdr + 0x40;
+	if (!x_check_range<uint32_t>(in_data_offset, in_length,
+				SMB2_HDR_BODY + sizeof(x_smb2_in_write_t), in_len)) {
+		return false;
+	}
 
-	SSVAL(outbody, 0x00, X_SMB2_WRITE_RESP_BODY_LEN + 1);
-	SSVAL(outbody, 0x02, 0);
-	SIVAL(outbody, 0x04, resp.write_count);
-	SIVAL(outbody, 0x08, resp.write_remaining);
-	SIVAL(outbody, 0x0c, 0); // channel info
-	x_smbd_conn_reply(smbd_conn, msg, smbd_sess, nullptr, outbuf, tid, status, X_SMB2_WRITE_RESP_BODY_LEN);
-	return 0;
+	state.in_offset = X_LE2H64(in_write->offset);
+	state.in_file_id_persistent = X_LE2H64(in_write->file_id_persistent);
+	state.in_file_id_volatile = X_LE2H64(in_write->file_id_volatile);
+	state.in_flags = X_LE2H8(in_write->flags);
+
+	/* TODO avoid copying */
+	state.in_data.assign(in_hdr + in_data_offset, in_hdr + in_data_offset + in_length);
+	return true;
 }
 
-
-int x_smb2_process_WRITE(x_smbd_conn_t *smbd_conn, x_msg_ptr_t &msg,
-		const uint8_t *in_buf, size_t in_len)
+static void encode_out_write(const x_smb2_state_write_t &state,
+		uint8_t *out_hdr)
 {
-	if (in_len < 0x40 + X_SMB2_WRITE_REQU_BODY_LEN) {
-		return X_SMB2_REPLY_ERROR(smbd_conn, msg, nullptr, 0, NT_STATUS_INVALID_PARAMETER);
+	x_smb2_out_write_t *out_write = (x_smb2_out_write_t *)(out_hdr + SMB2_HDR_BODY);
+	out_write->struct_size = X_H2LE16(sizeof(x_smb2_out_write_t) + 1);
+	out_write->reserved0 = 0;
+	out_write->count = X_H2LE32(state.out_count);
+	out_write->remaining = X_H2LE32(state.out_remaining);
+	out_write->write_channel_info_offset = 0;
+	out_write->write_channel_info_length = 0;
+}
+
+static void x_smb2_reply_write(x_smbd_conn_t *smbd_conn,
+		x_smb2_msg_t *msg,
+		const x_smb2_state_write_t &state)
+{
+	X_LOG_OP("%ld WRITE SUCCESS", msg->in_mid);
+
+	x_bufref_t *bufref = x_bufref_alloc(sizeof(x_smb2_out_write_t));
+
+	uint8_t *out_hdr = bufref->get_data();
+	encode_out_write(state, out_hdr);
+
+	x_smb2_reply(smbd_conn, msg, bufref, bufref, NT_STATUS_OK, 
+			SMB2_HDR_BODY + sizeof(x_smb2_out_write_t));
+}
+
+NTSTATUS x_smb2_process_WRITE(x_smbd_conn_t *smbd_conn, x_smb2_msg_t *msg)
+{
+	if (msg->in_requ_len < SMB2_HDR_BODY + sizeof(x_smb2_in_write_t)) {
+		RETURN_OP_STATUS(msg, NT_STATUS_INVALID_PARAMETER);
 	}
 
-	const uint8_t *inhdr = in_buf;
-	const uint8_t *inbody = in_buf + 0x40;
-
-	uint64_t in_session_id = BVAL(inhdr, SMB2_HDR_SESSION_ID);
-	uint32_t in_tid = IVAL(inhdr, SMB2_HDR_TID);
-	if (in_session_id == 0) {
-		return X_SMB2_REPLY_ERROR(smbd_conn, msg, nullptr, in_tid, NT_STATUS_USER_SESSION_DELETED);
-	}
-	x_auto_ref_t<x_smbd_sess_t> smbd_sess{x_smbd_sess_find(in_session_id, smbd_conn)};
-	if (smbd_sess == nullptr) {
-		return X_SMB2_REPLY_ERROR(smbd_conn, msg, nullptr, in_tid, NT_STATUS_USER_SESSION_DELETED);
-	}
-	if (smbd_sess->state != x_smbd_sess_t::S_ACTIVE) {
-		return X_SMB2_REPLY_ERROR(smbd_conn, msg, smbd_sess, in_tid, NT_STATUS_INVALID_PARAMETER);
-	}
-	/* TODO signing/encryption */
-
-	auto it = smbd_sess->tcon_table.find(in_tid);
-	if (it == smbd_sess->tcon_table.end()) {
-		return X_SMB2_REPLY_ERROR(smbd_conn, msg, smbd_sess, in_tid, NT_STATUS_NETWORK_NAME_DELETED);
-	}
-	std::shared_ptr<x_smbd_tcon_t> smbd_tcon = it->second;
-
-	/* TODO only for little-endian */
-	x_smb2_requ_write_t requ_write;
-	memcpy(&requ_write, inbody, X_SMB2_WRITE_REQU_BODY_LEN);
-
-	X_LOG_OP("%ld WRITE %x,%lx %lx,%lx", msg->mid, 
-			requ_write.data_length, requ_write.offset,
-			requ_write.file_id_persistent, requ_write.file_id_volatile);
-
-	if (!x_check_range(requ_write.data_offset, requ_write.data_length,
-				0x40 + X_SMB2_WRITE_REQU_BODY_LEN, in_len)) {
-		return X_SMB2_REPLY_ERROR(smbd_conn, msg, smbd_sess, in_tid, NT_STATUS_INVALID_PARAMETER);
+	if (!msg->smbd_sess) {
+		RETURN_OP_STATUS(msg, NT_STATUS_USER_SESSION_DELETED);
 	}
 
-	const std::shared_ptr<x_smbconf_t> smbconf = smbd_conn->get_smbconf();
-	if (requ_write.data_length > smbconf->max_trans) {
-		return X_SMB2_REPLY_ERROR(smbd_conn, msg, smbd_sess, in_tid, NT_STATUS_INVALID_PARAMETER);
+	if (msg->smbd_sess->state != x_smbd_sess_t::S_ACTIVE) {
+		RETURN_OP_STATUS(msg, NT_STATUS_INVALID_PARAMETER);
 	}
 
-	// TODO smbd_smb2_request_verify_creditcharge
-	x_auto_ref_t<x_smbd_open_t> smbd_open{x_smbd_open_find(requ_write.file_id_volatile,
-			smbd_tcon.get())};
-	if (!smbd_open) {
-		return X_SMB2_REPLY_ERROR(smbd_conn, msg, smbd_sess, in_tid, NT_STATUS_FILE_CLOSED);
+	const uint8_t *in_hdr = msg->get_in_data();
+
+	auto state = std::make_unique<x_smb2_state_write_t>();
+	if (!decode_in_write(*state, in_hdr, msg->in_requ_len)) {
+		RETURN_OP_STATUS(msg, NT_STATUS_INVALID_PARAMETER);
 	}
 
-	x_smb2_resp_write_t resp_write;
-	std::vector<uint8_t> output;
-	NTSTATUS status = x_smbd_open_op_write(smbd_conn, msg, smbd_open, requ_write, in_buf + requ_write.data_offset,
-			resp_write);
-	if (NT_STATUS_IS_OK(status)) {
-		return x_smb2_reply_write(smbd_conn, smbd_sess, msg, status, in_tid,
-				resp_write);
+	X_LOG_OP("%ld WRITE 0x%lx, 0x%lx", msg->in_mid,
+			state->in_file_id_persistent, state->in_file_id_volatile);
+
+	if (msg->smbd_open) {
+	} else if (msg->smbd_tcon) {
+		msg->smbd_open = x_smbd_open_find(state->in_file_id_persistent,
+				state->in_file_id_volatile,
+				msg->smbd_tcon);
 	} else {
-		return X_SMB2_REPLY_ERROR(smbd_conn, msg, smbd_sess, in_tid, status);
+		uint32_t tid = x_get_le32(in_hdr + SMB2_HDR_TID);
+		msg->smbd_open = x_smbd_open_find(state->in_file_id_persistent,
+				state->in_file_id_volatile, tid, msg->smbd_sess);
 	}
+
+	if (!msg->smbd_open) {
+		RETURN_OP_STATUS(msg, NT_STATUS_FILE_CLOSED);
+	}
+
+	NTSTATUS status = x_smbd_open_op_write(smbd_conn, msg, state);
+	if (NT_STATUS_IS_OK(status)) {
+		x_smb2_reply_write(smbd_conn, msg, *state);
+		return status;
+	}
+
+	RETURN_OP_STATUS(msg, status);
 }
 

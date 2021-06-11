@@ -1,5 +1,5 @@
 
-#include "smbd.hxx"
+#include "smb2.hxx"
 extern "C" {
 #include "samba/include/config.h"
 #include "samba/lib/crypto/crypto.h"
@@ -88,7 +88,7 @@ static inline void hmac_sha256_digest(const x_smb2_key_t &key,
 	struct HMACSHA256Context m;
 	uint8_t sha256_digest[SHA256_DIGEST_LENGTH];
 
-	ZERO_STRUCT(m);
+	memset(&m, 0, sizeof m);
 	hmac_sha256_init(key.data(), 16, &m);
 	for (unsigned int i = 0; i < count; ++i) {
 		hmac_sha256_update((const uint8_t *)vector[i].iov_base, vector[i].iov_len, &m);
@@ -97,36 +97,59 @@ static inline void hmac_sha256_digest(const x_smb2_key_t &key,
 	memcpy(digest, sha256_digest, 16);
 }
 
-NTSTATUS x_smb2_sign_msg(uint8_t *data, size_t length, uint16_t dialect,
-		const x_smb2_key_t &key)
+static void x_smb2_digest(uint16_t dialect,
+		const x_smb2_key_t &key,
+		x_bufref_t *buflist,
+		uint8_t *digest)
 {
-#if 0
-	uint64_t session_id;
-	session_id = BVAL(hdr, SMB2_HDR_SESSION_ID);
-	if (session_id == 0) {
-		/*
-		 * do not sign messages with a zero session_id.
-		 * See MS-SMB2 3.2.4.1.1
-		 */
-		return NT_STATUS_OK;
+	static const uint8_t zero_sig[16] = { 0, };
+	struct iovec iov[8];
+	unsigned int niov = 0;
+
+	X_ASSERT(buflist->length >= SMB2_HDR_BODY);
+
+	iov[niov].iov_base = buflist->get_data();
+	iov[niov].iov_len = SMB2_HDR_SIGNATURE;
+	++niov;
+	iov[niov].iov_base = (void *)zero_sig;
+	iov[niov].iov_len = sizeof(zero_sig);
+	++niov;
+	if (buflist->length > SMB2_HDR_BODY) {
+		iov[niov].iov_base = buflist->get_data() + SMB2_HDR_BODY;
+		iov[niov].iov_len = buflist->length - SMB2_HDR_BODY;
+		++niov;
 	}
-#endif
-	memset(data + SMB2_HDR_SIGNATURE, 0, 16);
 
-	SIVAL(data, SMB2_HDR_FLAGS, IVAL(data, SMB2_HDR_FLAGS) | SMB2_HDR_FLAG_SIGNED);
+	for (buflist = buflist->next ; buflist; buflist = buflist->next) {
+		iov[niov].iov_base = buflist->get_data();
+		iov[niov].iov_len = buflist->length;
+		++niov;
+	}
 
-	struct iovec vector = {
-		.iov_base = data,
-		.iov_len = length,
-	};
 	if (dialect >= SMB2_DIALECT_REVISION_224) {
-		cmac_digest_by_software(key, data + SMB2_HDR_SIGNATURE, &vector, 1);
+		cmac_digest_by_software(key, digest, iov, niov);
 	} else {
-		hmac_sha256_digest(key, data + SMB2_HDR_SIGNATURE, &vector, 1);
+		hmac_sha256_digest(key, digest, iov, niov);
 	}
-	// DEBUG(5,("signed SMB2 message\n"));
+}
 
-	return NT_STATUS_OK;
+bool x_smb2_signing_check(uint16_t dialect,
+		const x_smb2_key_t &key,
+		x_bufref_t *buflist)
+{
+	uint8_t digest[16];
+	x_smb2_digest(dialect, key, buflist, digest);
+	
+	uint8_t *signature = buflist->get_data() + SMB2_HDR_SIGNATURE;
+	return memcmp(digest, signature, 16) == 0;
+}
+
+void x_smb2_signing_sign(uint16_t dialect,
+		const x_smb2_key_t &key,
+		x_bufref_t *buflist)
+{
+	uint8_t *signature = buflist->get_data() + SMB2_HDR_SIGNATURE;
+	x_smb2_digest(dialect, key, buflist, signature);
 }
 
 

@@ -136,6 +136,7 @@ struct x_smbconf_t
 	bool gensec_require_pac = false; // if (gensec_setting_bool(gensec_security->settings, "gensec", "require_pac", false)) {
 
 	uint32_t max_referral_ttl = 300;
+	uint32_t smb2_max_credits = 8192;
 	bool host_msdfs = true;
 	std::string netbios_name, workgroup, dns_domain, realm;
 	std::vector<std::string> cluster_nodes;

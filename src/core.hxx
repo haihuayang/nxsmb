@@ -80,6 +80,16 @@ static inline void x_put_be64(uint8_t *buf, uint64_t val)
 	x_put_be32(buf + 4, val & 0xffffffff);
 }
 
+#define X_LE2H8(v) (v)
+#define X_LE2H16(v) (v)
+#define X_LE2H32(v) (v)
+#define X_LE2H64(v) (v)
+
+#define X_H2LE8(v) (v)
+#define X_H2LE16(v) (v)
+#define X_H2LE32(v) (v)
+#define X_H2LE64(v) (v)
+
 #else
 #error "Not implemented"
 #endif

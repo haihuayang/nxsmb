@@ -89,22 +89,36 @@ TARGET_CFLAGS_samba = \
 all: $(TARGET_SET_tests:%=$(TARGET_DIR_out)/tests/%) \
 	$(TARGET_DIR_out)/bin/nxsmbd
 
-SET_src_nxsmbd := auth_ntlmssp auth_krb5 auth_spnego auth \
-	network misc \
-	smbd smbd_sess smbd_conn smbd_share smbd_open \
-	smbd_ipc smbd_disk smbconf \
-	smb2_signing \
-	smb2_preauth \
+SET_src_nxsmbd := \
 	smb2_negprot \
-	smb2_sesssetup smb2_logoff \
-	smb2_tcon smb2_tdis \
-	smb2_create smb2_close \
-	smb2_flush smb2_read smb2_write \
-	smb2_lock smb2_ioctl \
-	smb2_cancel smb2_keepalive \
-	smb2_query_directory smb2_notify \
-	smb2_getinfo smb2_setinfo \
-	smb2_break
+	smb2_sesssetup \
+	smb2_logoff \
+	smb2_tcon \
+	smb2_tdis \
+	smb2_create \
+	smb2_close \
+	smb2_flush \
+	smb2_read \
+	smb2_write \
+	smb2_lock \
+	smb2_ioctl \
+	smb2_cancel \
+	smb2_keepalive \
+	smb2_query_directory \
+	smb2_notify \
+	smb2_getinfo \
+	smb2_setinfo \
+	smb2_break \
+	smb2_signing smb2_preauth \
+	smbd \
+	smbd_pool \
+	smbd_conn  \
+	smbd_ipc \
+	smbd_disk \
+	auth_ntlmssp auth_krb5 auth_spnego auth \
+	network misc \
+	smbconf smbd_share \
+
 
 $(TARGET_DIR_out)/bin/nxsmbd: $(SET_src_nxsmbd:%=$(TARGET_DIR_out)/src/%.o) $(TARGET_SET_lib:%=$(TARGET_DIR_out)/lib%.a)
 	$(CXX) -g $(TARGET_LDFLAGS) -o $@ $^ -lpthread -lresolv -ldl

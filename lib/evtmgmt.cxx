@@ -56,7 +56,7 @@ struct x_epoll_entry_t
 		if (genref.put()) {
 			x_epoll_upcall_t *tmp_upcall = upcall;
 			upcall = NULL;
-			tmp_upcall->on_unmanaged();
+			tmp_upcall->on_unmonitored();
 		}
 	}
 
@@ -264,7 +264,7 @@ static void timer_job_done(x_job_t *job)
 	if (timer->timeout != 0) {
 		__evtmgmt_add_timer(evtmgmt, timer);
 	} else {
-		timer->on_unmanaged();
+		timer->on_unmonitored();
 	}
 }
 

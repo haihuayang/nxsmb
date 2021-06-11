@@ -7,55 +7,61 @@ enum {
 	X_SMB2_TDIS_RESP_BODY_LEN = 0x04,
 };
 
-static int x_smb2_reply_tdis(x_smbd_conn_t *smbd_conn,
-		x_smbd_sess_t *smbd_sess,
-		x_msg_ptr_t &msg, NTSTATUS status,
-		uint32_t tid)
+static void x_smb2_reply_tdis(x_smbd_conn_t *smbd_conn,
+		x_smb2_msg_t *msg, NTSTATUS status)
 {
-	X_LOG_OP("%ld RESP SUCCESS %x", msg->mid, tid);
+	x_bufref_t *bufref = x_bufref_alloc(X_SMB2_TDIS_RESP_BODY_LEN);
 
-	uint8_t *outbuf = new uint8_t[8 + 0x40 + X_SMB2_TDIS_RESP_BODY_LEN];
-	uint8_t *outhdr = outbuf + 8;
-	uint8_t *outbody = outhdr + 0x40;
+	uint8_t *out_hdr = bufref->get_data();
+	uint8_t *out_body = out_hdr + SMB2_HDR_BODY;
 
-	SSVAL(outbody, 0x00, X_SMB2_TDIS_RESP_BODY_LEN);
-	SSVAL(outbody, 0x02, 0);
+	x_put_le16(out_body, X_SMB2_TDIS_RESP_BODY_LEN);
+	x_put_le16(out_body + 0x02, 0);
 
-	x_smbd_conn_reply(smbd_conn, msg, smbd_sess, nullptr, outbuf, tid, status, X_SMB2_TDIS_RESP_BODY_LEN);
-	return 0;
+	x_smb2_reply(smbd_conn, msg, bufref, bufref, status, 
+			SMB2_HDR_BODY + X_SMB2_TDIS_RESP_BODY_LEN);
 }
 
-int x_smb2_process_TDIS(x_smbd_conn_t *smbd_conn, x_msg_ptr_t &msg,
-		const uint8_t *in_buf, size_t in_len)
+NTSTATUS x_smb2_process_TDIS(x_smbd_conn_t *smbd_conn, x_smb2_msg_t *msg)
 {
-	if (in_len < 0x40 + X_SMB2_TDIS_REQU_BODY_LEN) {
-		return X_SMB2_REPLY_ERROR(smbd_conn, msg, nullptr, 0, NT_STATUS_INVALID_PARAMETER);
+	X_LOG_OP("%ld TDIS", msg->in_mid);
+
+	if (msg->in_requ_len < SMB2_HDR_BODY + X_SMB2_TDIS_REQU_BODY_LEN) {
+		RETURN_OP_STATUS(msg, NT_STATUS_INVALID_PARAMETER);
 	}
 
-	const uint8_t *inhdr = in_buf;
-
-	uint64_t in_session_id = BVAL(inhdr, SMB2_HDR_SESSION_ID);
-	uint32_t in_tid = IVAL(inhdr, SMB2_HDR_TID);
-
-	X_LOG_OP("%ld TDIS 0x%lx, 0x%x", msg->mid, in_session_id, in_tid);
-
-	if (in_session_id == 0) {
-		return X_SMB2_REPLY_ERROR(smbd_conn, msg, nullptr, in_tid, NT_STATUS_USER_SESSION_DELETED);
+	if (!msg->smbd_sess) {
+		RETURN_OP_STATUS(msg, NT_STATUS_USER_SESSION_DELETED);
 	}
-	x_auto_ref_t<x_smbd_sess_t> smbd_sess{x_smbd_sess_find(in_session_id, smbd_conn)};
-	if (smbd_sess == nullptr) {
-		return X_SMB2_REPLY_ERROR(smbd_conn, msg, nullptr, in_tid, NT_STATUS_USER_SESSION_DELETED);
+
+	if (msg->smbd_sess->state != x_smbd_sess_t::S_ACTIVE) {
+		RETURN_OP_STATUS(msg, NT_STATUS_INVALID_PARAMETER);
 	}
-	if (smbd_sess->state != x_smbd_sess_t::S_ACTIVE) {
-		return X_SMB2_REPLY_ERROR(smbd_conn, msg, smbd_sess, in_tid, NT_STATUS_INVALID_PARAMETER);
-	}
+
+	const uint8_t *in_hdr = msg->get_in_data();
+
 	/* TODO signing/encryption */
-
-	auto it = smbd_sess->tcon_table.find(in_tid);
-	if (it == smbd_sess->tcon_table.end()) {
-		return X_SMB2_REPLY_ERROR(smbd_conn, msg, smbd_sess, in_tid, NT_STATUS_NETWORK_NAME_DELETED);
+	if (!msg->smbd_tcon) {
+		uint32_t in_tid = IVAL(in_hdr, SMB2_HDR_TID);
+		msg->smbd_tcon = x_smbd_tcon_find(in_tid, msg->smbd_sess);
+		if (!msg->smbd_tcon) {
+			RETURN_OP_STATUS(msg, NT_STATUS_NETWORK_NAME_DELETED);
+		}
 	}
-	smbd_sess->tcon_table.erase(it);
 
-	return x_smb2_reply_tdis(smbd_conn, smbd_sess, msg, NT_STATUS_OK, in_tid);
+	x_smbd_open_t *smbd_open;
+	while ((smbd_open = msg->smbd_tcon->open_list.get_front()) != nullptr) {
+		msg->smbd_tcon->open_list.remove(smbd_open);
+		x_smbd_open_release(smbd_open);
+		smbd_open->decref();
+	}
+
+	msg->smbd_sess->tcon_list.remove(msg->smbd_tcon);
+	x_smb2_reply_tdis(smbd_conn, msg, NT_STATUS_OK);
+
+	x_smbd_tcon_release(msg->smbd_tcon);
+	msg->smbd_tcon->decref();
+	msg->smbd_tcon = nullptr;
+
+	return NT_STATUS_OK;
 }

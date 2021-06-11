@@ -81,9 +81,9 @@ enum {
 extern int x_loglevel;
 void x_log(int level, const char *fmt, ...);
 
-#define X_LOG_L(level, ...) do { \
+#define X_LOG_L(level, fmt, ...) do { \
 	if ((level) <= x_loglevel) { \
-		x_log((level), __VA_ARGS__); \
+		x_log((level), "[%s:%d:%s] " fmt, __FILE__, __LINE__, __FUNCTION__, ##__VA_ARGS__); \
 	} \
 } while (0)
 

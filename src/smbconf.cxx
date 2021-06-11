@@ -50,6 +50,11 @@ static bool parse_bool(const std::string &str)
 	return str == "yes";
 }
 
+static int parse_integer(const std::string &str)
+{
+	return strtol(str.c_str(), nullptr, 0);
+}
+
 static std::string::size_type skip(const std::string &s, std::string::size_type pos, std::string::size_type end)
 {
 	for ( ; pos < end && isspace(s[pos]); ++pos) {
@@ -67,14 +72,14 @@ static std::string::size_type rskip(const std::string &s, std::string::size_type
 
 static void add_share(x_smbconf_t &smbconf, std::shared_ptr<x_smbshare_t> &share_spec)
 {
-	X_DBG("add share section %s",
+	X_LOG_DBG("add share section %s",
 			share_spec->name.c_str());
 	smbconf.shares[share_spec->name] = share_spec;
 }
 
 static int parse_smbconf(x_smbconf_t &smbconf, const char *path)
 {
-	X_DBG("Loading smbconf from %s", path);
+	X_LOG_DBG("Loading smbconf from %s", path);
 
 	std::shared_ptr<x_smbshare_t> share_spec = std::make_shared<x_smbshare_t>("ipc$");
 	share_spec->type = TYPE_IPC;
@@ -157,6 +162,8 @@ static int parse_smbconf(x_smbconf_t &smbconf, const char *path)
 					smbconf.workgroup = value;
 				} else if (name == "lanman auth") {
 					smbconf.lanman_auth = parse_bool(value);
+				} else if (name == "smb2 max credits") {
+					smbconf.smb2_max_credits = parse_integer(value);
 				}
 			}
 		}

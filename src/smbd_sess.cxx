@@ -2,10 +2,25 @@
 #include "smbd.hxx"
 #include "include/hashtable.hxx"
 
+X_DECLARE_MEMBER_TRAITS(smbd_sess_hash_traits, x_smbd_sess_t, hash_link)
+
+std::atomic<int> x_smbd_sess_t::count;
 x_smbd_sess_t::x_smbd_sess_t(x_smbd_conn_t *smbd_conn)
 	: smbd_conn{smbd_conn}, refcnt{1}
 {
+	++count;
 	smbd_conn->incref();
+}
+
+x_smbd_sess_t::~x_smbd_sess_t()
+{
+	if (auth) {
+		x_auth_destroy(auth);
+	}
+	if (smbd_conn) {
+		smbd_conn->decref();
+	}
+	--count;
 }
 
 #if 0

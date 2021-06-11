@@ -224,7 +224,7 @@ static std::array<uint8_t, 16> ntlmssp_make_packet_signature(x_auth_ntlmssp_t *n
 		uint8_t seq_num[4];
 
 		auto &crypt = ntlmssp->crypt_dirs[direction];
-		X_DBG("%s seq = %u, len = %u, pdu_len = %u\n",
+		X_LOG_DBG("%s seq = %u, len = %u, pdu_len = %u\n",
 					direction == 0 ? "SEND" : "RECV",
 					crypt.seq_num,
 					(unsigned int)length,
@@ -903,14 +903,14 @@ static NTSTATUS ntlmssp_post_auth(x_auth_ntlmssp_t *ntlmssp, x_auth_info_t &auth
 	if (ntlmssp->doing_ntlm2) {
 		X_TODO;
 		if (memcmp(auth.user_session_key, zeros, 16) == 0) {
-			X_DBG("user_session_key is zero");
+			X_LOG_DBG("user_session_key is zero");
 		} else {
 
 		}
 	} else if ((ntlmssp->neg_flags & idl::NTLMSSP_NEGOTIATE_LM_KEY) && (!ntlmssp->client_nt_resp || ntlmssp->client_nt_resp->val.size() == 0x18)) {
 		X_TODO;
 		if (memcmp(auth.first_8_lm_hash, zeros, 8) == 0) {
-			X_DBG("lm_session_key is zero");
+			X_LOG_DBG("lm_session_key is zero");
 		}
 	} else if (memcmp(auth.user_session_key, zeros, 16) != 0) {
 		session_key_data = (const uint8_t *)auth.user_session_key;
@@ -919,7 +919,7 @@ static NTSTATUS ntlmssp_post_auth(x_auth_ntlmssp_t *ntlmssp, x_auth_info_t &auth
 		session_key_data = (const uint8_t *)auth.first_8_lm_hash;
 		session_key_length = 8;
 	} else {
-		X_DBG("Failed to create unmodified session key.");
+		X_LOG_ERR("Failed to create unmodified session key.");
 	}
 
 	if ((ntlmssp->neg_flags & idl::NTLMSSP_NEGOTIATE_KEY_EXCH) != 0 && session_key_length == 16) {
@@ -1092,7 +1092,7 @@ static void ntlmssp_domain_info_cb_reply(x_wbcli_t *wbcli, int err)
 	}
 
 	const auto &domain_info = ntlmssp->wbresp.header.data.domain_info;
-	X_DBG("err=%d, result=%d, name='%s', alt_name='%s', sid=%s, native_mode=%d, active_directory=%d, primary=%d", err, ntlmssp->wbresp.header.result,
+	X_LOG_DBG("err=%d, result=%d, name='%s', alt_name='%s', sid=%s, native_mode=%d, active_directory=%d, primary=%d", err, ntlmssp->wbresp.header.result,
 			domain_info.name, domain_info.alt_name,
 			domain_info.sid,
 			domain_info.native_mode,

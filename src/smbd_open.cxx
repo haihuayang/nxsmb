@@ -2,13 +2,9 @@
 #include "smbd.hxx"
 #include "include/hashtable.hxx"
 
+X_DECLARE_MEMBER_TRAITS(smbd_open_hash_traits, x_smbd_open_t, hash_link)
 struct smbd_open_pool_t
 {
-#if 0
-	x_timer_t timer; // check expire
-	x_tp_dcircle_t<smbd_open_dcircle_traits> active_list;
-	x_tp_dcircle_t<smbd_open_dcircle_traits> timeout_list;
-#endif
 	x_hashtable_t<smbd_open_hash_traits> hashtable;
 	std::atomic<uint32_t> count;
 	uint32_t capacity;

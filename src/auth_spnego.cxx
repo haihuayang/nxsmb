@@ -75,9 +75,11 @@ static void spnego_wrap(NTSTATUS status, MechType *mt, void *mic_data,
 
 	nt.negResult = &negResult;
 	heim_octet_string resp_token, mic;
-	resp_token.data = (void *)subout.data();
-	resp_token.length = subout.size();
-	nt.responseToken = &resp_token;
+	if (subout.size() > 0) {
+		resp_token.data = (void *)subout.data();
+		resp_token.length = subout.size();
+		nt.responseToken = &resp_token;
+	}
 	if (mic_length) {
 		mic.data = mic_data;
 		mic.length = mic_length;

@@ -1,9 +1,9 @@
 
 #include "smbd.hxx"
 
-int x_smb2_process_BREAK(x_smbd_conn_t *smbd_conn, x_msg_ptr_t &msg,
-		const uint8_t *in_buf, size_t in_len)
+NTSTATUS x_smb2_process_BREAK(x_smbd_conn_t *smbd_conn, x_smb2_msg_t *msg)
 {
 	X_TODO;
-	return -EBADMSG;
+	return NT_STATUS_NOT_SUPPORTED;
 }
+

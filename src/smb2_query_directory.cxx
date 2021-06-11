@@ -1,5 +1,5 @@
 
-#include "smbd.hxx"
+#include "smbd_open.hxx"
 #include "core.hxx"
 
 enum {
@@ -7,95 +7,123 @@ enum {
 	X_SMB2_FIND_RESP_BODY_LEN = 0x08,
 };
 
-static int x_smb2_reply_find(x_smbd_conn_t *smbd_conn,
-		x_smbd_sess_t *smbd_sess,
-		x_msg_ptr_t &msg, uint32_t tid,
-		const std::vector<uint8_t> &output)
+struct x_smb2_in_find_t
 {
-	X_LOG_OP("%ld RESP SUCCESS", msg->mid);
+	uint16_t struct_size;
+	uint8_t info_level;
+	uint8_t flags;
+	uint32_t file_index;
+	uint64_t file_id_persistent;
+	uint64_t file_id_volatile;
+	uint16_t name_offset;
+	uint16_t name_length;
+	uint32_t output_buffer_length;
+};
 
-	uint8_t *outbuf = new uint8_t[8 + 0x40 + X_SMB2_FIND_RESP_BODY_LEN + output.size()];
-	uint8_t *outhdr = outbuf + 8;
-	uint8_t *outbody = outhdr + 0x40;
+static bool decode_in_find(x_smb2_state_find_t &state,
+		const uint8_t *in_hdr, uint32_t in_len)
+{
+	const x_smb2_in_find_t *in_find = (const x_smb2_in_find_t *)(in_hdr + SMB2_HDR_BODY);
 
-	SSVAL(outbody, 0, X_SMB2_FIND_RESP_BODY_LEN + 1);
-	SSVAL(outbody, 2, 0x40 + X_SMB2_FIND_RESP_BODY_LEN);
-	SIVAL(outbody, 4, output.size());
-	memcpy(outbody + X_SMB2_FIND_RESP_BODY_LEN, output.data(), output.size());
+	uint16_t in_name_offset             = X_LE2H16(in_find->name_offset);
+	uint16_t in_name_length             = X_LE2H16(in_find->name_length);
 
-	x_smbd_conn_reply(smbd_conn, msg, smbd_sess, nullptr, outbuf, tid, NT_STATUS_OK,
-			X_SMB2_FIND_RESP_BODY_LEN + output.size());
-	return 0;
+	if (in_name_length % 2 != 0 || !x_check_range<uint32_t>(in_name_offset, in_name_length, 
+				SMB2_HDR_BODY + sizeof(x_smb2_in_find_t), in_len)) {
+		return false;
+	}
+
+	state.in_info_level = X_LE2H8(in_find->info_level);
+	state.in_flags = X_LE2H8(in_find->flags);
+	state.in_file_index = X_LE2H32(in_find->file_index);
+	state.in_file_id_persistent = X_LE2H64(in_find->file_id_persistent);
+	state.in_file_id_volatile = X_LE2H64(in_find->file_id_volatile);
+	state.in_output_buffer_length = X_LE2H32(in_find->output_buffer_length);
+
+	state.in_name.assign((char16_t *)(in_hdr + in_name_offset),
+			(char16_t *)(in_hdr + in_name_offset + in_name_length));
+
+	return true;
 }
 
-int x_smb2_process_QUERY_DIRECTORY(x_smbd_conn_t *smbd_conn, x_msg_ptr_t &msg,
-		const uint8_t *in_buf, size_t in_len)
+struct x_smb2_out_find_t
 {
-	if (in_len < 0x40 + X_SMB2_FIND_REQU_BODY_LEN) {
-		return X_SMB2_REPLY_ERROR(smbd_conn, msg, nullptr, 0, NT_STATUS_INVALID_PARAMETER);
+	uint16_t struct_size;
+	uint16_t offset;
+	uint32_t length;
+};
+
+static void encode_out_find(const x_smb2_state_find_t &state,
+		uint8_t *out_hdr)
+{
+	x_smb2_out_find_t *out_find = (x_smb2_out_find_t *)(out_hdr + SMB2_HDR_BODY);
+
+	out_find->struct_size = X_H2LE16(sizeof(x_smb2_out_find_t) + 1);
+	out_find->offset = X_H2LE16(SMB2_HDR_BODY + sizeof(x_smb2_out_find_t));
+	out_find->length = X_H2LE32(state.out_data.size());
+	memcpy(out_find + 1, state.out_data.data(), state.out_data.size());
+}
+
+static void x_smb2_reply_find(x_smbd_conn_t *smbd_conn,
+		x_smb2_msg_t *msg,
+		const x_smb2_state_find_t &state)
+{
+	X_LOG_OP("%ld RESP SUCCESS", msg->in_mid);
+
+	x_bufref_t *bufref = x_bufref_alloc(sizeof(x_smb2_out_find_t) +
+			state.out_data.size());
+
+	uint8_t *out_hdr = bufref->get_data();
+	encode_out_find(state, out_hdr);
+	x_smb2_reply(smbd_conn, msg, bufref, bufref, NT_STATUS_OK, 
+			SMB2_HDR_BODY + sizeof(x_smb2_out_find_t) + state.out_data.size());
+}
+
+NTSTATUS x_smb2_process_QUERY_DIRECTORY(x_smbd_conn_t *smbd_conn, x_smb2_msg_t *msg)
+{
+	if (msg->in_requ_len < SMB2_HDR_BODY + sizeof(x_smb2_in_find_t)) {
+		RETURN_OP_STATUS(msg, NT_STATUS_INVALID_PARAMETER);
 	}
 
-	const uint8_t *inhdr = in_buf;
-	const uint8_t *inbody = in_buf + 0x40;
-
-	uint64_t in_session_id = BVAL(inhdr, SMB2_HDR_SESSION_ID);
-	uint32_t in_tid = IVAL(inhdr, SMB2_HDR_TID);
-	if (in_session_id == 0) {
-		return X_SMB2_REPLY_ERROR(smbd_conn, msg, nullptr, in_tid, NT_STATUS_USER_SESSION_DELETED);
-	}
-	x_auto_ref_t<x_smbd_sess_t> smbd_sess{x_smbd_sess_find(in_session_id, smbd_conn)};
-	if (smbd_sess == nullptr) {
-		return X_SMB2_REPLY_ERROR(smbd_conn, msg, nullptr, in_tid, NT_STATUS_USER_SESSION_DELETED);
-	}
-	if (smbd_sess->state != x_smbd_sess_t::S_ACTIVE) {
-		return X_SMB2_REPLY_ERROR(smbd_conn, msg, smbd_sess, in_tid, NT_STATUS_INVALID_PARAMETER);
-	}
-	/* TODO signing/encryption */
-
-	auto it = smbd_sess->tcon_table.find(in_tid);
-	if (it == smbd_sess->tcon_table.end()) {
-		return X_SMB2_REPLY_ERROR(smbd_conn, msg, smbd_sess, in_tid, NT_STATUS_NETWORK_NAME_DELETED);
-	}
-	std::shared_ptr<x_smbd_tcon_t> smbd_tcon = it->second;
-
-	/* TODO only for little-endian */
-	x_smb2_requ_find_t requ_find;
-	requ_find.in_info_level              = CVAL(inbody, 0x02);
-	requ_find.in_flags                        = CVAL(inbody, 0x03);
-	requ_find.in_file_index                   = IVAL(inbody, 0x04);
-	requ_find.in_file_id_persistent           = BVAL(inbody, 0x08);
-	requ_find.in_file_id_volatile             = BVAL(inbody, 0x10);
-	uint16_t in_name_offset             = SVAL(inbody, 0x18);
-	uint16_t in_name_length             = SVAL(inbody, 0x1A);
-	requ_find.in_output_buffer_length         = IVAL(inbody, 0x1C);
-
-	if (in_name_length % 2 != 0 || !x_check_range(in_name_offset, in_name_length, 
-				0x40 + X_SMB2_FIND_REQU_BODY_LEN, in_len)) {
-		return X_SMB2_REPLY_ERROR(smbd_conn, msg, smbd_sess, in_tid, NT_STATUS_INVALID_PARAMETER);
+	if (!msg->smbd_sess) {
+		RETURN_OP_STATUS(msg, NT_STATUS_USER_SESSION_DELETED);
 	}
 
-	requ_find.in_name.assign((char16_t *)(in_buf + in_name_offset),
-			(char16_t *)(in_buf + in_name_offset + in_name_length)); 
-
-	X_LOG_OP("%ld FIND %x,%lx %lx,%lx", msg->mid, 
-			requ_find.in_info_level, requ_find.in_flags,
-			requ_find.in_file_id_persistent, requ_find.in_file_id_volatile);
-
-	// TODO smbd_smb2_request_verify_creditcharge
-	x_auto_ref_t<x_smbd_open_t> smbd_open{x_smbd_open_find(requ_find.in_file_id_volatile,
-			smbd_tcon.get())};
-	if (!smbd_open) {
-		return X_SMB2_REPLY_ERROR(smbd_conn, msg, smbd_sess, in_tid, NT_STATUS_FILE_CLOSED);
+	if (msg->smbd_sess->state != x_smbd_sess_t::S_ACTIVE) {
+		RETURN_OP_STATUS(msg, NT_STATUS_INVALID_PARAMETER);
 	}
 
-	std::vector<uint8_t> output;
-	NTSTATUS status = x_smbd_open_op_find(smbd_conn, msg, smbd_open, requ_find, output);
-	if (NT_STATUS_IS_OK(status)) {
-		return x_smb2_reply_find(smbd_conn, smbd_sess, msg, in_tid,
-				output);
+	const uint8_t *in_hdr = msg->get_in_data();
+
+	auto state = std::make_unique<x_smb2_state_find_t>();
+	if (!decode_in_find(*state, in_hdr, msg->in_requ_len)) {
+		RETURN_OP_STATUS(msg, NT_STATUS_INVALID_PARAMETER);
+	}
+
+	X_LOG_OP("%ld FIND 0x%lx, 0x%lx", msg->in_mid,
+			state->in_file_id_persistent, state->in_file_id_volatile);
+
+	if (msg->smbd_open) {
+	} else if (msg->smbd_tcon) {
+		msg->smbd_open = x_smbd_open_find(state->in_file_id_persistent,
+				state->in_file_id_volatile,
+				msg->smbd_tcon);
 	} else {
-		return X_SMB2_REPLY_ERROR(smbd_conn, msg, smbd_sess, in_tid, status);
+		uint32_t tid = x_get_le32(in_hdr + SMB2_HDR_TID);
+		msg->smbd_open = x_smbd_open_find(state->in_file_id_persistent,
+				state->in_file_id_volatile, tid, msg->smbd_sess);
 	}
-	return -EBADMSG;
+
+	if (!msg->smbd_open) {
+		RETURN_OP_STATUS(msg, NT_STATUS_FILE_CLOSED);
+	}
+
+	NTSTATUS status = x_smbd_open_op_find(smbd_conn, msg, state);
+	if (NT_STATUS_IS_OK(status)) {
+		x_smb2_reply_find(smbd_conn, msg, *state);
+		return status;
+	}
+
+	RETURN_OP_STATUS(msg, status);
 }
 

@@ -1,5 +1,5 @@
 
-#include "smbd.hxx"
+#include "smb2.hxx"
 extern "C" {
 #include "samba/include/config.h"
 #include "samba/lib/crypto/sha512.h"

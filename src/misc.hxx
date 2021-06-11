@@ -54,8 +54,9 @@ static inline idl::NTTIME x_timespec_to_nttime(const struct timespec &ts)
 	return idl::NTTIME{val};
 }
 
-static inline bool x_check_range(uint32_t offset, uint32_t length,
-		uint32_t min_offset, uint32_t max_offset)
+template <typename T>
+static inline bool x_check_range(T offset, T length,
+		T min_offset, T max_offset)
 {
 	if (length == 0) {
 		return true;
@@ -63,7 +64,7 @@ static inline bool x_check_range(uint32_t offset, uint32_t length,
 	if (offset < min_offset) {
 		return false;
 	}
-	uint32_t end = offset + length;
+	T end = offset + length;
 	if (end < offset) {
 		return false;
 	}
