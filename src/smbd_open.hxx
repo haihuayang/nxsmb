@@ -203,7 +203,7 @@ static inline NTSTATUS x_smbd_open_op_close(x_smbd_conn_t *smbd_conn,
 	return msg->smbd_open->ops->close(smbd_conn, msg, state);
 }
 
-struct x_smb2_requ_create_t
+struct x_smb2_state_create_t
 {
 	uint8_t in_oplock_level;
 	uint32_t in_impersonation_level;
@@ -214,26 +214,30 @@ struct x_smb2_requ_create_t
 	uint32_t in_create_options;
 
 	std::u16string in_name;
-	// TODO in_contexts
+	std::vector<uint8_t> in_context;
 
 	uint8_t out_oplock_level;
 	uint8_t out_create_flags;
 	uint32_t out_create_action;
 	x_smb2_create_close_info_t out_info;
-	// TODO out_contexts
+
+	std::vector<uint8_t> out_context;
 };
 
 struct x_smbd_tcon_ops_t
 {
 	x_smbd_open_t *(*create)(x_smbd_tcon_t *smbd_tcon,
-			NTSTATUS &status, uint32_t in_hdr_flags,
-			x_smb2_requ_create_t &);
+			NTSTATUS &status,
+			x_smb2_msg_t *msg,
+			std::unique_ptr<x_smb2_state_create_t> &state);
 };
 
 static inline x_smbd_open_t *x_smbd_tcon_op_create(x_smbd_tcon_t *smbd_tcon,
-		NTSTATUS &status, uint32_t in_hdr_flags, x_smb2_requ_create_t &requ_create)
+		NTSTATUS &status,
+		x_smb2_msg_t *msg,
+		std::unique_ptr<x_smb2_state_create_t> &state)
 {
-	return smbd_tcon->ops->create(smbd_tcon, status, in_hdr_flags, requ_create);
+	return smbd_tcon->ops->create(smbd_tcon, status, msg, state);
 }
 
 

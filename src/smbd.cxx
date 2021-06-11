@@ -151,11 +151,8 @@ static uint16_t x_smb2_calculate_credit(x_smbd_conn_t *smbd_conn, x_smb2_msg_t *
 static uint32_t calculate_out_hdr_flags(uint32_t in_hdr_flags, uint32_t out_hdr_flags)
 {
 	// TODO we just check SIGNED, should consider other flags?
-	if (in_hdr_flags & SMB2_HDR_FLAG_SIGNED) {
-		return out_hdr_flags | SMB2_HDR_FLAG_SIGNED;
-	} else {
-		return out_hdr_flags;
-	}
+	out_hdr_flags |= (in_hdr_flags & (SMB2_HDR_FLAG_PRIORITY_MASK | SMB2_HDR_FLAG_SIGNED));
+	return out_hdr_flags;
 }
 
 void x_smb2_reply(x_smbd_conn_t *smbd_conn,
@@ -785,8 +782,8 @@ static bool x_smbd_conn_do_send(x_smbd_conn_t *smbd_conn, x_fdevents_t &fdevents
 		ssize_t ret = writev(smbd_conn->fd, iov, niov);
 		if (ret > 0) {
 			size_t bytes = ret;
-			bufref = smbd_conn->send_buf_head;
 			for ( ; bytes > 0; ) {
+				bufref = smbd_conn->send_buf_head;
 				if (bufref->length <= bytes) {
 					smbd_conn->send_buf_head = bufref->next;
 					if (!bufref->next) {
@@ -966,7 +963,8 @@ static void x_smbd_init(x_smbd_t &smbd)
 	}
 
 	// TODO
-	smbd.capabilities = SMB2_CAP_DFS | SMB2_CAP_LARGE_MTU | SMB2_CAP_LEASING;
+	smbd.capabilities = SMB2_CAP_DFS | SMB2_CAP_LARGE_MTU | SMB2_CAP_LEASING
+		| SMB2_CAP_DIRECTORY_LEASING; // | SMB2_CAP_MULTI_CHANNEL
 
 	int fd = tcplisten(smbd.smbconf->port);
 	assert(fd >= 0);
@@ -1000,7 +998,7 @@ int main(int argc, char **argv)
 	x_threadpool_t *tpool = x_threadpool_create(smbd.smbconf->thread_count);
 	globals.tpool_evtmgmt = tpool;
 
-	globals.evtmgmt = x_evtmgmt_create(tpool, 2000000000);
+	globals.evtmgmt = x_evtmgmt_create(tpool, 60 * X_NSEC_PER_SEC);
 	globals.wbpool = x_wbpool_create(globals.evtmgmt, 2);
 
 	globals.tpool_aio = x_threadpool_create(smbd.smbconf->thread_count);

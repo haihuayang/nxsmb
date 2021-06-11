@@ -49,7 +49,6 @@ static uint32_t create_share_access_mask(const std::shared_ptr<x_smbshare_t> &sh
 			  idl::SEC_FILE_WRITE_EA | idl::SEC_FILE_WRITE_ATTRIBUTE |
 			  idl::SEC_DIR_DELETE_CHILD );
 	}
-	share_access |= idl::SEC_FLAG_SYSTEM_SECURITY; // TODO
 #if 0
 	if (security_token_has_privilege(token, SEC_PRIV_SECURITY)) {
 		share_access |= SEC_FLAG_SYSTEM_SECURITY;

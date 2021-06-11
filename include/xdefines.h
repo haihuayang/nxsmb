@@ -115,6 +115,8 @@ void x_log(int level, const char *fmt, ...);
 #define __location__ __FILE__ ":" XSTR2(__LINE__)
 #endif
 
+#define X_NSEC_PER_SEC 1000000000ul
+
 #define PROJECT_NAME XSTR2(PROJECT)
 
 #define X_ARRAY_SIZE(x) (sizeof(x)/sizeof(x[0]))

@@ -620,12 +620,12 @@ static inline x_smbd_named_pipe_t *x_smbd_named_pipe_create(x_smbd_tcon_t *smbd_
 }
 
 static x_smbd_open_t *x_smbd_tcon_ipc_op_create(x_smbd_tcon_t *smbd_tcon,
-		NTSTATUS &status, uint32_t in_hdr_flags,
-		x_smb2_requ_create_t &requ_create)
+		NTSTATUS &status, x_smb2_msg_t *msg,
+		std::unique_ptr<x_smb2_state_create_t> &state)
 {
 	std::u16string in_name;
-	in_name.reserve(requ_create.in_name.size());
-	std::transform(std::begin(requ_create.in_name), std::end(requ_create.in_name),
+	in_name.reserve(state->in_name.size());
+	std::transform(std::begin(state->in_name), std::end(state->in_name),
 			std::back_inserter(in_name), tolower);
 
 	const x_dcerpc_iface_t *rpc = find_rpc_by_name(in_name);
@@ -636,11 +636,11 @@ static x_smbd_open_t *x_smbd_tcon_ipc_op_create(x_smbd_tcon_t *smbd_tcon,
 
 	x_smbd_named_pipe_t *named_pipe = x_smbd_named_pipe_create(smbd_tcon, rpc);
 
-	requ_create.out_info.out_allocation_size = 4096;
-	requ_create.out_info.out_file_attributes = FILE_ATTRIBUTE_NORMAL;
-	requ_create.out_oplock_level = 0;
-	requ_create.out_create_flags = 0;
-	requ_create.out_create_action = FILE_WAS_OPENED;
+	state->out_info.out_allocation_size = 4096;
+	state->out_info.out_file_attributes = FILE_ATTRIBUTE_NORMAL;
+	state->out_oplock_level = 0;
+	state->out_create_flags = 0;
+	state->out_create_action = FILE_WAS_OPENED;
 
 	//status = x_smbd_open_np_file(smbd_open);
 	status = NT_STATUS_OK;

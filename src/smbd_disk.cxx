@@ -12,7 +12,8 @@
 #include <sys/statvfs.h>
 #include <dirent.h>
 
-#define NOTIFY_WATCH_TREE_FLAG		0x80000000u
+#define X_NOTIFY_FLAG_VALID		0x80000000u
+#define X_NOTIFY_FLAG_WATCH_TREE	0x40000000u
 
 #define FS_IOC_GET_DOS_ATTR             _IOR('t', 1, dos_attr_t)
 #define FS_IOC_SET_DOS_ATTR             _IOW('t', 2, dos_attr_t)
@@ -72,7 +73,7 @@ struct x_smbd_disk_open_t
 	bool update_write_time = false;
 	uint32_t notify_filter = 0;
 	uint32_t notify_output_size = 0;
-	// std::list<x_msg_ptr_t> notify_reqs;
+	std::list<x_smb2_msg_t *> notify_reqs;
 	std::vector<std::pair<uint32_t, std::u16string>> notifies;
 };
 X_DECLARE_MEMBER_TRAITS(smbd_open_object_traits, x_smbd_disk_open_t, object_link)
@@ -819,8 +820,6 @@ static NTSTATUS x_smbd_disk_open_notify(x_smbd_conn_t *smbd_conn,
 		x_smb2_msg_t *msg,
 		std::unique_ptr<x_smb2_state_notify_t> &state)
 {
-	X_TODO;
-#if 0
 	x_smbd_disk_open_t *disk_open = from_smbd_open(msg->smbd_open);
 	X_ASSERT(disk_open->disk_object);
 	x_smbd_disk_object_t *disk_object = disk_open->disk_object;
@@ -829,22 +828,22 @@ static NTSTATUS x_smbd_disk_open_notify(x_smbd_conn_t *smbd_conn,
 	}
 
 	if (disk_open->notify_filter == 0) {
-		disk_open->notify_filter = requ.filter;
-		if (requ.flags & SMB2_WATCH_TREE) {
-			disk_open->notify_filter |= NOTIFY_WATCH_TREE_FLAG;
+		disk_open->notify_filter = state->in_filter | X_NOTIFY_FLAG_VALID;;
+		if (state->in_flags & SMB2_WATCH_TREE) {
+			disk_open->notify_filter |= X_NOTIFY_FLAG_WATCH_TREE;
 		}
-		disk_open->notify_output_size = requ.output_length;
 	}
 
 	if (disk_open->notifies.empty()) {
 		// TODO smbd_conn add Cancels
+		disk_open->notify_output_size = state->in_output_buffer_length;
 		disk_open->notify_reqs.push_back(msg);
 		return NT_STATUS_PENDING;
 	} else {
-		notify_marshall(disk_open, output);
-		return output.empty() ? NT_STATUS_NOTIFY_ENUM_DIR : NT_STATUS_OK;
+		notify_marshall(disk_open, state->out_data);
+		return state->out_data.empty() ? NT_STATUS_NOTIFY_ENUM_DIR : NT_STATUS_OK;
 	}
-#endif
+
 	return NT_STATUS_PENDING;
 }
 
@@ -1112,30 +1111,30 @@ static int open_exist_path(x_smbd_disk_object_t *disk_object)
 static x_smbd_open_t *create_disk_open(
 		x_smbd_tcon_t *smbd_tcon,
 		x_auto_ref_t<x_smbd_disk_object_t> &disk_object,
-		const x_smb2_requ_create_t &requ_create)
+		const x_smb2_state_create_t &state)
 {
 	x_smbd_disk_open_t *disk_open = new x_smbd_disk_open_t{disk_object};
 	disk_open->base.ops = &x_smbd_disk_open_ops;
 	disk_open->base.smbd_tcon = smbd_tcon;
-	disk_open->base.share_access = requ_create.in_share_access;
-	disk_open->base.access_mask = requ_create.in_desired_access;
+	disk_open->base.share_access = state.in_share_access;
+	disk_open->base.access_mask = state.in_desired_access;
 	return &disk_open->base;
 }
 
-static void reply_requ_create(x_smb2_requ_create_t &requ_create,
+static void reply_requ_create(x_smb2_state_create_t &state,
 		const x_smbd_disk_object_t *disk_object,
 		uint32_t create_action)
 {
-	requ_create.out_oplock_level = 0;
-	requ_create.out_create_flags = 0;
-	requ_create.out_create_action = create_action;
-	fill_out_info(requ_create.out_info, disk_object->statex);
+	state.out_oplock_level = 0;
+	state.out_create_flags = 0;
+	state.out_create_action = create_action;
+	fill_out_info(state.out_info, disk_object->statex);
 }
 
 static x_smbd_open_t *open_object_new(
 		x_smbd_tcon_t *smbd_tcon,
 		x_auto_ref_t<x_smbd_disk_object_t> &disk_object,
-		x_smb2_requ_create_t &requ_create,
+		x_smb2_state_create_t &state,
 		NTSTATUS &status)
 {
 	status = check_parent_access(idl::SEC_DIR_ADD_FILE);
@@ -1143,7 +1142,7 @@ static x_smbd_open_t *open_object_new(
 		return nullptr;
 	}
 
-	if (requ_create.in_create_options & FILE_DIRECTORY_FILE) {
+	if (state.in_create_options & FILE_DIRECTORY_FILE) {
 		status = create_dir(smbd_tcon, disk_object);
 	} else {
 		status = create_file(smbd_tcon, disk_object);
@@ -1153,22 +1152,22 @@ static x_smbd_open_t *open_object_new(
 		return nullptr;
 	}
 
-	reply_requ_create(requ_create, disk_object, FILE_WAS_CREATED);
-	return create_disk_open(smbd_tcon, disk_object, requ_create);
+	reply_requ_create(state, disk_object, FILE_WAS_CREATED);
+	return create_disk_open(smbd_tcon, disk_object, state);
 }
 
 static x_smbd_open_t *open_object_exist(
 		x_smbd_tcon_t *smbd_tcon,
 		x_auto_ref_t<x_smbd_disk_object_t> &disk_object,
-		x_smb2_requ_create_t &requ_create,
+		x_smb2_state_create_t &state,
 		NTSTATUS &status)
 {
-	status = check_access(disk_object, requ_create.in_desired_access);
+	status = check_access(disk_object, state.in_desired_access);
 	if (!NT_STATUS_IS_OK(status)) {
 		return nullptr;
 	}
-	reply_requ_create(requ_create, disk_object, FILE_WAS_OPENED);
-	return create_disk_open(smbd_tcon, disk_object, requ_create);
+	reply_requ_create(state, disk_object, FILE_WAS_OPENED);
+	return create_disk_open(smbd_tcon, disk_object, state);
 }
 
 static NTSTATUS normalize_path(const char *path)
@@ -1196,13 +1195,14 @@ static NTSTATUS normalize_path(const char *path)
  */
 static x_smbd_open_t *x_smbd_tcon_disk_op_create(
 		x_smbd_tcon_t *smbd_tcon,
-		NTSTATUS &status, uint32_t in_hdr_flags,
-		x_smb2_requ_create_t &requ_create)
+		NTSTATUS &status,
+		x_smb2_msg_t *msg,
+		std::unique_ptr<x_smb2_state_create_t> &state)
 {
 	/* TODO case insenctive */
-	std::string in_name = x_convert_utf16_to_utf8(requ_create.in_name);
+	std::string in_name = x_convert_utf16_to_utf8(state->in_name);
 	const char *path = in_name.data();
-	if (in_hdr_flags & SMB2_HDR_FLAG_DFS) {
+	if (msg->in_hdr_flags & SMB2_HDR_FLAG_DFS) {
 		/* MAC uses DFS path in \hostname\share\path format. */
 		if (*path == '\\') {
 			++path;
@@ -1250,35 +1250,35 @@ static x_smbd_open_t *x_smbd_tcon_disk_op_create(
 		}
 	}
 
-	if (requ_create.in_create_disposition == FILE_CREATE) {
+	if (state->in_create_disposition == FILE_CREATE) {
 		std::unique_lock<std::mutex> lock(disk_object->mutex);
 
 		if (disk_object->exists()) {
 			status = NT_STATUS_OBJECT_NAME_COLLISION;
 			return nullptr;
 		} else {
-			return open_object_new(smbd_tcon, disk_object, requ_create, status);
+			return open_object_new(smbd_tcon, disk_object, *state, status);
 		}
 
-	} else if (requ_create.in_create_disposition == FILE_OPEN) {
+	} else if (state->in_create_disposition == FILE_OPEN) {
 		std::unique_lock<std::mutex> lock(disk_object->mutex);
 		if (disk_object->exists()) {
-			return open_object_exist(smbd_tcon, disk_object, requ_create, status);
+			return open_object_exist(smbd_tcon, disk_object, *state, status);
 		} else {
 			status = NT_STATUS_OBJECT_NAME_NOT_FOUND;
 			return nullptr;
 		}
 
-	} else if (requ_create.in_create_disposition == FILE_OPEN_IF) {
+	} else if (state->in_create_disposition == FILE_OPEN_IF) {
 		std::unique_lock<std::mutex> lock(disk_object->mutex);
 		if (disk_object->exists()) {
-			return open_object_exist(smbd_tcon, disk_object, requ_create, status);
+			return open_object_exist(smbd_tcon, disk_object, *state, status);
 		} else {
-			return open_object_new(smbd_tcon, disk_object, requ_create, status);
+			return open_object_new(smbd_tcon, disk_object, *state, status);
 		}
 
-	} else if (requ_create.in_create_disposition == FILE_OVERWRITE_IF ||
-			requ_create.in_create_disposition == FILE_SUPERSEDE) {
+	} else if (state->in_create_disposition == FILE_OVERWRITE_IF ||
+			state->in_create_disposition == FILE_SUPERSEDE) {
 		/* TODO
 		 * Currently we're using FILE_SUPERSEDE as the same as
 		 * FILE_OVERWRITE_IF but they really are
@@ -1289,9 +1289,9 @@ static x_smbd_open_t *x_smbd_tcon_disk_op_create(
 		if (disk_object->exists()) {
 			int err = ftruncate(disk_object->fd, 0);
 			X_ASSERT(err == 0); // TODO
-			return open_object_exist(smbd_tcon, disk_object, requ_create, status);
+			return open_object_exist(smbd_tcon, disk_object, *state, status);
 		} else {
-			return open_object_new(smbd_tcon, disk_object, requ_create, status);
+			return open_object_new(smbd_tcon, disk_object, *state, status);
 		}
 
 	} else {
