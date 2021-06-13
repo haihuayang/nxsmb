@@ -90,6 +90,8 @@ all: $(TARGET_SET_tests:%=$(TARGET_DIR_out)/tests/%) \
 	$(TARGET_DIR_out)/bin/nxsmbd
 
 SET_src_nxsmbd := \
+	smbd_dcerpc \
+	smbd_dcerpc_srvsvc \
 	smb2_negprot \
 	smb2_sesssetup \
 	smb2_logoff \

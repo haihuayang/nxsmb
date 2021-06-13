@@ -2132,6 +2132,17 @@ def output_header_INTERFACE(out, iface, idl):
 			error(f'''Unknown type "{t['TYPE']}" at {t['FILE']}:{t['LINE']}''')
 			assert False
 
+	out('''
+#define X_DCERPC_FUNCTION_ENUM_%s \\''' % iface['NAME'])
+	for t in iface['DATA']:
+		if not t["TYPE"] in [ "FUNCTION" ]:
+			continue
+		out('''
+	X_DCERPC_FUNCTION_DEF(%s) \\''' % t['NAME'])
+	out('''
+
+''')
+
 
 def output_ndrcxx_INTERFACE(out, iface, idl):
 	helper = get_property(iface, "helper")
