@@ -76,10 +76,8 @@ static uint32_t net_share_enum_all_1(x_smbd_conn_t *smbd_conn, std::shared_ptr<i
 	const std::shared_ptr<x_smbconf_t> smbconf = smbd_conn->get_smbconf();
 	for (auto &it: smbconf->shares) {
 		auto &share = it.second;
-		idl::srvsvc_ShareType type = idl::STYPE_DISKTREE;
-		if (share->type == TYPE_IPC) {
-			type = idl::STYPE_IPC_HIDDEN;
-		}
+		idl::srvsvc_ShareType type =
+			(share->type == TYPE_IPC ? idl::STYPE_IPC_HIDDEN : idl::STYPE_DISKTREE);
 		idl::srvsvc_NetShareInfo1 info1{
 			std::make_shared<std::u16string>(x_convert_utf8_to_utf16(share->name)),
 			type,
@@ -90,9 +88,24 @@ static uint32_t net_share_enum_all_1(x_smbd_conn_t *smbd_conn, std::shared_ptr<i
 		ctr1->array->emplace_back(std::make_shared<std::u16string>(x_convert_utf8_to_utf16(share->name)),
 			type,
 			std::make_shared<std::u16string>(x_convert_utf8_to_utf16("no comment"))); */
-		return true;
 	};
 	return ctr1->array->size();
+}
+
+static WERROR x_smbd_srvsvc_NetShareEnumAll(
+		x_smbd_conn_t *smbd_conn,
+		idl::srvsvc_NetShareEnumAll &arg)
+{
+
+	switch (arg.info_ctr.level) {
+	case 1:
+		arg.totalentries = net_share_enum_all_1(smbd_conn, arg.info_ctr.ctr.ctr1);
+		return WERR_OK;
+
+	default:
+		X_TODO;
+	}
+	return WERR_INVALID_LEVEL;
 }
 
 static idl::dcerpc_nca_status srvsvc_NetShareEnumAll(
@@ -101,41 +114,71 @@ static idl::dcerpc_nca_status srvsvc_NetShareEnumAll(
 		uint8_t &resp_type, std::vector<uint8_t> &body_output, uint32_t ndr_flags)
 {
 	idl::srvsvc_NetShareEnumAll arg;
-#if 0
-	idl::x_ndr_pull_buff_t ndr_pull_buff{request.stub_and_verifier.val.data(),
-		request.stub_and_verifier.val.size()};
-	idl::x_ndr_pull_t ndr_pull{ndr_pull_buff, 0};
-	idl::x_ndr_off_t ret = arg.ndr_requ(ndr_pull, 0, request.stub_and_verifier.val.size(), ndr_flags);
-#else
 	idl::x_ndr_off_t ret = idl::x_ndr_requ_pull(arg,
 			request.stub_and_verifier.val.data(),
 			request.stub_and_verifier.val.size(),
 			ndr_flags);
-#endif
 	if (ret < 0) {
 		return idl::DCERPC_NCA_S_PROTO_ERROR;
 	}
 	X_ASSERT(ret == (long)request.stub_and_verifier.val.size());
 
-	switch (arg.info_ctr.level) {
-	case 1:
-		arg.totalentries = net_share_enum_all_1(smbd_conn, arg.info_ctr.ctr.ctr1);
+	arg.__result = x_smbd_srvsvc_NetShareEnumAll(smbd_conn, arg);
+
+	ret = idl::x_ndr_resp_push(arg, body_output, ndr_flags);
+
+	X_ASSERT(ret > 0);
+	resp_type = idl::DCERPC_PKT_RESPONSE;
+	return idl::dcerpc_nca_status(0);
+}
+
+static WERROR x_smbd_srvsvc_NetShareGetInfo(
+		x_smbd_conn_t *smbd_conn,
+		idl::srvsvc_NetShareGetInfo &arg)
+{
+	std::string share_name = x_convert_utf16_to_utf8(arg.share_name);
+	auto smbshare = x_smbd_find_share(smbd_conn->smbd, share_name);
+	if (!smbshare) {
+		return WERR_INVALID_NAME;
+	}
+
+	switch (arg.level) {
+	case 1: {
+		auto &info1 = arg.info.info1;
+		X_ASSERT(!info1);
+		info1 = std::make_shared<idl::srvsvc_NetShareInfo1>();
+		info1->name = std::make_shared<std::u16string>(arg.share_name);
+		info1->type = (smbshare->type == TYPE_IPC) ? idl::STYPE_IPC_HIDDEN : idl::STYPE_DISKTREE;
+		info1->comment = std::make_shared<std::u16string>();
+		return WERR_OK;
+		}
 		break;
 
 	default:
 		X_TODO;
 	}
-#if 0
-	idl::x_ndr_push_buff_t ndr_push_buff{};
-	idl::x_ndr_push_t ndr_push{ndr_push_buff, 0};
-	ndr_push_buff.ptr_count = ndr_pull_buff.ptr_count;
-	ret = arg.ndr_resp(ndr_push, 0, idl::X_NDR_MAX_SIZE, ndr_flags);
-	if (ret >= 0) {
-		std::swap(body_output, ndr_push_buff.data);
+	return WERR_INVALID_LEVEL;
+}
+
+static idl::dcerpc_nca_status srvsvc_NetShareGetInfo(
+		x_smbd_conn_t *smbd_conn,
+		idl::dcerpc_request request,
+		uint8_t &resp_type, std::vector<uint8_t> &body_output, uint32_t ndr_flags)
+{
+	idl::srvsvc_NetShareGetInfo arg;
+	idl::x_ndr_off_t ret = idl::x_ndr_requ_pull(arg,
+			request.stub_and_verifier.val.data(),
+			request.stub_and_verifier.val.size(),
+			ndr_flags);
+	if (ret < 0) {
+		return idl::DCERPC_NCA_S_PROTO_ERROR;
 	}
-#else
+	X_ASSERT(ret == (long)request.stub_and_verifier.val.size());
+
+	arg.__result = x_smbd_srvsvc_NetShareGetInfo(smbd_conn, arg);
+
 	ret = idl::x_ndr_resp_push(arg, body_output, ndr_flags);
-#endif
+
 	X_ASSERT(ret > 0);
 	resp_type = idl::DCERPC_PKT_RESPONSE;
 	return idl::dcerpc_nca_status(0);
@@ -161,6 +204,8 @@ static const x_dcerpc_rpc_fn_t srvsvc_fns[] = {
 	nullptr,
 	nullptr,
 	srvsvc_NetShareEnumAll,
+
+	srvsvc_NetShareGetInfo,
 };
 
 //static std::map<std::u16string, int> rpc_lookup;
@@ -388,11 +433,6 @@ static NTSTATUS process_dcerpc_request(x_smbd_conn_t *smbd_conn,
 				request, resp_type, output, ndr_flags);
 		X_TODO_ASSERT(resp_type == idl::DCERPC_PKT_RESPONSE);
 		X_TODO_ASSERT(dce_status == 0);
-		/* TODO WERROR */
-		output.push_back(0);
-		output.push_back(0);
-		output.push_back(0);
-		output.push_back(0);
 		idl::dcerpc_response response;
 		response.alloc_hint = output.size();
 		response.context_id = 0;

@@ -1981,6 +1981,9 @@ x_ndr_off_t ndr_{in_out_name}_traits_t<{self.get_ctype()}>::scalars({constness}{
 			for stmt in field.buffers_post(upfunc):
 				out(f'''
 	{stmt}''')
+		if in_out_name == 'resp' and self.jsobj['RETURN_TYPE'] != 'void':
+			out(f'''
+	X_NDR_SCALARS_DEFAULT(__val.__result, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);''')
 		out(f'''
 	return __bpos;
 }}
