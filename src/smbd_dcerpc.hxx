@@ -61,6 +61,7 @@ extern const x_dcerpc_iface_t x_smbd_dcerpc_srvsvc;
 #define X_SMBD_DCERPC_IMPL_TODO(Arg) \
 static bool x_smbd_dcerpc_impl_##Arg(x_smbd_conn_t *smbd_conn, idl::Arg &arg) \
 { \
+	X_TODO; \
 	return false; \
 }
 

@@ -84,17 +84,17 @@ static void encode_out_ioctl(const x_smb2_state_ioctl_t &state,
 }
 
 static void x_smb2_reply_ioctl(x_smbd_conn_t *smbd_conn,
-		x_smb2_msg_t *msg,
+		x_smbd_requ_t *smbd_requ,
 		const x_smb2_state_ioctl_t &state)
 {
-	X_LOG_OP("%ld WRITE SUCCESS", msg->in_mid);
+	X_LOG_OP("%ld WRITE SUCCESS", smbd_requ->in_mid);
 
 	x_bufref_t *bufref = x_bufref_alloc(sizeof(x_smb2_out_ioctl_t) + state.out_data.size());
 
 	uint8_t *out_hdr = bufref->get_data();
 	encode_out_ioctl(state, out_hdr);
 
-	x_smb2_reply(smbd_conn, msg, bufref, bufref, NT_STATUS_OK, 
+	x_smb2_reply(smbd_conn, smbd_requ, bufref, bufref, NT_STATUS_OK, 
 			SMB2_HDR_BODY + sizeof(x_smb2_out_ioctl_t) + state.out_data.size());
 }
 
@@ -355,7 +355,7 @@ static NTSTATUS fsctl_dfs_get_refers_ex(
  */
 static NTSTATUS x_smb2_ioctl_dfs(
 		x_smbd_conn_t *smbd_conn,
-		x_smb2_msg_t *msg,
+		x_smbd_requ_t *smbd_requ,
 		std::unique_ptr<x_smb2_state_ioctl_t> &state)
 {
 	auto smbconf = smbd_conn->get_smbconf();
@@ -431,7 +431,7 @@ static NTSTATUS x_smb2_ioctl_dfs(
 
 // FSCTL_NAMED_PIPE
 static NTSTATUS x_smb2_ioctl_named_pipe(x_smbd_conn_t *smbd_conn,
-		x_smb2_msg_t *msg,
+		x_smbd_requ_t *smbd_requ,
 		std::unique_ptr<x_smb2_state_ioctl_t> &state)
 {
 	switch (state->ctl_code) {
@@ -443,21 +443,21 @@ static NTSTATUS x_smb2_ioctl_named_pipe(x_smbd_conn_t *smbd_conn,
 		return NT_STATUS_INTERNAL_ERROR;
 	}
 
-	if (msg->smbd_open) {
-	} else if (msg->smbd_tcon) {
-		msg->smbd_open = x_smbd_open_find(state->file_id_persistent,
+	if (smbd_requ->smbd_open) {
+	} else if (smbd_requ->smbd_tcon) {
+		smbd_requ->smbd_open = x_smbd_open_find(state->file_id_persistent,
 				state->file_id_volatile,
-				msg->smbd_tcon);
+				smbd_requ->smbd_tcon);
 	} else {
-		msg->smbd_open = x_smbd_open_find(state->file_id_persistent,
-				state->file_id_volatile, msg->in_tid, msg->smbd_sess);
+		smbd_requ->smbd_open = x_smbd_open_find(state->file_id_persistent,
+				state->file_id_volatile, smbd_requ->in_tid, smbd_requ->smbd_sess);
 	}
 
-	if (!msg->smbd_open) {
-		RETURN_OP_STATUS(msg, NT_STATUS_FILE_CLOSED);
+	if (!smbd_requ->smbd_open) {
+		RETURN_OP_STATUS(smbd_requ, NT_STATUS_FILE_CLOSED);
 	}
 
-	return x_smbd_open_op_ioctl(smbd_conn, msg, state);
+	return x_smbd_open_op_ioctl(smbd_conn, smbd_requ, state);
 }
 
 // FSCTL_NETWORK_FILESYSTEM
@@ -534,7 +534,7 @@ static NTSTATUS fsctl_network_iface_info(x_smbd_conn_t *smbd_conn,
 }
 
 static NTSTATUS x_smb2_ioctl_network_fs(x_smbd_conn_t *smbd_conn,
-		x_smb2_msg_t *msg,
+		x_smbd_requ_t *smbd_requ,
 		std::unique_ptr<x_smb2_state_ioctl_t> &state)
 {
 	NTSTATUS status = NT_STATUS_INTERNAL_ERROR;
@@ -639,31 +639,31 @@ static NTSTATUS x_smb2_ioctl_network_fs(x_smbd_conn_t *smbd_conn,
 	return status;
 }
 
-NTSTATUS x_smb2_process_IOCTL(x_smbd_conn_t *smbd_conn, x_smb2_msg_t *msg)
+NTSTATUS x_smb2_process_IOCTL(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 {
-	if (msg->in_requ_len < SMB2_HDR_BODY + sizeof(x_smb2_in_ioctl_t)) {
-		RETURN_OP_STATUS(msg, NT_STATUS_INVALID_PARAMETER);
+	if (smbd_requ->in_requ_len < SMB2_HDR_BODY + sizeof(x_smb2_in_ioctl_t)) {
+		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
 
-	if (!msg->smbd_sess) {
-		RETURN_OP_STATUS(msg, NT_STATUS_USER_SESSION_DELETED);
+	if (!smbd_requ->smbd_sess) {
+		RETURN_OP_STATUS(smbd_requ, NT_STATUS_USER_SESSION_DELETED);
 	}
 
-	if (msg->smbd_sess->state != x_smbd_sess_t::S_ACTIVE) {
-		RETURN_OP_STATUS(msg, NT_STATUS_INVALID_PARAMETER);
+	if (smbd_requ->smbd_sess->state != x_smbd_sess_t::S_ACTIVE) {
+		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
 
-	const uint8_t *in_hdr = msg->get_in_data();
+	const uint8_t *in_hdr = smbd_requ->get_in_data();
 
 	auto state = std::make_unique<x_smb2_state_ioctl_t>();
-	if (!decode_in_ioctl(*state, in_hdr, msg->in_requ_len)) {
-		RETURN_OP_STATUS(msg, NT_STATUS_INVALID_PARAMETER);
+	if (!decode_in_ioctl(*state, in_hdr, smbd_requ->in_requ_len)) {
+		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
 
 	NTSTATUS status;
 	switch (state->ctl_code & IOCTL_DEV_TYPE_MASK) {
 	case FSCTL_DFS:
-		status = x_smb2_ioctl_dfs(smbd_conn, msg, state);
+		status = x_smb2_ioctl_dfs(smbd_conn, smbd_requ, state);
 		break;
 #if 0
 	case FSCTL_FILESYSTEM:
@@ -671,10 +671,10 @@ NTSTATUS x_smb2_process_IOCTL(x_smbd_conn_t *smbd_conn, x_smb2_msg_t *msg)
 		break;
 #endif
 	case FSCTL_NAMED_PIPE:
-		status = x_smb2_ioctl_named_pipe(smbd_conn, msg, state);
+		status = x_smb2_ioctl_named_pipe(smbd_conn, smbd_requ, state);
 		break;
 	case FSCTL_NETWORK_FILESYSTEM:
-		status = x_smb2_ioctl_network_fs(smbd_conn, msg, state);
+		status = x_smb2_ioctl_network_fs(smbd_conn, smbd_requ, state);
 		break;
 	default:
 		X_TODO;
@@ -691,7 +691,7 @@ NTSTATUS x_smb2_process_IOCTL(x_smbd_conn_t *smbd_conn, x_smb2_msg_t *msg)
 	}
 
 	if (NT_STATUS_IS_OK(status)) {
-		x_smb2_reply_ioctl(smbd_conn, msg, *state);
+		x_smb2_reply_ioctl(smbd_conn, smbd_requ, *state);
 	}
 	return status;
 }

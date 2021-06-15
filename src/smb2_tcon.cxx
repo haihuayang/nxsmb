@@ -122,13 +122,13 @@ static NTSTATUS check_user_share_access(x_smbd_share_t *smbd_share,
 
 static void x_smb2_reply_tcon(x_smbd_conn_t *smbd_conn,
 		x_smbd_tcon_t *smbd_tcon,
-		x_smb2_msg_t *msg, NTSTATUS status,
+		x_smbd_requ_t *smbd_requ, NTSTATUS status,
 		uint8_t out_share_type,
 		uint32_t out_share_flags,
 		uint32_t out_share_capabilities,
 		uint32_t out_access_mask)
 {
-	X_LOG_OP("%ld RESP SUCCESS tid=%x", msg->in_mid, smbd_tcon->tid);
+	X_LOG_OP("%ld RESP SUCCESS tid=%x", smbd_requ->in_mid, smbd_tcon->tid);
 	x_bufref_t *bufref = x_bufref_alloc(X_SMB2_TCON_RESP_BODY_LEN);
 
 	uint8_t *out_hdr = bufref->get_data();
@@ -141,39 +141,39 @@ static void x_smb2_reply_tcon(x_smbd_conn_t *smbd_conn,
 	x_put_le32(out_body + 0x08, out_share_capabilities);
 	x_put_le32(out_body + 0x0c, out_access_mask);
 
-	msg->smbd_tcon = smbd_tcon;
-	x_smb2_reply(smbd_conn, msg, bufref, bufref, status, 
+	smbd_requ->smbd_tcon = smbd_tcon;
+	x_smb2_reply(smbd_conn, smbd_requ, bufref, bufref, status, 
 			SMB2_HDR_BODY + X_SMB2_TCON_RESP_BODY_LEN);
 }
 
-NTSTATUS x_smb2_process_TCON(x_smbd_conn_t *smbd_conn, x_smb2_msg_t *msg)
+NTSTATUS x_smb2_process_TCON(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 {
-	X_LOG_OP("%ld TCON", msg->in_mid);
+	X_LOG_OP("%ld TCON", smbd_requ->in_mid);
 
-	if (msg->in_requ_len < SMB2_HDR_BODY + X_SMB2_TCON_REQU_BODY_LEN + 1) {
-		RETURN_OP_STATUS(msg, NT_STATUS_INVALID_PARAMETER);
+	if (smbd_requ->in_requ_len < SMB2_HDR_BODY + X_SMB2_TCON_REQU_BODY_LEN + 1) {
+		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
 
-	const uint8_t *in_hdr = msg->get_in_data();
+	const uint8_t *in_hdr = smbd_requ->get_in_data();
 	const uint8_t *in_body = in_hdr + SMB2_HDR_BODY;
 
-	if (!msg->smbd_sess) {
-		RETURN_OP_STATUS(msg, NT_STATUS_USER_SESSION_DELETED);
+	if (!smbd_requ->smbd_sess) {
+		RETURN_OP_STATUS(smbd_requ, NT_STATUS_USER_SESSION_DELETED);
 	}
 	
-	if (msg->smbd_sess->state != x_smbd_sess_t::S_ACTIVE) {
-		RETURN_OP_STATUS(msg, NT_STATUS_INVALID_PARAMETER);
+	if (smbd_requ->smbd_sess->state != x_smbd_sess_t::S_ACTIVE) {
+		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
 	/* TODO signing/encryption */
 
 	uint16_t in_path_offset = SVAL(in_body, 0x04);
 	uint16_t in_path_length = SVAL(in_body, 0x06);
 	if (in_path_length % 2 != 0) {
-		RETURN_OP_STATUS(msg, NT_STATUS_INVALID_PARAMETER);
+		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
 
-	if (!x_check_range<uint32_t>(in_path_offset, in_path_length, SMB2_HDR_BODY + X_SMB2_TCON_REQU_BODY_LEN, msg->in_requ_len)) {
-		RETURN_OP_STATUS(msg, NT_STATUS_INVALID_PARAMETER);
+	if (!x_check_range<uint32_t>(in_path_offset, in_path_length, SMB2_HDR_BODY + X_SMB2_TCON_REQU_BODY_LEN, smbd_requ->in_requ_len)) {
+		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
 
 	/* convert lower case utf8 */
@@ -188,21 +188,21 @@ NTSTATUS x_smb2_process_TCON(x_smbd_conn_t *smbd_conn, x_smb2_msg_t *msg)
 	}
 	const char *in_share_s = strchr(in_path_s, '\\');
 	if (!in_share_s) {
-		RETURN_OP_STATUS(msg, NT_STATUS_INVALID_PARAMETER);
+		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
 
 	std::string host{in_path_s, in_share_s};
 	std::string share{in_share_s + 1};
 
-	X_LOG_OP("%ld TCON %s", msg->in_mid, in_path.c_str());
+	X_LOG_OP("%ld TCON %s", smbd_requ->in_mid, in_path.c_str());
 
 	auto smbshare = x_smbd_find_share(smbd_conn->smbd, share);
 	if (!smbshare) {
-		RETURN_OP_STATUS(msg, NT_STATUS_BAD_NETWORK_NAME);
+		RETURN_OP_STATUS(smbd_requ, NT_STATUS_BAD_NETWORK_NAME);
 	}
 
 	uint32_t share_access = create_share_access_mask(smbshare,
-			msg->smbd_sess);
+			smbd_requ->smbd_sess);
 
 	if ((share_access & (idl::SEC_FILE_READ_DATA|idl::SEC_FILE_WRITE_DATA)) == 0) {
 		/* No access, read or write. */
@@ -210,10 +210,10 @@ NTSTATUS x_smb2_process_TCON(x_smbd_conn_t *smbd_conn, x_smb2_msg_t *msg)
 			 "security descriptor.\n",
 			 session_info->unix_info->unix_name,
 			 lp_servicename(talloc_tos(), snum)));
-		RETURN_OP_STATUS(msg, NT_STATUS_ACCESS_DENIED);
+		RETURN_OP_STATUS(smbd_requ, NT_STATUS_ACCESS_DENIED);
 	}
 
-	auto smbd_tcon = make_tcon(msg->smbd_sess, smbshare);
+	auto smbd_tcon = make_tcon(smbd_requ->smbd_sess, smbshare);
 	smbd_tcon->share_access = share_access;
 
 	uint32_t out_share_flags = 0;
@@ -257,7 +257,7 @@ NTSTATUS x_smb2_process_TCON(x_smbd_conn_t *smbd_conn, x_smb2_msg_t *msg)
 
 	/* make_connection_snum *out_maximal_access = tcon->compat->share_access; */
 
-	x_smb2_reply_tcon(smbd_conn, smbd_tcon, msg, NT_STATUS_OK,
+	x_smb2_reply_tcon(smbd_conn, smbd_tcon, smbd_requ, NT_STATUS_OK,
 			smbshare->type == TYPE_IPC ? SMB2_SHARE_TYPE_PIPE : SMB2_SHARE_TYPE_DISK,
 			out_share_flags,
 			out_capabilities, share_access);

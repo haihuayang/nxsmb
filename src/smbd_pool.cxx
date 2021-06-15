@@ -176,6 +176,16 @@ static x_smbd_sess_t *smbd_sess_create_intl(smbd_sess_pool_t &pool, x_smbd_conn_
 }
 
 
+X_DECLARE_MEMBER_TRAITS(smbd_requ_hash_traits, x_smbd_requ_t, hash_link)
+struct smbd_requ_pool_t
+{
+	x_hashtable_t<smbd_requ_hash_traits> hashtable;
+	std::atomic<uint32_t> count;
+	uint32_t capacity;
+	std::mutex mutex;
+};
+
+
 
 template <typename P>
 static inline void pool_init(P &pool, uint32_t count)
@@ -201,6 +211,7 @@ static inline void pool_release(P &pool, E *elem)
 static smbd_open_pool_t g_smbd_open_pool;
 static smbd_tcon_pool_t g_smbd_tcon_pool;
 static smbd_sess_pool_t g_smbd_sess_pool;
+static smbd_requ_pool_t g_smbd_requ_pool;
 
 
 int x_smbd_open_pool_init(uint32_t count)
@@ -257,6 +268,13 @@ void x_smbd_sess_release(x_smbd_sess_t *smbd_sess)
 int x_smbd_sess_pool_init(uint32_t count)
 {
 	pool_init(g_smbd_sess_pool, count);
+	return 0;
+}
+
+
+int x_smbd_requ_pool_init(uint32_t count)
+{
+	pool_init(g_smbd_requ_pool, count);
 	return 0;
 }
 

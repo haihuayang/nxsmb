@@ -73,7 +73,7 @@ struct x_smbd_disk_open_t
 	bool update_write_time = false;
 	uint32_t notify_filter = 0;
 	uint32_t notify_output_size = 0;
-	std::list<x_smb2_msg_t *> notify_reqs;
+	std::list<x_smbd_requ_t *> notify_reqs;
 	std::vector<std::pair<uint32_t, std::u16string>> notifies;
 };
 X_DECLARE_MEMBER_TRAITS(smbd_open_object_traits, x_smbd_disk_open_t, object_link)
@@ -393,10 +393,10 @@ static const x_job_ops_t async_read_job_ops = {
 };
 #endif
 static NTSTATUS x_smbd_disk_open_read(x_smbd_conn_t *smbd_conn,
-		x_smb2_msg_t *msg,
+		x_smbd_requ_t *smbd_requ,
 		std::unique_ptr<x_smb2_state_read_t> &state)
 {
-	x_smbd_disk_open_t *disk_open = from_smbd_open(msg->smbd_open);
+	x_smbd_disk_open_t *disk_open = from_smbd_open(smbd_requ->smbd_open);
 	X_ASSERT(disk_open->disk_object);
 	uint32_t length = std::min(state->in_length, 1024u * 1024);
 
@@ -423,10 +423,10 @@ static NTSTATUS x_smbd_disk_open_read(x_smbd_conn_t *smbd_conn,
 }
 
 static NTSTATUS x_smbd_disk_open_write(x_smbd_conn_t *smbd_conn,
-		x_smb2_msg_t *msg,
+		x_smbd_requ_t *smbd_requ,
 		std::unique_ptr<x_smb2_state_write_t> &state)
 {
-	x_smbd_disk_open_t *disk_open = from_smbd_open(msg->smbd_open);
+	x_smbd_disk_open_t *disk_open = from_smbd_open(smbd_requ->smbd_open);
 	X_ASSERT(disk_open->disk_object);
 
 	ssize_t ret = pwrite(disk_open->disk_object->fd, state->in_data.data(),
@@ -514,10 +514,10 @@ static NTSTATUS getinfo_quota(x_smbd_disk_open_t *disk_open,
 }
 
 static NTSTATUS x_smbd_disk_open_getinfo(x_smbd_conn_t *smbd_conn,
-		x_smb2_msg_t *msg,
+		x_smbd_requ_t *smbd_requ,
 		std::unique_ptr<x_smb2_state_getinfo_t> &state)
 {
-	x_smbd_disk_open_t *disk_open = from_smbd_open(msg->smbd_open);
+	x_smbd_disk_open_t *disk_open = from_smbd_open(smbd_requ->smbd_open);
 	X_ASSERT(disk_open->disk_object);
 	if (state->in_info_class == SMB2_GETINFO_FILE) {
 		return getinfo_file(disk_open, *state);
@@ -533,7 +533,7 @@ static NTSTATUS x_smbd_disk_open_getinfo(x_smbd_conn_t *smbd_conn,
 }
 
 static NTSTATUS x_smbd_disk_open_setinfo(x_smbd_conn_t *smbd_conn,
-		x_smb2_msg_t *msg,
+		x_smbd_requ_t *smbd_requ,
 		std::unique_ptr<x_smb2_state_setinfo_t> &state)
 {
 #if 0
@@ -704,10 +704,10 @@ static uint8_t *marshall_entry(x_smbd_statex_t *statex, const char *fname,
 }
 
 static NTSTATUS x_smbd_disk_open_find(x_smbd_conn_t *smbd_conn,
-		x_smb2_msg_t *msg,
+		x_smbd_requ_t *smbd_requ,
 		std::unique_ptr<x_smb2_state_find_t> &state)
 {
-	x_smbd_disk_open_t *disk_open = from_smbd_open(msg->smbd_open);
+	x_smbd_disk_open_t *disk_open = from_smbd_open(smbd_requ->smbd_open);
 	X_ASSERT(disk_open->disk_object);
 	x_smbd_disk_object_t *disk_object = disk_open->disk_object;
 	if (!disk_object->is_dir()) {
@@ -780,7 +780,7 @@ static NTSTATUS x_smbd_disk_open_find(x_smbd_conn_t *smbd_conn,
 }
 
 static NTSTATUS x_smbd_disk_open_ioctl(x_smbd_conn_t *smbd_conn,
-		x_smb2_msg_t *msg,
+		x_smbd_requ_t *smbd_requ,
 		std::unique_ptr<x_smb2_state_ioctl_t> &state)
 {
 	X_TODO;
@@ -817,10 +817,10 @@ static void notify_marshall(
 }
 
 static NTSTATUS x_smbd_disk_open_notify(x_smbd_conn_t *smbd_conn,
-		x_smb2_msg_t *msg,
+		x_smbd_requ_t *smbd_requ,
 		std::unique_ptr<x_smb2_state_notify_t> &state)
 {
-	x_smbd_disk_open_t *disk_open = from_smbd_open(msg->smbd_open);
+	x_smbd_disk_open_t *disk_open = from_smbd_open(smbd_requ->smbd_open);
 	X_ASSERT(disk_open->disk_object);
 	x_smbd_disk_object_t *disk_object = disk_open->disk_object;
 	if (!disk_object->is_dir()) {
@@ -837,7 +837,7 @@ static NTSTATUS x_smbd_disk_open_notify(x_smbd_conn_t *smbd_conn,
 	if (disk_open->notifies.empty()) {
 		// TODO smbd_conn add Cancels
 		disk_open->notify_output_size = state->in_output_buffer_length;
-		disk_open->notify_reqs.push_back(msg);
+		disk_open->notify_reqs.push_back(smbd_requ);
 		return NT_STATUS_PENDING;
 	} else {
 		notify_marshall(disk_open, state->out_data);
@@ -865,17 +865,17 @@ static void smbd_notify_func(x_smbd_conn_t *smbd_conn, x_fdevt_user_t *fdevt_use
 	} else {
 		std::vector<uint8_t> output;
 		notify_marshall(disk_open, output);
-		x_msg_ptr_t msg = disk_open->notify_reqs.front();
+		x_msg_ptr_t smbd_requ = disk_open->notify_reqs.front();
 		disk_open->notify_reqs.pop_front();
 		auto &smbd_tcon = disk_open->base.smbd_tcon;
 		if (output.empty()) {
-			X_SMB2_REPLY_ERROR(smbd_conn, msg,
+			X_SMB2_REPLY_ERROR(smbd_conn, smbd_requ,
 					smbd_tcon->smbd_sess,
 					smbd_tcon->tid, 
 					NT_STATUS_NOTIFY_ENUM_DIR);
 		} else {
 			x_smb2_reply_notify(smbd_conn, smbd_tcon->smbd_sess,
-					msg, smbd_tcon->tid, 
+					smbd_requ, smbd_tcon->tid, 
 					output);
 		}
 	}
@@ -976,10 +976,10 @@ static void fill_out_info(x_smb2_create_close_info_t &info, const x_smbd_statex_
 }
 
 static NTSTATUS x_smbd_disk_open_close(x_smbd_conn_t *smbd_conn,
-		x_smb2_msg_t *msg,
+		x_smbd_requ_t *smbd_requ,
 		std::unique_ptr<x_smb2_state_close_t> &state)
 {
-	x_smbd_disk_open_t *disk_open = from_smbd_open(msg->smbd_open);
+	x_smbd_disk_open_t *disk_open = from_smbd_open(smbd_requ->smbd_open);
 	x_auto_ref_t<x_smbd_disk_object_t> disk_object{std::move(disk_open->disk_object)};
 	X_ASSERT(disk_object);
 #if 0
@@ -1196,13 +1196,13 @@ static NTSTATUS normalize_path(const char *path)
 static x_smbd_open_t *x_smbd_tcon_disk_op_create(
 		x_smbd_tcon_t *smbd_tcon,
 		NTSTATUS &status,
-		x_smb2_msg_t *msg,
+		x_smbd_requ_t *smbd_requ,
 		std::unique_ptr<x_smb2_state_create_t> &state)
 {
 	/* TODO case insenctive */
 	std::string in_name = x_convert_utf16_to_utf8(state->in_name);
 	const char *path = in_name.data();
-	if (msg->in_hdr_flags & SMB2_HDR_FLAG_DFS) {
+	if (smbd_requ->in_hdr_flags & SMB2_HDR_FLAG_DFS) {
 		/* MAC uses DFS path in \hostname\share\path format. */
 		if (*path == '\\') {
 			++path;

@@ -28,16 +28,10 @@ static uint32_t net_share_enum_all_1(x_smbd_conn_t *smbd_conn,
 		auto &share = it.second;
 		idl::srvsvc_ShareType type =
 			(share->type == TYPE_IPC ? idl::STYPE_IPC_HIDDEN : idl::STYPE_DISKTREE);
-		idl::srvsvc_NetShareInfo1 info1{
-			std::make_shared<std::u16string>(x_convert_utf8_to_utf16(share->name)),
-			type,
-			std::make_shared<std::u16string>(x_convert_utf8_to_utf16("no comment"))
-		};
-
-		ctr1->array->push_back(info1); /*
-		ctr1->array->emplace_back(std::make_shared<std::u16string>(x_convert_utf8_to_utf16(share->name)),
-			type,
-			std::make_shared<std::u16string>(x_convert_utf8_to_utf16("no comment"))); */
+		ctr1->array->push_back(idl::srvsvc_NetShareInfo1{
+				std::make_shared<std::u16string>(x_convert_utf8_to_utf16(share->name)),
+				type,
+				std::make_shared<std::u16string>()});
 	};
 	return ctr1->array->size();
 }

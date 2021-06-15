@@ -51,65 +51,65 @@ static void encode_out_notify(const x_smb2_state_notify_t &state,
 }
 
 static void x_smb2_reply_notify(x_smbd_conn_t *smbd_conn,
-		x_smb2_msg_t *msg,
+		x_smbd_requ_t *smbd_requ,
 		const x_smb2_state_notify_t &state)
 {
-	X_LOG_OP("%ld RESP SUCCESS", msg->in_mid);
+	X_LOG_OP("%ld RESP SUCCESS", smbd_requ->in_mid);
 
 	x_bufref_t *bufref = x_bufref_alloc(sizeof(x_smb2_out_notify_t) +
 			state.out_data.size());
 
 	uint8_t *out_hdr = bufref->get_data();
 	encode_out_notify(state, out_hdr);
-	x_smb2_reply(smbd_conn, msg, bufref, bufref, NT_STATUS_OK, 
+	x_smb2_reply(smbd_conn, smbd_requ, bufref, bufref, NT_STATUS_OK, 
 			SMB2_HDR_BODY + sizeof(x_smb2_out_notify_t) + state.out_data.size());
 }
 
-NTSTATUS x_smb2_process_NOTIFY(x_smbd_conn_t *smbd_conn, x_smb2_msg_t *msg)
+NTSTATUS x_smb2_process_NOTIFY(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 {
-	if (msg->in_requ_len < SMB2_HDR_BODY + sizeof(x_smb2_in_notify_t)) {
-		RETURN_OP_STATUS(msg, NT_STATUS_INVALID_PARAMETER);
+	if (smbd_requ->in_requ_len < SMB2_HDR_BODY + sizeof(x_smb2_in_notify_t)) {
+		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
 
-	if (!msg->smbd_sess) {
-		RETURN_OP_STATUS(msg, NT_STATUS_USER_SESSION_DELETED);
+	if (!smbd_requ->smbd_sess) {
+		RETURN_OP_STATUS(smbd_requ, NT_STATUS_USER_SESSION_DELETED);
 	}
 
-	if (msg->smbd_sess->state != x_smbd_sess_t::S_ACTIVE) {
-		RETURN_OP_STATUS(msg, NT_STATUS_INVALID_PARAMETER);
+	if (smbd_requ->smbd_sess->state != x_smbd_sess_t::S_ACTIVE) {
+		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
 
-	const uint8_t *in_hdr = msg->get_in_data();
+	const uint8_t *in_hdr = smbd_requ->get_in_data();
 
 	auto state = std::make_unique<x_smb2_state_notify_t>();
-	if (!decode_in_notify(*state, in_hdr, msg->in_requ_len)) {
-		RETURN_OP_STATUS(msg, NT_STATUS_INVALID_PARAMETER);
+	if (!decode_in_notify(*state, in_hdr, smbd_requ->in_requ_len)) {
+		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
 
-	X_LOG_OP("%ld NOTIFY 0x%lx, 0x%lx", msg->in_mid,
+	X_LOG_OP("%ld NOTIFY 0x%lx, 0x%lx", smbd_requ->in_mid,
 			state->in_file_id_persistent, state->in_file_id_volatile);
 
-	if (msg->smbd_open) {
-	} else if (msg->smbd_tcon) {
-		msg->smbd_open = x_smbd_open_find(state->in_file_id_persistent,
+	if (smbd_requ->smbd_open) {
+	} else if (smbd_requ->smbd_tcon) {
+		smbd_requ->smbd_open = x_smbd_open_find(state->in_file_id_persistent,
 				state->in_file_id_volatile,
-				msg->smbd_tcon);
+				smbd_requ->smbd_tcon);
 	} else {
 		uint32_t tid = x_get_le32(in_hdr + SMB2_HDR_TID);
-		msg->smbd_open = x_smbd_open_find(state->in_file_id_persistent,
-				state->in_file_id_volatile, tid, msg->smbd_sess);
+		smbd_requ->smbd_open = x_smbd_open_find(state->in_file_id_persistent,
+				state->in_file_id_volatile, tid, smbd_requ->smbd_sess);
 	}
 
-	if (!msg->smbd_open) {
-		RETURN_OP_STATUS(msg, NT_STATUS_FILE_CLOSED);
+	if (!smbd_requ->smbd_open) {
+		RETURN_OP_STATUS(smbd_requ, NT_STATUS_FILE_CLOSED);
 	}
 
-	NTSTATUS status = x_smbd_open_op_notify(smbd_conn, msg, state);
+	NTSTATUS status = x_smbd_open_op_notify(smbd_conn, smbd_requ, state);
 	if (NT_STATUS_IS_OK(status)) {
-		x_smb2_reply_notify(smbd_conn, msg, *state);
+		x_smb2_reply_notify(smbd_conn, smbd_requ, *state);
 		return status;
 	}
 
-	RETURN_OP_STATUS(msg, status);
+	RETURN_OP_STATUS(smbd_requ, status);
 }
 

@@ -378,18 +378,18 @@ static int named_pipe_write(x_smbd_conn_t *smbd_conn,
 }
 
 static NTSTATUS x_smbd_named_pipe_read(x_smbd_conn_t *smbd_conn,
-		x_smb2_msg_t *msg,
+		x_smbd_requ_t *smbd_requ,
 		std::unique_ptr<x_smb2_state_read_t> &state)
 {
-	return named_pipe_read(smbd_conn, from_smbd_open(msg->smbd_open),
+	return named_pipe_read(smbd_conn, from_smbd_open(smbd_requ->smbd_open),
 			state->in_length, state->out_data);
 }
 
 static NTSTATUS x_smbd_named_pipe_write(x_smbd_conn_t *smbd_conn,
-		x_smb2_msg_t *msg,
+		x_smbd_requ_t *smbd_requ,
 		std::unique_ptr<x_smb2_state_write_t> &state)
 {
-	int ret = named_pipe_write(smbd_conn, from_smbd_open(msg->smbd_open),
+	int ret = named_pipe_write(smbd_conn, from_smbd_open(smbd_requ->smbd_open),
 			state->in_data.data(), state->in_data.size());
 	state->out_count = ret;
 	state->out_remaining = 0;
@@ -397,7 +397,7 @@ static NTSTATUS x_smbd_named_pipe_write(x_smbd_conn_t *smbd_conn,
 }
 
 static NTSTATUS x_smbd_named_pipe_getinfo(x_smbd_conn_t *smbd_conn,
-		x_smb2_msg_t *msg,
+		x_smbd_requ_t *smbd_requ,
 		std::unique_ptr<x_smb2_state_getinfo_t> &state)
 {
 	/* SMB2_GETINFO_FILE, SMB2_FILE_STANDARD_INFO */
@@ -422,17 +422,17 @@ static NTSTATUS x_smbd_named_pipe_getinfo(x_smbd_conn_t *smbd_conn,
 }
 
 static NTSTATUS x_smbd_named_pipe_setinfo(x_smbd_conn_t *smbd_conn,
-		x_smb2_msg_t *msg,
+		x_smbd_requ_t *smbd_requ,
 		std::unique_ptr<x_smb2_state_setinfo_t> &state)
 {
 	return NT_STATUS_NOT_SUPPORTED;
 }
 
 static NTSTATUS x_smbd_named_pipe_ioctl(x_smbd_conn_t *smbd_conn,
-		x_smb2_msg_t *msg,
+		x_smbd_requ_t *smbd_requ,
 		std::unique_ptr<x_smb2_state_ioctl_t> &state)
 {
-	x_smbd_named_pipe_t *named_pipe = from_smbd_open(msg->smbd_open);
+	x_smbd_named_pipe_t *named_pipe = from_smbd_open(smbd_requ->smbd_open);
 	switch (state->ctl_code) {
 	case FSCTL_PIPE_TRANSCEIVE:
 		named_pipe_write(smbd_conn, named_pipe, state->in_data.data(),
@@ -446,21 +446,21 @@ static NTSTATUS x_smbd_named_pipe_ioctl(x_smbd_conn_t *smbd_conn,
 }
 
 static NTSTATUS x_smbd_named_pipe_find(x_smbd_conn_t *smbd_conn,
-		x_smb2_msg_t *msg,
+		x_smbd_requ_t *smbd_requ,
 		std::unique_ptr<x_smb2_state_find_t> &state)
 {
 	return NT_STATUS_INVALID_PARAMETER;
 }
 
 static NTSTATUS x_smbd_named_pipe_notify(x_smbd_conn_t *smbd_conn,
-		x_smb2_msg_t *msg,
+		x_smbd_requ_t *smbd_requ,
 		std::unique_ptr<x_smb2_state_notify_t> &state)
 {
 	return NT_STATUS_INVALID_PARAMETER;
 }
 
 static NTSTATUS x_smbd_named_pipe_close(x_smbd_conn_t *smbd_conn,
-		x_smb2_msg_t *msg,
+		x_smbd_requ_t *smbd_requ,
 		std::unique_ptr<x_smb2_state_close_t> &state)
 {
 	state->out_flags = 0;
@@ -495,7 +495,7 @@ static inline x_smbd_named_pipe_t *x_smbd_named_pipe_create(x_smbd_tcon_t *smbd_
 }
 
 static x_smbd_open_t *x_smbd_tcon_ipc_op_create(x_smbd_tcon_t *smbd_tcon,
-		NTSTATUS &status, x_smb2_msg_t *msg,
+		NTSTATUS &status, x_smbd_requ_t *smbd_requ,
 		std::unique_ptr<x_smb2_state_create_t> &state)
 {
 	std::u16string in_name;

@@ -63,13 +63,13 @@ struct x_smbd_sess_t;
 struct x_smbd_tcon_t;
 struct x_smbd_open_t;
 
-struct x_smb2_msg_t
+struct x_smbd_requ_t
 {
 	static std::atomic<int> count;
-	x_smb2_msg_t(x_buf_t *in_buf) : in_buf(in_buf) {
+	x_smbd_requ_t(x_buf_t *in_buf) : in_buf(in_buf) {
 		++count;
 	}
-	~x_smb2_msg_t() {
+	~x_smbd_requ_t() {
 		x_buf_release(in_buf);
 		--count;
 	}
@@ -89,6 +89,8 @@ struct x_smb2_msg_t
 	}
 
 	x_job_t job;
+	x_dqlink_t hash_link;
+	x_dlink_t async_link;
 	void *requ_state = nullptr;
 
 	int refcnt = 1;
@@ -101,7 +103,10 @@ struct x_smb2_msg_t
 	NTSTATUS status{NT_STATUS_OK};
 	uint16_t opcode;
 	uint64_t in_mid;
-	uint64_t in_tid;
+	union {
+		uint32_t in_tid;
+		uint64_t in_asyncid;
+	};
 	uint32_t in_hdr_flags;
 	uint32_t out_hdr_flags{};
 
@@ -117,7 +122,7 @@ struct x_smb2_msg_t
 };
 
 void x_smb2_reply(x_smbd_conn_t *smbd_conn,
-		x_smb2_msg_t *msg,
+		x_smbd_requ_t *smbd_requ,
 		x_bufref_t *buf_head,
 		x_bufref_t *buf_tail,
 		NTSTATUS status,
@@ -233,7 +238,7 @@ struct x_smbd_sess_t
 	bool signing_required = false;
 	std::shared_ptr<x_smbduser_t> user;
 	x_auth_t *auth{nullptr};
-	x_auto_ref_t<x_smb2_msg_t> authmsg;
+	x_auto_ref_t<x_smbd_requ_t> authmsg;
 
 	x_smb2_preauth_t preauth;
 	x_smb2_key_t signing_key, decryption_key, encryption_key, application_key;
@@ -241,20 +246,7 @@ struct x_smbd_sess_t
 	x_tp_ddlist_t<tcon_sess_traits> tcon_list;
 };
 X_DECLARE_MEMBER_TRAITS(smbd_sess_conn_traits, x_smbd_sess_t, conn_link)
-#if 0
-struct x_smbd_tcon_ops_t
-{
-	x_smbd_open_t *(*create)(std::shared_ptr<x_smbd_tcon_t>&,
-			NTSTATUS &status, uint32_t in_hdr_flags,
-			x_smb2_requ_create_t &);
-};
 
-static inline x_smbd_open_t *x_smbd_tcon_op_create(std::shared_ptr<x_smbd_tcon_t> &smbd_tcon,
-		NTSTATUS &status, uint32_t in_hdr_flags, x_smb2_requ_create_t &requ_create)
-{
-	return smbd_tcon->ops->create(smbd_tcon, status, in_hdr_flags, requ_create);
-}
-#endif
 void x_smbd_tcon_init_ipc(x_smbd_tcon_t *smbd_tcon);
 void x_smbd_tcon_init_disk(x_smbd_tcon_t *smbd_tcon);
 
@@ -356,6 +348,8 @@ x_smbd_sess_t *x_smbd_sess_create(x_smbd_conn_t *smbd_conn);
 x_smbd_sess_t *x_smbd_sess_find(uint64_t id, const x_smbd_conn_t *smbd_conn);
 void x_smbd_sess_release(x_smbd_sess_t *smbd_sess);
 
+int x_smbd_requ_pool_init(uint32_t count);
+
 x_auth_t *x_smbd_create_auth(x_smbd_t *smbd);
 
 x_smbd_tcon_t *x_smbd_tcon_find(uint32_t id, const x_smbd_sess_t *smbd_sess);
@@ -365,24 +359,24 @@ void x_smbd_tcon_release(x_smbd_tcon_t *smbd_tcon);
 void x_smbd_conn_remove_sessions(x_smbd_conn_t *smbd_conn);
 bool x_smbd_conn_post_user(x_smbd_conn_t *smbd_conn, x_fdevt_user_t *fdevt_user);
 #if 0
-void x_smbd_conn_reply(x_smbd_conn_t *smbd_conn, x_msg_ptr_t &msg, x_smbd_sess_t *smbd_sess,
+void x_smbd_conn_reply(x_smbd_conn_t *smbd_conn, x_msg_ptr_t &smbd_requ, x_smbd_sess_t *smbd_sess,
 		x_smb2_preauth_t *preauth, uint8_t *outbuf,
 		uint32_t tid, NTSTATUS status, uint32_t body_size);
-int x_smb2_reply_error(x_smbd_conn_t *smbd_conn, x_msg_ptr_t &msg, x_smbd_sess_t *smbd_sess,
+int x_smb2_reply_error(x_smbd_conn_t *smbd_conn, x_msg_ptr_t &smbd_requ, x_smbd_sess_t *smbd_sess,
 		uint32_t tid, NTSTATUS status, const char *file, unsigned int line);
 void x_smb2_reply(x_smbd_sess_t *smbd_sess,
 		x_smb2_requ_t *requ, uint8_t *outhdr, uint32_t body_size, NTSTATUS status);
-static inline bool msg_is_signed(const x_msg_ptr_t &msg)
+static inline bool msg_is_signed(const x_msg_ptr_t &smbd_requ)
 {
-	uint32_t flags = x_get_le32(msg->in_buf + SMB2_HDR_FLAGS);
+	uint32_t flags = x_get_le32(smbd_requ->in_buf + SMB2_HDR_FLAGS);
 	return flags & SMB2_HDR_FLAG_SIGNED;
 }
 
-#define X_SMB2_REPLY_ERROR(smbd_conn, msg, smbd_sess, tid, status) \
-	x_smb2_reply_error((smbd_conn), (msg), (smbd_sess), (tid), (status), __FILE__, __LINE__)
+#define X_SMB2_REPLY_ERROR(smbd_conn, smbd_requ, smbd_sess, tid, status) \
+	x_smb2_reply_error((smbd_conn), (smbd_requ), (smbd_sess), (tid), (status), __FILE__, __LINE__)
 #endif
 
-int x_smbd_conn_process_smb1negoprot(x_smbd_conn_t *smbd_conn, x_smb2_msg_t *msg);
+int x_smbd_conn_process_smb1negoprot(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ);
 
 void x_smbd_wbpool_request(x_wbcli_t *wbcli);
 
@@ -392,15 +386,15 @@ uint16_t x_smb2_dialect_match(x_smbd_conn_t *smbd_conn,
 		size_t dialect_count);
 
 #define X_SMB2_OP_DECL(X) \
-extern NTSTATUS x_smb2_process_##X(x_smbd_conn_t *smbd_conn, x_smb2_msg_t *msg);
+extern NTSTATUS x_smb2_process_##X(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ);
 	X_SMB2_OP_ENUM
 #undef X_SMB2_OP_DECL
 
-void x_smbd_conn_requ_done(x_smbd_conn_t *smbd_conn, x_smb2_msg_t *msg,
+void x_smbd_conn_requ_done(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ,
 		NTSTATUS status);
 
-#define RETURN_OP_STATUS(msg, status) do { \
-	X_LOG_OP("mid=%ld op=%d 0x%lx at %s:%d", (msg)->in_mid, (msg)->opcode, \
+#define RETURN_OP_STATUS(smbd_requ, status) do { \
+	X_LOG_OP("mid=%ld op=%d 0x%lx at %s:%d", (smbd_requ)->in_mid, (smbd_requ)->opcode, \
 			(status).v, __FILE__, __LINE__); \
 	return (status); \
 } while (0)
@@ -408,62 +402,6 @@ void x_smbd_conn_requ_done(x_smbd_conn_t *smbd_conn, x_smb2_msg_t *msg,
 /* TODO */
 #define DEBUG(...) do { } while (0)
 
-struct x_smb2_requ_t;
-struct x_smb2_requ_ops_t
-{
-	void (*reply)(x_smb2_requ_t *requ);
-	void (*destroy)(x_smb2_requ_t *requ);
-};
-
-struct x_smb2_requ_t
-{
-	const x_smb2_requ_ops_t *ops;
-	uint64_t mid;
-	uint32_t hdr_flags;
-	uint16_t opcode;
-	uint16_t credits_requested;
-	uint32_t tid;
-	x_bufref_t in_buf;
-};
-
-#if 0
-struct x_msg_t
-{
-	explicit x_msg_t(size_t nbt_hdr) : nbt_hdr(nbt_hdr) {
-		in_buf = new uint8_t[nbt_hdr & 0xffffff];
-	}
-	~x_msg_t() {
-		if (in_buf) {
-			delete[] in_buf;
-		}
-		if (out_buf) {
-			delete[] out_buf;
-		}
-	}
-	// x_dlink_t dlink;
-	uint64_t mid;
-	uint32_t hdr_flags;
-	uint16_t opcode;
-	uint16_t credits_requested;
-	bool do_signing{false};
-	const uint32_t nbt_hdr;
-	enum {
-		STATE_READING,
-		STATE_PROCESSING,
-		STATE_COMPLETE,
-		STATE_ABORT,
-	} state = STATE_READING;
-	unsigned int in_len = 0;
-	unsigned int in_off;
-	uint8_t *in_buf;
-	unsigned int out_len = 0;
-	unsigned int out_off;
-	uint8_t *out_buf = NULL;
-};
-//X_DECLARE_MEMBER_TRAITS(msg_dlink_traits, x_msg_t, dlink)
-
-using x_msg_ptr_t = std::shared_ptr<x_msg_t>;
-#endif
 
 #endif /* __smbd__hxx__ */
 

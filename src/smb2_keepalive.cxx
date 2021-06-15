@@ -21,25 +21,25 @@ static void encode_out_keepalive(uint8_t *out_hdr)
 	keepalive->reserved0 = 0;
 }
 
-static void x_smb2_reply_keepalive(x_smbd_conn_t *smbd_conn, x_smb2_msg_t *msg)
+static void x_smb2_reply_keepalive(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 {
 	x_bufref_t *bufref = x_bufref_alloc(sizeof(x_smb2_keepalive_t));
 
 	uint8_t *out_hdr = bufref->get_data();
 	
 	encode_out_keepalive(out_hdr);
-	x_smb2_reply(smbd_conn, msg, bufref, bufref, NT_STATUS_OK, 
+	x_smb2_reply(smbd_conn, smbd_requ, bufref, bufref, NT_STATUS_OK, 
 			SMB2_HDR_BODY + sizeof(x_smb2_keepalive_t));
 }
 
-NTSTATUS x_smb2_process_KEEPALIVE(x_smbd_conn_t *smbd_conn, x_smb2_msg_t *msg)
+NTSTATUS x_smb2_process_KEEPALIVE(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 {
-	if (msg->in_requ_len < SMB2_HDR_BODY + sizeof(struct x_smb2_keepalive_t)) {
-		RETURN_OP_STATUS(msg, NT_STATUS_INVALID_PARAMETER);
+	if (smbd_requ->in_requ_len < SMB2_HDR_BODY + sizeof(struct x_smb2_keepalive_t)) {
+		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
 
-	X_LOG_OP("%ld KEEPALIVE", msg->in_mid);
+	X_LOG_OP("%ld KEEPALIVE", smbd_requ->in_mid);
 
-	x_smb2_reply_keepalive(smbd_conn, msg);
+	x_smb2_reply_keepalive(smbd_conn, smbd_requ);
 	return NT_STATUS_OK;
 }
