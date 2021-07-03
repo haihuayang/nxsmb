@@ -45,10 +45,12 @@ static bool x_smbd_dcerpc_impl_srvsvc_NetShareEnumAll(
 	case 1:
 		arg.totalentries = net_share_enum_all_1(smbd_conn, arg.info_ctr.ctr.ctr1);
 		arg.__result = WERR_OK;
+		break;
 
 	default:
 		X_TODO;
 		arg.__result = WERR_INVALID_LEVEL;
+		break;
 	}
 	return true;
 }
@@ -87,7 +89,35 @@ X_SMBD_DCERPC_IMPL_TODO(srvsvc_NetShareSetInfo)
 X_SMBD_DCERPC_IMPL_TODO(srvsvc_NetShareDel)
 X_SMBD_DCERPC_IMPL_TODO(srvsvc_NetShareDelSticky)
 X_SMBD_DCERPC_IMPL_TODO(srvsvc_NetShareCheck)
-X_SMBD_DCERPC_IMPL_TODO(srvsvc_NetSrvGetInfo)
+
+static bool x_smbd_dcerpc_impl_srvsvc_NetSrvGetInfo(
+		x_smbd_conn_t *smbd_conn,
+		idl::srvsvc_NetSrvGetInfo &arg)
+{
+	const std::shared_ptr<x_smbconf_t> smbconf = smbd_conn->get_smbconf();
+
+	switch (arg.level) {
+	case 101: {
+		auto &info = arg.info.info101;
+		X_ASSERT(!info);
+		info = std::make_shared<idl::srvsvc_NetSrvInfo101>();
+		info->platform_id = idl::PLATFORM_ID_NT;
+		info->server_name = std::make_shared<std::u16string>(x_convert_utf8_to_utf16(smbconf->netbios_name));
+		info->version_major = 0x06;
+		info->version_minor = 0x01;
+		info->server_type = smbconf->get_default_server_announce();
+		info->comment = std::make_shared<std::u16string>();
+		arg.__result = WERR_OK;
+		}
+		break;
+
+	default:
+		X_TODO;
+		arg.__result = WERR_INVALID_LEVEL;
+	}
+	return true;
+}
+
 X_SMBD_DCERPC_IMPL_TODO(srvsvc_NetSrvSetInfo)
 X_SMBD_DCERPC_IMPL_TODO(srvsvc_NetDiskEnum)
 X_SMBD_DCERPC_IMPL_TODO(srvsvc_NetServerStatisticsGet)

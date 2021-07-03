@@ -2098,6 +2098,7 @@ const {dtype}{'* const' if t['POINTERS'] == 1 else ''} {t['NAME']}{array_suffix}
 ''')
 
 def output_header_INTERFACE(out, iface, idl):
+	function_count = 0
 	for t in iface['DATA']:
 		if t['TYPE'] == 'TYPEDEF':
 			if t['DATA']['TYPE'] in [ 'ENUM', 'BITMAP' ]:
@@ -2107,7 +2108,7 @@ def output_header_INTERFACE(out, iface, idl):
 		elif t['TYPE'] == 'CONST':
 			output_header_CONST(out, t)
 		elif t["TYPE"] in [ "FUNCTION" ]:
-			pass
+			function_count += 1
 		else:
 			error(f'''Unknown type "{t['TYPE']}" at {t['FILE']}:{t['LINE']}''')
 			assert False
@@ -2132,14 +2133,15 @@ def output_header_INTERFACE(out, iface, idl):
 			error(f'''Unknown type "{t['TYPE']}" at {t['FILE']}:{t['LINE']}''')
 			assert False
 
-	out('''
-#define X_DCERPC_FUNCTION_ENUM_%s \\''' % iface['NAME'])
-	for t in iface['DATA']:
-		if not t["TYPE"] in [ "FUNCTION" ]:
-			continue
+	if function_count > 0:
 		out('''
+#define X_DCERPC_FUNCTION_ENUM_%s \\''' % iface['NAME'])
+		for t in iface['DATA']:
+			if not t["TYPE"] in [ "FUNCTION" ]:
+				continue
+			out('''
 	X_DCERPC_FUNCTION_DEF(%s) \\''' % t['NAME'])
-	out('''
+		out('''
 
 ''')
 

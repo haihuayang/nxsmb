@@ -70,6 +70,8 @@ void x_smbd_conn_queue(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 	}
 	smbd_conn->send_buf_tail = smbd_requ->out_buf_tail;
 
+	smbd_requ->out_buf_head = smbd_requ->out_buf_tail = nullptr;
+
 	if (orig_empty) {
 		x_evtmgmt_enable_events(globals.evtmgmt, smbd_conn->ep_id, FDEVT_OUT);
 	}
@@ -386,9 +388,9 @@ static NTSTATUS x_smbd_conn_process_smb2__(x_smbd_conn_t *smbd_conn, x_smbd_requ
 	}
 
 	if (smbd_requ->in_hdr_flags & SMB2_HDR_FLAG_ASYNC) {
-		smbd_requ->in_tid = x_get_le32(in_buf + SMB2_HDR_TID);
-	} else {
 		smbd_requ->in_asyncid = x_get_le32(in_buf + SMB2_HDR_PID);
+	} else {
+		smbd_requ->in_tid = x_get_le32(in_buf + SMB2_HDR_TID);
 	}
 	return x_smb2_op_table[smbd_requ->opcode].op_func(smbd_conn, smbd_requ);
 }
@@ -1030,7 +1032,7 @@ void x_smbd_wbpool_request(x_wbcli_t *wbcli)
 	x_wbpool_request(globals.wbpool, wbcli);
 }
 
-bool x_smbd_conn_post_user(x_smbd_conn_t *smbd_conn, x_fdevt_user_t *evt_user)
+void x_smbd_conn_post_user(x_smbd_conn_t *smbd_conn, x_fdevt_user_t *fdevt_user)
 {
 	bool notify = false;
 	bool queued = false;
@@ -1038,14 +1040,17 @@ bool x_smbd_conn_post_user(x_smbd_conn_t *smbd_conn, x_fdevt_user_t *evt_user)
 		std::lock_guard<std::mutex> lock(smbd_conn->mutex);
 		if (smbd_conn->state != x_smbd_conn_t::STATE_DONE) {
 			notify = smbd_conn->fdevt_user_list.get_front() == nullptr;
-			smbd_conn->fdevt_user_list.push_back(evt_user);
+			smbd_conn->fdevt_user_list.push_back(fdevt_user);
 			queued = true;
 		}
 	}
 	if (notify) {
 		x_evtmgmt_post_events(globals.evtmgmt, smbd_conn->ep_id, FDEVT_USER);
 	}
-	return queued;
+	if (!queued) {
+		/* cancel the event */
+		fdevt_user->func(smbd_conn, fdevt_user, true);
+	}
 }
 
 void x_smbd_schedule_aio()

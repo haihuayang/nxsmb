@@ -87,9 +87,14 @@ TARGET_CFLAGS_samba = \
 	-Isamba/source3 \
 
 all: $(TARGET_SET_tests:%=$(TARGET_DIR_out)/tests/%) \
-	$(TARGET_DIR_out)/bin/nxsmbd
+	$(TARGET_DIR_out)/bin/nxsmbd \
+	$(TARGET_DIR_out)/bin/nxutils
 
 SET_src_nxsmbd := \
+	util_sid \
+	smbd_disk \
+	smbd_ipc \
+	smbd_vfs \
 	smbd_dcerpc \
 	smbd_dcerpc_srvsvc \
 	smb2_negprot \
@@ -115,17 +120,24 @@ SET_src_nxsmbd := \
 	smbd \
 	smbd_pool \
 	smbd_conn  \
-	smbd_ipc \
-	smbd_disk \
 	auth_ntlmssp auth_krb5 auth_spnego auth \
 	network misc \
 	smbconf smbd_share \
+	smbd_ntacl \
 
+SET_src_nxutils := \
+	nxutils \
+	smbd_vfs \
+	smbd_ntacl \
+	util_sid \
 
 $(TARGET_DIR_out)/bin/nxsmbd: $(SET_src_nxsmbd:%=$(TARGET_DIR_out)/src/%.o) $(TARGET_SET_lib:%=$(TARGET_DIR_out)/lib%.a)
 	$(CXX) -g $(TARGET_LDFLAGS) -o $@ $^ -lpthread -lresolv -ldl
 
-$(SET_src_nxsmbd:%=$(TARGET_DIR_out)/src/%.o): $(TARGET_DIR_out)/%.o: %.cxx | target_mkdir target_idl target_samba_gen
+$(TARGET_DIR_out)/bin/nxutils: $(SET_src_nxutils:%=$(TARGET_DIR_out)/src/%.o) $(TARGET_SET_lib:%=$(TARGET_DIR_out)/lib%.a)
+	$(CXX) -g $(TARGET_LDFLAGS) -o $@ $^ -lpthread -lresolv -ldl
+
+$(TARGET_DIR_out)/src/%.o: src/%.cxx | target_mkdir target_idl target_samba_gen
 	$(CXX) -c $(TARGET_CXXFLAGS) $(TARGET_CFLAGS_EXTRA) $(TARGET_CFLAGS_samba) $(TARGET_CFLAGS_heimdal) -o $@ $<
 
 $(TARGET_SET_tests:%=$(TARGET_DIR_out)/tests/%) : %: %.o $(TARGET_SET_lib:%=$(TARGET_DIR_out)/lib%.a)

@@ -95,6 +95,7 @@ struct x_smb2_state_ioctl_t
 
 struct x_smb2_state_notify_t
 {
+	void done(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ, NTSTATUS status);
 	uint16_t in_flags;
 	uint32_t in_output_buffer_length;
 	uint64_t in_file_id_persistent;
@@ -240,6 +241,12 @@ static inline x_smbd_open_t *x_smbd_tcon_op_create(x_smbd_tcon_t *smbd_tcon,
 	return smbd_tcon->ops->create(smbd_tcon, status, smbd_requ, state);
 }
 
+struct x_smb2_standard_info_t
+{
+	uint32_t create_time;
+	uint32_t access_time;
+	uint32_t modify_time;
+};
 
 
 #endif /* __smbd_open__hxx__ */

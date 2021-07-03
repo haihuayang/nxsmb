@@ -71,6 +71,22 @@ static void x_smb2_reply_setinfo(x_smbd_conn_t *smbd_conn,
 			SMB2_HDR_BODY + sizeof(x_smb2_out_setinfo_t));
 }
 
+#if 0
+static NTSTATUS process_setinfo(x_smbd_conn_t *smbd_conn,
+		x_smbd_requ_t *smbd_requ,
+		std::unique<x_smb2_state_setinfo_t> &state)
+{
+	if (state->in_info_class == SMB2_GETINFO_FILE) {
+		return x_smbd_open_op_setinfo_file(smbd_conn, smbd_requ, state);
+	} else if (state->in_info_class == SMB2_GETINFO_FS) {
+		return x_smbd_open_op_setinfo_fs(smbd_conn, smbd_requ, state);
+	} else if (state->in_info_class == SMB2_GETINFO_SECURITY) {
+		return setinfo_security(disk_open, smbd_requ, *state);
+	} else {
+		return NT_STATUS_INVALID_PARAMETER;
+	}
+}
+#endif
 NTSTATUS x_smb2_process_SETINFO(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 {
 	if (smbd_requ->in_requ_len < SMB2_HDR_BODY + sizeof(x_smb2_in_setinfo_t)) {

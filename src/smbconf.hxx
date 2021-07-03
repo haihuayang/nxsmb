@@ -6,6 +6,8 @@
 #error "Must be c++"
 #endif
 
+#include "include/librpc/misc.hxx"
+
 static inline bool lpcfg_param_bool(void *service, const char *type, const char *option, bool default_v)
 {
 	return default_v;
@@ -122,8 +124,21 @@ struct x_smbconf_t
 	x_smbconf_t() {
 		strcpy((char *)guid, "nxsmbd");
 	}
+
+	idl::svcctl_ServerType get_default_server_announce() const {
+		// lp_default_server_announce
+		idl::svcctl_ServerType ret = idl::svcctl_ServerType(idl::SV_TYPE_WORKSTATION
+			| idl::SV_TYPE_SERVER
+			| idl::SV_TYPE_SERVER_UNIX
+			| idl::SV_TYPE_SERVER_NT
+			| idl::SV_TYPE_NT
+			| idl::SV_TYPE_DOMAIN_MEMBER);
+		return ret;
+	}
+
 	uint8_t guid[16];
 	int port = 445;
+	int backend_port = 446;
 	uint32_t thread_count = 1;
 
 	size_t max_trans = 1024 * 1024;

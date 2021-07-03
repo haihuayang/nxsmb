@@ -90,7 +90,7 @@ struct x_smbd_requ_t
 
 	x_job_t job;
 	x_dqlink_t hash_link;
-	x_dlink_t async_link;
+	x_dlink_t async_link; // link into open
 	void *requ_state = nullptr;
 
 	int refcnt = 1;
@@ -120,6 +120,7 @@ struct x_smbd_requ_t
 	x_smbd_tcon_t *smbd_tcon{};
 	x_smbd_open_t *smbd_open{};
 };
+X_DECLARE_MEMBER_TRAITS(requ_async_traits, x_smbd_requ_t, async_link)
 
 void x_smb2_reply(x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ,
@@ -128,9 +129,10 @@ void x_smb2_reply(x_smbd_conn_t *smbd_conn,
 		NTSTATUS status,
 		uint32_t reply_size);
 
-struct x_smbduser_t
+struct x_smbd_user_t
 {
-	// security token
+	idl::dom_sid u_sid, g_sid;
+	std::vector<idl::dom_sid> group_sids;
 };
 
 struct x_smbd_open_ops_t;
@@ -140,6 +142,10 @@ struct x_smbd_open_t
 		X_ASSERT(refcnt++ > 0);
 	}
 	void decref();
+
+	bool check_access(uint32_t access) const {
+		return (access_mask & access);
+	}
 
 	x_dqlink_t hash_link;
 	x_dlink_t tcon_link;
@@ -236,7 +242,7 @@ struct x_smbd_sess_t
 	std::mutex mutex;
 	// uint16_t security_mode = 0;
 	bool signing_required = false;
-	std::shared_ptr<x_smbduser_t> user;
+	std::shared_ptr<x_smbd_user_t> smbd_user;
 	x_auth_t *auth{nullptr};
 	x_auto_ref_t<x_smbd_requ_t> authmsg;
 
@@ -357,7 +363,7 @@ void x_smbd_tcon_insert(x_smbd_tcon_t *smbd_tcon);
 void x_smbd_tcon_release(x_smbd_tcon_t *smbd_tcon);
 
 void x_smbd_conn_remove_sessions(x_smbd_conn_t *smbd_conn);
-bool x_smbd_conn_post_user(x_smbd_conn_t *smbd_conn, x_fdevt_user_t *fdevt_user);
+void x_smbd_conn_post_user(x_smbd_conn_t *smbd_conn, x_fdevt_user_t *fdevt_user);
 #if 0
 void x_smbd_conn_reply(x_smbd_conn_t *smbd_conn, x_msg_ptr_t &smbd_requ, x_smbd_sess_t *smbd_sess,
 		x_smb2_preauth_t *preauth, uint8_t *outbuf,

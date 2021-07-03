@@ -8,8 +8,10 @@ $(1).c $(1).h
 endef
 
 define compile_et_wrap
-$(1)/$(2).c $(1)/$(2).h: samba/source4/heimdal/$(2).et
-	$(HOST_DIR_out)/bin/compile_et $$< && mv $(notdir $(2)).c $(notdir $(2)).h $(1)/$(dir $(2))
+$(1)/$(2).h: samba/source4/heimdal/$(2).et
+	$(HOST_DIR_out)/bin/compile_et $$< && mv $(notdir $(2)).c $(notdir $(2)).h $(1)/$(dir $(2)) && touch $(1)/$(2).c
+$(1)/$(2).c: $(1)/$(2).h
+	#noop
 $(1)/$(2).c $(1)/$(2).h: $(HOST_DIR_out)/bin/compile_et
 endef
 

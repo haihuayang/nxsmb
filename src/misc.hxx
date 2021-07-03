@@ -54,6 +54,15 @@ static inline idl::NTTIME x_timespec_to_nttime(const struct timespec &ts)
 	return idl::NTTIME{val};
 }
 
+static inline struct timespec x_nttime_to_timespec(idl::NTTIME nt)
+{
+	struct timespec ts;
+	ts.tv_nsec = (nt.val % (1000 * 1000 * 10)) * 100;
+	ts.tv_sec = nt.val / (1000 * 1000 * 10);
+	ts.tv_sec -= idl::NTTIME::TIME_FIXUP_CONSTANT;
+	return ts;
+}
+
 template <typename T>
 static inline bool x_check_range(T offset, T length,
 		T min_offset, T max_offset)
@@ -81,6 +90,8 @@ void x_smbd_report_nt_status(NTSTATUS status, unsigned int line, const char *fil
 	return (status); \
 } while(0)
 
+NTSTATUS x_map_nt_error_from_unix(int unix_error);
+NTSTATUS x_map_nt_error_from_ndr_err(idl::x_ndr_err_code_t ndr_err);
 
 #endif /* __misc__hxx__ */
 

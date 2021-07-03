@@ -36,7 +36,10 @@ template <typename T>
 struct x_auto_ref_t
 {
 	explicit x_auto_ref_t(T *t = nullptr) : val{t} { }
-	x_auto_ref_t(const x_auto_ref_t<T> &o) = delete;
+	x_auto_ref_t(const x_auto_ref_t<T> &o) {
+		val = o.val;
+		val->incref();
+	}
 	x_auto_ref_t(x_auto_ref_t<T> &&o) {
 		val = o.val;
 		o.val = nullptr;

@@ -33,7 +33,37 @@ struct ndr_traits_dom_sid2
 	}
 };
 
+long dom_sid_compare_domain(const dom_sid &sid1, const dom_sid &sid2);
+long dom_sid_compare(const dom_sid &sid1, const dom_sid &sid2);
+
+static inline bool operator==(const dom_sid &sid1, const dom_sid &sid2) {
+	return dom_sid_compare(sid1, sid2) == 0;
 }
+
+/* domain num_auths must less than 15 */
+static inline dom_sid dom_sid_from_domain_and_rid(const dom_sid &domain, uint32_t rid)
+{
+	dom_sid ret = domain;
+	ret.sub_auths[ret.num_auths++] = rid;
+	return ret;
+}
+
+static inline bool operator==(const security_ace &ace1, const security_ace &ace2)
+{
+	if (ace1.type != ace2.type) {
+		return false;
+	}
+	if (ace1.flags != ace2.flags) {
+		return false;
+	}
+	if (ace1.access_mask != ace2.access_mask) {
+		return false;
+	}
+	return ace1.trustee == ace2.trustee;
+}
+
+}
+
 
 #endif /* __librpc__security__hxx__ */
 

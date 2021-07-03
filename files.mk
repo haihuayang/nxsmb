@@ -10,6 +10,7 @@ TARGET_SET_idl := \
 	dcerpc \
 	svcctl \
 	srvsvc \
+	xattr \
 
 a=\
 	mytest_x_elem_size \

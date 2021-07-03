@@ -429,6 +429,29 @@ static NTSTATUS x_smb2_ioctl_dfs(
 	return status;
 }
 
+// FSCTL_FILESYSTEM
+static NTSTATUS x_smb2_ioctl_filesys(x_smbd_conn_t *smbd_conn,
+		x_smbd_requ_t *smbd_requ,
+		std::unique_ptr<x_smb2_state_ioctl_t> &state)
+{
+	if (smbd_requ->smbd_open) {
+	} else if (smbd_requ->smbd_tcon) {
+		smbd_requ->smbd_open = x_smbd_open_find(state->file_id_persistent,
+				state->file_id_volatile,
+				smbd_requ->smbd_tcon);
+	} else {
+		smbd_requ->smbd_open = x_smbd_open_find(state->file_id_persistent,
+				state->file_id_volatile, smbd_requ->in_tid, smbd_requ->smbd_sess);
+	}
+
+	/* TODO check tcon is not IPC? */
+	if (!smbd_requ->smbd_open) {
+		RETURN_OP_STATUS(smbd_requ, NT_STATUS_FILE_CLOSED);
+	}
+
+	return x_smbd_open_op_ioctl(smbd_conn, smbd_requ, state);
+}
+
 // FSCTL_NAMED_PIPE
 static NTSTATUS x_smb2_ioctl_named_pipe(x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ,
@@ -453,6 +476,7 @@ static NTSTATUS x_smb2_ioctl_named_pipe(x_smbd_conn_t *smbd_conn,
 				state->file_id_volatile, smbd_requ->in_tid, smbd_requ->smbd_sess);
 	}
 
+	/* TODO check tcon is IPC? */
 	if (!smbd_requ->smbd_open) {
 		RETURN_OP_STATUS(smbd_requ, NT_STATUS_FILE_CLOSED);
 	}
@@ -665,11 +689,9 @@ NTSTATUS x_smb2_process_IOCTL(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ
 	case FSCTL_DFS:
 		status = x_smb2_ioctl_dfs(smbd_conn, smbd_requ, state);
 		break;
-#if 0
 	case FSCTL_FILESYSTEM:
-		return smb2_ioctl_filesys(in_ctl_code, ev, req, state);
+		status = x_smb2_ioctl_filesys(smbd_conn, smbd_requ, state);
 		break;
-#endif
 	case FSCTL_NAMED_PIPE:
 		status = x_smb2_ioctl_named_pipe(smbd_conn, smbd_requ, state);
 		break;

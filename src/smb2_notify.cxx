@@ -113,3 +113,13 @@ NTSTATUS x_smb2_process_NOTIFY(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_req
 	RETURN_OP_STATUS(smbd_requ, status);
 }
 
+void x_smb2_state_notify_t::done(x_smbd_conn_t *smbd_conn,
+		x_smbd_requ_t *smbd_requ,
+		NTSTATUS status)
+{
+	if (NT_STATUS_IS_OK(status)) {
+		x_smb2_reply_notify(smbd_conn, smbd_requ, *this);
+	}
+	x_smbd_conn_requ_done(smbd_conn, smbd_requ, status);
+}
+

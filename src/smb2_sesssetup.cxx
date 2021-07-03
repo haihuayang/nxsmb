@@ -104,6 +104,7 @@ static void smbd_sess_auth_succeeded(x_smbd_conn_t *smbd_conn, x_smbd_sess_t *sm
 		const x_auth_info_t &auth_info)
 {
 	X_LOG_DBG("auth_info %s", tostr(auth_info).c_str());
+	X_ASSERT(auth_info.domain_sid.num_auths < auth_info.domain_sid.sub_auths.size());
 	
 	/* TODO find_user by auth_info
 	sort auth_info sids ..., create unique hash value 
@@ -122,6 +123,24 @@ static void smbd_sess_auth_succeeded(x_smbd_conn_t *smbd_conn, x_smbd_sess_t *sm
 	*/
 	/* TODO set user token ... */
 
+
+	auto smbd_user = std::make_shared<x_smbd_user_t>();
+	smbd_user->u_sid = dom_sid_from_domain_and_rid(auth_info.domain_sid,
+			auth_info.rid);
+	smbd_user->g_sid = dom_sid_from_domain_and_rid(auth_info.domain_sid,
+			auth_info.primary_gid);
+
+	for (auto &group_rid : auth_info.group_rids) {
+		smbd_user->group_sids.push_back(
+				dom_sid_from_domain_and_rid(auth_info.domain_sid,
+					group_rid.rid));
+	}
+
+	for (auto &other_sid : auth_info.other_sids) {
+		smbd_user->group_sids.push_back(other_sid.sid);
+	}
+
+	smbd_sess->smbd_user = smbd_user;
 
 	const x_array_const_t<char> *derivation_sign_label, *derivation_sign_context,
 	      *derivation_encryption_label, *derivation_encryption_context,
