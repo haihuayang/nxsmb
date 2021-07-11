@@ -33,7 +33,7 @@ struct x_hashtable_t
 		return find_in_bucket(bucket, eq);
 	}
 
-private:
+// TODO private:
 	template <class EQ> item_type *find_in_bucket(const bucket_type &bucket,
 			EQ &&eq) const
 	{

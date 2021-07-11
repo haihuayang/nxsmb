@@ -1,0 +1,23 @@
+
+#ifndef __smbd_ctrl__hxx__
+#define __smbd_ctrl__hxx__
+
+#ifndef __cplusplus
+#error "Must be c++"
+#endif
+
+#include "smbd.hxx"
+
+struct x_smbd_ctrl_handler_t
+{
+	virtual ~x_smbd_ctrl_handler_t() { }
+	virtual bool output(std::string &data) = 0;
+};
+
+x_smbd_ctrl_handler_t *x_smbd_list_session_create();
+x_smbd_ctrl_handler_t *x_smbd_list_tcon_create();
+x_smbd_ctrl_handler_t *x_smbd_list_open_create();
+
+
+#endif /* __smbd_ctrl__hxx__ */
+

@@ -29,9 +29,10 @@ static struct {
 	bool do_async = false;
 	x_threadpool_t *tpool_aio;
 	x_threadpool_t *tpool_evtmgmt;
-	x_evtmgmt_t *evtmgmt;
 	x_wbpool_t *wbpool;
 } globals;
+
+x_evtmgmt_t *g_evtmgmt = nullptr;
 
 std::atomic<int> x_smbd_requ_t::count;
 
@@ -39,7 +40,7 @@ static void main_loop()
 {
 	snprintf(task_name, sizeof task_name, "MAIN");
 	for (;;) {
-		x_evtmgmt_dispatch(globals.evtmgmt);
+		x_evtmgmt_dispatch(g_evtmgmt);
 	}
 }
 
@@ -73,7 +74,7 @@ void x_smbd_conn_queue(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 	smbd_requ->out_buf_head = smbd_requ->out_buf_tail = nullptr;
 
 	if (orig_empty) {
-		x_evtmgmt_enable_events(globals.evtmgmt, smbd_conn->ep_id, FDEVT_OUT);
+		x_evtmgmt_enable_events(g_evtmgmt, smbd_conn->ep_id, FDEVT_OUT);
 	}
 }
 
@@ -297,7 +298,7 @@ void x_smbd_conn_reply(x_smbd_conn_t *smbd_conn, x_msg_ptr_t &smbd_requ, x_smbd_
 	}
 	smbd_conn->send_queue.push_back(smbd_requ);
 	if (orig_empty) {
-		x_evtmgmt_enable_events(globals.evtmgmt, smbd_conn->ep_id, FDEVT_OUT);
+		x_evtmgmt_enable_events(g_evtmgmt, smbd_conn->ep_id, FDEVT_OUT);
 	}
 
 }
@@ -315,7 +316,7 @@ void x_smbd_conn_reply(x_smbd_conn_t *smbd_conn, x_msg_t *smbd_requ, x_smbd_sess
 		}
 		smbd_conn->send_queue.push_back(smbd_requ);
 		if (orig_empty) {
-			x_evtmgmt_enable_events(globals.evtmgmt, smbd_conn->ep_id, FDEVT_OUT);
+			x_evtmgmt_enable_events(g_evtmgmt, smbd_conn->ep_id, FDEVT_OUT);
 		}
 	} else {
 		delete smbd_requ;
@@ -903,8 +904,8 @@ static void x_smbd_accepted(x_smbd_t *smbd, int fd, const x_sockaddr_t &saddr)
 	x_smbd_conn_t *smbd_conn = new x_smbd_conn_t(smbd, fd, saddr);
 	X_ASSERT(smbd_conn != NULL);
 	smbd_conn->upcall.cbs = &x_smbd_conn_upcall_cbs;
-	smbd_conn->ep_id = x_evtmgmt_monitor(globals.evtmgmt, fd, FDEVT_IN | FDEVT_OUT, &smbd_conn->upcall);
-	x_evtmgmt_enable_events(globals.evtmgmt, smbd_conn->ep_id,
+	smbd_conn->ep_id = x_evtmgmt_monitor(g_evtmgmt, fd, FDEVT_IN | FDEVT_OUT, &smbd_conn->upcall);
+	x_evtmgmt_enable_events(g_evtmgmt, smbd_conn->ep_id,
 			FDEVT_IN | FDEVT_ERR | FDEVT_SHUTDOWN | FDEVT_TIMER | FDEVT_USER);
 }
 
@@ -978,8 +979,8 @@ static void x_smbd_init(x_smbd_t &smbd)
 	smbd.fd = fd;
 	smbd.upcall.cbs = &x_smbd_upcall_cbs;
 
-	smbd.ep_id = x_evtmgmt_monitor(globals.evtmgmt, fd, FDEVT_IN, &smbd.upcall);
-	x_evtmgmt_enable_events(globals.evtmgmt, smbd.ep_id, FDEVT_IN | FDEVT_ERR | FDEVT_SHUTDOWN);
+	smbd.ep_id = x_evtmgmt_monitor(g_evtmgmt, fd, FDEVT_IN, &smbd.upcall);
+	x_evtmgmt_enable_events(g_evtmgmt, smbd.ep_id, FDEVT_IN | FDEVT_ERR | FDEVT_SHUTDOWN);
 
 	// TODO start_wbcli(1);
 }
@@ -1005,8 +1006,8 @@ int main(int argc, char **argv)
 	x_threadpool_t *tpool = x_threadpool_create(smbd.smbconf->thread_count);
 	globals.tpool_evtmgmt = tpool;
 
-	globals.evtmgmt = x_evtmgmt_create(tpool, 60 * X_NSEC_PER_SEC);
-	globals.wbpool = x_wbpool_create(globals.evtmgmt, 2);
+	g_evtmgmt = x_evtmgmt_create(tpool, 60 * X_NSEC_PER_SEC);
+	globals.wbpool = x_wbpool_create(g_evtmgmt, 2);
 
 	globals.tpool_aio = x_threadpool_create(smbd.smbconf->thread_count);
 
@@ -1019,7 +1020,7 @@ int main(int argc, char **argv)
 	x_smbd_disk_init(X_SMBD_MAX_OPEN);
 
 	x_smbd_init(smbd);
-
+	x_smbd_ctrl_init(g_evtmgmt);
 
 	main_loop();
 
@@ -1045,7 +1046,7 @@ void x_smbd_conn_post_user(x_smbd_conn_t *smbd_conn, x_fdevt_user_t *fdevt_user)
 		}
 	}
 	if (notify) {
-		x_evtmgmt_post_events(globals.evtmgmt, smbd_conn->ep_id, FDEVT_USER);
+		x_evtmgmt_post_events(g_evtmgmt, smbd_conn->ep_id, FDEVT_USER);
 	}
 	if (!queued) {
 		/* cancel the event */

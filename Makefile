@@ -92,6 +92,7 @@ all: $(TARGET_SET_tests:%=$(TARGET_DIR_out)/tests/%) \
 
 SET_src_nxsmbd := \
 	util_sid \
+	smbd_ctrl \
 	smbd_disk \
 	smbd_ipc \
 	smbd_vfs \
