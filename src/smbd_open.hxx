@@ -143,6 +143,7 @@ struct x_smbd_open_ops_t
 			x_smbd_requ_t *smbd_requ,
 			std::unique_ptr<x_smb2_state_notify_t> &state);
 	NTSTATUS (*close)(x_smbd_conn_t *smbd_conn,
+			x_smbd_open_t *smbd_open,
 			x_smbd_requ_t *smbd_requ,
 			std::unique_ptr<x_smb2_state_close_t> &state);
 	void (*destroy)(x_smbd_open_t *smbd_open);
@@ -197,13 +198,6 @@ static inline NTSTATUS x_smbd_open_op_notify(x_smbd_conn_t *smbd_conn,
 	return smbd_requ->smbd_open->ops->notify(smbd_conn, smbd_requ, state);
 }
 
-static inline NTSTATUS x_smbd_open_op_close(x_smbd_conn_t *smbd_conn,
-		x_smbd_requ_t *smbd_requ,
-		std::unique_ptr<x_smb2_state_close_t> &state)
-{
-	return smbd_requ->smbd_open->ops->close(smbd_conn, smbd_requ, state);
-}
-
 struct x_smb2_state_create_t
 {
 	uint8_t in_oplock_level;
@@ -248,6 +242,10 @@ struct x_smb2_standard_info_t
 	uint32_t modify_time;
 };
 
+NTSTATUS x_smbd_open_close(x_smbd_conn_t *smbd_conn,
+		x_smbd_open_t *smbd_open,
+		x_smbd_requ_t *smbd_requ,
+		std::unique_ptr<x_smb2_state_close_t> &state);
 
 #endif /* __smbd_open__hxx__ */
 

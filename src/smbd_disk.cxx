@@ -291,7 +291,8 @@ void x_smbd_disk_object_pool_t::release(x_smbd_disk_object_t *disk_object)
 	}
 }
 #endif
-void x_smbd_disk_object_remove(x_smbd_disk_object_t *disk_object, x_smbd_disk_open_t *disk_open)
+static void x_smbd_disk_object_remove(x_smbd_disk_object_t *disk_object,
+		x_smbd_disk_open_t *disk_open)
 {
 	std::unique_lock<std::mutex> lock(disk_object->mutex);
 	disk_object->open_list.remove(disk_open);
@@ -1166,6 +1167,7 @@ static void fill_out_info(x_smb2_create_close_info_t &info, const x_smbd_statex_
 }
 
 static NTSTATUS x_smbd_disk_open_close(x_smbd_conn_t *smbd_conn,
+		x_smbd_open_t *smbd_open,
 		x_smbd_requ_t *smbd_requ,
 		std::unique_ptr<x_smb2_state_close_t> &state)
 {
@@ -1173,19 +1175,27 @@ static NTSTATUS x_smbd_disk_open_close(x_smbd_conn_t *smbd_conn,
 	x_auto_ref_t<x_smbd_disk_object_t> disk_object{std::move(disk_open->disk_object)};
 	X_ASSERT(disk_object);
 
-	for (x_smbd_requ_t *requ_notify = disk_open->notify_requ_list.get_front();
-			requ_notify; ) {
-		disk_open->notify_requ_list.remove(requ_notify);
-		std::unique_ptr<x_smb2_state_notify_t> notify_state{(x_smb2_state_notify_t *)requ_notify->requ_state};
-		requ_notify->requ_state = nullptr;
+	if (smbd_requ) {
+		/* Windows server send NT_STATUS_NOTIFY_CLEANUP
+		   when tree disconect.
+		   while samba not send.
+		   for simplicity we do not either for now
+		 */
 
-		notify_state->done(smbd_conn, requ_notify, NT_STATUS_NOTIFY_CLEANUP);
-	}
+		for (x_smbd_requ_t *requ_notify = disk_open->notify_requ_list.get_front();
+				requ_notify; ) {
+			disk_open->notify_requ_list.remove(requ_notify);
+			std::unique_ptr<x_smb2_state_notify_t> notify_state{(x_smb2_state_notify_t *)requ_notify->requ_state};
+			requ_notify->requ_state = nullptr;
 
-	if (state->in_flags & SMB2_CLOSE_FLAGS_FULL_INFORMATION) {
-		state->out_flags = SMB2_CLOSE_FLAGS_FULL_INFORMATION;
-		std::unique_lock<std::mutex> lock(disk_object->mutex);
-		fill_out_info(state->out_info, disk_object->statex);
+			notify_state->done(smbd_conn, requ_notify, NT_STATUS_NOTIFY_CLEANUP);
+		}
+
+		if (state->in_flags & SMB2_CLOSE_FLAGS_FULL_INFORMATION) {
+			state->out_flags = SMB2_CLOSE_FLAGS_FULL_INFORMATION;
+			std::unique_lock<std::mutex> lock(disk_object->mutex);
+			fill_out_info(state->out_info, disk_object->statex);
+		}
 	}
 
 	x_smbd_disk_object_remove(disk_object, disk_open);

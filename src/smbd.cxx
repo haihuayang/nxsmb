@@ -670,8 +670,8 @@ static bool x_smbd_conn_do_timer(x_smbd_conn_t *smbd_conn, x_fdevents_t &fdevent
 			break;
 		}
 		X_LOG_DBG("%p expired\n", smbd_sess);
+		x_smbd_sess_terminate(smbd_sess);
 		smbd_conn->session_wait_input_list.remove(smbd_sess);
-		x_smbd_sess_release(smbd_sess);
 		smbd_sess->decref();
 	}
 
@@ -887,7 +887,7 @@ static void x_smbd_conn_upcall_cb_unmonitor(x_epoll_upcall_t *upcall)
 		}
 	}
 
-	x_smbd_conn_remove_sessions(smbd_conn);
+	x_smbd_conn_terminate_sessions(smbd_conn);
 	smbd_conn->decref();
 }
 

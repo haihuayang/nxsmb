@@ -460,10 +460,13 @@ static NTSTATUS x_smbd_named_pipe_notify(x_smbd_conn_t *smbd_conn,
 }
 
 static NTSTATUS x_smbd_named_pipe_close(x_smbd_conn_t *smbd_conn,
+		x_smbd_open_t *smbd_open,
 		x_smbd_requ_t *smbd_requ,
 		std::unique_ptr<x_smb2_state_close_t> &state)
 {
-	state->out_flags = 0;
+	if (smbd_requ) {
+		state->out_flags = 0;
+	}
 	return NT_STATUS_OK;
 }
 

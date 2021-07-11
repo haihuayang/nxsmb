@@ -38,16 +38,10 @@ NTSTATUS x_smb2_process_LOGOFF(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_req
 		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
 
-	/* TODO close tcon, opens ... */
-	x_smbd_tcon_t *smbd_tcon;
-	while ((smbd_tcon = smbd_requ->smbd_sess->tcon_list.get_front()) != nullptr) {
-		smbd_requ->smbd_sess->tcon_list.remove(smbd_tcon);
-		x_smbd_tcon_release(smbd_tcon);
-		smbd_tcon->decref();
-	}
+	x_smbd_sess_terminate(smbd_requ->smbd_sess);
 
 	smbd_conn->session_list.remove(smbd_requ->smbd_sess);
-	x_smbd_sess_release(smbd_requ->smbd_sess);
+
 	x_smb2_reply_logoff(smbd_conn, smbd_requ, NT_STATUS_OK);
 	smbd_requ->smbd_sess->decref();
 	smbd_requ->smbd_sess = nullptr;

@@ -352,7 +352,8 @@ int x_smbd_tcon_pool_init(uint32_t count);
 int x_smbd_sess_pool_init(uint32_t count);
 x_smbd_sess_t *x_smbd_sess_create(x_smbd_conn_t *smbd_conn);
 x_smbd_sess_t *x_smbd_sess_find(uint64_t id, const x_smbd_conn_t *smbd_conn);
-void x_smbd_sess_release(x_smbd_sess_t *smbd_sess);
+// void x_smbd_sess_release(x_smbd_sess_t *smbd_sess);
+void x_smbd_sess_terminate(x_smbd_sess_t *smbd_sess);
 
 int x_smbd_requ_pool_init(uint32_t count);
 
@@ -360,9 +361,9 @@ x_auth_t *x_smbd_create_auth(x_smbd_t *smbd);
 
 x_smbd_tcon_t *x_smbd_tcon_find(uint32_t id, const x_smbd_sess_t *smbd_sess);
 void x_smbd_tcon_insert(x_smbd_tcon_t *smbd_tcon);
-void x_smbd_tcon_release(x_smbd_tcon_t *smbd_tcon);
+void x_smbd_tcon_terminate(x_smbd_tcon_t *smbd_tcon);
 
-void x_smbd_conn_remove_sessions(x_smbd_conn_t *smbd_conn);
+void x_smbd_conn_terminate_sessions(x_smbd_conn_t *smbd_conn);
 void x_smbd_conn_post_user(x_smbd_conn_t *smbd_conn, x_fdevt_user_t *fdevt_user);
 #if 0
 void x_smbd_conn_reply(x_smbd_conn_t *smbd_conn, x_msg_ptr_t &smbd_requ, x_smbd_sess_t *smbd_sess,

@@ -49,19 +49,21 @@ NTSTATUS x_smb2_process_TDIS(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 		}
 	}
 
+	x_smbd_tcon_terminate(smbd_requ->smbd_tcon);
+#if 0
 	x_smbd_open_t *smbd_open;
 	while ((smbd_open = smbd_requ->smbd_tcon->open_list.get_front()) != nullptr) {
 		smbd_requ->smbd_tcon->open_list.remove(smbd_open);
 		x_smbd_open_release(smbd_open);
 		smbd_open->decref();
 	}
-
-	smbd_requ->smbd_sess->tcon_list.remove(smbd_requ->smbd_tcon);
-	x_smb2_reply_tdis(smbd_conn, smbd_requ, NT_STATUS_OK);
-
 	x_smbd_tcon_release(smbd_requ->smbd_tcon);
+#endif
+	smbd_requ->smbd_sess->tcon_list.remove(smbd_requ->smbd_tcon);
+
 	smbd_requ->smbd_tcon->decref();
 	smbd_requ->smbd_tcon = nullptr;
 
+	x_smb2_reply_tdis(smbd_conn, smbd_requ, NT_STATUS_OK);
 	return NT_STATUS_OK;
 }

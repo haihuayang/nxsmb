@@ -382,3 +382,47 @@ void x_smbd_open_insert_local(x_smbd_open_t *smbd_open)
 	return smbd_open_insert_intl(g_smbd_open_pool, smbd_open);
 }
 
+
+void x_smbd_tcon_terminate(x_smbd_tcon_t *smbd_tcon)
+{
+	x_smbd_tcon_release(smbd_tcon);
+
+	std::unique_ptr<x_smb2_state_close_t> close_state;
+	x_smbd_open_t *smbd_open;
+	while ((smbd_open = smbd_tcon->open_list.get_front()) != nullptr) {
+		smbd_tcon->open_list.remove(smbd_open);
+		x_smbd_open_close(smbd_tcon->smbd_sess->smbd_conn,
+				smbd_open, nullptr, close_state);
+		smbd_open->decref();
+	}
+}
+
+void x_smbd_sess_terminate(x_smbd_sess_t *smbd_sess)
+{
+	x_smbd_tcon_t *smbd_tcon;
+	while ((smbd_tcon = smbd_sess->tcon_list.get_front()) != nullptr) {
+		smbd_sess->tcon_list.remove(smbd_tcon);
+		x_smbd_tcon_terminate(smbd_tcon);
+		smbd_tcon->decref();
+	}
+
+	x_smbd_sess_release(smbd_sess);
+}
+
+NTSTATUS x_smbd_open_close(x_smbd_conn_t *smbd_conn,
+		x_smbd_open_t *smbd_open,
+		x_smbd_requ_t *smbd_requ,
+		std::unique_ptr<x_smb2_state_close_t> &state)
+{
+	/* TODO call x_smbd_open_close */
+	NTSTATUS status = smbd_open->ops->close(smbd_conn, smbd_open,
+			smbd_requ, state);
+	if (!NT_STATUS_IS_OK(status)) {
+		RETURN_OP_STATUS(smbd_requ, status);
+	}
+
+	x_smbd_open_release(smbd_open);
+	return NT_STATUS_OK;
+}
+
+

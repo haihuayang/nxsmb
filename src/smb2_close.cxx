@@ -106,14 +106,12 @@ NTSTATUS x_smb2_process_CLOSE(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ
 	}
 
 
-	/* TODO signing/encryption */
-
-	NTSTATUS status = x_smbd_open_op_close(smbd_conn, smbd_requ, state);
+	NTSTATUS status = x_smbd_open_close(smbd_conn, smbd_requ->smbd_open,
+			smbd_requ, state);
 	if (!NT_STATUS_IS_OK(status)) {
 		RETURN_OP_STATUS(smbd_requ, status);
 	}
 
-	x_smbd_open_release(smbd_requ->smbd_open);
 	smbd_requ->smbd_open = nullptr;
 	x_smb2_reply_close(smbd_conn, smbd_requ, *state);
 	return status;
