@@ -461,8 +461,8 @@ struct x_smbd_list_open_t : x_smbd_ctrl_handler_t
 bool x_smbd_list_open_t::output(std::string &data)
 {
 	std::ostringstream os;
-	size_t count = open_iter.get_next([&os](const x_smbd_open_t &smbd_open) {
-		os << idl::x_hex_t<uint64_t>(smbd_open.id) << ' ' << idl::x_hex_t<uint32_t>(smbd_open.access_mask) << ' ' << idl::x_hex_t<uint32_t>(smbd_open.share_access) << ' ' << idl::x_hex_t<uint32_t>(smbd_open.smbd_tcon->tid) << std::endl;
+	size_t count = open_iter.get_next([&os](x_smbd_open_t &smbd_open) {
+		os << idl::x_hex_t<uint64_t>(smbd_open.id) << ' ' << idl::x_hex_t<uint32_t>(smbd_open.access_mask) << ' ' << idl::x_hex_t<uint32_t>(smbd_open.share_access) << ' ' << idl::x_hex_t<uint32_t>(smbd_open.smbd_tcon->tid) << " '" << x_smbd_open_op_get_path(&smbd_open) << "'" << std::endl;
 		return false;
 	}, 0);
 	if (count) {

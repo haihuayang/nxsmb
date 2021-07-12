@@ -147,6 +147,7 @@ struct x_smbd_open_ops_t
 			x_smbd_requ_t *smbd_requ,
 			std::unique_ptr<x_smb2_state_close_t> &state);
 	void (*destroy)(x_smbd_open_t *smbd_open);
+	std::string (*get_path)(x_smbd_open_t *smbd_open);
 };
 
 static inline NTSTATUS x_smbd_open_op_read(x_smbd_conn_t *smbd_conn,
@@ -196,6 +197,11 @@ static inline NTSTATUS x_smbd_open_op_notify(x_smbd_conn_t *smbd_conn,
 		std::unique_ptr<x_smb2_state_notify_t> &state)
 {
 	return smbd_requ->smbd_open->ops->notify(smbd_conn, smbd_requ, state);
+}
+
+static inline std::string x_smbd_open_op_get_path(x_smbd_open_t *smbd_open)
+{
+	return smbd_open->ops->get_path(smbd_open);
 }
 
 struct x_smb2_state_create_t

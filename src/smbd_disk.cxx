@@ -1208,6 +1208,12 @@ static void x_smbd_disk_open_destroy(x_smbd_open_t *smbd_open)
 	delete disk_open;
 }
 
+static std::string x_smbd_disk_open_get_path(x_smbd_open_t *smbd_open)
+{
+	x_smbd_disk_open_t *disk_open = from_smbd_open(smbd_open);
+	return disk_open->disk_object->req_path;
+}
+
 static const x_smbd_open_ops_t x_smbd_disk_open_ops = {
 	x_smbd_disk_open_read,
 	x_smbd_disk_open_write,
@@ -1218,6 +1224,7 @@ static const x_smbd_open_ops_t x_smbd_disk_open_ops = {
 	x_smbd_disk_open_notify,
 	x_smbd_disk_open_close,
 	x_smbd_disk_open_destroy,
+	x_smbd_disk_open_get_path,
 };
 
 #if 0

@@ -164,7 +164,7 @@ X_DCERPC_FUNCTION_ENUM_srvsvc
 
 const x_dcerpc_iface_t x_smbd_dcerpc_srvsvc = {
 	{ NDR_SRVSVC_UUID, NDR_SRVSVC_VERSION },
-	u"srvsvc",
+	"srvsvc",
 	X_ARRAY_SIZE(srvsvc_fns),
 	srvsvc_fns,
 };

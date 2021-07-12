@@ -64,10 +64,10 @@ static const x_dcerpc_iface_t *rpc_lookup[] = {
 	&x_smbd_dcerpc_srvsvc,
 };
 
-static const x_dcerpc_iface_t *find_rpc_by_name(const std::u16string &name)
+static const x_dcerpc_iface_t *find_rpc_by_name(const std::string &name)
 {
 	for (const auto rpc: rpc_lookup) {
-		if (rpc->iface_name == name) {
+		if (strcasecmp(rpc->iface_name.c_str(), name.c_str()) == 0) {
 			return rpc;
 		}
 	}
@@ -215,7 +215,7 @@ static NTSTATUS process_dcerpc_bind(x_smbd_named_pipe_t *named_pipe,
 	} else {
 		bind_ack.assoc_group_id = 0x53f0;
 	}
-	bind_ack.secondary_address= "\\PIPE\\" + x_convert_utf16_to_utf8(named_pipe->iface->iface_name);
+	bind_ack.secondary_address= "\\PIPE\\" + named_pipe->iface->iface_name;
 
 	x_ndr_push(bind_ack, body_output, ndr_flags);
 	resp_type = idl::DCERPC_PKT_BIND_ACK;
@@ -476,6 +476,12 @@ static void x_smbd_named_pipe_destroy(x_smbd_open_t *smbd_open)
 	delete named_pipe;
 }
 
+static std::string x_smbd_named_pipe_get_path(x_smbd_open_t *smbd_open)
+{
+	x_smbd_named_pipe_t *named_pipe = from_smbd_open(smbd_open);
+	return named_pipe->iface->iface_name;
+}
+
 static const x_smbd_open_ops_t x_smbd_named_pipe_ops = {
 	x_smbd_named_pipe_read,
 	x_smbd_named_pipe_write,
@@ -486,6 +492,7 @@ static const x_smbd_open_ops_t x_smbd_named_pipe_ops = {
 	x_smbd_named_pipe_notify,
 	x_smbd_named_pipe_close,
 	x_smbd_named_pipe_destroy,
+	x_smbd_named_pipe_get_path,
 };
 
 static inline x_smbd_named_pipe_t *x_smbd_named_pipe_create(x_smbd_tcon_t *smbd_tcon, const x_dcerpc_iface_t *iface)
@@ -501,11 +508,13 @@ static x_smbd_open_t *x_smbd_tcon_ipc_op_create(x_smbd_tcon_t *smbd_tcon,
 		NTSTATUS &status, x_smbd_requ_t *smbd_requ,
 		std::unique_ptr<x_smb2_state_create_t> &state)
 {
+	std::string in_name = x_convert_utf16_to_utf8(state->in_name);
+#if 0
 	std::u16string in_name;
 	in_name.reserve(state->in_name.size());
 	std::transform(std::begin(state->in_name), std::end(state->in_name),
 			std::back_inserter(in_name), tolower);
-
+#endif
 	const x_dcerpc_iface_t *rpc = find_rpc_by_name(in_name);
 	if (!rpc) {
 		status = NT_STATUS_OBJECT_NAME_NOT_FOUND;
