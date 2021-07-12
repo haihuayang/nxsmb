@@ -1171,7 +1171,7 @@ static NTSTATUS x_smbd_disk_open_close(x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ,
 		std::unique_ptr<x_smb2_state_close_t> &state)
 {
-	x_smbd_disk_open_t *disk_open = from_smbd_open(smbd_requ->smbd_open);
+	x_smbd_disk_open_t *disk_open = from_smbd_open(smbd_open);
 	x_auto_ref_t<x_smbd_disk_object_t> disk_object{std::move(disk_open->disk_object)};
 	X_ASSERT(disk_object);
 
