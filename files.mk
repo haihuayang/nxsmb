@@ -10,6 +10,7 @@ TARGET_SET_idl := \
 	dcerpc \
 	svcctl \
 	srvsvc \
+	wkssvc \
 	xattr \
 
 a=\
@@ -21,7 +22,6 @@ a=\
 a=\
 
 a=\
-	wkssvc \
 	security \
 	misc \
 	netlogon \

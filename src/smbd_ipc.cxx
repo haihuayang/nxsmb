@@ -60,8 +60,8 @@ struct x_smbd_named_pipe_t
 
 
 static const x_dcerpc_iface_t *rpc_lookup[] = {
-	// { { WKSSVC_UUID, WKSSVC_VERSION }, u"wkssvc", 0, nullptr, /*WKSSVC_RPCGEN_N_CMD, x_dcerpc_wkssvc */},
 	&x_smbd_dcerpc_srvsvc,
+	&x_smbd_dcerpc_wkssvc,
 };
 
 static const x_dcerpc_iface_t *find_rpc_by_name(const std::string &name)

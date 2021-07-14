@@ -1208,7 +1208,7 @@ def elem_get_pointer_info(elem, iface, in_function):
 			assert v == 1
 			return v, 'unique', False
 		v -= 1
-		assert v < 2
+		assert v < 3
 		return v, 'unique', True
 	else:
 		for t in [ "unique", "relative", "relative_short" ]:
