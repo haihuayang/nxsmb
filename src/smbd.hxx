@@ -99,6 +99,7 @@ struct x_smbd_requ_t
 	const uint8_t *in_hdr;
 	uint32_t in_offset, in_requ_len;
 	bool compound_followed = false;
+	bool async = false;
 
 	NTSTATUS status{NT_STATUS_OK};
 	uint16_t opcode;

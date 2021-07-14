@@ -40,7 +40,7 @@ struct wbconn_t
 		S_SENDING,
 		S_RECVING,
 	} state = S_DISCONNECTED;
-
+	bool handshaking = false;
 	int fd = -1;
 	x_wbpool_t *wbpool;
 	x_wbcli_t *wbcli{nullptr};
@@ -182,6 +182,7 @@ static int wb_connect(x_wbpool_t *wbpool, wbconn_t *wbconn)
 	}
 
 	wbconn->fd = fd;
+	wbconn->handshaking = true;
 	wbconn->ep_id = x_evtmgmt_monitor(wbpool->evtmgmt, fd, FDEVT_IN | FDEVT_OUT, &wbconn->upcall);
 
 	wbconn_send_simple(wbconn, &handshake_wbcli_cbs, WINBINDD_INTERFACE_VERSION);
@@ -388,6 +389,7 @@ static bool wbconn_upcall_cb_getevents(x_epoll_upcall_t *upcall,
 				std::swap(wbcli, wbconn->wbcli);
 				wbconn->requ_off = wbconn->resp_off = 0;
 				wbconn->state = wbconn_t::S_READY;
+				wbconn->handshaking = false;
 				fdevents = x_fdevents_disable(fdevents, FDEVT_IN);
 
 				wbcli->on_reply(0);
@@ -414,6 +416,7 @@ static bool wbconn_upcall_cb_getevents(x_epoll_upcall_t *upcall,
 			} else if (err == -EAGAIN) {
 				fdevents = x_fdevents_consume(fdevents, FDEVT_IN);
 			} else if (err != -EINTR) {
+				X_LOG_CONN("wbconn_dorecv errno %d\n", -err);
 				return true;
 			}
 		} else {
@@ -445,7 +448,8 @@ static bool wbconn_upcall_cb_getevents(x_epoll_upcall_t *upcall,
 static void wbconn_upcall_cb_unmonitor(x_epoll_upcall_t *upcall)
 {
 	wbconn_t *wbconn = wbconn_from_upcall(upcall);
-	close(wbconn->fd);
+	X_LOG_CONN("unmonitor wbconn %p", wbconn);
+	X_ASSERT(close(wbconn->fd) == 0);
 	wbconn->fd = -1;
 	x_wbcli_t *wbcli = wbconn->wbcli;
 	wbconn->wbcli = nullptr;
@@ -458,6 +462,10 @@ static void wbconn_upcall_cb_unmonitor(x_epoll_upcall_t *upcall)
 	x_wbpool_t *wbpool = wbconn->wbpool;
 	std::unique_lock<std::mutex> lock(wbpool->mutex);
 	wbpool->disconnected_list.push_back(wbconn);
+	if (wbconn->handshaking) {
+		wbconn->handshaking = false;
+		wbpool->state = x_wbpool_t::S_NONE;
+	}
 }
 
 static const x_epoll_upcall_cbs_t wbconn_upcall_cbs = {
@@ -493,13 +501,17 @@ int x_wbpool_request(x_wbpool_t *wbpool, x_wbcli_t *wbcli)
 		if (!wbconn) {
 			wbcli->timeout = x_tick_add(tick_now, WBCLI_TIMEOUT);
 			wbpool->queue.push_back(wbcli);
-			return 0;
 		} else {
 			wbpool->ready_list.remove(wbconn);
 		}
 	}
-	X_ASSERT(wbconn->state == wbconn_t::S_READY);
-	wbconn_send(wbconn, wbcli);
+	if (!wbconn) {
+		X_DBG("no ready wbconn, queued %p", wbcli);
+	} else {
+		X_ASSERT(wbconn->state == wbconn_t::S_READY);
+		X_DBG("wbconn %p send %p", wbconn, wbcli);
+		wbconn_send(wbconn, wbcli);
+	}
 	return 0;
 }
 

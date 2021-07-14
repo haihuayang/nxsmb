@@ -101,16 +101,19 @@ NTSTATUS x_smb2_process_CLOSE(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ
 	}
 
 
-	if (!smbd_requ->smbd_open) {
+	auto smbd_open = smbd_requ->smbd_open;
+	if (!smbd_open) {
 		RETURN_OP_STATUS(smbd_requ, NT_STATUS_FILE_CLOSED);
 	}
 
 
-	NTSTATUS status = x_smbd_open_close(smbd_conn, smbd_requ->smbd_open,
+	NTSTATUS status = x_smbd_open_close(smbd_conn, smbd_open,
 			smbd_requ, state);
 	if (!NT_STATUS_IS_OK(status)) {
 		RETURN_OP_STATUS(smbd_requ, status);
 	}
+
+	smbd_open->smbd_tcon->open_list.remove(smbd_open);
 
 	smbd_requ->smbd_open = nullptr;
 	x_smb2_reply_close(smbd_conn, smbd_requ, *state);

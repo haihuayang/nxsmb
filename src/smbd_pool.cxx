@@ -398,7 +398,10 @@ bool x_smbd_list_session_t::output(std::string &data)
 	size_t count = sess_iter.get_next([&os](const x_smbd_sess_t &smbd_sess) {
 		x_smbd_conn_t *smbd_conn = smbd_sess.smbd_conn;
 		std::shared_ptr<x_smbd_user_t> smbd_user = smbd_sess.smbd_user;
-		os << idl::x_hex_t<uint64_t>(smbd_sess.id) << ' ' << smbd_conn->saddr.tostring() << ' ' << idl::x_hex_t<uint16_t>(smbd_conn->dialect);
+		os << idl::x_hex_t<uint64_t>(smbd_sess.id) << ' '
+			<< idl::x_hex_t<uint64_t>(smbd_conn->ep_id) << ' '
+			<< smbd_conn->saddr.tostring() << ' '
+			<< idl::x_hex_t<uint16_t>(smbd_conn->dialect);
 		if (smbd_user) {
 			os << ' ' << smbd_user->u_sid << ' ' << smbd_user->g_sid;
 		} else {
@@ -462,7 +465,11 @@ bool x_smbd_list_open_t::output(std::string &data)
 {
 	std::ostringstream os;
 	size_t count = open_iter.get_next([&os](x_smbd_open_t &smbd_open) {
-		os << idl::x_hex_t<uint64_t>(smbd_open.id) << ' ' << idl::x_hex_t<uint32_t>(smbd_open.access_mask) << ' ' << idl::x_hex_t<uint32_t>(smbd_open.share_access) << ' ' << idl::x_hex_t<uint32_t>(smbd_open.smbd_tcon->tid) << " '" << x_smbd_open_op_get_path(&smbd_open) << "'" << std::endl;
+		os << idl::x_hex_t<uint64_t>(smbd_open.id) << ' '
+			<< idl::x_hex_t<uint32_t>(smbd_open.access_mask) << ' '
+			<< idl::x_hex_t<uint32_t>(smbd_open.share_access) << ' '
+			<< idl::x_hex_t<uint32_t>(smbd_open.smbd_tcon->tid) << " '"
+			<< x_smbd_open_op_get_path(&smbd_open) << "'" << std::endl;
 		return false;
 	}, 0);
 	if (count) {

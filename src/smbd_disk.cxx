@@ -298,6 +298,8 @@ static void x_smbd_disk_object_remove(x_smbd_disk_object_t *disk_object,
 	disk_object->open_list.remove(disk_open);
 	if (disk_object->open_list.empty()) {
 		if (disk_object->flags & x_smbd_disk_object_t::flag_delete_on_close) {
+			auto notify_filter = disk_object->is_dir() ? FILE_NOTIFY_CHANGE_DIR_NAME : FILE_NOTIFY_CHANGE_FILE_NAME;
+
 			int err = unlink(disk_object->unix_path.c_str());
 			X_ASSERT(err == 0);
 			err = close(disk_object->fd);
@@ -305,7 +307,7 @@ static void x_smbd_disk_object_remove(x_smbd_disk_object_t *disk_object,
 			disk_object->fd = -1;
 			disk_object->flags = x_smbd_disk_object_t::flag_not_exist;
 			notify_fname(disk_object, NOTIFY_ACTION_REMOVED,
-					disk_object->is_dir() ? FILE_NOTIFY_CHANGE_DIR_NAME : FILE_NOTIFY_CHANGE_FILE_NAME);
+					notify_filter);
 		}
 
 		x_smbd_disk_object_pool_release(smbd_disk_object_pool, disk_object);
@@ -348,7 +350,8 @@ static NTSTATUS notify_marshall(
 	uint32_t rec_size = 0;
 	for (const auto &change: notify_changes) {
 		uint32_t pad_len = x_pad_len(rec_size, 4);
-		uint32_t new_size = offset + pad_len + 12 + 2 * change.second.size();
+		rec_size = 12 + 2 * change.second.size();
+		uint32_t new_size = offset + pad_len + rec_size;
 		if (new_size > max_offset) {
 			offset = rec_size = 0;
 			break;

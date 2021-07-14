@@ -53,7 +53,7 @@ static void encode_out_setinfo(const x_smb2_state_setinfo_t &state,
 		uint8_t *out_hdr)
 {
 	x_smb2_out_setinfo_t *out_setinfo = (x_smb2_out_setinfo_t *)(out_hdr + SMB2_HDR_BODY);
-	out_setinfo->struct_size = X_H2LE16(sizeof(x_smb2_out_setinfo_t) + 1);
+	out_setinfo->struct_size = X_H2LE16(sizeof(x_smb2_out_setinfo_t));
 }
 
 static void x_smb2_reply_setinfo(x_smbd_conn_t *smbd_conn,

@@ -80,7 +80,7 @@ static bool x_smbd_ctrl_post_recv(x_smbd_ctrl_conn_t *smbd_ctrl_conn)
 static bool x_smbd_ctrl_conn_do_recv(x_smbd_ctrl_conn_t *smbd_ctrl_conn, x_fdevents_t &fdevents)
 {
 	int ret;
-	X_LOG_DBG("%s %p x%llx", task_name, smbd_ctrl_conn, fdevents);
+	X_LOG_DBG("%s %p x%lx x%llx", task_name, smbd_ctrl_conn, smbd_ctrl_conn->ep_id, fdevents);
 	ret = read(smbd_ctrl_conn->fd, (char *)&smbd_ctrl_conn->recv_buf + smbd_ctrl_conn->recv_len,
 			sizeof(smbd_ctrl_conn->recv_buf) - smbd_ctrl_conn->recv_len - 1);
 	if (ret > 0) {
@@ -104,7 +104,7 @@ static bool x_smbd_ctrl_conn_do_recv(x_smbd_ctrl_conn_t *smbd_ctrl_conn, x_fdeve
 
 static bool x_smbd_ctrl_conn_do_send(x_smbd_ctrl_conn_t *smbd_ctrl_conn, x_fdevents_t &fdevents)
 {
-	X_LOG_DBG("%s %p x%llx", task_name, smbd_ctrl_conn, fdevents);
+	X_LOG_DBG("%s %p x%lx x%llx", task_name, smbd_ctrl_conn, smbd_ctrl_conn->ep_id, fdevents);
 	for (;;) {
 		int ret = write(smbd_ctrl_conn->fd,
 				smbd_ctrl_conn->output.data() + smbd_ctrl_conn->output_off,
