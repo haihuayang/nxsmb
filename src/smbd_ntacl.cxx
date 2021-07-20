@@ -100,7 +100,7 @@ static inline uint32_t se_map(uint32_t access_mask, uint32_t map_from, uint32_t 
 	return access_mask;
 }
 
-uint32_t se_map_generic(uint32_t access_mask, const generic_mapping_t &mapping)
+static uint32_t se_map_generic(uint32_t access_mask, const generic_mapping_t &mapping)
 {
 	uint32_t old_mask = access_mask;
 

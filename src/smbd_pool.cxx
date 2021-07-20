@@ -232,7 +232,7 @@ void x_smbd_tcon_insert(x_smbd_tcon_t *smbd_tcon)
 	smbd_tcon_insert_intl(g_smbd_tcon_pool, smbd_tcon);
 }
 
-void x_smbd_tcon_release(x_smbd_tcon_t *smbd_tcon)
+static void x_smbd_tcon_release(x_smbd_tcon_t *smbd_tcon)
 {
 	pool_release(g_smbd_tcon_pool, smbd_tcon);
 }
@@ -249,7 +249,7 @@ x_smbd_sess_t *x_smbd_sess_create(x_smbd_conn_t *smbd_conn)
 	return smbd_sess_create_intl(g_smbd_sess_pool, smbd_conn);
 }
 
-void x_smbd_sess_release(x_smbd_sess_t *smbd_sess)
+static void x_smbd_sess_release(x_smbd_sess_t *smbd_sess)
 {
 	pool_release(g_smbd_sess_pool, smbd_sess);
 }

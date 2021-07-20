@@ -49,7 +49,7 @@ x_auth_t *x_smbd_create_auth(x_smbd_t *smbd)
 	return x_auth_create_by_oid(smbd->auth_context, GSS_SPNEGO_MECHANISM);
 }
 
-void x_smbd_conn_queue(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
+static void x_smbd_conn_queue(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 {
 	x_bufref_t *bufref = smbd_requ->out_buf_head;
 	X_ASSERT(bufref);
@@ -214,7 +214,7 @@ void x_smb2_reply(x_smbd_conn_t *smbd_conn,
 	smbd_requ->out_length += reply_size;
 }
 
-int x_smbd_reply_error(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ,
+static int x_smbd_reply_error(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ,
 		NTSTATUS status,
 		const char *file, unsigned int line)
 {
@@ -237,7 +237,7 @@ int x_smbd_reply_error(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ,
 #define X_SMBD_REPLY_ERROR(smbd_conn, smbd_requ, status) \
 	x_smbd_reply_error((smbd_conn), (smbd_requ), (status), __FILE__, __LINE__)
 
-int x_smbd_reply_async(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ,
+static int x_smbd_reply_async(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ,
 		const char *file, unsigned int line)
 {
 	X_LOG_OP("%ld RESP ASYNC at %s:%d", smbd_requ->in_mid, file, line);
@@ -1069,10 +1069,6 @@ void x_smbd_conn_post_user(x_smbd_conn_t *smbd_conn, x_fdevt_user_t *fdevt_user)
 		/* cancel the event */
 		fdevt_user->func(smbd_conn, fdevt_user, true);
 	}
-}
-
-void x_smbd_schedule_aio()
-{
 }
 
 void x_smbd_conn_requ_done(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ,

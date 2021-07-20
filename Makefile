@@ -11,7 +11,7 @@ include files.mk
 
 TARGET_PROJECT_CFLAGS := -g3 -Wall -DPROJECT=$(PROJECT) -fsanitize=address
 TARGET_CFLAGS = $(TARGET_PROJECT_CFLAGS) -Wstrict-prototypes -MT $@ -MMD -MP -MF $@.d
-TARGET_CXXFLAGS = $(TARGET_PROJECT_CFLAGS) -std=c++14 -Wno-invalid-offsetof -MT $@ -MMD -MP -MF $@.d
+TARGET_CXXFLAGS = $(TARGET_PROJECT_CFLAGS) -std=c++14 -Wmissing-declarations -Wno-invalid-offsetof -MT $@ -MMD -MP -MF $@.d
 TARGET_LDFLAGS := $(TARGET_LDFLAGS) -fsanitize=address -g3
 
 TARGET_DIR_out := target.dbg.linux.x86_64
@@ -123,7 +123,7 @@ SET_src_nxsmbd := \
 	smbd_pool \
 	smbd_conn  \
 	auth_ntlmssp auth_krb5 auth_spnego auth \
-	network misc \
+	network misc fnmatch \
 	smbconf smbd_share \
 	smbd_ntacl \
 

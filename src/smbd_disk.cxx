@@ -1076,11 +1076,17 @@ static NTSTATUS x_smbd_disk_open_find(x_smbd_conn_t *smbd_conn,
 	uint8_t *pend = state->out_data.data() + state->out_data.size();
 	uint8_t *pcurr =  pbegin, *plast = nullptr;
 	uint32_t num = 0, matched_count = 0;
+
+	x_fnmatch_t *fnmatch = x_fnmatch_create(state->in_name, true);
 	while (num < max_count) {
 		qdir_pos_t qdir_pos;
 		const char *ent_name = qdir_get(*qdir, qdir_pos, disk_object);
 		if (!ent_name) {
 			break;
+		}
+
+		if (fnmatch && !x_fnmatch_match(fnmatch, ent_name)) {
+			continue;
 		}
 
 		x_smbd_statex_t statex;

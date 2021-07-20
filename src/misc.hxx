@@ -93,5 +93,10 @@ void x_smbd_report_nt_status(NTSTATUS status, unsigned int line, const char *fil
 NTSTATUS x_map_nt_error_from_unix(int unix_error);
 NTSTATUS x_map_nt_error_from_ndr_err(idl::x_ndr_err_code_t ndr_err);
 
+
+struct x_fnmatch_t;
+bool x_fnmatch_match(const x_fnmatch_t *fnmatch, const char *name);
+x_fnmatch_t *x_fnmatch_create(const std::u16string &pattern, bool icase);
+
 #endif /* __misc__hxx__ */
 
