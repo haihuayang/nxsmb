@@ -389,6 +389,7 @@ static void smbd_notify_func(x_smbd_conn_t *smbd_conn, x_fdevt_user_t *fdevt_use
 	} else {
 		x_smbd_requ_t *smbd_requ = disk_open->notify_requ_list.get_front();
 		disk_open->notify_requ_list.remove(smbd_requ);
+		x_smbd_requ_remove(smbd_requ);
 
 		std::unique_ptr<x_smb2_state_notify_t> state{(x_smb2_state_notify_t *)smbd_requ->requ_state};
 		smbd_requ->requ_state = nullptr;
@@ -1134,6 +1135,39 @@ static NTSTATUS x_smbd_disk_open_ioctl(x_smbd_conn_t *smbd_conn,
 	X_TODO;
 }
 
+struct smbd_notify_cancel_evt_t
+{
+	x_fdevt_user_t base;
+	x_smbd_requ_t *smbd_requ;
+};
+
+static void smbd_notify_cancel_func(x_smbd_conn_t *smbd_conn, x_fdevt_user_t *fdevt_user, bool cancelled)
+{
+	smbd_notify_cancel_evt_t *evt = X_CONTAINER_OF(fdevt_user, smbd_notify_cancel_evt_t, base);
+
+	x_smbd_requ_t *smbd_requ = evt->smbd_requ;
+	if (!cancelled) {
+		std::unique_ptr<x_smb2_state_notify_t> state{(x_smb2_state_notify_t *)smbd_requ->requ_state};
+		smbd_requ->requ_state = nullptr;
+
+		state->done(smbd_conn, smbd_requ, NT_STATUS_CANCELLED);
+	}
+
+	smbd_requ->decref();
+	delete evt;
+}
+
+static void notify_cancel(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
+{
+	x_smbd_disk_open_t *disk_open = from_smbd_open(smbd_requ->smbd_open);
+	disk_open->notify_requ_list.remove(smbd_requ);
+
+	smbd_notify_cancel_evt_t *evt = new smbd_notify_cancel_evt_t;
+	evt->base.func = smbd_notify_cancel_func;
+	evt->smbd_requ = smbd_requ;
+	x_smbd_conn_post_user(disk_open->base.smbd_tcon->smbd_sess->smbd_conn, &evt->base);
+}
+
 static NTSTATUS x_smbd_disk_open_notify(x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ,
 		std::unique_ptr<x_smb2_state_notify_t> &state)
@@ -1158,6 +1192,7 @@ static NTSTATUS x_smbd_disk_open_notify(x_smbd_conn_t *smbd_conn,
 		smbd_requ->requ_state = state.release();
 		smbd_requ->incref();
 		disk_open->notify_requ_list.push_back(smbd_requ);
+		x_smbd_conn_set_async(smbd_conn, smbd_requ, notify_cancel);
 		return NT_STATUS_PENDING;
 	} else {
 		return notify_marshall(notify_changes, state->in_output_buffer_length, state->out_data);

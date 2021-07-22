@@ -100,14 +100,12 @@ struct x_smbd_requ_t
 	uint32_t in_offset, in_requ_len;
 	bool compound_followed = false;
 	bool async = false;
+	uint16_t opcode;
 
 	NTSTATUS status{NT_STATUS_OK};
-	uint16_t opcode;
+	uint64_t async_id{};
 	uint64_t in_mid;
-	union {
-		uint32_t in_tid;
-		uint64_t in_asyncid;
-	};
+	uint32_t in_tid;
 	uint32_t in_hdr_flags;
 	uint32_t out_hdr_flags{};
 
@@ -120,8 +118,12 @@ struct x_smbd_requ_t
 	x_smbd_sess_t *smbd_sess{};
 	x_smbd_tcon_t *smbd_tcon{};
 	x_smbd_open_t *smbd_open{};
+	void (*cancel_fn)(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ) = nullptr;
 };
 X_DECLARE_MEMBER_TRAITS(requ_async_traits, x_smbd_requ_t, async_link)
+
+void x_smbd_conn_set_async(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ,
+		void (*cancel_fn)(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ));
 
 void x_smb2_reply(x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ,
@@ -357,6 +359,9 @@ x_smbd_sess_t *x_smbd_sess_find(uint64_t id, const x_smbd_conn_t *smbd_conn);
 void x_smbd_sess_terminate(x_smbd_sess_t *smbd_sess);
 
 int x_smbd_requ_pool_init(uint32_t count);
+x_smbd_requ_t *x_smbd_requ_find(uint64_t id, const x_smbd_conn_t *smbd_conn);
+void x_smbd_requ_insert(x_smbd_requ_t *smbd_requ);
+void x_smbd_requ_remove(x_smbd_requ_t *smbd_requ);
 
 x_auth_t *x_smbd_create_auth(x_smbd_t *smbd);
 

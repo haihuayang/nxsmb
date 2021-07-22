@@ -79,38 +79,6 @@ static void x_smbd_conn_queue(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ
 	}
 }
 
-#if 0
-x_buf_t *x_smb2_alloc_reply_buf(uint32_t body_size)
-{
-	x_buf_t *buf = x_buf_alloc(8 + SMB2_HDR_BODY + x_pad_len(body_size, 8));
-	return buf;
-}
-void x_smb2_requ_parse(x_smbd_sess_t *smbd_sess,
-		x_smb2_requ_t *requ, uint8_t *outhdr, uint32_t body_size, NTSTATUS status)
-{
-	memset(outhdr, 0, SMB2_HDR_BODY);
-	SIVAL(outhdr, SMB2_HDR_PROTOCOL_ID,     SMB2_MAGIC);
-	SSVAL(outhdr, SMB2_HDR_LENGTH,	  SMB2_HDR_BODY);
-	SSVAL(outhdr, SMB2_HDR_CREDIT_CHARGE, 1); // TODO
-	SIVAL(outhdr, SMB2_HDR_STATUS, NT_STATUS_V(status));
-	SIVAL(outhdr, SMB2_HDR_OPCODE, requ->opcode);
-	SSVAL(outhdr, SMB2_HDR_CREDIT, std::max(uint16_t(1), requ->credits_requested)); // TODO
-	SIVAL(outhdr, SMB2_HDR_FLAGS, requ->hdr_flags | SMB2_HDR_FLAG_REDIRECT); // TODO
-	SIVAL(outhdr, SMB2_HDR_NEXT_COMMAND, 0);
-	SBVAL(outhdr, SMB2_HDR_MESSAGE_ID, requ->mid);
-	SIVAL(outhdr, SMB2_HDR_TID, requ->tid);
-	SBVAL(outhdr, SMB2_HDR_SESSION_ID, smbd_sess ? smbd_sess->id : 0);
-
-	if (requ->hdr_flags & SMB2_HDR_FLAG_SIGNED) {
-		X_ASSERT(smbd_sess);
-		x_smb2_sign_msg(outhdr,
-				body_size + SMB2_HDR_BODY,
-				smbd_sess->smbd_conn->dialect,
-				smbd_sess->signing_key);
-	}
-}
-#endif
-
 static uint16_t x_smb2_calculate_credit(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ,
 		NTSTATUS status)
 {
@@ -183,9 +151,10 @@ void x_smb2_reply(x_smbd_conn_t *smbd_conn,
 	}
 	SBVAL(out_hdr, SMB2_HDR_MESSAGE_ID, smbd_requ->in_mid);
 	if (smbd_requ->async) {
+		X_ASSERT(smbd_requ->async_id != 0);
 		SIVAL(out_hdr, SMB2_HDR_FLAGS, smbd_requ->out_hdr_flags | SMB2_HDR_FLAG_REDIRECT | SMB2_HDR_FLAG_ASYNC);
 		// we use mid as async_id
-		SBVAL(out_hdr, SMB2_HDR_ASYNC_ID, smbd_requ->in_mid);
+		SBVAL(out_hdr, SMB2_HDR_ASYNC_ID, smbd_requ->async_id);
 	} else {
 		SIVAL(out_hdr, SMB2_HDR_FLAGS, smbd_requ->out_hdr_flags | SMB2_HDR_FLAG_REDIRECT);
 		SIVAL(out_hdr, SMB2_HDR_PID, 0xfeff);
@@ -237,7 +206,7 @@ static int x_smbd_reply_error(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ
 #define X_SMBD_REPLY_ERROR(smbd_conn, smbd_requ, status) \
 	x_smbd_reply_error((smbd_conn), (smbd_requ), (status), __FILE__, __LINE__)
 
-static int x_smbd_reply_async(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ,
+static int x_smbd_reply_interim(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ,
 		const char *file, unsigned int line)
 {
 	X_LOG_OP("%ld RESP ASYNC at %s:%d", smbd_requ->in_mid, file, line);
@@ -257,42 +226,24 @@ static int x_smbd_reply_async(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ
 
 	x_bufref_t *bufref = new x_bufref_t{out_buf, 8, SMB2_HDR_BODY + 8};
 	x_smb2_reply(smbd_conn, smbd_requ, bufref, bufref, NT_STATUS_PENDING, SMB2_HDR_BODY + 8);
-#if 0
-	memset(out_hdr, 0, SMB2_HDR_BODY);
-	SIVAL(out_hdr, SMB2_HDR_PROTOCOL_ID, SMB2_MAGIC);
-	SSVAL(out_hdr, SMB2_HDR_LENGTH, SMB2_HDR_BODY);
-	SSVAL(out_hdr, SMB2_HDR_CREDIT_CHARGE, smbd_requ->in_credit_charge);
-	SIVAL(out_hdr, SMB2_HDR_STATUS, NT_STATUS_V(NT_STATUS_PENDING));
-	SIVAL(out_hdr, SMB2_HDR_OPCODE, smbd_requ->opcode);
-	SSVAL(out_hdr, SMB2_HDR_CREDIT, smbd_requ->out_credit_granted);
-	SIVAL(out_hdr, SMB2_HDR_FLAGS, smbd_requ->out_hdr_flags | SMB2_HDR_FLAG_REDIRECT | SMB2_HDR_FLAG_ASYNC);
-	SBVAL(out_hdr, SMB2_HDR_MESSAGE_ID, smbd_requ->in_mid);
-	// we use mid as async_id
-	SBVAL(out_hdr, SMB2_HDR_ASYNC_ID, smbd_requ->in_mid);
-	if (smbd_requ->smbd_sess) {
-		SBVAL(out_hdr, SMB2_HDR_SESSION_ID, smbd_requ->smbd_sess->id);
-	}
-	x_bufref_t *bufref = new x_bufref_t{out_buf, 8, SMB2_HDR_BODY + 8};
-	if (smbd_requ->out_hdr_flags & SMB2_HDR_FLAG_SIGNED) {
-		X_ASSERT(smbd_requ->smbd_sess);
-		x_smb2_signing_sign(smbd_requ->smbd_sess->smbd_conn->dialect,
-				smbd_requ->smbd_sess->signing_key,
-				bufref);
-	}
-
-	if (smbd_requ->out_buf_tail) {
-		smbd_requ->out_buf_tail->next = bufref;
-	} else {
-		smbd_requ->out_buf_head = bufref;
-	}
-	smbd_requ->out_buf_tail = bufref;
-	smbd_requ->out_length += SMB2_HDR_BODY + 8;
-#endif
 	return 0;
 }
 
-#define X_SMBD_REPLY_ASYNC(smbd_conn, smbd_requ) \
-	x_smbd_reply_async((smbd_conn), (smbd_requ), __FILE__, __LINE__)
+#define X_SMBD_REPLY_INTERIM(smbd_conn, smbd_requ) \
+	x_smbd_reply_interim((smbd_conn), (smbd_requ), __FILE__, __LINE__)
+
+static void x_smbd_conn_cancel(x_smbd_conn_t *smbd_conn, uint64_t async_id)
+{
+	x_smbd_requ_t *smbd_requ = x_smbd_requ_find(async_id, smbd_conn);
+	if (!smbd_requ) {
+		X_LOG_ERR("%ld not found", async_id);
+		return;
+	}
+
+	smbd_requ->cancel_fn(smbd_conn, smbd_requ);
+	smbd_requ->decref();
+}
+
 #if 0
 void x_smbd_conn_reply(x_smbd_conn_t *smbd_conn, x_msg_ptr_t &smbd_requ, x_smbd_sess_t *smbd_sess,
 		x_smb2_preauth_t *preauth,
@@ -377,6 +328,10 @@ static const struct {
 
 static NTSTATUS x_smbd_conn_process_smb2__(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 {
+	if (smbd_requ->in_hdr_flags & SMB2_HDR_FLAG_ASYNC) {
+		return NT_STATUS_INVALID_PARAMETER;
+	}
+
 	x_buf_t *buf = smbd_requ->in_buf;
 	uint8_t *in_buf = buf->data + smbd_requ->in_offset;
 	uint64_t in_session_id = x_get_le64(in_buf + SMB2_HDR_SESSION_ID);
@@ -404,17 +359,14 @@ static NTSTATUS x_smbd_conn_process_smb2__(x_smbd_conn_t *smbd_conn, x_smbd_requ
 	}
 
 	smbd_requ->async = false;
-	if (smbd_requ->in_hdr_flags & SMB2_HDR_FLAG_ASYNC) {
-		smbd_requ->in_asyncid = x_get_le32(in_buf + SMB2_HDR_PID);
-	} else {
-		smbd_requ->in_tid = x_get_le32(in_buf + SMB2_HDR_TID);
-	}
+	smbd_requ->in_tid = x_get_le32(in_buf + SMB2_HDR_TID);
+
 	return x_smb2_op_table[smbd_requ->opcode].op_func(smbd_conn, smbd_requ);
 }
 
 static bool x_smb2_validate_message_id(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 {
-	if (smbd_requ->opcode == SMB2_OP_CANCEL) {
+	if (smbd_requ->opcode == X_SMB2_OP_CANCEL) {
 		return true;
 	}
 
@@ -490,7 +442,22 @@ static int x_smbd_conn_process_smb2(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smb
 		}
 		smbd_requ->in_offset = offset;
 		smbd_requ->in_requ_len = in_requ_len;
+
 		smbd_requ->in_hdr_flags = x_get_le32(in_buf + SMB2_HDR_FLAGS);
+
+		if (smbd_requ->opcode == X_SMB2_OP_CANCEL) {
+			uint64_t in_async_id;
+			if (smbd_requ->in_hdr_flags & SMB2_HDR_FLAG_ASYNC) {
+				in_async_id = x_get_le64(in_buf + SMB2_HDR_PID);
+			} else {
+				in_async_id = x_get_le64(in_buf + SMB2_HDR_MESSAGE_ID);
+			}
+			x_smbd_conn_cancel(smbd_conn, in_async_id);
+			continue;
+		}
+
+		smbd_requ->async_id = 0;
+		smbd_requ->cancel_fn = nullptr;
 		smbd_requ->in_mid = x_get_le64(in_buf + SMB2_HDR_MESSAGE_ID);
 		smbd_requ->in_credit_charge = x_get_le16(in_buf + SMB2_HDR_CREDIT_CHARGE);
 		smbd_requ->in_credit_requested = x_get_le16(in_buf + SMB2_HDR_CREDIT);
@@ -509,7 +476,7 @@ static int x_smbd_conn_process_smb2(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smb
 		if (NT_STATUS_IS_OK(status) || NT_STATUS_EQUAL(status, NT_STATUS_MORE_PROCESSING_REQUIRED)) {
 			continue;
 		} else if (NT_STATUS_EQUAL(status, NT_STATUS_PENDING)) {
-			X_SMBD_REPLY_ASYNC(smbd_conn, smbd_requ);
+			X_SMBD_REPLY_INTERIM(smbd_conn, smbd_requ);
 			if (offset + in_requ_len < buf->size) {
 				X_TODO;
 				return 0;
@@ -522,7 +489,10 @@ static int x_smbd_conn_process_smb2(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smb
 		}
 	}
 
-	x_smbd_conn_queue(smbd_conn, smbd_requ);
+	/* CANCEL request do not have response */
+	if (smbd_requ->out_length > 0) {
+		x_smbd_conn_queue(smbd_conn, smbd_requ);
+	}
 	return 0;
 
 #if 0
@@ -1032,6 +1002,7 @@ int main(int argc, char **argv)
 	x_smbd_tcon_pool_init(X_SMBD_MAX_TCON);
 	x_smbd_sess_pool_init(X_SMBD_MAX_SESSION);
 	x_smbd_sess_pool_init(X_SMBD_MAX_REQUEST);
+	x_smbd_requ_pool_init(X_SMBD_MAX_OPEN); // TODO use X_SMBD_MAX_OPEN for now
 
 	x_smbd_ipc_init();
 	x_smbd_disk_init(X_SMBD_MAX_OPEN);
@@ -1076,7 +1047,7 @@ void x_smbd_conn_requ_done(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ,
 {
 	if (NT_STATUS_IS_OK(status) || NT_STATUS_EQUAL(status, NT_STATUS_MORE_PROCESSING_REQUIRED)) {
 	} else if (NT_STATUS_EQUAL(status, NT_STATUS_PENDING)) {
-		X_SMBD_REPLY_ASYNC(smbd_conn, smbd_requ);
+		X_ASSERT(false); // should not happen, X_SMBD_REPLY_INTERIM(smbd_conn, smbd_requ);
 	} else {
 		smbd_requ->status = status;
 		X_SMBD_REPLY_ERROR(smbd_conn, smbd_requ, status);
@@ -1110,4 +1081,11 @@ void x_smbd_conn_requ_done(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ,
 #endif
 }
 
+void x_smbd_conn_set_async(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ,
+		void (*cancel_fn)(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ))
+{
+	X_ASSERT(!smbd_requ->cancel_fn);
+	smbd_requ->cancel_fn = cancel_fn;
+	x_smbd_requ_insert(smbd_requ);
+}
 

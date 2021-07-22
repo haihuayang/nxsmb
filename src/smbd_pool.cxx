@@ -174,6 +174,44 @@ static x_smbd_sess_t *smbd_sess_create_intl(smbd_sess_pool_t &pool, x_smbd_conn_
 X_DECLARE_MEMBER_TRAITS(smbd_requ_hash_traits, x_smbd_requ_t, hash_link)
 using smbd_requ_pool_t = smbd_pool_t<smbd_requ_hash_traits>;
 
+static inline x_smbd_requ_t *smbd_requ_find_by_id(smbd_requ_pool_t &pool, uint64_t id)
+{
+	return pool.hashtable.find(id, [id](const x_smbd_requ_t &s) { return s.async_id == id; });
+}
+
+static x_smbd_requ_t *smbd_requ_find_intl(smbd_requ_pool_t &pool, uint64_t id,
+		const x_smbd_conn_t *smbd_conn)
+{
+	std::unique_lock<std::mutex> lock(pool.mutex);
+	x_smbd_requ_t *smbd_requ = smbd_requ_find_by_id(pool, id);
+	if (smbd_requ) {
+		X_ASSERT(smbd_requ->smbd_sess);
+		if (smbd_requ->smbd_sess->smbd_conn == smbd_conn) {
+			smbd_requ->incref();
+			return smbd_requ;
+		}
+	}
+	return nullptr;
+}
+
+static uint64_t g_async_id_id = 0x0;
+static void smbd_requ_insert_intl(smbd_requ_pool_t &pool, x_smbd_requ_t *smbd_requ)
+{
+	std::unique_lock<std::mutex> lock(pool.mutex);
+	for (;;) {
+		/* TODO to reduce hash conflict */
+		smbd_requ->async_id = g_async_id_id++;
+		if (smbd_requ->async_id == 0) {
+			continue;
+		}
+		x_auto_ref_t<x_smbd_requ_t> exist{smbd_requ_find_by_id(pool, smbd_requ->async_id)};
+		if (!exist) {
+			break;
+		}
+	}
+	pool.hashtable.insert(smbd_requ, smbd_requ->async_id);
+}
+
 
 
 template <typename P>
@@ -267,6 +305,20 @@ int x_smbd_requ_pool_init(uint32_t count)
 	return 0;
 }
 
+x_smbd_requ_t *x_smbd_requ_find(uint64_t id, const x_smbd_conn_t *smbd_conn)
+{
+	return smbd_requ_find_intl(g_smbd_requ_pool, id, smbd_conn);
+}
+
+void x_smbd_requ_insert(x_smbd_requ_t *smbd_requ)
+{
+	smbd_requ_insert_intl(g_smbd_requ_pool, smbd_requ);
+}
+
+void x_smbd_requ_remove(x_smbd_requ_t *smbd_requ)
+{
+	pool_release(g_smbd_requ_pool, smbd_requ);
+}
 
 
 /* TODO should also match persistent id??? */
@@ -485,73 +537,9 @@ x_smbd_ctrl_handler_t *x_smbd_list_open_create()
 	return new x_smbd_list_open_t;
 }
 
+
+
 #if 0
-x_smbd_sess_t *x_smbd_sess_find(x_smbd_conn_t *smbd_conn, NTSTATUS &status,
-		uint64_t sess_id)
-{
-	x_smbd_sess_t *smbd_sess = smbd_sess_find_intl(smbd_sess_pool, sess_id);
-	if (smbd_sess) {
-		if (smbd_sess_match(smbd_conn)) {
-			return smbd_sess;
-		}
-		x_smbd_sess_release(smbd_sess);
-	}
-	status = NT_STATUS_USER_SESSION_DELETED;
-	return nullptr;
-}
-
-static x_smbd_sess_t *smbd_sess_find_intl(smbd_sess_pool_t &pool, uint64_t id)
-{
-	std::unique_lock<std::mutex> lock(pool.mutex);
-	x_smbd_sess_t *smbd_sess = smbd_sess_find_by_id(pool, id);
-	if (smbd_sess) {
-		smbd_sess->incref();
-		return smbd_sess;
-	}
-	return nullptr;
-}
-
-x_smbd_tcon_t *x_smbd_tcon_find(x_smbd_conn_t *smbd_conn, NTSTATUS &status,
-		uint32_t tcon_id, uint64_t sess_id)
-{
-	x_smbd_tcon_t *smbd_tcon = smbd_tcon_find_intl(smbd_tcon_pool, open_id);
-	if (smbd_tcon) {
-		if (smbd_tcon_match(smbd_conn, sess_id)) {
-			return smbd_tcon;
-		}
-		x_smbd_tcon_release(smbd_tcon);
-	}
-
-	x_smbd_sess_t *smbd_sess = x_smbd_sess_find(smbd_conn, status, sess_id);
-	if (smbd_sess) {
-		x_smbd_sess_release(smbd_sess);
-		status = NT_STATUS_NETWORK_NAME_DELETED;
-	}
-	return nullptr;
-}
-
-int x_smbd_pool_init(uint32_t max_sess,
-		uint32_t max_tcon,
-		uint32_t max_open)
-{
-	x_smbd_sess_pool_init(g_smbd_sess_pool, max_sess);
-	x_smbd_tcon_pool_init(g_smbd_tcon_pool, max_tcon);
-	x_smbd_open_pool_init(g_smbd_open_pool, max_open);
-}
-static void x_smbd_tcon_pool_init(smbd_tcon_pool_t &pool, uint32_t count)
-{
-	size_t bucket_size = x_next_2_power(count);
-	pool.hashtable.init(bucket_size);
-	pool.capacity = count;
-}
-
-static void x_smbd_sess_pool_init(smbd_sess_pool_t &pool, uint32_t count)
-{
-	size_t bucket_size = x_next_2_power(count);
-	pool.hashtable.init(bucket_size);
-	pool.capacity = count;
-}
-
 template <typename HashTraits, typename Func>
 static void foreach(x_hashtable_t<HashTraits> &pool, Func &&func)
 {
