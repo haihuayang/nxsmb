@@ -42,5 +42,7 @@ NTSTATUS make_child_sec_desc(
 		const idl::dom_sid *group_sid,
 		bool container);
 
+std::shared_ptr<idl::security_descriptor> get_share_security(const std::string &sharename);
+
 #endif /* __smbd_ntacl__hxx__ */
 

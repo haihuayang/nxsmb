@@ -569,3 +569,29 @@ NTSTATUS make_child_sec_desc(
 	}
 }
 
+
+static std::shared_ptr<idl::security_descriptor> get_share_security_default(uint32_t def_access)
+{
+	auto psd = std::make_shared<idl::security_descriptor>();
+
+	psd->revision = idl::SECURITY_DESCRIPTOR_REVISION_1;
+	psd->type = idl::security_descriptor_type(idl::SEC_DESC_SELF_RELATIVE|idl::SEC_DESC_DACL_PRESENT|idl::SEC_DESC_DACL_AUTO_INHERITED);
+	auto dacl = std::make_shared<idl::security_acl>();
+	dacl->revision = idl::security_acl_revision(idl::NT4_ACL_REVISION);
+	uint32_t spec_access = se_map_generic(def_access, file_generic_mapping);
+	spec_access |= def_access;
+	append_ace(dacl->aces, 
+			idl::SEC_ACE_TYPE_ACCESS_ALLOWED,
+			idl::security_ace_flags(0),
+			spec_access, // TODO
+			global_sid_World);
+
+	std::swap(psd->dacl, dacl);
+	return psd;
+}
+
+std::shared_ptr<idl::security_descriptor> get_share_security(const std::string &sharename)
+{
+	/* TODO we do not set share_security for now, always use the default one */
+	return get_share_security_default(idl::SEC_RIGHTS_DIR_ALL);
+}

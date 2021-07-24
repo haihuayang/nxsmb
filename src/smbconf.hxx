@@ -108,6 +108,7 @@ struct x_smbshare_t
 	std::string msdfs_proxy;
 	bool abe = false;
 	uint32_t max_referral_ttl = 300;
+	uint32_t max_connections = 0;
 
 	bool is_msdfs_root() const {
 		// TODO

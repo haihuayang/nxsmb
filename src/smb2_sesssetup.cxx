@@ -290,7 +290,7 @@ NTSTATUS x_smb2_process_SESSSETUP(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_
 	const uint8_t *in_body = in_hdr + SMB2_HDR_BODY;
 	// uint64_t in_session_id = BVAL(inhdr, SMB2_HDR_SESSION_ID);
 	uint8_t in_flags = CVAL(in_body, 0x02);
-	uint8_t in_security_mode = CVAL(in_body, 0x03);
+	// uint8_t in_security_mode = CVAL(in_body, 0x03);
 	uint16_t in_security_offset = SVAL(in_body, 0x0C);
 	uint16_t in_security_length = SVAL(in_body, 0x0E);
 	// TODO uint64_t in_previous_session_id = BVAL(in_body, 0x10);

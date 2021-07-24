@@ -791,6 +791,36 @@ static NTSTATUS getinfo_fs(x_smbd_disk_open_t *disk_open,
 		x_put_le32(p, 512); p += 4;
 
 		return NT_STATUS_OK;
+	} else if (state.in_info_level == SMB2_FILE_INFO_FS_ATTRIBUTE_INFORMATION) {
+		/* 20 = 4 + 4 + 4 + 'NTFS' */
+		if (state.in_output_buffer_length < 20) {
+			return STATUS_BUFFER_OVERFLOW;
+		}
+		struct statvfs fsstat;
+		int err = fstatvfs(disk_open->disk_object->fd, &fsstat);
+		assert(err == 0);
+
+		uint32_t fs_cap = FILE_CASE_SENSITIVE_SEARCH | FILE_CASE_PRESERVED_NAMES;
+		if (fsstat.f_flag & ST_RDONLY) {
+			fs_cap |= FILE_READ_ONLY_VOLUME;
+		}
+
+		fs_cap |= FILE_VOLUME_QUOTAS;
+		fs_cap |= FILE_SUPPORTS_SPARSE_FILES;
+		fs_cap |= (FILE_SUPPORTS_REPARSE_POINTS | FILE_SUPPORTS_SPARSE_FILES);
+		fs_cap |= FILE_NAMED_STREAMS;
+		fs_cap |= FILE_PERSISTENT_ACLS;;
+		fs_cap |= FILE_SUPPORTS_OBJECT_IDS | FILE_UNICODE_ON_DISK;
+		// fs_cap |= smbshare->fake_fs_caps;
+
+		state.out_data.resize(20);
+		uint8_t *p = state.out_data.data();
+		x_put_le32(p, fs_cap);
+		x_put_le32(p, 255); /* Max filename component length */
+		x_put_le32(p, 8); /* length of NTFS */
+		x_put_le64(p, 0x5300460054004e); /* NTFS char16 le order */
+
+		return NT_STATUS_OK;
 	}
 
 	return NT_STATUS_INVALID_LEVEL;
@@ -1029,6 +1059,42 @@ static uint8_t *marshall_entry(x_smbd_statex_t *statex, const char *fname,
 		p += 4;
 		
 		memset(p, 0, 26); p += 26; // shortname
+		{
+			memcpy(p, name.data(), name.size() * 2);
+			p += name.size() * 2;
+			uint32_t len = p - pbegin;
+			uint8_t *ptmp = pbegin + ((len + (align - 1)) & ~(align - 1));
+			memset(p, 0, ptmp - p);
+			p = ptmp;
+		}
+		break;
+
+	case SMB2_FIND_FULL_DIRECTORY_INFO:
+		if (p + 300 > pend) {
+			return nullptr;
+		}
+		SIVAL(p, 0, 0); p += 4;
+		SIVAL(p, 0, 0); p += 4;
+		p = put_find_timespec(p, statex->birth_time);
+		p = put_find_timespec(p, statex->stat.st_atim);
+		p = put_find_timespec(p, statex->stat.st_mtim);
+		p = put_find_timespec(p, statex->stat.st_ctim);
+		x_put_le64(p, statex->get_end_of_file()); p += 8;
+		x_put_le64(p, statex->get_allocation()); p += 8;
+		x_put_le32(p, statex->file_attributes); p += 4;
+		x_put_le32(p, name.size() * 2); p += 4;
+		if (statex->file_attributes & FILE_ATTRIBUTE_REPARSE_POINT) {
+			x_put_le32(p, IO_REPARSE_TAG_DFS);
+		} else {
+			/*
+			 * OS X specific SMB2 extension negotiated via
+			 * AAPL create context: return max_access in
+			 * ea_size field.
+			 */
+			x_put_le32(p, 0);
+		}
+		p += 4;
+		
 		{
 			memcpy(p, name.data(), name.size() * 2);
 			p += name.size() * 2;
