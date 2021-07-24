@@ -18,6 +18,8 @@
 
 #include "smb2.hxx"
 
+#define MAX_MSG_SIZE 0x1000000
+
 enum {
 #define X_SMB2_OP_DECL(x) X_SMB2_OP_##x,
 	X_SMB2_OP_ENUM
@@ -138,7 +140,7 @@ void x_smb2_reply(x_smbd_conn_t *smbd_conn,
 	smbd_requ->out_hdr_flags = calculate_out_hdr_flags(smbd_requ->in_hdr_flags, smbd_requ->out_hdr_flags);
 	uint8_t *out_hdr = buf_head->get_data();
 	memset(out_hdr, 0, SMB2_HDR_BODY);
-	SIVAL(out_hdr, SMB2_HDR_PROTOCOL_ID, SMB2_MAGIC);
+	x_put_be32(out_hdr + SMB2_HDR_PROTOCOL_ID, X_SMB2_MAGIC);
 	SSVAL(out_hdr, SMB2_HDR_LENGTH, SMB2_HDR_BODY);
 	SSVAL(out_hdr, SMB2_HDR_CREDIT_CHARGE, smbd_requ->in_credit_charge);
 	SIVAL(out_hdr, SMB2_HDR_STATUS, NT_STATUS_V(status));
@@ -313,11 +315,6 @@ void x_smbd_conn_reply(x_smbd_conn_t *smbd_conn, x_msg_t *smbd_requ, x_smbd_sess
 	}
 }
 #endif
-#define MAX_MSG_SIZE 0x1000000
-#define SMB_MAGIC 0x424D53FF /* 0xFF 'S' 'M' 'B' */
-#define SMB2_MAGIC 0x424D53FE /* 0xFE 'S' 'M' 'B' */
-#define SMB2_TF_MAGIC 0x424D53FD /* 0xFD 'S' 'M' 'B' */
-
 static const struct {
 	NTSTATUS (*op_func)(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ);
 } x_smb2_op_table[] = {
@@ -533,17 +530,16 @@ static int x_smbd_conn_process_smb(x_smbd_conn_t *smbd_conn, x_buf_t *buf)
 	if (len < 4) {
 		return -EBADMSG;
 	}
-	uint32_t smbhdr;
-	memcpy(&smbhdr, buf->data + offset, sizeof smbhdr);
+	int32_t smbhdr = x_get_be32(buf->data + offset);
 
 	x_auto_ref_t<x_smbd_requ_t> smbd_requ{new x_smbd_requ_t(x_buf_get(buf))};
 	
-	if (smbhdr == SMB2_MAGIC) {
+	if (smbhdr == X_SMB2_MAGIC) {
 		if (len < SMB2_HDR_BODY) {
 			return -EBADMSG;
 		}
 		return x_smbd_conn_process_smb2(smbd_conn, smbd_requ, 0);
-	} else if (smbhdr == SMB_MAGIC) {
+	} else if (smbhdr == X_SMB1_MAGIC) {
 		uint8_t cmd = buf->data[4];
 		if (/* TODO smbd_conn->is_negotiated || */cmd != SMBnegprot) {
 			return -EBADMSG;
@@ -567,45 +563,6 @@ static int x_smbd_conn_process_smb(x_smbd_conn_t *smbd_conn, x_buf_t *buf)
 		return -EBADMSG;
 	}
 }
-#if 0
-static int x_smbd_conn_process_smb(x_smbd_conn_t *smbd_conn, x_buf_t *buf)
-{
-	X_ASSERT(offset < buf->size);
-	uint32_t offset = 0;
-	uint8 *inbuf = buf->data + offset;
-	size_t len = buf->size - offset;
-	if (len < 4) {
-		return -EBADMSG;
-	}
-	uint32_t smbhdr;
-	memcpy(&smbhdr, buf->data + offset, sizeof smbhdr);
-	if (smbhdr == SMB2_MAGIC) {
-		return x_smbd_conn_process_smb2(smbd_conn, req, 0);
-
-	} else if (smbhdr == SMB_MAGIC) {
-		if (len < 35) { // TODO 
-			return -EBADMSG;
-		}
-		uint8_t cmd = buf->data[4];
-		if (/* TODO smbd_conn->is_negotiated || */cmd != SMBnegprot) {
-			return -EBADMSG;
-		}
-		x_smb2req_t *req = new x_smb2_req_t(buf, offset);
-		return x_smbd_conn_process_smb1negoprot(smbd_conn, req);
-	}
-	return 0;
-}
-
-void x_smbd_smb2_async_reply(x_smb2_requ_t *requ, NTSTATUS status,
-		x_buf_t *out_buffer)
-{
-	if (NT_STATUS_IS_OK(status)) {
-
-	} else {
-	}
-	if (
-}
-#endif
 
 static int x_smbd_conn_process_nbt(x_smbd_conn_t *smbd_conn)
 {

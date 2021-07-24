@@ -204,6 +204,13 @@ static inline std::string x_smbd_open_op_get_path(x_smbd_open_t *smbd_open)
 	return smbd_open->ops->get_path(smbd_open);
 }
 
+
+struct x_smb2_create_context_t
+{
+	uint32_t tag;
+	std::vector<uint8_t> data;
+};
+
 struct x_smb2_state_create_t
 {
 	uint8_t in_oplock_level;
@@ -215,14 +222,14 @@ struct x_smb2_state_create_t
 	uint32_t in_create_options;
 
 	std::u16string in_name;
-	std::vector<uint8_t> in_context;
+	std::vector<x_smb2_create_context_t> in_contexts;
 
 	uint8_t out_oplock_level;
 	uint8_t out_create_flags;
 	uint32_t out_create_action;
 	x_smb2_create_close_info_t out_info;
 
-	std::vector<uint8_t> out_context;
+	std::vector<x_smb2_create_context_t> out_contexts;
 };
 
 struct x_smbd_tcon_ops_t

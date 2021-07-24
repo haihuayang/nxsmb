@@ -74,6 +74,11 @@ static inline void x_put_be32(uint8_t *buf, uint32_t val)
 	x_put_be16(buf + 2, val & 0xffff);
 }
 
+static inline uint32_t x_get_be32(const uint8_t *buf)
+{
+	return (buf[0] << 24) | (buf[1] << 16)  | (buf[2] << 8) | buf[3];
+}
+
 static inline void x_put_be64(uint8_t *buf, uint64_t val)
 {
 	x_put_be32(buf, val >> 32);

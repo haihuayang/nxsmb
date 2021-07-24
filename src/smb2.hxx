@@ -18,6 +18,12 @@ extern "C" {
 #include "samba/libcli/util/ntstatus.h"
 }
 
+enum {
+	X_SMB1_MAGIC = '\xffSMB',
+	X_SMB2_MAGIC = '\xfeSMB',
+	X_SMB2_TF_MAGIC = '\xfdSMB',
+};
+
 #define X_SMB2_OP_ENUM \
 	X_SMB2_OP_DECL(NEGPROT) \
 	X_SMB2_OP_DECL(SESSSETUP) \
@@ -132,6 +138,22 @@ enum {
 #define NOTIFY_ACTION_ADDED_STREAM 6
 #define NOTIFY_ACTION_REMOVED_STREAM 7
 #define NOTIFY_ACTION_MODIFIED_STREAM 8
+
+
+enum {
+	X_SMB2_CREATE_TAG_EXTA = 'ExtA',
+	X_SMB2_CREATE_TAG_MXAC = 'MxAc',
+	X_SMB2_CREATE_TAG_SECD = 'SecD',
+	X_SMB2_CREATE_TAG_DHNQ = 'DHnQ',
+	X_SMB2_CREATE_TAG_DHNC = 'DHnC',
+	X_SMB2_CREATE_TAG_ALSI = 'AlSi',
+	X_SMB2_CREATE_TAG_TWRP = 'TWrp',
+	X_SMB2_CREATE_TAG_QFID = 'QFid',
+	X_SMB2_CREATE_TAG_RQLS = 'RqLs',
+	X_SMB2_CREATE_TAG_DH2Q = 'DH2Q',
+	X_SMB2_CREATE_TAG_DH2C = 'DH2C',
+	X_SMB2_CREATE_TAG_AAPL = 'AAPL',
+};
 
 struct x_buf_t
 {

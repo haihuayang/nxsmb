@@ -27,6 +27,90 @@ struct x_smb2_in_create_t
 	uint32_t context_length;
 };
 
+static bool decode_contexts(std::vector<x_smb2_create_context_t> &contexts,
+		const uint8_t *data, uint32_t length)
+{
+	// const uint8_t *context_begin = in_hdr + in_context_offset;
+	// const uint8_t *context_end = context_begin + in_context_length;
+	for (;;) {
+		if (length < 0x10) {
+			return false;
+		}
+
+		const uint8_t *p = data;
+		uint32_t chain_off = x_get_le32(p); p += 4;
+		uint16_t tag_off = x_get_le16(p); p += 2;
+		uint16_t tag_len = x_get_le16(p); p += 4; // we assume tag_len is 2 bytes
+		uint16_t data_off = x_get_le16(p); p += 2;
+		uint32_t data_len = x_get_le32(p); p += 4;
+
+		uint32_t clen;
+		if (chain_off != 0) {
+			if (chain_off + 0x10 > length) {
+				return false;
+			}
+			clen = chain_off;
+		} else {
+			clen = length;
+		}
+
+		if (!x_check_range<uint32_t>(tag_off, tag_len, 0, clen)) {
+			return false;
+		}
+
+		if (!x_check_range<uint32_t>(data_off, data_len, 0, clen)) {
+			return false;
+		}
+
+		if (tag_len == 4) {
+			contexts.resize(contexts.size() + 1);
+			auto &ctx = contexts.back();
+			ctx.tag = x_get_be32(data + tag_off);
+			ctx.data.assign(data + data_off, data + data_off + data_len);
+		} else {
+			/* ignore */
+		}
+
+		data += clen;
+		length -= clen;
+
+		if (length == 0) {
+			break;
+		}
+	}
+	return true;
+}
+
+static uint32_t encode_contexts(const std::vector<x_smb2_create_context_t> &contexts,
+		uint8_t *out_ptr)
+{
+	uint8_t *pchain = nullptr;
+	uint8_t *p = out_ptr;
+	for (auto &ctx: contexts) {
+		if (pchain) {
+			p = out_ptr + x_pad_len(p - out_ptr, 8);
+			if (p != out_ptr) {
+				memset(out_ptr, 0, p - out_ptr);
+			}
+			x_put_le32(pchain, p - pchain);
+		}
+		pchain = p;
+		p += 4;
+		x_put_le16(p, 0x10); p += 2; // tag offset
+		x_put_le16(p, 0x4); p += 2; // tag length (4 byte), but not 4 byte align, so we use 16bits, since it should be small
+		x_put_le16(p, 0x0); p += 2;
+		x_put_le16(p, 0x18); p += 2; // data offset
+		x_put_le32(p, ctx.data.size()); p += 4; // data length
+		x_put_be32(p, ctx.tag); p += 4;
+		x_put_le32(p, 0); p += 4;
+		memcpy(p, ctx.data.data(), ctx.data.size());
+		p += ctx.data.size();
+	}
+	X_ASSERT(pchain);
+	x_put_le32(pchain, 0);
+	return p - out_ptr;
+}
+
 static bool decode_in_create(x_smb2_state_create_t &state,
 		const uint8_t *in_hdr, uint32_t in_len)
 {
@@ -55,10 +139,17 @@ static bool decode_in_create(x_smb2_state_create_t &state,
 	state.in_create_options       = X_LE2H32(in_create->create_options);
 
 	state.in_name.assign((char16_t *)(in_hdr + in_name_offset),
-			(char16_t *)(in_hdr + in_name_offset + in_name_length)); 
+			(char16_t *)(in_hdr + in_name_offset + in_name_length));
 
-	state.in_context.assign(in_hdr + in_context_offset,
-			in_hdr + in_context_offset + in_context_length); 
+	if (in_context_length == 0) {
+		return true;
+	}
+
+	if (!decode_contexts(state.in_contexts, 
+				in_hdr + in_context_offset,
+				in_context_length)) {
+		return false;
+	}
 
 	return true;
 }
@@ -83,7 +174,7 @@ struct x_smb2_out_create_t
 	uint32_t context_length;
 };
 
-static void encode_out_create(const x_smb2_state_create_t &state,
+static uint32_t encode_out_create(const x_smb2_state_create_t &state,
 		x_smbd_open_t *smbd_open, uint8_t *out_hdr)
 {
 	x_smb2_out_create_t *out_create = (x_smb2_out_create_t *)(out_hdr + SMB2_HDR_BODY);
@@ -102,14 +193,19 @@ static void encode_out_create(const x_smb2_state_create_t &state,
 	out_create->reserved0 = 0;
 	out_create->file_id_persistent = X_H2LE64(smbd_open->id);
 	out_create->file_id_volatile = X_H2LE64(smbd_open->id);
-	if (state.out_context.empty()) {
+
+	uint32_t out_context_length = 0;
+	if (state.out_contexts.empty()) {
 		out_create->context_offset = out_create->context_length = 0;
 	} else {
+		static_assert((sizeof(x_smb2_out_create_t) % 8) == 0);
+		out_context_length = encode_contexts(state.out_contexts,
+				(uint8_t *)(out_create + 1));
 		out_create->context_offset = X_H2LE32(SMB2_HDR_BODY + sizeof(x_smb2_out_create_t));
-		out_create->context_length = X_H2LE32(state.out_context.size());
+		out_create->context_length = X_H2LE32(out_context_length);
 	}
 
-	memcpy(out_create + 1, state.out_context.data(), state.out_context.size());
+	return sizeof(x_smb2_out_create_t) + out_context_length;
 }
 
 static void x_smb2_reply_create(x_smbd_conn_t *smbd_conn,
@@ -119,13 +215,19 @@ static void x_smb2_reply_create(x_smbd_conn_t *smbd_conn,
 	X_LOG_OP("%ld RESP SUCCESS 0x%lx,0x%lx", smbd_requ->in_mid,
 			smbd_requ->smbd_open->id, smbd_requ->smbd_open->id);
 
-	x_bufref_t *bufref = x_bufref_alloc(sizeof(x_smb2_out_create_t) + state.out_context.size());
+	size_t out_context_length = 0;
+	for (const auto &ctx: state.out_contexts) {
+		out_context_length += 0x18 + ctx.data.size() + 8;
+	}
+
+	x_bufref_t *bufref = x_bufref_alloc(sizeof(x_smb2_out_create_t) + out_context_length);
 
 	uint8_t *out_hdr = bufref->get_data();
 
-	encode_out_create(state, smbd_requ->smbd_open, out_hdr);
+	uint32_t out_length = encode_out_create(state, smbd_requ->smbd_open, out_hdr);
+	bufref->length = SMB2_HDR_BODY + out_length;
 	x_smb2_reply(smbd_conn, smbd_requ, bufref, bufref, NT_STATUS_OK, 
-			SMB2_HDR_BODY + sizeof(x_smb2_out_create_t) + state.out_context.size());
+			bufref->length);
 }
 
 NTSTATUS x_smb2_process_CREATE(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
