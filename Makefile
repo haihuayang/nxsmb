@@ -99,6 +99,8 @@ SET_src_nxsmbd := \
 	smbd_dcerpc \
 	smbd_dcerpc_wkssvc \
 	smbd_dcerpc_srvsvc \
+	smbd_dcerpc_dssetup \
+	smbd_dcerpc_lsarpc \
 	smb2_negprot \
 	smb2_sesssetup \
 	smb2_logoff \

@@ -11,6 +11,7 @@ TARGET_SET_idl := \
 	svcctl \
 	srvsvc \
 	wkssvc \
+	dssetup \
 	xattr \
 
 a=\
@@ -44,7 +45,6 @@ a=\
 	dns \
 	dnsserver \
 	dsbackup \
-	dssetup \
 	echo \
 	efs \
 	eventlog6 \

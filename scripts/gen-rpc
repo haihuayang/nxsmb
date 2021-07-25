@@ -2099,6 +2099,26 @@ const {dtype}{'* const' if t['POINTERS'] == 1 else ''} {t['NAME']}{array_suffix}
 
 def output_header_INTERFACE(out, iface, idl):
 	function_count = 0
+
+	if 'PROPERTIES' in iface:
+		iface_properties = iface['PROPERTIES']
+		if "uuid" in iface_properties:
+			m = re.search('^"([0-9a-f]{8})-([0-9a-f]{4})-([0-9a-f]{4})-([0-9a-f]{2})([0-9a-f]{2})-([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})(([0-9a-f]{2})([0-9a-f]{2}))?"$', iface_properties["uuid"])
+			assert m
+			t0, t1, t2, t3, t4, t5, t6, t7, t8, _, t9, t10 = m.groups()
+			if t9 is None:
+				t9, t10 = '00', '00'
+			out(f'constexpr idl::GUID {iface["NAME"]}_uuid{{0x{t0}, 0x{t1}, 0x{t2}, {{0x{t3}, 0x{t4}}}, {{0x{t5}, 0x{t6}, 0x{t7}, 0x{t8}, 0x{t9}, 0x{t10}}}}};')
+		if "version" in iface_properties:
+			m1, m2 = [ int (x) for x in iface_properties["version"].split('.') ]
+			out(f'constexpr uint32_t {iface["NAME"]}_version = {m2 * 256 * 256 + m1};')
+	out('\n')
+
+
+#define NDR_SRVSVC_UUID	{0x4b324fc8,0x1670,0x01d3,{0x12,0x78},{0x5a,0x47,0xbf,0x6e,0xe1,0x88}}
+#         "version" : "3.0",
+#         "uuid" : "\"4b324fc8-1670-01d3-1278-5a47bf6ee188\"",
+
 	for t in iface['DATA']:
 		if t['TYPE'] == 'TYPEDEF':
 			if t['DATA']['TYPE'] in [ 'ENUM', 'BITMAP' ]:

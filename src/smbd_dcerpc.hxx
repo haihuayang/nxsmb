@@ -58,6 +58,8 @@ static idl::dcerpc_nca_status x_smbd_dcerpc_fn_##Arg( \
 
 extern const x_dcerpc_iface_t x_smbd_dcerpc_srvsvc;
 extern const x_dcerpc_iface_t x_smbd_dcerpc_wkssvc;
+extern const x_dcerpc_iface_t x_smbd_dcerpc_dssetup;
+extern const x_dcerpc_iface_t x_smbd_dcerpc_lsarpc;
 
 #define X_SMBD_DCERPC_IMPL_TODO(Arg) \
 static bool x_smbd_dcerpc_impl_##Arg(x_smbd_conn_t *smbd_conn, idl::Arg &arg) \

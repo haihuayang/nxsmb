@@ -62,6 +62,8 @@ struct x_smbd_named_pipe_t
 static const x_dcerpc_iface_t *rpc_lookup[] = {
 	&x_smbd_dcerpc_srvsvc,
 	&x_smbd_dcerpc_wkssvc,
+	&x_smbd_dcerpc_dssetup,
+	&x_smbd_dcerpc_lsarpc,
 };
 
 static const x_dcerpc_iface_t *find_rpc_by_name(const std::string &name)
@@ -172,15 +174,17 @@ static bool x_smbd_named_pipe_bind(x_smbd_named_pipe_t *named_pipe,
 	/* rpc_srv_pipe_exists_by_id,
 	 * should we just compare the syntax_id of this pipe or find globally?
 		const x_rpc_iface_t *rpc = find_rpc_by_syntax(ctx.abstract);
-	 */
 	if (!(ctx.abstract_syntax == named_pipe->iface->syntax_id)) {
+	 */
+	const x_dcerpc_iface_t *iface = find_rpc_by_syntax(ctx.abstract_syntax);
+	if (!iface) {
 		ack_ctx.result = idl::DCERPC_BIND_ACK_RESULT_USER_REJECTION;
 		ack_ctx.reason.value = idl::DCERPC_BIND_ACK_REASON_ABSTRACT_SYNTAX_NOT_SUPPORTED;
 		ack_ctx.syntax = PNIO;
 		return false;
 	}
 
-	named_pipe->bind_contexts.push_back(x_bind_context_t{ctx.context_id, named_pipe->iface});
+	named_pipe->bind_contexts.push_back(x_bind_context_t{ctx.context_id, iface});
 	ack_ctx.result = idl::DCERPC_BIND_ACK_RESULT_ACCEPTANCE;
 	ack_ctx.reason.value = idl::DCERPC_BIND_ACK_REASON_NOT_SPECIFIED;
 	ack_ctx.syntax = ndr_transfer_syntax_ndr;
