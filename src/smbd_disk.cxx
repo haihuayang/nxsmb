@@ -1417,8 +1417,7 @@ static x_smbd_open_t *open_object_new(
 	auto smbd_user = smbd_tcon->smbd_sess->smbd_user;
 	std::shared_ptr<idl::security_descriptor> psd;
 	status = make_child_sec_desc(psd, parent_psd,
-			&smbd_user->u_sid,
-			&smbd_user->g_sid,
+			*smbd_user,
 			state.in_create_options & FILE_DIRECTORY_FILE);
 
 	if (!NT_STATUS_IS_OK(status)) {

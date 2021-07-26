@@ -125,21 +125,11 @@ static void smbd_sess_auth_succeeded(x_smbd_conn_t *smbd_conn, x_smbd_sess_t *sm
 
 
 	auto smbd_user = std::make_shared<x_smbd_user_t>();
-	smbd_user->u_sid = dom_sid_from_domain_and_rid(auth_info.domain_sid,
-			auth_info.rid);
-	smbd_user->g_sid = dom_sid_from_domain_and_rid(auth_info.domain_sid,
-			auth_info.primary_gid);
-
-	for (auto &group_rid : auth_info.group_rids) {
-		smbd_user->group_sids.push_back(
-				dom_sid_from_domain_and_rid(auth_info.domain_sid,
-					group_rid.rid));
-	}
-
-	for (auto &other_sid : auth_info.other_sids) {
-		smbd_user->group_sids.push_back(other_sid.sid);
-	}
-
+	smbd_user->domain_sid = auth_info.domain_sid;
+	smbd_user->uid = auth_info.rid;
+	smbd_user->gid = auth_info.primary_gid;
+	smbd_user->group_rids = auth_info.group_rids;
+	smbd_user->other_sids = auth_info.other_sids;
 	smbd_sess->smbd_user = smbd_user;
 
 	const x_array_const_t<char> *derivation_sign_label, *derivation_sign_context,

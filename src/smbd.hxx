@@ -134,8 +134,10 @@ void x_smb2_reply(x_smbd_conn_t *smbd_conn,
 
 struct x_smbd_user_t
 {
-	idl::dom_sid u_sid, g_sid;
-	std::vector<idl::dom_sid> group_sids;
+	idl::dom_sid domain_sid;
+	uint32_t uid, gid;
+	std::vector<idl::samr_RidWithAttribute> group_rids;
+	std::vector<x_dom_sid_with_attrs_t> other_sids;
 };
 
 struct x_smbd_open_ops_t;

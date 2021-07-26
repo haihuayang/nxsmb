@@ -2,14 +2,131 @@
 #include "smbd_dcerpc.hxx"
 #include "include/librpc/lsa.hxx"
 
-X_SMBD_DCERPC_IMPL_TODO(lsa_Close)
+enum lsa_handle_type_t {
+	LSA_HANDLE_POLICY_TYPE = 1,
+	LSA_HANDLE_ACCOUNT_TYPE = 2,
+	LSA_HANDLE_TRUST_TYPE = 3,
+	LSA_HANDLE_SECRET_TYPE = 4,
+};
+
+struct lsa_info_t
+{
+	lsa_handle_type_t type;
+	uint32_t access;
+};
+
+static auto find_handle(x_dcerpc_pipe_t &rpc_pipe, const idl::policy_handle &handle)
+{
+	auto it = std::begin(rpc_pipe.handles);
+	for ( ; it != std::end(rpc_pipe.handles); ++it) {
+		if (it->wire_handle == handle) {
+			break;
+		}
+	}
+	return it;
+}
+
+static std::shared_ptr<void> get_handle_data(x_dcerpc_pipe_t &rpc_pipe, const idl::policy_handle &handle)
+{
+	for (auto it = std::begin(rpc_pipe.handles); it != std::end(rpc_pipe.handles); ++it) {
+		if (it->wire_handle == handle) {
+			return it->data;
+		}
+	}
+	return nullptr;
+}
+
+static bool x_smbd_dcerpc_impl_lsa_Close(
+		x_dcerpc_pipe_t &rpc_pipe,
+		x_smbd_sess_t *smbd_sess,
+		idl::lsa_Close &arg)
+{
+	auto it = find_handle(rpc_pipe, arg.handle);
+	if (it != std::end(rpc_pipe.handles)) {
+		rpc_pipe.handles.erase(it);
+		arg.__result = NT_STATUS_OK;
+	} else {
+		arg.__result = NT_STATUS_INVALID_HANDLE;
+	}
+	return true;
+}
+
 X_SMBD_DCERPC_IMPL_TODO(lsa_Delete)
 X_SMBD_DCERPC_IMPL_TODO(lsa_EnumPrivs)
 X_SMBD_DCERPC_IMPL_TODO(lsa_QuerySecurity)
 X_SMBD_DCERPC_IMPL_TODO(lsa_SetSecObj)
 X_SMBD_DCERPC_IMPL_TODO(lsa_ChangePassword)
 X_SMBD_DCERPC_IMPL_TODO(lsa_OpenPolicy)
-X_SMBD_DCERPC_IMPL_TODO(lsa_QueryInfoPolicy)
+
+static bool x_smbd_dcerpc_impl_lsa_QueryInfoPolicy(
+		x_dcerpc_pipe_t &rpc_pipe,
+		x_smbd_sess_t *smbd_sess,
+		idl::lsa_QueryInfoPolicy &arg)
+{
+	auto handle_data = get_handle_data(rpc_pipe, arg.handle);
+	if (!handle_data) {
+		arg.__result = NT_STATUS_INVALID_HANDLE;
+		return true;
+	}
+
+	auto lsa_info = std::static_pointer_cast<lsa_info_t>(handle_data);
+	auto smbconf = smbd_sess->smbd_conn->get_smbconf();
+
+	//uint32_t acc_required = 0;
+	switch (arg.level) {
+	case idl::LSA_POLICY_INFO_ACCOUNT_DOMAIN: {
+		// check access has idl::LSA_POLICY_VIEW_LOCAL_INFORMATION
+		auto info = std::make_shared<idl::lsa_PolicyInformation>();
+		info->__init(arg.level);
+		info->account_domain.name.string = std::make_shared<std::u16string>(x_convert_utf8_to_utf16(smbconf->netbios_name));
+		info->account_domain.sid = std::make_shared<idl::dom_sid>(smbd_sess->smbd_user->domain_sid); // TODO we use user's domain_sid for now
+		arg.info = info;
+		arg.__result = NT_STATUS_OK;
+						  }
+		break;
+
+#if 0
+		case idl::LSA_POLICY_INFO_AUDIT_LOG:
+		case idl::LSA_POLICY_INFO_AUDIT_EVENTS:
+			acc_required = idl::LSA_POLICY_VIEW_AUDIT_INFORMATION;
+			break;
+		case idl::LSA_POLICY_INFO_DOMAIN:
+			acc_required = idl::LSA_POLICY_VIEW_LOCAL_INFORMATION;
+			break;
+		case idl::LSA_POLICY_INFO_PD:
+			acc_required = idl::LSA_POLICY_GET_PRIVATE_INFORMATION;
+			break;
+		case idl::LSA_POLICY_INFO_ACCOUNT_DOMAIN:
+			acc_required = idl::LSA_POLICY_VIEW_LOCAL_INFORMATION;
+			break;
+		case idl::LSA_POLICY_INFO_ROLE:
+		case idl::LSA_POLICY_INFO_REPLICA:
+			acc_required = idl::LSA_POLICY_VIEW_LOCAL_INFORMATION;
+			break;
+		case idl::LSA_POLICY_INFO_QUOTA:
+			acc_required = idl::LSA_POLICY_VIEW_LOCAL_INFORMATION;
+			break;
+		case idl::LSA_POLICY_INFO_MOD:
+		case idl::LSA_POLICY_INFO_AUDIT_FULL_SET:
+			/* according to MS-LSAD 3.1.4.4.3 */
+			arg.__result = NT_STATUS_INVALID_PARAMETER;
+			return true;
+		case idl::LSA_POLICY_INFO_AUDIT_FULL_QUERY:
+			acc_required = idl::LSA_POLICY_VIEW_AUDIT_INFORMATION;
+			break;
+		case idl::LSA_POLICY_INFO_DNS:
+		case idl::LSA_POLICY_INFO_DNS_INT:
+		case idl::LSA_POLICY_INFO_L_ACCOUNT_DOMAIN:
+			acc_required = idl::LSA_POLICY_VIEW_LOCAL_INFORMATION;
+			break;
+#endif
+		default:
+			X_TODO;
+			break;
+	}
+	return true;
+}
+
 X_SMBD_DCERPC_IMPL_TODO(lsa_SetInfoPolicy)
 X_SMBD_DCERPC_IMPL_TODO(lsa_ClearAuditLog)
 X_SMBD_DCERPC_IMPL_TODO(lsa_CreateAccount)
@@ -46,7 +163,48 @@ X_SMBD_DCERPC_IMPL_TODO(lsa_SetTrustedDomainInfo)
 X_SMBD_DCERPC_IMPL_TODO(lsa_DeleteTrustedDomain)
 X_SMBD_DCERPC_IMPL_TODO(lsa_StorePrivateData)
 X_SMBD_DCERPC_IMPL_TODO(lsa_RetrievePrivateData)
-X_SMBD_DCERPC_IMPL_TODO(lsa_OpenPolicy2)
+
+#ifndef MAX_OPEN_POLS
+#define MAX_OPEN_POLS 2048
+#endif
+
+static std::atomic<uint64_t> pol_hnd{0};
+static std::atomic<uint64_t> pol_hnd_random{0}; // TODO samba use time(), and pid()
+
+static bool x_smbd_dcerpc_impl_lsa_OpenPolicy2(
+		x_dcerpc_pipe_t &rpc_pipe,
+		x_smbd_sess_t *smbd_sess,
+		idl::lsa_OpenPolicy2 &arg)
+{
+	// _lsa_OpenPolicy2
+	// TODO only allow LOCAL INFORMATION for now
+	if ((arg.access_mask & ~(idl::LSA_POLICY_VIEW_LOCAL_INFORMATION)) != 0) {
+		X_LOG_ERR("not supported access_mask 0x%x", arg.access_mask);
+		arg.__result = NT_STATUS_ACCESS_DENIED;
+		return true;
+	}
+
+	if (rpc_pipe.handles.size() >= MAX_OPEN_POLS) {
+		// samba return NOT_FOUND for any error
+		arg.__result = NT_STATUS_OBJECT_NAME_NOT_FOUND;
+		return true;
+	}
+
+	rpc_pipe.handles.resize(rpc_pipe.handles.size() + 1);
+	auto &handle = rpc_pipe.handles.back();
+	handle.wire_handle.handle_type = 0;
+	*(uint64_t *)&handle.wire_handle.uuid = ++pol_hnd;
+	*((uint64_t *)&handle.wire_handle.uuid + 1) = ++pol_hnd_random;
+	auto info = std::make_shared<lsa_info_t>();
+	info->type = LSA_HANDLE_POLICY_TYPE;
+	info->access = arg.access_mask;
+	handle.data = info;
+
+	arg.handle = handle.wire_handle;
+	arg.__result = NT_STATUS_OK;
+	return true;
+}
+
 X_SMBD_DCERPC_IMPL_TODO(lsa_GetUserName)
 X_SMBD_DCERPC_IMPL_TODO(lsa_QueryInfoPolicy2)
 X_SMBD_DCERPC_IMPL_TODO(lsa_SetInfoPolicy2)

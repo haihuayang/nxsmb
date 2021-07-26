@@ -6,6 +6,7 @@
 #error "Must be c++"
 #endif
 
+#include "smbd.hxx"
 #include "include/librpc/xattr.hxx"
 
 NTSTATUS parse_acl_blob(const std::vector<uint8_t> &blob,
@@ -38,8 +39,7 @@ void append_ace(std::vector<idl::security_ace> &aces,
 NTSTATUS make_child_sec_desc(
 		std::shared_ptr<idl::security_descriptor> &psd,
 		const std::shared_ptr<idl::security_descriptor> &parent_psd,
-		const idl::dom_sid *owner_sid,
-		const idl::dom_sid *group_sid,
+		const x_smbd_user_t &smbd_user,
 		bool container);
 
 std::shared_ptr<idl::security_descriptor> get_share_security(const std::string &sharename);

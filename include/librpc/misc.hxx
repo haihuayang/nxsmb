@@ -26,6 +26,11 @@ static inline bool operator==(const ndr_syntax_id &id1, const ndr_syntax_id &id2
 
 void x_ndr_ostr(const ndr_syntax_id &v, x_ndr_ostr_t &os, uint32_t flags, x_ndr_switch_t level);
 
+static inline bool operator==(const policy_handle &v1, const policy_handle &v2)
+{
+	return v1.handle_type == v2.handle_type && v1.uuid == v2.uuid;
+}
+
 }
 
 #endif /* __librpc__misc__hxx__ */

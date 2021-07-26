@@ -557,15 +557,18 @@ static NTSTATUS make_dummy_sec_desc(
 NTSTATUS make_child_sec_desc(
 		std::shared_ptr<idl::security_descriptor> &psd,
 		const std::shared_ptr<idl::security_descriptor> &parent_psd,
-		const idl::dom_sid *owner_sid,
-		const idl::dom_sid *group_sid,
+		const x_smbd_user_t &smbd_user,
 		bool container)
 {
+	idl::dom_sid owner_sid = dom_sid_from_domain_and_rid(smbd_user.domain_sid,
+			smbd_user.uid);
+	idl::dom_sid group_sid = dom_sid_from_domain_and_rid(smbd_user.domain_sid,
+			smbd_user.gid);
 	if (parent_psd && sd_has_inheritable_components(*parent_psd, container)) {
-		return se_create_child_secdesc(psd, *parent_psd, owner_sid, group_sid,
+		return se_create_child_secdesc(psd, *parent_psd, &owner_sid, &group_sid,
 				container);
 	} else {
-		return make_dummy_sec_desc(psd, owner_sid, group_sid);
+		return make_dummy_sec_desc(psd, &owner_sid, &group_sid);
 	}
 }
 

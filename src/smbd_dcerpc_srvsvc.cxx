@@ -38,13 +38,15 @@ static uint32_t net_share_enum_all_1(x_smbd_conn_t *smbd_conn,
 }
 
 static bool x_smbd_dcerpc_impl_srvsvc_NetShareEnumAll(
-		x_smbd_conn_t *smbd_conn,
+		x_dcerpc_pipe_t &rpc_pipe,
+		x_smbd_sess_t *smbd_sess,
 		idl::srvsvc_NetShareEnumAll &arg)
 {
 
 	switch (arg.info_ctr.level) {
 	case 1:
-		arg.totalentries = net_share_enum_all_1(smbd_conn, arg.info_ctr.ctr.ctr1);
+		arg.totalentries = net_share_enum_all_1(smbd_sess->smbd_conn,
+				arg.info_ctr.ctr.ctr1);
 		arg.__result = WERR_OK;
 		break;
 
@@ -99,11 +101,12 @@ static void fill_share_info2(Info &info, const std::u16string &share_name,
 }
 
 static bool x_smbd_dcerpc_impl_srvsvc_NetShareGetInfo(
-		x_smbd_conn_t *smbd_conn,
+		x_dcerpc_pipe_t &rpc_pipe,
+		x_smbd_sess_t *smbd_sess,
 		idl::srvsvc_NetShareGetInfo &arg)
 {
 	std::string share_name = x_convert_utf16_to_utf8(arg.share_name);
-	auto smbshare = x_smbd_find_share(smbd_conn->smbd, share_name);
+	auto smbshare = x_smbd_find_share(smbd_sess->smbd_conn->smbd, share_name);
 	if (!smbshare) {
 		arg.__result = WERR_INVALID_NAME;
 		return true;
@@ -215,10 +218,11 @@ X_SMBD_DCERPC_IMPL_TODO(srvsvc_NetShareDelSticky)
 X_SMBD_DCERPC_IMPL_TODO(srvsvc_NetShareCheck)
 
 static bool x_smbd_dcerpc_impl_srvsvc_NetSrvGetInfo(
-		x_smbd_conn_t *smbd_conn,
+		x_dcerpc_pipe_t &rpc_pipe,
+		x_smbd_sess_t *smbd_sess,
 		idl::srvsvc_NetSrvGetInfo &arg)
 {
-	const std::shared_ptr<x_smbconf_t> smbconf = smbd_conn->get_smbconf();
+	const std::shared_ptr<x_smbconf_t> smbconf = smbd_sess->smbd_conn->get_smbconf();
 
 	switch (arg.level) {
 	case 101: {

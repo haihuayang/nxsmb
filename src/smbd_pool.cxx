@@ -455,7 +455,7 @@ bool x_smbd_list_session_t::output(std::string &data)
 			<< smbd_conn->saddr.tostring() << ' '
 			<< idl::x_hex_t<uint16_t>(smbd_conn->dialect);
 		if (smbd_user) {
-			os << ' ' << smbd_user->u_sid << ' ' << smbd_user->g_sid;
+			os << ' ' << smbd_user->domain_sid << ' ' << smbd_user->uid << ' ' << smbd_user->gid;
 		} else {
 			os << " - -";
 		}

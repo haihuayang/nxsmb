@@ -49,6 +49,7 @@ struct x_smbd_named_pipe_t
 	x_smbd_open_t base;
 	const x_dcerpc_iface_t *iface;
 	std::vector<x_bind_context_t> bind_contexts;
+	x_dcerpc_pipe_t rpc_pipe;
 	x_ncacn_packet_t pkt;
 	NTSTATUS return_status{NT_STATUS_OK};
 	uint16_t packet_read = 0;
@@ -254,7 +255,7 @@ static const x_dcerpc_iface_t *find_context(x_smbd_named_pipe_t *named_pipe, uin
 	return nullptr;
 }
 
-static NTSTATUS process_dcerpc_request(x_smbd_conn_t *smbd_conn,
+static NTSTATUS process_dcerpc_request(x_smbd_sess_t *smbd_sess,
 		x_smbd_named_pipe_t *named_pipe,
 		uint8_t &resp_type, std::vector<uint8_t> &body_output)
 {
@@ -277,7 +278,8 @@ static NTSTATUS process_dcerpc_request(x_smbd_conn_t *smbd_conn,
 		x_smbd_dcerpc_fault(resp_type, body_output, ndr_flags);
 	} else {
 		std::vector<uint8_t> output;
-		idl::dcerpc_nca_status dce_status = iface->cmds[opnum](smbd_conn,
+		idl::dcerpc_nca_status dce_status = iface->cmds[opnum](
+				named_pipe->rpc_pipe, smbd_sess,
 				request, resp_type, output, ndr_flags);
 		X_TODO_ASSERT(resp_type == idl::DCERPC_PKT_RESPONSE);
 		X_TODO_ASSERT(dce_status == 0);
@@ -292,7 +294,7 @@ static NTSTATUS process_dcerpc_request(x_smbd_conn_t *smbd_conn,
 	return NT_STATUS_OK;
 }
 
-static inline NTSTATUS process_ncacn_pdu(x_smbd_conn_t *smbd_conn, x_smbd_named_pipe_t *named_pipe)
+static inline NTSTATUS process_ncacn_pdu(x_smbd_sess_t *smbd_sess, x_smbd_named_pipe_t *named_pipe)
 {
 	std::vector<uint8_t> body_output;
 	uint8_t resp_type;
@@ -302,7 +304,7 @@ static inline NTSTATUS process_ncacn_pdu(x_smbd_conn_t *smbd_conn, x_smbd_named_
 			status = process_dcerpc_bind(named_pipe, resp_type, body_output);
 			break;
 		case idl::DCERPC_PKT_REQUEST:
-			status = process_dcerpc_request(smbd_conn, named_pipe, resp_type, body_output);
+			status = process_dcerpc_request(smbd_sess, named_pipe, resp_type, body_output);
 			break;
 		default:
 			X_TODO;
@@ -329,7 +331,7 @@ static inline NTSTATUS process_ncacn_pdu(x_smbd_conn_t *smbd_conn, x_smbd_named_
 	return status;
 }
 
-static int named_pipe_write(x_smbd_conn_t *smbd_conn,
+static int named_pipe_write(x_smbd_sess_t *smbd_sess,
 		x_smbd_named_pipe_t *named_pipe,
 		const uint8_t *_input_data,
 		uint32_t input_size)
@@ -376,7 +378,7 @@ static int named_pipe_write(x_smbd_conn_t *smbd_conn,
 
 	if (named_pipe->packet_read == named_pipe->pkt.frag_length) {
 		/* complete pdu */
-		named_pipe->return_status = process_ncacn_pdu(smbd_conn, named_pipe);
+		named_pipe->return_status = process_ncacn_pdu(smbd_sess, named_pipe);
 	}
 	return data - _input_data;
 }
@@ -393,7 +395,7 @@ static NTSTATUS x_smbd_named_pipe_write(x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ,
 		std::unique_ptr<x_smb2_state_write_t> &state)
 {
-	int ret = named_pipe_write(smbd_conn, from_smbd_open(smbd_requ->smbd_open),
+	int ret = named_pipe_write(smbd_requ->smbd_sess, from_smbd_open(smbd_requ->smbd_open),
 			state->in_data.data(), state->in_data.size());
 	state->out_count = ret;
 	state->out_remaining = 0;
@@ -439,7 +441,7 @@ static NTSTATUS x_smbd_named_pipe_ioctl(x_smbd_conn_t *smbd_conn,
 	x_smbd_named_pipe_t *named_pipe = from_smbd_open(smbd_requ->smbd_open);
 	switch (state->ctl_code) {
 	case FSCTL_PIPE_TRANSCEIVE:
-		named_pipe_write(smbd_conn, named_pipe, state->in_data.data(),
+		named_pipe_write(smbd_requ->smbd_sess, named_pipe, state->in_data.data(),
 				state->in_data.size());
 		return named_pipe_read(smbd_conn, named_pipe,
 				state->in_max_output_length, state->out_data);

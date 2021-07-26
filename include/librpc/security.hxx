@@ -43,6 +43,7 @@ static inline bool operator==(const dom_sid &sid1, const dom_sid &sid2) {
 /* domain num_auths must less than 15 */
 static inline dom_sid dom_sid_from_domain_and_rid(const dom_sid &domain, uint32_t rid)
 {
+	X_ASSERT(domain.num_auths < domain.sub_auths.size());
 	dom_sid ret = domain;
 	ret.sub_auths[ret.num_auths++] = rid;
 	return ret;

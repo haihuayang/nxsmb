@@ -3,10 +3,11 @@
 #include "include/librpc/wkssvc.hxx"
 
 static bool x_smbd_dcerpc_impl_wkssvc_NetWkstaGetInfo(
-		x_smbd_conn_t *smbd_conn,
+		x_dcerpc_pipe_t &rpc_pipe,
+		x_smbd_sess_t *smbd_sess,
 		idl::wkssvc_NetWkstaGetInfo &arg)
 {
-	const std::shared_ptr<x_smbconf_t> smbconf = smbd_conn->get_smbconf();
+	const std::shared_ptr<x_smbconf_t> smbconf = smbd_sess->smbd_conn->get_smbconf();
 
 	switch (arg.level) {
 	case 100: {
