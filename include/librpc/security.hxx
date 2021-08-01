@@ -35,6 +35,7 @@ struct ndr_traits_dom_sid2
 
 long dom_sid_compare_domain(const dom_sid &sid1, const dom_sid &sid2);
 long dom_sid_compare(const dom_sid &sid1, const dom_sid &sid2);
+bool dom_sid_in_domain(const dom_sid &domain, const dom_sid &sid);
 
 static inline bool operator==(const dom_sid &sid1, const dom_sid &sid2) {
 	return dom_sid_compare(sid1, sid2) == 0;

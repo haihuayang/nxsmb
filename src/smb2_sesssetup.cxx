@@ -1,6 +1,7 @@
 #include "smbd.hxx"
 #include "core.hxx"
 #include "misc.hxx"
+#include "smbd_ntacl.hxx"
 
 enum {
 	X_SMB2_SESSSETUP_REQU_BODY_LEN = 0x18,

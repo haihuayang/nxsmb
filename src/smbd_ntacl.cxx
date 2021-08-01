@@ -185,6 +185,7 @@ NTSTATUS parse_setinfo_sd_blob(idl::security_descriptor &sd,
 		uint32_t access_mask,
 		const std::vector<uint8_t> &sd_blob)
 {
+	// set_sd
 	idl::x_ndr_off_t ndr_ret = idl::x_ndr_pull(sd, sd_blob.data(), sd_blob.size(), 0);
 	if (ndr_ret < 0) {
 		// TODO ndr_map_error2ntstatus
@@ -193,13 +194,19 @@ NTSTATUS parse_setinfo_sd_blob(idl::security_descriptor &sd,
 	security_info_sent &= idl::SMB_SUPPORTED_SECINFO_FLAGS;
 	if (!sd.owner_sid) {
 		security_info_sent &= ~idl::SECINFO_OWNER;
-	} else if (!(access_mask & idl::SEC_STD_WRITE_OWNER)) {
-		return NT_STATUS_ACCESS_DENIED;
 	}
 
 	if (!sd.group_sid) {
 		security_info_sent &= ~idl::SECINFO_GROUP;
-	} else if (!(access_mask & idl::SEC_STD_WRITE_OWNER)) {
+	}
+
+	if ((security_info_sent & idl::SECINFO_OWNER) && 
+			!(access_mask & idl::SEC_STD_WRITE_OWNER)) {
+		return NT_STATUS_ACCESS_DENIED;
+	}
+
+	if ((security_info_sent & idl::SECINFO_GROUP) && 
+			!(access_mask & idl::SEC_STD_WRITE_OWNER)) {
 		return NT_STATUS_ACCESS_DENIED;
 	}
 
@@ -247,14 +254,14 @@ NTSTATUS create_acl_blob_from_old(std::vector<uint8_t> &new_blob,
 	}
 
 	bool chown_needed = false;
-	if (sd.owner_sid) {
+	if ((security_info_sent & idl::SECINFO_OWNER)) {
 		if (idl::dom_sid_compare(*psd->owner_sid, *sd.owner_sid) != 0) {
 			chown_needed = true;
 		}
 		psd->owner_sid = sd.owner_sid;
 	}
 
-	if (sd.group_sid) {
+	if ((security_info_sent & idl::SECINFO_GROUP)) {
 		if (idl::dom_sid_compare(*psd->group_sid, *sd.group_sid) != 0) {
 			chown_needed = true;
 		}
@@ -598,3 +605,310 @@ std::shared_ptr<idl::security_descriptor> get_share_security(const std::string &
 	/* TODO we do not set share_security for now, always use the default one */
 	return get_share_security_default(idl::SEC_RIGHTS_DIR_ALL);
 }
+
+static bool user_token_has_sid(const x_smbd_user_t &smbd_user, const idl::dom_sid &sid)
+{
+	if (idl::dom_sid_in_domain(smbd_user.domain_sid, sid)) {
+		uint32_t rid = sid.sub_auths[sid.num_auths - 1];
+		if (rid == smbd_user.uid || rid == smbd_user.gid) {
+			return true;
+		}
+		for (auto &group: smbd_user.group_rids) {
+			if (rid == group.rid) {
+				return true;
+			}
+		}
+	}
+
+	for (auto &other: smbd_user.other_sids) {
+		if (other.sid == sid) {
+			return true;
+		}
+	}
+
+	return false;
+}
+
+/*
+  perform a SEC_FLAG_MAXIMUM_ALLOWED access check
+ */
+static uint32_t access_check_max_allowed(const idl::security_descriptor &sd,
+		const x_smbd_user_t &smbd_user)
+{
+	uint32_t denied = 0, granted = 0;
+	bool have_owner_rights_ace = false;
+	bool am_owner = user_token_has_sid(smbd_user, *sd.owner_sid);
+
+	if (!sd.dacl) {
+		if (am_owner) {
+			granted |= idl::SEC_STD_WRITE_DAC | idl::SEC_STD_READ_CONTROL;
+		}
+		return granted;
+	}
+
+	if (am_owner) {
+		/*
+		 * Check for explicit owner rights: if there are none, we remove
+		 * the default owner right SEC_STD_WRITE_DAC|SEC_STD_READ_CONTROL
+		 * from remaining_access. Otherwise we just process the
+		 * explicitly granted rights when processing the ACEs.
+		 */
+
+		for (auto &ace: sd.dacl->aces) {
+			if (ace.flags & idl::SEC_ACE_FLAG_INHERIT_ONLY) {
+				continue;
+			}
+
+			have_owner_rights_ace = ace.trustee == global_sid_Owner_Rights;
+			if (have_owner_rights_ace) {
+				break;
+			}
+		}
+	}
+
+	if (am_owner && !have_owner_rights_ace) {
+		granted |= idl::SEC_STD_WRITE_DAC|idl::SEC_STD_READ_CONTROL;
+	}
+
+	for (auto &ace: sd.dacl->aces) {
+		bool is_owner_rights_ace = false;
+
+		if (ace.flags & idl::SEC_ACE_FLAG_INHERIT_ONLY) {
+			continue;
+		}
+
+		if (am_owner) {
+			is_owner_rights_ace = ace.trustee == global_sid_Owner_Rights;
+		}
+
+		if (!is_owner_rights_ace &&
+				!user_token_has_sid(smbd_user, ace.trustee)) {
+			continue;
+		}
+
+		switch (ace.type) {
+		case idl::SEC_ACE_TYPE_ACCESS_ALLOWED:
+			granted |= ace.access_mask;
+			break;
+		case idl::SEC_ACE_TYPE_ACCESS_DENIED:
+		case idl::SEC_ACE_TYPE_ACCESS_DENIED_OBJECT:
+			denied |= ~granted & ace.access_mask;
+			break;
+		default:	/* Other ACE types not handled/supported */
+			break;
+		}
+	}
+
+	return granted & ~denied;
+}
+
+/*
+  The main entry point for access checking. If returning ACCESS_DENIED
+  this function returns the denied bits in the uint32_t pointed
+  to by the access_granted pointer.
+*/
+static NTSTATUS se_access_check(const idl::security_descriptor &sd,
+		const x_smbd_user_t &smbd_user,
+		uint32_t access_desired,
+		uint32_t *access_granted)
+{
+	uint32_t bits_remaining;
+	uint32_t explicitly_denied_bits = 0;
+	bool am_owner = false;
+	bool have_owner_rights_ace = false;
+
+	*access_granted = access_desired;
+	bits_remaining = access_desired;
+
+	/* handle the maximum allowed flag */
+	if (access_desired & idl::SEC_FLAG_MAXIMUM_ALLOWED) {
+		uint32_t orig_access_desired = access_desired;
+
+		access_desired |= access_check_max_allowed(sd, smbd_user);
+		access_desired &= ~idl::SEC_FLAG_MAXIMUM_ALLOWED;
+		*access_granted = access_desired;
+		bits_remaining = access_desired;
+
+		X_DBG("se_access_check: MAX desired = 0x%x, granted = 0x%x, remaining = 0x%x",
+			orig_access_desired,
+			*access_granted,
+			bits_remaining);
+	}
+
+	/* a NULL dacl allows access */
+	if ((sd.type & idl::SEC_DESC_DACL_PRESENT) && !sd.dacl) {
+		*access_granted = access_desired;
+		return NT_STATUS_OK;
+	}
+
+	if (!sd.dacl) {
+		goto done;
+	}
+
+	if (user_token_has_sid(smbd_user, *sd.owner_sid)) {
+		/*
+		 * Check for explicit owner rights: if there are none, we remove
+		 * the default owner right SEC_STD_WRITE_DAC|SEC_STD_READ_CONTROL
+		 * from remaining_access. Otherwise we just process the
+		 * explicitly granted rights when processing the ACEs.
+		 */
+		am_owner = true;
+
+		for (auto &ace: sd.dacl->aces) {
+			if (ace.flags & idl::SEC_ACE_FLAG_INHERIT_ONLY) {
+				continue;
+			}
+
+			have_owner_rights_ace = ace.trustee == global_sid_Owner_Rights;
+			if (have_owner_rights_ace) {
+				break;
+			}
+		}
+	}
+	if (am_owner && !have_owner_rights_ace) {
+		bits_remaining &= ~(idl::SEC_STD_WRITE_DAC | idl::SEC_STD_READ_CONTROL);
+	}
+
+	/* check each ace in turn. */
+	for (size_t i=0; bits_remaining && i < sd.dacl->aces.size(); ++i) {
+		auto &ace = sd.dacl->aces[i];
+		bool is_owner_rights_ace = false;
+
+		if (ace.flags & idl::SEC_ACE_FLAG_INHERIT_ONLY) {
+			continue;
+		}
+
+		if (am_owner) {
+			is_owner_rights_ace = ace.trustee == global_sid_Owner_Rights;
+		}
+
+		if (!is_owner_rights_ace &&
+		    !user_token_has_sid(smbd_user, ace.trustee))
+		{
+			continue;
+		}
+
+		switch (ace.type) {
+		case idl::SEC_ACE_TYPE_ACCESS_ALLOWED:
+			bits_remaining &= ~ace.access_mask;
+			break;
+		case idl::SEC_ACE_TYPE_ACCESS_DENIED:
+		case idl::SEC_ACE_TYPE_ACCESS_DENIED_OBJECT:
+			explicitly_denied_bits |= (bits_remaining & ace.access_mask);
+			break;
+		default:	/* Other ACE types not handled/supported */
+			break;
+		}
+	}
+
+	/* Explicitly denied bits always override */
+	bits_remaining |= explicitly_denied_bits;
+
+	/* TODO
+	 * We check privileges here because they override even DENY entries.
+	 */
+#if 0
+	/* Does the user have the privilege to gain SEC_PRIV_SECURITY? */
+	if (bits_remaining & idl::SEC_FLAG_SYSTEM_SECURITY) {
+		if (security_token_has_privilege(token, SEC_PRIV_SECURITY)) {
+			bits_remaining &= ~SEC_FLAG_SYSTEM_SECURITY;
+		} else {
+			return NT_STATUS_PRIVILEGE_NOT_HELD;
+		}
+	}
+
+	if ((bits_remaining & idl::SEC_STD_WRITE_OWNER) &&
+	     security_token_has_privilege(token, SEC_PRIV_TAKE_OWNERSHIP)) {
+		bits_remaining &= ~(idl::SEC_STD_WRITE_OWNER);
+	}
+#endif
+done:
+	if (bits_remaining != 0) {
+		*access_granted = bits_remaining;
+		return NT_STATUS_ACCESS_DENIED;
+	}
+
+	return NT_STATUS_OK;
+}
+
+/*
+  The main entry point for access checking FOR THE FILE SERVER ONLY !
+  If returning ACCESS_DENIED this function returns the denied bits in
+  the uint32_t pointed to by the access_granted pointer.
+*/
+NTSTATUS se_file_access_check(const idl::security_descriptor &sd,
+		const x_smbd_user_t &smbd_user,
+		bool priv_open_requested,
+		uint32_t access_desired,
+		uint32_t *access_granted)
+{
+	if (!priv_open_requested) {
+		/* Fall back to generic se_access_check(). */
+		return se_access_check(sd,
+				smbd_user,
+				access_desired,
+				access_granted);
+	}
+
+	X_TODO;
+	return NT_STATUS_ACCESS_DENIED;
+#if 0
+	uint32_t bits_remaining;*
+	NTSTATUS status;
+
+	/*
+	 * We need to handle the maximum allowed flag
+	 * outside of se_access_check(), as we need to
+	 * add in the access allowed by the privileges
+	 * as well.
+	 */
+
+	if (access_desired & SEC_FLAG_MAXIMUM_ALLOWED) {
+		uint32_t orig_access_desired = access_desired;
+
+		access_desired |= access_check_max_allowed(sd, token);
+		access_desired &= ~SEC_FLAG_MAXIMUM_ALLOWED;
+
+		if (security_token_has_privilege(token, SEC_PRIV_BACKUP)) {
+			access_desired |= SEC_RIGHTS_PRIV_BACKUP;
+		}
+
+		if (security_token_has_privilege(token, SEC_PRIV_RESTORE)) {
+			access_desired |= SEC_RIGHTS_PRIV_RESTORE;
+		}
+
+		DEBUG(10,("se_file_access_check: MAX desired = 0x%x "
+			"mapped to 0x%x\n",
+			orig_access_desired,
+			access_desired));
+	}
+
+	status = se_access_check(sd,
+				token,
+				access_desired,
+				access_granted);
+
+	if (!NT_STATUS_EQUAL(status, NT_STATUS_ACCESS_DENIED)) {
+		return status;
+	}
+
+	bits_remaining = *access_granted;
+
+	/* Check if we should override with privileges. */
+	if ((bits_remaining & SEC_RIGHTS_PRIV_BACKUP) &&
+	    security_token_has_privilege(token, SEC_PRIV_BACKUP)) {
+		bits_remaining &= ~(SEC_RIGHTS_PRIV_BACKUP);
+	}
+	if ((bits_remaining & SEC_RIGHTS_PRIV_RESTORE) &&
+	    security_token_has_privilege(token, SEC_PRIV_RESTORE)) {
+		bits_remaining &= ~(SEC_RIGHTS_PRIV_RESTORE);
+	}
+	if (bits_remaining != 0) {
+		*access_granted = bits_remaining;
+		return NT_STATUS_ACCESS_DENIED;
+	}
+
+	return NT_STATUS_OK;
+#endif
+}
+

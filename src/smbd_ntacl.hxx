@@ -44,5 +44,11 @@ NTSTATUS make_child_sec_desc(
 
 std::shared_ptr<idl::security_descriptor> get_share_security(const std::string &sharename);
 
+NTSTATUS se_file_access_check(const idl::security_descriptor &sd,
+		const x_smbd_user_t &smbd_user,
+		bool priv_open_requested,
+		uint32_t access_desired,
+		uint32_t *access_granted);
+
 #endif /* __smbd_ntacl__hxx__ */
 

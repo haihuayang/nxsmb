@@ -141,24 +141,6 @@ struct x_smbd_disk_object_pool_t
 
 static x_smbd_disk_object_pool_t smbd_disk_object_pool;
 
-static NTSTATUS check_parent_access(uint32_t access)
-{
-	// TODO
-	return NT_STATUS_OK;
-}
-
-static bool check_open_access(x_smbd_disk_open_t *disk_open, uint32_t access)
-{
-	return (disk_open->base.access_mask & access);
-}
-
-static inline bool check_object_access(x_smbd_disk_object_t *disk_object, uint32_t access)
-{
-	// TODO smbd_check_access_rights
-	// return (disk_object->statex.file_attributes & access);
-	return true;
-}
-
 static x_smbd_disk_object_t *x_smbd_disk_object_pool_find(
 		x_smbd_disk_object_pool_t &pool,
 		const uuid_t &share_uuid,
@@ -250,6 +232,20 @@ static x_smbd_disk_object_t *x_smbd_disk_object_pool_find_and_open(
 	return disk_object;
 }
 
+static x_smbd_disk_object_t *get_parent_disk_object(x_smbd_disk_object_t *disk_object,
+		x_smbd_tcon_t *smbd_tcon)
+{
+	auto sep = disk_object->req_path.rfind('\\');
+	std::string parent_path;
+	if (sep != std::string::npos) {
+		parent_path = disk_object->req_path.substr(0, sep);
+	}
+
+	return x_smbd_disk_object_pool_find_and_open(
+			smbd_disk_object_pool,
+			smbd_tcon, parent_path);
+}
+
 static NTSTATUS disk_object_get_sd(x_smbd_disk_object_t *disk_object,
 		std::shared_ptr<idl::security_descriptor> &psd)
 {
@@ -263,6 +259,168 @@ static NTSTATUS disk_object_get_sd(x_smbd_disk_object_t *disk_object,
 	uint16_t version;
 	std::array<uint8_t, idl::XATTR_SD_HASH_SIZE> hash;
 	return parse_acl_blob(blob, psd, &hash_type, &version, hash);
+}
+
+static NTSTATUS check_parent_access(uint32_t access)
+{
+	// TODO
+	return NT_STATUS_OK;
+}
+
+/****************************************************************************
+ Actually emulate the in-kernel access checking for delete access. We need
+ this to successfully return ACCESS_DENIED on a file open for delete access.
+****************************************************************************/
+
+static bool can_delete_file_in_directory(
+		x_smbd_disk_object_t *disk_object,
+		x_smbd_tcon_t *smbd_tcon,
+		const x_smbd_user_t &smbd_user)
+{
+	x_auto_ref_t<x_smbd_disk_object_t> parent_disk_object{get_parent_disk_object(disk_object,
+			smbd_tcon)};
+
+	if (!parent_disk_object->exists() || !parent_disk_object->is_dir()) {
+		/* it should not happend */
+		return false;
+	}
+#if 0
+	char *dname = NULL;
+	struct smb_filename *smb_fname_parent;
+	bool ret;
+
+	if (!CAN_WRITE(conn)) {
+		return False;
+	}
+
+	if (!lp_acl_check_permissions(SNUM(conn))) {
+		/* This option means don't check. */
+		return true;
+	}
+
+	/* Get the parent directory permission mask and owners. */
+	if (!parent_dirname(ctx, smb_fname->base_name, &dname, NULL)) {
+		return False;
+	}
+
+	smb_fname_parent = synthetic_smb_fname(ctx,
+				dname,
+				NULL,
+				NULL,
+				smb_fname->flags);
+	if (smb_fname_parent == NULL) {
+		ret = false;
+		goto out;
+	}
+
+	if(SMB_VFS_STAT(conn, smb_fname_parent) != 0) {
+		ret = false;
+		goto out;
+	}
+
+	/* fast paths first */
+
+	if (!S_ISDIR(smb_fname_parent->st.st_ex_mode)) {
+		ret = false;
+		goto out;
+	}
+	if (get_current_uid(conn) == (uid_t)0) {
+		/* I'm sorry sir, I didn't know you were root... */
+		ret = true;
+		goto out;
+	}
+
+#ifdef S_ISVTX
+	/* sticky bit means delete only by owner of file or by root or
+	 * by owner of directory. */
+	if (smb_fname_parent->st.st_ex_mode & S_ISVTX) {
+		if (!VALID_STAT(smb_fname->st)) {
+			/* If the file doesn't already exist then
+			 * yes we'll be able to delete it. */
+			ret = true;
+			goto out;
+		}
+
+		/*
+		 * Patch from SATOH Fumiyasu <fumiyas@miraclelinux.com>
+		 * for bug #3348. Don't assume owning sticky bit
+		 * directory means write access allowed.
+		 * Fail to delete if we're not the owner of the file,
+		 * or the owner of the directory as we have no possible
+		 * chance of deleting. Otherwise, go on and check the ACL.
+		 */
+		if ((get_current_uid(conn) !=
+			smb_fname_parent->st.st_ex_uid) &&
+		    (get_current_uid(conn) != smb_fname->st.st_ex_uid)) {
+			DEBUG(10,("can_delete_file_in_directory: not "
+				  "owner of file %s or directory %s",
+				  smb_fname_str_dbg(smb_fname),
+				  smb_fname_str_dbg(smb_fname_parent)));
+			ret = false;
+			goto out;
+		}
+	}
+#endif
+#endif
+	/* now for ACL checks */
+
+	std::shared_ptr<idl::security_descriptor> psd;
+	NTSTATUS status = disk_object_get_sd(parent_disk_object, psd);
+	if (!NT_STATUS_IS_OK(status)) {
+		return false;
+	}
+
+	uint32_t rejected_mask = 0;
+	status = se_file_access_check(*psd, smbd_user, false, idl::SEC_DIR_DELETE_CHILD, &rejected_mask);
+	return NT_STATUS_IS_OK(status);
+	/*
+	 * There's two ways to get the permission to delete a file: First by
+	 * having the DELETE bit on the file itself and second if that does
+	 * not help, by the DELETE_CHILD bit on the containing directory.
+	 *
+	 * Here we only check the directory permissions, we will
+	 * check the file DELETE permission separately.
+	 */
+}
+
+static bool check_open_access(x_smbd_disk_open_t *disk_open, uint32_t access)
+{
+	return (disk_open->base.access_mask & access);
+}
+
+static inline NTSTATUS check_object_access(
+		x_smbd_disk_object_t *disk_object,
+		x_smbd_tcon_t *smbd_tcon,
+		const x_smbd_user_t &smbd_user,
+		uint32_t access)
+{
+	// No access check needed for attribute opens.
+	if ((access & ~(idl::SEC_FILE_READ_ATTRIBUTE | idl::SEC_STD_SYNCHRONIZE)) == 0) {
+		return NT_STATUS_OK;
+	}
+
+	// TODO smbd_check_access_rights
+	// if (!use_privs && can_skip_access_check(conn)) {
+	// if ((access_mask & DELETE_ACCESS) && !lp_acl_check_permissions(SNUM(conn))) {
+
+	std::shared_ptr<idl::security_descriptor> psd;
+	NTSTATUS status = disk_object_get_sd(disk_object, psd);
+	if (!NT_STATUS_IS_OK(status)) {
+		return status;
+	}
+
+	uint32_t rejected_mask = 0;
+	status = se_file_access_check(*psd, smbd_user, false, access, &rejected_mask);
+	if (!NT_STATUS_EQUAL(status, NT_STATUS_ACCESS_DENIED)) {
+		return status;
+	}
+	
+	if (rejected_mask == idl::SEC_STD_DELETE && can_delete_file_in_directory(disk_object,
+				smbd_tcon, smbd_user)) {
+		return NT_STATUS_OK;
+	} else {
+		return NT_STATUS_ACCESS_DENIED;
+	}
 }
 
 static void notify_fname(
@@ -1388,15 +1546,8 @@ static x_smbd_open_t *open_object_new(
 		return nullptr;
 	}
 	
-	auto sep = disk_object->req_path.rfind('\\');
-	std::string parent_path;
-	if (sep != std::string::npos) {
-		parent_path = disk_object->req_path.substr(0, sep);
-	}
-
-	x_auto_ref_t<x_smbd_disk_object_t> parent_disk_object{x_smbd_disk_object_pool_find_and_open(
-			smbd_disk_object_pool,
-			smbd_tcon, parent_path)};
+	x_auto_ref_t<x_smbd_disk_object_t> parent_disk_object{get_parent_disk_object(disk_object,
+			smbd_tcon)};
 
 	if (!parent_disk_object->exists()) {
 		status = NT_STATUS_OBJECT_PATH_NOT_FOUND;
@@ -1455,10 +1606,23 @@ static x_smbd_open_t *open_object_exist(
 		x_smb2_state_create_t &state,
 		NTSTATUS &status)
 {
-	if (!check_object_access(disk_object, state.in_desired_access)) {
+	if (disk_object->flags & x_smbd_disk_object_t::flag_delete_on_close) {
+		status = NT_STATUS_DELETE_PENDING;
+		return nullptr;
+	}
+
+	if ((state.in_desired_access & ~smbd_tcon->share_access) != 0) {
 		status = NT_STATUS_ACCESS_DENIED;
 		return nullptr;
 	}
+
+	status = check_object_access(disk_object, smbd_tcon,
+			*smbd_tcon->smbd_sess->smbd_user,
+			state.in_desired_access);
+	if (!NT_STATUS_IS_OK(status)) {
+		return nullptr;
+	}
+
 	reply_requ_create(state, disk_object, FILE_WAS_OPENED);
 	return create_disk_open(smbd_tcon, disk_object, state);
 }

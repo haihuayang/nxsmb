@@ -153,5 +153,17 @@ long dom_sid_compare(const dom_sid &sid1, const dom_sid &sid2)
 	return dom_sid_compare_id_auth(sid1, sid2);
 }
 
+bool dom_sid_in_domain(const dom_sid &domain, const dom_sid &sid)
+{
+	if (domain.num_auths + 1 != sid.num_auths) {
+		return false;
+	}
+	if (dom_sid_compare_subauth(domain, sid, domain.num_auths) != 0) {
+		return false;
+	}
+	return dom_sid_compare_id_auth(domain, sid) == 0;
+}
+
+
 } /* namespace idl */
 
