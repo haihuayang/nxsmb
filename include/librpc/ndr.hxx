@@ -20,6 +20,7 @@
 #include <limits.h>
 
 #include "libndr.h"
+#include "include/utils.hxx"
 
 extern "C" {
 #include "samba/libcli/util/ntstatus.h"
@@ -119,6 +120,7 @@ enum : uint32_t {
 };
 
 NTSTATUS x_ndr_map_error2ntstatus(x_ndr_off_t ndr_off);
+const char *x_ndr_map_error2string(unsigned int ndr_err);
 
 
 struct x_ndr_push_buff_t {
@@ -741,6 +743,8 @@ x_ndr_off_t x_ndr_push_uint8(uint8 v, x_ndr_push_t &ndr, x_ndr_off_t bpos, x_ndr
 x_ndr_off_t x_ndr_pull_uint8(uint8 &v, x_ndr_pull_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags);
 x_ndr_off_t x_ndr_push_uint64_align(uint64_t v, x_ndr_push_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, uint32_t alignment);
 x_ndr_off_t x_ndr_pull_uint64_align(uint64_t &v, x_ndr_pull_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, uint32_t alignment);
+
+void x_ndr_ostr_uint8_array(const uint8_t *v, x_ndr_ostr_t &ndr, uint32_t flags, x_ndr_switch_t level, size_t count);
 
 static inline x_ndr_off_t x_ndr_push_uint64(uint64_t v, x_ndr_push_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags)
 {

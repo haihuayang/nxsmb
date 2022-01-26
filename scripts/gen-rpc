@@ -1175,6 +1175,8 @@ enum {self.get_ctype()} : {self.etype} {{
 
 X_NDR_DECLARE_TRAITS_ENUM({self.get_ctype()}, {self.etype}, {len(self.elements)}, x_ndr_type_bitmap)
 
+X_DEFINE_ENUM_FLAG_OPERATORS({self.get_ctype()})
+
 ''')
 
 	def ndrcxx(self, out):
