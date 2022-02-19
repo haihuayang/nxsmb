@@ -1,6 +1,7 @@
 
-#include "smbd_open.hxx"
+#include "smbd.hxx"
 #include "core.hxx"
+#include "smbd_object.hxx"
 #include "include/charset.hxx"
 
 enum {
@@ -27,22 +28,75 @@ struct x_smb2_in_create_t
 	uint32_t context_length;
 };
 
-static bool decode_contexts(std::vector<x_smb2_create_context_t> &contexts,
+static bool decode_smb2_lease(x_smb2_lease_t &lease,
 		const uint8_t *data, uint32_t length)
 {
-	// const uint8_t *context_begin = in_hdr + in_context_offset;
-	// const uint8_t *context_end = context_begin + in_context_length;
+	const x_smb2_lease_t *in_lease = (const x_smb2_lease_t *)data;
+	if (length == 52) {
+		lease.key = in_lease->key;
+		lease.state = X_LE2H32(in_lease->state);
+		lease.flags = X_LE2H32(in_lease->flags);
+		lease.duration = X_LE2H32(in_lease->duration);
+		lease.parent_key = in_lease->parent_key;
+		lease.epoch = X_LE2H16(in_lease->epoch);
+		lease.version = 2;
+	} else if (length == 32) {
+		lease.key = in_lease->key;
+		lease.state = X_LE2H32(in_lease->state);
+		lease.flags = X_LE2H32(in_lease->flags);
+		lease.duration = X_LE2H32(in_lease->duration);
+		lease.version = 1;
+	} else {
+		return false;
+	}
+	return true;
+}
+
+static uint32_t encode_smb2_lease(const x_smb2_lease_t &lease,
+		uint8_t *data)
+{
+	x_smb2_lease_t *out_lease = (x_smb2_lease_t *)data;
+	out_lease->key = lease.key;
+	out_lease->state = X_H2LE32(lease.state);
+	out_lease->flags = X_H2LE32(lease.flags);
+	out_lease->duration = X_H2LE64(lease.duration);
+	if (lease.version == 2) {
+		out_lease->parent_key = lease.parent_key;
+		out_lease->epoch = X_H2LE16(lease.epoch);
+		out_lease->version = 0;
+		return 52;
+	} else {
+		return 32;
+	}
+}
+
+struct x_smb2_create_context_header_t
+{
+	uint32_t chain_offset;
+	uint16_t tag_offset;
+	uint16_t tag_length;
+	uint16_t unused0;
+	uint16_t data_offset;
+	uint32_t data_length;
+	// uint32_t tag;
+	// uint32_t unused1;
+};
+
+static bool decode_contexts(x_smb2_state_create_t &state,
+		const uint8_t *data, uint32_t length)
+{
+	bool has_RqLs = false;
 	for (;;) {
-		if (length < 0x10) {
+		if (length < sizeof(x_smb2_create_context_header_t)) {
 			return false;
 		}
 
-		const uint8_t *p = data;
-		uint32_t chain_off = x_get_le32(p); p += 4;
-		uint16_t tag_off = x_get_le16(p); p += 2;
-		uint16_t tag_len = x_get_le16(p); p += 4; // we assume tag_len is 2 bytes
-		uint16_t data_off = x_get_le16(p); p += 2;
-		uint32_t data_len = x_get_le32(p); p += 4;
+		const x_smb2_create_context_header_t *ch = (const x_smb2_create_context_header_t *)data;
+		uint32_t chain_off = X_LE2H32(ch->chain_offset);
+		uint16_t tag_off = X_LE2H16(ch->tag_offset);
+		uint16_t tag_len = X_LE2H16(ch->tag_length); // we assume tag_len is 2 bytes
+		uint16_t data_off = X_LE2H16(ch->data_offset);
+		uint32_t data_len = X_LE2H32(ch->data_length);
 
 		uint32_t clen;
 		if (chain_off != 0) {
@@ -63,10 +117,22 @@ static bool decode_contexts(std::vector<x_smb2_create_context_t> &contexts,
 		}
 
 		if (tag_len == 4) {
-			contexts.resize(contexts.size() + 1);
-			auto &ctx = contexts.back();
-			ctx.tag = x_get_be32(data + tag_off);
-			ctx.data.assign(data + data_off, data + data_off + data_len);
+			uint32_t tag = x_get_be32(data + tag_off);
+			if (tag == X_SMB2_CREATE_TAG_RQLS) {
+				if (state.oplock_level == X_SMB2_OPLOCK_LEVEL_LEASE) {
+					has_RqLs = decode_smb2_lease(state.lease,
+							data + data_off,
+							data_len);
+				}
+			} else {
+#if 0
+				// TODO
+				contexts.resize(contexts.size() + 1);
+				auto &ctx = contexts.back();
+				ctx.tag = x_get_be32(data + tag_off);
+				ctx.data.assign(data + data_off, data + data_off + data_len);
+#endif
+			}
 		} else {
 			/* ignore */
 		}
@@ -78,14 +144,45 @@ static bool decode_contexts(std::vector<x_smb2_create_context_t> &contexts,
 			break;
 		}
 	}
+	if (state.oplock_level == X_SMB2_OPLOCK_LEVEL_LEASE && !has_RqLs) {
+		state.oplock_level = X_SMB2_OPLOCK_LEVEL_NONE;
+	}
 	return true;
 }
 
-static uint32_t encode_contexts(const std::vector<x_smb2_create_context_t> &contexts,
+static uint32_t encode_contexts(const x_smb2_state_create_t &state,
 		uint8_t *out_ptr)
 {
-	uint8_t *pchain = nullptr;
 	uint8_t *p = out_ptr;
+	x_smb2_create_context_header_t *ch = nullptr;
+
+	if (state.oplock_level == X_SMB2_OPLOCK_LEVEL_LEASE) {
+		if (ch) {
+			uint8_t *np = out_ptr + x_pad_len(p - out_ptr, 8);
+			while (p != np) {
+				*p++ = 0;
+			}
+			ch->chain_offset = X_H2LE32(p - (uint8_t *)ch);
+		}
+
+		ch = (x_smb2_create_context_header_t *)p;
+		ch->tag_offset = X_H2LE16(0x10);
+		ch->tag_length = X_H2LE16(0x4);
+		ch->unused0 = 0;
+		ch->data_offset = X_H2LE16(0x18);
+
+		p = (uint8_t *)(ch + 1);
+		*(uint32_t *)p = X_H2BE32(X_SMB2_CREATE_TAG_RQLS);
+		p += 4;
+		*(uint32_t *)p = 0;
+		p += 4;
+
+		uint32_t data_len = encode_smb2_lease(state.lease, p);
+		ch->data_length = X_H2LE32(data_len);
+		p += data_len;
+	}
+
+#if 0
 	for (auto &ctx: contexts) {
 		if (pchain) {
 			p = out_ptr + x_pad_len(p - out_ptr, 8);
@@ -106,8 +203,10 @@ static uint32_t encode_contexts(const std::vector<x_smb2_create_context_t> &cont
 		memcpy(p, ctx.data.data(), ctx.data.size());
 		p += ctx.data.size();
 	}
-	X_ASSERT(pchain);
-	x_put_le32(pchain, 0);
+#endif
+	if (ch) {
+		ch->chain_offset = 0;
+	}
 	return p - out_ptr;
 }
 
@@ -130,7 +229,7 @@ static bool decode_in_create(x_smb2_state_create_t &state,
 		return false;
 	}
 
-	state.in_oplock_level         = in_create->oplock_level;
+	state.oplock_level         = in_create->oplock_level;
 	state.in_impersonation_level  = X_LE2H32(in_create->impersonation_level);
 	state.in_desired_access       = X_LE2H32(in_create->desired_access);
 	state.in_file_attributes      = X_LE2H32(in_create->file_attributes);
@@ -145,7 +244,7 @@ static bool decode_in_create(x_smb2_state_create_t &state,
 		return true;
 	}
 
-	if (!decode_contexts(state.in_contexts, 
+	if (!decode_contexts(state,
 				in_hdr + in_context_offset,
 				in_context_length)) {
 		return false;
@@ -174,13 +273,14 @@ struct x_smb2_out_create_t
 	uint32_t context_length;
 };
 
+/* it assume output has enough space */
 static uint32_t encode_out_create(const x_smb2_state_create_t &state,
 		x_smbd_open_t *smbd_open, uint8_t *out_hdr)
 {
 	x_smb2_out_create_t *out_create = (x_smb2_out_create_t *)(out_hdr + SMB2_HDR_BODY);
 
 	out_create->struct_size = X_H2LE16(sizeof(x_smb2_out_create_t) + 1);
-	out_create->oplock_level = state.out_oplock_level;
+	out_create->oplock_level = state.oplock_level;
 	out_create->create_flags = state.out_create_flags;
 	out_create->create_action = X_H2LE32(state.out_create_action);
 	out_create->create_ts = X_H2LE64(state.out_info.out_create_ts.val);
@@ -194,13 +294,11 @@ static uint32_t encode_out_create(const x_smb2_state_create_t &state,
 	out_create->file_id_persistent = X_H2LE64(smbd_open->id);
 	out_create->file_id_volatile = X_H2LE64(smbd_open->id);
 
-	uint32_t out_context_length = 0;
-	if (state.out_contexts.empty()) {
+	static_assert((sizeof(x_smb2_out_create_t) % 8) == 0);
+	uint32_t out_context_length = encode_contexts(state, (uint8_t *)(out_create + 1));
+	if (out_context_length == 0) {
 		out_create->context_offset = out_create->context_length = 0;
 	} else {
-		static_assert((sizeof(x_smb2_out_create_t) % 8) == 0);
-		out_context_length = encode_contexts(state.out_contexts,
-				(uint8_t *)(out_create + 1));
 		out_create->context_offset = X_H2LE32(SMB2_HDR_BODY + sizeof(x_smb2_out_create_t));
 		out_create->context_length = X_H2LE32(out_context_length);
 	}
@@ -216,9 +314,10 @@ static void x_smb2_reply_create(x_smbd_conn_t *smbd_conn,
 			smbd_requ->smbd_open->id, smbd_requ->smbd_open->id);
 
 	size_t out_context_length = 0;
-	for (const auto &ctx: state.out_contexts) {
-		out_context_length += 0x18 + ctx.data.size() + 8;
+	if (state.oplock_level == X_SMB2_OPLOCK_LEVEL_LEASE) {
+		out_context_length += 0x18 + 56;
 	}
+	// TODO other contexts
 
 	x_bufref_t *bufref = x_bufref_alloc(sizeof(x_smb2_out_create_t) + out_context_length);
 
@@ -232,8 +331,6 @@ static void x_smb2_reply_create(x_smbd_conn_t *smbd_conn,
 
 NTSTATUS x_smb2_process_CREATE(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 {
-	X_LOG_OP("%ld CREATE", smbd_requ->in_mid);
-
 	if (smbd_requ->in_requ_len < SMB2_HDR_BODY + sizeof(x_smb2_in_create_t) + 1) {
 		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
@@ -265,17 +362,18 @@ NTSTATUS x_smb2_process_CREATE(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_req
 	}
 
 	X_LOG_OP("%ld CREATE '%s'", smbd_requ->in_mid, x_convert_utf16_to_utf8(state->in_name).c_str());
-	NTSTATUS status;
-       	x_smbd_open_t *smbd_open = x_smbd_tcon_op_create(smbd_requ->smbd_tcon, status, smbd_requ, state);
+       	x_smbd_open_t *smbd_open = nullptr;
+	NTSTATUS status = x_smbd_tcon_op_create(smbd_requ->smbd_tcon, &smbd_open, smbd_requ, state);
 	if (smbd_open) {
 		X_ASSERT(!smbd_requ->smbd_open);
 		smbd_requ->smbd_open = smbd_open;
 		x_smbd_open_insert_local(smbd_open);
+		X_ASSERT(smbd_open->smbd_tcon); // initialized in side op_create
 		smbd_requ->smbd_tcon->open_list.push_back(smbd_open);
 		smbd_open->incref();
 		x_smb2_reply_create(smbd_conn, smbd_requ, *state);
 		return status;
+	} else {
+		RETURN_OP_STATUS(smbd_requ, status);
 	}
-
-	RETURN_OP_STATUS(smbd_requ, status);
 }

@@ -1,6 +1,7 @@
 
-#include "smbd_open.hxx"
+#include "smbd.hxx"
 #include "core.hxx"
+#include "smbd_object.hxx"
 
 namespace {
 enum {
@@ -122,12 +123,67 @@ NTSTATUS x_smb2_process_WRITE(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ
 		RETURN_OP_STATUS(smbd_requ, NT_STATUS_FILE_CLOSED);
 	}
 
-	NTSTATUS status = x_smbd_open_op_write(smbd_conn, smbd_requ, state);
+	if (!smbd_requ->smbd_open->check_access(idl::SEC_FILE_WRITE_DATA)) {
+		RETURN_OP_STATUS(smbd_requ, NT_STATUS_ACCESS_DENIED);
+	}
+
+	auto smbd_object = smbd_requ->smbd_open->smbd_object;
+	NTSTATUS status = x_smbd_object_op_write(smbd_object, smbd_conn, smbd_requ,
+			state);
 	if (NT_STATUS_IS_OK(status)) {
 		x_smb2_reply_write(smbd_conn, smbd_requ, *state);
 		return status;
 	}
-
 	RETURN_OP_STATUS(smbd_requ, status);
 }
+#if 0
+static NTSTATUS x_smbd_read(x_smbd_conn_t *smbd_conn,
+		x_smbd_requ_t *smbd_requ,
+		x_smb2_state_read_t &state)
+{
+	auto smbd_object = smbd_requ->smbd_open->smbd_object;
+	if (!smbd_object->ops->read)
+		return NT_STATUS_INVALID_DEVICE_REQUEST;
+	}
 
+	ssize_t ret = smbd_object->ops->read(smbd_object, smbd_requ->smbd_open,
+			state->out_data, state->in_length, state->in_offset);
+	if (ret > 0) {
+		state->out_data.resize(ret);
+		return NT_STATUS_OK;
+	} else if (ret == 0) {
+		state->out_data.clear();
+		return NT_STATUS_END_OF_FILE;
+	} else {
+		X_TODO;
+		return NT_STATUS_INTERNAL_ERROR;
+	}
+#if 0
+	++smb2_read->requ.refcount;
+	smb2_read->job.ops = &async_read_job_ops;
+	x_smbd_schedule_async(&smb2_read->job);
+
+	return X_NT_STATUS_INTERNAL_BLOCKED;
+#endif
+}
+
+static NTSTATUS x_smbd_write(x_smbd_conn_t *smbd_conn,
+		x_smbd_requ_t *smbd_requ,
+		x_smb2_state_write_t &state)
+{
+	auto smbd_object = smbd_requ->smbd_open->smbd_object;
+	if (!smbd_object->ops->write)
+		return NT_STATUS_INVALID_DEVICE_REQUEST;
+	}
+
+	ssize_t ret = smbd_object->ops->write(smbd_object, smbd_requ->smbd_open,
+			state->out_data, state->in_offset);
+	if (ret < 0) {
+		X_TODO;
+	} else {
+		state->out_count = ret;
+		state->out_remaining = 0;
+	}
+	return NT_STATUS_OK;
+}
+#endif

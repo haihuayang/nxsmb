@@ -606,10 +606,36 @@ std::shared_ptr<idl::security_descriptor> get_share_security(const std::string &
 	return get_share_security_default(idl::SEC_RIGHTS_DIR_ALL);
 }
 
+/* TODO should read from group_map.tdb, find the map and add smbd_user */
+static const idl::dom_sid hhdom2_user =
+{ 1, 5, {0,0,0,0,0,5}, {21,568171695,4233659445u,1996052170u,512,0,0,0,0,0,0,0,0,0,0}};
+static const idl::dom_sid hhdom2_admin =
+{ 1, 5, {0,0,0,0,0,5}, {21,568171695,4233659445u,1996052170u,513,0,0,0,0,0,0,0,0,0,0}};
+
 static bool user_token_has_sid(const x_smbd_user_t &smbd_user, const idl::dom_sid &sid)
 {
-	if (idl::dom_sid_in_domain(smbd_user.domain_sid, sid)) {
-		uint32_t rid = sid.sub_auths[sid.num_auths - 1];
+	if (sid == global_sid_World) {
+		return true;
+	}
+
+	if (sid == global_sid_Network) {
+		return true;
+	}
+
+	if (sid == global_sid_Authenticated_Users) {
+		return true;
+	}
+
+	const idl::dom_sid *psid = &sid;
+	/* add_builtin_alias */
+	if (sid == global_sid_Builtin_Users) {
+		psid = &hhdom2_user;
+	} else if (sid == global_sid_Builtin_Administrators) {
+		psid = &hhdom2_admin;
+	}
+
+	if (idl::dom_sid_in_domain(smbd_user.domain_sid, *psid)) {
+		uint32_t rid = psid->sub_auths[psid->num_auths - 1];
 		if (rid == smbd_user.uid || rid == smbd_user.gid) {
 			return true;
 		}
@@ -621,7 +647,7 @@ static bool user_token_has_sid(const x_smbd_user_t &smbd_user, const idl::dom_si
 	}
 
 	for (auto &other: smbd_user.other_sids) {
-		if (other.sid == sid) {
+		if (other.sid == *psid) {
 			return true;
 		}
 	}

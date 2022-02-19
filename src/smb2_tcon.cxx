@@ -10,13 +10,13 @@ enum {
 
 
 static x_smbd_tcon_t *make_tcon(x_smbd_sess_t *smbd_sess,
-		const std::shared_ptr<x_smbshare_t> &smbshare)
+		const std::shared_ptr<x_smbd_share_t> &smbshare)
 {
 	auto smbd_tcon = new x_smbd_tcon_t(smbd_sess, smbshare);
 	if (smbshare->type == TYPE_IPC) {
 		x_smbd_tcon_init_ipc(smbd_tcon);
 	} else {
-		x_smbd_tcon_init_disk(smbd_tcon);
+		x_smbd_tcon_init_posixfs(smbd_tcon);
 	}
 
 	x_smbd_tcon_insert(smbd_tcon);
@@ -29,7 +29,7 @@ static x_smbd_tcon_t *make_tcon(x_smbd_sess_t *smbd_sess,
  Can this user access with share with the required permissions ?
 ********************************************************************/
 
-static uint32_t share_get_maximum_access(const std::shared_ptr<x_smbshare_t> &share)
+static uint32_t share_get_maximum_access(const std::shared_ptr<x_smbd_share_t> &share)
 {
 	return idl::SEC_RIGHTS_DIR_ALL;
 }
@@ -38,7 +38,7 @@ static uint32_t share_get_maximum_access(const std::shared_ptr<x_smbshare_t> &sh
   Setup the share access mask for a connection.
 ****************************************************************************/
 
-static uint32_t create_share_access_mask(const std::shared_ptr<x_smbshare_t> &share,
+static uint32_t create_share_access_mask(const std::shared_ptr<x_smbd_share_t> &share,
 		x_smbd_sess_t *smbd_sess)
 {
 	uint32_t share_access = share_get_maximum_access(share);
@@ -218,7 +218,7 @@ NTSTATUS x_smb2_process_TCON(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 
 	uint32_t out_share_flags = 0;
 	uint32_t out_capabilities = 0;
-	if (smbshare->is_msdfs_root()) {
+	if (false /* TODO smbshare->is_msdfs_root()*/) {
 		out_share_flags |= SMB2_SHAREFLAG_DFS|SMB2_SHAREFLAG_DFS_ROOT;
 		out_capabilities |= SMB2_SHARE_CAP_DFS;
 	}

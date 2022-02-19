@@ -1,7 +1,9 @@
 
-#include "smbd.hxx"
+#include "smbd_conf.hxx"
 #include <fstream>
 #include <getopt.h>
+#include <fcntl.h>
+//#include "smbd_lfs.hxx"
 
 #define PARSE_FATAL(fmt, ...) do { \
 	X_PANIC(fmt "\n", __VA_ARGS__); \
@@ -70,21 +72,38 @@ static std::string::size_type rskip(const std::string &s, std::string::size_type
 	return pos + 1;
 }
 
-static void add_share(x_smbconf_t &smbconf, std::shared_ptr<x_smbshare_t> &share_spec)
+static void add_share(x_smbd_conf_t &smbd_conf, std::shared_ptr<x_smbd_share_t> &share_spec)
 {
-	X_LOG_DBG("add share section %s",
-			share_spec->name.c_str());
-	smbconf.shares[share_spec->name] = share_spec;
+	X_LOG_DBG("add share section %s", share_spec->name.c_str());
+	smbd_conf.shares[share_spec->name] = share_spec;
+	if (share_spec->type == TYPE_DEFAULT) {
+		/* TODO if the share is hosted by this node */
+		int fd = open(share_spec->path.c_str(), O_RDONLY);
+		X_ASSERT(fd != -1);
+		auto topdir = std::make_shared<x_smbd_topdir_t>(share_spec);
+		topdir->fd = fd;
+		share_spec->root_dir = topdir; /* TODO cycle reference  */
+	} else if (share_spec->type == TYPE_HOME) {
+		X_ASSERT(0);
+		/* if the files_at_root vg is host by this node,
+		   create a top_dir point the files_at_root vg.
+
+		   create a root_dir point the dir has all the vg mounted
+		 */
+	} else {
+		X_ASSERT(share_spec->type == TYPE_IPC);
+	}
 }
 
-static int parse_smbconf(x_smbconf_t &smbconf, const char *path)
-{
-	X_LOG_DBG("Loading smbconf from %s", path);
 
-	std::shared_ptr<x_smbshare_t> share_spec = std::make_shared<x_smbshare_t>("ipc$");
+static int parse_smbconf(x_smbd_conf_t &smbd_conf, const char *path)
+{
+	X_LOG_DBG("Loading smbd_conf from %s", path);
+
+	std::shared_ptr<x_smbd_share_t> share_spec = std::make_shared<x_smbd_share_t>("ipc$");
 	share_spec->type = TYPE_IPC;
 	share_spec->read_only = true;
-	add_share(smbconf, share_spec);
+	add_share(smbd_conf, share_spec);
 	share_spec = nullptr;
 
 	std::string line;
@@ -104,11 +123,11 @@ static int parse_smbconf(x_smbconf_t &smbconf, const char *path)
 			}
 			std::string section = line.substr(pos + 1, end - pos - 1);
 			if (share_spec) {
-				add_share(smbconf, share_spec);
+				add_share(smbd_conf, share_spec);
 				share_spec = nullptr;
 			}
 			if (section != "global") {
-				share_spec = std::make_shared<x_smbshare_t>(section);
+				share_spec = std::make_shared<x_smbd_share_t>(section);
 			}
 		} else {
 			auto sep = line.find('=', pos);
@@ -123,7 +142,8 @@ static int parse_smbconf(x_smbconf_t &smbconf, const char *path)
 
 			if (share_spec) {
 				if (name == "type") {
-					if (value == "HOME_SHARE") {
+					/* TODO not support distribute share for now */
+					if (false && value == "HOME_SHARE") {
 						share_spec->type = TYPE_HOME;
 					} else if (value == "DEFAULT_SHARE") {
 						share_spec->type = TYPE_DEFAULT;
@@ -153,28 +173,28 @@ static int parse_smbconf(x_smbconf_t &smbconf, const char *path)
 			} else {
 				// global parameters
 				if (name == "netbios name") {
-					smbconf.netbios_name = value;
+					smbd_conf.netbios_name = value;
 				} else if (name == "dns domain") {
-					smbconf.dns_domain = value;
+					smbd_conf.dns_domain = value;
 				} else if (name == "realm") {
-					smbconf.realm = value;
+					smbd_conf.realm = value;
 				} else if (name == "workgroup") {
-					smbconf.workgroup = value;
+					smbd_conf.workgroup = value;
 				} else if (name == "lanman auth") {
-					smbconf.lanman_auth = parse_bool(value);
+					smbd_conf.lanman_auth = parse_bool(value);
 				} else if (name == "smb2 max credits") {
-					smbconf.smb2_max_credits = parse_integer(value);
+					smbd_conf.smb2_max_credits = parse_integer(value);
 				}
 			}
 		}
 	}
 	if (share_spec) {
-		add_share(smbconf, share_spec);
+		add_share(smbd_conf, share_spec);
 	}
 	return 0;
 }
 
-int x_smbd_parse_cmdline(std::shared_ptr<x_smbconf_t> &smbconf, int argc, char **argv)
+int x_smbd_conf_parse(std::shared_ptr<x_smbd_conf_t> &smbd_conf, int argc, char **argv)
 {
 	int32_t thread_count = -1;
 	const char *configfile = nullptr;
@@ -206,7 +226,7 @@ int x_smbd_parse_cmdline(std::shared_ptr<x_smbconf_t> &smbconf, int argc, char *
 	if (!configfile) {
 		configfile = "/etc/samba/smb.conf";
 	}
-	auto ret = std::make_shared<x_smbconf_t>();
+	auto ret = std::make_shared<x_smbd_conf_t>();
 	int err = parse_smbconf(*ret, configfile);
 	if (err < 0) {
 		return err;
@@ -215,7 +235,7 @@ int x_smbd_parse_cmdline(std::shared_ptr<x_smbconf_t> &smbconf, int argc, char *
 	if (thread_count != -1) {
 		ret->thread_count = thread_count;
 	}
-	smbconf = ret;
+	smbd_conf = ret;
 	return 0;
 }
 

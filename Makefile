@@ -91,11 +91,13 @@ all: $(TARGET_SET_tests:%=$(TARGET_DIR_out)/tests/%) \
 	$(TARGET_DIR_out)/bin/nxutils
 
 SET_src_nxsmbd := \
+	smbd_posixfs_utils \
+	smbd_posixfs \
+	smbd_ipc \
+	smbd_pool \
+	smbd_lease \
 	util_sid \
 	smbd_ctrl \
-	smbd_disk \
-	smbd_ipc \
-	smbd_vfs \
 	smbd_dcerpc \
 	smbd_dcerpc_wkssvc \
 	smbd_dcerpc_srvsvc \
@@ -121,17 +123,25 @@ SET_src_nxsmbd := \
 	smb2_setinfo \
 	smb2_break \
 	smb2_signing smb2_preauth \
+	smb2 \
 	smbd \
-	smbd_pool \
 	smbd_conn  \
 	auth_ntlmssp auth_krb5 auth_spnego auth \
 	network misc fnmatch \
-	smbconf smbd_share \
+	smbd_conf smbd_share \
 	smbd_ntacl \
+
+old:=\
+	smbd_vfs \
+	smbd_object \
+	smbd_disk \
+	smbd_fs_object \
+	smbd_fs_qdir \
+	smbd_fs_notify \
 
 SET_src_nxutils := \
 	nxutils \
-	smbd_vfs \
+	smbd_posixfs_utils \
 	smbd_ntacl \
 	util_sid \
 

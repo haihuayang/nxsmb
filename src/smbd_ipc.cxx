@@ -1,5 +1,6 @@
 
 #include "smbd_open.hxx"
+#include "smbd_object.hxx"
 #include "include/charset.hxx"
 #include "smbd_dcerpc.hxx"
 #if 0
@@ -7,9 +8,7 @@
 #endif
 #include "include/librpc/wkssvc.hxx"
 #include "include/librpc/srvsvc.hxx"
-// #include "include/librpc/dcerpc_x.hxx"
-
-namespace {
+#include "include/librpc/security.hxx"
 
 /* this guid indicates NDR encoding in a protocol tower */
 static const idl::ndr_syntax_id ndr_transfer_syntax_ndr = {
@@ -47,7 +46,7 @@ struct x_bind_context_t
 struct x_smbd_named_pipe_t
 {
 	x_smbd_open_t base;
-	const x_dcerpc_iface_t *iface;
+	// const x_dcerpc_iface_t *iface;
 	std::vector<x_bind_context_t> bind_contexts;
 	x_dcerpc_pipe_t rpc_pipe;
 	x_ncacn_packet_t pkt;
@@ -57,44 +56,37 @@ struct x_smbd_named_pipe_t
 	std::vector<uint8_t> input;
 	std::vector<uint8_t> output;
 };
-}
 
-
-static const x_dcerpc_iface_t *rpc_lookup[] = {
-	&x_smbd_dcerpc_srvsvc,
-	&x_smbd_dcerpc_wkssvc,
-	&x_smbd_dcerpc_dssetup,
-	&x_smbd_dcerpc_lsarpc,
+struct x_smbd_ipc_object_t
+{
+	x_smbd_ipc_object_t(const x_dcerpc_iface_t *iface);
+	x_smbd_object_t base;
+	const x_dcerpc_iface_t * const iface;
 };
 
-static const x_dcerpc_iface_t *find_rpc_by_name(const std::string &name)
+static const x_dcerpc_iface_t *find_iface_by_syntax(
+		const idl::ndr_syntax_id &syntax);
+
+static inline x_smbd_ipc_object_t *from_smbd_object(x_smbd_object_t *smbd_object)
 {
-	for (const auto rpc: rpc_lookup) {
-		if (strcasecmp(rpc->iface_name.c_str(), name.c_str()) == 0) {
-			return rpc;
-		}
-	}
-	return nullptr;
+	return X_CONTAINER_OF(smbd_object, x_smbd_ipc_object_t, base);
 }
 
-static inline const x_dcerpc_iface_t *find_rpc_by_syntax(const idl::ndr_syntax_id &syntax)
+static inline const x_smbd_ipc_object_t *from_smbd_object(const x_smbd_object_t *smbd_object)
 {
-	for (const auto rpc: rpc_lookup) {
-		if (rpc->syntax_id == syntax) {
-			return rpc;
-		}
-	}
-	return nullptr;
+	return X_CONTAINER_OF(smbd_object, x_smbd_ipc_object_t, base);
 }
-
 
 static inline x_smbd_named_pipe_t *from_smbd_open(x_smbd_open_t *smbd_open)
 {
 	return X_CONTAINER_OF(smbd_open, x_smbd_named_pipe_t, base);
 }
 
-static NTSTATUS named_pipe_read(x_smbd_conn_t *smbd_conn,
-		x_smbd_named_pipe_t *named_pipe, uint32_t requ_length,
+static NTSTATUS named_pipe_read(
+		x_smbd_ipc_object_t *ipc_object,
+		x_smbd_named_pipe_t *named_pipe,
+		x_smbd_conn_t *smbd_conn,
+		uint32_t requ_length,
 		std::vector<uint8_t> &output)
 {
 	if (named_pipe->output.size() == 0) {
@@ -177,7 +169,7 @@ static bool x_smbd_named_pipe_bind(x_smbd_named_pipe_t *named_pipe,
 		const x_rpc_iface_t *rpc = find_rpc_by_syntax(ctx.abstract);
 	if (!(ctx.abstract_syntax == named_pipe->iface->syntax_id)) {
 	 */
-	const x_dcerpc_iface_t *iface = find_rpc_by_syntax(ctx.abstract_syntax);
+	const x_dcerpc_iface_t *iface = find_iface_by_syntax(ctx.abstract_syntax);
 	if (!iface) {
 		ack_ctx.result = idl::DCERPC_BIND_ACK_RESULT_USER_REJECTION;
 		ack_ctx.reason.value = idl::DCERPC_BIND_ACK_REASON_ABSTRACT_SYNTAX_NOT_SUPPORTED;
@@ -192,7 +184,9 @@ static bool x_smbd_named_pipe_bind(x_smbd_named_pipe_t *named_pipe,
 	return true;
 }
 
-static NTSTATUS process_dcerpc_bind(x_smbd_named_pipe_t *named_pipe,
+static NTSTATUS process_dcerpc_bind(
+		const x_smbd_ipc_object_t *ipc_object,
+		x_smbd_named_pipe_t *named_pipe,
 		uint8_t &resp_type, std::vector<uint8_t> &body_output)
 {
 	idl::dcerpc_bind bind;
@@ -220,7 +214,7 @@ static NTSTATUS process_dcerpc_bind(x_smbd_named_pipe_t *named_pipe,
 	} else {
 		bind_ack.assoc_group_id = 0x53f0;
 	}
-	bind_ack.secondary_address= "\\PIPE\\" + named_pipe->iface->iface_name;
+	bind_ack.secondary_address= "\\PIPE\\" + ipc_object->iface->iface_name;
 
 	x_ndr_push(bind_ack, body_output, ndr_flags);
 	resp_type = idl::DCERPC_PKT_BIND_ACK;
@@ -255,8 +249,10 @@ static const x_dcerpc_iface_t *find_context(x_smbd_named_pipe_t *named_pipe, uin
 	return nullptr;
 }
 
-static NTSTATUS process_dcerpc_request(x_smbd_sess_t *smbd_sess,
+static NTSTATUS process_dcerpc_request(
+		const x_smbd_ipc_object_t* ipc_object,
 		x_smbd_named_pipe_t *named_pipe,
+		x_smbd_sess_t *smbd_sess,
 		uint8_t &resp_type, std::vector<uint8_t> &body_output)
 {
 	idl::dcerpc_request request;
@@ -294,17 +290,20 @@ static NTSTATUS process_dcerpc_request(x_smbd_sess_t *smbd_sess,
 	return NT_STATUS_OK;
 }
 
-static inline NTSTATUS process_ncacn_pdu(x_smbd_sess_t *smbd_sess, x_smbd_named_pipe_t *named_pipe)
+static inline NTSTATUS process_ncacn_pdu(
+		const x_smbd_ipc_object_t *ipc_object,
+		x_smbd_named_pipe_t *named_pipe,
+		x_smbd_sess_t *smbd_sess)
 {
 	std::vector<uint8_t> body_output;
 	uint8_t resp_type;
 	NTSTATUS status = NT_STATUS_INTERNAL_ERROR;
 	switch (named_pipe->pkt.type) {
 		case idl::DCERPC_PKT_BIND:
-			status = process_dcerpc_bind(named_pipe, resp_type, body_output);
+			status = process_dcerpc_bind(ipc_object, named_pipe, resp_type, body_output);
 			break;
 		case idl::DCERPC_PKT_REQUEST:
-			status = process_dcerpc_request(smbd_sess, named_pipe, resp_type, body_output);
+			status = process_dcerpc_request(ipc_object, named_pipe, smbd_sess, resp_type, body_output);
 			break;
 		default:
 			X_TODO;
@@ -331,8 +330,10 @@ static inline NTSTATUS process_ncacn_pdu(x_smbd_sess_t *smbd_sess, x_smbd_named_
 	return status;
 }
 
-static int named_pipe_write(x_smbd_sess_t *smbd_sess,
+static int named_pipe_write(
+		x_smbd_ipc_object_t *ipc_object,
 		x_smbd_named_pipe_t *named_pipe,
+		x_smbd_sess_t *smbd_sess,
 		const uint8_t *_input_data,
 		uint32_t input_size)
 {
@@ -378,34 +379,45 @@ static int named_pipe_write(x_smbd_sess_t *smbd_sess,
 
 	if (named_pipe->packet_read == named_pipe->pkt.frag_length) {
 		/* complete pdu */
-		named_pipe->return_status = process_ncacn_pdu(smbd_sess, named_pipe);
+		named_pipe->return_status = process_ncacn_pdu(ipc_object, named_pipe, smbd_sess);
 	}
 	return data - _input_data;
 }
 
-static NTSTATUS x_smbd_named_pipe_read(x_smbd_conn_t *smbd_conn,
+static NTSTATUS x_smbd_ipc_op_read(
+		x_smbd_object_t *smbd_object,
+		x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ,
 		std::unique_ptr<x_smb2_state_read_t> &state)
 {
-	return named_pipe_read(smbd_conn, from_smbd_open(smbd_requ->smbd_open),
+	return named_pipe_read(from_smbd_object(smbd_object),
+			from_smbd_open(smbd_requ->smbd_open),
+			smbd_conn,
 			state->in_length, state->out_data);
 }
 
-static NTSTATUS x_smbd_named_pipe_write(x_smbd_conn_t *smbd_conn,
+static NTSTATUS x_smbd_ipc_op_write(
+		x_smbd_object_t *smbd_object,
+		x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ,
 		std::unique_ptr<x_smb2_state_write_t> &state)
 {
-	int ret = named_pipe_write(smbd_requ->smbd_sess, from_smbd_open(smbd_requ->smbd_open),
+	int ret = named_pipe_write(from_smbd_object(smbd_object),
+			from_smbd_open(smbd_requ->smbd_open),
+			smbd_requ->smbd_sess,
 			state->in_data.data(), state->in_data.size());
 	state->out_count = ret;
 	state->out_remaining = 0;
 	return NT_STATUS_OK;
 }
 
-static NTSTATUS x_smbd_named_pipe_getinfo(x_smbd_conn_t *smbd_conn,
+static NTSTATUS x_smbd_ipc_op_getinfo(
+		x_smbd_object_t *smbd_object,
+		x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ,
 		std::unique_ptr<x_smb2_state_getinfo_t> &state)
 {
+	/* TODO should access check ? */
 	/* SMB2_GETINFO_FILE, SMB2_FILE_STANDARD_INFO */
 	if (state->in_info_class == SMB2_GETINFO_FILE &&
 			state->in_info_level == SMB2_FILE_INFO_FILE_STANDARD_INFORMATION) {
@@ -427,23 +439,31 @@ static NTSTATUS x_smbd_named_pipe_getinfo(x_smbd_conn_t *smbd_conn,
 	}
 }
 
-static NTSTATUS x_smbd_named_pipe_setinfo(x_smbd_conn_t *smbd_conn,
+static NTSTATUS x_smbd_ipc_op_setinfo(
+		x_smbd_object_t *smbd_object,
+		x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ,
 		std::unique_ptr<x_smb2_state_setinfo_t> &state)
 {
 	return NT_STATUS_NOT_SUPPORTED;
 }
 
-static NTSTATUS x_smbd_named_pipe_ioctl(x_smbd_conn_t *smbd_conn,
+static NTSTATUS x_smbd_ipc_op_ioctl(
+		x_smbd_object_t *smbd_object,
+		x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ,
 		std::unique_ptr<x_smb2_state_ioctl_t> &state)
 {
+	x_smbd_ipc_object_t *ipc_object = from_smbd_object(smbd_object);
 	x_smbd_named_pipe_t *named_pipe = from_smbd_open(smbd_requ->smbd_open);
 	switch (state->ctl_code) {
 	case FSCTL_PIPE_TRANSCEIVE:
-		named_pipe_write(smbd_requ->smbd_sess, named_pipe, state->in_data.data(),
+		named_pipe_write(ipc_object, named_pipe,
+				smbd_requ->smbd_sess,
+				state->in_data.data(),
 				state->in_data.size());
-		return named_pipe_read(smbd_conn, named_pipe,
+		return named_pipe_read(ipc_object, named_pipe,
+				smbd_conn,
 				state->in_max_output_length, state->out_data);
 	default:
 		X_TODO;
@@ -451,21 +471,27 @@ static NTSTATUS x_smbd_named_pipe_ioctl(x_smbd_conn_t *smbd_conn,
 	}
 }
 
-static NTSTATUS x_smbd_named_pipe_find(x_smbd_conn_t *smbd_conn,
+static NTSTATUS x_smbd_ipc_op_qdir(
+		x_smbd_object_t *smbd_object,
+		x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ,
-		std::unique_ptr<x_smb2_state_find_t> &state)
+		std::unique_ptr<x_smb2_state_qdir_t> &state)
 {
 	return NT_STATUS_INVALID_PARAMETER;
 }
 
-static NTSTATUS x_smbd_named_pipe_notify(x_smbd_conn_t *smbd_conn,
+static NTSTATUS x_smbd_ipc_op_notify(
+		x_smbd_object_t *smbd_object,
+		x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ,
 		std::unique_ptr<x_smb2_state_notify_t> &state)
 {
 	return NT_STATUS_INVALID_PARAMETER;
 }
 
-static NTSTATUS x_smbd_named_pipe_close(x_smbd_conn_t *smbd_conn,
+static NTSTATUS x_smbd_ipc_op_close(
+		x_smbd_object_t *smbd_object,
+		x_smbd_conn_t *smbd_conn,
 		x_smbd_open_t *smbd_open,
 		x_smbd_requ_t *smbd_requ,
 		std::unique_ptr<x_smb2_state_close_t> &state)
@@ -476,68 +502,101 @@ static NTSTATUS x_smbd_named_pipe_close(x_smbd_conn_t *smbd_conn,
 	return NT_STATUS_OK;
 }
 
-static void x_smbd_named_pipe_destroy(x_smbd_open_t *smbd_open)
+static std::string x_smbd_ipc_op_get_path(
+		const x_smbd_object_t *smbd_object)
 {
-	x_smbd_named_pipe_t *named_pipe = from_smbd_open(smbd_open);
-	delete named_pipe;
+	const x_smbd_ipc_object_t *ipc_object = from_smbd_object(smbd_object);
+	return ipc_object->iface->iface_name;
 }
 
-static std::string x_smbd_named_pipe_get_path(x_smbd_open_t *smbd_open)
-{
-	x_smbd_named_pipe_t *named_pipe = from_smbd_open(smbd_open);
-	return named_pipe->iface->iface_name;
-}
-
-static const x_smbd_open_ops_t x_smbd_named_pipe_ops = {
-	x_smbd_named_pipe_read,
-	x_smbd_named_pipe_write,
-	x_smbd_named_pipe_getinfo,
-	x_smbd_named_pipe_setinfo,
-	x_smbd_named_pipe_find,
-	x_smbd_named_pipe_ioctl,
-	x_smbd_named_pipe_notify,
-	x_smbd_named_pipe_close,
-	x_smbd_named_pipe_destroy,
-	x_smbd_named_pipe_get_path,
+static const x_smbd_object_ops_t x_smbd_ipc_object_ops = {
+	x_smbd_ipc_op_close,
+	x_smbd_ipc_op_read,
+	x_smbd_ipc_op_write,
+	x_smbd_ipc_op_getinfo,
+	x_smbd_ipc_op_setinfo,
+	x_smbd_ipc_op_ioctl,
+	x_smbd_ipc_op_qdir,
+	x_smbd_ipc_op_notify,
+	x_smbd_ipc_op_get_path,
 };
 
-static inline x_smbd_named_pipe_t *x_smbd_named_pipe_create(x_smbd_tcon_t *smbd_tcon, const x_dcerpc_iface_t *iface)
+static x_smbd_ipc_object_t ipc_object_tbl[] = {
+	&x_smbd_dcerpc_srvsvc,
+	&x_smbd_dcerpc_wkssvc,
+	&x_smbd_dcerpc_dssetup,
+	&x_smbd_dcerpc_lsarpc,
+};
+
+x_smbd_ipc_object_t::x_smbd_ipc_object_t(const x_dcerpc_iface_t *iface)
+		: base(&x_smbd_ipc_object_ops), iface(iface)
 {
-	x_smbd_named_pipe_t *named_pipe = new x_smbd_named_pipe_t;
-	named_pipe->base.ops = &x_smbd_named_pipe_ops;
-	named_pipe->base.smbd_tcon = smbd_tcon;
-	named_pipe->iface = iface;
-	return named_pipe;
 }
 
-static x_smbd_open_t *x_smbd_tcon_ipc_op_create(x_smbd_tcon_t *smbd_tcon,
-		NTSTATUS &status, x_smbd_requ_t *smbd_requ,
+static x_smbd_ipc_object_t *find_ipc_object_by_name(const std::string &name)
+{
+	for (auto &ipc: ipc_object_tbl) {
+		if (strcasecmp(ipc.iface->iface_name.c_str(), name.c_str()) == 0) {
+			return &ipc;
+		}
+	}
+	return nullptr;
+}
+
+static const x_dcerpc_iface_t *find_iface_by_syntax(
+		const idl::ndr_syntax_id &syntax)
+{
+	for (const auto &ipc: ipc_object_tbl) {
+		if (ipc.iface->syntax_id == syntax) {
+			return ipc.iface;
+		}
+	}
+	return nullptr;
+}
+
+static NTSTATUS ipc_create(
+		x_smbd_ipc_object_t *ipc_object,
+		x_smbd_open_t **psmbd_open,
+		x_smbd_requ_t *smbd_requ,
 		std::unique_ptr<x_smb2_state_create_t> &state)
 {
-	std::string in_name = x_convert_utf16_to_utf8(state->in_name);
+	if (state->in_desired_access & idl::SEC_STD_DELETE) {
+		*psmbd_open = nullptr;
+		return NT_STATUS_ACCESS_DENIED;
+	}
+
+	x_smbd_named_pipe_t *named_pipe = new x_smbd_named_pipe_t;
+	x_smbd_open_init(&named_pipe->base, &ipc_object->base, smbd_requ->smbd_tcon,
+			state->in_share_access, state->in_desired_access);
+
+	state->out_info.out_allocation_size = 4096;
+	state->out_info.out_file_attributes = FILE_ATTRIBUTE_NORMAL;
+	state->oplock_level = 0;
+	state->out_create_flags = 0;
+	state->out_create_action = FILE_WAS_OPENED;
+
+	*psmbd_open = &named_pipe->base;
+	return NT_STATUS_OK;
+}
+
+
+static NTSTATUS x_smbd_tcon_ipc_op_create(x_smbd_tcon_t *smbd_tcon,
+		x_smbd_open_t **psmbd_open,
+		x_smbd_requ_t *smbd_requ,
+		std::unique_ptr<x_smb2_state_create_t> &state)
+{
+	std::string in_name_utf8 = x_convert_utf16_to_utf8(state->in_name);
 #if 0
 	std::u16string in_name;
 	in_name.reserve(state->in_name.size());
 	std::transform(std::begin(state->in_name), std::end(state->in_name),
 			std::back_inserter(in_name), tolower);
 #endif
-	const x_dcerpc_iface_t *rpc = find_rpc_by_name(in_name);
-	if (!rpc) {
-		status = NT_STATUS_OBJECT_NAME_NOT_FOUND;
-		return nullptr;
+	x_smbd_ipc_object_t *ipc_object = find_ipc_object_by_name(in_name_utf8);
+	if (!ipc_object) {
+		return NT_STATUS_OBJECT_NAME_NOT_FOUND;
 	}
-
-	x_smbd_named_pipe_t *named_pipe = x_smbd_named_pipe_create(smbd_tcon, rpc);
-
-	state->out_info.out_allocation_size = 4096;
-	state->out_info.out_file_attributes = FILE_ATTRIBUTE_NORMAL;
-	state->out_oplock_level = 0;
-	state->out_create_flags = 0;
-	state->out_create_action = FILE_WAS_OPENED;
-
-	//status = x_smbd_open_np_file(smbd_open);
-	status = NT_STATUS_OK;
-	return &named_pipe->base;
+	return ipc_create(ipc_object, psmbd_open, smbd_requ, state);
 }
 
 static const x_smbd_tcon_ops_t x_smbd_tcon_ipc_ops = {

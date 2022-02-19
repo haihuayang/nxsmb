@@ -70,7 +70,7 @@ static bool x_smbd_dcerpc_impl_lsa_QueryInfoPolicy(
 	}
 
 	auto lsa_info = std::static_pointer_cast<lsa_info_t>(handle_data);
-	auto smbconf = smbd_sess->smbd_conn->get_smbconf();
+	auto smbconf = smbd_sess->smbd_conn->get_conf();
 
 	//uint32_t acc_required = 0;
 	switch (arg.level) {

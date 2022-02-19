@@ -7,7 +7,7 @@ static bool x_smbd_dcerpc_impl_wkssvc_NetWkstaGetInfo(
 		x_smbd_sess_t *smbd_sess,
 		idl::wkssvc_NetWkstaGetInfo &arg)
 {
-	const std::shared_ptr<x_smbconf_t> smbconf = smbd_sess->smbd_conn->get_smbconf();
+	const std::shared_ptr<x_smbd_conf_t> smbconf = smbd_sess->smbd_conn->get_conf();
 
 	switch (arg.level) {
 	case 100: {

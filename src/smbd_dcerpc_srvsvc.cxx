@@ -24,7 +24,7 @@ static uint32_t net_share_enum_all_1(x_smbd_conn_t *smbd_conn,
 {
 	// TODO buffer size and resume handle
 	ctr1->array = std::make_shared<std::vector<idl::srvsvc_NetShareInfo1>>();
-	const std::shared_ptr<x_smbconf_t> smbconf = smbd_conn->get_smbconf();
+	const std::shared_ptr<x_smbd_conf_t> smbconf = smbd_conn->get_conf();
 	for (auto &it: smbconf->shares) {
 		auto &share = it.second;
 		idl::srvsvc_ShareType type =
@@ -58,14 +58,14 @@ static bool x_smbd_dcerpc_impl_srvsvc_NetShareEnumAll(
 	return true;
 }
 
-static uint32_t get_share_current_users(const x_smbshare_t &smbshare)
+static uint32_t get_share_current_users(const x_smbd_share_t &smbshare)
 {
 	return 1; // TODO
 }
 
 template <typename Info>
 static void fill_share_info1(Info &info, const std::u16string &share_name,
-		x_smbshare_t &smbshare)
+		x_smbd_share_t &smbshare)
 {
 	info.name = std::make_shared<std::u16string>(share_name);
 	info.comment = std::make_shared<std::u16string>();
@@ -76,14 +76,14 @@ static void fill_share_info1(Info &info, const std::u16string &share_name,
 	}
 }
 
-static uint32_t get_max_users(const x_smbshare_t &smbshare)
+static uint32_t get_max_users(const x_smbd_share_t &smbshare)
 {
 	return smbshare.max_connections ? smbshare.max_connections : (uint32_t)-1;
 }
 
 template <typename Info>
 static void fill_share_info2(Info &info, const std::u16string &share_name,
-		x_smbshare_t &smbshare)
+		x_smbd_share_t &smbshare)
 {
 	info.name = std::make_shared<std::u16string>(share_name);
 	info.comment = std::make_shared<std::u16string>();
@@ -222,7 +222,7 @@ static bool x_smbd_dcerpc_impl_srvsvc_NetSrvGetInfo(
 		x_smbd_sess_t *smbd_sess,
 		idl::srvsvc_NetSrvGetInfo &arg)
 {
-	const std::shared_ptr<x_smbconf_t> smbconf = smbd_sess->smbd_conn->get_smbconf();
+	const std::shared_ptr<x_smbd_conf_t> smbconf = smbd_sess->smbd_conn->get_conf();
 
 	switch (arg.level) {
 	case 101: {

@@ -19,6 +19,24 @@ struct x_array_const_t
 	const T *data;
 	size_t size;
 };
+
+template <class T>
+std::string idl_tostring(const T &obj)
+{
+	std::ostringstream os;
+	idl::x_ndr_output(obj, os, 8, 3);
+	std::string ret = os.str();
+	return ret;
+}
+
+template <class T>
+std::string tostr(const T &v)
+{
+	std::ostringstream os;
+	os << v;
+	return os.str();
+}
+
 #if 0
 template <class T, std::size_t N>
 constexpr x_array_const_t<T> x_array_const(const T(&array)[N]){

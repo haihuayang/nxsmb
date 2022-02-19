@@ -199,15 +199,16 @@ static void print_ace_flags(std::ostream &os, uint8_t flags)
 
 std::ostream &operator<<(std::ostream &os, const security_ace &v)
 {
-	os << v.trustee << ':' << (uint32_t)v.type;
+	/* TODO skip security_ace_object_ctr for now since it is unusual */
+	os << v.trustee << "/(" << (uint32_t)v.type;
 	if (v.type == SEC_ACE_TYPE_ACCESS_ALLOWED) {
-		os << "(A)";
+		os << "A";
 	} else if (v.type == SEC_ACE_TYPE_ACCESS_DENIED) {
-		os << "(D)";
+		os << "D";
 	} else {
-		os << "(X)";
+		os << "X";
 	}
-	os << "/";
+	os << ")/";
 	print_ace_flags(os, v.flags);
 	os << "/";
 	char buf[16];

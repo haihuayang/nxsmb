@@ -1,5 +1,6 @@
 
 #include "smbd_open.hxx"
+#include "smbd_object.hxx"
 
 namespace {
 enum {
@@ -126,7 +127,10 @@ NTSTATUS x_smb2_process_SETINFO(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_re
 		RETURN_OP_STATUS(smbd_requ, NT_STATUS_FILE_CLOSED);
 	}
 
-	NTSTATUS status = x_smbd_open_op_setinfo(smbd_conn, smbd_requ, state);
+	x_smbd_object_t *smbd_object = smbd_requ->smbd_open->smbd_object;
+
+	/* different INFO request different access, so check access inside the op func */
+	NTSTATUS status = smbd_object->ops->setinfo(smbd_object, smbd_conn, smbd_requ, state);
 	if (NT_STATUS_IS_OK(status)) {
 		x_smb2_reply_setinfo(smbd_conn, smbd_requ, *state);
 		return status;

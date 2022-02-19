@@ -6,19 +6,9 @@
 #error "Must be c++"
 #endif
 
-#include "smbd.hxx"
-
-struct x_smb2_create_close_info_t
-{
-	idl::NTTIME out_create_ts;
-	idl::NTTIME out_last_access_ts;
-	idl::NTTIME out_last_write_ts;
-	idl::NTTIME out_change_ts;
-	uint64_t out_allocation_size{0};
-	uint64_t out_end_of_file{0};
-	uint32_t out_file_attributes{0};
-};
-
+#include "defines.hxx"
+#include "include/librpc/ndr_smb.hxx"
+#include "smb2.hxx"
 
 struct x_smb2_state_read_t
 {
@@ -67,7 +57,7 @@ struct x_smb2_state_setinfo_t
 	std::vector<uint8_t> in_data;
 };
 
-struct x_smb2_state_find_t
+struct x_smb2_state_qdir_t
 {
 	uint8_t in_info_level;
 	uint8_t in_flags;
@@ -95,7 +85,7 @@ struct x_smb2_state_ioctl_t
 
 struct x_smb2_state_notify_t
 {
-	void done(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ, NTSTATUS status);
+	// void done(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ, NTSTATUS status);
 	uint16_t in_flags;
 	uint32_t in_output_buffer_length;
 	uint64_t in_file_id_persistent;
@@ -103,6 +93,22 @@ struct x_smb2_state_notify_t
 	uint32_t in_filter;
 
 	std::vector<uint8_t> out_data;
+};
+
+struct x_smb2_state_oplock_break_t
+{
+	uint8_t in_oplock_level;
+	uint64_t in_file_id_persistent;
+	uint64_t in_file_id_volatile;
+};
+
+struct x_smb2_state_lease_break_t
+{
+	uint8_t in_oplock_level;
+	uint32_t in_flags;
+	x_smb2_lease_key_t in_key;
+	uint32_t in_state;
+	uint64_t in_duration;
 };
 
 struct x_smb2_state_close_t
@@ -119,101 +125,16 @@ struct x_smb2_state_close_t
 	x_smb2_create_close_info_t out_info;
 };
 
-struct x_smbd_open_ops_t
-{
-	NTSTATUS (*read)(x_smbd_conn_t *smbd_conn,
-			x_smbd_requ_t *smbd_requ,
-			std::unique_ptr<x_smb2_state_read_t> &state);
-	NTSTATUS (*write)(x_smbd_conn_t *smbd_conn,
-			x_smbd_requ_t *smbd_requ,
-			std::unique_ptr<x_smb2_state_write_t> &state);
-	NTSTATUS (*getinfo)(x_smbd_conn_t *smbd_conn,
-			x_smbd_requ_t *smbd_requ,
-			std::unique_ptr<x_smb2_state_getinfo_t> &state);
-	NTSTATUS (*setinfo)(x_smbd_conn_t *smbd_conn,
-			x_smbd_requ_t *smbd_requ,
-			std::unique_ptr<x_smb2_state_setinfo_t> &state);
-	NTSTATUS (*find)(x_smbd_conn_t *smbd_conn,
-			x_smbd_requ_t *smbd_requ,
-			std::unique_ptr<x_smb2_state_find_t> &state);
-	NTSTATUS (*ioctl)(x_smbd_conn_t *smbd_conn,
-			x_smbd_requ_t *smbd_requ,
-			std::unique_ptr<x_smb2_state_ioctl_t> &state);
-	NTSTATUS (*notify)(x_smbd_conn_t *smbd_conn,
-			x_smbd_requ_t *smbd_requ,
-			std::unique_ptr<x_smb2_state_notify_t> &state);
-	NTSTATUS (*close)(x_smbd_conn_t *smbd_conn,
-			x_smbd_open_t *smbd_open,
-			x_smbd_requ_t *smbd_requ,
-			std::unique_ptr<x_smb2_state_close_t> &state);
-	void (*destroy)(x_smbd_open_t *smbd_open);
-	std::string (*get_path)(x_smbd_open_t *smbd_open);
-};
-
-static inline NTSTATUS x_smbd_open_op_read(x_smbd_conn_t *smbd_conn,
-		x_smbd_requ_t *smbd_requ,
-		std::unique_ptr<x_smb2_state_read_t> &state)
-{
-	return smbd_requ->smbd_open->ops->read(smbd_conn, smbd_requ, state);
-}
-
-static inline NTSTATUS x_smbd_open_op_write(x_smbd_conn_t *smbd_conn,
-		x_smbd_requ_t *smbd_requ,
-		std::unique_ptr<x_smb2_state_write_t> &state)
-{
-	return smbd_requ->smbd_open->ops->write(smbd_conn, smbd_requ, state);
-}
-
-static inline NTSTATUS x_smbd_open_op_getinfo(x_smbd_conn_t *smbd_conn,
-		x_smbd_requ_t *smbd_requ,
-		std::unique_ptr<x_smb2_state_getinfo_t> &state)
-{
-	return smbd_requ->smbd_open->ops->getinfo(smbd_conn, smbd_requ, state);
-}
-
-static inline NTSTATUS x_smbd_open_op_setinfo(x_smbd_conn_t *smbd_conn,
-		x_smbd_requ_t *smbd_requ,
-		std::unique_ptr<x_smb2_state_setinfo_t> &state)
-{
-	return smbd_requ->smbd_open->ops->setinfo(smbd_conn, smbd_requ, state);
-}
-
-static inline NTSTATUS x_smbd_open_op_find(x_smbd_conn_t *smbd_conn,
-		x_smbd_requ_t *smbd_requ,
-		std::unique_ptr<x_smb2_state_find_t> &state)
-{
-	return smbd_requ->smbd_open->ops->find(smbd_conn, smbd_requ, state);
-}
-
-static inline NTSTATUS x_smbd_open_op_ioctl(x_smbd_conn_t *smbd_conn,
-		x_smbd_requ_t *smbd_requ,
-		std::unique_ptr<x_smb2_state_ioctl_t> &state)
-{
-	return smbd_requ->smbd_open->ops->ioctl(smbd_conn, smbd_requ, state);
-}
-
-static inline NTSTATUS x_smbd_open_op_notify(x_smbd_conn_t *smbd_conn,
-		x_smbd_requ_t *smbd_requ,
-		std::unique_ptr<x_smb2_state_notify_t> &state)
-{
-	return smbd_requ->smbd_open->ops->notify(smbd_conn, smbd_requ, state);
-}
-
-static inline std::string x_smbd_open_op_get_path(x_smbd_open_t *smbd_open)
-{
-	return smbd_open->ops->get_path(smbd_open);
-}
-
-
+#if 0
 struct x_smb2_create_context_t
 {
 	uint32_t tag;
 	std::vector<uint8_t> data;
 };
-
+#endif
 struct x_smb2_state_create_t
 {
-	uint8_t in_oplock_level;
+	uint8_t oplock_level;
 	uint32_t in_impersonation_level;
 	uint32_t in_desired_access;
 	uint32_t in_file_attributes;
@@ -221,44 +142,17 @@ struct x_smb2_state_create_t
 	uint32_t in_create_disposition;
 	uint32_t in_create_options;
 
-	std::u16string in_name;
-	std::vector<x_smb2_create_context_t> in_contexts;
+	x_smb2_lease_t lease;
 
-	uint8_t out_oplock_level;
+	std::u16string in_name;
+
 	uint8_t out_create_flags;
 	uint32_t out_create_action;
 	x_smb2_create_close_info_t out_info;
 
-	std::vector<x_smb2_create_context_t> out_contexts;
+	// std::vector<x_smb2_create_context_t> in_contexts;
+	// std::vector<x_smb2_create_context_t> out_contexts;
 };
-
-struct x_smbd_tcon_ops_t
-{
-	x_smbd_open_t *(*create)(x_smbd_tcon_t *smbd_tcon,
-			NTSTATUS &status,
-			x_smbd_requ_t *smbd_requ,
-			std::unique_ptr<x_smb2_state_create_t> &state);
-};
-
-static inline x_smbd_open_t *x_smbd_tcon_op_create(x_smbd_tcon_t *smbd_tcon,
-		NTSTATUS &status,
-		x_smbd_requ_t *smbd_requ,
-		std::unique_ptr<x_smb2_state_create_t> &state)
-{
-	return smbd_tcon->ops->create(smbd_tcon, status, smbd_requ, state);
-}
-
-struct x_smb2_standard_info_t
-{
-	uint32_t create_time;
-	uint32_t access_time;
-	uint32_t modify_time;
-};
-
-NTSTATUS x_smbd_open_close(x_smbd_conn_t *smbd_conn,
-		x_smbd_open_t *smbd_open,
-		x_smbd_requ_t *smbd_requ,
-		std::unique_ptr<x_smb2_state_close_t> &state);
 
 #endif /* __smbd_open__hxx__ */
 

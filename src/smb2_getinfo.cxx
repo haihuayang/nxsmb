@@ -1,5 +1,6 @@
 
 #include "smbd_open.hxx"
+#include "smbd_object.hxx"
 #include "core.hxx"
 
 namespace {
@@ -128,7 +129,10 @@ NTSTATUS x_smb2_process_GETINFO(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_re
 		RETURN_OP_STATUS(smbd_requ, NT_STATUS_FILE_CLOSED);
 	}
 
-	NTSTATUS status = x_smbd_open_op_getinfo(smbd_conn, smbd_requ, state);
+	x_smbd_object_t *smbd_object = smbd_requ->smbd_open->smbd_object;
+	NTSTATUS status = smbd_object->ops->getinfo(smbd_object,
+		       	smbd_conn, smbd_requ,
+			state);
 	if (NT_STATUS_IS_OK(status)) {
 		x_smb2_reply_getinfo(smbd_conn, smbd_requ, *state);
 		return status;

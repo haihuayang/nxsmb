@@ -18,7 +18,7 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <unistd.h>
-#include "smbconf.hxx"
+#include "smbd_conf.hxx"
 #include "smb2.hxx"
 #include "misc.hxx"
 #include "network.hxx"
@@ -35,7 +35,8 @@ extern "C" {
 #include "samba/source4/heimdal/lib/gssapi/gssapi/gssapi.h"
 }
 
-#include "auth.hxx"
+#include "smbd_user.hxx"
+#include "smbd_open.hxx"
 #include "network.hxx"
 
 #define X_NT_STATUS_INTERNAL_BLOCKED	NT_STATUS(1)
@@ -48,13 +49,12 @@ struct x_smbd_t
 	uint64_t ep_id;
 	int fd;
 
-	std::shared_ptr<x_smbconf_t> smbconf;
+	std::shared_ptr<x_smbd_conf_t> smbd_conf;
 	uint32_t capabilities;
 
 	x_auth_context_t *auth_context;
 	std::vector<uint8_t> negprot_spnego;
 };
-int x_smbd_parse_cmdline(std::shared_ptr<x_smbconf_t> &smbconf, int argc, char **argv);
 
 x_auth_context_t *x_auth_create_context(x_smbd_t *smbd);
 
@@ -62,6 +62,15 @@ struct x_smbd_conn_t;
 struct x_smbd_sess_t;
 struct x_smbd_tcon_t;
 struct x_smbd_open_t;
+struct x_smbd_lease_t;
+struct x_smbd_object_t;
+struct x_smbd_requ_t;
+
+struct x_smbd_requ_async_fn_t
+{
+	void (*cancel_fn)(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ);
+	void (*done_fn)(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ, NTSTATUS status);
+};
 
 struct x_smbd_requ_t
 {
@@ -118,7 +127,8 @@ struct x_smbd_requ_t
 	x_smbd_sess_t *smbd_sess{};
 	x_smbd_tcon_t *smbd_tcon{};
 	x_smbd_open_t *smbd_open{};
-	void (*cancel_fn)(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ) = nullptr;
+	void (*cancel_fn)(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ);
+	void (*async_done_fn)(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ, NTSTATUS status);
 };
 X_DECLARE_MEMBER_TRAITS(requ_async_traits, x_smbd_requ_t, async_link)
 
@@ -132,15 +142,6 @@ void x_smb2_reply(x_smbd_conn_t *smbd_conn,
 		NTSTATUS status,
 		uint32_t reply_size);
 
-struct x_smbd_user_t
-{
-	idl::dom_sid domain_sid;
-	uint32_t uid, gid;
-	std::vector<idl::samr_RidWithAttribute> group_rids;
-	std::vector<x_dom_sid_with_attrs_t> other_sids;
-};
-
-struct x_smbd_open_ops_t;
 struct x_smbd_open_t
 {
 	void incref() {
@@ -154,7 +155,8 @@ struct x_smbd_open_t
 
 	x_dqlink_t hash_link;
 	x_dlink_t tcon_link;
-	const x_smbd_open_ops_t *ops;
+	x_smbd_object_t *smbd_object{};
+	x_smbd_tcon_t *smbd_tcon;
 	uint64_t id;
 	enum {
 		S_PENDING,
@@ -163,19 +165,27 @@ struct x_smbd_open_t
 	} state;
 
 	uint32_t access_mask, share_access;
+#if 0
+	uint32_t notify_filter = 0;
+	uint8_t oplock;
+	/* open's on the same file sharing the same lease can have different parent key */
+	x_smb2_lease_key_t parent_lease_key;
+	x_smbd_lease_t *smbd_lease{};
+#endif
 	std::atomic<int> refcnt{1};
-	x_smbd_tcon_t *smbd_tcon;
 };
+
 X_DECLARE_MEMBER_TRAITS(open_tcon_traits, x_smbd_open_t, tcon_link)
+// X_DECLARE_MEMBER_TRAITS(open_object_traits, x_smbd_open_t, object_link)
 
 struct x_smbd_tcon_ops_t;
 struct x_smbd_tcon_t
 { 
 	x_smbd_tcon_t(x_smbd_sess_t *smbd_sess,
-			const std::shared_ptr<x_smbshare_t> &share)
-		: smbd_sess(smbd_sess), smbshare(share) { }
-	x_smbshare_type_t get_share_type() const {
-		return smbshare->type;
+			const std::shared_ptr<x_smbd_share_t> &share)
+		: smbd_sess(smbd_sess), smbd_share(share) { }
+	x_smbd_share_type_t get_share_type() const {
+		return smbd_share->type;
 	}
 
 	void incref() {
@@ -195,10 +205,25 @@ struct x_smbd_tcon_t
 	uint32_t tid;
 	uint32_t share_access;
 	x_smbd_sess_t * const smbd_sess;
-	std::shared_ptr<x_smbshare_t> smbshare;
+	std::shared_ptr<x_smbd_share_t> smbd_share;
 	x_tp_ddlist_t<open_tcon_traits> open_list;
 };
 X_DECLARE_MEMBER_TRAITS(tcon_sess_traits, x_smbd_tcon_t, sess_link)
+
+struct x_smbd_tcon_ops_t
+{
+	NTSTATUS (*create)(x_smbd_tcon_t *smbd_tcon, x_smbd_open_t **psmbd_open,
+			x_smbd_requ_t *smbd_requ,
+			std::unique_ptr<x_smb2_state_create_t> &state);
+};
+
+static inline NTSTATUS x_smbd_tcon_op_create(x_smbd_tcon_t *smbd_tcon,
+		x_smbd_open_t **psmbd_open,
+		x_smbd_requ_t *smbd_requ,
+		std::unique_ptr<x_smb2_state_create_t> &state)
+{
+	return smbd_tcon->ops->create(smbd_tcon, psmbd_open, smbd_requ, state);
+}
 
 struct x_smbd_sess_t
 {
@@ -234,6 +259,7 @@ struct x_smbd_sess_t
 		S_EXPIRED,
 		S_SHUTDOWN,
 	};
+
 	x_dqlink_t hash_link;
 	x_dlink_t conn_link;
 
@@ -259,12 +285,13 @@ struct x_smbd_sess_t
 X_DECLARE_MEMBER_TRAITS(smbd_sess_conn_traits, x_smbd_sess_t, conn_link)
 
 void x_smbd_tcon_init_ipc(x_smbd_tcon_t *smbd_tcon);
-void x_smbd_tcon_init_disk(x_smbd_tcon_t *smbd_tcon);
+void x_smbd_tcon_init_posixfs(x_smbd_tcon_t *smbd_tcon);
 
-int x_smbd_disk_init(size_t max_open);
+int x_smbd_posixfs_init(size_t max_open);
 int x_smbd_ipc_init();
 
 
+void x_smbd_open_init(x_smbd_open_t *smbd_open, x_smbd_object_t *smbd_object, x_smbd_tcon_t *smbd_tcon, uint32_t share_access, uint32_t access_mask);
 void x_smbd_open_insert_local(x_smbd_open_t *smbd_open);
 x_smbd_open_t *x_smbd_open_find(uint64_t id_presistent, uint64_t id_volatile,
 		const x_smbd_tcon_t *smbd_tcon);
@@ -298,8 +325,8 @@ struct x_smbd_conn_t
 	x_smbd_conn_t(x_smbd_t *smbd, int fd, const x_sockaddr_t &saddr);
 	~x_smbd_conn_t();
 
-	const std::shared_ptr<x_smbconf_t> get_smbconf() const {
-		return smbd->smbconf;
+	const std::shared_ptr<x_smbd_conf_t> get_conf() const {
+		return smbd->smbd_conf;
 	}
 
 	void incref() {
@@ -348,7 +375,9 @@ struct x_smbd_conn_t
 	x_tp_ddlist_t<fdevt_user_conn_traits> fdevt_user_list;
 };
 
-std::shared_ptr<x_smbshare_t> x_smbd_find_share(x_smbd_t *smbd, const std::string &name);
+std::shared_ptr<x_smbd_share_t> x_smbd_find_share(x_smbd_t *smbd, const std::string &name);
+
+
 // void x_smbshares_foreach(std::function<bool(std::shared_ptr<x_smbshare_t> &share)>);
 // int x_smbd_load_shares();
 
@@ -391,6 +420,27 @@ static inline bool msg_is_signed(const x_msg_ptr_t &smbd_requ)
 	x_smb2_reply_error((smbd_conn), (smbd_requ), (smbd_sess), (tid), (status), __FILE__, __LINE__)
 #endif
 
+static inline const idl::GUID &x_smbd_get_client_guid(const x_smbd_conn_t &conn)
+{
+	return conn.client_guid;
+}
+
+static inline const idl::GUID &x_smbd_get_client_guid(const x_smbd_sess_t &sess)
+{
+	return x_smbd_get_client_guid(*sess.smbd_conn);
+}
+
+static inline const idl::GUID &x_smbd_get_client_guid(const x_smbd_tcon_t &tcon)
+{
+	return x_smbd_get_client_guid(*tcon.smbd_sess);
+}
+
+static inline const idl::GUID &x_smbd_get_client_guid(const x_smbd_open_t &open)
+{
+	return x_smbd_get_client_guid(*open.smbd_tcon);
+}
+
+
 int x_smbd_conn_process_smb1negoprot(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ);
 
 void x_smbd_wbpool_request(x_wbcli_t *wbcli);
@@ -419,6 +469,10 @@ void x_smbd_conn_requ_done(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ,
 
 extern x_evtmgmt_t *g_evtmgmt;
 int x_smbd_ctrl_init(x_evtmgmt_t *evtmgmt);
+
+void x_smbd_open_append_notify(x_smbd_open_t *smbd_open,
+		uint32_t action,
+		const std::u16string &path);
 
 #endif /* __smbd__hxx__ */
 

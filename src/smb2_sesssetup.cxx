@@ -92,14 +92,6 @@ static std::ostream &operator<<(std::ostream &os, const x_auth_info_t &auth_info
 	return os;
 }
 
-template <class T>
-std::string tostr(const T &v)
-{
-	std::ostringstream ostr;
-	ostr << v;
-	return ostr.str();
-}
-
 // smbd_smb2_auth_generic_return
 static void smbd_sess_auth_succeeded(x_smbd_conn_t *smbd_conn, x_smbd_sess_t *smbd_sess,
 		const x_auth_info_t &auth_info)

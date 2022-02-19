@@ -10,7 +10,7 @@ static bool x_smbd_dcerpc_impl_dssetup_DsRoleGetPrimaryDomainInformation(
 		x_smbd_sess_t *smbd_sess,
 		idl::dssetup_DsRoleGetPrimaryDomainInformation &arg)
 {
-	const std::shared_ptr<x_smbconf_t> smbconf = smbd_sess->smbd_conn->get_smbconf();
+	const std::shared_ptr<x_smbd_conf_t> smbconf = smbd_sess->smbd_conn->get_conf();
 	switch (arg.level) {
 	case idl::DS_ROLE_BASIC_INFORMATION: {
 		auto &info = arg.info;

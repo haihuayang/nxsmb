@@ -6,8 +6,10 @@
 #error "Must be c++"
 #endif
 
-#include "smbd.hxx"
+#include "defines.hxx"
 #include "include/librpc/xattr.hxx"
+
+struct x_smbd_user_t;
 
 NTSTATUS parse_acl_blob(const std::vector<uint8_t> &blob,
 		std::shared_ptr<idl::security_descriptor> &psd,

@@ -7,7 +7,7 @@ extern "C" {
 
 x_smbd_conn_t::x_smbd_conn_t(x_smbd_t *smbd, int fd, const x_sockaddr_t &saddr)
 	: smbd(smbd), fd(fd), saddr(saddr)
-	, seq_bitmap(smbd->smbconf->smb2_max_credits)
+	, seq_bitmap(smbd->smbd_conf->smb2_max_credits)
 {
 }
 

@@ -1,9 +1,13 @@
 
-#include "smbd_vfs.hxx"
+#include "smbd_ntacl.hxx"
+#include "smbd_posixfs_utils.hxx"
+// #include "smbd_vfs.hxx"
 #include <unistd.h>
+#include <fcntl.h>
 #include <string.h>
 #include "util_sid.hxx"
-#include "smbd_ntacl.hxx"
+#include "misc.hxx"
+#include <iostream>
 
 static void usage(const char *progname)
 {
@@ -29,12 +33,12 @@ static std::shared_ptr<idl::security_descriptor> make_share_sec_desc()
 			global_sid_Creator_Owner);
 	append_ace(psd->dacl->aces, 
 			idl::SEC_ACE_TYPE_ACCESS_ALLOWED,
-			idl::security_ace_flags(0xb),
+			idl::security_ace_flags(0x3),
 			0x1f01ff, // TODO
 			global_sid_Builtin_Administrators);
 	append_ace(psd->dacl->aces, 
 			idl::SEC_ACE_TYPE_ACCESS_ALLOWED,
-			idl::security_ace_flags(0xb),
+			idl::security_ace_flags(0x3),
 			0x1f01ff, // TODO
 			global_sid_Builtin_Users);
 	psd->revision = idl::SECURITY_DESCRIPTOR_REVISION_1;
@@ -42,34 +46,45 @@ static std::shared_ptr<idl::security_descriptor> make_share_sec_desc()
 	return psd;
 }
 
-static int create_share(char **argv)
+static int set_default_security_desc(char **argv)
 {
 	const char *path = argv[0];
-	x_smbd_statex_t statex;
 	auto psd = make_share_sec_desc();
 	std::vector<uint8_t> ntacl_blob;
 	create_acl_blob(ntacl_blob, psd, idl::XATTR_SD_HASH_TYPE_NONE, std::array<uint8_t, idl::XATTR_SD_HASH_SIZE>());
-	int fd = x_smbd_vfs_create(true, path, &statex, ntacl_blob);
+	int fd = open(path, O_RDONLY);
 	X_ASSERT(fd >= 0);
+	posixfs_set_ntacl_blob(fd, ntacl_blob);
 	close(fd);
 	return 0;
 }
-#if 0
-static int create_file(char **argv)
+
+static int show_security_desc(char **argv)
 {
 	const char *path = argv[0];
-	x_smbd_statex_t statex;
-	int fd = x_smbd_vfs_create(false, path, &statex);
+	int fd = open(path, O_RDONLY);
 	X_ASSERT(fd >= 0);
+	std::vector<uint8_t> blob;
+	posixfs_get_ntacl_blob(fd, blob);
 	close(fd);
+
+	std::shared_ptr<idl::security_descriptor> psd;
+	uint16_t hash_type;
+	uint16_t version;
+	std::array<uint8_t, idl::XATTR_SD_HASH_SIZE> hash;
+	NTSTATUS status = parse_acl_blob(blob, psd, &hash_type, &version, hash);
+	assert(NT_STATUS_IS_OK(status));
+	std::cout << "SD " << idl_tostring(*psd) << std::endl;
 	return 0;
 }
-#endif
+
 int main(int argc, char **argv)
 {
 	const char *command = argv[1];
-	if (strcmp(command, "create-share") == 0) {
-		return create_share(argv + 2);
+	if (strcmp(command, "set-default-security-desc") == 0) {
+		return set_default_security_desc(argv + 2);
+	} else if (strcmp(command, "show-security-desc") == 0) {
+		return show_security_desc(argv + 2);
 #if 0
 	} else if (strcmp(command, "create-file") == 0) {
 		return create_file(argv + 2);

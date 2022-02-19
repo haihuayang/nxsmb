@@ -26,7 +26,7 @@ static NTSTATUS x_smbd_conn_reply_negprot(x_smbd_conn_t *smbd_conn, x_smbd_requ_
 	X_LOG_OP("%ld RESP SUCCESS dialect=%x", smbd_requ->in_mid, negprot->out_dialect);
 
 	const x_smbd_t *smbd = smbd_conn->smbd;
-	const std::shared_ptr<x_smbconf_t> smbconf = smbd_conn->get_smbconf();
+	const std::shared_ptr<x_smbd_conf_t> smbconf = smbd_conn->get_conf();
 	idl::NTTIME now = x_tick_to_nttime(tick_now);
 
 	smbd_conn->dialect = negprot->out_dialect;
@@ -132,7 +132,7 @@ uint16_t x_smb2_dialect_match(x_smbd_conn_t *smbd_conn,
 		const void *dialects,
 		size_t dialect_count)
 {
-	const std::shared_ptr<x_smbconf_t> smbconf = smbd_conn->get_smbconf();
+	const auto smbconf = smbd_conn->get_conf();
 	for (auto sdialect: smbconf->dialects) {
 		const uint8_t *data = (const uint8_t *)dialects;
 		for (unsigned int di = 0; di < dialect_count; ++di) {

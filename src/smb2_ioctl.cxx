@@ -1,7 +1,8 @@
 
-#include "smbd_open.hxx"
+#include "smbd.hxx"
 #include "core.hxx"
 #include "include/charset.hxx"
+#include "smbd_object.hxx"
 
 enum {
 	X_SMB2_IOCTL_REQU_BODY_LEN = 0x38,
@@ -251,24 +252,32 @@ static NTSTATUS fsctl_dfs_get_refers_internal(
 		return status;
 	}
 
-	auto smbconf = smbd_conn->get_smbconf();
+	auto smbconf = smbd_conn->get_conf();
 	for (auto const& node: smbconf->cluster_nodes) {
 		if (host == node) {
 			return NT_STATUS_NOT_FOUND;
 		}
 	}
 
-	std::shared_ptr<x_smbshare_t> smbd_share = x_smbd_find_share(smbd_conn->smbd, share);
+	std::shared_ptr<x_smbd_share_t> smbd_share = x_smbd_find_share(smbd_conn->smbd, share);
 	if (!smbd_share) {
 		X_TODO;
 		// find_service user_share
 		return NT_STATUS_NOT_FOUND;
 	}
 
+	if (smbd_share->msdfs_proxy.size() == 0) {
+		return NT_STATUS_FS_DRIVER_REQUIRED;
+	}
+
 	x_dfs_referral_resp_t dfs_referral_resp;
 	dfs_referral_resp.path_consumed = (in_file_name_end - in_file_name_ptr) * 2;
 	if (true || reqpath.size() == 0) {
 		std::u16string in_file_name{in_file_name_ptr, in_file_name_end};
+#if 1
+		dfs_referral_resp.referrals.push_back(x_referral_t{0, smbconf->max_referral_ttl, in_file_name, in_file_name});
+#else
+		TODO
 		if (smbd_share->msdfs_proxy.size() == 0) {
 			dfs_referral_resp.referrals.push_back(x_referral_t{0, smbconf->max_referral_ttl, in_file_name, in_file_name});
 		} else {
@@ -286,7 +295,7 @@ static NTSTATUS fsctl_dfs_get_refers_internal(
 			}
 			dfs_referral_resp.referrals.push_back(x_referral_t{0, smbconf->max_referral_ttl, in_file_name, x_convert_utf8_to_utf16(alt_path)});
 		}
-
+#endif
 	} else {
 		X_TODO; // department share
 	}
@@ -294,10 +303,24 @@ static NTSTATUS fsctl_dfs_get_refers_internal(
 	return push_ref_resp(dfs_referral_resp, state.in_max_output_length, state.out_data);
 }
 
-static NTSTATUS fsctl_dfs_get_refers(
+/* FSCTL_DFS_GET_REFERRALS_EX References: [MS-DFSC]: 2.2.3
+ */
+	/* TODO should check IPC ?
+	if (smbd_tcon->smbshare->type != TYPE_IPC) {
+		return NT_STATUS_INVALID_DEVICE_REQUEST;
+	}
+	if (!smbconf->host_msdfs) {
+		return NT_STATUS_FS_DRIVER_REQUIRED;
+	}
+	*/
+static NTSTATUS x_smb2_fsctl_dfs_get_referrals(
 		x_smbd_conn_t *smbd_conn,
 		x_smb2_state_ioctl_t &state)
 {
+	if (!file_id_is_nul(state)) {
+		return NT_STATUS_INVALID_PARAMETER;
+	}
+
 	if (state.in_data.size() < (2 + 2)) {
 		return NT_STATUS_INVALID_PARAMETER;
 	}
@@ -317,10 +340,14 @@ struct x_smb2_in_refers_ex_t
 	uint32_t request_size;
 };
 
-static NTSTATUS fsctl_dfs_get_refers_ex(
+static NTSTATUS x_smb2_fsctl_dfs_get_referrals_ex(
 		x_smbd_conn_t *smbd_conn,
 		x_smb2_state_ioctl_t &state)
 {
+	if (!file_id_is_nul(state)) {
+		return NT_STATUS_INVALID_PARAMETER;
+	}
+
 	if (state.in_data.size() < sizeof(x_smb2_in_refers_ex_t) + 2) {
 		return NT_STATUS_INVALID_PARAMETER;
 	}
@@ -351,143 +378,36 @@ static NTSTATUS fsctl_dfs_get_refers_ex(
 			in_file_name_size);
 }
 
-/* FSCTL_DFS_GET_REFERRALS_EX References: [MS-DFSC]: 2.2.3
- */
-static NTSTATUS x_smb2_ioctl_dfs(
+static NTSTATUS x_smb2_fsctl_pipe_wait(
 		x_smbd_conn_t *smbd_conn,
-		x_smbd_requ_t *smbd_requ,
-		std::unique_ptr<x_smb2_state_ioctl_t> &state)
-{
-	auto smbconf = smbd_conn->get_smbconf();
-
-	/* TODO should check IPC ?
-	if (smbd_tcon->smbshare->type != TYPE_IPC) {
-		return NT_STATUS_INVALID_DEVICE_REQUEST;
-	}
-	if (!smbconf->host_msdfs) {
-		return NT_STATUS_FS_DRIVER_REQUIRED;
-	}
-	*/
-
-	NTSTATUS status = NT_STATUS_INTERNAL_ERROR;
-
-	switch (state->ctl_code) {
-	case FSCTL_DFS_GET_REFERRALS:
-		if (!file_id_is_nul(*state)) {
-			return NT_STATUS_INVALID_PARAMETER;
-		}
-		return NT_STATUS_FS_DRIVER_REQUIRED;
-		status = fsctl_dfs_get_refers(smbd_conn, *state);
-		break;
-	case FSCTL_DFS_GET_REFERRALS_EX:
-		if (!file_id_is_nul(*state)) {
-			return NT_STATUS_INVALID_PARAMETER;
-		}
-		return NT_STATUS_FS_DRIVER_REQUIRED;
-		status = fsctl_dfs_get_refers_ex(smbd_conn, *state);
-		break;
-	default: {
-		X_TODO;
-#if 0
-		uint8_t *out_data = NULL;
-		uint32_t out_data_len = 0;
-
-		if (state->fsp == NULL) {
-			status = NT_STATUS_NOT_SUPPORTED;
-		} else {
-			status = SMB_VFS_FSCTL(state->fsp,
-					       state,
-					       ctl_code,
-					       state->smbreq->flags2,
-					       state->in_input.data,
-					       state->in_input.length,
-					       &out_data,
-					       state->in_max_output,
-					       &out_data_len);
-			state->out_output = data_blob_const(out_data, out_data_len);
-			if (NT_STATUS_IS_OK(status)) {
-				tevent_req_done(req);
-				return tevent_req_post(req, ev);
-			}
-		}
-
-		if (NT_STATUS_EQUAL(status, NT_STATUS_NOT_SUPPORTED)) {
-			if (IS_IPC(state->smbreq->conn)) {
-				status = NT_STATUS_FS_DRIVER_REQUIRED;
-			} else {
-				status = NT_STATUS_INVALID_DEVICE_REQUEST;
-			}
-		}
-
-		tevent_req_nterror(req, status);
-		return tevent_req_post(req, ev);
-		break;
-#endif
-	}
-	}
-
-	return status;
-}
-
-// FSCTL_FILESYSTEM
-static NTSTATUS x_smb2_ioctl_filesys(x_smbd_conn_t *smbd_conn,
-		x_smbd_requ_t *smbd_requ,
-		std::unique_ptr<x_smb2_state_ioctl_t> &state)
-{
-	if (smbd_requ->smbd_open) {
-	} else if (smbd_requ->smbd_tcon) {
-		smbd_requ->smbd_open = x_smbd_open_find(state->file_id_persistent,
-				state->file_id_volatile,
-				smbd_requ->smbd_tcon);
-	} else {
-		smbd_requ->smbd_open = x_smbd_open_find(state->file_id_persistent,
-				state->file_id_volatile, smbd_requ->in_tid, smbd_requ->smbd_sess);
-	}
-
-	/* TODO check tcon is not IPC? */
-	if (!smbd_requ->smbd_open) {
-		RETURN_OP_STATUS(smbd_requ, NT_STATUS_FILE_CLOSED);
-	}
-
-	return x_smbd_open_op_ioctl(smbd_conn, smbd_requ, state);
-}
-
-// FSCTL_NAMED_PIPE
-static NTSTATUS x_smb2_ioctl_named_pipe(x_smbd_conn_t *smbd_conn,
-		x_smbd_requ_t *smbd_requ,
-		std::unique_ptr<x_smb2_state_ioctl_t> &state)
-{
-	switch (state->ctl_code) {
-	case FSCTL_PIPE_WAIT:
-		if (!file_id_is_nul(*state)) {
-			return NT_STATUS_INVALID_PARAMETER;
-		}
-		/* TODO */
-		return NT_STATUS_INTERNAL_ERROR;
-	}
-
-	if (smbd_requ->smbd_open) {
-	} else if (smbd_requ->smbd_tcon) {
-		smbd_requ->smbd_open = x_smbd_open_find(state->file_id_persistent,
-				state->file_id_volatile,
-				smbd_requ->smbd_tcon);
-	} else {
-		smbd_requ->smbd_open = x_smbd_open_find(state->file_id_persistent,
-				state->file_id_volatile, smbd_requ->in_tid, smbd_requ->smbd_sess);
-	}
-
-	/* TODO check tcon is IPC? */
-	if (!smbd_requ->smbd_open) {
-		RETURN_OP_STATUS(smbd_requ, NT_STATUS_FILE_CLOSED);
-	}
-
-	return x_smbd_open_op_ioctl(smbd_conn, smbd_requ, state);
-}
-
-// FSCTL_NETWORK_FILESYSTEM
-static NTSTATUS fsctl_validate_neg_info(x_smbd_conn_t *smbd_conn,
 		x_smb2_state_ioctl_t &state)
 {
+	if (!file_id_is_nul(state)) {
+		return NT_STATUS_INVALID_PARAMETER;
+	}
+	X_TODO;
+	return NT_STATUS_INTERNAL_ERROR;
+}
+
+static NTSTATUS x_smb2_fsctl_validate_negotiate_info_224(
+		x_smbd_conn_t *smbd_conn,
+		x_smb2_state_ioctl_t &state)
+{
+	if (!file_id_is_nul(state)) {
+		return NT_STATUS_INVALID_PARAMETER;
+	}
+	X_TODO;
+	return NT_STATUS_INTERNAL_ERROR;
+}
+
+static NTSTATUS x_smb2_fsctl_validate_negotiate_info(
+		x_smbd_conn_t *smbd_conn,
+		x_smb2_state_ioctl_t &state)
+{
+	if (!file_id_is_nul(state)) {
+		return NT_STATUS_INVALID_PARAMETER;
+	}
+
 	const uint8_t *in_data = state.in_data.data();
 	uint32_t in_input_size = state.in_data.size();
 
@@ -539,7 +459,7 @@ static NTSTATUS fsctl_validate_neg_info(x_smbd_conn_t *smbd_conn,
 		return NT_STATUS_BUFFER_TOO_SMALL;
 	}
 
-	const std::shared_ptr<x_smbconf_t> smbconf = smbd_conn->get_smbconf();
+	const std::shared_ptr<x_smbd_conf_t> smbconf = smbd_conn->get_conf();
 	state.out_data.resize(0x18);
 	uint8_t *outbody = state.out_data.data();
 	x_put_le32(outbody + 0x00, smbd_conn->server_capabilities);
@@ -550,11 +470,145 @@ static NTSTATUS fsctl_validate_neg_info(x_smbd_conn_t *smbd_conn,
 	return NT_STATUS_OK;
 }
 
-static NTSTATUS fsctl_network_iface_info(x_smbd_conn_t *smbd_conn,
+static NTSTATUS x_smb2_fsctl_query_network_interface_info(
+		x_smbd_conn_t *smbd_conn,
 		x_smb2_state_ioctl_t &state)
 {
-	/* TODO */
+	if (!file_id_is_nul(state)) {
+		return NT_STATUS_INVALID_PARAMETER;
+	}
+	X_TODO;
 	return NT_STATUS_INTERNAL_ERROR;
+}
+
+NTSTATUS x_smb2_process_IOCTL(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
+{
+	if (smbd_requ->in_requ_len < SMB2_HDR_BODY + sizeof(x_smb2_in_ioctl_t)) {
+		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
+	}
+
+	if (!smbd_requ->smbd_sess) {
+		RETURN_OP_STATUS(smbd_requ, NT_STATUS_USER_SESSION_DELETED);
+	}
+
+	if (smbd_requ->smbd_sess->state != x_smbd_sess_t::S_ACTIVE) {
+		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
+	}
+
+	const uint8_t *in_hdr = smbd_requ->get_in_data();
+
+	auto state = std::make_unique<x_smb2_state_ioctl_t>();
+	if (!decode_in_ioctl(*state, in_hdr, smbd_requ->in_requ_len)) {
+		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
+	}
+
+	X_LOG_OP("%ld IOCTL 0x%lx, 0x%lx", smbd_requ->in_mid,
+			state->file_id_persistent, state->file_id_volatile);
+
+	if (state->in_flags != SMB2_IOCTL_FLAG_IS_FSCTL) {
+		RETURN_OP_STATUS(smbd_requ, NT_STATUS_NOT_SUPPORTED);
+	}
+
+	NTSTATUS status;
+	switch (state->ctl_code) {
+	default:
+		if (smbd_requ->smbd_open) {
+		} else if (smbd_requ->smbd_tcon) {
+			smbd_requ->smbd_open = x_smbd_open_find(state->file_id_persistent,
+					state->file_id_volatile,
+					smbd_requ->smbd_tcon);
+		} else {
+			uint32_t tid = x_get_le32(in_hdr + SMB2_HDR_TID);
+			smbd_requ->smbd_open = x_smbd_open_find(state->file_id_persistent,
+					state->file_id_volatile, tid, smbd_requ->smbd_sess);
+		}
+
+		if (!smbd_requ->smbd_open) {
+			RETURN_OP_STATUS(smbd_requ, NT_STATUS_FILE_CLOSED);
+		}
+
+		status = x_smbd_object_op_ioctl(smbd_requ->smbd_open->smbd_object,
+				smbd_conn, smbd_requ, state);
+		break;
+	case FSCTL_DFS_GET_REFERRALS:
+		status = x_smb2_fsctl_dfs_get_referrals(smbd_conn, *state);
+		break;
+	case FSCTL_DFS_GET_REFERRALS_EX:
+		status = x_smb2_fsctl_dfs_get_referrals_ex(smbd_conn, *state);
+		break;
+	case FSCTL_PIPE_WAIT:
+		status = x_smb2_fsctl_pipe_wait(smbd_conn, *state);
+		break;
+	case FSCTL_VALIDATE_NEGOTIATE_INFO_224:
+		status = x_smb2_fsctl_validate_negotiate_info_224(smbd_conn, *state);
+		break;
+	case FSCTL_VALIDATE_NEGOTIATE_INFO:
+		status = x_smb2_fsctl_validate_negotiate_info(smbd_conn, *state);
+		break;
+	case FSCTL_QUERY_NETWORK_INTERFACE_INFO:
+		status = x_smb2_fsctl_query_network_interface_info(smbd_conn, *state);
+		break;
+	}
+
+	if (NT_STATUS_IS_OK(status)) {
+		x_smb2_reply_ioctl(smbd_conn, smbd_requ, *state);
+	}
+	return status;
+}
+#if 0
+// FSCTL_NAMED_PIPE
+static NTSTATUS x_smb2_ioctl_named_pipe(x_smbd_conn_t *smbd_conn,
+		x_smbd_requ_t *smbd_requ,
+		std::unique_ptr<x_smb2_state_ioctl_t> &state)
+{
+	switch (state->ctl_code) {
+	case FSCTL_PIPE_WAIT:
+		if (!file_id_is_nul(*state)) {
+			return NT_STATUS_INVALID_PARAMETER;
+		}
+		/* TODO */
+		return NT_STATUS_INTERNAL_ERROR;
+	}
+
+	if (smbd_requ->smbd_open) {
+	} else if (smbd_requ->smbd_tcon) {
+		smbd_requ->smbd_open = x_smbd_open_find(state->file_id_persistent,
+				state->file_id_volatile,
+				smbd_requ->smbd_tcon);
+	} else {
+		smbd_requ->smbd_open = x_smbd_open_find(state->file_id_persistent,
+				state->file_id_volatile, smbd_requ->in_tid, smbd_requ->smbd_sess);
+	}
+
+	/* TODO check tcon is IPC? */
+	if (!smbd_requ->smbd_open) {
+		RETURN_OP_STATUS(smbd_requ, NT_STATUS_FILE_CLOSED);
+	}
+
+	return x_smbd_open_op_ioctl(smbd_conn, smbd_requ, state);
+}
+
+// FSCTL_FILESYSTEM
+static NTSTATUS x_smb2_ioctl_filesys(x_smbd_conn_t *smbd_conn,
+		x_smbd_requ_t *smbd_requ,
+		std::unique_ptr<x_smb2_state_ioctl_t> &state)
+{
+	if (smbd_requ->smbd_open) {
+	} else if (smbd_requ->smbd_tcon) {
+		smbd_requ->smbd_open = x_smbd_open_find(state->file_id_persistent,
+				state->file_id_volatile,
+				smbd_requ->smbd_tcon);
+	} else {
+		smbd_requ->smbd_open = x_smbd_open_find(state->file_id_persistent,
+				state->file_id_volatile, smbd_requ->in_tid, smbd_requ->smbd_sess);
+	}
+
+	/* TODO check tcon is not IPC? */
+	if (!smbd_requ->smbd_open) {
+		RETURN_OP_STATUS(smbd_requ, NT_STATUS_FILE_CLOSED);
+	}
+
+	return x_smbd_open_op_ioctl(smbd_conn, smbd_requ, state);
 }
 
 static NTSTATUS x_smb2_ioctl_network_fs(x_smbd_conn_t *smbd_conn,
@@ -662,60 +716,30 @@ static NTSTATUS x_smb2_ioctl_network_fs(x_smbd_conn_t *smbd_conn,
 
 	return status;
 }
-
-NTSTATUS x_smb2_process_IOCTL(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
+static NTSTATUS x_smb2_ioctl_open(
+		x_smbd_conn_t *smbd_conn,
+		x_smbd_requ_t *smbd_requ,
+		std::unique_ptr<x_smb2_state_ioctl_t> &state)
 {
-	if (smbd_requ->in_requ_len < SMB2_HDR_BODY + sizeof(x_smb2_in_ioctl_t)) {
-		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
+	if (smbd_requ->smbd_open) {
+	} else if (smbd_requ->smbd_tcon) {
+		smbd_requ->smbd_open = x_smbd_open_find(state->file_id_persistent,
+				state->file_id_volatile,
+				smbd_requ->smbd_tcon);
+	} else {
+		uint32_t tid = x_get_le32(in_hdr + SMB2_HDR_TID);
+		smbd_requ->smbd_open = x_smbd_open_find(state->file_id_persistent,
+				state->file_id_volatile, tid, smbd_requ->smbd_sess);
 	}
 
-	if (!smbd_requ->smbd_sess) {
-		RETURN_OP_STATUS(smbd_requ, NT_STATUS_USER_SESSION_DELETED);
+	if (!smbd_requ->smbd_open) {
+		RETURN_OP_STATUS(smbd_requ, NT_STATUS_FILE_CLOSED);
 	}
 
-	if (smbd_requ->smbd_sess->state != x_smbd_sess_t::S_ACTIVE) {
-		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
-	}
-
-	const uint8_t *in_hdr = smbd_requ->get_in_data();
-
-	auto state = std::make_unique<x_smb2_state_ioctl_t>();
-	if (!decode_in_ioctl(*state, in_hdr, smbd_requ->in_requ_len)) {
-		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
-	}
-
-	NTSTATUS status;
-	switch (state->ctl_code & IOCTL_DEV_TYPE_MASK) {
-	case FSCTL_DFS:
-		status = x_smb2_ioctl_dfs(smbd_conn, smbd_requ, state);
-		break;
-	case FSCTL_FILESYSTEM:
-		status = x_smb2_ioctl_filesys(smbd_conn, smbd_requ, state);
-		break;
-	case FSCTL_NAMED_PIPE:
-		status = x_smb2_ioctl_named_pipe(smbd_conn, smbd_requ, state);
-		break;
-	case FSCTL_NETWORK_FILESYSTEM:
-		status = x_smb2_ioctl_network_fs(smbd_conn, smbd_requ, state);
-		break;
-	default:
-		X_TODO;
-#if 0
-		if (IS_IPC(smbreq->conn)) {
-			tevent_req_nterror(req, NT_STATUS_FS_DRIVER_REQUIRED);
-		} else {
-			tevent_req_nterror(req, NT_STATUS_INVALID_DEVICE_REQUEST);
-		}
-
-		return tevent_req_post(req, ev);
-#endif
-		break;
-	}
-
-	if (NT_STATUS_IS_OK(status)) {
-		x_smb2_reply_ioctl(smbd_conn, smbd_requ, *state);
-	}
-	return status;
+	auto smbd_object = smbd_requ->smbd_open->smbd_object;
+	return x_smbd_object_op_ioctl(smbd_object, smbd_conn, smbd_requ,
+			state);
 }
 
+#endif
 

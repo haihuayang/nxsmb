@@ -13,7 +13,7 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <unistd.h>
-#include "smbconf.hxx"
+#include "smbd_conf.hxx"
 #include "smb2.hxx"
 #include "misc.hxx"
 #include "include/utils.hxx"
@@ -45,7 +45,7 @@ extern "C" {
 #define GENSEC_EXPIRE_TIME_INFINITY (NTTIME)0x8000000000000000LL
 
 struct x_auth_context_t;
-const std::shared_ptr<x_smbconf_t> x_auth_context_get_smbconf(const x_auth_context_t *);
+const std::shared_ptr<x_smbd_conf_t> x_auth_context_get_smbd_conf(const x_auth_context_t *);
 
 struct x_auth_t;
 
@@ -153,11 +153,11 @@ struct x_auth_t
 			std::vector<uint8_t> &sig) {
 		return ops->sign_packet(this, data, data_len, whole_pdu, pdu_length, sig);
 	}
-
+#if 0
 	const std::shared_ptr<x_smbconf_t> get_smbconf() const {
 		return x_auth_context_get_smbconf(context);
 	}
-
+#endif
 	x_auth_context_t * const context;
 	const x_auth_ops_t * const ops;
 };

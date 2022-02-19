@@ -8,8 +8,8 @@ struct x_auth_context_t
 	x_smbd_t * const smbd;
 	std::vector<const x_auth_mech_t *> mechs;
 	x_auth_t *create_by_oid(const char *oid);
-	const std::shared_ptr<x_smbconf_t> get_smbconf() const {
-		return smbd->smbconf;
+	const std::shared_ptr<x_smbd_conf_t> get_smbd_conf() const {
+		return smbd->smbd_conf;
 	}
 };
 
@@ -48,9 +48,9 @@ x_auth_t *x_auth_create_by_oid(x_auth_context_t *context, gss_const_OID oid)
 	return mech->create(context);
 }
 
-const std::shared_ptr<x_smbconf_t> x_auth_context_get_smbconf(const x_auth_context_t *context)
+const std::shared_ptr<x_smbd_conf_t> x_auth_context_get_smbd_conf(const x_auth_context_t *context)
 {
-	return context->get_smbconf();
+	return context->get_smbd_conf();
 }
 #if 0
 bool x_auth_context_lpcfg_lanman_auth(const x_auth_context_t *context);

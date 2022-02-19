@@ -118,6 +118,10 @@ enum {
 #define FILE_NOTIFY_CHANGE_STREAM_NAME	0x00000200
 #define FILE_NOTIFY_CHANGE_STREAM_SIZE	0x00000400
 #define FILE_NOTIFY_CHANGE_STREAM_WRITE	0x00000800
+/* ChangeNotify flags used internally */
+#define X_FILE_NOTIFY_CHANGE_WATCH_TREE	0x40000000u
+#define X_FILE_NOTIFY_CHANGE_VALID	0x80000000u
+
 
 #define FILE_NOTIFY_CHANGE_NAME \
 	(FILE_NOTIFY_CHANGE_FILE_NAME|FILE_NOTIFY_CHANGE_DIR_NAME)
@@ -140,6 +144,26 @@ enum {
 #define NOTIFY_ACTION_REMOVED_STREAM 7
 #define NOTIFY_ACTION_MODIFIED_STREAM 8
 
+enum {
+	X_SMB2_OPLOCK_LEVEL_NONE = 0x00,
+	X_SMB2_OPLOCK_LEVEL_II = 0x01,
+	X_SMB2_OPLOCK_LEVEL_EXCLUSIVE = 0x08,
+	X_SMB2_OPLOCK_LEVEL_BATCH = 0x09,
+	X_SMB2_OPLOCK_LEVEL_LEASE = 0xFF,
+};
+
+enum {
+	X_SMB2_LEASE_NONE = 0x0,
+	X_SMB2_LEASE_READ = 0x01,
+	X_SMB2_LEASE_HANDLE = 0x02,
+	X_SMB2_LEASE_WRITE = 0x04,
+};
+
+enum {
+	/* SMB2 lease flags */
+	X_SMB2_LEASE_FLAG_BREAK_IN_PROGRESS =                0x00000002,
+	X_SMB2_LEASE_FLAG_PARENT_LEASE_KEY_SET =             0x00000004,
+};
 
 enum {
 	X_SMB2_CREATE_TAG_EXTA = 'ExtA',
@@ -154,6 +178,38 @@ enum {
 	X_SMB2_CREATE_TAG_DH2Q = 'DH2Q',
 	X_SMB2_CREATE_TAG_DH2C = 'DH2C',
 	X_SMB2_CREATE_TAG_AAPL = 'AAPL',
+};
+
+struct x_smb2_preauth_t
+{
+	std::array<char, 64> data{};
+	void update(const void *data, size_t length);
+};
+
+using x_smb2_key_t = std::array<uint8_t, 16>;
+
+void x_smb2_key_derivation(const uint8_t *KI, size_t KI_len,
+		const x_array_const_t<char> &label,
+		const x_array_const_t<char> &context,
+		x_smb2_key_t &key);
+
+struct x_smb2_lease_key_t
+{
+	bool operator==(const x_smb2_lease_key_t &other) const {
+		return data == other.data;
+	}
+	std::array<uint64_t, 2> data;
+};
+
+struct x_smb2_lease_t
+{
+	x_smb2_lease_key_t key;
+	uint32_t state;
+	uint32_t flags;
+	uint64_t duration;
+	x_smb2_lease_key_t parent_key;
+	uint16_t epoch;
+	uint16_t version;
 };
 
 struct x_buf_t
@@ -234,6 +290,15 @@ struct x_buflist_t
 	void pop();
 	x_bufref_t *head{}, *tail{};
 };
+
+bool x_smb2_signing_check(uint16_t dialect,
+		const x_smb2_key_t &key,
+		x_bufref_t *buflist);
+
+void x_smb2_signing_sign(uint16_t dialect,
+		const x_smb2_key_t &key,
+		x_bufref_t *buflist);
+
 #if 0
 struct x_nbt_t
 {
@@ -276,28 +341,43 @@ struct x_smb2_op_state_t
 };
 #endif
 
-struct x_smb2_preauth_t
+struct x_smb2_create_close_info_t
 {
-	std::array<char, 64> data{};
-	void update(const void *data, size_t length);
+	idl::NTTIME out_create_ts;
+	idl::NTTIME out_last_access_ts;
+	idl::NTTIME out_last_write_ts;
+	idl::NTTIME out_change_ts;
+	uint64_t out_allocation_size{0};
+	uint64_t out_end_of_file{0};
+	uint32_t out_file_attributes{0};
 };
 
-using x_smb2_key_t = std::array<uint8_t, 16>;
+struct x_smb2_standard_info_t
+{
+	uint32_t create_time;
+	uint32_t access_time;
+	uint32_t modify_time;
+};
 
-void x_smb2_key_derivation(const uint8_t *KI, size_t KI_len,
-		const x_array_const_t<char> &label,
-		const x_array_const_t<char> &context,
-		x_smb2_key_t &key);
+struct x_smb2_basic_info_t
+{
+	idl::NTTIME creation;
+	idl::NTTIME last_access;
+	idl::NTTIME last_write;
+	idl::NTTIME change;
+	uint32_t file_attributes;
+};
 
-bool x_smb2_signing_check(uint16_t dialect,
-		const x_smb2_key_t &key,
-		x_bufref_t *buflist);
+bool x_smb2_standard_info_decode(x_smb2_standard_info_t &standard_info,
+		const std::vector<uint8_t> &in_data);
 
-void x_smb2_signing_sign(uint16_t dialect,
-		const x_smb2_key_t &key,
-		x_bufref_t *buflist);
+bool x_smb2_basic_info_decode(x_smb2_basic_info_t &basic_info,
+		const std::vector<uint8_t> &in_data);
 
-
+NTSTATUS x_smb2_notify_marshall(
+		const std::vector<std::pair<uint32_t, std::u16string>> &notify_changes,
+		uint32_t max_offset,
+		std::vector<uint8_t> &output);
 
 #endif /* __smb2__hxx__ */
 

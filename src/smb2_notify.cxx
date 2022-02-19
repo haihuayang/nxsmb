@@ -1,6 +1,7 @@
 
-#include "smbd_open.hxx"
+#include "smbd.hxx"
 #include "core.hxx"
+#include "smbd_object.hxx"
 
 namespace {
 enum {
@@ -65,6 +66,19 @@ static void x_smb2_reply_notify(x_smbd_conn_t *smbd_conn,
 			SMB2_HDR_BODY + sizeof(x_smb2_out_notify_t) + state.out_data.size());
 }
 
+static void x_smb2_notify_async_done(x_smbd_conn_t *smbd_conn,
+		x_smbd_requ_t *smbd_requ,
+		NTSTATUS status)
+{
+	std::unique_ptr<x_smb2_state_notify_t> state{(x_smb2_state_notify_t *)smbd_requ->requ_state};
+	X_LOG_DBG("status=0x%x", status.v);
+	smbd_requ->requ_state = nullptr;
+	if (NT_STATUS_IS_OK(status)) {
+		x_smb2_reply_notify(smbd_conn, smbd_requ, *state);
+	}
+	x_smbd_conn_requ_done(smbd_conn, smbd_requ, status);
+}
+
 NTSTATUS x_smb2_process_NOTIFY(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 {
 	if (smbd_requ->in_requ_len < SMB2_HDR_BODY + sizeof(x_smb2_in_notify_t)) {
@@ -86,8 +100,9 @@ NTSTATUS x_smb2_process_NOTIFY(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_req
 		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
 
-	X_LOG_OP("%ld NOTIFY 0x%lx, 0x%lx", smbd_requ->in_mid,
-			state->in_file_id_persistent, state->in_file_id_volatile);
+	X_LOG_OP("%ld NOTIFY 0x%lx,0x%lx, filter=0x%x", smbd_requ->in_mid,
+			state->in_file_id_persistent, state->in_file_id_volatile,
+			state->in_filter);
 
 	if (smbd_requ->smbd_open) {
 	} else if (smbd_requ->smbd_tcon) {
@@ -104,7 +119,9 @@ NTSTATUS x_smb2_process_NOTIFY(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_req
 		RETURN_OP_STATUS(smbd_requ, NT_STATUS_FILE_CLOSED);
 	}
 
-	NTSTATUS status = x_smbd_open_op_notify(smbd_conn, smbd_requ, state);
+	smbd_requ->async_done_fn = x_smb2_notify_async_done;
+	NTSTATUS status = x_smbd_object_op_notify(smbd_requ->smbd_open->smbd_object,
+			smbd_conn, smbd_requ, state);
 	if (NT_STATUS_IS_OK(status)) {
 		x_smb2_reply_notify(smbd_conn, smbd_requ, *state);
 		return status;
@@ -113,13 +130,4 @@ NTSTATUS x_smb2_process_NOTIFY(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_req
 	RETURN_OP_STATUS(smbd_requ, status);
 }
 
-void x_smb2_state_notify_t::done(x_smbd_conn_t *smbd_conn,
-		x_smbd_requ_t *smbd_requ,
-		NTSTATUS status)
-{
-	if (NT_STATUS_IS_OK(status)) {
-		x_smb2_reply_notify(smbd_conn, smbd_requ, *this);
-	}
-	x_smbd_conn_requ_done(smbd_conn, smbd_requ, status);
-}
 

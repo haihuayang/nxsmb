@@ -12,9 +12,10 @@
 #include <stdio.h>
 
 // #include "smb_consts.h"
-#include "smbconf.hxx"
+#include "smbd_conf.hxx"
 #include "core.hxx"
 #include "network.hxx"
+#include "smbd_lease.hxx"
 
 #include "smb2.hxx"
 
@@ -917,7 +918,7 @@ static void x_smbd_init(x_smbd_t &smbd)
 	smbd.capabilities = SMB2_CAP_DFS | SMB2_CAP_LARGE_MTU | SMB2_CAP_LEASING
 		| SMB2_CAP_DIRECTORY_LEASING; // | SMB2_CAP_MULTI_CHANNEL
 
-	int fd = tcplisten(smbd.smbconf->port);
+	int fd = tcplisten(smbd.smbd_conf->port);
 	assert(fd >= 0);
 
 	smbd.fd = fd;
@@ -939,7 +940,7 @@ enum {
 int main(int argc, char **argv)
 {
 	x_smbd_t smbd;
-	int err = x_smbd_parse_cmdline(smbd.smbconf, argc, argv);
+	int err = x_smbd_conf_parse(smbd.smbd_conf, argc, argv);
 	if (err < 0) {
 		fprintf(stderr, "parse_cmdline failed %d\n", err);
 		exit(1);
@@ -947,22 +948,23 @@ int main(int argc, char **argv)
 
 	signal(SIGPIPE, SIG_IGN);
 
-	x_threadpool_t *tpool = x_threadpool_create(smbd.smbconf->thread_count);
+	x_threadpool_t *tpool = x_threadpool_create(smbd.smbd_conf->thread_count);
 	globals.tpool_evtmgmt = tpool;
 
 	g_evtmgmt = x_evtmgmt_create(tpool, 60 * X_NSEC_PER_SEC);
 	globals.wbpool = x_wbpool_create(g_evtmgmt, 2);
 
-	globals.tpool_aio = x_threadpool_create(smbd.smbconf->thread_count);
+	globals.tpool_aio = x_threadpool_create(smbd.smbd_conf->thread_count);
 
 	x_smbd_open_pool_init(X_SMBD_MAX_OPEN);
 	x_smbd_tcon_pool_init(X_SMBD_MAX_TCON);
 	x_smbd_sess_pool_init(X_SMBD_MAX_SESSION);
 	x_smbd_sess_pool_init(X_SMBD_MAX_REQUEST);
 	x_smbd_requ_pool_init(X_SMBD_MAX_OPEN); // TODO use X_SMBD_MAX_OPEN for now
+	x_smbd_lease_pool_init(X_SMBD_MAX_OPEN, X_SMBD_MAX_OPEN / 16); // TODO use X_SMBD_MAX_OPEN for now
 
 	x_smbd_ipc_init();
-	x_smbd_disk_init(X_SMBD_MAX_OPEN);
+	x_smbd_posixfs_init(X_SMBD_MAX_OPEN);
 
 	x_smbd_init(smbd);
 	x_smbd_ctrl_init(g_evtmgmt);

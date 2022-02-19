@@ -1127,7 +1127,7 @@ x_auth_ntlmssp_t::x_auth_ntlmssp_t(x_auth_context_t *context, const x_auth_ops_t
 	wbcli.requ = &wbrequ;
 	wbcli.resp = &wbresp;
 
-	auto smbconf = x_auth_context_get_smbconf(context);
+	auto smbconf = x_auth_context_get_smbd_conf(context);
 	// gensec_ntlmssp_server_start
 	allow_lm_response = smbconf->lanman_auth;
 	allow_lm_key = (allow_lm_response && lpcfg_param_bool(NULL, "ntlmssp_server", "allow_lm_key", false));

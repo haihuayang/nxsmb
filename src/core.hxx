@@ -90,10 +90,20 @@ static inline void x_put_be64(uint8_t *buf, uint64_t val)
 #define X_LE2H32(v) (v)
 #define X_LE2H64(v) (v)
 
+#define X_BE2H8(v) (v)
+#define X_BE2H16(v) __builtin_bswap16(v)
+#define X_BE2H32(v) __builtin_bswap32(v)
+#define X_BE2H64(v) __builtin_bswap64(v)
+
 #define X_H2LE8(v) (v)
 #define X_H2LE16(v) (v)
 #define X_H2LE32(v) (v)
 #define X_H2LE64(v) (v)
+
+#define X_H2BE8(v) (v)
+#define X_H2BE16(v) __builtin_bswap16(v)
+#define X_H2BE32(v) __builtin_bswap32(v)
+#define X_H2BE64(v) __builtin_bswap64(v)
 
 #else
 #error "Not implemented"

@@ -1,6 +1,7 @@
 
-#include "smbd_open.hxx"
+#include "smbd.hxx"
 #include "core.hxx"
+#include "smbd_object.hxx"
 
 enum {
 	X_SMB2_CLOSE_REQU_BODY_LEN = 0x18,
@@ -49,7 +50,8 @@ static void encode_out_close(const x_smb2_state_close_t &state,
 		/* TODO not work for big-endian */
 		memcpy(&out_close->info, &state.out_info, sizeof(state.out_info));
 	} else {
-		memset(&out_close->info, 0, sizeof(out_close->info));
+		out_close->info = x_smb2_create_close_info_t{};
+		// memset(&out_close->info, 0, sizeof(out_close->info));
 	}
 }
 
@@ -100,14 +102,13 @@ NTSTATUS x_smb2_process_CLOSE(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ
 				state->in_file_id_volatile, smbd_requ->in_tid, smbd_requ->smbd_sess);
 	}
 
-
 	auto smbd_open = smbd_requ->smbd_open;
 	if (!smbd_open) {
 		RETURN_OP_STATUS(smbd_requ, NT_STATUS_FILE_CLOSED);
 	}
 
-
-	NTSTATUS status = x_smbd_open_close(smbd_conn, smbd_open,
+	auto smbd_object = smbd_requ->smbd_open->smbd_object;
+	NTSTATUS status = x_smbd_object_op_close(smbd_object, smbd_conn, smbd_open,
 			smbd_requ, state);
 	if (!NT_STATUS_IS_OK(status)) {
 		RETURN_OP_STATUS(smbd_requ, status);

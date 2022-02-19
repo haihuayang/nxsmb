@@ -959,7 +959,7 @@ static NTSTATUS auth_krb5_accepted(x_auth_krb5_t &auth, gss_ctx_id_t gss_ctx,
 			gss_release_buffer_set(&min_stat, &p);
 		});
 
-	const std::shared_ptr<x_smbconf_t> smbconf = auth.auth.get_smbconf();
+	const std::shared_ptr<x_smbd_conf_t> smbconf = x_auth_context_get_smbd_conf(auth.auth.context);
 	std::shared_ptr<idl::PAC_LOGON_INFO> logon_info;
 	/* IF we have the PAC - otherwise we need to get this
 	 * data from elsewere
@@ -1493,7 +1493,7 @@ fail:
 }
 #endif
 static krb5_error_code get_host_principal(
-		const std::shared_ptr<x_smbconf_t> &smbconf,
+		const std::shared_ptr<x_smbd_conf_t> &smbconf,
 		krb5_context krbctx,
 		krb5_principal *host_princ)
 {
@@ -1561,7 +1561,7 @@ static int kerberos_key_from_string(krb5_context context,
 }
 
 static krb5_error_code fill_keytab_from_password(
-		const std::shared_ptr<x_smbconf_t> smbconf,
+		const std::shared_ptr<x_smbd_conf_t> smbconf,
 		krb5_context krbctx,
 		krb5_keytab keytab,
 		krb5_principal princ,
@@ -1648,7 +1648,7 @@ static krb5_error_code fill_mem_keytab_from_secrets(
 	krb5_principals node_princs = NULL;
 	krb5_kvno kvno = 0; /* FIXME: fetch current vno from KDC ? */
 
-	auto smbconf = x_auth_context_get_smbconf(auth_context);
+	auto smbconf = x_auth_context_get_smbd_conf(auth_context);
 	if (!secrets_init()) {
 		DEBUG(1, (__location__ ": secrets_init failed\n"));
 		return KRB5_CONFIG_CANTOPEN;

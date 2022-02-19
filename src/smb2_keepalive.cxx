@@ -1,5 +1,5 @@
 
-#include "smbd_open.hxx"
+#include "smbd.hxx"
 #include "core.hxx"
 
 enum {

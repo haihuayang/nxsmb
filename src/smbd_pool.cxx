@@ -1,26 +1,29 @@
 
-#include "smbd_open.hxx"
+#include "smbd.hxx"
+#include "smbd_object.hxx"
 #include "smbd_ctrl.hxx"
-#include "include/hashtable.hxx"
+#include "smbd_pool.hxx"
 #include "include/librpc/security.hxx"
-
-template <typename HashTraits>
-struct smbd_pool_t
-{
-	x_hashtable_t<HashTraits> hashtable;
-	std::atomic<uint32_t> count;
-	uint32_t capacity;
-	std::mutex mutex;
-};
 
 
 X_DECLARE_MEMBER_TRAITS(smbd_open_hash_traits, x_smbd_open_t, hash_link)
 using smbd_open_pool_t = smbd_pool_t<smbd_open_hash_traits>;
 
+void x_smbd_open_init(x_smbd_open_t *smbd_open, x_smbd_object_t *smbd_object, x_smbd_tcon_t *smbd_tcon, uint32_t share_access, uint32_t access_mask)
+{
+	smbd_open->smbd_object = smbd_object;
+	smbd_open->smbd_tcon = smbd_tcon;
+	smbd_open->share_access = share_access;
+	smbd_open->access_mask = access_mask;
+}
+
+/* open ref to object, and link into object's open list
+   object does not ref to open
+ */
 void x_smbd_open_t::decref()
 {
 	if (unlikely(--refcnt == 0)) {
-		ops->destroy(this);
+		X_TODO; // ops->destroy(this);
 	}
 }
 
@@ -214,26 +217,6 @@ static void smbd_requ_insert_intl(smbd_requ_pool_t &pool, x_smbd_requ_t *smbd_re
 
 
 
-template <typename P>
-static inline void pool_init(P &pool, uint32_t count)
-{
-	size_t bucket_size = x_next_2_power(count);
-	pool.hashtable.init(bucket_size);
-	pool.capacity = count;
-}
-
-template <typename P, typename E>
-static inline void pool_release(P &pool, E *elem)
-{
-	{
-		std::lock_guard<std::mutex> lock(pool.mutex);
-		pool.hashtable.remove(elem);
-	}
-	--pool.count;
-	elem->decref();
-}
-
-
 
 static smbd_open_pool_t g_smbd_open_pool;
 static smbd_tcon_pool_t g_smbd_tcon_pool;
@@ -312,6 +295,7 @@ x_smbd_requ_t *x_smbd_requ_find(uint64_t id, const x_smbd_conn_t *smbd_conn)
 
 void x_smbd_requ_insert(x_smbd_requ_t *smbd_requ)
 {
+	smbd_requ->incref();
 	smbd_requ_insert_intl(g_smbd_requ_pool, smbd_requ);
 }
 
@@ -364,7 +348,8 @@ void x_smbd_tcon_terminate(x_smbd_tcon_t *smbd_tcon)
 	x_smbd_open_t *smbd_open;
 	while ((smbd_open = smbd_tcon->open_list.get_front()) != nullptr) {
 		smbd_tcon->open_list.remove(smbd_open);
-		x_smbd_open_close(smbd_tcon->smbd_sess->smbd_conn,
+		x_smbd_object_op_close(smbd_open->smbd_object,
+				smbd_tcon->smbd_sess->smbd_conn,
 				smbd_open, nullptr, close_state);
 		smbd_open->decref();
 	}
@@ -381,7 +366,7 @@ void x_smbd_sess_terminate(x_smbd_sess_t *smbd_sess)
 
 	x_smbd_sess_release(smbd_sess);
 }
-
+#if 0
 NTSTATUS x_smbd_open_close(x_smbd_conn_t *smbd_conn,
 		x_smbd_open_t *smbd_open,
 		x_smbd_requ_t *smbd_requ,
@@ -397,45 +382,7 @@ NTSTATUS x_smbd_open_close(x_smbd_conn_t *smbd_conn,
 	x_smbd_open_release(smbd_open);
 	return NT_STATUS_OK;
 }
-
-template <typename HashTraits>
-struct pool_iterator_t
-{
-	pool_iterator_t(smbd_pool_t<HashTraits> &pool) : ppool(&pool) { }
-	smbd_pool_t<HashTraits> *const ppool;
-	size_t next_bucket_idx = 0;
-
-	template <typename Func>
-	size_t get_next(Func &&func, size_t min_count);
-};
-
-
-template <typename HashTraits> template <typename Func>
-size_t pool_iterator_t<HashTraits>::get_next(Func &&func, size_t min_count)
-{
-	if (min_count == 0) {
-		min_count = 1;
-	}
-
-	size_t count = 0;
-	std::unique_lock<std::mutex> lock(ppool->mutex);
-	while (next_bucket_idx < ppool->hashtable.buckets.size()) {
-		for (x_dqlink_t *link = ppool->hashtable.buckets[next_bucket_idx].get_front();
-				link; link = link->get_next()) {
-			auto item = HashTraits::container(link);
-			if (func(*item)) {
-				min_count = 0;
-			}
-			++count;
-		}
-		++next_bucket_idx;
-		if (count >= min_count) {
-			break;
-		}
-	}
-	return count;
-}
-
+#endif
 struct x_smbd_list_session_t : x_smbd_ctrl_handler_t
 {
 	x_smbd_list_session_t() : sess_iter(g_smbd_sess_pool) { }
@@ -488,7 +435,7 @@ bool x_smbd_list_tcon_t::output(std::string &data)
 {
 	std::ostringstream os;
 	size_t count = tcon_iter.get_next([&os](const x_smbd_tcon_t &smbd_tcon) {
-		std::shared_ptr<x_smbshare_t> smbshare = smbd_tcon.smbshare;
+		std::shared_ptr<x_smbd_share_t> smbshare = smbd_tcon.smbd_share;
 		os << idl::x_hex_t<uint32_t>(smbd_tcon.tid) << ' ' << idl::x_hex_t<uint32_t>(smbd_tcon.share_access) << ' ' << smbshare->name << std::endl;
 		return false;
 	}, 0);
@@ -521,7 +468,7 @@ bool x_smbd_list_open_t::output(std::string &data)
 			<< idl::x_hex_t<uint32_t>(smbd_open.access_mask) << ' '
 			<< idl::x_hex_t<uint32_t>(smbd_open.share_access) << ' '
 			<< idl::x_hex_t<uint32_t>(smbd_open.smbd_tcon->tid) << " '"
-			<< x_smbd_open_op_get_path(&smbd_open) << "'" << std::endl;
+			<< x_smbd_object_op_get_path(smbd_open.smbd_object) << "'" << std::endl;
 		return false;
 	}, 0);
 	if (count) {
