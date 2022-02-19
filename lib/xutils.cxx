@@ -10,8 +10,8 @@
 
 static void vlog(const char *name, const char *fmt, va_list ap)
 {
-	char buf[1024], *p = buf;
-	size_t len, max = 1024;
+	char buf[8 * 1024], *p = buf;
+	size_t len, max = sizeof buf;
 	struct timeval tv;
 	struct tm tm;
 	gettimeofday(&tv, NULL);

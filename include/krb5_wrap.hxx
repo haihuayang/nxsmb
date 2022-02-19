@@ -48,5 +48,13 @@ NTSTATUS kerberos_pac_logon_info(gss_const_buffer_t pac_blob,
 				 time_t tgs_authtime,
 				 std::shared_ptr<idl::PAC_LOGON_INFO> &logon_info);
 
+NTSTATUS kerberos_decode_pac(gss_const_buffer_t pac_buf,
+			     krb5_context context,
+			     const krb5_keyblock *krbtgt_keyblock,
+			     const krb5_keyblock *service_keyblock,
+			     krb5_const_principal client_principal,
+			     time_t tgs_authtime,
+			     idl::PAC_DATA &pac_data);
+
 #endif /* __krb5_wrap__hxx__ */
 
