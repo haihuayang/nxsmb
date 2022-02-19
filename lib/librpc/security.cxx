@@ -5,7 +5,7 @@ namespace idl {
 
 std::ostream &operator<<(std::ostream &os, const dom_sid &v)
 {
-	os << "S-" << v.sid_rev_num;
+	os << "S-" << (uint32_t)v.sid_rev_num << '-';
 
 	uint64_t ia = ((uint64_t)v.id_auth[5]) +
 		((uint64_t)v.id_auth[4] << 8 ) +
@@ -164,6 +164,63 @@ bool dom_sid_in_domain(const dom_sid &domain, const dom_sid &sid)
 	return dom_sid_compare_id_auth(domain, sid) == 0;
 }
 
+static const struct {
+	uint8_t flag;
+	const char *name;
+} ace_flag_names[] = {
+	{ SEC_ACE_FLAG_OBJECT_INHERIT, "OI", },
+	{ SEC_ACE_FLAG_CONTAINER_INHERIT, "CI" },
+	{ SEC_ACE_FLAG_NO_PROPAGATE_INHERIT, "NP" },
+	{ SEC_ACE_FLAG_INHERIT_ONLY, "IO" },
+	{ SEC_ACE_FLAG_INHERITED_ACE, "I" },
+};
+
+static void print_ace_flags(std::ostream &os, uint8_t flags)
+{
+	char buf[16];
+	snprintf(buf, sizeof buf, "x%x", flags);
+	os << buf << '(';
+
+	bool first = true;
+	for (auto &fn: ace_flag_names) {
+		if (!(flags & fn.flag)) {
+			continue;
+		}
+		if (first) {
+			first = false;
+		} else {
+			os << '|';
+		}
+		os << fn.name;
+	}
+
+	os << ')';
+}
+
+std::ostream &operator<<(std::ostream &os, const security_ace &v)
+{
+	os << v.trustee << ':' << (uint32_t)v.type;
+	if (v.type == SEC_ACE_TYPE_ACCESS_ALLOWED) {
+		os << "(A)";
+	} else if (v.type == SEC_ACE_TYPE_ACCESS_DENIED) {
+		os << "(D)";
+	} else {
+		os << "(X)";
+	}
+	os << "/";
+	print_ace_flags(os, v.flags);
+	os << "/";
+	char buf[16];
+	snprintf(buf, sizeof buf, "x%x", v.access_mask);
+	os << buf;
+	return os;
+}
+
+void ndr_traits_t<security_ace>::ostr(const security_ace &val,
+		x_ndr_ostr_t &ndr, uint32_t flags, x_ndr_switch_t level) const
+{
+	ndr.os << val;
+}
 
 } /* namespace idl */
 

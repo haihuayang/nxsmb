@@ -64,6 +64,8 @@ static inline bool operator==(const security_ace &ace1, const security_ace &ace2
 	return ace1.trustee == ace2.trustee;
 }
 
+std::ostream &operator<<(std::ostream &os, const security_ace &v);
+
 }
 
 
