@@ -2089,6 +2089,18 @@ static NTSTATUS posixfs_op_create(x_smbd_tcon_t *smbd_tcon,
 		notify_fname(posixfs_object, NOTIFY_ACTION_ADDED,
 				(state->in_create_options & FILE_DIRECTORY_FILE) ? FILE_NOTIFY_CHANGE_DIR_NAME : FILE_NOTIFY_CHANGE_FILE_NAME);
 	}
+
+	uint32_t contexts = state->contexts;
+	state->contexts = 0;
+	/* TODO for now we only handle QFID, otherwise Windows 10 client queyr
+	   couple getinfo SMB2_FILE_INFO_FILE_NETWORK_OPEN_INFORMATION */
+	if (contexts & X_SMB2_CONTEXT_FLAG_QFID) {
+		state->contexts |= X_SMB2_CONTEXT_FLAG_QFID;
+		x_put_le64(state->out_qfid_info, posixfs_object->statex.stat.st_ino);
+		x_put_le64(state->out_qfid_info + 8, posixfs_object->statex.stat.st_dev);
+		memset(state->out_qfid_info + 16, 0, 16);
+	}
+
 	*psmbd_open = &posixfs_open->base;
 	return NT_STATUS_OK;
 }

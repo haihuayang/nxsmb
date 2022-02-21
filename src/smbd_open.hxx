@@ -132,9 +132,17 @@ struct x_smb2_create_context_t
 	std::vector<uint8_t> data;
 };
 #endif
+
+enum {
+	X_SMB2_CONTEXT_FLAG_MXAC = 1,
+	X_SMB2_CONTEXT_FLAG_QFID = 2,
+};
+
 struct x_smb2_state_create_t
 {
 	uint8_t oplock_level;
+	uint32_t contexts{0};
+
 	uint32_t in_impersonation_level;
 	uint32_t in_desired_access;
 	uint32_t in_file_attributes;
@@ -148,6 +156,8 @@ struct x_smb2_state_create_t
 
 	uint8_t out_create_flags;
 	uint32_t out_create_action;
+	uint32_t out_maximal_access{0};
+	uint8_t out_qfid_info[32];
 	x_smb2_create_close_info_t out_info;
 
 	// std::vector<x_smb2_create_context_t> in_contexts;

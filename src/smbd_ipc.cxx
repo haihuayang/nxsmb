@@ -574,6 +574,7 @@ static NTSTATUS ipc_create(
 	state->oplock_level = 0;
 	state->out_create_flags = 0;
 	state->out_create_action = FILE_WAS_OPENED;
+	state->contexts = 0;
 
 	*psmbd_open = &named_pipe->base;
 	return NT_STATUS_OK;

@@ -124,6 +124,10 @@ static bool decode_contexts(x_smb2_state_create_t &state,
 							data + data_off,
 							data_len);
 				}
+			} else if (tag == X_SMB2_CREATE_TAG_QFID) {
+				state.contexts |= X_SMB2_CONTEXT_FLAG_QFID;
+			} else if (tag == X_SMB2_CREATE_TAG_MXAC) {
+				state.contexts |= X_SMB2_CONTEXT_FLAG_MXAC;
 			} else {
 #if 0
 				// TODO
@@ -180,6 +184,58 @@ static uint32_t encode_contexts(const x_smb2_state_create_t &state,
 		uint32_t data_len = encode_smb2_lease(state.lease, p);
 		ch->data_length = X_H2LE32(data_len);
 		p += data_len;
+	}
+
+	if (state.contexts & X_SMB2_CONTEXT_FLAG_MXAC) {
+		if (ch) {
+			uint8_t *np = out_ptr + x_pad_len(p - out_ptr, 8);
+			while (p != np) {
+				*p++ = 0;
+			}
+			ch->chain_offset = X_H2LE32(p - (uint8_t *)ch);
+		}
+
+		ch = (x_smb2_create_context_header_t *)p;
+		ch->tag_offset = X_H2LE16(0x10);
+		ch->tag_length = X_H2LE16(0x4);
+		ch->unused0 = 0;
+		ch->data_offset = X_H2LE16(0x18);
+
+		p = (uint8_t *)(ch + 1);
+		*(uint32_t *)p = X_H2BE32(X_SMB2_CREATE_TAG_MXAC);
+		p += 4;
+		*(uint32_t *)p = 0;
+		p += 4;
+
+		*(uint32_t *)p = 0; /* MxAc INFO, query status */
+		*(uint32_t *)p = X_H2BE32(state.out_maximal_access);
+		ch->data_length = X_H2LE32(8);
+	}
+
+	if (state.contexts & X_SMB2_CONTEXT_FLAG_QFID) {
+		if (ch) {
+			uint8_t *np = out_ptr + x_pad_len(p - out_ptr, 8);
+			while (p != np) {
+				*p++ = 0;
+			}
+			ch->chain_offset = X_H2LE32(p - (uint8_t *)ch);
+		}
+
+		ch = (x_smb2_create_context_header_t *)p;
+		ch->tag_offset = X_H2LE16(0x10);
+		ch->tag_length = X_H2LE16(0x4);
+		ch->unused0 = 0;
+		ch->data_offset = X_H2LE16(0x18);
+
+		p = (uint8_t *)(ch + 1);
+		*(uint32_t *)p = X_H2BE32(X_SMB2_CREATE_TAG_QFID);
+		p += 4;
+		*(uint32_t *)p = 0;
+		p += 4;
+
+		memcpy(p, state.out_qfid_info, sizeof state.out_qfid_info);
+		ch->data_length = X_H2LE32(sizeof state.out_qfid_info);
+		p += sizeof state.out_qfid_info;
 	}
 
 #if 0
@@ -277,6 +333,7 @@ struct x_smb2_out_create_t
 static uint32_t encode_out_create(const x_smb2_state_create_t &state,
 		x_smbd_open_t *smbd_open, uint8_t *out_hdr)
 {
+	/* TODO we assume max output context 256 */
 	x_smb2_out_create_t *out_create = (x_smb2_out_create_t *)(out_hdr + SMB2_HDR_BODY);
 
 	out_create->struct_size = X_H2LE16(sizeof(x_smb2_out_create_t) + 1);
@@ -313,12 +370,15 @@ static void x_smb2_reply_create(x_smbd_conn_t *smbd_conn,
 	X_LOG_OP("%ld RESP SUCCESS 0x%lx,0x%lx", smbd_requ->in_mid,
 			smbd_requ->smbd_open->id, smbd_requ->smbd_open->id);
 
+#if 1
+	/* TODO we assume max output context 256 */
+	size_t out_context_length = 256;
+#else
 	size_t out_context_length = 0;
 	if (state.oplock_level == X_SMB2_OPLOCK_LEVEL_LEASE) {
 		out_context_length += 0x18 + 56;
 	}
-	// TODO other contexts
-
+#endif
 	x_bufref_t *bufref = x_bufref_alloc(sizeof(x_smb2_out_create_t) + out_context_length);
 
 	uint8_t *out_hdr = bufref->get_data();
