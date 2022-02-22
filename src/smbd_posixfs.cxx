@@ -184,14 +184,6 @@ struct posixfs_object_t
 		X_ASSERT(fd != -1);
 		return S_ISDIR(statex.stat.st_mode);
 	}
-#if 0
-	void clear() {
-		if (fd != -1) {
-			close(fd);
-		}
-		fd = -1;
-	}
-#endif
 	x_dqlink_t hash_link;
 	const uint64_t hash;
 	uint64_t unused_timestamp{0};
@@ -228,12 +220,6 @@ struct posixfs_object_pool_t
 	};
 	std::vector<bucket_t> buckets;
 	std::atomic<uint32_t> count{0}, unused_count{0};
-#if 0
-	void release(posixfs_object_t *posixfs_object);
-
-	x_hashtable_t<smbd_posixfs_object_hash_traits> hashtable;
-	uint32_t capacity, count = 0;
-#endif
 };
 
 static posixfs_object_pool_t posixfs_object_pool;
@@ -845,7 +831,7 @@ static posixfs_open_t *posixfs_open_create(
 {
 	posixfs_open_t *posixfs_open = new posixfs_open_t;
 	x_smbd_open_init(&posixfs_open->base, &posixfs_object->base, smbd_tcon, 
-			state.in_share_access, state.in_desired_access);
+			state.in_share_access, state.granted_access);
 
 	posixfs_open->smbd_lease = smbd_lease;
 	++posixfs_object->use_count;
@@ -934,6 +920,14 @@ static posixfs_open_t *open_object_new(
 		X_ASSERT(-fd == EEXIST);
 		status = NT_STATUS_OBJECT_NAME_COLLISION;
 		return nullptr;
+	}
+
+	state.out_maximal_access = se_calculate_maximal_access(*psd, *smbd_tcon->smbd_sess->smbd_user);
+	/* Windows server seem not do access check for create new object */
+	if (state.in_desired_access & idl::SEC_FLAG_MAXIMUM_ALLOWED) {
+		state.granted_access = state.out_maximal_access;
+	} else {
+		state.granted_access = state.out_maximal_access & state.in_desired_access;
 	}
 
 	X_ASSERT(posixfs_object->fd == -1);
@@ -1105,11 +1099,25 @@ static posixfs_open_t *open_object_exist(
 		return nullptr;
 	}
 
-	status = check_object_access(posixfs_object, smbd_tcon,
-			*smbd_tcon->smbd_sess->smbd_user,
-			state.in_desired_access);
+	std::shared_ptr<idl::security_descriptor> psd;
+	status = posixfs_object_get_sd__(posixfs_object, psd);
 	if (!NT_STATUS_IS_OK(status)) {
 		return nullptr;
+	}
+
+	state.out_maximal_access = se_calculate_maximal_access(*psd, *smbd_tcon->smbd_sess->smbd_user);
+	uint32_t desired_access = state.in_desired_access & ~idl::SEC_FLAG_MAXIMUM_ALLOWED;
+
+	uint32_t granted = (desired_access & state.out_maximal_access);
+	if (granted != desired_access) {
+		status = NT_STATUS_ACCESS_DENIED;
+		return nullptr;
+	}
+
+	if (state.in_desired_access & idl::SEC_FLAG_MAXIMUM_ALLOWED) {
+		state.granted_access = state.out_maximal_access;
+	} else {
+		state.granted_access = granted;
 	}
 
 	bool conflict = open_mode_check(posixfs_object, state.in_desired_access, state.in_share_access);
@@ -2092,8 +2100,12 @@ static NTSTATUS posixfs_op_create(x_smbd_tcon_t *smbd_tcon,
 
 	uint32_t contexts = state->contexts;
 	state->contexts = 0;
-	/* TODO for now we only handle QFID, otherwise Windows 10 client queyr
+	/* TODO we support MXAC and QFID for now,
+	   without QFID Windows 10 client query
 	   couple getinfo SMB2_FILE_INFO_FILE_NETWORK_OPEN_INFORMATION */
+	if (contexts & X_SMB2_CONTEXT_FLAG_MXAC) {
+		state->contexts |= X_SMB2_CONTEXT_FLAG_MXAC;
+	}
 	if (contexts & X_SMB2_CONTEXT_FLAG_QFID) {
 		state->contexts |= X_SMB2_CONTEXT_FLAG_QFID;
 		x_put_le64(state->out_qfid_info, posixfs_object->statex.stat.st_ino);

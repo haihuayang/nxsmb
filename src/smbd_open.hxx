@@ -160,8 +160,7 @@ struct x_smb2_state_create_t
 	uint8_t out_qfid_info[32];
 	x_smb2_create_close_info_t out_info;
 
-	// std::vector<x_smb2_create_context_t> in_contexts;
-	// std::vector<x_smb2_create_context_t> out_contexts;
+	uint32_t granted_access{0}; // internally used
 };
 
 #endif /* __smbd_open__hxx__ */

@@ -46,6 +46,9 @@ NTSTATUS make_child_sec_desc(
 
 std::shared_ptr<idl::security_descriptor> get_share_security(const std::string &sharename);
 
+uint32_t se_calculate_maximal_access(const idl::security_descriptor &sd,
+		const x_smbd_user_t &smbd_user);
+
 NTSTATUS se_file_access_check(const idl::security_descriptor &sd,
 		const x_smbd_user_t &smbd_user,
 		bool priv_open_requested,

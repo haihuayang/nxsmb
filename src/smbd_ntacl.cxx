@@ -658,7 +658,7 @@ static bool user_token_has_sid(const x_smbd_user_t &smbd_user, const idl::dom_si
 /*
   perform a SEC_FLAG_MAXIMUM_ALLOWED access check
  */
-static uint32_t access_check_max_allowed(const idl::security_descriptor &sd,
+uint32_t se_calculate_maximal_access(const idl::security_descriptor &sd,
 		const x_smbd_user_t &smbd_user)
 {
 	uint32_t denied = 0, granted = 0;
@@ -750,7 +750,7 @@ static NTSTATUS se_access_check(const idl::security_descriptor &sd,
 	if (access_desired & idl::SEC_FLAG_MAXIMUM_ALLOWED) {
 		uint32_t orig_access_desired = access_desired;
 
-		access_desired |= access_check_max_allowed(sd, smbd_user);
+		access_desired |= se_calculate_maximal_access(sd, smbd_user);
 		access_desired &= ~idl::SEC_FLAG_MAXIMUM_ALLOWED;
 		*access_granted = access_desired;
 		bits_remaining = access_desired;

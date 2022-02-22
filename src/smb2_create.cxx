@@ -208,7 +208,9 @@ static uint32_t encode_contexts(const x_smb2_state_create_t &state,
 		p += 4;
 
 		*(uint32_t *)p = 0; /* MxAc INFO, query status */
-		*(uint32_t *)p = X_H2BE32(state.out_maximal_access);
+		p += 4;
+		*(uint32_t *)p = X_H2LE32(state.out_maximal_access);
+		p += 4;
 		ch->data_length = X_H2LE32(8);
 	}
 
