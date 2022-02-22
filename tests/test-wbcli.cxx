@@ -22,7 +22,7 @@ static void winbindd_init_request(struct winbindd_request *request,
 	request->pid = getpid();
 }
 
-int winbind_open_pipe()
+static int winbind_open_pipe()
 {
 	struct sockaddr_un sun;
 	sun.sun_family = AF_UNIX;

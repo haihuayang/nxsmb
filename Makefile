@@ -11,7 +11,7 @@ include files.mk
 
 TARGET_PROJECT_CFLAGS := -g3 -Wall -DPROJECT=$(PROJECT) -fsanitize=address
 TARGET_CFLAGS = $(TARGET_PROJECT_CFLAGS) -Wstrict-prototypes -MT $@ -MMD -MP -MF $@.d
-TARGET_CXXFLAGS = $(TARGET_PROJECT_CFLAGS) -std=c++14 -Wmissing-declarations -Wno-invalid-offsetof -Wno-multichar -MT $@ -MMD -MP -MF $@.d
+TARGET_CXXFLAGS = $(TARGET_PROJECT_CFLAGS) -std=c++14 -Werror -Wmissing-declarations -Wno-invalid-offsetof -Wno-multichar -MT $@ -MMD -MP -MF $@.d
 TARGET_LDFLAGS := $(TARGET_LDFLAGS) -fsanitize=address -g3
 
 TARGET_DIR_out := target.dbg.linux.x86_64
@@ -303,12 +303,6 @@ TARGET_GEN_samba := \
 
 $(TARGET_DIR_out)/libsamba.a: $(TARGET_SRC_libsamba:%=$(TARGET_DIR_out)/samba/%.o) $(TARGET_GEN_libsamba:%=$(TARGET_DIR_out)/samba/%.o)
 	ar rcs $@ $^
-
-#$(TARGET_SRC_libsamba:%=$(TARGET_DIR_out)/samba/%.o): $(TARGET_DIR_out)/%.o: %.c | target_samba_gen
-#	$(CC) -c $(TARGET_CFLAGS) $(TARGET_CFLAGS_EXTRA) \
-#		-DBINDIR=\"/usr/bin\" -DSBINDIR=\"/usr/sbin\" \
-#		-DLIBDIR=\"/usr/lib\" -DLIBEXECDIR=\"/usr/libexec\" \
-#		-o $@ $<
 
 $(TARGET_DIR_out)/samba/lib/%.o: samba/lib/%.c | target_samba_gen
 	$(CC) -c $(TARGET_CFLAGS) $(TARGET_CFLAGS_EXTRA) $(TARGET_CFLAGS_samba) \
