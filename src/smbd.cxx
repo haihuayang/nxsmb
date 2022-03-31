@@ -52,34 +52,41 @@ x_auth_t *x_smbd_create_auth(x_smbd_t *smbd)
 	return x_auth_create_by_oid(smbd->auth_context, GSS_SPNEGO_MECHANISM);
 }
 
-static void x_smbd_conn_queue(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
+static void x_smbd_conn_queue(x_smbd_conn_t *smbd_conn, x_bufref_t *buf_head,
+		x_bufref_t *buf_tail, size_t length)
 {
-	x_bufref_t *bufref = smbd_requ->out_buf_head;
-	X_ASSERT(bufref);
-	X_ASSERT(smbd_requ->out_length > 0);
-
+	x_bufref_t *bufref = buf_head;
 	X_ASSERT(bufref->buf->ref == 1);
 	X_ASSERT(bufref->offset >= 4);
 
 	bufref->offset -= 4;
 	bufref->length += 4;
 	uint8_t *outnbt = bufref->get_data();
-	x_put_be32(outnbt, smbd_requ->out_length);
+	x_put_be32(outnbt, length);
 
 	bool orig_empty = smbd_conn->send_buf_head == nullptr;
 	if (orig_empty) {
-		smbd_conn->send_buf_head = smbd_requ->out_buf_head;
+		smbd_conn->send_buf_head = buf_head;
 	} else {
-		smbd_conn->send_buf_tail->next = smbd_requ->out_buf_head;
+		smbd_conn->send_buf_tail->next = buf_head;
 	}
-	smbd_conn->send_buf_tail = smbd_requ->out_buf_tail;
-
-	smbd_requ->out_buf_head = smbd_requ->out_buf_tail = nullptr;
-	smbd_requ->out_length = 0;
+	smbd_conn->send_buf_tail = buf_tail;
 
 	if (orig_empty) {
 		x_evtmgmt_enable_events(g_evtmgmt, smbd_conn->ep_id, FDEVT_OUT);
 	}
+}
+
+static void x_smbd_conn_queue(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
+{
+	X_ASSERT(smbd_requ->out_buf_head);
+	X_ASSERT(smbd_requ->out_length > 0);
+
+	x_smbd_conn_queue(smbd_conn, smbd_requ->out_buf_head, smbd_requ->out_buf_tail,
+			smbd_requ->out_length);
+
+	smbd_requ->out_buf_head = smbd_requ->out_buf_tail = nullptr;
+	smbd_requ->out_length = 0;
 }
 
 static uint16_t x_smb2_calculate_credit(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ,
@@ -245,6 +252,24 @@ static void x_smbd_conn_cancel(x_smbd_conn_t *smbd_conn, uint64_t async_id)
 
 	smbd_requ->cancel_fn(smbd_conn, smbd_requ);
 	smbd_requ->decref();
+}
+
+void x_smbd_conn_send_unsolicited(x_smbd_conn_t *smbd_conn, x_smbd_sess_t *smbd_sess,
+		x_bufref_t *buf, uint16_t opcode)
+{
+	uint8_t *out_hdr = buf->get_data();
+	memset(out_hdr, 0, SMB2_HDR_BODY);
+	x_put_be32(out_hdr + SMB2_HDR_PROTOCOL_ID, X_SMB2_MAGIC);
+	SSVAL(out_hdr, SMB2_HDR_LENGTH, SMB2_HDR_BODY);
+	SIVAL(out_hdr, SMB2_HDR_OPCODE, opcode);
+	SIVAL(out_hdr, SMB2_HDR_FLAGS, SMB2_HDR_FLAG_REDIRECT);
+	SBVAL(out_hdr, SMB2_HDR_MESSAGE_ID, uint64_t(-1));
+	SIVAL(out_hdr, SMB2_HDR_PID, 0xfeff);
+	if (smbd_sess) {
+		SBVAL(out_hdr, SMB2_HDR_SESSION_ID, smbd_sess->id);
+	}
+
+	x_smbd_conn_queue(smbd_conn, buf, buf, buf->length);
 }
 
 #if 0
@@ -1038,6 +1063,33 @@ void x_smbd_conn_requ_done(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ,
 		}
 	}
 #endif
+}
+
+struct x_smbd_cancel_evt_t
+{
+	x_fdevt_user_t base;
+	x_smbd_requ_t *smbd_requ;
+};
+
+static void x_smbd_cancel_func(x_smbd_conn_t *smbd_conn, x_fdevt_user_t *fdevt_user, bool cancelled)
+{
+	x_smbd_cancel_evt_t *evt = X_CONTAINER_OF(fdevt_user, x_smbd_cancel_evt_t, base);
+
+	x_smbd_requ_t *smbd_requ = evt->smbd_requ;
+	if (!cancelled) {
+		smbd_requ->async_done_fn(smbd_conn, smbd_requ, NT_STATUS_CANCELLED);
+	}
+
+	smbd_requ->decref();
+	delete evt;
+}
+
+void x_smbd_conn_post_cancel(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
+{
+	x_smbd_cancel_evt_t *evt = new x_smbd_cancel_evt_t;
+	evt->base.func = x_smbd_cancel_func;
+	evt->smbd_requ = smbd_requ;
+	x_smbd_conn_post_user(smbd_conn, &evt->base);
 }
 
 void x_smbd_conn_set_async(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ,

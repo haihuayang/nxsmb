@@ -127,6 +127,7 @@ struct x_smbd_requ_t
 	x_smbd_sess_t *smbd_sess{};
 	x_smbd_tcon_t *smbd_tcon{};
 	x_smbd_open_t *smbd_open{};
+	x_smbd_object_t *smbd_object{};
 	void (*cancel_fn)(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ);
 	void (*async_done_fn)(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ, NTSTATUS status);
 };
@@ -402,6 +403,9 @@ void x_smbd_tcon_terminate(x_smbd_tcon_t *smbd_tcon);
 
 void x_smbd_conn_terminate_sessions(x_smbd_conn_t *smbd_conn);
 void x_smbd_conn_post_user(x_smbd_conn_t *smbd_conn, x_fdevt_user_t *fdevt_user);
+void x_smbd_conn_post_cancel(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ);
+void x_smbd_conn_send_unsolicited(x_smbd_conn_t *smbd_conn, x_smbd_sess_t *smbd_sess,
+		x_bufref_t *buf, uint16_t opcode);
 #if 0
 void x_smbd_conn_reply(x_smbd_conn_t *smbd_conn, x_msg_ptr_t &smbd_requ, x_smbd_sess_t *smbd_sess,
 		x_smb2_preauth_t *preauth, uint8_t *outbuf,
@@ -419,6 +423,13 @@ static inline bool msg_is_signed(const x_msg_ptr_t &smbd_requ)
 #define X_SMB2_REPLY_ERROR(smbd_conn, smbd_requ, smbd_sess, tid, status) \
 	x_smb2_reply_error((smbd_conn), (smbd_requ), (smbd_sess), (tid), (status), __FILE__, __LINE__)
 #endif
+void x_smb2_send_lease_break(x_smbd_conn_t *smbd_conn, x_smbd_sess_t *smbd_sess,
+		const x_smb2_lease_key_t *lease_key,
+		uint16_t new_epoch,
+		uint32_t flags,
+		uint32_t current_state, uint32_t new_state);
+void x_smb2_send_oplock_break(x_smbd_conn_t *smbd_conn, x_smbd_sess_t *smbd_sess,
+		const x_smbd_open_t *smbd_open, uint8_t oplock_level);
 
 static inline const idl::GUID &x_smbd_get_client_guid(const x_smbd_conn_t &conn)
 {

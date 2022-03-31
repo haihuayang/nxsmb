@@ -391,6 +391,19 @@ static void x_smb2_reply_create(x_smbd_conn_t *smbd_conn,
 			bufref->length);
 }
 
+static void x_smb2_create_async_done(x_smbd_conn_t *smbd_conn,
+		x_smbd_requ_t *smbd_requ,
+		NTSTATUS status)
+{
+	std::unique_ptr<x_smb2_state_create_t> state{(x_smb2_state_create_t *)smbd_requ->requ_state};
+	X_LOG_DBG("status=0x%x", status.v);
+	smbd_requ->requ_state = nullptr;
+	if (NT_STATUS_IS_OK(status)) {
+		x_smb2_reply_create(smbd_conn, smbd_requ, *state);
+	}
+	x_smbd_conn_requ_done(smbd_conn, smbd_requ, status);
+}
+
 NTSTATUS x_smb2_process_CREATE(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 {
 	if (smbd_requ->in_requ_len < SMB2_HDR_BODY + sizeof(x_smb2_in_create_t) + 1) {
@@ -425,6 +438,7 @@ NTSTATUS x_smb2_process_CREATE(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_req
 
 	X_LOG_OP("%ld CREATE '%s'", smbd_requ->in_mid, x_convert_utf16_to_utf8(state->in_name).c_str());
        	x_smbd_open_t *smbd_open = nullptr;
+	smbd_requ->async_done_fn = x_smb2_create_async_done;
 	NTSTATUS status = x_smbd_tcon_op_create(smbd_requ->smbd_tcon, &smbd_open, smbd_requ, state);
 	if (smbd_open) {
 		X_ASSERT(!smbd_requ->smbd_open);

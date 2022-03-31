@@ -46,6 +46,15 @@ struct x_smbd_object_ops_t
 			x_smbd_conn_t *smbd_conn,
 			x_smbd_requ_t *smbd_requ,
 			std::unique_ptr<x_smb2_state_notify_t> &state);
+	NTSTATUS (*lease_break)(x_smbd_object_t *smbd_object,
+			x_smbd_conn_t *smbd_conn,
+			x_smbd_requ_t *smbd_requ,
+			x_smbd_lease_t *smbd_lease,
+			std::unique_ptr<x_smb2_state_lease_break_t> &state);
+	NTSTATUS (*oplock_break)(x_smbd_object_t *smbd_object,
+			x_smbd_conn_t *smbd_conn,
+			x_smbd_requ_t *smbd_requ,
+			std::unique_ptr<x_smb2_state_oplock_break_t> &state);
 	std::string (*get_path)(const x_smbd_object_t *smbd_object);
 };
 
@@ -128,6 +137,33 @@ static inline NTSTATUS x_smbd_object_op_notify(
 		return NT_STATUS_INVALID_DEVICE_REQUEST;
 	}
 	return smbd_object->ops->notify(smbd_object, smbd_conn,
+			smbd_requ, state);
+}
+
+static inline NTSTATUS x_smbd_object_op_lease_break(
+		x_smbd_object_t *smbd_object,
+		x_smbd_conn_t *smbd_conn,
+		x_smbd_requ_t *smbd_requ,
+		x_smbd_lease_t *smbd_lease,
+		std::unique_ptr<x_smb2_state_lease_break_t> &state)
+{
+	if (!smbd_object->ops->lease_break) {
+		return NT_STATUS_INVALID_DEVICE_REQUEST;
+	}
+	return smbd_object->ops->lease_break(smbd_object, smbd_conn,
+			smbd_requ, smbd_lease, state);
+}
+
+static inline NTSTATUS x_smbd_object_op_oplock_break(
+		x_smbd_object_t *smbd_object,
+		x_smbd_conn_t *smbd_conn,
+		x_smbd_requ_t *smbd_requ,
+		std::unique_ptr<x_smb2_state_oplock_break_t> &state)
+{
+	if (!smbd_object->ops->oplock_break) {
+		return NT_STATUS_INVALID_DEVICE_REQUEST;
+	}
+	return smbd_object->ops->oplock_break(smbd_object, smbd_conn,
 			smbd_requ, state);
 }
 

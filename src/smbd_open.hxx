@@ -95,13 +95,6 @@ struct x_smb2_state_notify_t
 	std::vector<uint8_t> out_data;
 };
 
-struct x_smb2_state_oplock_break_t
-{
-	uint8_t in_oplock_level;
-	uint64_t in_file_id_persistent;
-	uint64_t in_file_id_volatile;
-};
-
 struct x_smb2_state_lease_break_t
 {
 	uint8_t in_oplock_level;
@@ -109,6 +102,14 @@ struct x_smb2_state_lease_break_t
 	x_smb2_lease_key_t in_key;
 	uint32_t in_state;
 	uint64_t in_duration;
+};
+
+struct x_smb2_state_oplock_break_t
+{
+	uint8_t in_oplock_level;
+	uint8_t out_oplock_level;
+	uint64_t in_file_id_persistent;
+	uint64_t in_file_id_volatile;
 };
 
 struct x_smb2_state_close_t
@@ -124,14 +125,6 @@ struct x_smb2_state_close_t
 	uint32_t out_reserved{0};
 	x_smb2_create_close_info_t out_info;
 };
-
-#if 0
-struct x_smb2_create_context_t
-{
-	uint32_t tag;
-	std::vector<uint8_t> data;
-};
-#endif
 
 enum {
 	X_SMB2_CONTEXT_FLAG_MXAC = 1,

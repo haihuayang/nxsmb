@@ -518,6 +518,8 @@ static const x_smbd_object_ops_t x_smbd_ipc_object_ops = {
 	x_smbd_ipc_op_ioctl,
 	x_smbd_ipc_op_qdir,
 	x_smbd_ipc_op_notify,
+	nullptr,
+	nullptr,
 	x_smbd_ipc_op_get_path,
 };
 

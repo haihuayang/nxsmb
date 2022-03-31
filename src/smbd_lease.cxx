@@ -4,26 +4,6 @@
 #include "include/hashtable.hxx"
 #include <mutex>
 
-struct x_smbd_lease_t
-{
-	x_smbd_lease_t(const idl::GUID &client_guid,
-			const x_smb2_lease_key_t &lease_key,
-			uint32_t hash);
-	x_dqlink_t hash_link;
-	idl::GUID client_guid;
-	x_smbd_object_t *smbd_object;
-
-	x_smb2_lease_key_t lease_key;
-	uint32_t hash;
-	uint32_t refcnt;
-	uint8_t version;
-	uint8_t lease_state;
-	uint16_t lease_epoch;
-	bool breaking{false};
-	std::atomic<uint32_t> open_cnt;
-	std::atomic<uint32_t> ref_cnt;
-};
-
 X_DECLARE_MEMBER_TRAITS(smbd_lease_hash_traits, x_smbd_lease_t, hash_link)
 
 static uint32_t lease_hash(const idl::GUID &client_guid, const x_smb2_lease_key_t &lease_key)
@@ -98,10 +78,29 @@ void x_smbd_lease_release(x_smbd_lease_t *smbd_lease)
 	}
 }
 
+/* TODO lease should ref smbd_object */
+x_smbd_lease_t *x_smbd_lease_find(
+		const idl::GUID &client_guid,
+		const x_smb2_lease_key_t &lease_key)
+{
+	uint32_t hash = lease_hash(client_guid, lease_key);
+
+	std::lock_guard<std::mutex> lock(g_smbd_lease_pool.mutex[hash % g_smbd_lease_pool.mutex.size()]);
+	x_smbd_lease_t *smbd_lease = g_smbd_lease_pool.hashtable.find(hash,
+			[client_guid, lease_key](const x_smbd_lease_t &smbd_lease) {
+				return x_smbd_lease_match(&smbd_lease, client_guid, lease_key);
+			});
+	if (smbd_lease) {
+		++smbd_lease->refcnt;
+	}
+	return smbd_lease;
+}
+
 x_smbd_lease_t *x_smbd_lease_grant(
 		const idl::GUID &client_guid,
 		x_smb2_lease_t *lease,
-		uint32_t granted)
+		uint32_t granted,
+		x_smbd_object_t *smbd_object)
 {
 	uint32_t hash = lease_hash(client_guid, lease->key);
 
@@ -114,9 +113,12 @@ x_smbd_lease_t *x_smbd_lease_grant(
 		smbd_lease = new x_smbd_lease_t(client_guid, lease->key, hash);
 		smbd_lease->lease_state = lease->state = granted;
 		smbd_lease->lease_epoch = ++lease->epoch;
+		smbd_lease->smbd_object = smbd_object;
 		g_smbd_lease_pool.hashtable.insert(smbd_lease, hash);
 		return smbd_lease;
 	}
+
+	X_ASSERT(smbd_object == smbd_lease->smbd_object);
 
 	uint32_t existing = smbd_lease->lease_state;
 	uint32_t requested = lease->state;
