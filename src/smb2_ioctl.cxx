@@ -252,14 +252,14 @@ static NTSTATUS fsctl_dfs_get_refers_internal(
 		return status;
 	}
 
-	auto smbconf = smbd_conn->get_conf();
-	for (auto const& node: smbconf->cluster_nodes) {
+	auto smbd_conf = x_smbd_conf_get();
+	for (auto const& node: smbd_conf->cluster_nodes) {
 		if (host == node) {
 			return NT_STATUS_NOT_FOUND;
 		}
 	}
 
-	std::shared_ptr<x_smbd_share_t> smbd_share = x_smbd_find_share(smbd_conn->smbd, share);
+	std::shared_ptr<x_smbd_share_t> smbd_share = x_smbd_find_share(share);
 	if (!smbd_share) {
 		X_TODO;
 		// find_service user_share
@@ -275,17 +275,17 @@ static NTSTATUS fsctl_dfs_get_refers_internal(
 	if (true || reqpath.size() == 0) {
 		std::u16string in_file_name{in_file_name_ptr, in_file_name_end};
 #if 1
-		dfs_referral_resp.referrals.push_back(x_referral_t{0, smbconf->max_referral_ttl, in_file_name, in_file_name});
+		dfs_referral_resp.referrals.push_back(x_referral_t{0, smbd_conf->max_referral_ttl, in_file_name, in_file_name});
 #else
 		TODO
 		if (smbd_share->msdfs_proxy.size() == 0) {
-			dfs_referral_resp.referrals.push_back(x_referral_t{0, smbconf->max_referral_ttl, in_file_name, in_file_name});
+			dfs_referral_resp.referrals.push_back(x_referral_t{0, smbd_conf->max_referral_ttl, in_file_name, in_file_name});
 		} else {
 			std::string alt_path = "\\";
 			alt_path += smbd_share->msdfs_proxy;
-			if (!smbconf->dns_domain.empty()) {
+			if (!smbd_conf->dns_domain.empty()) {
 				alt_path += '.';
-				alt_path += smbconf->dns_domain;
+				alt_path += smbd_conf->dns_domain;
 			}
 			alt_path += '\\';
 			alt_path += share;
@@ -293,7 +293,7 @@ static NTSTATUS fsctl_dfs_get_refers_internal(
 				alt_path += '\\';
 				alt_path += reqpath;
 			}
-			dfs_referral_resp.referrals.push_back(x_referral_t{0, smbconf->max_referral_ttl, in_file_name, x_convert_utf8_to_utf16(alt_path)});
+			dfs_referral_resp.referrals.push_back(x_referral_t{0, smbd_conf->max_referral_ttl, in_file_name, x_convert_utf8_to_utf16(alt_path)});
 		}
 #endif
 	} else {
@@ -309,7 +309,7 @@ static NTSTATUS fsctl_dfs_get_refers_internal(
 	if (smbd_tcon->smbshare->type != TYPE_IPC) {
 		return NT_STATUS_INVALID_DEVICE_REQUEST;
 	}
-	if (!smbconf->host_msdfs) {
+	if (!smbd_conf->host_msdfs) {
 		return NT_STATUS_FS_DRIVER_REQUIRED;
 	}
 	*/
@@ -459,11 +459,11 @@ static NTSTATUS x_smb2_fsctl_validate_negotiate_info(
 		return NT_STATUS_BUFFER_TOO_SMALL;
 	}
 
-	const std::shared_ptr<x_smbd_conf_t> smbconf = smbd_conn->get_conf();
+	const auto smbd_conf = x_smbd_conf_get();
 	state.out_data.resize(0x18);
 	uint8_t *outbody = state.out_data.data();
 	x_put_le32(outbody + 0x00, smbd_conn->server_capabilities);
-	memcpy(outbody + 4, smbconf->guid, 16);
+	memcpy(outbody + 4, smbd_conf->guid, 16);
 	x_put_le16(outbody + 0x14, smbd_conn->server_security_mode);
 	x_put_le16(outbody + 0x16, smbd_conn->dialect);
 

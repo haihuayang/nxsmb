@@ -1,4 +1,5 @@
 
+#include "smb2.hxx"
 #include "smbd_conf.hxx"
 #include <fstream>
 #include <getopt.h>
@@ -8,6 +9,8 @@
 #define PARSE_FATAL(fmt, ...) do { \
 	X_PANIC(fmt "\n", __VA_ARGS__); \
 } while (0)
+
+static std::shared_ptr<x_smbd_conf_t> g_smbd_conf;
 
 static int hex(char c)
 {
@@ -191,10 +194,32 @@ static int parse_smbconf(x_smbd_conf_t &smbd_conf, const char *path)
 	if (share_spec) {
 		add_share(smbd_conf, share_spec);
 	}
+	smbd_conf.capabilities = SMB2_CAP_DFS | SMB2_CAP_LARGE_MTU | SMB2_CAP_LEASING
+		| SMB2_CAP_DIRECTORY_LEASING; // | SMB2_CAP_MULTI_CHANNEL
+	smbd_conf.security_mode = SMB2_NEGOTIATE_SIGNING_ENABLED;
+	if (false /* signing_required*/) {
+		smbd_conf.security_mode |= SMB2_NEGOTIATE_SIGNING_REQUIRED;
+	}
+
 	return 0;
 }
 
-int x_smbd_conf_parse(std::shared_ptr<x_smbd_conf_t> &smbd_conf, int argc, char **argv)
+std::shared_ptr<x_smbd_conf_t> x_smbd_conf_get()
+{
+	return g_smbd_conf;
+}
+
+std::shared_ptr<x_smbd_share_t> x_smbd_find_share(const std::string &name)
+{
+	auto it = g_smbd_conf->shares.find(name);
+	if (it != g_smbd_conf->shares.end()) {
+		return it->second;
+	}
+	return nullptr;
+	/* TODO USER_SHARE */
+}
+
+int x_smbd_conf_parse(int argc, char **argv)
 {
 	int32_t thread_count = -1;
 	const char *configfile = nullptr;
@@ -235,7 +260,7 @@ int x_smbd_conf_parse(std::shared_ptr<x_smbd_conf_t> &smbd_conf, int argc, char 
 	if (thread_count != -1) {
 		ret->thread_count = thread_count;
 	}
-	smbd_conf = ret;
+	g_smbd_conf = ret;
 	return 0;
 }
 

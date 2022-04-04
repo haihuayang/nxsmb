@@ -49,9 +49,6 @@ struct x_smbd_t
 	uint64_t ep_id;
 	int fd;
 
-	std::shared_ptr<x_smbd_conf_t> smbd_conf;
-	uint32_t capabilities;
-
 	x_auth_context_t *auth_context;
 	std::vector<uint8_t> negprot_spnego;
 };
@@ -323,12 +320,8 @@ struct x_smbd_conn_t
 {
 	enum { MAX_MSG = 4 };
 	enum state_t { STATE_RUNNING, STATE_DONE };
-	x_smbd_conn_t(x_smbd_t *smbd, int fd, const x_sockaddr_t &saddr);
+	x_smbd_conn_t(x_smbd_t *smbd, int fd, const x_sockaddr_t &saddr, uint32_t max_credits);
 	~x_smbd_conn_t();
-
-	const std::shared_ptr<x_smbd_conf_t> get_conf() const {
-		return smbd->smbd_conf;
-	}
 
 	void incref() {
 		X_ASSERT(refcnt++ > 0);

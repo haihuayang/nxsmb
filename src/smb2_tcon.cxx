@@ -196,7 +196,7 @@ NTSTATUS x_smb2_process_TCON(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 
 	X_LOG_OP("%ld TCON %s", smbd_requ->in_mid, in_path.c_str());
 
-	auto smbshare = x_smbd_find_share(smbd_conn->smbd, share);
+	auto smbshare = x_smbd_find_share(share);
 	if (!smbshare) {
 		RETURN_OP_STATUS(smbd_requ, NT_STATUS_BAD_NETWORK_NAME);
 	}

@@ -24,8 +24,8 @@ static uint32_t net_share_enum_all_1(x_smbd_conn_t *smbd_conn,
 {
 	// TODO buffer size and resume handle
 	ctr1->array = std::make_shared<std::vector<idl::srvsvc_NetShareInfo1>>();
-	const std::shared_ptr<x_smbd_conf_t> smbconf = smbd_conn->get_conf();
-	for (auto &it: smbconf->shares) {
+	const std::shared_ptr<x_smbd_conf_t> smbd_conf = x_smbd_conf_get();
+	for (auto &it: smbd_conf->shares) {
 		auto &share = it.second;
 		idl::srvsvc_ShareType type =
 			(share->type == TYPE_IPC ? idl::STYPE_IPC_HIDDEN : idl::STYPE_DISKTREE);
@@ -106,7 +106,7 @@ static bool x_smbd_dcerpc_impl_srvsvc_NetShareGetInfo(
 		idl::srvsvc_NetShareGetInfo &arg)
 {
 	std::string share_name = x_convert_utf16_to_utf8(arg.share_name);
-	auto smbshare = x_smbd_find_share(smbd_sess->smbd_conn->smbd, share_name);
+	auto smbshare = x_smbd_find_share(share_name);
 	if (!smbshare) {
 		arg.__result = WERR_INVALID_NAME;
 		return true;
@@ -222,7 +222,7 @@ static bool x_smbd_dcerpc_impl_srvsvc_NetSrvGetInfo(
 		x_smbd_sess_t *smbd_sess,
 		idl::srvsvc_NetSrvGetInfo &arg)
 {
-	const std::shared_ptr<x_smbd_conf_t> smbconf = smbd_sess->smbd_conn->get_conf();
+	const std::shared_ptr<x_smbd_conf_t> smbd_conf = x_smbd_conf_get();
 
 	switch (arg.level) {
 	case 101: {
@@ -230,10 +230,10 @@ static bool x_smbd_dcerpc_impl_srvsvc_NetSrvGetInfo(
 		X_ASSERT(!info);
 		info = std::make_shared<idl::srvsvc_NetSrvInfo101>();
 		info->platform_id = idl::PLATFORM_ID_NT;
-		info->server_name = std::make_shared<std::u16string>(x_convert_utf8_to_utf16(smbconf->netbios_name));
+		info->server_name = std::make_shared<std::u16string>(x_convert_utf8_to_utf16(smbd_conf->netbios_name));
 		info->version_major = 0x06;
 		info->version_minor = 0x01;
-		info->server_type = smbconf->get_default_server_announce();
+		info->server_type = smbd_conf->get_default_server_announce();
 		info->comment = std::make_shared<std::u16string>();
 		arg.__result = WERR_OK;
 		}

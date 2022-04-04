@@ -152,10 +152,13 @@ struct x_smbd_conf_t
 	int backend_port = 446;
 	uint32_t thread_count = 1;
 
+	uint32_t capacities = 0;
 	size_t max_trans = 1024 * 1024;
 	size_t max_read = 1024 * 1024;
 	size_t max_write = 1024 * 1024;
 
+	uint32_t capabilities;
+	uint16_t security_mode;
 	bool signing_required = false;
 	bool lanman_auth = false;
 	bool allow_trusted_domains = true;
@@ -180,7 +183,9 @@ struct x_smbd_topdir_t
 	std::atomic<uint32_t> watch_tree_cnt{0};
 };
 
-int x_smbd_conf_parse(std::shared_ptr<x_smbd_conf_t> &smbd_conf, int argc, char **argv);
+int x_smbd_conf_parse(int argc, char **argv);
+std::shared_ptr<x_smbd_conf_t> x_smbd_conf_get();
+std::shared_ptr<x_smbd_share_t> x_smbd_find_share(const std::string &name);
 
 #endif /* __smbconf__hxx__ */
 

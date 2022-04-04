@@ -959,13 +959,13 @@ static NTSTATUS auth_krb5_accepted(x_auth_krb5_t &auth, gss_ctx_id_t gss_ctx,
 			gss_release_buffer_set(&min_stat, &p);
 		});
 
-	const std::shared_ptr<x_smbd_conf_t> smbconf = x_auth_context_get_smbd_conf(auth.auth.context);
+	const auto smbd_conf = x_smbd_conf_get();
 	std::shared_ptr<idl::PAC_LOGON_INFO> logon_info;
 	/* IF we have the PAC - otherwise we need to get this
 	 * data from elsewere
 	 */
 	if (pac_buffer_set == GSS_C_NO_BUFFER_SET) {
-		if (smbconf->gensec_require_pac) {
+		if (smbd_conf->gensec_require_pac) {
 			DEBUG(1, ("Unable to find PAC in ticket from %s, failing to allow access\n",
 				  principal_string));
 			return NT_STATUS_ACCESS_DENIED;
@@ -1003,8 +1003,8 @@ static NTSTATUS auth_krb5_accepted(x_auth_krb5_t &auth, gss_ctx_id_t gss_ctx,
 		return NT_STATUS_LOGON_FAILURE;
 	}
 	auth.realm = auth.principal_string.substr(pos + 1);
-	if (auth.realm != smbconf->realm) { // TODO multibyte comparing
-		if (!smbconf->allow_trusted_domains) {
+	if (auth.realm != smbd_conf->realm) { // TODO multibyte comparing
+		if (!smbd_conf->allow_trusted_domains) {
 			return NT_STATUS_LOGON_FAILURE;
 		}
 	}
@@ -1493,7 +1493,7 @@ fail:
 }
 #endif
 static krb5_error_code get_host_principal(
-		const std::shared_ptr<x_smbd_conf_t> &smbconf,
+		const std::shared_ptr<x_smbd_conf_t> &smbd_conf,
 		krb5_context krbctx,
 		krb5_principal *host_princ)
 {
@@ -1502,8 +1502,8 @@ static krb5_error_code get_host_principal(
 	int err;
 
 	/* must be utf8 */
-	err = asprintf(&host_princ_s, "cifs/%s.%s@%s", smbconf->netbios_name.c_str(),
-			smbconf->realm.c_str(), smbconf->realm.c_str());
+	err = asprintf(&host_princ_s, "cifs/%s.%s@%s", smbd_conf->netbios_name.c_str(),
+			smbd_conf->realm.c_str(), smbd_conf->realm.c_str());
 	if (err == -1) {
 		return -1;
 	}
@@ -1561,7 +1561,7 @@ static int kerberos_key_from_string(krb5_context context,
 }
 
 static krb5_error_code fill_keytab_from_password(
-		const std::shared_ptr<x_smbd_conf_t> smbconf,
+		const std::shared_ptr<x_smbd_conf_t> smbd_conf,
 		krb5_context krbctx,
 		krb5_keytab keytab,
 		krb5_principal princ,
@@ -1648,13 +1648,13 @@ static krb5_error_code fill_mem_keytab_from_secrets(
 	krb5_principals node_princs = NULL;
 	krb5_kvno kvno = 0; /* FIXME: fetch current vno from KDC ? */
 
-	auto smbconf = x_auth_context_get_smbd_conf(auth_context);
+	auto smbd_conf = x_smbd_conf_get();
 	if (!secrets_init()) {
 		DEBUG(1, (__location__ ": secrets_init failed\n"));
 		return KRB5_CONFIG_CANTOPEN;
 	}
 
-	std::string pwd = secrets_fetch_machine_password(smbconf->workgroup);
+	std::string pwd = secrets_fetch_machine_password(smbd_conf->workgroup);
 	if (pwd.empty()) {
 		DEBUG(2, (__location__ ": failed to fetch machine password\n"));
 		return KRB5_LIBOS_CANTREADPWD;
@@ -1721,7 +1721,7 @@ static krb5_error_code fill_mem_keytab_from_secrets(
 #endif
 	/* keytab is not up to date, fill it up */
 
-	ret = get_host_principal(smbconf, krbctx, &princ);
+	ret = get_host_principal(smbd_conf, krbctx, &princ);
 	if (ret) {
 		DEBUG(1, (__location__ ": Failed to get host principal!\n"));
 		return ret;
@@ -1740,18 +1740,18 @@ static krb5_error_code fill_mem_keytab_from_secrets(
 		free_Principals(p);
 	});
 #endif
-	ret = fill_keytab_from_password(smbconf, krbctx, keytab,
+	ret = fill_keytab_from_password(smbd_conf, krbctx, keytab,
 					princ, node_princs, kvno, pwd);
 	if (ret) {
 		DEBUG(1, (__location__ ": Failed to fill memory keytab!\n"));
 		return ret;
 	}
 
-	std::string pwd_old = secrets_fetch_prev_machine_password(smbconf->workgroup);
+	std::string pwd_old = secrets_fetch_prev_machine_password(smbd_conf->workgroup);
 	if (pwd_old.empty()) {
 		DEBUG(10, (__location__ ": no prev machine password\n"));
 	} else {
-		ret = fill_keytab_from_password(smbconf, krbctx, keytab,
+		ret = fill_keytab_from_password(smbd_conf, krbctx, keytab,
 				princ, node_princs, kvno -1, pwd_old);
 		if (ret) {
 			DEBUG(1, (__location__

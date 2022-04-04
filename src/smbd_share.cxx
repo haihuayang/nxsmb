@@ -1,16 +1,6 @@
 
 #include "smbd.hxx"
 
-std::shared_ptr<x_smbd_share_t> x_smbd_find_share(x_smbd_t *smbd, const std::string &name)
-{
-	std::shared_ptr<x_smbd_conf_t> smbconf = smbd->smbd_conf;
-	auto it = smbconf->shares.find(name);
-	if (it != smbconf->shares.end()) {
-		return it->second;
-	}
-	return nullptr;
-	/* TODO USER_SHARE */
-}
 #if 0
 #include <map>
 

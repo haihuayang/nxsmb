@@ -871,7 +871,9 @@ static void x_smbd_accepted(x_smbd_t *smbd, int fd, const x_sockaddr_t &saddr)
 {
 	X_LOG_CONN("accept %d from %s", fd, saddr.tostring().c_str());
 	set_nbio(fd, 1);
-	x_smbd_conn_t *smbd_conn = new x_smbd_conn_t(smbd, fd, saddr);
+	auto smbd_conf = x_smbd_conf_get();
+	x_smbd_conn_t *smbd_conn = new x_smbd_conn_t(smbd, fd, saddr,
+			smbd_conf->smb2_max_credits);
 	X_ASSERT(smbd_conn != NULL);
 	smbd_conn->upcall.cbs = &x_smbd_conn_upcall_cbs;
 	smbd_conn->ep_id = x_evtmgmt_monitor(g_evtmgmt, fd, FDEVT_IN | FDEVT_OUT, &smbd_conn->upcall);
@@ -921,7 +923,7 @@ static const x_epoll_upcall_cbs_t x_smbd_upcall_cbs = {
 	x_smbd_upcall_cb_unmonitor,
 };
 
-static void x_smbd_init(x_smbd_t &smbd)
+static void x_smbd_init(x_smbd_t &smbd, int port)
 {
 	smbd.auth_context = x_auth_create_context(&smbd);
 	x_auth_krb5_init(smbd.auth_context);
@@ -939,11 +941,7 @@ static void x_smbd_init(x_smbd_t &smbd)
 		x_auth_destroy(spnego);
 	}
 
-	// TODO
-	smbd.capabilities = SMB2_CAP_DFS | SMB2_CAP_LARGE_MTU | SMB2_CAP_LEASING
-		| SMB2_CAP_DIRECTORY_LEASING; // | SMB2_CAP_MULTI_CHANNEL
-
-	int fd = tcplisten(smbd.smbd_conf->port);
+	int fd = tcplisten(port);
 	assert(fd >= 0);
 
 	smbd.fd = fd;
@@ -965,7 +963,7 @@ enum {
 int main(int argc, char **argv)
 {
 	x_smbd_t smbd;
-	int err = x_smbd_conf_parse(smbd.smbd_conf, argc, argv);
+	int err = x_smbd_conf_parse(argc, argv);
 	if (err < 0) {
 		fprintf(stderr, "parse_cmdline failed %d\n", err);
 		exit(1);
@@ -973,13 +971,14 @@ int main(int argc, char **argv)
 
 	signal(SIGPIPE, SIG_IGN);
 
-	x_threadpool_t *tpool = x_threadpool_create(smbd.smbd_conf->thread_count);
+	auto smbd_conf = x_smbd_conf_get();
+	x_threadpool_t *tpool = x_threadpool_create(smbd_conf->thread_count);
 	globals.tpool_evtmgmt = tpool;
 
 	g_evtmgmt = x_evtmgmt_create(tpool, 60 * X_NSEC_PER_SEC);
 	globals.wbpool = x_wbpool_create(g_evtmgmt, 2);
 
-	globals.tpool_aio = x_threadpool_create(smbd.smbd_conf->thread_count);
+	globals.tpool_aio = x_threadpool_create(smbd_conf->thread_count);
 
 	x_smbd_open_pool_init(X_SMBD_MAX_OPEN);
 	x_smbd_tcon_pool_init(X_SMBD_MAX_TCON);
@@ -991,7 +990,7 @@ int main(int argc, char **argv)
 	x_smbd_ipc_init();
 	x_smbd_posixfs_init(X_SMBD_MAX_OPEN);
 
-	x_smbd_init(smbd);
+	x_smbd_init(smbd, smbd_conf->port);
 	x_smbd_ctrl_init(g_evtmgmt);
 
 	main_loop();

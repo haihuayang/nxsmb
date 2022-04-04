@@ -26,13 +26,13 @@ static NTSTATUS x_smbd_conn_reply_negprot(x_smbd_conn_t *smbd_conn, x_smbd_requ_
 	X_LOG_OP("%ld RESP SUCCESS dialect=%x", smbd_requ->in_mid, negprot->out_dialect);
 
 	const x_smbd_t *smbd = smbd_conn->smbd;
-	const std::shared_ptr<x_smbd_conf_t> smbconf = smbd_conn->get_conf();
+	const std::shared_ptr<x_smbd_conf_t> smbd_conf = x_smbd_conf_get();
 	idl::NTTIME now = x_tick_to_nttime(tick_now);
 
 	smbd_conn->dialect = negprot->out_dialect;
 
 	uint16_t security_mode = SMB2_NEGOTIATE_SIGNING_ENABLED;
-	if (smbconf->signing_required) {
+	if (smbd_conf->signing_required) {
 		security_mode |= SMB2_NEGOTIATE_SIGNING_REQUIRED;
 	}
 
@@ -52,11 +52,11 @@ static NTSTATUS x_smbd_conn_reply_negprot(x_smbd_conn_t *smbd_conn, x_smbd_requ_
 	x_put_le16(outbody + 2, security_mode);
 	x_put_le16(outbody + 4, negprot->out_dialect);
 	x_put_le16(outbody + 6, negprot->out_context_count);
-	memcpy(outbody + 8, smbconf->guid, 16);
-	x_put_le32(outbody + 0x18, smbd->capabilities);
-	x_put_le32(outbody + 0x1c, smbconf->max_trans);
-	x_put_le32(outbody + 0x20, smbconf->max_read);
-	x_put_le32(outbody + 0x24, smbconf->max_write);
+	memcpy(outbody + 8, smbd_conf->guid, 16);
+	x_put_le32(outbody + 0x18, smbd_conf->capabilities);
+	x_put_le32(outbody + 0x1c, smbd_conf->max_trans);
+	x_put_le32(outbody + 0x20, smbd_conf->max_read);
+	x_put_le32(outbody + 0x24, smbd_conf->max_write);
 
 	x_put_le64(outbody + 0x28, now.val);	 /* system time */
 	x_put_le64(outbody + 0x30, 0);	   /* server start time */
@@ -84,7 +84,7 @@ static NTSTATUS x_smbd_conn_reply_negprot(x_smbd_conn_t *smbd_conn, x_smbd_requ_
 
 	if (negprot->out_dialect != SMB2_DIALECT_REVISION_2FF) {
 		smbd_conn->server_security_mode = security_mode;
-		smbd_conn->server_capabilities = smbd->capabilities;
+		smbd_conn->server_capabilities = smbd_conf->capabilities;
 	}
 
 	x_smb2_reply(smbd_conn, smbd_requ, bufref, bufref, NT_STATUS_OK, 
@@ -132,8 +132,8 @@ uint16_t x_smb2_dialect_match(x_smbd_conn_t *smbd_conn,
 		const void *dialects,
 		size_t dialect_count)
 {
-	const auto smbconf = smbd_conn->get_conf();
-	for (auto sdialect: smbconf->dialects) {
+	const auto smbd_conf = x_smbd_conf_get();
+	for (auto sdialect: smbd_conf->dialects) {
 		const uint8_t *data = (const uint8_t *)dialects;
 		for (unsigned int di = 0; di < dialect_count; ++di) {
 			uint16_t cdialect = x_get_le16(data);

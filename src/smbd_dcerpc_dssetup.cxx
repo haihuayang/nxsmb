@@ -10,7 +10,7 @@ static bool x_smbd_dcerpc_impl_dssetup_DsRoleGetPrimaryDomainInformation(
 		x_smbd_sess_t *smbd_sess,
 		idl::dssetup_DsRoleGetPrimaryDomainInformation &arg)
 {
-	const std::shared_ptr<x_smbd_conf_t> smbconf = smbd_sess->smbd_conn->get_conf();
+	const std::shared_ptr<x_smbd_conf_t> smbd_conf = x_smbd_conf_get();
 	switch (arg.level) {
 	case idl::DS_ROLE_BASIC_INFORMATION: {
 		auto &info = arg.info;
@@ -20,8 +20,8 @@ static bool x_smbd_dcerpc_impl_dssetup_DsRoleGetPrimaryDomainInformation(
 		// fill_dsrole_dominfo_basic
 		info->basic.role = idl::DS_ROLE_MEMBER_SERVER;
 		info->basic.flags = idl::DS_ROLE_PRIMARY_DOMAIN_GUID_PRESENT;
-		info->basic.domain = std::make_shared<std::u16string>(x_convert_utf8_to_utf16(smbconf->workgroup));
-		info->basic.dns_domain = std::make_shared<std::u16string>(x_convert_utf8_to_utf16(smbconf->realm));
+		info->basic.domain = std::make_shared<std::u16string>(x_convert_utf8_to_utf16(smbd_conf->workgroup));
+		info->basic.dns_domain = std::make_shared<std::u16string>(x_convert_utf8_to_utf16(smbd_conf->realm));
 		info->basic.forest = info->basic.dns_domain;
 		memcpy(&info->basic.domain_guid, hhdom2_guid, sizeof(idl::GUID));
 		arg.__result = WERR_OK;

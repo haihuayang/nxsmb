@@ -70,7 +70,7 @@ static bool x_smbd_dcerpc_impl_lsa_QueryInfoPolicy(
 	}
 
 	auto lsa_info = std::static_pointer_cast<lsa_info_t>(handle_data);
-	auto smbconf = smbd_sess->smbd_conn->get_conf();
+	auto smbd_conf = x_smbd_conf_get();
 
 	//uint32_t acc_required = 0;
 	switch (arg.level) {
@@ -78,7 +78,7 @@ static bool x_smbd_dcerpc_impl_lsa_QueryInfoPolicy(
 		// check access has idl::LSA_POLICY_VIEW_LOCAL_INFORMATION
 		auto info = std::make_shared<idl::lsa_PolicyInformation>();
 		info->__init(arg.level);
-		info->account_domain.name.string = std::make_shared<std::u16string>(x_convert_utf8_to_utf16(smbconf->netbios_name));
+		info->account_domain.name.string = std::make_shared<std::u16string>(x_convert_utf8_to_utf16(smbd_conf->netbios_name));
 		info->account_domain.sid = std::make_shared<idl::dom_sid>(smbd_sess->smbd_user->domain_sid); // TODO we use user's domain_sid for now
 		arg.info = info;
 		arg.__result = NT_STATUS_OK;
