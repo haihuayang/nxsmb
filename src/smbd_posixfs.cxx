@@ -87,23 +87,6 @@ static int posixfs_set_basic_info(int fd,
 	return 0;
 }
 
-static void post_create(int fd, uint32_t file_attrs, posixfs_statex_t *statex,
-		const std::vector<uint8_t> &ntacl_blob)
-{
-	int err = fstat(fd, &statex->stat);
-	X_ASSERT(err == 0);
-	dos_attr_t dos_attr = {
-		.attr_mask = DOS_SET_CREATE_TIME | DOS_SET_FILE_ATTR,
-		.file_attrs = file_attrs,
-		.create_time = statex->stat.st_mtim,
-	};
-	err = posixfs_dos_attr_set(fd, &dos_attr);
-	X_ASSERT(err == 0);
-	statex->file_attributes = file_attrs;
-	statex->birth_time = statex->stat.st_mtim;
-	posixfs_set_ntacl_blob(fd, ntacl_blob);
-}
-
 static int posixfs_create(int dirfd, bool is_dir, const char *path,
 		posixfs_statex_t *statex,
 		const std::vector<uint8_t> &ntacl_blob)
@@ -122,7 +105,7 @@ static int posixfs_create(int dirfd, bool is_dir, const char *path,
 			return -errno;
 		}
 	}
-	post_create(fd, is_dir ? FILE_ATTRIBUTE_DIRECTORY : FILE_ATTRIBUTE_ARCHIVE,
+	posixfs_post_create(fd, is_dir ? FILE_ATTRIBUTE_DIRECTORY : FILE_ATTRIBUTE_ARCHIVE,
 			statex, ntacl_blob);
 	return fd;
 }

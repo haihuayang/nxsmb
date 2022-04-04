@@ -187,6 +187,8 @@ static int parse_smbconf(x_smbd_conf_t &smbd_conf, const char *path)
 					smbd_conf.lanman_auth = parse_bool(value);
 				} else if (name == "smb2 max credits") {
 					smbd_conf.smb2_max_credits = parse_integer(value);
+				} else if (name == "private dir") {
+					smbd_conf.private_dir = value;
 				}
 			}
 		}
@@ -262,6 +264,12 @@ int x_smbd_conf_parse(int argc, char **argv)
 	}
 	g_smbd_conf = ret;
 	return 0;
+}
+
+x_smbd_conf_t::x_smbd_conf_t()
+{
+	strcpy((char *)guid, "nxsmbd");
+	private_dir = "/var/lib/samba/private";
 }
 
 

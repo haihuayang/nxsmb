@@ -27,6 +27,7 @@ extern "C" {
 #undef min
 
 #include "smbd.hxx"
+#include "smbd_secrets.hxx"
 #include <cctype>
 #include <algorithm>
 #include "include/asn1_wrap.hxx"
@@ -1619,23 +1620,6 @@ out:
 	return ret;
 }
 
-static const char *secrets_fetch_machine_password(const std::string &domain)
-//				     time_t *pass_last_set_time,
-//				     enum netr_SchannelType *channel)
-{
-	return "nxsmb12345";
-}
-
-static const char *secrets_fetch_prev_machine_password(const std::string &domain)
-{
-	return "";
-}
-
-static bool secrets_init()
-{
-	return true;
-}
-
 static krb5_error_code fill_mem_keytab_from_secrets(
 		x_auth_context_t *auth_context,
 		krb5_context krbctx,
@@ -1649,12 +1633,8 @@ static krb5_error_code fill_mem_keytab_from_secrets(
 	krb5_kvno kvno = 0; /* FIXME: fetch current vno from KDC ? */
 
 	auto smbd_conf = x_smbd_conf_get();
-	if (!secrets_init()) {
-		DEBUG(1, (__location__ ": secrets_init failed\n"));
-		return KRB5_CONFIG_CANTOPEN;
-	}
 
-	std::string pwd = secrets_fetch_machine_password(smbd_conf->workgroup);
+	std::string pwd = x_smbd_secrets_fetch_machine_password(smbd_conf->workgroup);
 	if (pwd.empty()) {
 		DEBUG(2, (__location__ ": failed to fetch machine password\n"));
 		return KRB5_LIBOS_CANTREADPWD;
@@ -1747,7 +1727,7 @@ static krb5_error_code fill_mem_keytab_from_secrets(
 		return ret;
 	}
 
-	std::string pwd_old = secrets_fetch_prev_machine_password(smbd_conf->workgroup);
+	std::string pwd_old = x_smbd_secrets_fetch_prev_machine_password(smbd_conf->workgroup);
 	if (pwd_old.empty()) {
 		DEBUG(10, (__location__ ": no prev machine password\n"));
 	} else {

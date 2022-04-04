@@ -16,6 +16,7 @@
 #include "core.hxx"
 #include "network.hxx"
 #include "smbd_lease.hxx"
+#include "smbd_secrets.hxx"
 
 #include "smb2.hxx"
 
@@ -925,6 +926,9 @@ static const x_epoll_upcall_cbs_t x_smbd_upcall_cbs = {
 
 static void x_smbd_init(x_smbd_t &smbd, int port)
 {
+	int err = x_smbd_secrets_init();
+	X_ASSERT(err == 0);
+
 	smbd.auth_context = x_auth_create_context(&smbd);
 	x_auth_krb5_init(smbd.auth_context);
 	x_auth_ntlmssp_init(smbd.auth_context);

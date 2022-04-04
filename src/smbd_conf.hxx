@@ -132,9 +132,7 @@ struct x_smbd_share_t
 
 struct x_smbd_conf_t
 {
-	x_smbd_conf_t() {
-		strcpy((char *)guid, "nxsmbd");
-	}
+	x_smbd_conf_t();
 
 	idl::svcctl_ServerType get_default_server_announce() const {
 		// lp_default_server_announce
@@ -168,6 +166,7 @@ struct x_smbd_conf_t
 	uint32_t smb2_max_credits = 8192;
 	bool host_msdfs = true;
 	std::string netbios_name, workgroup, dns_domain, realm;
+	std::string private_dir;
 	std::vector<std::string> cluster_nodes;
 
 	std::vector<uint16_t> dialects{0x311, 0x310, 0x302, 0x210, 0x202};

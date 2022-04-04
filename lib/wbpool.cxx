@@ -125,7 +125,9 @@ static int set_sock_flags(int fd)
 
 
 #define WINBINDD_SOCKET_PATH "/var/run/winbindd/pipe"
-#define WINBINDD_PRIV_SOCKET_PATH "/home/samba/lib/winbindd_privileged/pipe"
+// #define WINBINDD_PRIV_SOCKET_PATH "/home/samba/lib/winbindd_privileged/pipe"
+// #define WINBINDD_PRIV_SOCKET_PATH "/usr/local/samba/var/locks/winbindd_privileged/pipe"
+#define WINBINDD_PRIV_SOCKET_PATH "/var/lib/samba/winbindd_privileged/pipe"
 static int winbindd_open_pipe()
 {
 	struct sockaddr_un sun;
@@ -145,7 +147,7 @@ static int winbindd_open_pipe()
 		X_DBG("connect inprogress");
 		return fd;
 	} else {
-		X_DBG("connect error %d", errno);
+		X_LOG_ERR("connect error %d", errno);
 		close(fd);
 		return -1;
 	}

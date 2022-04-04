@@ -29,6 +29,7 @@ TARGET_SET_samba_dir := \
 	samba/source4/heimdal/lib/hx509 \
 	samba/source4/heimdal_build \
 	samba/lib/replace \
+	samba/lib/tdb/common \
 	samba/lib/util \
 	samba/lib/crypto \
 	samba/libcli/util \
@@ -82,6 +83,7 @@ TARGET_CFLAGS_samba = \
 	-Isamba/source4 \
 	-Isamba \
 	-Isamba/lib/replace \
+	-Isamba/lib/tdb/include \
 	-I. \
 	-Isamba/lib/talloc \
 	-Isamba/source3 \
@@ -91,6 +93,7 @@ all: $(TARGET_SET_tests:%=$(TARGET_DIR_out)/tests/%) \
 	$(TARGET_DIR_out)/bin/nxutils
 
 SET_src_nxsmbd := \
+	smbd_secrets \
 	smbd_posixfs_utils \
 	smbd_posixfs \
 	smbd_ipc \
@@ -260,6 +263,16 @@ TARGET_SRC_libsamba := \
 		lib/crypto/aes_cmac_128 \
 		lib/crypto/arcfour \
 		lib/replace/replace \
+		lib/tdb/common/tdb \
+		lib/tdb/common/error \
+		lib/tdb/common/hash \
+		lib/tdb/common/open \
+		lib/tdb/common/freelist \
+		lib/tdb/common/io \
+		lib/tdb/common/lock \
+		lib/tdb/common/mutex \
+		lib/tdb/common/traverse \
+		lib/tdb/common/transaction \
 		third_party/zlib/crc32 \
 		source4/heimdal/lib/roken/resolve \
 		source4/heimdal/lib/asn1/timegm \
