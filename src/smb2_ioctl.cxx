@@ -470,15 +470,56 @@ static NTSTATUS x_smb2_fsctl_validate_negotiate_info(
 	return NT_STATUS_OK;
 }
 
+struct fsctl_net_iface_info_t
+{
+	uint32_t next;
+	uint32_t ifindex;
+	uint32_t capability;
+	uint32_t rss_queue;
+	uint64_t linkspeed;
+	struct sockaddr_storage sockaddr;
+};
+
 static NTSTATUS x_smb2_fsctl_query_network_interface_info(
 		x_smbd_conn_t *smbd_conn,
+		x_smbd_tcon_t *smbd_tcon,
 		x_smb2_state_ioctl_t &state)
 {
 	if (!file_id_is_nul(state)) {
 		return NT_STATUS_INVALID_PARAMETER;
 	}
-	X_TODO;
-	return NT_STATUS_INTERNAL_ERROR;
+	if (!(smbd_conn->server_capabilities & SMB2_CAP_MULTI_CHANNEL)) {
+		if (smbd_tcon->smbd_share->type == TYPE_IPC) {
+			return NT_STATUS_FS_DRIVER_REQUIRED;
+		} else {
+			return NT_STATUS_INVALID_DEVICE_REQUEST;
+		}
+	}
+
+	const auto smbd_conf = x_smbd_conf_get();
+	const auto &local_ifaces = smbd_conf->local_ifaces;
+	if (state.in_max_output_length < sizeof(fsctl_net_iface_info_t) * local_ifaces.size()) {
+		return NT_STATUS_BUFFER_TOO_SMALL;
+	}
+
+	state.out_data.resize(sizeof(fsctl_net_iface_info_t) * local_ifaces.size());
+	uint8_t *p = state.out_data.data();
+	fsctl_net_iface_info_t *last_info = nullptr;
+	for (auto &iface: local_ifaces) {
+		fsctl_net_iface_info_t *info = (fsctl_net_iface_info_t *)p;
+		if (last_info) {
+			last_info->next = X_H2LE32(sizeof(fsctl_net_iface_info_t));
+		}
+		info->next = 0;
+		info->ifindex = X_H2LE32(iface.if_index);
+		info->capability = 0;
+		info->rss_queue = 0;
+		info->linkspeed = X_H2LE64(iface.linkspeed);
+		info->sockaddr = iface.ip;
+		last_info = info;
+	}
+
+	return NT_STATUS_OK;
 }
 
 NTSTATUS x_smb2_process_IOCTL(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
@@ -546,7 +587,8 @@ NTSTATUS x_smb2_process_IOCTL(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ
 		status = x_smb2_fsctl_validate_negotiate_info(smbd_conn, *state);
 		break;
 	case FSCTL_QUERY_NETWORK_INTERFACE_INFO:
-		status = x_smb2_fsctl_query_network_interface_info(smbd_conn, *state);
+		status = x_smb2_fsctl_query_network_interface_info(smbd_conn,
+				smbd_requ->smbd_tcon, *state);
 		break;
 	}
 

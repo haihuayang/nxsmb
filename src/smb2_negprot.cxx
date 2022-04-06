@@ -44,6 +44,15 @@ static NTSTATUS x_smbd_conn_reply_negprot(x_smbd_conn_t *smbd_conn, x_smbd_requ_
 		dyn_len += negprot->out_context.size();
 	}
 
+	smbd_conn->server_security_mode = security_mode;
+	// TODO should it use client capabilities
+	smbd_conn->server_capabilities = smbd_conf->capabilities;
+	
+	if (negprot->out_dialect < SMB3_DIALECT_REVISION_300) {
+		smbd_conn->server_capabilities &= ~(SMB2_CAP_DIRECTORY_LEASING |
+				SMB2_CAP_MULTI_CHANNEL);
+	}
+
 	x_bufref_t *bufref = x_bufref_alloc(X_SMB2_NEGPROT_RESP_BODY_LEN + dyn_len);
 	uint8_t *out_hdr = bufref->get_data();
 	uint8_t *outbody = out_hdr + SMB2_HDR_BODY;
@@ -53,7 +62,7 @@ static NTSTATUS x_smbd_conn_reply_negprot(x_smbd_conn_t *smbd_conn, x_smbd_requ_
 	x_put_le16(outbody + 4, negprot->out_dialect);
 	x_put_le16(outbody + 6, negprot->out_context_count);
 	memcpy(outbody + 8, smbd_conf->guid, 16);
-	x_put_le32(outbody + 0x18, smbd_conf->capabilities);
+	x_put_le32(outbody + 0x18, smbd_conn->server_capabilities);
 	x_put_le32(outbody + 0x1c, smbd_conf->max_trans);
 	x_put_le32(outbody + 0x20, smbd_conf->max_read);
 	x_put_le32(outbody + 0x24, smbd_conf->max_write);
@@ -80,11 +89,6 @@ static NTSTATUS x_smbd_conn_reply_negprot(x_smbd_conn_t *smbd_conn, x_smbd_requ_
 		x_put_le32(outbody + 0x3c, offset);
 		memcpy(out_hdr + offset, negprot->out_context.data(), negprot->out_context.size());
 		offset += negprot->out_context.size();
-	}
-
-	if (negprot->out_dialect != SMB2_DIALECT_REVISION_2FF) {
-		smbd_conn->server_security_mode = security_mode;
-		smbd_conn->server_capabilities = smbd_conf->capabilities;
 	}
 
 	x_smb2_reply(smbd_conn, smbd_requ, bufref, bufref, NT_STATUS_OK, 

@@ -11,7 +11,7 @@ include files.mk
 
 TARGET_PROJECT_CFLAGS := -g3 -Wall -DPROJECT=$(PROJECT) -fsanitize=address
 TARGET_CFLAGS = $(TARGET_PROJECT_CFLAGS) -Wstrict-prototypes -MT $@ -MMD -MP -MF $@.d
-TARGET_CXXFLAGS = $(TARGET_PROJECT_CFLAGS) -std=c++14 -Werror -Wmissing-declarations -Wno-invalid-offsetof -Wno-multichar -MT $@ -MMD -MP -MF $@.d
+TARGET_CXXFLAGS = $(TARGET_PROJECT_CFLAGS) -std=c++17 -Werror -Wmissing-declarations -Wno-invalid-offsetof -Wno-multichar -MT $@ -MMD -MP -MF $@.d
 TARGET_LDFLAGS := $(TARGET_LDFLAGS) -fsanitize=address -g3
 
 TARGET_DIR_out := target.dbg.linux.x86_64
@@ -43,6 +43,7 @@ TARGET_SET_dir := bin lib lib/librpc librpc/idl src tests \
 TARGET_SET_tests := test-srvsvc \
 	test-timer  test-wbcli test-wbpool test-mbuf \
 	test-security test-krb5pac test-ntlmssp \
+	test-iface
 
 TARGET_SET_lib := nxsmb samba
 
@@ -368,6 +369,7 @@ TARGET_SRC_libnxsmb := \
 		lib/wbpool \
 		lib/kerberos_pac \
 		lib/charset \
+		lib/networking \
 
 a=\
 		lib/string \

@@ -4,7 +4,6 @@
 #include <fstream>
 #include <getopt.h>
 #include <fcntl.h>
-//#include "smbd_lfs.hxx"
 
 #define PARSE_FATAL(fmt, ...) do { \
 	X_PANIC(fmt "\n", __VA_ARGS__); \
@@ -60,6 +59,17 @@ static int parse_integer(const std::string &str)
 	return strtol(str.c_str(), nullptr, 0);
 }
 
+static std::vector<std::string> parse_stringlist(const std::string &str)
+{
+	std::vector<std::string> ret;
+	std::istringstream is(str);
+	std::string token;
+	while (std::getline(is, token, ' ')) {
+		ret.push_back(token);
+	}
+	return ret;
+}
+
 static std::string::size_type skip(const std::string &s, std::string::size_type pos, std::string::size_type end)
 {
 	for ( ; pos < end && isspace(s[pos]); ++pos) {
@@ -98,11 +108,45 @@ static void add_share(x_smbd_conf_t &smbd_conf, std::shared_ptr<x_smbd_share_t> 
 	}
 }
 
+static void load_ifaces(x_smbd_conf_t &smbd_conf)
+{
+	std::vector<x_iface_t> probed_ifaces;
+
+	/* Probe the kernel for interfaces */
+	int err = x_probe_ifaces(probed_ifaces);
+	X_ASSERT(!err);
+	X_ASSERT(probed_ifaces.size() > 0);
+
+	/* if we don't have a interfaces line then use all broadcast capable
+	   interfaces except loopback */
+	if (smbd_conf.interfaces.size() == 0) {
+#if 0
+		for (i=0;i<total_probed;i++) {
+			if (probed_ifaces[i].flags & IFF_BROADCAST) {
+				add_interface(&probed_ifaces[i]);
+			}
+		}
+#endif
+		smbd_conf.local_ifaces = probed_ifaces;
+		return;
+	}
+
+	std::vector<x_iface_t> ret_ifaces;
+	for (auto const &iface_name: smbd_conf.interfaces) {
+		x_interpret_iface(ret_ifaces, iface_name, probed_ifaces);
+	}
+
+	if (ret_ifaces.size() == 0) {
+		X_LOG_ERR("WARNING: no network interfaces found");
+	}
+	smbd_conf.local_ifaces = ret_ifaces;
+}
 
 static int parse_smbconf(x_smbd_conf_t &smbd_conf, const char *path)
 {
 	X_LOG_DBG("Loading smbd_conf from %s", path);
 
+	bool server_multi_channel_support = true;
 	std::shared_ptr<x_smbd_share_t> share_spec = std::make_shared<x_smbd_share_t>("ipc$");
 	share_spec->type = TYPE_IPC;
 	share_spec->read_only = true;
@@ -189,6 +233,10 @@ static int parse_smbconf(x_smbd_conf_t &smbd_conf, const char *path)
 					smbd_conf.smb2_max_credits = parse_integer(value);
 				} else if (name == "private dir") {
 					smbd_conf.private_dir = value;
+				} else if (name == "interfaces") {
+					smbd_conf.interfaces = parse_stringlist(value);
+				} else if (name == "server multi channel support") {
+					server_multi_channel_support = parse_bool(value);
 				}
 			}
 		}
@@ -197,12 +245,16 @@ static int parse_smbconf(x_smbd_conf_t &smbd_conf, const char *path)
 		add_share(smbd_conf, share_spec);
 	}
 	smbd_conf.capabilities = SMB2_CAP_DFS | SMB2_CAP_LARGE_MTU | SMB2_CAP_LEASING
-		| SMB2_CAP_DIRECTORY_LEASING; // | SMB2_CAP_MULTI_CHANNEL
+		| SMB2_CAP_DIRECTORY_LEASING;
+	if (server_multi_channel_support) {
+		smbd_conf.capabilities |= SMB2_CAP_MULTI_CHANNEL;
+	}
 	smbd_conf.security_mode = SMB2_NEGOTIATE_SIGNING_ENABLED;
 	if (false /* signing_required*/) {
 		smbd_conf.security_mode |= SMB2_NEGOTIATE_SIGNING_REQUIRED;
 	}
 
+	load_ifaces(smbd_conf);
 	return 0;
 }
 

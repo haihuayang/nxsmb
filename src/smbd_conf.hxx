@@ -8,6 +8,7 @@
 
 #include "defines.hxx"
 #include "include/utils.hxx"
+#include "include/networking.hxx"
 #include "include/librpc/misc.hxx"
 #include <map>
 #include <atomic>
@@ -16,83 +17,6 @@ static inline bool lpcfg_param_bool(void *service, const char *type, const char 
 {
 	return default_v;
 }
-
-#if 0
-static inline size_t lp_smb2_max_credits()
-{
-	return 8192;
-}
-
-static inline size_t lp_smb2_max_trans()
-{
-	return 1024 * 1024;
-}
-
-static inline size_t lp_smb2_max_read()
-{
-	return 1024 * 1024;
-}
-
-static inline size_t lp_smb2_max_write()
-{
-	return 1024 * 1024;
-}
-
-static inline bool lpcfg_server_signing_required()
-{
-	return false;
-}
-
-static inline const char *lpcfg_netbios_name()
-{
-	return "HH360U";
-}
-
-static inline const char *lpcfg_workgroup()
-{
-	return "CHILD4";
-}
-
-static inline const char *lpcfg_realm()
-{
-	return "HHDOM2.HHLAB";
-}
-
-static inline const char *lpcfg_salt_princ()
-{
-	return "host/hh360u.hhdom2.hhlab@CHILD4";
-}
-
-static inline std::vector<std::string> lpcfg_cluster_nodes()
-{
-	return std::vector<std::string>{"ntnx-hh360u-1.hhdom2.hhlab"};
-}
-
-static inline const char *lpcfg_dns_domain()
-{
-	return "hhdom2.hhlab";
-}
-
-static inline bool lpcfg_gensec_require_pac(bool def)
-{
-	return true;
-}
-
-static inline bool lpcfg_allow_trusted_domains()
-{
-	return false;
-}
-
-static inline bool lpcfg_host_msdfs()
-{
-	return true;
-}
-
-static inline uint32_t lpcfg_max_referral_ttl()
-{
-	return 300;
-}
-#endif
 
 enum x_smbd_share_type_t {
 	TYPE_IPC,
@@ -168,6 +92,8 @@ struct x_smbd_conf_t
 	std::string netbios_name, workgroup, dns_domain, realm;
 	std::string private_dir;
 	std::vector<std::string> cluster_nodes;
+	std::vector<std::string> interfaces;
+	std::vector<x_iface_t> local_ifaces;
 
 	std::vector<uint16_t> dialects{0x311, 0x310, 0x302, 0x210, 0x202};
 	std::map<std::string, std::shared_ptr<x_smbd_share_t>> shares;
