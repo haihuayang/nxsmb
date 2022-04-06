@@ -241,10 +241,8 @@ SET_SRC_roken := \
 	emalloc \
 	erealloc \
 	estrdup \
-	freeaddrinfo \
 	freehostent \
 	gai_strerror \
-	getaddrinfo \
 	getarg \
 	getdtablesize \
 	getipnodebyaddr \
