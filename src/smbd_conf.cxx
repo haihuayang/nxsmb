@@ -2,7 +2,6 @@
 #include "smb2.hxx"
 #include "smbd_conf.hxx"
 #include <fstream>
-#include <getopt.h>
 #include <fcntl.h>
 
 #define PARSE_FATAL(fmt, ...) do { \
@@ -142,16 +141,70 @@ static void load_ifaces(x_smbd_conf_t &smbd_conf)
 	smbd_conf.local_ifaces = ret_ifaces;
 }
 
-static int parse_smbconf(x_smbd_conf_t &smbd_conf, const char *path)
+static void parse_global_param(x_smbd_conf_t &smbd_conf,
+		const std::string &name, const std::string &value)
+{
+	// global parameters
+	if (name == "client thread count") {
+		smbd_conf.client_thread_count = parse_integer(value);
+	} else if (name == "async thread count") {
+		smbd_conf.async_thread_count = parse_integer(value);
+	} else if (name == "netbios name") {
+		smbd_conf.netbios_name = value;
+	} else if (name == "dns domain") {
+		smbd_conf.dns_domain = value;
+	} else if (name == "realm") {
+		smbd_conf.realm = value;
+	} else if (name == "workgroup") {
+		smbd_conf.workgroup = value;
+	} else if (name == "lanman auth") {
+		smbd_conf.lanman_auth = parse_bool(value);
+	} else if (name == "smb2 max credits") {
+		smbd_conf.smb2_max_credits = parse_integer(value);
+	} else if (name == "private dir") {
+		smbd_conf.private_dir = value;
+	} else if (name == "interfaces") {
+		smbd_conf.interfaces = parse_stringlist(value);
+	} else if (name == "server multi channel support") {
+		bool server_multi_channel_support = parse_bool(value);
+		if (server_multi_channel_support) {
+			smbd_conf.capabilities |= SMB2_CAP_MULTI_CHANNEL;
+		} else {
+			smbd_conf.capabilities &= ~SMB2_CAP_MULTI_CHANNEL;
+		}
+	} else {
+		X_LOG_WARN("unknown global param '%s' with value '%s'",
+				name.c_str(), value.c_str());
+	}
+}
+
+static bool split_option(const std::string opt, size_t pos,
+		std::string &name, std::string &value)
+{
+	auto sep = opt.find('=', pos);
+	if (sep == std::string::npos) {
+		return false;
+	}
+	name = opt.substr(pos, rskip(opt, sep, pos) - pos);
+
+	pos = skip(opt, sep + 1, opt.length());
+	value = opt.substr(pos, rskip(opt, opt.length(), pos) - pos);
+	return true;
+}
+
+static int parse_smbconf(x_smbd_conf_t &smbd_conf, const char *path,
+		const std::vector<std::string> &cmdline_options)
 {
 	X_LOG_DBG("Loading smbd_conf from %s", path);
 
-	bool server_multi_channel_support = true;
 	std::shared_ptr<x_smbd_share_t> share_spec = std::make_shared<x_smbd_share_t>("ipc$");
 	share_spec->type = TYPE_IPC;
 	share_spec->read_only = true;
 	add_share(smbd_conf, share_spec);
 	share_spec = nullptr;
+
+	smbd_conf.capabilities = SMB2_CAP_DFS | SMB2_CAP_LARGE_MTU | SMB2_CAP_LEASING
+		| SMB2_CAP_DIRECTORY_LEASING;
 
 	std::string line;
 	std::ifstream in(path);
@@ -177,15 +230,11 @@ static int parse_smbconf(x_smbd_conf_t &smbd_conf, const char *path)
 				share_spec = std::make_shared<x_smbd_share_t>(section);
 			}
 		} else {
-			auto sep = line.find('=', pos);
-			if (sep == std::string::npos) {
+			std::string name, value;
+			if (!split_option(line, pos, name, value)) {
 				X_PANIC("No '=' at %s:%u",
 						path, lineno);
 			}
-			auto name = line.substr(pos, rskip(line, sep, pos) - pos);
-
-			pos = skip(line, sep + 1, line.length());
-			auto value = line.substr(pos, rskip(line, line.length(), pos) - pos);
 
 			if (share_spec) {
 				if (name == "type") {
@@ -218,37 +267,28 @@ static int parse_smbconf(x_smbd_conf_t &smbd_conf, const char *path)
 					}
 				}
 			} else {
-				// global parameters
-				if (name == "netbios name") {
-					smbd_conf.netbios_name = value;
-				} else if (name == "dns domain") {
-					smbd_conf.dns_domain = value;
-				} else if (name == "realm") {
-					smbd_conf.realm = value;
-				} else if (name == "workgroup") {
-					smbd_conf.workgroup = value;
-				} else if (name == "lanman auth") {
-					smbd_conf.lanman_auth = parse_bool(value);
-				} else if (name == "smb2 max credits") {
-					smbd_conf.smb2_max_credits = parse_integer(value);
-				} else if (name == "private dir") {
-					smbd_conf.private_dir = value;
-				} else if (name == "interfaces") {
-					smbd_conf.interfaces = parse_stringlist(value);
-				} else if (name == "server multi channel support") {
-					server_multi_channel_support = parse_bool(value);
-				}
+				parse_global_param(smbd_conf, name, value);
 			}
 		}
 	}
 	if (share_spec) {
 		add_share(smbd_conf, share_spec);
 	}
-	smbd_conf.capabilities = SMB2_CAP_DFS | SMB2_CAP_LARGE_MTU | SMB2_CAP_LEASING
-		| SMB2_CAP_DIRECTORY_LEASING;
-	if (server_multi_channel_support) {
-		smbd_conf.capabilities |= SMB2_CAP_MULTI_CHANNEL;
+
+	// override global params by argv
+	for (auto &opt: cmdline_options) {
+		size_t pos = skip(opt, 0, opt.length());;
+		if (pos == opt.length() || opt.compare(pos, 1, "#") == 0) {
+			continue;
+		}
+		std::string name, value;
+		if (!split_option(line, pos, name, value)) {
+			X_PANIC("No '=' at argv %s",
+					opt.c_str());
+		}
+		parse_global_param(smbd_conf, name, value);
 	}
+
 	smbd_conf.security_mode = SMB2_NEGOTIATE_SIGNING_ENABLED;
 	if (false /* signing_required*/) {
 		smbd_conf.security_mode |= SMB2_NEGOTIATE_SIGNING_REQUIRED;
@@ -273,47 +313,14 @@ std::shared_ptr<x_smbd_share_t> x_smbd_find_share(const std::string &name)
 	/* TODO USER_SHARE */
 }
 
-int x_smbd_conf_parse(int argc, char **argv)
+int x_smbd_conf_parse(const char *configfile, const std::vector<std::string> &cmdline_options)
 {
-	int32_t thread_count = -1;
-	const char *configfile = nullptr;
-
-	const struct option long_options[] = {
-		{ "configfile", required_argument, 0, 'c'},
-		{ "thread-count", required_argument, 0, 't'},
-	};
-
-	int optind = 0;
-	for (;;) {
-		int c = getopt_long(argc, argv, "c:t:",
-				long_options, &optind);
-		if (c == -1) {
-			break;
-		}
-		switch (c) {
-			case 'c':
-				configfile = optarg;
-				break;
-			case 't':
-				thread_count = atoi(optarg);
-				break;
-			default:
-				abort();
-		}
-	}
-
-	if (!configfile) {
-		configfile = "/etc/samba/smb.conf";
-	}
 	auto ret = std::make_shared<x_smbd_conf_t>();
-	int err = parse_smbconf(*ret, configfile);
+	int err = parse_smbconf(*ret, configfile, cmdline_options);
 	if (err < 0) {
 		return err;
 	}
 
-	if (thread_count != -1) {
-		ret->thread_count = thread_count;
-	}
 	g_smbd_conf = ret;
 	return 0;
 }

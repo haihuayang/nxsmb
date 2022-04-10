@@ -68,6 +68,8 @@ static void thread_func(x_threadpool_t *tpool, uint32_t no)
 			continue;
 		}
 
+		X_ASSERT(status == x_job_t::JOB_BLOCKED);
+
 		uint32_t oval = job->state.load(std::memory_order_relaxed);
 		uint32_t nval = x_job_t::STATE_SCHEDULED;
 		for (;;) {

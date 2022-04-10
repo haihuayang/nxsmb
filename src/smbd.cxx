@@ -10,6 +10,7 @@
 #include <unistd.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <getopt.h>
 
 // #include "smb_consts.h"
 #include "smbd_conf.hxx"
@@ -31,8 +32,7 @@ enum {
 
 static struct {
 	bool do_async = false;
-	x_threadpool_t *tpool_aio;
-	x_threadpool_t *tpool_evtmgmt;
+	x_threadpool_t *tpool_evtmgmt{}, *tpool_async;
 	x_wbpool_t *wbpool;
 } globals;
 
@@ -966,23 +966,60 @@ enum {
 
 int main(int argc, char **argv)
 {
+	const char *configfile = nullptr;
+
+	const struct option long_options[] = {
+		{ "configfile", required_argument, 0, 'c'},
+		{ "daemon", required_argument, 0, 'D'},
+		{ "option", no_argument, 0, 'o'},
+	};
+
+	std::vector<std::string> cmdline_options;
+	bool daemon = false;
+	int optind = 0;
+	for (;;) {
+		int c = getopt_long(argc, argv, "c:t:",
+				long_options, &optind);
+		if (c == -1) {
+			break;
+		}
+		switch (c) {
+			case 'c':
+				configfile = optarg;
+				break;
+			case 'D':
+				daemon = true;
+				break;
+			case 'o':
+				cmdline_options.push_back(optarg);
+				break;
+			default:
+				abort();
+		}
+	}
+
+	if (!configfile) {
+		configfile = "/etc/samba/smb.conf";
+	}
 	x_smbd_t smbd;
-	int err = x_smbd_conf_parse(argc, argv);
+	int err = x_smbd_conf_parse(configfile, cmdline_options);
 	if (err < 0) {
-		fprintf(stderr, "parse_cmdline failed %d\n", err);
+		fprintf(stderr, "x_smbd_conf_parse failed %d\n", err);
 		exit(1);
 	}
+
+	// TODO daemonize
+	(void)daemon;
 
 	signal(SIGPIPE, SIG_IGN);
 
 	auto smbd_conf = x_smbd_conf_get();
-	x_threadpool_t *tpool = x_threadpool_create(smbd_conf->thread_count);
+	globals.tpool_async = x_threadpool_create(smbd_conf->async_thread_count);
+	x_threadpool_t *tpool = x_threadpool_create(smbd_conf->client_thread_count);
 	globals.tpool_evtmgmt = tpool;
 
 	g_evtmgmt = x_evtmgmt_create(tpool, 60 * X_NSEC_PER_SEC);
 	globals.wbpool = x_wbpool_create(g_evtmgmt, 2);
-
-	globals.tpool_aio = x_threadpool_create(smbd_conf->thread_count);
 
 	x_smbd_open_pool_init(X_SMBD_MAX_OPEN);
 	x_smbd_tcon_pool_init(X_SMBD_MAX_TCON);
@@ -1101,5 +1138,11 @@ void x_smbd_conn_set_async(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ,
 	X_ASSERT(!smbd_requ->cancel_fn);
 	smbd_requ->cancel_fn = cancel_fn;
 	x_smbd_requ_insert(smbd_requ);
+}
+
+void x_smbd_schedule_async(x_job_t *job)
+{
+	bool ret = x_threadpool_schedule(globals.tpool_async, job);
+	X_ASSERT(ret);
 }
 

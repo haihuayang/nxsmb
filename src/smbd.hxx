@@ -478,5 +478,7 @@ void x_smbd_open_append_notify(x_smbd_open_t *smbd_open,
 		uint32_t action,
 		const std::u16string &path);
 
+void x_smbd_schedule_async(x_job_t *job);
+
 #endif /* __smbd__hxx__ */
 

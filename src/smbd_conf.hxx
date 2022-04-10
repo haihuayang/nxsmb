@@ -72,7 +72,8 @@ struct x_smbd_conf_t
 	uint8_t guid[16];
 	int port = 445;
 	int backend_port = 446;
-	uint32_t thread_count = 1;
+	uint32_t client_thread_count = 2;
+	uint32_t async_thread_count = 2;
 
 	uint32_t capacities = 0;
 	size_t max_trans = 1024 * 1024;
@@ -108,7 +109,7 @@ struct x_smbd_topdir_t
 	std::atomic<uint32_t> watch_tree_cnt{0};
 };
 
-int x_smbd_conf_parse(int argc, char **argv);
+int x_smbd_conf_parse(const char *configfile, const std::vector<std::string> &cmdline_options);
 std::shared_ptr<x_smbd_conf_t> x_smbd_conf_get();
 std::shared_ptr<x_smbd_share_t> x_smbd_find_share(const std::string &name);
 
