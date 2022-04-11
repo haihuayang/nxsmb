@@ -27,8 +27,9 @@ struct x_smb2_in_ioctl_t
 };
 
 static bool decode_in_ioctl(x_smb2_state_ioctl_t &state,
-		const uint8_t *in_hdr, uint32_t in_len)
+		x_buf_t *in_buf, uint32_t in_offset, uint32_t in_len)
 {
+	const uint8_t *in_hdr = in_buf->data + in_offset;
 	const x_smb2_in_ioctl_t *in_ioctl = (const x_smb2_in_ioctl_t *)(in_hdr + SMB2_HDR_BODY);
 	uint16_t in_input_offset = X_LE2H16(in_ioctl->input_offset);
 	uint32_t in_input_length = X_LE2H32(in_ioctl->input_length);
@@ -45,8 +46,11 @@ static bool decode_in_ioctl(x_smb2_state_ioctl_t &state,
 	state.in_max_output_length = X_LE2H32(in_ioctl->max_output_length);
 	state.in_flags = X_LE2H32(in_ioctl->flags);
 
-	state.in_data.assign(in_hdr + in_input_offset,
-			in_hdr + in_input_offset + in_input_length);
+	if (in_input_length > 0) {
+		state.in_buf = x_buf_get(in_buf);
+		state.in_buf_offset = in_offset + in_input_offset;
+		state.in_buf_length = in_input_length;
+	}
 	return true;
 }
 
@@ -69,7 +73,7 @@ static void encode_out_ioctl(const x_smb2_state_ioctl_t &state,
 {
 	x_smb2_out_ioctl_t *out_ioctl = (x_smb2_out_ioctl_t *)(out_hdr + SMB2_HDR_BODY);
 	out_ioctl->struct_size = X_H2LE16(sizeof(x_smb2_out_ioctl_t) +
-			(state.out_data.empty() ? 0 : 1));
+			(state.out_buf_length != 0));
 
 	out_ioctl->reserved0 = 0;
 	out_ioctl->ctl_code = X_H2LE32(state.ctl_code);
@@ -78,25 +82,29 @@ static void encode_out_ioctl(const x_smb2_state_ioctl_t &state,
 	out_ioctl->input_offset = X_H2LE32(SMB2_HDR_BODY + sizeof(x_smb2_out_ioctl_t));
 	out_ioctl->input_length = 0;
 	out_ioctl->output_offset = X_H2LE32(SMB2_HDR_BODY + sizeof(x_smb2_out_ioctl_t));
-	out_ioctl->output_length = X_H2LE32(state.out_data.size());;
+	out_ioctl->output_length = X_H2LE32(state.out_buf_length);
 	out_ioctl->reserved1 = 0;
-
-	memcpy(out_ioctl + 1, state.out_data.data(), state.out_data.size());
 }
 
 static void x_smb2_reply_ioctl(x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ,
 		const x_smb2_state_ioctl_t &state)
 {
-	X_LOG_OP("%ld WRITE SUCCESS", smbd_requ->in_mid);
+	X_LOG_OP("%ld IOCTL SUCCESS", smbd_requ->in_mid);
 
-	x_bufref_t *bufref = x_bufref_alloc(sizeof(x_smb2_out_ioctl_t) + state.out_data.size());
+	x_bufref_t *bufref = x_bufref_alloc(sizeof(x_smb2_out_ioctl_t));
+	x_bufref_t *out_data;
+	if (state.out_buf_length) {
+		out_data = new x_bufref_t(state.out_buf, 0, state.out_buf_length);
+	} else {
+		out_data = bufref;
+	}
 
 	uint8_t *out_hdr = bufref->get_data();
 	encode_out_ioctl(state, out_hdr);
 
-	x_smb2_reply(smbd_conn, smbd_requ, bufref, bufref, NT_STATUS_OK, 
-			SMB2_HDR_BODY + sizeof(x_smb2_out_ioctl_t) + state.out_data.size());
+	x_smb2_reply(smbd_conn, smbd_requ, bufref, out_data, NT_STATUS_OK, 
+			SMB2_HDR_BODY + sizeof(x_smb2_out_ioctl_t) + state.out_buf_length);
 }
 
 
@@ -202,7 +210,8 @@ static idl::x_ndr_off_t push_dfs_referral_resp(const x_dfs_referral_resp_t &resp
 	return bpos;
 }
 
-static NTSTATUS push_ref_resp(const x_dfs_referral_resp_t &resp, size_t in_max_output, std::vector<uint8_t> &output)
+static NTSTATUS push_ref_resp(const x_dfs_referral_resp_t &resp, size_t in_max_output,
+		x_buf_t *&out_buf, uint32_t &out_buf_length)
 {
 	idl::x_ndr_push_buff_t ndr_data{};
 	idl::x_ndr_push_t ndr{ndr_data, 0};
@@ -210,7 +219,9 @@ static NTSTATUS push_ref_resp(const x_dfs_referral_resp_t &resp, size_t in_max_o
 	if (ndr_ret < 0) {
 		return STATUS_BUFFER_OVERFLOW;
 	}
-	std::swap(output, ndr_data.data);
+	out_buf = x_buf_alloc(ndr_data.data.size());
+	memcpy(out_buf->data, ndr_data.data.data(), ndr_data.data.size());
+	out_buf_length = ndr_data.data.size();
 	return NT_STATUS_OK;
 }
 
@@ -300,7 +311,7 @@ static NTSTATUS fsctl_dfs_get_refers_internal(
 		X_TODO; // department share
 	}
 
-	return push_ref_resp(dfs_referral_resp, state.in_max_output_length, state.out_data);
+	return push_ref_resp(dfs_referral_resp, state.in_max_output_length, state.out_buf, state.out_buf_length);
 }
 
 /* FSCTL_DFS_GET_REFERRALS_EX References: [MS-DFSC]: 2.2.3
@@ -321,16 +332,16 @@ static NTSTATUS x_smb2_fsctl_dfs_get_referrals(
 		return NT_STATUS_INVALID_PARAMETER;
 	}
 
-	if (state.in_data.size() < (2 + 2)) {
+	if (state.in_buf_length < (2 + 2)) {
 		return NT_STATUS_INVALID_PARAMETER;
 	}
 
-	const uint8_t *in_data = state.in_data.data();
+	const uint8_t *in_data = state.in_buf->data + state.in_buf_offset;
 	uint16_t in_max_referral_level = x_get_le16(in_data);
 
 	return fsctl_dfs_get_refers_internal(smbd_conn, state,
 			in_max_referral_level,
-			in_data + 2, state.in_data.size() - 2);
+			in_data + 2, state.in_buf_length - 2);
 }
 
 struct x_smb2_in_refers_ex_t
@@ -348,10 +359,10 @@ static NTSTATUS x_smb2_fsctl_dfs_get_referrals_ex(
 		return NT_STATUS_INVALID_PARAMETER;
 	}
 
-	if (state.in_data.size() < sizeof(x_smb2_in_refers_ex_t) + 2) {
+	if (state.in_buf_length < sizeof(x_smb2_in_refers_ex_t) + 2) {
 		return NT_STATUS_INVALID_PARAMETER;
 	}
-	const uint8_t *in_data = state.in_data.data();
+	const uint8_t *in_data = state.in_buf->data + state.in_buf_offset;
 	x_smb2_in_refers_ex_t in_refers_ex;
 	memcpy(&in_refers_ex, in_data, sizeof(in_refers_ex));
 
@@ -362,7 +373,7 @@ static NTSTATUS x_smb2_fsctl_dfs_get_referrals_ex(
 		return NT_STATUS_INVALID_PARAMETER;
 	}
 
-	if (in_refers_ex.request_size > state.in_data.size() - sizeof(x_smb2_in_refers_ex_t)) {
+	if (in_refers_ex.request_size > state.in_buf_length - sizeof(x_smb2_in_refers_ex_t)) {
 		return NT_STATUS_INVALID_PARAMETER;
 	}
 
@@ -408,8 +419,8 @@ static NTSTATUS x_smb2_fsctl_validate_negotiate_info(
 		return NT_STATUS_INVALID_PARAMETER;
 	}
 
-	const uint8_t *in_data = state.in_data.data();
-	uint32_t in_input_size = state.in_data.size();
+	const uint8_t *in_data = state.in_buf->data + state.in_buf_offset;
+	uint32_t in_input_size = state.in_buf_length;
 
 	if (in_input_size < 0x18) {
 		return NT_STATUS_INVALID_PARAMETER;
@@ -460,12 +471,13 @@ static NTSTATUS x_smb2_fsctl_validate_negotiate_info(
 	}
 
 	const auto smbd_conf = x_smbd_conf_get();
-	state.out_data.resize(0x18);
-	uint8_t *outbody = state.out_data.data();
+	state.out_buf = x_buf_alloc(0x18);
+	uint8_t *outbody = state.out_buf->data;
 	x_put_le32(outbody + 0x00, smbd_conn->server_capabilities);
 	memcpy(outbody + 4, smbd_conf->guid, 16);
 	x_put_le16(outbody + 0x14, smbd_conn->server_security_mode);
 	x_put_le16(outbody + 0x16, smbd_conn->dialect);
+	state.out_buf_length = 0x18;
 
 	return NT_STATUS_OK;
 }
@@ -502,8 +514,8 @@ static NTSTATUS x_smb2_fsctl_query_network_interface_info(
 		return NT_STATUS_BUFFER_TOO_SMALL;
 	}
 
-	state.out_data.resize(sizeof(fsctl_net_iface_info_t) * local_ifaces.size());
-	uint8_t *p = state.out_data.data();
+	state.out_buf = x_buf_alloc(sizeof(fsctl_net_iface_info_t) * local_ifaces.size());
+	uint8_t *p = state.out_buf->data;
 	fsctl_net_iface_info_t *last_info = nullptr;
 	for (auto &iface: local_ifaces) {
 		fsctl_net_iface_info_t *info = (fsctl_net_iface_info_t *)p;
@@ -518,6 +530,7 @@ static NTSTATUS x_smb2_fsctl_query_network_interface_info(
 		info->sockaddr = iface.ip;
 		last_info = info;
 	}
+	state.out_buf_length = sizeof(fsctl_net_iface_info_t) * local_ifaces.size();
 
 	return NT_STATUS_OK;
 }
@@ -539,7 +552,7 @@ NTSTATUS x_smb2_process_IOCTL(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ
 	const uint8_t *in_hdr = smbd_requ->get_in_data();
 
 	auto state = std::make_unique<x_smb2_state_ioctl_t>();
-	if (!decode_in_ioctl(*state, in_hdr, smbd_requ->in_requ_len)) {
+	if (!decode_in_ioctl(*state, smbd_requ->in_buf, smbd_requ->in_offset, smbd_requ->in_requ_len)) {
 		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
 

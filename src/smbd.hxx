@@ -102,7 +102,7 @@ struct x_smbd_requ_t
 	int refcnt = 1;
 
 	x_buf_t *in_buf;
-	const uint8_t *in_hdr;
+	// const uint8_t *in_hdr;
 	uint32_t in_offset, in_requ_len;
 	bool compound_followed = false;
 	bool async = false;

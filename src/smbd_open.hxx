@@ -18,17 +18,34 @@ struct x_smb2_state_read_t
 	uint64_t in_file_id_persistent;
 	uint64_t in_file_id_volatile;
 	uint32_t in_minimum_count;
-
-	std::vector<uint8_t> out_data;
+#if 1
+	~x_smb2_state_read_t() {
+		if (out_buf) {
+			x_buf_release(out_buf);
+		}
+	}
+	x_buf_t *out_buf{};
+	uint32_t out_buf_length;
+#else
+	std::unique_ptr<x_bufref_t> out_data;
+#endif
 };
 
 struct x_smb2_state_write_t
 {
+	~x_smb2_state_write_t() {
+		if (in_buf) {
+			x_buf_release(in_buf);
+		}
+	}
 	uint64_t in_offset;
 	uint64_t in_file_id_persistent;
 	uint64_t in_file_id_volatile;
 	uint32_t in_flags;
-	std::vector<uint8_t> in_data;
+
+	x_buf_t *in_buf{};
+	uint32_t in_buf_offset;
+	uint32_t in_buf_length;
 
 	uint32_t out_count;
 	uint32_t out_remaining;
@@ -72,6 +89,14 @@ struct x_smb2_state_qdir_t
 
 struct x_smb2_state_ioctl_t
 {
+	~x_smb2_state_ioctl_t() {
+		if (in_buf) {
+			x_buf_release(in_buf);
+		}
+		if (out_buf) {
+			x_buf_release(out_buf);
+		}
+	}
 	uint32_t ctl_code;
 	uint32_t in_flags;
 	uint64_t file_id_persistent;
@@ -79,8 +104,15 @@ struct x_smb2_state_ioctl_t
 	uint32_t in_max_input_length;
 	uint32_t in_max_output_length;
 
+	x_buf_t *in_buf{};
+	uint32_t in_buf_offset;
+	uint32_t in_buf_length{0};
+	x_buf_t *out_buf{};
+	uint32_t out_buf_length{0};
+#if 0
 	std::vector<uint8_t> in_data;
 	std::vector<uint8_t> out_data;
+#endif
 };
 
 struct x_smb2_state_notify_t

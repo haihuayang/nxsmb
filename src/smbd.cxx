@@ -273,75 +273,7 @@ void x_smbd_conn_send_unsolicited(x_smbd_conn_t *smbd_conn, x_smbd_sess_t *smbd_
 	x_smbd_conn_queue(smbd_conn, buf, buf, buf->length);
 }
 
-#if 0
-void x_smbd_conn_reply(x_smbd_conn_t *smbd_conn, x_msg_ptr_t &smbd_requ, x_smbd_sess_t *smbd_sess,
-		x_smb2_preauth_t *preauth,
-		uint8_t *outbuf,
-		uint32_t tid, NTSTATUS status, uint32_t body_size)
-{
-	uint8_t *outhdr = outbuf + 8;
-	//smbd_smb2_request_setup_out
-	memset(outhdr, 0, 0x40);
-	SIVAL(outhdr, SMB2_HDR_PROTOCOL_ID,     SMB2_MAGIC);
-	SSVAL(outhdr, SMB2_HDR_LENGTH,	  SMB2_HDR_BODY);
-	SSVAL(outhdr, SMB2_HDR_CREDIT_CHARGE, 1); // TODO
-	SIVAL(outhdr, SMB2_HDR_STATUS, NT_STATUS_V(status));
-	SIVAL(outhdr, SMB2_HDR_OPCODE, smbd_requ->opcode);
-	SSVAL(outhdr, SMB2_HDR_CREDIT, std::max(uint16_t(1), smbd_requ->credits_requested)); // TODO
-	SIVAL(outhdr, SMB2_HDR_FLAGS, smbd_requ->hdr_flags | SMB2_HDR_FLAG_REDIRECT); // TODO
-	SIVAL(outhdr, SMB2_HDR_NEXT_COMMAND, 0);
-	SBVAL(outhdr, SMB2_HDR_MESSAGE_ID, smbd_requ->mid);
-	SIVAL(outhdr, SMB2_HDR_TID, tid);
-	SBVAL(outhdr, SMB2_HDR_SESSION_ID, smbd_sess ? smbd_sess->id : 0);
 
-	uint8_t *outnbt = outbuf + 4;
-	x_put_be32(outnbt, 0x40 + body_size);
-
-	smbd_requ->out_buf = outbuf;
-	smbd_requ->out_off = 4;
-	smbd_requ->out_len = 4 + 0x40 + body_size;
-	smbd_requ->state = x_msg_t::STATE_COMPLETE;
-
-	if (preauth) {
-		preauth->update(outbuf + 8, smbd_requ->out_len - 4);
-	}
-
-	bool orig_empty = smbd_conn->send_queue.empty();
-	if (smbd_requ->do_signing || msg_is_signed(smbd_requ)) {
-		X_ASSERT(smbd_sess);
-		x_smb2_sign_msg(outbuf + 8,
-				smbd_requ->out_len - 4,
-				smbd_conn->dialect,
-				smbd_sess->signing_key);
-	}
-	smbd_conn->send_queue.push_back(smbd_requ);
-	if (orig_empty) {
-		x_evtmgmt_enable_events(g_evtmgmt, smbd_conn->ep_id, FDEVT_OUT);
-	}
-
-}
-
-void x_smbd_conn_reply(x_smbd_conn_t *smbd_conn, x_msg_t *smbd_requ, x_smbd_sess_t *smbd_sess)
-{
-	if (smbd_requ->state == x_msg_t::STATE_COMPLETE) {
-		bool orig_empty = smbd_conn->send_queue.empty();
-		if (smbd_requ->do_signing || msg_is_signed(smbd_requ)) {
-			X_ASSERT(smbd_sess);
-			x_smb2_sign_msg(smbd_requ->out_buf + 8,
-					smbd_requ->out_len - 4,
-					smbd_conn->dialect,
-					smbd_sess->signing_key);
-		}
-		smbd_conn->send_queue.push_back(smbd_requ);
-		if (orig_empty) {
-			x_evtmgmt_enable_events(g_evtmgmt, smbd_conn->ep_id, FDEVT_OUT);
-		}
-	} else {
-		delete smbd_requ;
-		X_ASSERT(smbd_conn->count_msg-- > 0);
-	}
-}
-#endif
 static const struct {
 	NTSTATUS (*op_func)(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ);
 } x_smb2_op_table[] = {
@@ -518,35 +450,6 @@ static int x_smbd_conn_process_smb2(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smb
 		x_smbd_conn_queue(smbd_conn, smbd_requ);
 	}
 	return 0;
-
-#if 0
-		if (SMB2_HDR_BODY > len) {
-	const uint8_t *in_buf = req->bufreq->data();
-	uint32_t in_len = req->bufreq->length;
-
-			return -EBADMSG;
-		}
-		x_smb2req_t *req = new x_smb2req_t(buf, offset);
-		x_smbd_conn_process_smb2(smbd_conn, req);
-	} else {
-
-			uint32_t next_command = x_get_le32(in_buf + SMB2_HDR_NEXT_COMMAND);
-			if (next_command > len) {
-				reutrn -EBADMSG;
-			}
-			if (next_command != 0) {
-				x_smb2req_t *req = new x_smb2req_t(buf, offset, next_command);
-			}
-
-
-	const uint8_t *in_buf = req->bufreq->data();
-	uint32_t in_len = req->bufreq->length;
-	req->mid = x_get_le64(in_buf + SMB2_HDR_MESSAGE_ID);
-	req->hdr_flags = x_get_le32(in_buf + SMB2_HDR_FLAGS);
-	req->opcode = opcode;
-	req->credits_requested = x_get_le16(in_buf + SMB2_HDR_CREDIT);
-	return x_smb2_op_table[opcode].op_func(smbd_conn, req);
-#endif
 }
 
 static int x_smbd_conn_process_smb(x_smbd_conn_t *smbd_conn, x_buf_t *buf)

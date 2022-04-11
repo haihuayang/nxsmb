@@ -26,9 +26,10 @@ struct x_smb2_in_write_t
 };
 
 static bool decode_in_write(x_smb2_state_write_t &state,
-		const uint8_t *in_hdr, uint32_t in_len)
+		x_buf_t *in_buf, uint32_t in_offset, uint32_t in_len)
 {
-	const x_smb2_in_write_t *in_write = (const x_smb2_in_write_t *)(in_hdr + SMB2_HDR_BODY);
+	const uint8_t *in_hdr = in_buf->data + in_offset;
+	const x_smb2_in_write_t *in_write = (const x_smb2_in_write_t *)(in_hdr  + SMB2_HDR_BODY);
 	uint16_t in_data_offset = X_LE2H16(in_write->data_offset);
 	uint32_t in_length = X_LE2H32(in_write->length);
 
@@ -42,8 +43,9 @@ static bool decode_in_write(x_smb2_state_write_t &state,
 	state.in_file_id_volatile = X_LE2H64(in_write->file_id_volatile);
 	state.in_flags = X_LE2H8(in_write->flags);
 
-	/* TODO avoid copying */
-	state.in_data.assign(in_hdr + in_data_offset, in_hdr + in_data_offset + in_length);
+	state.in_buf = x_buf_get(in_buf);
+	state.in_buf_offset = in_offset + in_data_offset;
+	state.in_buf_length = in_length;
 	return true;
 }
 
@@ -84,6 +86,19 @@ static void x_smb2_reply_write(x_smbd_conn_t *smbd_conn,
 			SMB2_HDR_BODY + sizeof(x_smb2_out_write_t));
 }
 
+static void x_smb2_write_async_done(x_smbd_conn_t *smbd_conn,
+		x_smbd_requ_t *smbd_requ,
+		NTSTATUS status)
+{
+	X_LOG_DBG("status=0x%x", status.v);
+	std::unique_ptr<x_smb2_state_write_t> state{(x_smb2_state_write_t *)smbd_requ->requ_state};
+	smbd_requ->requ_state = nullptr;
+	if (NT_STATUS_IS_OK(status)) {
+		x_smb2_reply_write(smbd_conn, smbd_requ, *state);
+	}
+	x_smbd_conn_requ_done(smbd_conn, smbd_requ, status);
+}
+
 NTSTATUS x_smb2_process_WRITE(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 {
 	if (smbd_requ->in_requ_len < SMB2_HDR_BODY + sizeof(x_smb2_in_write_t)) {
@@ -101,7 +116,7 @@ NTSTATUS x_smb2_process_WRITE(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ
 	const uint8_t *in_hdr = smbd_requ->get_in_data();
 
 	auto state = std::make_unique<x_smb2_state_write_t>();
-	if (!decode_in_write(*state, in_hdr, smbd_requ->in_requ_len)) {
+	if (!decode_in_write(*state, smbd_requ->in_buf, smbd_requ->in_offset, smbd_requ->in_requ_len)) {
 		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
 
@@ -127,6 +142,7 @@ NTSTATUS x_smb2_process_WRITE(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ
 		RETURN_OP_STATUS(smbd_requ, NT_STATUS_ACCESS_DENIED);
 	}
 
+	smbd_requ->async_done_fn = x_smb2_write_async_done;
 	auto smbd_object = smbd_requ->smbd_open->smbd_object;
 	NTSTATUS status = x_smbd_object_op_write(smbd_object, smbd_conn, smbd_requ,
 			state);

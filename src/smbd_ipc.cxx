@@ -87,7 +87,8 @@ static NTSTATUS named_pipe_read(
 		x_smbd_named_pipe_t *named_pipe,
 		x_smbd_conn_t *smbd_conn,
 		uint32_t requ_length,
-		std::vector<uint8_t> &output)
+		x_buf_t *&out_buf,
+		uint32_t &out_buf_length)
 {
 	if (named_pipe->output.size() == 0) {
 		X_TODO;
@@ -97,7 +98,9 @@ static NTSTATUS named_pipe_read(
 	if (data_copy > requ_length) {
 		data_copy = requ_length;
 	}
-	output.assign(named_pipe->output.data() + named_pipe->offset, named_pipe->output.data() + named_pipe->offset + data_copy);
+	out_buf = x_buf_alloc(data_copy);
+	memcpy(out_buf->data, named_pipe->output.data() + named_pipe->offset, data_copy);
+	out_buf_length = data_copy;
 	named_pipe->offset += data_copy;
 	if (named_pipe->offset == named_pipe->output.size()) {
 		named_pipe->output.clear();
@@ -393,7 +396,8 @@ static NTSTATUS x_smbd_ipc_op_read(
 	return named_pipe_read(from_smbd_object(smbd_object),
 			from_smbd_open(smbd_requ->smbd_open),
 			smbd_conn,
-			state->in_length, state->out_data);
+			state->in_length, state->out_buf,
+			state->out_buf_length);
 }
 
 static NTSTATUS x_smbd_ipc_op_write(
@@ -405,7 +409,8 @@ static NTSTATUS x_smbd_ipc_op_write(
 	int ret = named_pipe_write(from_smbd_object(smbd_object),
 			from_smbd_open(smbd_requ->smbd_open),
 			smbd_requ->smbd_sess,
-			state->in_data.data(), state->in_data.size());
+			state->in_buf->data + state->in_buf_offset,
+			state->in_buf_length);
 	state->out_count = ret;
 	state->out_remaining = 0;
 	return NT_STATUS_OK;
@@ -460,11 +465,13 @@ static NTSTATUS x_smbd_ipc_op_ioctl(
 	case FSCTL_PIPE_TRANSCEIVE:
 		named_pipe_write(ipc_object, named_pipe,
 				smbd_requ->smbd_sess,
-				state->in_data.data(),
-				state->in_data.size());
+				state->in_buf->data + state->in_buf_offset,
+				state->in_buf_length);
 		return named_pipe_read(ipc_object, named_pipe,
 				smbd_conn,
-				state->in_max_output_length, state->out_data);
+				state->in_max_output_length,
+				state->out_buf,
+				state->out_buf_length);
 	default:
 		X_TODO;
 		return NT_STATUS_NOT_SUPPORTED;

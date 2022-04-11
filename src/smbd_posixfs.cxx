@@ -192,6 +192,7 @@ struct posixfs_object_t
 	};
 
 	uint32_t flags = 0;
+	bool statex_modified{false}; // TODO use flags
 	posixfs_statex_t statex;
 	const std::shared_ptr<x_smbd_topdir_t> topdir;
 	const std::u16string req_path;
@@ -1382,6 +1383,95 @@ static NTSTATUS posixfs_object_op_close(
 	return NT_STATUS_OK;
 }
 
+struct posixfs_read_evt_t
+{
+	posixfs_read_evt_t(x_smbd_requ_t *r, NTSTATUS s)
+		: smbd_requ(r), status(s) { }
+	x_fdevt_user_t base;
+	x_smbd_requ_t *smbd_requ;
+	NTSTATUS const status;
+};
+
+static void posixfs_read_evt_func(x_smbd_conn_t *smbd_conn, x_fdevt_user_t *fdevt_user, bool cancelled)
+{
+	posixfs_read_evt_t *evt = X_CONTAINER_OF(fdevt_user, posixfs_read_evt_t, base);
+	X_LOG_DBG("evt=%p", evt);
+
+	if (!cancelled) {
+		x_smbd_requ_t *smbd_requ = evt->smbd_requ;
+		x_smbd_requ_remove(smbd_requ);
+		smbd_requ->async_done_fn(smbd_conn, smbd_requ, evt->status);
+	}
+
+	delete evt;
+}
+
+struct posixfs_read_job_t
+{
+	posixfs_read_job_t(posixfs_object_t *po, x_smbd_requ_t *r);
+	x_job_t base;
+	posixfs_object_t *posixfs_object;
+	x_smbd_requ_t *smbd_requ;
+};
+
+static x_job_t::retval_t posixfs_read_job_run(x_job_t *job)
+{
+	posixfs_read_job_t *posixfs_read_job = X_CONTAINER_OF(job, posixfs_read_job_t, base);
+
+	x_smbd_requ_t *smbd_requ = posixfs_read_job->smbd_requ;
+	posixfs_object_t *posixfs_object = posixfs_read_job->posixfs_object;
+	posixfs_read_job->smbd_requ = nullptr;
+	posixfs_read_job->posixfs_object = nullptr;
+
+	x_smb2_state_read_t *state = (x_smb2_state_read_t *)smbd_requ->requ_state;
+
+	uint32_t length = std::min(state->in_length, 1024u * 1024);
+	state->out_buf = x_buf_alloc(length);
+	ssize_t ret = pread(posixfs_object->fd, state->out_buf->data,
+			length, state->in_offset);
+	X_LOG_DBG("pread %lu at %lu ret %ld", length, state->in_offset, ret);
+	NTSTATUS status;
+	if (ret < 0) {
+		status = NT_STATUS_INTERNAL_ERROR;
+	} else if (ret == 0) {
+		state->out_buf_length = ret;
+		status = NT_STATUS_END_OF_FILE;
+	} else {
+		state->out_buf_length = ret;
+		status = NT_STATUS_OK;
+	}
+
+	posixfs_object_release(posixfs_object);
+	posixfs_read_evt_t *evt = new posixfs_read_evt_t(smbd_requ, status);
+	evt->base.func = posixfs_read_evt_func;
+	x_smbd_conn_post_user(smbd_requ->smbd_sess->smbd_conn, &evt->base);
+	return x_job_t::JOB_DONE;
+}
+
+static void posixfs_read_job_done(x_job_t *job)
+{
+	posixfs_read_job_t *posixfs_read_job = X_CONTAINER_OF(job, posixfs_read_job_t, base);
+	X_ASSERT(!posixfs_read_job->posixfs_object);
+	X_ASSERT(!posixfs_read_job->smbd_requ);
+	delete posixfs_read_job;
+}
+
+static const x_job_ops_t posixfs_read_job_ops = {
+	posixfs_read_job_run,
+	posixfs_read_job_done,
+};
+
+inline posixfs_read_job_t::posixfs_read_job_t(posixfs_object_t *po, x_smbd_requ_t *r)
+	: posixfs_object(po), smbd_requ(r)
+{
+	base.ops = &posixfs_read_job_ops;
+}
+
+static void posixfs_read_cancel(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
+{
+	x_smbd_conn_post_cancel(smbd_conn, smbd_requ);
+}
+
 static NTSTATUS posixfs_object_op_read(
 		x_smbd_object_t *smbd_object,
 		x_smbd_conn_t *smbd_conn,
@@ -1389,15 +1479,15 @@ static NTSTATUS posixfs_object_op_read(
 		std::unique_ptr<x_smb2_state_read_t> &state)
 {
 	posixfs_object_t *posixfs_object = posixfs_object_from_base_t::container(smbd_object);
-	uint32_t length = std::min(state->in_length, 1024u * 1024);
-
+	++posixfs_object->use_count;
+	smbd_requ->incref();
+	posixfs_read_job_t *read_job = new posixfs_read_job_t(posixfs_object, smbd_requ);
+	smbd_requ->requ_state = state.release();
+	x_smbd_conn_set_async(smbd_conn, smbd_requ, posixfs_read_cancel);
+	x_smbd_schedule_async(&read_job->base);
+	return NT_STATUS_PENDING;
 #if 0
-	++smb2_read->requ.refcount;
-	smb2_read->job.ops = &async_read_job_ops;
-	x_smbd_schedule_async(&smb2_read->job);
-
-	return X_NT_STATUS_INTERNAL_BLOCKED;
-#else
+	uint32_t length = std::min(state->in_length, 1024u * 1024);
 	state->out_data.resize(length);
 	ssize_t ret = pread(posixfs_object->fd, state->out_data.data(),
 			length, state->in_offset);
@@ -1413,6 +1503,93 @@ static NTSTATUS posixfs_object_op_read(
 #endif
 }
 
+
+struct posixfs_write_evt_t
+{
+	posixfs_write_evt_t(x_smbd_requ_t *r, NTSTATUS s)
+		: smbd_requ(r), status(s) { }
+	x_fdevt_user_t base;
+	x_smbd_requ_t *smbd_requ;
+	NTSTATUS const status;
+};
+
+static void posixfs_write_evt_func(x_smbd_conn_t *smbd_conn, x_fdevt_user_t *fdevt_user, bool cancelled)
+{
+	posixfs_write_evt_t *evt = X_CONTAINER_OF(fdevt_user, posixfs_write_evt_t, base);
+	X_LOG_DBG("evt=%p", evt);
+
+	if (!cancelled) {
+		x_smbd_requ_t *smbd_requ = evt->smbd_requ;
+		x_smbd_requ_remove(smbd_requ);
+		smbd_requ->async_done_fn(smbd_conn, smbd_requ, evt->status);
+	}
+
+	delete evt;
+}
+
+struct posixfs_write_job_t
+{
+	posixfs_write_job_t(posixfs_object_t *po, x_smbd_requ_t *r);
+	x_job_t base;
+	posixfs_object_t *posixfs_object;
+	x_smbd_requ_t *smbd_requ;
+};
+
+static x_job_t::retval_t posixfs_write_job_run(x_job_t *job)
+{
+	posixfs_write_job_t *posixfs_write_job = X_CONTAINER_OF(job, posixfs_write_job_t, base);
+
+	x_smbd_requ_t *smbd_requ = posixfs_write_job->smbd_requ;
+	posixfs_object_t *posixfs_object = posixfs_write_job->posixfs_object;
+	posixfs_write_job->smbd_requ = nullptr;
+	posixfs_write_job->posixfs_object = nullptr;
+
+	x_smb2_state_write_t *state = (x_smb2_state_write_t *)smbd_requ->requ_state;
+	ssize_t ret = pwrite(posixfs_object->fd,
+			state->in_buf->data + state->in_buf_offset,
+			state->in_buf_length, state->in_offset);
+	X_LOG_DBG("pwrite %lu at %lu ret %ld", state->in_buf_length, state->in_offset, ret);
+	NTSTATUS status;
+	if (ret <= 0) {
+		status = NT_STATUS_INTERNAL_ERROR;
+	} else {
+		posixfs_object->statex_modified = true; // TODO atomic
+		state->out_count = ret;
+		state->out_remaining = 0;
+		status = NT_STATUS_OK;
+	}
+
+	posixfs_object_release(posixfs_object);
+	posixfs_write_evt_t *evt = new posixfs_write_evt_t(smbd_requ, status);
+	evt->base.func = posixfs_write_evt_func;
+	x_smbd_conn_post_user(smbd_requ->smbd_sess->smbd_conn, &evt->base);
+	return x_job_t::JOB_DONE;
+}
+
+static void posixfs_write_job_done(x_job_t *job)
+{
+	posixfs_write_job_t *posixfs_write_job = X_CONTAINER_OF(job, posixfs_write_job_t, base);
+	X_ASSERT(!posixfs_write_job->posixfs_object);
+	X_ASSERT(!posixfs_write_job->smbd_requ);
+	delete posixfs_write_job;
+}
+
+static const x_job_ops_t posixfs_write_job_ops = {
+	posixfs_write_job_run,
+	posixfs_write_job_done,
+};
+
+inline posixfs_write_job_t::posixfs_write_job_t(posixfs_object_t *po, x_smbd_requ_t *r)
+	: posixfs_object(po), smbd_requ(r)
+{
+	base.ops = &posixfs_write_job_ops;
+}
+
+static void posixfs_write_cancel(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
+{
+	x_smbd_conn_post_cancel(smbd_conn, smbd_requ);
+}
+
 static NTSTATUS posixfs_object_op_write(
 		x_smbd_object_t *smbd_object,
 		x_smbd_conn_t *smbd_conn,
@@ -1420,7 +1597,14 @@ static NTSTATUS posixfs_object_op_write(
 		std::unique_ptr<x_smb2_state_write_t> &state)
 {
 	posixfs_object_t *posixfs_object = posixfs_object_from_base_t::container(smbd_object);
-
+	++posixfs_object->use_count;
+	smbd_requ->incref();
+	posixfs_write_job_t *write_job = new posixfs_write_job_t(posixfs_object, smbd_requ);
+	smbd_requ->requ_state = state.release();
+	x_smbd_conn_set_async(smbd_conn, smbd_requ, posixfs_write_cancel);
+	x_smbd_schedule_async(&write_job->base);
+	return NT_STATUS_PENDING;
+#if 0
 	ssize_t ret = pwrite(posixfs_object->fd, state->in_data.data(),
 			state->in_data.size(), state->in_offset);
 	if (ret < 0) {
@@ -1430,6 +1614,7 @@ static NTSTATUS posixfs_object_op_write(
 		state->out_remaining = 0;
 	}
 	return NT_STATUS_OK;
+#endif
 }
 
 static NTSTATUS getinfo_file(posixfs_object_t *posixfs_object,

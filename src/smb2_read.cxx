@@ -50,12 +50,13 @@ struct x_smb2_out_read_t
 
 static void x_smb2_reply_read(x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ,
-		const x_smb2_state_read_t &state)
+		x_smb2_state_read_t &state)
 {
 	X_LOG_OP("%ld RESP SUCCESS", smbd_requ->in_mid);
 
-	x_bufref_t *bufref = x_bufref_alloc(sizeof(x_smb2_out_read_t) +
-			state.out_data.size());
+	x_bufref_t *bufref = x_bufref_alloc(sizeof(x_smb2_out_read_t));
+	x_bufref_t *out_data = new x_bufref_t(state.out_buf, 0, state.out_buf_length);
+	state.out_buf = nullptr;
 
 	uint8_t *out_hdr = bufref->get_data();
 
@@ -63,13 +64,27 @@ static void x_smb2_reply_read(x_smbd_conn_t *smbd_conn,
 	out_read->struct_size = X_H2LE16(sizeof(x_smb2_out_read_t) + 1);
 	out_read->data_offset = SMB2_HDR_BODY + sizeof(x_smb2_out_read_t);
 	out_read->reserved0 = 0;
-	out_read->data_length = X_H2LE32(state.out_data.size());
+	out_read->data_length = X_H2LE32(out_data->length);
 	out_read->data_remaining = 0;
 	out_read->reserved1 = 0;
-	memcpy(out_read + 1, state.out_data.data(), state.out_data.size());
 
-	x_smb2_reply(smbd_conn, smbd_requ, bufref, bufref, NT_STATUS_OK, 
-			SMB2_HDR_BODY + sizeof(x_smb2_out_read_t) + state.out_data.size());
+	bufref->next = out_data;
+
+	x_smb2_reply(smbd_conn, smbd_requ, bufref, out_data, NT_STATUS_OK, 
+			SMB2_HDR_BODY + sizeof(x_smb2_out_read_t) + out_data->length);
+}
+
+static void x_smb2_read_async_done(x_smbd_conn_t *smbd_conn,
+		x_smbd_requ_t *smbd_requ,
+		NTSTATUS status)
+{
+	X_LOG_DBG("status=0x%x", status.v);
+	std::unique_ptr<x_smb2_state_read_t> state{(x_smb2_state_read_t *)smbd_requ->requ_state};
+	smbd_requ->requ_state = nullptr;
+	if (NT_STATUS_IS_OK(status)) {
+		x_smb2_reply_read(smbd_conn, smbd_requ, *state);
+	}
+	x_smbd_conn_requ_done(smbd_conn, smbd_requ, status);
 }
 
 NTSTATUS x_smb2_process_READ(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
@@ -114,6 +129,7 @@ NTSTATUS x_smb2_process_READ(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 		RETURN_OP_STATUS(smbd_requ, NT_STATUS_ACCESS_DENIED);
 	}
 
+	smbd_requ->async_done_fn = x_smb2_read_async_done;
 	auto smbd_object = smbd_requ->smbd_open->smbd_object;
 	NTSTATUS status = x_smbd_object_op_read(smbd_object, smbd_conn, smbd_requ,
 			state);
