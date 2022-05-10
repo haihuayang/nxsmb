@@ -134,22 +134,22 @@ static void x_smb2_digest(uint16_t dialect,
 }
 
 bool x_smb2_signing_check(uint16_t dialect,
-		const x_smb2_key_t &key,
+		const x_smb2_key_t *key,
 		x_bufref_t *buflist)
 {
 	uint8_t digest[16];
-	x_smb2_digest(dialect, key, buflist, digest);
+	x_smb2_digest(dialect, *key, buflist, digest);
 	
 	uint8_t *signature = buflist->get_data() + SMB2_HDR_SIGNATURE;
 	return memcmp(digest, signature, 16) == 0;
 }
 
 void x_smb2_signing_sign(uint16_t dialect,
-		const x_smb2_key_t &key,
+		const x_smb2_key_t *key,
 		x_bufref_t *buflist)
 {
 	uint8_t *signature = buflist->get_data() + SMB2_HDR_SIGNATURE;
-	x_smb2_digest(dialect, key, buflist, signature);
+	x_smb2_digest(dialect, *key, buflist, signature);
 }
 
 

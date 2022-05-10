@@ -116,7 +116,7 @@ static NTSTATUS x_smb2_process_lease_break(x_smbd_conn_t *smbd_conn,
 {
 	auto state = std::make_unique<x_smb2_state_lease_break_t>();
 	decode_in_lease_break(*state, in_lease_break);
-	x_smbd_lease_t *smbd_lease = x_smbd_lease_find(x_smbd_get_client_guid(*smbd_conn),
+	x_smbd_lease_t *smbd_lease = x_smbd_lease_find(x_smbd_conn_curr_client_guid(),
 			state->in_key);
 	if (!smbd_lease) {
 		return NT_STATUS_INVALID_PARAMETER;
@@ -130,7 +130,7 @@ static NTSTATUS x_smb2_process_lease_break(x_smbd_conn_t *smbd_conn,
 	return status;
 }
 
-NTSTATUS x_smb2_process_BREAK(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
+NTSTATUS x_smb2_process_break(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 {
 	X_LOG_OP("%ld BREAK", smbd_requ->in_mid);
 
@@ -138,6 +138,10 @@ NTSTATUS x_smb2_process_BREAK(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ
 		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
 
+	if (smbd_requ->smbd_chan == nullptr) {
+		RETURN_OP_STATUS(smbd_requ, NT_STATUS_USER_SESSION_DELETED);
+	}
+#if 0
 	if (!smbd_requ->smbd_sess) {
 		RETURN_OP_STATUS(smbd_requ, NT_STATUS_USER_SESSION_DELETED);
 	}
@@ -145,7 +149,7 @@ NTSTATUS x_smb2_process_BREAK(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ
 	if (smbd_requ->smbd_sess->state != x_smbd_sess_t::S_ACTIVE) {
 		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
-
+#endif
 	const uint8_t *in_hdr = smbd_requ->get_in_data();
 	/* TODO signing/encryption */
 	if (!smbd_requ->smbd_tcon) {

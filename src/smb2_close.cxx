@@ -68,21 +68,15 @@ static void x_smb2_reply_close(x_smbd_conn_t *smbd_conn,
 			SMB2_HDR_BODY + X_SMB2_CLOSE_RESP_BODY_LEN);
 }
 
-NTSTATUS x_smb2_process_CLOSE(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
+NTSTATUS x_smb2_process_close(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 {
+	X_ASSERT(smbd_requ->smbd_chan && smbd_requ->smbd_sess);
+
 	if (smbd_requ->in_requ_len < SMB2_HDR_BODY + sizeof(x_smb2_in_close_t)) {
 		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
 
 	const uint8_t *in_hdr = smbd_requ->get_in_data();
-
-	if (!smbd_requ->smbd_sess) {
-		RETURN_OP_STATUS(smbd_requ, NT_STATUS_USER_SESSION_DELETED);
-	}
-
-	if (smbd_requ->smbd_sess->state != x_smbd_sess_t::S_ACTIVE) {
-		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
-	}
 
 	auto state = std::make_unique<x_smb2_state_close_t>();
 	if (!decode_in_close(*state, in_hdr)) {
@@ -99,7 +93,8 @@ NTSTATUS x_smb2_process_CLOSE(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ
 				smbd_requ->smbd_tcon);
 	} else {
 		smbd_requ->smbd_open = x_smbd_open_find(state->in_file_id_persistent,
-				state->in_file_id_volatile, smbd_requ->in_tid, smbd_requ->smbd_sess);
+				state->in_file_id_volatile, smbd_requ->in_tid,
+				smbd_requ->smbd_sess);
 	}
 
 	auto smbd_open = smbd_requ->smbd_open;

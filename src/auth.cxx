@@ -1,18 +1,16 @@
 
-#include "smbd.hxx"
+#include "auth.hxx"
 #include <string.h>
 
 struct x_auth_context_t
 {
-	x_auth_context_t(x_smbd_t *smbd) : smbd(smbd) { }
-	x_smbd_t * const smbd;
 	std::vector<const x_auth_mech_t *> mechs;
 	x_auth_t *create_by_oid(const char *oid);
 };
 
-x_auth_context_t *x_auth_create_context(x_smbd_t *smbd)
+x_auth_context_t *x_auth_create_context()
 {
-	x_auth_context_t *ret = new x_auth_context_t(smbd);
+	x_auth_context_t *ret = new x_auth_context_t;
 	return ret;
 }
 

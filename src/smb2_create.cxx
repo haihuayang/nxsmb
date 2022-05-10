@@ -404,17 +404,10 @@ static void x_smb2_create_async_done(x_smbd_conn_t *smbd_conn,
 	x_smbd_conn_requ_done(smbd_conn, smbd_requ, status);
 }
 
-NTSTATUS x_smb2_process_CREATE(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
+NTSTATUS x_smb2_process_create(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 {
+	X_ASSERT(smbd_requ->smbd_chan && smbd_requ->smbd_sess);
 	if (smbd_requ->in_requ_len < SMB2_HDR_BODY + sizeof(x_smb2_in_create_t) + 1) {
-		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
-	}
-
-	if (!smbd_requ->smbd_sess) {
-		RETURN_OP_STATUS(smbd_requ, NT_STATUS_USER_SESSION_DELETED);
-	}
-
-	if (smbd_requ->smbd_sess->state != x_smbd_sess_t::S_ACTIVE) {
 		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
 
@@ -446,7 +439,7 @@ NTSTATUS x_smb2_process_CREATE(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_req
 		x_smbd_open_insert_local(smbd_open);
 		X_ASSERT(smbd_open->smbd_tcon); // initialized in side op_create
 		smbd_requ->smbd_tcon->open_list.push_back(smbd_open);
-		smbd_open->incref();
+		x_smbd_ref_inc(smbd_open);
 		x_smb2_reply_create(smbd_conn, smbd_requ, *state);
 		return status;
 	} else {

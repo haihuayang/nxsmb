@@ -19,8 +19,7 @@ X_SMBD_DCERPC_IMPL_TODO(srvsvc_NetSessEnum)
 X_SMBD_DCERPC_IMPL_TODO(srvsvc_NetSessDel)
 X_SMBD_DCERPC_IMPL_TODO(srvsvc_NetShareAdd)
 
-static uint32_t net_share_enum_all_1(x_smbd_conn_t *smbd_conn,
-		std::shared_ptr<idl::srvsvc_NetShareCtr1> &ctr1)
+static uint32_t net_share_enum_all_1(std::shared_ptr<idl::srvsvc_NetShareCtr1> &ctr1)
 {
 	// TODO buffer size and resume handle
 	ctr1->array = std::make_shared<std::vector<idl::srvsvc_NetShareInfo1>>();
@@ -45,8 +44,7 @@ static bool x_smbd_dcerpc_impl_srvsvc_NetShareEnumAll(
 
 	switch (arg.info_ctr.level) {
 	case 1:
-		arg.totalentries = net_share_enum_all_1(smbd_sess->smbd_conn,
-				arg.info_ctr.ctr.ctr1);
+		arg.totalentries = net_share_enum_all_1(arg.info_ctr.ctr.ctr1);
 		arg.__result = WERR_OK;
 		break;
 

@@ -180,6 +180,9 @@ enum {
 	X_SMB2_CREATE_TAG_AAPL = 'AAPL',
 };
 
+using x_smb2_uuid_t = std::array<uint64_t, 2>;
+using x_smb2_uuid_bytes_t = std::array<uint8_t, 16>;
+
 struct x_smb2_preauth_t
 {
 	std::array<char, 64> data{};
@@ -292,11 +295,11 @@ struct x_buflist_t
 };
 
 bool x_smb2_signing_check(uint16_t dialect,
-		const x_smb2_key_t &key,
+		const x_smb2_key_t *key,
 		x_bufref_t *buflist);
 
 void x_smb2_signing_sign(uint16_t dialect,
-		const x_smb2_key_t &key,
+		const x_smb2_key_t *key,
 		x_bufref_t *buflist);
 
 #if 0
@@ -341,6 +344,10 @@ struct x_smb2_op_state_t
 };
 #endif
 
+struct x_smb2_state_negprot_t
+{
+};
+
 struct x_smb2_create_close_info_t
 {
 	idl::NTTIME out_create_ts;
@@ -378,6 +385,10 @@ NTSTATUS x_smb2_notify_marshall(
 		const std::vector<std::pair<uint32_t, std::u16string>> &notify_changes,
 		uint32_t max_offset,
 		std::vector<uint8_t> &output);
+
+uint16_t x_smb2_dialect_match(const std::vector<uint16_t> &sdialects,
+		const uint16_t *dialects,
+		size_t dialect_count);
 
 #endif /* __smb2__hxx__ */
 

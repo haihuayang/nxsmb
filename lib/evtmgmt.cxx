@@ -53,7 +53,7 @@ struct x_epoll_entry_t
 	}
 
 	void put() {
-		if (genref.put()) {
+		if (genref.decref()) {
 			x_epoll_upcall_t *tmp_upcall = upcall;
 			upcall = NULL;
 			tmp_upcall->on_unmonitored();
@@ -166,7 +166,7 @@ static void epoll_job_done(x_job_t *job)
 	x_epoll_entry_t *entry = X_CONTAINER_OF(job, x_epoll_entry_t, job);
 	X_DBG("%p", entry);
 	x_evtmgmt_t *evtmgmt = (x_evtmgmt_t *)entry->job.private_data;
-	{
+	if (evtmgmt->entry_interval) {
 		std::lock_guard<std::mutex> lock(evtmgmt->mutex);
 		evtmgmt->epoll_timer_list.remove(entry);
 	}
@@ -323,7 +323,7 @@ void x_evtmgmt_dispatch(x_evtmgmt_t *ep)
 			ep->epoll_timer_list.remove(entry);
 			entry->timeout = x_tick_add(tick_now, ep->entry_interval);
 			ep->epoll_timer_list.push_back(entry);
-			entry->genref.get();
+			entry->genref.incref();
 			lock.unlock();
 			__evtmgmt_modify_fdevents(ep, entry, x_fdevents_init(FDEVT_TIMER, 0));
 			entry->put();
@@ -335,7 +335,7 @@ void x_evtmgmt_dispatch(x_evtmgmt_t *ep)
 	}
 
 	struct epoll_event ev;
-	int err = epoll_wait(ep->epfd, &ev, 1, wait_ns / 1000000);
+	int err = epoll_wait(ep->epfd, &ev, 1, std::max(wait_ns / 1000000, 1l));
 	if (err > 0) {
 		if (ev.data.u64 == (uint64_t)ep->timerfd) {
 			uint64_t c;

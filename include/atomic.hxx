@@ -15,17 +15,22 @@ struct x_genref_t
 	/* high 32 bit is gen, low 32 bit is refcount */
 	std::atomic<uint64_t> val{0};
 
-	uint64_t init(uint32_t init_ref = 1) {
+	uint64_t init(uint32_t init_ref = 1) noexcept {
 		uint64_t oval = val;
-		assert((oval & 0xffffffff) == 0);
+		assert((oval & 0xffffffffu) == 0);
 		val += init_ref;
-		return oval & 0xffffffff00000000;
+		return oval & 0xffffffff00000000ul;
 	}
 
-	bool try_get(uint64_t gen) {
+	uint64_t get_gen() const noexcept {
+		uint64_t oval = val.load(std::memory_order_release);
+		return (oval & 0xffffffff00000000ul);
+	}
+
+	bool try_get(uint64_t gen) noexcept {
 		uint64_t oval = val.load(std::memory_order_relaxed);
 		for (;;) {
-			if ((oval & 0xffffffff00000000) != gen) {
+			if ((oval & 0xffffffff00000000ul) != gen) {
 				return false;
 			}
 
@@ -49,7 +54,31 @@ struct x_genref_t
 		return true;
 	}
 
-	bool get() {
+	bool try_incref(uint64_t &ret_gen) noexcept {
+		uint64_t oval = val.load(std::memory_order_relaxed);
+		for (;;) {
+			int32_t ref = int32_t(oval);
+			assert(ref >= 0);
+
+			if (ref == 0) {
+				return false;
+			}
+			uint64_t gen = oval & 0xffffffff00000000ul;
+			uint64_t nval = gen | (ref + 1);
+			if (std::atomic_compare_exchange_weak_explicit(
+						&val,
+						&oval,
+						nval,
+						std::memory_order_release,
+						std::memory_order_relaxed)) {
+				ret_gen = gen;
+				break;
+			}
+		}
+		return true;
+	}
+
+	bool incref() noexcept {
 		uint64_t oval = val.load(std::memory_order_relaxed);
 		for (;;) {
 			int32_t ref = int32_t(oval);
@@ -67,18 +96,19 @@ struct x_genref_t
 		return true;
 	}
 
-	void release() {
+	void release() noexcept {
 		X_ASSERT(int32_t(val) > 0);
+		/* increase the generation */
 		val += (1ul << 32);
 	}
 
-	bool put() {
+	bool decref() noexcept {
 		uint64_t oval = val.load(std::memory_order_relaxed);
 		uint64_t nval;
 		for (;;) {
 			int32_t ref = int32_t(oval);
 			assert(ref > 0);
-			nval = (oval & 0xffffffff00000000) | (ref - 1);
+			nval = (oval & 0xffffffff00000000) | (uint32_t)(ref - 1);
 			if (std::atomic_compare_exchange_weak_explicit(
 						&val,
 						&oval,

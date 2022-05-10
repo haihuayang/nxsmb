@@ -32,7 +32,7 @@ static void x_smb2_reply_keepalive(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd
 			SMB2_HDR_BODY + sizeof(x_smb2_keepalive_t));
 }
 
-NTSTATUS x_smb2_process_KEEPALIVE(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
+NTSTATUS x_smb2_process_keepalive(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 {
 	if (smbd_requ->in_requ_len < SMB2_HDR_BODY + sizeof(struct x_smb2_keepalive_t)) {
 		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);

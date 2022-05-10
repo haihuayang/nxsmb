@@ -204,7 +204,7 @@ static int parse_smbconf(x_smbd_conf_t &smbd_conf, const char *path,
 	share_spec = nullptr;
 
 	smbd_conf.capabilities = SMB2_CAP_DFS | SMB2_CAP_LARGE_MTU | SMB2_CAP_LEASING
-		| SMB2_CAP_DIRECTORY_LEASING;
+		| SMB2_CAP_DIRECTORY_LEASING | SMB2_CAP_MULTI_CHANNEL;
 
 	std::string line;
 	std::ifstream in(path);
@@ -327,7 +327,7 @@ int x_smbd_conf_parse(const char *configfile, const std::vector<std::string> &cm
 
 x_smbd_conf_t::x_smbd_conf_t()
 {
-	strcpy((char *)guid, "nxsmbd");
+	strcpy((char *)&guid, "nxsmbd");
 	private_dir = "/var/lib/samba/private";
 }
 

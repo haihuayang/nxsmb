@@ -48,4 +48,19 @@ NTSTATUS x_smb2_notify_marshall(
 	return output.empty() ?  NT_STATUS_NOTIFY_ENUM_DIR : NT_STATUS_OK;
 }
 
+uint16_t x_smb2_dialect_match(const std::vector<uint16_t> &sdialects,
+		const uint16_t *dialects,
+		size_t dialect_count)
+{
+	for (auto sdialect: sdialects) {
+		for (unsigned int di = 0; di < dialect_count; ++di) {
+			uint16_t cdialect = X_LE2H16(dialects[di]);
+			if (sdialect == cdialect) {
+				return sdialect;
+			}
+		}
+	}
+	return SMB2_DIALECT_REVISION_000;
+}
+
 

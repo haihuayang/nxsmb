@@ -79,7 +79,8 @@ static bool x_smbd_dcerpc_impl_lsa_QueryInfoPolicy(
 		auto info = std::make_shared<idl::lsa_PolicyInformation>();
 		info->__init(arg.level);
 		info->account_domain.name.string = std::make_shared<std::u16string>(x_convert_utf8_to_utf16(smbd_conf->netbios_name));
-		info->account_domain.sid = std::make_shared<idl::dom_sid>(smbd_sess->smbd_user->domain_sid); // TODO we use user's domain_sid for now
+		X_TODO;
+		// info->account_domain.sid = std::make_shared<idl::dom_sid>(smbd_sess->smbd_user->domain_sid); // TODO we use user's domain_sid for now
 		arg.info = info;
 		arg.__result = NT_STATUS_OK;
 						  }

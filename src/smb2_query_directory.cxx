@@ -80,17 +80,9 @@ static void x_smb2_reply_qdir(x_smbd_conn_t *smbd_conn,
 			SMB2_HDR_BODY + sizeof(x_smb2_out_qdir_t) + state.out_data.size());
 }
 
-NTSTATUS x_smb2_process_QUERY_DIRECTORY(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
+NTSTATUS x_smb2_process_query_directory(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 {
 	if (smbd_requ->in_requ_len < SMB2_HDR_BODY + sizeof(x_smb2_in_qdir_t)) {
-		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
-	}
-
-	if (!smbd_requ->smbd_sess) {
-		RETURN_OP_STATUS(smbd_requ, NT_STATUS_USER_SESSION_DELETED);
-	}
-
-	if (smbd_requ->smbd_sess->state != x_smbd_sess_t::S_ACTIVE) {
 		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
 

@@ -95,10 +95,10 @@ all: $(TARGET_SET_tests:%=$(TARGET_DIR_out)/tests/%) \
 
 SET_src_nxsmbd := \
 	smbd_secrets \
-	smbd_posixfs_utils \
-	smbd_posixfs \
-	smbd_ipc \
 	smbd_pool \
+	smbd_posixfs \
+	smbd_posixfs_utils \
+	smbd_ipc \
 	smbd_lease \
 	util_sid \
 	smbd_ctrl \
@@ -107,8 +107,13 @@ SET_src_nxsmbd := \
 	smbd_dcerpc_srvsvc \
 	smbd_dcerpc_dssetup \
 	smbd_dcerpc_lsarpc \
-	smb2_negprot \
+	smbd \
+	smbd_conn \
+	smbd_requ \
+	smbd_chan \
 	smb2_sesssetup \
+	smbd_sess  \
+	smb2_negprot \
 	smb2_logoff \
 	smb2_tcon \
 	smb2_tdis \
@@ -128,20 +133,10 @@ SET_src_nxsmbd := \
 	smb2_break \
 	smb2_signing smb2_preauth \
 	smb2 \
-	smbd \
-	smbd_conn  \
 	auth_ntlmssp auth_krb5 auth_spnego auth \
 	network misc fnmatch \
 	smbd_conf smbd_share \
 	smbd_ntacl \
-
-old:=\
-	smbd_vfs \
-	smbd_object \
-	smbd_disk \
-	smbd_fs_object \
-	smbd_fs_qdir \
-	smbd_fs_notify \
 
 SET_src_nxutils := \
 	nxutils \
@@ -366,6 +361,7 @@ TARGET_SRC_libnxsmb := \
 		lib/xutils \
 		lib/threadpool \
 		lib/evtmgmt \
+		lib/timerq \
 		lib/wbpool \
 		lib/kerberos_pac \
 		lib/charset \

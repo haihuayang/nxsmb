@@ -45,7 +45,6 @@ extern "C" {
 #define GENSEC_EXPIRE_TIME_INFINITY (NTTIME)0x8000000000000000LL
 
 struct x_auth_context_t;
-const std::shared_ptr<x_smbd_conf_t> x_auth_context_get_smbd_conf(const x_auth_context_t *);
 
 struct x_auth_t;
 
@@ -183,6 +182,7 @@ int x_auth_register(x_auth_context_t *context, const x_auth_mech_t *mech);
 
 extern const x_auth_mech_t x_auth_mech_spnego;
 
+x_auth_context_t *x_auth_create_context();
 
 #endif /* __auth__hxx__ */
 

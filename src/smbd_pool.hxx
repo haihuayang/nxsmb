@@ -33,7 +33,7 @@ static inline void pool_release(P &pool, E *elem)
 		pool.hashtable.remove(elem);
 	}
 	--pool.count;
-	elem->decref();
+	x_smbd_ref_dec(elem);
 }
 
 template <typename HashTraits>

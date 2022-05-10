@@ -20,8 +20,8 @@ static x_smbd_tcon_t *make_tcon(x_smbd_sess_t *smbd_sess,
 	}
 
 	x_smbd_tcon_insert(smbd_tcon);
-	smbd_tcon->incref();
-	smbd_sess->tcon_list.push_back(smbd_tcon);
+	x_smbd_ref_inc(smbd_tcon);
+	x_smbd_sess_link_tcon(smbd_sess, &smbd_tcon->sess_link);
 	return smbd_tcon;
 }
 
@@ -39,7 +39,7 @@ static uint32_t share_get_maximum_access(const std::shared_ptr<x_smbd_share_t> &
 ****************************************************************************/
 
 static uint32_t create_share_access_mask(const std::shared_ptr<x_smbd_share_t> &share,
-		x_smbd_sess_t *smbd_sess)
+		x_smbd_chan_t *smbd_chan)
 {
 	uint32_t share_access = share_get_maximum_access(share);
 
@@ -146,9 +146,10 @@ static void x_smb2_reply_tcon(x_smbd_conn_t *smbd_conn,
 			SMB2_HDR_BODY + X_SMB2_TCON_RESP_BODY_LEN);
 }
 
-NTSTATUS x_smb2_process_TCON(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
+NTSTATUS x_smb2_process_tcon(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 {
 	X_LOG_OP("%ld TCON", smbd_requ->in_mid);
+	X_ASSERT(smbd_requ->smbd_chan && smbd_requ->smbd_sess);
 
 	if (smbd_requ->in_requ_len < SMB2_HDR_BODY + X_SMB2_TCON_REQU_BODY_LEN + 1) {
 		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
@@ -157,13 +158,6 @@ NTSTATUS x_smb2_process_TCON(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 	const uint8_t *in_hdr = smbd_requ->get_in_data();
 	const uint8_t *in_body = in_hdr + SMB2_HDR_BODY;
 
-	if (!smbd_requ->smbd_sess) {
-		RETURN_OP_STATUS(smbd_requ, NT_STATUS_USER_SESSION_DELETED);
-	}
-	
-	if (smbd_requ->smbd_sess->state != x_smbd_sess_t::S_ACTIVE) {
-		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
-	}
 	/* TODO signing/encryption */
 
 	uint16_t in_path_offset = SVAL(in_body, 0x04);
@@ -202,7 +196,7 @@ NTSTATUS x_smb2_process_TCON(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 	}
 
 	uint32_t share_access = create_share_access_mask(smbshare,
-			smbd_requ->smbd_sess);
+			smbd_requ->smbd_chan);
 
 	if ((share_access & (idl::SEC_FILE_READ_DATA|idl::SEC_FILE_WRITE_DATA)) == 0) {
 		/* No access, read or write. */

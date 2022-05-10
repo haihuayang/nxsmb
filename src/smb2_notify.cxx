@@ -79,7 +79,7 @@ static void x_smb2_notify_async_done(x_smbd_conn_t *smbd_conn,
 	x_smbd_conn_requ_done(smbd_conn, smbd_requ, status);
 }
 
-NTSTATUS x_smb2_process_NOTIFY(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
+NTSTATUS x_smb2_process_notify(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 {
 	if (smbd_requ->in_requ_len < SMB2_HDR_BODY + sizeof(x_smb2_in_notify_t)) {
 		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
@@ -87,10 +87,6 @@ NTSTATUS x_smb2_process_NOTIFY(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_req
 
 	if (!smbd_requ->smbd_sess) {
 		RETURN_OP_STATUS(smbd_requ, NT_STATUS_USER_SESSION_DELETED);
-	}
-
-	if (smbd_requ->smbd_sess->state != x_smbd_sess_t::S_ACTIVE) {
-		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
 
 	const uint8_t *in_hdr = smbd_requ->get_in_data();

@@ -3,6 +3,7 @@
 #include "core.hxx"
 #include "include/charset.hxx"
 #include "smbd_object.hxx"
+#include "smb2.hxx"
 
 enum {
 	X_SMB2_IOCTL_REQU_BODY_LEN = 0x38,
@@ -95,7 +96,8 @@ static void x_smb2_reply_ioctl(x_smbd_conn_t *smbd_conn,
 	x_bufref_t *bufref = x_bufref_alloc(sizeof(x_smb2_out_ioctl_t));
 	x_bufref_t *out_data;
 	if (state.out_buf_length) {
-		out_data = new x_bufref_t(state.out_buf, 0, state.out_buf_length);
+		out_data = new x_bufref_t(x_buf_get(state.out_buf), 0, state.out_buf_length);
+		bufref->next = out_data;
 	} else {
 		out_data = bufref;
 	}
@@ -411,6 +413,22 @@ static NTSTATUS x_smb2_fsctl_validate_negotiate_info_224(
 	return NT_STATUS_INTERNAL_ERROR;
 }
 
+struct x_smb2_fsctl_validate_negotiate_info_in_t
+{
+	uint32_t capabilities;
+	x_smb2_uuid_bytes_t client_guid;
+	uint16_t security_mode;
+	uint16_t num_dialects;
+};
+
+struct x_smb2_fsctl_validate_negotiate_info_out_t
+{
+	uint32_t capabilities;
+	x_smb2_uuid_bytes_t server_guid;
+	uint16_t security_mode;
+	uint16_t dialect;
+};
+
 static NTSTATUS x_smb2_fsctl_validate_negotiate_info(
 		x_smbd_conn_t *smbd_conn,
 		x_smb2_state_ioctl_t &state)
@@ -419,67 +437,40 @@ static NTSTATUS x_smb2_fsctl_validate_negotiate_info(
 		return NT_STATUS_INVALID_PARAMETER;
 	}
 
-	const uint8_t *in_data = state.in_buf->data + state.in_buf_offset;
 	uint32_t in_input_size = state.in_buf_length;
 
-	if (in_input_size < 0x18) {
+	if (in_input_size < sizeof(x_smb2_fsctl_validate_negotiate_info_in_t)) {
 		return NT_STATUS_INVALID_PARAMETER;
 	}
 
-	uint32_t in_capabilities = x_get_le32(in_data);
-	if (in_capabilities != smbd_conn->client_capabilities) {
-		return X_NT_STATUS_INTERNAL_TERMINATE;
-	}
-
-	idl::GUID client_guid;
-	idl::x_ndr_pull(client_guid, in_data + 4, 0x10, 0);
-	if (memcmp(&client_guid, &smbd_conn->client_guid, 0x10) != 0) {
-		return X_NT_STATUS_INTERNAL_TERMINATE;
-	}
-
-	uint16_t in_security_mode = x_get_le16(in_data + 0x14);
-	if (in_security_mode != smbd_conn->client_security_mode) {
-		return X_NT_STATUS_INTERNAL_TERMINATE;
-	}
-
-	uint16_t in_num_dialects = x_get_le16(in_data + 0x16);
-	if (in_input_size < (0x18u + in_num_dialects*2)) {
-		return NT_STATUS_INVALID_PARAMETER;
-	}
-
-	/*
-	 * From: [MS-SMB2]
-	 * 3.3.5.15.12 Handling a Validate Negotiate Info Request
-	 *
-	 * The server MUST determine the greatest common dialect
-	 * between the dialects it implements and the Dialects array
-	 * of the VALIDATE_NEGOTIATE_INFO request. If no dialect is
-	 * matched, or if the value is not equal to Connection.Dialect,
-	 * the server MUST terminate the transport connection
-	 * and free the Connection object.
-	 */
-	uint16_t dialect = x_smb2_dialect_match(smbd_conn, 
-			in_data + 0x18,
-			in_num_dialects);
-
-	if (dialect != smbd_conn->dialect) {
-		return X_NT_STATUS_INTERNAL_TERMINATE;
-	}
-
-	if (state.in_max_output_length < 0x18) {
+	if (state.in_max_output_length < sizeof(x_smb2_fsctl_validate_negotiate_info_out_t)) {
 		return NT_STATUS_BUFFER_TOO_SMALL;
 	}
 
-	const auto smbd_conf = x_smbd_conf_get();
-	state.out_buf = x_buf_alloc(0x18);
-	uint8_t *outbody = state.out_buf->data;
-	x_put_le32(outbody + 0x00, smbd_conn->server_capabilities);
-	memcpy(outbody + 4, smbd_conf->guid, 16);
-	x_put_le16(outbody + 0x14, smbd_conn->server_security_mode);
-	x_put_le16(outbody + 0x16, smbd_conn->dialect);
-	state.out_buf_length = 0x18;
+	struct x_smb2_fsctl_validate_negotiate_info_state_t fsctl_state;
+	const struct x_smb2_fsctl_validate_negotiate_info_in_t *in = (x_smb2_fsctl_validate_negotiate_info_in_t *)(state.in_buf->data + state.in_buf_offset);
 
-	return NT_STATUS_OK;
+	fsctl_state.in_capabilities = X_LE2H32(in->capabilities);
+	memcpy(&fsctl_state.in_guid, &in->client_guid, sizeof(in->client_guid));
+	fsctl_state.in_security_mode = X_LE2H16(in->security_mode);
+	fsctl_state.in_num_dialects = X_LE2H16(in->num_dialects);
+	if (in_input_size < (sizeof(x_smb2_fsctl_validate_negotiate_info_in_t)
+				+ fsctl_state.in_num_dialects * 2)) {
+		return NT_STATUS_INVALID_PARAMETER;
+	}
+
+	NTSTATUS status = x_smbd_conn_validate_negotiate_info(smbd_conn, fsctl_state);
+	if (NT_STATUS_IS_OK(status)) {
+		state.out_buf = x_buf_alloc(sizeof(x_smb2_fsctl_validate_negotiate_info_out_t));
+		x_smb2_fsctl_validate_negotiate_info_out_t *out = (x_smb2_fsctl_validate_negotiate_info_out_t *)state.out_buf->data;
+		out->capabilities = X_H2LE32(fsctl_state.out_capabilities);
+		memcpy(&out->server_guid, &fsctl_state.out_guid, sizeof(out->server_guid));
+		out->security_mode = X_H2LE16(fsctl_state.out_security_mode);
+		out->dialect = X_H2LE16(fsctl_state.out_dialect);
+		state.out_buf_length = sizeof(x_smb2_fsctl_validate_negotiate_info_out_t);
+	}
+
+	return status;
 }
 
 struct fsctl_net_iface_info_t
@@ -500,7 +491,7 @@ static NTSTATUS x_smb2_fsctl_query_network_interface_info(
 	if (!file_id_is_nul(state)) {
 		return NT_STATUS_INVALID_PARAMETER;
 	}
-	if (!(smbd_conn->server_capabilities & SMB2_CAP_MULTI_CHANNEL)) {
+	if (!(x_smbd_conn_get_capabilities(smbd_conn) & SMB2_CAP_MULTI_CHANNEL)) {
 		if (smbd_tcon->smbd_share->type == TYPE_IPC) {
 			return NT_STATUS_FS_DRIVER_REQUIRED;
 		} else {
@@ -524,8 +515,8 @@ static NTSTATUS x_smb2_fsctl_query_network_interface_info(
 		}
 		info->next = 0;
 		info->ifindex = X_H2LE32(iface.if_index);
-		info->capability = 0;
-		info->rss_queue = 0;
+		info->capability = X_H2LE32(iface.capability);
+		info->rss_queue = 0; // samba always set to 0
 		info->linkspeed = X_H2LE64(iface.linkspeed);
 		info->sockaddr = iface.ip;
 		last_info = info;
@@ -535,17 +526,9 @@ static NTSTATUS x_smb2_fsctl_query_network_interface_info(
 	return NT_STATUS_OK;
 }
 
-NTSTATUS x_smb2_process_IOCTL(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
+NTSTATUS x_smb2_process_ioctl(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 {
 	if (smbd_requ->in_requ_len < SMB2_HDR_BODY + sizeof(x_smb2_in_ioctl_t)) {
-		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
-	}
-
-	if (!smbd_requ->smbd_sess) {
-		RETURN_OP_STATUS(smbd_requ, NT_STATUS_USER_SESSION_DELETED);
-	}
-
-	if (smbd_requ->smbd_sess->state != x_smbd_sess_t::S_ACTIVE) {
 		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
 

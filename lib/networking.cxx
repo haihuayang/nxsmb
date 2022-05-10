@@ -452,10 +452,11 @@ static void query_iface_speed_from_name(const char *name, uint64_t *speed)
 		goto done;
 	}
 	/* NTNX, fsvm cannot get speed */
-	if (ecmd.speed_hi == 0xffff) {
-		goto done;
+	if (ecmd.speed_hi == 0xffff && ecmd.speed == 0xffff) {
+		*speed = 10000lu * 1000 * 1000;
+	} else {
+		*speed = ((uint64_t)ethtool_cmd_speed(&ecmd)) * 1000 * 1000;
 	}
-	*speed = ((uint64_t)ethtool_cmd_speed(&ecmd)) * 1000 * 1000;
 
 done:
 	(void)close(fd);
@@ -601,7 +602,7 @@ int x_probe_ifaces(std::vector<x_iface_t> &ifaces)
 	/* Loop through interfaces, looking for given IP address */
 	for (struct ifaddrs *ifptr = iflist; ifptr != NULL; ifptr = ifptr->ifa_next) {
 		uint64_t if_speed = 0;
-		uint64_t rx_queues = 1;
+		uint64_t rx_queues = 0;
 
 		/* Check the interface is up. */
 		if (!(ifptr->ifa_flags & IFF_UP)) {
@@ -675,7 +676,8 @@ int x_probe_ifaces(std::vector<x_iface_t> &ifaces)
 		query_iface_rx_queues_from_name(ifptr->ifa_name, &rx_queues);
 		iface.linkspeed = if_speed;
 		iface.capability = 0;
-		if (rx_queues > 1) {
+		/* NUTANIX-DEV, kernel not support RSS??? */
+		if (true || rx_queues > 1) {
 			iface.capability |= X_FSCTL_NET_IFACE_RSS_CAPABLE;
 		}
 	}

@@ -10,6 +10,7 @@
 #include "include/utils.hxx"
 #include "include/networking.hxx"
 #include "include/librpc/misc.hxx"
+#include "smb2.hxx"
 #include <map>
 #include <atomic>
 
@@ -69,16 +70,16 @@ struct x_smbd_conf_t
 		return ret;
 	}
 
-	uint8_t guid[16];
+	x_smb2_uuid_t guid; // uint8_t guid[16];
 	int port = 445;
 	int backend_port = 446;
 	uint32_t client_thread_count = 2;
 	uint32_t async_thread_count = 2;
 
 	uint32_t capacities = 0;
-	size_t max_trans = 1024 * 1024;
-	size_t max_read = 1024 * 1024;
-	size_t max_write = 1024 * 1024;
+	size_t max_trans_size = 1024 * 1024;
+	size_t max_read_size = 1024 * 1024;
+	size_t max_write_size = 1024 * 1024;
 
 	uint32_t capabilities;
 	uint16_t security_mode;

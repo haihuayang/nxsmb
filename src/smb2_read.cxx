@@ -87,18 +87,12 @@ static void x_smb2_read_async_done(x_smbd_conn_t *smbd_conn,
 	x_smbd_conn_requ_done(smbd_conn, smbd_requ, status);
 }
 
-NTSTATUS x_smb2_process_READ(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
+NTSTATUS x_smb2_process_read(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 {
+	X_ASSERT(smbd_requ->smbd_chan && smbd_requ->smbd_sess);
+
 	// TODO smbd_smb2_request_verify_creditcharge
 	if (smbd_requ->in_requ_len < SMB2_HDR_BODY + sizeof(x_smb2_in_read_t)) {
-		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
-	}
-
-	if (!smbd_requ->smbd_sess) {
-		RETURN_OP_STATUS(smbd_requ, NT_STATUS_USER_SESSION_DELETED);
-	}
-
-	if (smbd_requ->smbd_sess->state != x_smbd_sess_t::S_ACTIVE) {
 		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
 
