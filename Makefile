@@ -43,7 +43,7 @@ TARGET_SET_dir := bin lib lib/librpc librpc/idl src tests \
 TARGET_SET_tests := test-srvsvc \
 	test-timer  test-wbcli test-wbpool test-mbuf \
 	test-security test-krb5pac test-ntlmssp \
-	test-iface
+	test-iface test-idtable
 
 TARGET_SET_lib := nxsmb samba
 
@@ -112,7 +112,8 @@ SET_src_nxsmbd := \
 	smbd_requ \
 	smbd_chan \
 	smb2_sesssetup \
-	smbd_sess  \
+	smbd_sess \
+	smbd_tcon \
 	smb2_negprot \
 	smb2_logoff \
 	smb2_tcon \

@@ -492,7 +492,7 @@ static NTSTATUS x_smb2_fsctl_query_network_interface_info(
 		return NT_STATUS_INVALID_PARAMETER;
 	}
 	if (!(x_smbd_conn_get_capabilities(smbd_conn) & SMB2_CAP_MULTI_CHANNEL)) {
-		if (smbd_tcon->smbd_share->type == TYPE_IPC) {
+		if (x_smbd_tcon_get_share(smbd_tcon)->type == TYPE_IPC) {
 			return NT_STATUS_FS_DRIVER_REQUIRED;
 		} else {
 			return NT_STATUS_INVALID_DEVICE_REQUEST;

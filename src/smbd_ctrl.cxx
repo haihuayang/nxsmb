@@ -1,6 +1,9 @@
 
 #include "smbd_ctrl.hxx"
 
+/* to access ctrl,
+   socat ABSTRACT-CONNECT:nxsmbctrl -
+ */
 struct x_smbd_ctrl_t
 {
 	x_epoll_upcall_t upcall;
@@ -51,7 +54,7 @@ static void x_smbd_ctrl_command(x_smbd_ctrl_conn_t *smbd_ctrl_conn)
 	if (strcmp(smbd_ctrl_conn->recv_buf, "list-session") == 0) {
 		smbd_ctrl_conn->handler.reset(x_smbd_list_session_create());
 	} else if (strcmp(smbd_ctrl_conn->recv_buf, "list-tcon") == 0) {
-		smbd_ctrl_conn->handler.reset(x_smbd_list_tcon_create());
+		smbd_ctrl_conn->handler.reset(x_smbd_tcon_list_create());
 	} else if (strcmp(smbd_ctrl_conn->recv_buf, "list-open") == 0) {
 		smbd_ctrl_conn->handler.reset(x_smbd_list_open_create());
 	} else {

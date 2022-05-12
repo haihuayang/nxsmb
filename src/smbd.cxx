@@ -69,7 +69,7 @@ static void init_smbd()
 	g_smbd.wbpool = x_wbpool_create(g_evtmgmt, 2);
 
 	x_smbd_open_pool_init(X_SMBD_MAX_OPEN);
-	x_smbd_tcon_pool_init(X_SMBD_MAX_TCON);
+	x_smbd_tcon_table_init(X_SMBD_MAX_TCON);
 	x_smbd_sess_pool_init(X_SMBD_MAX_SESSION);
 	x_smbd_sess_pool_init(X_SMBD_MAX_REQUEST);
 	x_smbd_requ_pool_init(X_SMBD_MAX_OPEN); // TODO use X_SMBD_MAX_OPEN for now

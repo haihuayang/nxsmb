@@ -682,7 +682,7 @@ static inline uint8_t get_lease_type(const posixfs_open_t *posixfs_open)
 		return 0;
 	}
 }
-
+#if 0
 struct posixfs_break_evt_t
 {
 	x_fdevt_user_t base;
@@ -724,10 +724,12 @@ static void posixfs_break_func(x_smbd_conn_t *smbd_conn, x_fdevt_user_t *fdevt_u
 		}
 	}
 }
-
+#endif
 static void send_break(posixfs_open_t *posixfs_open,
 		uint32_t breakto)
 {
+	X_TODO;
+#if 0
 	/* already hold posixfs_object mutex */
 	posixfs_break_evt_t *evt = new posixfs_break_evt_t;
 	evt->base.func = posixfs_break_func;
@@ -743,6 +745,7 @@ static void send_break(posixfs_open_t *posixfs_open,
 	}
 	X_LOG_ERR("failed to post send_break %p", smbd_chan);
 	delete evt;
+#endif
 }
 
 /* caller locked posixfs_object */
@@ -1011,6 +1014,7 @@ static NTSTATUS get_parent_sd(const posixfs_object_t *posixfs_object,
  */
 static posixfs_open_t *open_object_new(
 		posixfs_object_t *posixfs_object,
+		x_smbd_sess_t *smbd_sess,
 		x_smbd_tcon_t *smbd_tcon,
 		x_smb2_state_create_t &state,
 		NTSTATUS &status)
@@ -1021,7 +1025,7 @@ static posixfs_open_t *open_object_new(
 		return nullptr;
 	}
 
-	auto smbd_user = x_smbd_sess_get_user(smbd_tcon->smbd_sess);
+	auto smbd_user = x_smbd_sess_get_user(smbd_sess);
 	uint32_t rejected_mask = 0;
 	status = se_file_access_check(*parent_psd, *smbd_user,
 			false, idl::SEC_DIR_ADD_FILE, &rejected_mask);
@@ -1218,6 +1222,7 @@ static inline NTSTATUS check_object_access(
 
 static posixfs_open_t *open_object_exist(
 		posixfs_object_t *posixfs_object,
+		x_smbd_sess_t *smbd_sess,
 		x_smbd_tcon_t *smbd_tcon,
 		std::unique_ptr<x_smb2_state_create_t> &state,
 		NTSTATUS &status,
@@ -1228,7 +1233,7 @@ static posixfs_open_t *open_object_exist(
 		return nullptr;
 	}
 
-	if ((state->in_desired_access & ~smbd_tcon->share_access) != 0) {
+	if (!x_smbd_tcon_access_check(smbd_tcon, state->in_desired_access)) {
 		status = NT_STATUS_ACCESS_DENIED;
 		return nullptr;
 	}
@@ -1239,7 +1244,7 @@ static posixfs_open_t *open_object_exist(
 		return nullptr;
 	}
 
-	auto smbd_user = x_smbd_sess_get_user(smbd_tcon->smbd_sess);
+	auto smbd_user = x_smbd_sess_get_user(smbd_sess);
 	state->out_maximal_access = se_calculate_maximal_access(*psd, *smbd_user);
 	uint32_t desired_access = state->in_desired_access & ~idl::SEC_FLAG_MAXIMUM_ALLOWED;
 
@@ -1301,21 +1306,21 @@ static posixfs_open_t *create_posixfs_open(
 		if (posixfs_object->exists()) {
 			status = NT_STATUS_OBJECT_NAME_COLLISION;
 		} else {
-			posixfs_open = open_object_new(posixfs_object, smbd_tcon, *state, status);
+			posixfs_open = open_object_new(posixfs_object, smbd_requ->smbd_sess, smbd_tcon, *state, status);
 		}
 
 	} else if (state->in_create_disposition == FILE_OPEN) {
 		if (posixfs_object->exists()) {
-			posixfs_open = open_object_exist(posixfs_object, smbd_tcon, state, status, smbd_requ);
+			posixfs_open = open_object_exist(posixfs_object, smbd_requ->smbd_sess, smbd_tcon, state, status, smbd_requ);
 		} else {
 			status = NT_STATUS_OBJECT_NAME_NOT_FOUND;
 		}
 
 	} else if (state->in_create_disposition == FILE_OPEN_IF) {
 		if (posixfs_object->exists()) {
-			posixfs_open = open_object_exist(posixfs_object, smbd_tcon, state, status, smbd_requ);
+			posixfs_open = open_object_exist(posixfs_object, smbd_requ->smbd_sess, smbd_tcon, state, status, smbd_requ);
 		} else {
-			posixfs_open = open_object_new(posixfs_object, smbd_tcon, *state, status);
+			posixfs_open = open_object_new(posixfs_object, smbd_requ->smbd_sess, smbd_tcon, *state, status);
 		}
 
 	} else if (state->in_create_disposition == FILE_OVERWRITE_IF ||
@@ -1329,9 +1334,9 @@ static posixfs_open_t *create_posixfs_open(
 		if (posixfs_object->exists()) {
 			int err = ftruncate(posixfs_object->fd, 0);
 			X_ASSERT(err == 0); // TODO
-			posixfs_open = open_object_exist(posixfs_object, smbd_tcon, state, status, smbd_requ);
+			posixfs_open = open_object_exist(posixfs_object, smbd_requ->smbd_sess, smbd_tcon, state, status, smbd_requ);
 		} else {
-			posixfs_open = open_object_new(posixfs_object, smbd_tcon, *state, status);
+			posixfs_open = open_object_new(posixfs_object, smbd_requ->smbd_sess, smbd_tcon, *state, status);
 		}
 
 	} else {
@@ -2433,7 +2438,8 @@ static NTSTATUS x_smbd_resolve_path(
 {
 	/* TODO polymorphism for home/general share */
 	X_ASSERT(!dfs);
-	topdir = smbd_tcon->smbd_share->root_dir;
+	auto smbd_share = x_smbd_tcon_get_share(smbd_tcon);
+	topdir = smbd_share->root_dir;
 	path = in_path;
 	return NT_STATUS_OK;
 }
@@ -2493,9 +2499,9 @@ static const x_smbd_tcon_ops_t x_smbd_tcon_posixfs_ops = {
 	posixfs_op_create,
 };
 
-void x_smbd_tcon_init_posixfs(x_smbd_tcon_t *smbd_tcon)
+const x_smbd_tcon_ops_t *x_smbd_posixfs_get_tcon_ops()
 {
-	smbd_tcon->ops = &x_smbd_tcon_posixfs_ops;
+	return &x_smbd_tcon_posixfs_ops;
 }
 
 int x_smbd_posixfs_init(size_t max_open)

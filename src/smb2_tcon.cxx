@@ -8,7 +8,7 @@ enum {
 	X_SMB2_TCON_RESP_BODY_LEN = 0x10,
 };
 
-
+#if 0
 static x_smbd_tcon_t *make_tcon(x_smbd_sess_t *smbd_sess,
 		const std::shared_ptr<x_smbd_share_t> &smbshare)
 {
@@ -24,7 +24,7 @@ static x_smbd_tcon_t *make_tcon(x_smbd_sess_t *smbd_sess,
 	x_smbd_sess_link_tcon(smbd_sess, &smbd_tcon->sess_link);
 	return smbd_tcon;
 }
-
+#endif
 /*******************************************************************
  Can this user access with share with the required permissions ?
 ********************************************************************/
@@ -128,7 +128,7 @@ static void x_smb2_reply_tcon(x_smbd_conn_t *smbd_conn,
 		uint32_t out_share_capabilities,
 		uint32_t out_access_mask)
 {
-	X_LOG_OP("%ld RESP SUCCESS tid=%x", smbd_requ->in_mid, smbd_tcon->tid);
+	X_LOG_OP("%ld RESP SUCCESS tid=%x", smbd_requ->in_mid, x_smbd_tcon_get_id(smbd_tcon));
 	x_bufref_t *bufref = x_bufref_alloc(X_SMB2_TCON_RESP_BODY_LEN);
 
 	uint8_t *out_hdr = bufref->get_data();
@@ -207,8 +207,7 @@ NTSTATUS x_smb2_process_tcon(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 		RETURN_OP_STATUS(smbd_requ, NT_STATUS_ACCESS_DENIED);
 	}
 
-	auto smbd_tcon = make_tcon(smbd_requ->smbd_sess, smbshare);
-	smbd_tcon->share_access = share_access;
+	auto smbd_tcon = x_smbd_tcon_create(smbd_requ->smbd_sess, smbshare, share_access);
 
 	uint32_t out_share_flags = 0;
 	uint32_t out_capabilities = 0;

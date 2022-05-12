@@ -288,6 +288,7 @@ X_DECLARE_MEMBER_TRAITS(open_tcon_traits, x_smbd_open_t, tcon_link)
 // X_DECLARE_MEMBER_TRAITS(open_object_traits, x_smbd_open_t, object_link)
 
 struct x_smbd_tcon_ops_t;
+#if 0
 struct x_smbd_tcon_t
 { 
 	x_smbd_tcon_t(x_smbd_sess_t *smbd_sess,
@@ -323,7 +324,7 @@ inline void x_smbd_ref_dec(x_smbd_tcon_t *smbd_tcon)
 		delete smbd_tcon;
 	}
 }
-
+#endif
 
 struct x_smbd_tcon_ops_t
 {
@@ -332,13 +333,23 @@ struct x_smbd_tcon_ops_t
 			std::unique_ptr<x_smb2_state_create_t> &state);
 };
 
-static inline NTSTATUS x_smbd_tcon_op_create(x_smbd_tcon_t *smbd_tcon,
+int x_smbd_tcon_table_init(uint32_t count);
+
+NTSTATUS x_smbd_tcon_op_create(x_smbd_tcon_t *smbd_tcon,
 		x_smbd_open_t **psmbd_open,
 		x_smbd_requ_t *smbd_requ,
-		std::unique_ptr<x_smb2_state_create_t> &state)
-{
-	return smbd_tcon->ops->create(smbd_tcon, psmbd_open, smbd_requ, state);
-}
+		std::unique_ptr<x_smb2_state_create_t> &state);
+
+x_smbd_tcon_t *x_smbd_tcon_create(x_smbd_sess_t *smbd_sess, 
+		const std::shared_ptr<x_smbd_share_t> &smbshare,
+		uint32_t share_access);
+uint32_t x_smbd_tcon_get_id(const x_smbd_tcon_t *smbd_tcon);
+bool x_smbd_tcon_access_check(const x_smbd_tcon_t *smbd_tcon, uint32_t desired_access);
+bool x_smbd_tcon_match(const x_smbd_tcon_t *smbd_tcon, const x_smbd_sess_t *smbd_sess, uint32_t tid);
+std::shared_ptr<x_smbd_share_t> x_smbd_tcon_get_share(const x_smbd_tcon_t *smbd_tcon);
+x_smbd_tcon_t *x_smbd_tcon_find(uint32_t id, const x_smbd_sess_t *smbd_sess);
+void x_smbd_tcon_remove_open(x_smbd_tcon_t *smbd_tcon, x_smbd_open_t *smbd_open);
+
 
 
 x_smbd_chan_t *x_smbd_chan_create(x_smbd_sess_t *smbd_sess,
@@ -417,7 +428,9 @@ void x_smbd_tcon_init_ipc(x_smbd_tcon_t *smbd_tcon);
 void x_smbd_tcon_init_posixfs(x_smbd_tcon_t *smbd_tcon);
 
 int x_smbd_posixfs_init(size_t max_open);
+const x_smbd_tcon_ops_t *x_smbd_posixfs_get_tcon_ops();
 int x_smbd_ipc_init();
+const x_smbd_tcon_ops_t *x_smbd_ipc_get_tcon_ops();
 
 
 void x_smbd_open_init(x_smbd_open_t *smbd_open, x_smbd_object_t *smbd_object, x_smbd_tcon_t *smbd_tcon, uint32_t share_access, uint32_t access_mask);

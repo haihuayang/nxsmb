@@ -613,9 +613,9 @@ static const x_smbd_tcon_ops_t x_smbd_tcon_ipc_ops = {
 	x_smbd_tcon_ipc_op_create,
 };
 
-void x_smbd_tcon_init_ipc(x_smbd_tcon_t *smbd_tcon)
+const x_smbd_tcon_ops_t *x_smbd_ipc_get_tcon_ops()
 {
-	smbd_tcon->ops = &x_smbd_tcon_ipc_ops;
+	return &x_smbd_tcon_ipc_ops;
 }
 
 int x_smbd_ipc_init()

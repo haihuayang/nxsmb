@@ -296,7 +296,7 @@ void x_smb2_reply(x_smbd_conn_t *smbd_conn,
 		SIVAL(out_hdr, SMB2_HDR_FLAGS, smbd_requ->out_hdr_flags | SMB2_HDR_FLAG_REDIRECT);
 		SIVAL(out_hdr, SMB2_HDR_PID, 0xfeff);
 		if (smbd_requ->smbd_tcon) {
-			SIVAL(out_hdr, SMB2_HDR_TID, smbd_requ->smbd_tcon->tid);
+			SIVAL(out_hdr, SMB2_HDR_TID, x_smbd_tcon_get_id(smbd_requ->smbd_tcon));
 		}
 	}
 	if (smbd_requ->smbd_sess) {

@@ -70,7 +70,7 @@ static void smbd_open_insert_intl(smbd_open_pool_t &pool, x_smbd_open_t *smbd_op
 	pool.hashtable.insert(smbd_open, smbd_open->id);
 }
 
-
+#if 0
 X_DECLARE_MEMBER_TRAITS(smbd_tcon_hash_traits, x_smbd_tcon_t, hash_link)
 using smbd_tcon_pool_t = smbd_pool_t<smbd_tcon_hash_traits>;
 
@@ -116,7 +116,6 @@ static x_smbd_tcon_t *smbd_tcon_insert_intl(smbd_tcon_pool_t &pool, x_smbd_tcon_
 	return smbd_tcon;
 }
 
-#if 0
 x_smbd_sess_t::x_smbd_sess_t(x_smbd_conn_t *smbd_conn)
 	: smbd_conn{smbd_conn}, refcnt{1}
 {
@@ -223,7 +222,6 @@ static void smbd_requ_insert_intl(smbd_requ_pool_t &pool, x_smbd_requ_t *smbd_re
 
 
 static smbd_open_pool_t g_smbd_open_pool;
-static smbd_tcon_pool_t g_smbd_tcon_pool;
 static smbd_requ_pool_t g_smbd_requ_pool;
 
 
@@ -239,7 +237,8 @@ void x_smbd_open_release(x_smbd_open_t *smbd_open)
 }
 
 
-
+#if 0
+static smbd_tcon_pool_t g_smbd_tcon_pool;
 int x_smbd_tcon_pool_init(uint32_t count)
 {
 	pool_init(g_smbd_tcon_pool, count);
@@ -261,7 +260,6 @@ static void x_smbd_tcon_release(x_smbd_tcon_t *smbd_tcon)
 	pool_release(g_smbd_tcon_pool, smbd_tcon);
 }
 
-#if 0
 x_smbd_sess_t *x_smbd_sess_find(uint64_t id, const x_smbd_conn_t *smbd_conn)
 {
 	return smbd_sess_find_intl(g_smbd_sess_pool, id, smbd_conn);
@@ -327,7 +325,7 @@ x_smbd_open_t *x_smbd_open_find(uint64_t id_presistent, uint64_t id_volatile,
 {
 	x_smbd_open_t *smbd_open = smbd_open_find_intl(g_smbd_open_pool, id_volatile);
 	if (smbd_open) {
-		if (smbd_open->smbd_tcon->tid == tid && smbd_open->smbd_tcon->smbd_sess == smbd_sess) {
+		if (x_smbd_tcon_match(smbd_open->smbd_tcon, smbd_sess, tid)) {
 			return smbd_open;
 		} else {
 			x_smbd_ref_dec(smbd_open);
@@ -341,6 +339,7 @@ void x_smbd_open_insert_local(x_smbd_open_t *smbd_open)
 	return smbd_open_insert_intl(g_smbd_open_pool, smbd_open);
 }
 
+#if 0
 void x_smbd_tcon_terminate(x_smbd_tcon_t *smbd_tcon)
 {
 	x_smbd_tcon_release(smbd_tcon);
@@ -358,7 +357,6 @@ void x_smbd_tcon_terminate(x_smbd_tcon_t *smbd_tcon)
 #endif
 }
 
-#if 0
 void x_smbd_sess_terminate(x_smbd_sess_t *smbd_sess)
 {
 	x_smbd_tcon_t *smbd_tcon;
@@ -425,7 +423,6 @@ x_smbd_ctrl_handler_t *x_smbd_list_session_create()
 {
 	return new x_smbd_list_session_t;
 }
-#endif
 
 struct x_smbd_list_tcon_t : x_smbd_ctrl_handler_t
 {
@@ -455,6 +452,7 @@ x_smbd_ctrl_handler_t *x_smbd_list_tcon_create()
 {
 	return new x_smbd_list_tcon_t;
 }
+#endif
 
 struct x_smbd_list_open_t : x_smbd_ctrl_handler_t
 {
@@ -471,7 +469,7 @@ bool x_smbd_list_open_t::output(std::string &data)
 		os << idl::x_hex_t<uint64_t>(smbd_open.id) << ' '
 			<< idl::x_hex_t<uint32_t>(smbd_open.access_mask) << ' '
 			<< idl::x_hex_t<uint32_t>(smbd_open.share_access) << ' '
-			<< idl::x_hex_t<uint32_t>(smbd_open.smbd_tcon->tid) << " '"
+			<< idl::x_hex_t<uint32_t>(x_smbd_tcon_get_id(smbd_open.smbd_tcon)) << " '"
 			<< x_smbd_object_op_get_path(smbd_open.smbd_object) << "'" << std::endl;
 		return false;
 	}, 0);

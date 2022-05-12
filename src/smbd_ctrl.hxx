@@ -15,8 +15,9 @@ struct x_smbd_ctrl_handler_t
 };
 
 x_smbd_ctrl_handler_t *x_smbd_list_session_create();
-x_smbd_ctrl_handler_t *x_smbd_list_tcon_create();
 x_smbd_ctrl_handler_t *x_smbd_list_open_create();
+
+x_smbd_ctrl_handler_t *x_smbd_tcon_list_create();
 
 
 #endif /* __smbd_ctrl__hxx__ */

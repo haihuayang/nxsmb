@@ -46,8 +46,9 @@ NTSTATUS x_smb2_process_tdis(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 		}
 	}
 
-	x_smbd_tcon_terminate(smbd_requ->smbd_tcon);
+	X_TODO;
 #if 0
+	x_smbd_tcon_terminate(smbd_requ->smbd_tcon);
 	x_smbd_open_t *smbd_open;
 	while ((smbd_open = smbd_requ->smbd_tcon->open_list.get_front()) != nullptr) {
 		smbd_requ->smbd_tcon->open_list.remove(smbd_open);
@@ -55,8 +56,8 @@ NTSTATUS x_smb2_process_tdis(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 		smbd_open->decref();
 	}
 	x_smbd_tcon_release(smbd_requ->smbd_tcon);
-#endif
 	x_smbd_sess_unlink_tcon(smbd_requ->smbd_sess, &smbd_requ->smbd_tcon->sess_link);
+#endif
 
 	X_SMBD_REF_DEC(smbd_requ->smbd_tcon);
 

@@ -109,7 +109,7 @@ NTSTATUS x_smb2_process_close(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ
 		RETURN_OP_STATUS(smbd_requ, status);
 	}
 
-	smbd_open->smbd_tcon->open_list.remove(smbd_open);
+	x_smbd_tcon_remove_open(smbd_open->smbd_tcon, smbd_open);
 
 	smbd_requ->smbd_open = nullptr;
 	x_smb2_reply_close(smbd_conn, smbd_requ, *state);

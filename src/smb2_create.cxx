@@ -434,12 +434,6 @@ NTSTATUS x_smb2_process_create(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_req
 	smbd_requ->async_done_fn = x_smb2_create_async_done;
 	NTSTATUS status = x_smbd_tcon_op_create(smbd_requ->smbd_tcon, &smbd_open, smbd_requ, state);
 	if (smbd_open) {
-		X_ASSERT(!smbd_requ->smbd_open);
-		smbd_requ->smbd_open = smbd_open;
-		x_smbd_open_insert_local(smbd_open);
-		X_ASSERT(smbd_open->smbd_tcon); // initialized in side op_create
-		smbd_requ->smbd_tcon->open_list.push_back(smbd_open);
-		x_smbd_ref_inc(smbd_open);
 		x_smb2_reply_create(smbd_conn, smbd_requ, *state);
 		return status;
 	} else {
