@@ -154,7 +154,9 @@ struct x_idtable_t
 		id_type index = entry - entries;
 		id_type entry_gen = Traits::entry_to_gen(entry->header);
 		/* should set id first, otherwise there is a race, other thread
-		   may lookup the entry before the caller get the id
+		 * may lookup the entry before the caller get the id
+		 * idealy the id should be kept by the table, instead the object,
+		 * then how to get id from the object?
 		 */
 		id = Traits::build_id(entry_gen, (index + 1));
 		// TODO should be possible to use more loose memory order

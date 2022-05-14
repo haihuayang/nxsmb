@@ -1,6 +1,6 @@
 
 #include "smbd_lease.hxx"
-#include "smbd_object.hxx"
+#include "smbd_open.hxx"
 #include "include/hashtable.hxx"
 #include <mutex>
 

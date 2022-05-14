@@ -1,6 +1,6 @@
 
 #include "smbd.hxx"
-#include "smbd_object.hxx"
+#include "smbd_open.hxx"
 #include "core.hxx"
 
 namespace {
@@ -104,19 +104,13 @@ NTSTATUS x_smb2_process_read(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 	X_LOG_OP("%ld READ 0x%lx, 0x%lx", smbd_requ->in_mid,
 			state->in_file_id_persistent, state->in_file_id_volatile);
 
-	if (smbd_requ->smbd_open) {
-	} else if (smbd_requ->smbd_tcon) {
-		smbd_requ->smbd_open = x_smbd_open_find(state->in_file_id_persistent,
+	if (!smbd_requ->smbd_open) {
+		smbd_requ->smbd_open = x_smbd_open_lookup(state->in_file_id_persistent,
 				state->in_file_id_volatile,
 				smbd_requ->smbd_tcon);
-	} else {
-		uint32_t tid = x_get_le32(in_hdr + SMB2_HDR_TID);
-		smbd_requ->smbd_open = x_smbd_open_find(state->in_file_id_persistent,
-				state->in_file_id_volatile, tid, smbd_requ->smbd_sess);
-	}
-
-	if (!smbd_requ->smbd_open) {
-		RETURN_OP_STATUS(smbd_requ, NT_STATUS_FILE_CLOSED);
+		if (!smbd_requ->smbd_open) {
+			RETURN_OP_STATUS(smbd_requ, NT_STATUS_FILE_CLOSED);
+		}
 	}
 
 	if (!smbd_requ->smbd_open->check_access(idl::SEC_FILE_READ_DATA)) {
@@ -124,8 +118,7 @@ NTSTATUS x_smb2_process_read(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 	}
 
 	smbd_requ->async_done_fn = x_smb2_read_async_done;
-	auto smbd_object = smbd_requ->smbd_open->smbd_object;
-	NTSTATUS status = x_smbd_object_op_read(smbd_object, smbd_conn, smbd_requ,
+	NTSTATUS status = x_smbd_open_op_read(smbd_requ->smbd_open, smbd_conn, smbd_requ,
 			state);
 	if (NT_STATUS_IS_OK(status)) {
 		x_smb2_reply_read(smbd_conn, smbd_requ, *state);

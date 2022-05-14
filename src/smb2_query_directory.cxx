@@ -1,7 +1,7 @@
 
 #include "smbd.hxx"
 #include "core.hxx"
-#include "smbd_object.hxx"
+#include "smbd_open.hxx"
 
 enum {
 	X_SMB2_FIND_REQU_BODY_LEN = 0x20,
@@ -96,22 +96,16 @@ NTSTATUS x_smb2_process_query_directory(x_smbd_conn_t *smbd_conn, x_smbd_requ_t 
 	X_LOG_OP("%ld FIND 0x%lx, 0x%lx", smbd_requ->in_mid,
 			state->in_file_id_persistent, state->in_file_id_volatile);
 
-	if (smbd_requ->smbd_open) {
-	} else if (smbd_requ->smbd_tcon) {
-		smbd_requ->smbd_open = x_smbd_open_find(state->in_file_id_persistent,
+	if (!smbd_requ->smbd_open) {
+		smbd_requ->smbd_open = x_smbd_open_lookup(state->in_file_id_persistent,
 				state->in_file_id_volatile,
 				smbd_requ->smbd_tcon);
-	} else {
-		uint32_t tid = x_get_le32(in_hdr + SMB2_HDR_TID);
-		smbd_requ->smbd_open = x_smbd_open_find(state->in_file_id_persistent,
-				state->in_file_id_volatile, tid, smbd_requ->smbd_sess);
+		if (!smbd_requ->smbd_open) {
+			RETURN_OP_STATUS(smbd_requ, NT_STATUS_FILE_CLOSED);
+		}
 	}
 
-	if (!smbd_requ->smbd_open) {
-		RETURN_OP_STATUS(smbd_requ, NT_STATUS_FILE_CLOSED);
-	}
-
-	NTSTATUS status = x_smbd_object_op_qdir(smbd_requ->smbd_open->smbd_object,
+	NTSTATUS status = x_smbd_open_op_qdir(smbd_requ->smbd_open,
 			smbd_conn, smbd_requ, state);
 	if (NT_STATUS_IS_OK(status)) {
 		x_smb2_reply_qdir(smbd_conn, smbd_requ, *state);

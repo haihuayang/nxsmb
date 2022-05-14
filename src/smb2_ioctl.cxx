@@ -2,7 +2,7 @@
 #include "smbd.hxx"
 #include "core.hxx"
 #include "include/charset.hxx"
-#include "smbd_object.hxx"
+#include "smbd_open.hxx"
 #include "smb2.hxx"
 
 enum {
@@ -532,8 +532,6 @@ NTSTATUS x_smb2_process_ioctl(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ
 		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
 
-	const uint8_t *in_hdr = smbd_requ->get_in_data();
-
 	auto state = std::make_unique<x_smb2_state_ioctl_t>();
 	if (!decode_in_ioctl(*state, smbd_requ->in_buf, smbd_requ->in_offset, smbd_requ->in_requ_len)) {
 		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
@@ -549,22 +547,16 @@ NTSTATUS x_smb2_process_ioctl(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ
 	NTSTATUS status;
 	switch (state->ctl_code) {
 	default:
-		if (smbd_requ->smbd_open) {
-		} else if (smbd_requ->smbd_tcon) {
-			smbd_requ->smbd_open = x_smbd_open_find(state->file_id_persistent,
+		if (!smbd_requ->smbd_open) {
+			smbd_requ->smbd_open = x_smbd_open_lookup(state->file_id_persistent,
 					state->file_id_volatile,
 					smbd_requ->smbd_tcon);
-		} else {
-			uint32_t tid = x_get_le32(in_hdr + SMB2_HDR_TID);
-			smbd_requ->smbd_open = x_smbd_open_find(state->file_id_persistent,
-					state->file_id_volatile, tid, smbd_requ->smbd_sess);
+			if (!smbd_requ->smbd_open) {
+				RETURN_OP_STATUS(smbd_requ, NT_STATUS_FILE_CLOSED);
+			}
 		}
 
-		if (!smbd_requ->smbd_open) {
-			RETURN_OP_STATUS(smbd_requ, NT_STATUS_FILE_CLOSED);
-		}
-
-		status = x_smbd_object_op_ioctl(smbd_requ->smbd_open->smbd_object,
+		status = x_smbd_open_op_ioctl(smbd_requ->smbd_open,
 				smbd_conn, smbd_requ, state);
 		break;
 	case FSCTL_DFS_GET_REFERRALS:

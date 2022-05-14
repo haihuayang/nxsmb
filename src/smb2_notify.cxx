@@ -1,7 +1,7 @@
 
 #include "smbd.hxx"
 #include "core.hxx"
-#include "smbd_object.hxx"
+#include "smbd_open.hxx"
 
 namespace {
 enum {
@@ -100,23 +100,17 @@ NTSTATUS x_smb2_process_notify(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_req
 			state->in_file_id_persistent, state->in_file_id_volatile,
 			state->in_filter);
 
-	if (smbd_requ->smbd_open) {
-	} else if (smbd_requ->smbd_tcon) {
-		smbd_requ->smbd_open = x_smbd_open_find(state->in_file_id_persistent,
+	if (!smbd_requ->smbd_open) {
+		smbd_requ->smbd_open = x_smbd_open_lookup(state->in_file_id_persistent,
 				state->in_file_id_volatile,
 				smbd_requ->smbd_tcon);
-	} else {
-		uint32_t tid = x_get_le32(in_hdr + SMB2_HDR_TID);
-		smbd_requ->smbd_open = x_smbd_open_find(state->in_file_id_persistent,
-				state->in_file_id_volatile, tid, smbd_requ->smbd_sess);
-	}
-
-	if (!smbd_requ->smbd_open) {
-		RETURN_OP_STATUS(smbd_requ, NT_STATUS_FILE_CLOSED);
+		if (!smbd_requ->smbd_open) {
+			RETURN_OP_STATUS(smbd_requ, NT_STATUS_FILE_CLOSED);
+		}
 	}
 
 	smbd_requ->async_done_fn = x_smb2_notify_async_done;
-	NTSTATUS status = x_smbd_object_op_notify(smbd_requ->smbd_open->smbd_object,
+	NTSTATUS status = x_smbd_open_op_notify(smbd_requ->smbd_open,
 			smbd_conn, smbd_requ, state);
 	if (NT_STATUS_IS_OK(status)) {
 		x_smb2_reply_notify(smbd_conn, smbd_requ, *state);

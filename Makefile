@@ -108,13 +108,14 @@ SET_src_nxsmbd := \
 	smbd_dcerpc_dssetup \
 	smbd_dcerpc_lsarpc \
 	smbd \
-	smbd_conn \
 	smbd_requ \
-	smbd_chan \
-	smb2_sesssetup \
+	smbd_conn \
 	smbd_sess \
+	smbd_chan \
 	smbd_tcon \
+	smbd_open \
 	smb2_negprot \
+	smb2_sesssetup \
 	smb2_logoff \
 	smb2_tcon \
 	smb2_tdis \

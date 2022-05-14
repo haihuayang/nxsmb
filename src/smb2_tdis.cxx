@@ -29,37 +29,18 @@ static void x_smb2_reply_tdis(x_smbd_conn_t *smbd_conn,
 NTSTATUS x_smb2_process_tdis(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 {
 	X_LOG_OP("%ld TDIS", smbd_requ->in_mid);
-	X_ASSERT(smbd_requ->smbd_chan && smbd_requ->smbd_sess);
+	X_ASSERT(smbd_requ->smbd_chan && smbd_requ->smbd_sess && smbd_requ->smbd_tcon);
 
 	if (smbd_requ->in_requ_len < SMB2_HDR_BODY + sizeof(x_smb2_tdis_requ_t)) {
 		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
 
-	const uint8_t *in_hdr = smbd_requ->get_in_data();
-
-	/* TODO signing/encryption */
-	if (!smbd_requ->smbd_tcon) {
-		uint32_t in_tid = IVAL(in_hdr, SMB2_HDR_TID);
-		smbd_requ->smbd_tcon = x_smbd_tcon_find(in_tid, smbd_requ->smbd_sess);
-		if (!smbd_requ->smbd_tcon) {
-			RETURN_OP_STATUS(smbd_requ, NT_STATUS_NETWORK_NAME_DELETED);
-		}
-	}
-
-	X_TODO;
-#if 0
-	x_smbd_tcon_terminate(smbd_requ->smbd_tcon);
-	x_smbd_open_t *smbd_open;
-	while ((smbd_open = smbd_requ->smbd_tcon->open_list.get_front()) != nullptr) {
-		smbd_requ->smbd_tcon->open_list.remove(smbd_open);
-		x_smbd_open_release(smbd_open);
-		smbd_open->decref();
-	}
-	x_smbd_tcon_release(smbd_requ->smbd_tcon);
-	x_smbd_sess_unlink_tcon(smbd_requ->smbd_sess, &smbd_requ->smbd_tcon->sess_link);
-#endif
-
+	bool ret = x_smbd_tcon_disconnect(smbd_requ->smbd_tcon);
 	X_SMBD_REF_DEC(smbd_requ->smbd_tcon);
+
+	if (!ret) {
+		return NT_STATUS_NETWORK_NAME_DELETED;
+	}
 
 	x_smb2_reply_tdis(smbd_conn, smbd_requ, NT_STATUS_OK);
 	return NT_STATUS_OK;

@@ -369,7 +369,7 @@ static int x_smbd_reply_interim(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_re
 
 static void x_smbd_conn_cancel(x_smbd_conn_t *smbd_conn, uint64_t async_id)
 {
-	x_smbd_requ_t *smbd_requ = x_smbd_requ_find(async_id, smbd_conn);
+	x_smbd_requ_t *smbd_requ = x_smbd_requ_lookup(async_id, smbd_conn);
 	if (!smbd_requ) {
 		X_LOG_ERR("%ld not found", async_id);
 		return;
@@ -400,26 +400,27 @@ void x_smbd_conn_send_unsolicited(x_smbd_conn_t *smbd_conn, x_smbd_sess_t *smbd_
 static const struct {
 	NTSTATUS (* const op_func)(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ);
 	bool const need_channel;
+	bool const need_tcon;
 } x_smb2_op_table[] = {
-	{ x_smb2_process_negprot, false, },
-	{ x_smb2_process_sesssetup, false, },
-	{ x_smb2_process_logoff, true, },
-	{ x_smb2_process_tcon, true, },
-	{ x_smb2_process_tdis, true, },
-	{ x_smb2_process_create, true, },
-	{ x_smb2_process_close, true, },
-	{ x_smb2_process_flush, true, },
-	{ x_smb2_process_read, true, },
-	{ x_smb2_process_write, true, },
-	{ x_smb2_process_lock, true, },
-	{ x_smb2_process_ioctl, true, },
-	{ x_smb2_process_cancel, false, },
-	{ x_smb2_process_keepalive, false, },
-	{ x_smb2_process_query_directory, true, },
-	{ x_smb2_process_notify, true, },
-	{ x_smb2_process_getinfo, true, },
-	{ x_smb2_process_setinfo, true, },
-	{ x_smb2_process_break, true, },
+	{ x_smb2_process_negprot, false, false, },
+	{ x_smb2_process_sesssetup, false, false, },
+	{ x_smb2_process_logoff, true, false, },
+	{ x_smb2_process_tcon, true, false, },
+	{ x_smb2_process_tdis, true, true, },
+	{ x_smb2_process_create, true, true, },
+	{ x_smb2_process_close, true, true, },
+	{ x_smb2_process_flush, true, true, },
+	{ x_smb2_process_read, true, true, },
+	{ x_smb2_process_write, true, true, },
+	{ x_smb2_process_lock, true, true, },
+	{ x_smb2_process_ioctl, true, true, },
+	{ x_smb2_process_cancel, false, false, },
+	{ x_smb2_process_keepalive, false, false, },
+	{ x_smb2_process_query_directory, true, true, },
+	{ x_smb2_process_notify, true, true, },
+	{ x_smb2_process_getinfo, true, true, },
+	{ x_smb2_process_setinfo, true, true, },
+	{ x_smb2_process_break, true, true, },
 };
 
 
@@ -441,7 +442,7 @@ static NTSTATUS x_smbd_conn_process_smb2_intl(x_smbd_conn_t *smbd_conn, x_smbd_r
 			X_SMBD_REF_DEC(smbd_requ->smbd_sess);
 		}
 		if (in_session_id != 0) {
-			smbd_requ->smbd_sess = x_smbd_sess_find(in_session_id, smbd_conn->client_guid);
+			smbd_requ->smbd_sess = x_smbd_sess_lookup(in_session_id, smbd_conn->client_guid);
 		}
 	}
 	
@@ -459,7 +460,7 @@ static NTSTATUS x_smbd_conn_process_smb2_intl(x_smbd_conn_t *smbd_conn, x_smbd_r
 		}
 		x_bufref_t bufref{x_buf_get(smbd_requ->in_buf), smbd_requ->in_offset, smbd_requ->in_requ_len};
 		if (!smbd_requ->smbd_chan) {
-			smbd_requ->smbd_chan = x_smbd_sess_find_chan(smbd_requ->smbd_sess,
+			smbd_requ->smbd_chan = x_smbd_sess_lookup_chan(smbd_requ->smbd_sess,
 				smbd_conn);
 		}
 		const x_smb2_key_t *signing_key = get_signing_key(smbd_requ);
@@ -481,7 +482,7 @@ static NTSTATUS x_smbd_conn_process_smb2_intl(x_smbd_conn_t *smbd_conn, x_smbd_r
 			return NT_STATUS_USER_SESSION_DELETED;
 		}
 		if (!smbd_requ->smbd_chan) {
-			smbd_requ->smbd_chan = x_smbd_sess_find_chan(smbd_requ->smbd_sess,
+			smbd_requ->smbd_chan = x_smbd_sess_lookup_chan(smbd_requ->smbd_sess,
 					smbd_conn);
 			if (!smbd_requ->smbd_chan || !x_smbd_chan_is_active(smbd_requ->smbd_chan)) {
 				return NT_STATUS_USER_SESSION_DELETED;
@@ -489,8 +490,23 @@ static NTSTATUS x_smbd_conn_process_smb2_intl(x_smbd_conn_t *smbd_conn, x_smbd_r
 		}
 	}
 
-	smbd_requ->async = false;
+	/* TODO signing/encryption */
 	smbd_requ->in_tid = x_get_le32(in_buf + SMB2_HDR_TID);
+	if (op.need_tcon) {
+		X_ASSERT(smbd_requ->smbd_sess);
+		if (!smbd_requ->smbd_tcon) {
+			if (!smbd_requ->in_tid) {
+				return NT_STATUS_NETWORK_NAME_DELETED;
+			}
+			smbd_requ->smbd_tcon = x_smbd_tcon_lookup(smbd_requ->in_tid,
+					smbd_requ->smbd_sess);
+			if (!smbd_requ->smbd_tcon) {
+				return NT_STATUS_NETWORK_NAME_DELETED;
+			}
+		}
+	}
+
+	smbd_requ->async = false;
 
 	return op.op_func(smbd_conn, smbd_requ);
 }
@@ -887,10 +903,10 @@ static void x_smbd_conn_terminate_chans(x_smbd_conn_t *smbd_conn)
 	x_dlink_t *link;
 	while ((link = smbd_conn->chan_list.get_front()) != nullptr) {
 		smbd_conn->chan_list.remove(link);
-		/* unlink smbd_chan, x_smbd_chan_terminate need to dec the ref
+		/* unlink smbd_chan, x_smbd_chan_done need to dec the ref
 		 * of smbd_chan
 		 */
-		x_smbd_chan_terminate(link, smbd_conn);
+		x_smbd_chan_unlinked(link, smbd_conn);
 	}
 }
 

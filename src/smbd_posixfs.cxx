@@ -1,6 +1,5 @@
 
 #include "smbd_open.hxx"
-#include "smbd_object.hxx"
 #include "smbd_posixfs_utils.hxx"
 #include <fcntl.h>
 #include <sys/statvfs.h>
@@ -141,6 +140,9 @@ enum class oplock_break_sent_t {
 
 struct posixfs_open_t
 {
+	posixfs_open_t(x_smbd_object_t *so, x_smbd_tcon_t *st,
+			uint32_t am, uint32_t sa)
+		: base(so, st, am, sa) { }
 	x_smbd_open_t base;
 	x_dlink_t object_link;
 	qdir_t *qdir = nullptr;
@@ -962,10 +964,8 @@ static posixfs_open_t *posixfs_open_create(
 		const x_smb2_state_create_t &state,
 		x_smbd_lease_t *smbd_lease)
 {
-	posixfs_open_t *posixfs_open = new posixfs_open_t;
-	x_smbd_open_init(&posixfs_open->base, &posixfs_object->base, smbd_tcon, 
-			state.in_share_access, state.granted_access);
-
+	posixfs_open_t *posixfs_open = new posixfs_open_t(&posixfs_object->base,
+			smbd_tcon, state.in_share_access, state.granted_access);
 	posixfs_open->oplock_level = state.oplock_level;
 	posixfs_open->smbd_lease = smbd_lease;
 	++posixfs_object->use_count;
@@ -2408,6 +2408,12 @@ static std::string posixfs_object_op_get_path(
 	return posixfs_object->unix_path;
 }
 
+static void posixfs_object_op_destroy(x_smbd_object_t *smbd_object,
+		x_smbd_open_t *smbd_open)
+{
+	X_TODO;
+}
+
 static const x_smbd_object_ops_t posixfs_object_ops = {
 	posixfs_object_op_close,
 	posixfs_object_op_read,
@@ -2420,6 +2426,7 @@ static const x_smbd_object_ops_t posixfs_object_ops = {
 	posixfs_object_op_lease_break,
 	posixfs_object_op_oplock_break,
 	posixfs_object_op_get_path,
+	posixfs_object_op_destroy,
 };
 
 posixfs_object_t::posixfs_object_t(uint64_t h,

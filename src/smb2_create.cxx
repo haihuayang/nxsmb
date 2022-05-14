@@ -1,7 +1,7 @@
 
 #include "smbd.hxx"
 #include "core.hxx"
-#include "smbd_object.hxx"
+#include "smbd_open.hxx"
 #include "include/charset.hxx"
 
 enum {
@@ -350,8 +350,10 @@ static uint32_t encode_out_create(const x_smb2_state_create_t &state,
 	out_create->end_of_file = X_H2LE64(state.out_info.out_end_of_file);
 	out_create->file_attributes = X_H2LE32(state.out_info.out_file_attributes);
 	out_create->reserved0 = 0;
-	out_create->file_id_persistent = X_H2LE64(smbd_open->id);
-	out_create->file_id_volatile = X_H2LE64(smbd_open->id);
+	uint64_t id_persistent, id_volatile;
+	x_smbd_open_get_id(smbd_open, id_persistent, id_volatile);
+	out_create->file_id_persistent = X_H2LE64(id_persistent);
+	out_create->file_id_volatile = X_H2LE64(id_volatile);
 
 	static_assert((sizeof(x_smb2_out_create_t) % 8) == 0);
 	uint32_t out_context_length = encode_contexts(state, (uint8_t *)(out_create + 1));
@@ -414,15 +416,6 @@ NTSTATUS x_smb2_process_create(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_req
 	const uint8_t *in_hdr = smbd_requ->get_in_data();
 
 	/* TODO check limit of open for both total and per conn*/
-	/* TODO signing/encryption */
-
-	if (!smbd_requ->smbd_tcon) {
-		uint32_t in_tid = IVAL(in_hdr, SMB2_HDR_TID);
-		smbd_requ->smbd_tcon = x_smbd_tcon_find(in_tid, smbd_requ->smbd_sess);
-		if (!smbd_requ->smbd_tcon) {
-			RETURN_OP_STATUS(smbd_requ, NT_STATUS_NETWORK_NAME_DELETED);
-		}
-	}
 
 	auto state = std::make_unique<x_smb2_state_create_t>();
 	if (!decode_in_create(*state, in_hdr, smbd_requ->in_requ_len)) {

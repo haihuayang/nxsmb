@@ -1,6 +1,5 @@
 
 #include "smbd_open.hxx"
-#include "smbd_object.hxx"
 #include "include/charset.hxx"
 #include "smbd_dcerpc.hxx"
 #if 0
@@ -43,8 +42,11 @@ struct x_bind_context_t
 	const x_dcerpc_iface_t *iface;
 };
 
-struct x_smbd_named_pipe_t
+struct named_pipe_t
 {
+	named_pipe_t(x_smbd_object_t *so, x_smbd_tcon_t *st,
+			uint32_t am, uint32_t sa)
+		: base(so, st, am, sa) { }
 	x_smbd_open_t base;
 	// const x_dcerpc_iface_t *iface;
 	std::vector<x_bind_context_t> bind_contexts;
@@ -77,14 +79,14 @@ static inline const x_smbd_ipc_object_t *from_smbd_object(const x_smbd_object_t 
 	return X_CONTAINER_OF(smbd_object, x_smbd_ipc_object_t, base);
 }
 
-static inline x_smbd_named_pipe_t *from_smbd_open(x_smbd_open_t *smbd_open)
+static inline named_pipe_t *from_smbd_open(x_smbd_open_t *smbd_open)
 {
-	return X_CONTAINER_OF(smbd_open, x_smbd_named_pipe_t, base);
+	return X_CONTAINER_OF(smbd_open, named_pipe_t, base);
 }
 
 static NTSTATUS named_pipe_read(
 		x_smbd_ipc_object_t *ipc_object,
-		x_smbd_named_pipe_t *named_pipe,
+		named_pipe_t *named_pipe,
 		x_smbd_conn_t *smbd_conn,
 		uint32_t requ_length,
 		x_buf_t *&out_buf,
@@ -133,7 +135,7 @@ static inline bool process_ncacn_header(x_ncacn_packet_t &header)
 	return true;
 }
 
-static bool x_smbd_named_pipe_bind(x_smbd_named_pipe_t *named_pipe,
+static bool x_smbd_named_pipe_bind(named_pipe_t *named_pipe,
 		const idl::dcerpc_ctx_list &ctx,
 		idl::dcerpc_ack_ctx &ack_ctx)
 {
@@ -189,7 +191,7 @@ static bool x_smbd_named_pipe_bind(x_smbd_named_pipe_t *named_pipe,
 
 static NTSTATUS process_dcerpc_bind(
 		const x_smbd_ipc_object_t *ipc_object,
-		x_smbd_named_pipe_t *named_pipe,
+		named_pipe_t *named_pipe,
 		uint8_t &resp_type, std::vector<uint8_t> &body_output)
 {
 	idl::dcerpc_bind bind;
@@ -242,7 +244,7 @@ static NTSTATUS process_dcerpc_bind(
 	return NT_STATUS_OK;
 }
 
-static const x_dcerpc_iface_t *find_context(x_smbd_named_pipe_t *named_pipe, uint32_t context_id)
+static const x_dcerpc_iface_t *find_context(named_pipe_t *named_pipe, uint32_t context_id)
 {
 	for (const auto ctx: named_pipe->bind_contexts) {
 		if (ctx.context_id == context_id) {
@@ -254,7 +256,7 @@ static const x_dcerpc_iface_t *find_context(x_smbd_named_pipe_t *named_pipe, uin
 
 static NTSTATUS process_dcerpc_request(
 		const x_smbd_ipc_object_t* ipc_object,
-		x_smbd_named_pipe_t *named_pipe,
+		named_pipe_t *named_pipe,
 		x_smbd_sess_t *smbd_sess,
 		uint8_t &resp_type, std::vector<uint8_t> &body_output)
 {
@@ -295,7 +297,7 @@ static NTSTATUS process_dcerpc_request(
 
 static inline NTSTATUS process_ncacn_pdu(
 		const x_smbd_ipc_object_t *ipc_object,
-		x_smbd_named_pipe_t *named_pipe,
+		named_pipe_t *named_pipe,
 		x_smbd_sess_t *smbd_sess)
 {
 	std::vector<uint8_t> body_output;
@@ -335,7 +337,7 @@ static inline NTSTATUS process_ncacn_pdu(
 
 static int named_pipe_write(
 		x_smbd_ipc_object_t *ipc_object,
-		x_smbd_named_pipe_t *named_pipe,
+		named_pipe_t *named_pipe,
 		x_smbd_sess_t *smbd_sess,
 		const uint8_t *_input_data,
 		uint32_t input_size)
@@ -387,7 +389,7 @@ static int named_pipe_write(
 	return data - _input_data;
 }
 
-static NTSTATUS x_smbd_ipc_op_read(
+static NTSTATUS ipc_object_op_read(
 		x_smbd_object_t *smbd_object,
 		x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ,
@@ -400,7 +402,7 @@ static NTSTATUS x_smbd_ipc_op_read(
 			state->out_buf_length);
 }
 
-static NTSTATUS x_smbd_ipc_op_write(
+static NTSTATUS ipc_object_op_write(
 		x_smbd_object_t *smbd_object,
 		x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ,
@@ -416,7 +418,7 @@ static NTSTATUS x_smbd_ipc_op_write(
 	return NT_STATUS_OK;
 }
 
-static NTSTATUS x_smbd_ipc_op_getinfo(
+static NTSTATUS ipc_object_op_getinfo(
 		x_smbd_object_t *smbd_object,
 		x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ,
@@ -444,7 +446,7 @@ static NTSTATUS x_smbd_ipc_op_getinfo(
 	}
 }
 
-static NTSTATUS x_smbd_ipc_op_setinfo(
+static NTSTATUS ipc_object_op_setinfo(
 		x_smbd_object_t *smbd_object,
 		x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ,
@@ -453,14 +455,14 @@ static NTSTATUS x_smbd_ipc_op_setinfo(
 	return NT_STATUS_NOT_SUPPORTED;
 }
 
-static NTSTATUS x_smbd_ipc_op_ioctl(
+static NTSTATUS ipc_object_op_ioctl(
 		x_smbd_object_t *smbd_object,
 		x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ,
 		std::unique_ptr<x_smb2_state_ioctl_t> &state)
 {
 	x_smbd_ipc_object_t *ipc_object = from_smbd_object(smbd_object);
-	x_smbd_named_pipe_t *named_pipe = from_smbd_open(smbd_requ->smbd_open);
+	named_pipe_t *named_pipe = from_smbd_open(smbd_requ->smbd_open);
 	switch (state->ctl_code) {
 	case FSCTL_PIPE_TRANSCEIVE:
 		named_pipe_write(ipc_object, named_pipe,
@@ -478,7 +480,7 @@ static NTSTATUS x_smbd_ipc_op_ioctl(
 	}
 }
 
-static NTSTATUS x_smbd_ipc_op_qdir(
+static NTSTATUS ipc_object_op_qdir(
 		x_smbd_object_t *smbd_object,
 		x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ,
@@ -487,7 +489,7 @@ static NTSTATUS x_smbd_ipc_op_qdir(
 	return NT_STATUS_INVALID_PARAMETER;
 }
 
-static NTSTATUS x_smbd_ipc_op_notify(
+static NTSTATUS ipc_object_op_notify(
 		x_smbd_object_t *smbd_object,
 		x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ,
@@ -496,7 +498,7 @@ static NTSTATUS x_smbd_ipc_op_notify(
 	return NT_STATUS_INVALID_PARAMETER;
 }
 
-static NTSTATUS x_smbd_ipc_op_close(
+static NTSTATUS ipc_object_op_close(
 		x_smbd_object_t *smbd_object,
 		x_smbd_conn_t *smbd_conn,
 		x_smbd_open_t *smbd_open,
@@ -509,25 +511,31 @@ static NTSTATUS x_smbd_ipc_op_close(
 	return NT_STATUS_OK;
 }
 
-static std::string x_smbd_ipc_op_get_path(
+static std::string ipc_object_op_get_path(
 		const x_smbd_object_t *smbd_object)
 {
 	const x_smbd_ipc_object_t *ipc_object = from_smbd_object(smbd_object);
 	return ipc_object->iface->iface_name;
 }
 
+static void ipc_object_op_destroy(x_smbd_object_t *smbd_object,
+		x_smbd_open_t *smbd_open)
+{
+}
+
 static const x_smbd_object_ops_t x_smbd_ipc_object_ops = {
-	x_smbd_ipc_op_close,
-	x_smbd_ipc_op_read,
-	x_smbd_ipc_op_write,
-	x_smbd_ipc_op_getinfo,
-	x_smbd_ipc_op_setinfo,
-	x_smbd_ipc_op_ioctl,
-	x_smbd_ipc_op_qdir,
-	x_smbd_ipc_op_notify,
+	ipc_object_op_close,
+	ipc_object_op_read,
+	ipc_object_op_write,
+	ipc_object_op_getinfo,
+	ipc_object_op_setinfo,
+	ipc_object_op_ioctl,
+	ipc_object_op_qdir,
+	ipc_object_op_notify,
 	nullptr,
 	nullptr,
-	x_smbd_ipc_op_get_path,
+	ipc_object_op_get_path,
+	ipc_object_op_destroy,
 };
 
 static x_smbd_ipc_object_t ipc_object_tbl[] = {
@@ -563,7 +571,7 @@ static const x_dcerpc_iface_t *find_iface_by_syntax(
 	return nullptr;
 }
 
-static NTSTATUS ipc_create(
+static NTSTATUS ipc_open_create(
 		x_smbd_ipc_object_t *ipc_object,
 		x_smbd_open_t **psmbd_open,
 		x_smbd_requ_t *smbd_requ,
@@ -574,8 +582,8 @@ static NTSTATUS ipc_create(
 		return NT_STATUS_ACCESS_DENIED;
 	}
 
-	x_smbd_named_pipe_t *named_pipe = new x_smbd_named_pipe_t;
-	x_smbd_open_init(&named_pipe->base, &ipc_object->base, smbd_requ->smbd_tcon,
+	named_pipe_t *named_pipe = new named_pipe_t(&ipc_object->base,
+			smbd_requ->smbd_tcon,
 			state->in_share_access, state->in_desired_access);
 
 	state->out_info.out_allocation_size = 4096;
@@ -584,6 +592,8 @@ static NTSTATUS ipc_create(
 	state->out_create_flags = 0;
 	state->out_create_action = FILE_WAS_OPENED;
 	state->contexts = 0;
+
+	// x_smbd_open_init(&named_pipe->base, &ipc_object->base, smbd_requ->smbd_tcon,
 
 	*psmbd_open = &named_pipe->base;
 	return NT_STATUS_OK;
@@ -606,7 +616,7 @@ static NTSTATUS x_smbd_tcon_ipc_op_create(x_smbd_tcon_t *smbd_tcon,
 	if (!ipc_object) {
 		return NT_STATUS_OBJECT_NAME_NOT_FOUND;
 	}
-	return ipc_create(ipc_object, psmbd_open, smbd_requ, state);
+	return ipc_open_create(ipc_object, psmbd_open, smbd_requ, state);
 }
 
 static const x_smbd_tcon_ops_t x_smbd_tcon_ipc_ops = {

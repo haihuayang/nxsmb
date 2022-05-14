@@ -1,5 +1,5 @@
 
-#include "smbd_object.hxx"
+#include "smbd_open.hxx"
 #include "smbd_lease.hxx"
 
 /* oplock break notification, acknowledgement, response */
@@ -90,8 +90,7 @@ static NTSTATUS x_smb2_process_oplock_break(x_smbd_conn_t *smbd_conn,
 	decode_in_oplock_break(*state, in_oplock_break);
 
 	if (!smbd_requ->smbd_open) {
-		assert(smbd_requ->smbd_tcon);
-		smbd_requ->smbd_open = x_smbd_open_find(state->in_file_id_persistent,
+		smbd_requ->smbd_open = x_smbd_open_lookup(state->in_file_id_persistent,
 				state->in_file_id_volatile,
 				smbd_requ->smbd_tcon);
 
@@ -100,7 +99,7 @@ static NTSTATUS x_smb2_process_oplock_break(x_smbd_conn_t *smbd_conn,
 		}
 	}
 
-	NTSTATUS status = x_smbd_object_op_oplock_break(smbd_requ->smbd_open->smbd_object,
+	NTSTATUS status = x_smbd_open_op_oplock_break(smbd_requ->smbd_open,
 			smbd_conn, smbd_requ, state);
 	if (NT_STATUS_IS_OK(status)) {
 		x_smb2_reply_oplock_break(smbd_conn, smbd_requ, *state);
@@ -122,9 +121,8 @@ static NTSTATUS x_smb2_process_lease_break(x_smbd_conn_t *smbd_conn,
 		return NT_STATUS_INVALID_PARAMETER;
 	}
 
-	auto smbd_object = smbd_lease->smbd_object;
-	NTSTATUS status = x_smbd_object_op_lease_break(smbd_object, smbd_conn,
-			smbd_requ, smbd_lease, state);
+	NTSTATUS status = x_smbd_lease_op_break(smbd_lease, smbd_conn,
+			smbd_requ, state);
 	x_smbd_lease_release(smbd_lease);
 
 	return status;
@@ -151,15 +149,6 @@ NTSTATUS x_smb2_process_break(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ
 	}
 #endif
 	const uint8_t *in_hdr = smbd_requ->get_in_data();
-	/* TODO signing/encryption */
-	if (!smbd_requ->smbd_tcon) {
-		uint32_t in_tid = IVAL(in_hdr, SMB2_HDR_TID);
-		smbd_requ->smbd_tcon = x_smbd_tcon_find(in_tid, smbd_requ->smbd_sess);
-		if (!smbd_requ->smbd_tcon) {
-			RETURN_OP_STATUS(smbd_requ, NT_STATUS_NETWORK_NAME_DELETED);
-		}
-	}
-
 	const x_smb2_oplock_break_t *in_break = (const x_smb2_oplock_break_t *)(in_hdr + SMB2_HDR_BODY);
 	if (in_break->struct_size >= sizeof(x_smb2_lease_break_t)) {
 		if (smbd_requ->in_requ_len < SMB2_HDR_BODY + sizeof(x_smb2_lease_break_t)) {

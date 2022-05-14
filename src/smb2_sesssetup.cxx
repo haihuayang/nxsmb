@@ -137,7 +137,7 @@ NTSTATUS x_smb2_process_sesssetup(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_
 		}
 		new_auth = true;
 	} else if (!smbd_requ->smbd_chan) {
-		smbd_requ->smbd_chan = x_smbd_sess_find_chan(smbd_requ->smbd_sess,
+		smbd_requ->smbd_chan = x_smbd_sess_lookup_chan(smbd_requ->smbd_sess,
 				smbd_conn);
 		if (!smbd_requ->smbd_chan) {
 			RETURN_OP_STATUS(smbd_requ, NT_STATUS_USER_SESSION_DELETED);

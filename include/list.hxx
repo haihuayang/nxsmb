@@ -28,10 +28,12 @@ struct name \
 
 struct x_dlink_t
 {
+	// static constexpr x_dlink_t * const invalid = reinterpret_cast<x_dlink_t *>(-1l);
 	x_dlink_t *get_next() const { return next; }
 	x_dlink_t *get_prev() const { return prev; }
+	bool is_valid() const { return prev != reinterpret_cast<x_dlink_t *>(-1l); }
 	//      bool is_linked() const { return link->prev != NULL; }
-	x_dlink_t *next, *prev;
+	x_dlink_t *next = reinterpret_cast<x_dlink_t *>(-1l), *prev = reinterpret_cast<x_dlink_t *>(-1l);
 };
 
 struct x_sdlist_t
@@ -127,9 +129,7 @@ struct x_ddlist_t
 			link->prev->next = link->next;
 		else
 			front = link->next;
-#ifndef NDEBUG
-		link->prev = link->next = nullptr;
-#endif
+		link->prev = link->next = reinterpret_cast<x_dlink_t *>(-1l);
 	}
 	void push_front(x_dlink_t *link) {
 		if ((link->next = front) != nullptr)

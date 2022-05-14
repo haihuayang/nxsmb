@@ -1,6 +1,5 @@
 
 #include "smbd_open.hxx"
-#include "smbd_object.hxx"
 #include "core.hxx"
 
 namespace {
@@ -106,19 +105,13 @@ NTSTATUS x_smb2_process_getinfo(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_re
 	X_LOG_OP("%ld GETINFO 0x%lx, 0x%lx", smbd_requ->in_mid,
 			state->in_file_id_persistent, state->in_file_id_volatile);
 
-	if (smbd_requ->smbd_open) {
-	} else if (smbd_requ->smbd_tcon) {
-		smbd_requ->smbd_open = x_smbd_open_find(state->in_file_id_persistent,
+	if (!smbd_requ->smbd_open) {
+		smbd_requ->smbd_open = x_smbd_open_lookup(state->in_file_id_persistent,
 				state->in_file_id_volatile,
 				smbd_requ->smbd_tcon);
-	} else {
-		uint32_t tid = x_get_le32(in_hdr + SMB2_HDR_TID);
-		smbd_requ->smbd_open = x_smbd_open_find(state->in_file_id_persistent,
-				state->in_file_id_volatile, tid, smbd_requ->smbd_sess);
-	}
-
-	if (!smbd_requ->smbd_open) {
-		RETURN_OP_STATUS(smbd_requ, NT_STATUS_FILE_CLOSED);
+		if (!smbd_requ->smbd_open) {
+			RETURN_OP_STATUS(smbd_requ, NT_STATUS_FILE_CLOSED);
+		}
 	}
 
 	x_smbd_object_t *smbd_object = smbd_requ->smbd_open->smbd_object;

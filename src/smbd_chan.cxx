@@ -41,7 +41,7 @@ struct x_smbd_chan_t
 		S_BLOCKED,
 		S_FAILED,
 		S_EXPIRED,
-		S_TERMINATED,
+		S_DONE,
 	};
 
 	x_dlink_t conn_link;
@@ -459,7 +459,7 @@ x_smbd_chan_t *x_smbd_chan_create(x_smbd_sess_t *smbd_sess, x_smbd_conn_t *smbd_
 	return smbd_chan;
 }
 
-void x_smbd_chan_terminate(x_dlink_t *conn_link, x_smbd_conn_t *smbd_conn)
+void x_smbd_chan_unlinked(x_dlink_t *conn_link, x_smbd_conn_t *smbd_conn)
 {
 	/* trigger by smbd_conn, it is already unlinked */
 	x_smbd_chan_t *smbd_chan = X_CONTAINER_OF(conn_link, x_smbd_chan_t, conn_link);
@@ -468,7 +468,7 @@ void x_smbd_chan_terminate(x_dlink_t *conn_link, x_smbd_conn_t *smbd_conn)
 		if (!smbd_chan_cancel_timer(smbd_chan)) {
 		}
 	}
-	smbd_chan->state = x_smbd_chan_t::S_TERMINATED;
+	smbd_chan->state = x_smbd_chan_t::S_DONE;
 	x_smbd_sess_remove_chan(smbd_chan->smbd_sess, smbd_chan);
 	/* dec the ref hold by smbd_conn */
 	x_smbd_ref_dec(smbd_chan);
@@ -495,7 +495,7 @@ static void smbd_chan_logoff(x_smbd_conn_t *smbd_conn, x_smbd_chan_t *smbd_chan)
 		if (!smbd_chan_cancel_timer(smbd_chan)) {
 		}
 	}
-	smbd_chan->state = x_smbd_chan_t::S_TERMINATED;
+	smbd_chan->state = x_smbd_chan_t::S_DONE;
 }
 
 static void smbd_chan_logoff_evt_func(x_smbd_conn_t *smbd_conn, x_fdevt_user_t *fdevt_user, bool terminated)

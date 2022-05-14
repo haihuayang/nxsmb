@@ -21,6 +21,7 @@
 #include <unistd.h>
 #include "smbd_conf.hxx"
 #include "smb2.hxx"
+#include "smb2_state.hxx"
 #include "misc.hxx"
 #include "network.hxx"
 #include "include/utils.hxx"
@@ -37,7 +38,6 @@ extern "C" {
 }
 
 #include "smbd_user.hxx"
-#include "smbd_open.hxx"
 #include "network.hxx"
 
 #define X_NT_STATUS_INTERNAL_BLOCKED	NT_STATUS(1)
@@ -249,7 +249,7 @@ void x_smb2_reply(x_smbd_conn_t *smbd_conn,
 		x_bufref_t *buf_tail,
 		NTSTATUS status,
 		uint32_t reply_size);
-
+#if 0
 struct x_smbd_open_t
 {
 	/*
@@ -286,6 +286,9 @@ struct x_smbd_open_t
 
 X_DECLARE_MEMBER_TRAITS(open_tcon_traits, x_smbd_open_t, tcon_link)
 // X_DECLARE_MEMBER_TRAITS(open_object_traits, x_smbd_open_t, object_link)
+#endif
+
+int x_smbd_open_table_init(uint32_t count);
 
 struct x_smbd_tcon_ops_t;
 #if 0
@@ -347,8 +350,9 @@ uint32_t x_smbd_tcon_get_id(const x_smbd_tcon_t *smbd_tcon);
 bool x_smbd_tcon_access_check(const x_smbd_tcon_t *smbd_tcon, uint32_t desired_access);
 bool x_smbd_tcon_match(const x_smbd_tcon_t *smbd_tcon, const x_smbd_sess_t *smbd_sess, uint32_t tid);
 std::shared_ptr<x_smbd_share_t> x_smbd_tcon_get_share(const x_smbd_tcon_t *smbd_tcon);
-x_smbd_tcon_t *x_smbd_tcon_find(uint32_t id, const x_smbd_sess_t *smbd_sess);
-void x_smbd_tcon_remove_open(x_smbd_tcon_t *smbd_tcon, x_smbd_open_t *smbd_open);
+x_smbd_tcon_t *x_smbd_tcon_lookup(uint32_t id, const x_smbd_sess_t *smbd_sess);
+bool x_smbd_tcon_unlink_open(x_smbd_tcon_t *smbd_tcon, x_dlink_t *link);
+bool x_smbd_tcon_disconnect(x_smbd_tcon_t *smbd_tcon);
 
 
 
@@ -366,7 +370,7 @@ NTSTATUS x_smbd_chan_update_auth(x_smbd_chan_t *smbd_chan,
 		std::vector<uint8_t> &out_security,
 		std::shared_ptr<x_auth_info_t> &auth_info,
 		bool new_auth);
-void x_smbd_chan_terminate(x_dlink_t *conn_link, x_smbd_conn_t *smbd_conn);
+void x_smbd_chan_unlinked(x_dlink_t *conn_link, x_smbd_conn_t *smbd_conn);
 void x_smbd_chan_logoff(x_smbd_chan_t *smbd_chan);
 bool x_smbd_chan_post_user(x_smbd_chan_t *smbd_chan, x_fdevt_user_t *fdevt_user);
 
@@ -407,7 +411,7 @@ struct x_smbd_sess_t
 
 int x_smbd_sess_pool_init(uint32_t count);
 x_smbd_sess_t *x_smbd_sess_create(uint64_t &id);
-x_smbd_sess_t *x_smbd_sess_find(uint64_t id, const x_smb2_uuid_t &client_guid);
+x_smbd_sess_t *x_smbd_sess_lookup(uint64_t id, const x_smb2_uuid_t &client_guid);
 NTSTATUS x_smbd_sess_auth_succeeded(x_smbd_sess_t *smbd_sess,
 		std::shared_ptr<x_smbd_user_t> &smbd_user,
 		const x_smbd_key_set_t &keys);
@@ -415,14 +419,14 @@ NTSTATUS x_smbd_sess_auth_succeeded(x_smbd_sess_t *smbd_sess,
 // void x_smbd_sess_decref(x_smbd_sess_t *smbd_sess);
 uint64_t x_smbd_sess_get_id(const x_smbd_sess_t *smbd_sess);
 bool x_smbd_sess_is_signing_required(const x_smbd_sess_t *smbd_sess);
-x_smbd_chan_t *x_smbd_sess_find_chan(x_smbd_sess_t *smbd_sess, x_smbd_conn_t *smbd_conn);
+x_smbd_chan_t *x_smbd_sess_lookup_chan(x_smbd_sess_t *smbd_sess, x_smbd_conn_t *smbd_conn);
 x_smbd_chan_t *x_smbd_sess_get_active_chan(x_smbd_sess_t *smbd_sess);
 bool x_smbd_sess_add_chan(x_smbd_sess_t *smbd_sess, x_smbd_chan_t *smbd_chan);
 void x_smbd_sess_remove_chan(x_smbd_sess_t *smbd_sess, x_smbd_chan_t *smbd_chan);
 std::shared_ptr<x_smbd_user_t> x_smbd_sess_get_user(const x_smbd_sess_t *smbd_sess);
 NTSTATUS x_smbd_sess_logoff(x_smbd_sess_t *smbd_sess);
-void x_smbd_sess_link_tcon(x_smbd_sess_t *smbd_sess, x_dlink_t *link);
-void x_smbd_sess_unlink_tcon(x_smbd_sess_t *smbd_sess, x_dlink_t *link);
+bool x_smbd_sess_link_tcon(x_smbd_sess_t *smbd_sess, x_dlink_t *link);
+bool x_smbd_sess_unlink_tcon(x_smbd_sess_t *smbd_sess, x_dlink_t *link);
 
 void x_smbd_tcon_init_ipc(x_smbd_tcon_t *smbd_tcon);
 void x_smbd_tcon_init_posixfs(x_smbd_tcon_t *smbd_tcon);
@@ -433,6 +437,7 @@ int x_smbd_ipc_init();
 const x_smbd_tcon_ops_t *x_smbd_ipc_get_tcon_ops();
 
 
+#if 0
 void x_smbd_open_init(x_smbd_open_t *smbd_open, x_smbd_object_t *smbd_object, x_smbd_tcon_t *smbd_tcon, uint32_t share_access, uint32_t access_mask);
 void x_smbd_open_insert_local(x_smbd_open_t *smbd_open);
 x_smbd_open_t *x_smbd_open_find(uint64_t id_presistent, uint64_t id_volatile,
@@ -441,7 +446,6 @@ x_smbd_open_t *x_smbd_open_find(uint64_t id_presistent, uint64_t id_volatile,
 		uint32_t tid, const x_smbd_sess_t *smbd_sess);
 void x_smbd_open_release(x_smbd_open_t *smbd_open);
 
-#if 0
 x_smbd_open_t *x_smbd_open_create(x_smbd_tcon_t *smbd_tcon);
 struct x_smbd_tcon_t
 {
@@ -516,26 +520,26 @@ struct x_smbd_conn_t
 
 int x_smbd_open_pool_init(uint32_t count);
 int x_smbd_tcon_pool_init(uint32_t count);
-void x_smbd_sess_find(uint64_t id, const x_smbd_conn_t *smbd_conn,
+void x_smbd_sess_lookup(uint64_t id, const x_smbd_conn_t *smbd_conn,
 		x_smbd_sess_t **psmbd_sess, x_smbd_chan_t **psmbd_chan,
 		bool match_conn);
-x_smbd_chan_t *x_smbd_chan_find(uint64_t id, const x_smbd_conn_t *smbd_conn,
+x_smbd_chan_t *x_smbd_chan_lookup(uint64_t id, const x_smbd_conn_t *smbd_conn,
 		bool match_conn);
 x_smbd_sess_t * x_smbd_chan_get_sess(x_smbd_chan_t *smbd_chan);
 const x_smb2_key_t *x_smbd_sess_get_signing_key(x_smbd_sess_t *smbd_sess);
 
 void x_smbd_sess_release(x_smbd_sess_t *smbd_sess);
-void x_smbd_sess_terminate(x_smbd_sess_t *smbd_sess);
+void x_smbd_sess_done(x_smbd_sess_t *smbd_sess);
 
 int x_smbd_requ_pool_init(uint32_t count);
-x_smbd_requ_t *x_smbd_requ_find(uint64_t id, const x_smbd_conn_t *smbd_conn);
+x_smbd_requ_t *x_smbd_requ_lookup(uint64_t id, const x_smbd_conn_t *smbd_conn);
 void x_smbd_requ_insert(x_smbd_requ_t *smbd_requ);
 void x_smbd_requ_remove(x_smbd_requ_t *smbd_requ);
 
 
-x_smbd_tcon_t *x_smbd_tcon_find(uint32_t id, const x_smbd_sess_t *smbd_sess);
+x_smbd_tcon_t *x_smbd_tcon_lookup(uint32_t id, const x_smbd_sess_t *smbd_sess);
 void x_smbd_tcon_insert(x_smbd_tcon_t *smbd_tcon);
-void x_smbd_tcon_terminate(x_smbd_tcon_t *smbd_tcon);
+void x_smbd_tcon_unlinked(x_dlink_t *link, x_smbd_sess_t *smbd_sess);
 
 void x_smbd_conn_terminate_sessions(x_smbd_conn_t *smbd_conn);
 bool x_smbd_conn_post_user_2(x_smbd_conn_t *smbd_conn, x_fdevt_user_t *fdevt_user);

@@ -6,187 +6,235 @@
 #error "Must be c++"
 #endif
 
+#include "smbd.hxx"
 #include "defines.hxx"
-#include "include/librpc/ndr_smb.hxx"
 #include "smb2.hxx"
+#include "smbd_lease.hxx"
 
-struct x_smb2_state_read_t
+
+struct x_smbd_open_t
 {
-	uint8_t in_flags;
-	uint32_t in_length;
-	uint64_t in_offset;
-	uint64_t in_file_id_persistent;
-	uint64_t in_file_id_volatile;
-	uint32_t in_minimum_count;
-#if 1
-	~x_smb2_state_read_t() {
-		if (out_buf) {
-			x_buf_release(out_buf);
-		}
+	x_smbd_open_t(x_smbd_object_t *so, x_smbd_tcon_t *st,
+			uint32_t am, uint32_t sa);
+	~x_smbd_open_t();
+	x_smbd_open_t(const x_smbd_open_t &) = delete;
+	x_smbd_open_t(x_smbd_open_t &&) = delete;
+	x_smbd_open_t &operator=(const x_smbd_open_t &) = delete;
+	x_smbd_open_t &operator=(x_smbd_open_t &&) = delete;
+
+	bool check_access(uint32_t access) const {
+		return (access_mask & access);
 	}
-	x_buf_t *out_buf{};
-	uint32_t out_buf_length;
-#else
-	std::unique_ptr<x_bufref_t> out_data;
-#endif
+
+	x_dlink_t tcon_link; // protected by the mutex of smbd_tcon
+	x_smbd_object_t * const smbd_object;
+	x_smbd_tcon_t * const smbd_tcon;
+	uint64_t id; // TODO we use it for both volatile and persisten id
+	enum {
+		// S_PENDING,
+		S_ACTIVE,
+		S_DONE,
+	} state = S_ACTIVE;
+
+	const uint32_t access_mask, share_access;
 };
 
-struct x_smb2_state_write_t
+struct x_smbd_object_t;
+struct x_smbd_object_ops_t
 {
-	~x_smb2_state_write_t() {
-		if (in_buf) {
-			x_buf_release(in_buf);
-		}
+	NTSTATUS (*close)(x_smbd_object_t *smbd_object,
+			x_smbd_conn_t *smbd_conn,
+			x_smbd_open_t *smbd_open,
+			x_smbd_requ_t *smbd_requ,
+			std::unique_ptr<x_smb2_state_close_t> &state);
+	NTSTATUS (*read)(x_smbd_object_t *smbd_object,
+			x_smbd_conn_t *smbd_conn,
+			x_smbd_requ_t *smbd_requ,
+			std::unique_ptr<x_smb2_state_read_t> &state);
+	NTSTATUS (*write)(x_smbd_object_t *smbd_object,
+			x_smbd_conn_t *smbd_conn,
+			x_smbd_requ_t *smbd_requ,
+			std::unique_ptr<x_smb2_state_write_t> &state);
+	NTSTATUS (*getinfo)(x_smbd_object_t *smbd_object,
+			x_smbd_conn_t *smbd_conn,
+			x_smbd_requ_t *smbd_requ,
+			std::unique_ptr<x_smb2_state_getinfo_t> &state);
+	NTSTATUS (*setinfo)(x_smbd_object_t *smbd_object,
+			x_smbd_conn_t *smbd_conn,
+			x_smbd_requ_t *smbd_requ,
+			std::unique_ptr<x_smb2_state_setinfo_t> &state);
+	NTSTATUS (*ioctl)(x_smbd_object_t *smbd_object,
+			x_smbd_conn_t *smbd_conn,
+			x_smbd_requ_t *smbd_requ,
+			std::unique_ptr<x_smb2_state_ioctl_t> &state);
+	NTSTATUS (*qdir)(x_smbd_object_t *smbd_object,
+			x_smbd_conn_t *smbd_conn,
+			x_smbd_requ_t *smbd_requ,
+			std::unique_ptr<x_smb2_state_qdir_t> &state);
+	NTSTATUS (*notify)(x_smbd_object_t *smbd_object,
+			x_smbd_conn_t *smbd_conn,
+			x_smbd_requ_t *smbd_requ,
+			std::unique_ptr<x_smb2_state_notify_t> &state);
+	NTSTATUS (*lease_break)(x_smbd_object_t *smbd_object,
+			x_smbd_conn_t *smbd_conn,
+			x_smbd_requ_t *smbd_requ,
+			x_smbd_lease_t *smbd_lease,
+			std::unique_ptr<x_smb2_state_lease_break_t> &state);
+	NTSTATUS (*oplock_break)(x_smbd_object_t *smbd_object,
+			x_smbd_conn_t *smbd_conn,
+			x_smbd_requ_t *smbd_requ,
+			std::unique_ptr<x_smb2_state_oplock_break_t> &state);
+	std::string (*get_path)(const x_smbd_object_t *smbd_object);
+	void (*destroy)(x_smbd_object_t *smbd_object, x_smbd_open_t *smbd_open);
+};
+
+struct x_smbd_object_t
+{
+	x_smbd_object_t(const x_smbd_object_ops_t *ops) : ops(ops) { }
+	const x_smbd_object_ops_t *ops;
+};
+
+static inline NTSTATUS x_smbd_open_op_close(
+		x_smbd_open_t *smbd_open,
+		x_smbd_conn_t *smbd_conn,
+		x_smbd_requ_t *smbd_requ,
+		std::unique_ptr<x_smb2_state_close_t> &state)
+{
+	x_smbd_object_t *smbd_object = smbd_open->smbd_object;
+	return smbd_object->ops->close(smbd_object, smbd_conn, smbd_open,
+			smbd_requ, state);
+}
+
+static inline NTSTATUS x_smbd_open_op_read(
+		x_smbd_open_t *smbd_open,
+		x_smbd_conn_t *smbd_conn,
+		x_smbd_requ_t *smbd_requ,
+		std::unique_ptr<x_smb2_state_read_t> &state)
+{
+	x_smbd_object_t *smbd_object = smbd_open->smbd_object;
+	if (!smbd_object->ops->read) {
+		return NT_STATUS_INVALID_DEVICE_REQUEST;
 	}
-	uint64_t in_offset;
-	uint64_t in_file_id_persistent;
-	uint64_t in_file_id_volatile;
-	uint32_t in_flags;
+	return smbd_object->ops->read(smbd_object, smbd_conn,
+			smbd_requ, state);
+}
 
-	x_buf_t *in_buf{};
-	uint32_t in_buf_offset;
-	uint32_t in_buf_length;
-
-	uint32_t out_count;
-	uint32_t out_remaining;
-};
-
-struct x_smb2_state_getinfo_t
+static inline NTSTATUS x_smbd_open_op_write(
+		x_smbd_open_t *smbd_open,
+		x_smbd_conn_t *smbd_conn,
+		x_smbd_requ_t *smbd_requ,
+		std::unique_ptr<x_smb2_state_write_t> &state)
 {
-	uint8_t  in_info_class;
-	uint8_t  in_info_level;
-	uint32_t in_output_buffer_length;
-	uint32_t in_additional;
-	uint32_t in_flags;
-	uint64_t in_file_id_persistent;
-	uint64_t in_file_id_volatile;
-
-	std::vector<uint8_t> out_data;
-};
-
-struct x_smb2_state_setinfo_t
-{
-	uint8_t  in_info_class;
-	uint8_t  in_info_level;
-	uint32_t in_additional;
-	uint64_t in_file_id_persistent;
-	uint64_t in_file_id_volatile;
-	std::vector<uint8_t> in_data;
-};
-
-struct x_smb2_state_qdir_t
-{
-	uint8_t in_info_level;
-	uint8_t in_flags;
-	uint32_t in_file_index;
-	uint32_t in_output_buffer_length;
-	uint64_t in_file_id_persistent;
-	uint64_t in_file_id_volatile;
-	std::u16string in_name;
-
-	std::vector<uint8_t> out_data;
-};
-
-struct x_smb2_state_ioctl_t
-{
-	~x_smb2_state_ioctl_t() {
-		if (in_buf) {
-			x_buf_release(in_buf);
-		}
-		if (out_buf) {
-			x_buf_release(out_buf);
-		}
+	x_smbd_object_t *smbd_object = smbd_open->smbd_object;
+	if (!smbd_object->ops->write) {
+		return NT_STATUS_INVALID_DEVICE_REQUEST;
 	}
-	uint32_t ctl_code;
-	uint32_t in_flags;
-	uint64_t file_id_persistent;
-	uint64_t file_id_volatile;
-	uint32_t in_max_input_length;
-	uint32_t in_max_output_length;
+	return smbd_object->ops->write(smbd_object, smbd_conn,
+			smbd_requ, state);
+}
 
-	x_buf_t *in_buf{};
-	uint32_t in_buf_offset;
-	uint32_t in_buf_length{0};
-	x_buf_t *out_buf{};
-	uint32_t out_buf_length{0};
-#if 0
-	std::vector<uint8_t> in_data;
-	std::vector<uint8_t> out_data;
-#endif
-};
-
-struct x_smb2_state_notify_t
+static inline NTSTATUS x_smbd_open_op_ioctl(
+		x_smbd_open_t *smbd_open,
+		x_smbd_conn_t *smbd_conn,
+		x_smbd_requ_t *smbd_requ,
+		std::unique_ptr<x_smb2_state_ioctl_t> &state)
 {
-	// void done(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ, NTSTATUS status);
-	uint16_t in_flags;
-	uint32_t in_output_buffer_length;
-	uint64_t in_file_id_persistent;
-	uint64_t in_file_id_volatile;
-	uint32_t in_filter;
+	x_smbd_object_t *smbd_object = smbd_open->smbd_object;
+	if (!smbd_object->ops->ioctl) {
+		return NT_STATUS_INVALID_DEVICE_REQUEST;
+	}
+	return smbd_object->ops->ioctl(smbd_object, smbd_conn,
+			smbd_requ, state);
+}
 
-	std::vector<uint8_t> out_data;
-};
-
-struct x_smb2_state_lease_break_t
+static inline NTSTATUS x_smbd_open_op_qdir(
+		x_smbd_open_t *smbd_open,
+		x_smbd_conn_t *smbd_conn,
+		x_smbd_requ_t *smbd_requ,
+		std::unique_ptr<x_smb2_state_qdir_t> &state)
 {
-	uint8_t in_oplock_level;
-	uint32_t in_flags;
-	x_smb2_lease_key_t in_key;
-	uint32_t in_state;
-	uint64_t in_duration;
-};
+	x_smbd_object_t *smbd_object = smbd_open->smbd_object;
+	if (!smbd_object->ops->qdir) {
+		return NT_STATUS_INVALID_DEVICE_REQUEST;
+	}
+	return smbd_object->ops->qdir(smbd_object, smbd_conn,
+			smbd_requ, state);
+}
 
-struct x_smb2_state_oplock_break_t
+static inline NTSTATUS x_smbd_open_op_notify(
+		x_smbd_open_t *smbd_open,
+		x_smbd_conn_t *smbd_conn,
+		x_smbd_requ_t *smbd_requ,
+		std::unique_ptr<x_smb2_state_notify_t> &state)
 {
-	uint8_t in_oplock_level;
-	uint8_t out_oplock_level;
-	uint64_t in_file_id_persistent;
-	uint64_t in_file_id_volatile;
-};
+	x_smbd_object_t *smbd_object = smbd_open->smbd_object;
+	if (!smbd_object->ops->notify) {
+		return NT_STATUS_INVALID_DEVICE_REQUEST;
+	}
+	return smbd_object->ops->notify(smbd_object, smbd_conn,
+			smbd_requ, state);
+}
 
-struct x_smb2_state_close_t
+static inline NTSTATUS x_smbd_lease_op_break(
+		x_smbd_lease_t *smbd_lease,
+		x_smbd_conn_t *smbd_conn,
+		x_smbd_requ_t *smbd_requ,
+		std::unique_ptr<x_smb2_state_lease_break_t> &state)
 {
-	uint16_t in_struct_size;
-	uint16_t in_flags;
-	uint32_t in_reserved;
-	uint64_t in_file_id_persistent;
-	uint64_t in_file_id_volatile;
+	x_smbd_object_t *smbd_object = smbd_lease->smbd_object;
+	if (!smbd_object->ops->lease_break) {
+		return NT_STATUS_INVALID_DEVICE_REQUEST;
+	}
+	return smbd_object->ops->lease_break(smbd_object, smbd_conn,
+			smbd_requ, smbd_lease, state);
+}
 
-	uint16_t out_struct_size;
-	uint16_t out_flags{0};
-	uint32_t out_reserved{0};
-	x_smb2_create_close_info_t out_info;
-};
-
-enum {
-	X_SMB2_CONTEXT_FLAG_MXAC = 1,
-	X_SMB2_CONTEXT_FLAG_QFID = 2,
-};
-
-struct x_smb2_state_create_t
+static inline NTSTATUS x_smbd_open_op_oplock_break(
+		x_smbd_open_t *smbd_open,
+		x_smbd_conn_t *smbd_conn,
+		x_smbd_requ_t *smbd_requ,
+		std::unique_ptr<x_smb2_state_oplock_break_t> &state)
 {
-	uint8_t oplock_level;
-	uint32_t contexts{0};
+	x_smbd_object_t *smbd_object = smbd_open->smbd_object;
+	if (!smbd_object->ops->oplock_break) {
+		return NT_STATUS_INVALID_DEVICE_REQUEST;
+	}
+	return smbd_object->ops->oplock_break(smbd_object, smbd_conn,
+			smbd_requ, state);
+}
 
-	uint32_t in_impersonation_level;
-	uint32_t in_desired_access;
-	uint32_t in_file_attributes;
-	uint32_t in_share_access;
-	uint32_t in_create_disposition;
-	uint32_t in_create_options;
+static inline std::string x_smbd_open_op_get_path(
+		const x_smbd_open_t *smbd_open)
+{
+	x_smbd_object_t *smbd_object = smbd_open->smbd_object;
+	return smbd_object->ops->get_path(smbd_object);
+}
 
-	x_smb2_lease_t lease;
+static inline void x_smbd_open_op_destroy(
+		x_smbd_open_t *smbd_open)
+{
+	x_smbd_object_t *smbd_object = smbd_open->smbd_object;
+	return smbd_object->ops->destroy(smbd_object, smbd_open);
+}
 
-	std::u16string in_name;
+bool x_smbd_open_has_space();
+void x_smbd_open_init(x_smbd_open_t *smbd_open, x_smbd_object_t *smbd_object, x_smbd_tcon_t *smbd_tcon, uint32_t share_access, uint32_t access_mask);
+void x_smbd_open_insert_local(x_smbd_open_t *smbd_open);
+x_smbd_open_t *x_smbd_open_lookup(uint64_t id_presistent, uint64_t id_volatile,
+		const x_smbd_tcon_t *smbd_tcon);
+bool x_smbd_open_store(x_smbd_open_t *smbd_open);
+// x_smbd_open_t *x_smbd_open_lookup(uint64_t id_presistent, uint64_t id_volatile,
+//		uint32_t tid, const x_smbd_sess_t *smbd_sess);
+bool x_smbd_open_close(x_smbd_open_t *smbd_open);
+void x_smbd_open_unlinked(x_dlink_t *link, x_smbd_tcon_t *smbd_tcon);
+// void x_smbd_open_release(x_smbd_open_t *smbd_open);
 
-	uint8_t out_create_flags;
-	uint32_t out_create_action;
-	uint32_t out_maximal_access{0};
-	uint8_t out_qfid_info[32];
-	x_smb2_create_close_info_t out_info;
-
-	uint32_t granted_access{0}; // internally used
-};
+static inline void x_smbd_open_get_id(x_smbd_open_t *smbd_open, uint64_t &id_persistent,
+		uint64_t &id_volatile)
+{
+	id_persistent = smbd_open->id;
+	id_volatile = smbd_open->id;
+}
 
 #endif /* __smbd_open__hxx__ */
 

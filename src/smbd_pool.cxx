@@ -1,11 +1,11 @@
 
 #include "smbd.hxx"
-#include "smbd_object.hxx"
+#include "smbd_open.hxx"
 #include "smbd_ctrl.hxx"
 #include "smbd_pool.hxx"
 #include "include/librpc/security.hxx"
 
-
+#if 0
 X_DECLARE_MEMBER_TRAITS(smbd_open_hash_traits, x_smbd_open_t, hash_link)
 using smbd_open_pool_t = smbd_pool_t<smbd_open_hash_traits>;
 
@@ -70,7 +70,6 @@ static void smbd_open_insert_intl(smbd_open_pool_t &pool, x_smbd_open_t *smbd_op
 	pool.hashtable.insert(smbd_open, smbd_open->id);
 }
 
-#if 0
 X_DECLARE_MEMBER_TRAITS(smbd_tcon_hash_traits, x_smbd_tcon_t, hash_link)
 using smbd_tcon_pool_t = smbd_pool_t<smbd_tcon_hash_traits>;
 
@@ -200,13 +199,13 @@ static x_smbd_requ_t *smbd_requ_find_intl(smbd_requ_pool_t &pool, uint64_t id,
 	return nullptr;
 }
 
-static uint64_t g_async_id_id = 0x0;
+static uint64_t g_async_id = 0x0;
 static void smbd_requ_insert_intl(smbd_requ_pool_t &pool, x_smbd_requ_t *smbd_requ)
 {
 	std::unique_lock<std::mutex> lock(pool.mutex);
 	for (;;) {
 		/* TODO to reduce hash conflict */
-		smbd_requ->async_id = g_async_id_id++;
+		smbd_requ->async_id = g_async_id++;
 		if (smbd_requ->async_id == 0) {
 			continue;
 		}
@@ -220,9 +219,11 @@ static void smbd_requ_insert_intl(smbd_requ_pool_t &pool, x_smbd_requ_t *smbd_re
 
 
 
+static smbd_requ_pool_t g_smbd_requ_pool;
+
+#if 0
 
 static smbd_open_pool_t g_smbd_open_pool;
-static smbd_requ_pool_t g_smbd_requ_pool;
 
 
 int x_smbd_open_pool_init(uint32_t count)
@@ -236,8 +237,6 @@ void x_smbd_open_release(x_smbd_open_t *smbd_open)
 	pool_release(g_smbd_open_pool, smbd_open);
 }
 
-
-#if 0
 static smbd_tcon_pool_t g_smbd_tcon_pool;
 int x_smbd_tcon_pool_init(uint32_t count)
 {
@@ -288,7 +287,7 @@ int x_smbd_requ_pool_init(uint32_t count)
 	return 0;
 }
 
-x_smbd_requ_t *x_smbd_requ_find(uint64_t id, const x_smbd_conn_t *smbd_conn)
+x_smbd_requ_t *x_smbd_requ_lookup(uint64_t id, const x_smbd_conn_t *smbd_conn)
 {
 	return smbd_requ_find_intl(g_smbd_requ_pool, id, smbd_conn);
 }
@@ -304,7 +303,7 @@ void x_smbd_requ_remove(x_smbd_requ_t *smbd_requ)
 	pool_release(g_smbd_requ_pool, smbd_requ);
 }
 
-
+#if 0
 /* TODO should also match persistent id??? */
 x_smbd_open_t *x_smbd_open_find(uint64_t id_presistent, uint64_t id_volatile,
 		const x_smbd_tcon_t *smbd_tcon)
@@ -339,7 +338,6 @@ void x_smbd_open_insert_local(x_smbd_open_t *smbd_open)
 	return smbd_open_insert_intl(g_smbd_open_pool, smbd_open);
 }
 
-#if 0
 void x_smbd_tcon_terminate(x_smbd_tcon_t *smbd_tcon)
 {
 	x_smbd_tcon_release(smbd_tcon);
@@ -452,7 +450,6 @@ x_smbd_ctrl_handler_t *x_smbd_list_tcon_create()
 {
 	return new x_smbd_list_tcon_t;
 }
-#endif
 
 struct x_smbd_list_open_t : x_smbd_ctrl_handler_t
 {
@@ -486,9 +483,6 @@ x_smbd_ctrl_handler_t *x_smbd_list_open_create()
 	return new x_smbd_list_open_t;
 }
 
-
-
-#if 0
 template <typename HashTraits, typename Func>
 static void foreach(x_hashtable_t<HashTraits> &pool, Func &&func)
 {

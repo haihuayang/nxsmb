@@ -208,6 +208,9 @@ NTSTATUS x_smb2_process_tcon(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 	}
 
 	auto smbd_tcon = x_smbd_tcon_create(smbd_requ->smbd_sess, smbshare, share_access);
+	if (!smbd_tcon) {
+		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INSUFFICIENT_RESOURCES);
+	}
 
 	uint32_t out_share_flags = 0;
 	uint32_t out_capabilities = 0;
