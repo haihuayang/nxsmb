@@ -14,10 +14,10 @@ struct x_smbd_ctrl_handler_t
 	virtual bool output(std::string &data) = 0;
 };
 
-x_smbd_ctrl_handler_t *x_smbd_list_session_create();
-
+x_smbd_ctrl_handler_t *x_smbd_sess_list_create();
 x_smbd_ctrl_handler_t *x_smbd_tcon_list_create();
 x_smbd_ctrl_handler_t *x_smbd_open_list_create();
+x_smbd_ctrl_handler_t *x_smbd_stats_report_create();
 
 
 #endif /* __smbd_ctrl__hxx__ */

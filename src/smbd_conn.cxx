@@ -1,5 +1,6 @@
 
 #include "smbd.hxx"
+#include "smbd_stats.hxx"
 extern "C" {
 #include "samba/include/config.h"
 #include "samba/lib/crypto/sha512.h"
@@ -23,7 +24,6 @@ struct x_smbd_srv_t
 	int fd;
 };
 
-static std::atomic<uint32_t> g_smbd_conn_count = 0;
 struct x_smbd_conn_t
 {
 	enum { MAX_MSG = 4 };
@@ -69,7 +69,7 @@ x_smbd_conn_t::x_smbd_conn_t(int fd, const x_sockaddr_t &saddr,
 	: fd(fd), saddr(saddr)
 	, seq_bitmap(max_credits)
 {
-	++g_smbd_conn_count;
+	X_SMBD_COUNTER_INC(conn_create, 1);
 }
 
 x_smbd_conn_t::~x_smbd_conn_t()
@@ -86,7 +86,7 @@ x_smbd_conn_t::~x_smbd_conn_t()
 		delete send_buf_head;
 		send_buf_head = next;
 	}
-	--g_smbd_conn_count;
+	X_SMBD_COUNTER_INC(conn_delete, 1);
 }
 
 template <>

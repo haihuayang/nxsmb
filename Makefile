@@ -94,6 +94,7 @@ all: $(TARGET_SET_tests:%=$(TARGET_DIR_out)/tests/%) \
 	$(TARGET_DIR_out)/bin/nxutils
 
 SET_src_nxsmbd := \
+	smbd_stats \
 	smbd_secrets \
 	smbd_pool \
 	smbd_posixfs \

@@ -1,6 +1,7 @@
 
 #include "smbd.hxx"
 #include "smbd_ctrl.hxx"
+#include "smbd_stats.hxx"
 #include "smbd_open.hxx"
 #include "include/idtable.hxx"
 
@@ -29,11 +30,13 @@ x_smbd_open_t::x_smbd_open_t(x_smbd_object_t *so, x_smbd_tcon_t *st,
 	: smbd_object(so), smbd_tcon(x_smbd_ref_inc(st))
 	, access_mask(am), share_access(sa)
 {
+	X_SMBD_COUNTER_INC(open_create, 1);
 }
 
 x_smbd_open_t::~x_smbd_open_t()
 {
 	x_smbd_ref_dec(smbd_tcon);
+	X_SMBD_COUNTER_INC(open_delete, 1);
 }
 
 template <>

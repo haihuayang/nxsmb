@@ -1,5 +1,6 @@
 
 #include "smbd.hxx"
+#include "smbd_stats.hxx"
 
 static constexpr x_array_const_t<char> SMB2_24_signing_label{"SMB2AESCMAC"};
 static constexpr x_array_const_t<char> SMB2_24_signing_context{"SmbSign"};
@@ -15,8 +16,6 @@ static constexpr x_array_const_t<char> SMB3_10_decryption_label{"SMBC2SCipherKey
 static constexpr x_array_const_t<char> SMB3_10_encryption_label{"SMBS2CCipherKey"};
 static constexpr x_array_const_t<char> SMB3_10_application_label{"SMBAppKey"};
 
-static std::atomic<uint32_t> g_smbd_chan_count = 0;
-
 struct x_smbd_chan_t
 {
 	/* smbd_chan must hold the ref of smbd_conn through its life,
@@ -25,12 +24,12 @@ struct x_smbd_chan_t
 	explicit x_smbd_chan_t(x_smbd_conn_t *smbd_conn, x_smbd_sess_t *smbd_sess)
 		: smbd_conn(x_smbd_ref_inc(smbd_conn))
 		, smbd_sess(x_smbd_ref_inc(smbd_sess)) {
-		++g_smbd_chan_count;
+		X_SMBD_COUNTER_INC(chan_create, 1);
 	}
 	~x_smbd_chan_t() {
 		x_smbd_ref_dec(smbd_sess);
 		x_smbd_ref_dec(smbd_conn);
-		--g_smbd_chan_count;
+		X_SMBD_COUNTER_INC(chan_delete, 1);
 	}
 
 	enum {

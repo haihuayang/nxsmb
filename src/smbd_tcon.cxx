@@ -1,6 +1,7 @@
 
 #include "smbd.hxx"
 #include "smbd_ctrl.hxx"
+#include "smbd_stats.hxx"
 #include "smbd_open.hxx"
 #include "include/idtable.hxx"
 
@@ -15,9 +16,11 @@ struct x_smbd_tcon_t
 			uint32_t share_access)
        		: ops(ops), share_access(share_access)
 		, smbd_sess(x_smbd_ref_inc(smbd_sess)), smbd_share(share) {
+		X_SMBD_COUNTER_INC(tcon_create, 1);
 	}
 	~x_smbd_tcon_t() {
 		x_smbd_ref_dec(smbd_sess);
+		X_SMBD_COUNTER_INC(tcon_delete, 1);
 	}
 
 	x_dlink_t sess_link; // protected by smbd_sess' mutex
@@ -144,7 +147,7 @@ NTSTATUS x_smbd_tcon_op_create(x_smbd_tcon_t *smbd_tcon,
 
 static bool smbd_tcon_terminate(x_smbd_tcon_t *smbd_tcon)
 {
-	std::unique_lock<std::mutex> lock;
+	std::unique_lock<std::mutex> lock(smbd_tcon->mutex);
 	if (smbd_tcon->state == x_smbd_tcon_t::S_DONE) {
 		/* this can happen if client logoff on one channel and
 		 * tdis on another

@@ -409,7 +409,7 @@ struct x_smbd_sess_t
 // X_DECLARE_MEMBER_TRAITS(smbd_sess_conn_traits, x_smbd_sess_t, conn_link)
 #endif
 
-int x_smbd_sess_pool_init(uint32_t count);
+int x_smbd_sess_table_init(uint32_t count);
 x_smbd_sess_t *x_smbd_sess_create(uint64_t &id);
 x_smbd_sess_t *x_smbd_sess_lookup(uint64_t id, const x_smb2_uuid_t &client_guid);
 NTSTATUS x_smbd_sess_auth_succeeded(x_smbd_sess_t *smbd_sess,

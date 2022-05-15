@@ -12,12 +12,12 @@
 #include <stdio.h>
 #include <getopt.h>
 
-// #include "smb_consts.h"
 #include "smbd_conf.hxx"
 #include "core.hxx"
 #include "network.hxx"
 #include "smbd_lease.hxx"
 #include "smbd_secrets.hxx"
+#include "smbd_stats.hxx"
 #include "auth.hxx"
 
 #include "smb2.hxx"
@@ -61,6 +61,9 @@ enum {
 static void init_smbd()
 {
 	auto smbd_conf = x_smbd_conf_get();
+
+	x_smbd_stats_init();
+
 	g_smbd.tpool_async = x_threadpool_create(smbd_conf->async_thread_count);
 	x_threadpool_t *tpool = x_threadpool_create(smbd_conf->client_thread_count);
 	g_smbd.tpool_evtmgmt = tpool;
@@ -70,8 +73,7 @@ static void init_smbd()
 
 	x_smbd_open_table_init(X_SMBD_MAX_OPEN);
 	x_smbd_tcon_table_init(X_SMBD_MAX_TCON);
-	x_smbd_sess_pool_init(X_SMBD_MAX_SESSION);
-	x_smbd_sess_pool_init(X_SMBD_MAX_REQUEST);
+	x_smbd_sess_table_init(X_SMBD_MAX_SESSION);
 	x_smbd_requ_pool_init(X_SMBD_MAX_OPEN); // TODO use X_SMBD_MAX_OPEN for now
 	x_smbd_lease_pool_init(X_SMBD_MAX_OPEN, X_SMBD_MAX_OPEN / 16); // TODO use X_SMBD_MAX_OPEN for now
 
