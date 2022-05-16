@@ -215,7 +215,7 @@ inline x_ndr_off_t x_ndr_scalars_unique_ptr(
 
 // TODO force subctx round 8, is it correct?
 #define X_NDR_SUBCTXFFFFFC01_END_PUSH(subndr, ndr, bpos, epos, _flags) \
-	__subctx.content_size = X_NDR_ROUND((bpos) - __tmp_bpos, 8); \
+	__subctx.content_size = x_convert_assert<uint32_t>(X_NDR_ROUND((bpos) - __tmp_bpos, 8)); \
 	(bpos) = X_NDR_CHECK_POS(__tmp_bpos + __subctx.content_size, __tmp_bpos, (epos)); \
 	__subctx.flags = (_flags); \
 	X_NDR_SCALARS_DEFAULT(__subctx, (ndr), __pos_subctx, (epos), (_flags), X_NDR_SWITCH_NONE); \

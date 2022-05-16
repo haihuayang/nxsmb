@@ -65,21 +65,6 @@ void destruct(T &t) noexcept
 {
 	t.~T();
 }
-#if 0
-/* no std::size in c++14 */
-template <typename T>
-inline uint32_t get_size(const std::vector<T> &t)
-{
-	return t.size();
-}
-
-template <typename T, size_t N>
-inline uint32_t get_size(const std::array<T, N> &t)
-{
-	return N;
-}
-/* end c++ helpers */
-#endif
 
 enum x_ndr_err_code_t : int {
 	NDR_ERR_SUCCESS = 0,
@@ -1027,7 +1012,7 @@ inline x_ndr_off_t x_ndr_scalars(std::array<T,C> &t, x_ndr_pull_t &ndr,
 
 struct x_ndr_subctx_t
 {
-	size_t content_size;
+	uint32_t content_size;
 	uint32_t flags = 0;
 };
 
