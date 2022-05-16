@@ -66,6 +66,7 @@ void x_dbg(const char *fmt, ...);
 #define X_LOG_ENUM \
 	X_LOG_DECL(ERR) \
 	X_LOG_DECL(WARN) \
+	X_LOG_DECL(NOTICE) \
 	X_LOG_DECL(CONN) \
 	X_LOG_DECL(OP) \
 	X_LOG_DECL(DBG) \
@@ -80,6 +81,7 @@ enum {
 
 extern int x_loglevel;
 void x_log(int level, const char *fmt, ...);
+int x_log_init(const char *log_level, const char *log_name);
 
 #define X_LOG_L(level, fmt, ...) do { \
 	if ((level) <= x_loglevel) { \
@@ -89,6 +91,7 @@ void x_log(int level, const char *fmt, ...);
 
 #define X_LOG_ERR(...) X_LOG_L(X_LOG_LEVEL_ERR, __VA_ARGS__)
 #define X_LOG_WARN(...) X_LOG_L(X_LOG_LEVEL_WARN, __VA_ARGS__)
+#define X_LOG_NOTICE(...) X_LOG_L(X_LOG_LEVEL_NOTICE, __VA_ARGS__)
 #define X_LOG_CONN(...) X_LOG_L(X_LOG_LEVEL_CONN, __VA_ARGS__)
 #define X_LOG_OP(...) X_LOG_L(X_LOG_LEVEL_OP, __VA_ARGS__)
 #define X_LOG_DBG(...) X_LOG_L(X_LOG_LEVEL_DBG, __VA_ARGS__)

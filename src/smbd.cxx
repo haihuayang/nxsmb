@@ -61,6 +61,8 @@ static void init_smbd()
 {
 	auto smbd_conf = x_smbd_conf_get();
 
+	x_log_init(smbd_conf->log_level.c_str(), smbd_conf->log_name.c_str());
+
 	x_smbd_stats_init();
 
 	g_smbd.tpool_async = x_threadpool_create(smbd_conf->async_thread_count);

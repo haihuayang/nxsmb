@@ -91,6 +91,9 @@ struct x_smbd_conf_t
 	uint32_t max_referral_ttl = 300;
 	uint32_t smb2_max_credits = 8192;
 	bool host_msdfs = true;
+
+	std::string log_level;
+	std::string log_name = "stderr";
 	std::string netbios_name, workgroup, dns_domain, realm;
 	std::string private_dir;
 	std::vector<std::string> cluster_nodes;

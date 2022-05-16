@@ -155,7 +155,11 @@ static bool parse_global_param(x_smbd_conf_t &smbd_conf,
 		const std::string &name, const std::string &value)
 {
 	// global parameters
-	if (name == "client thread count") {
+	if (name == "log level") {
+		smbd_conf.log_level = value;
+	} else if (name == "log name") {
+		smbd_conf.log_name = value;
+	} else if (name == "client thread count") {
 		return parse_uint32(value, smbd_conf.client_thread_count);
 	} else if (name == "async thread count") {
 		return parse_uint32(value, smbd_conf.async_thread_count);

@@ -4,9 +4,14 @@
 #include <stdarg.h>
 #include <unistd.h>
 #include <stdio.h>
+#include <string.h>
 #include <assert.h>
 #include <time.h>
 #include <sys/time.h>
+#include <fcntl.h>
+
+int x_loglevel = X_LOG_LEVEL_DBG;
+int x_logfd = 2; // stderr
 
 static void vlog(const char *name, const char *fmt, va_list ap)
 {
@@ -37,7 +42,7 @@ static void vlog(const char *name, const char *fmt, va_list ap)
 	}
 	p += len;
 	*p++ = '\n';
-	write(2, buf, p - buf);
+	write(x_logfd, buf, p - buf);
 }
 
 void x_dbg(const char *fmt, ...)
@@ -58,8 +63,6 @@ void x_panic(const char *fmt, ...)
 	abort();
 }
 
-int x_loglevel = X_LOG_LEVEL_DBG;
-
 static const char *x_loglevel_names[] = {
 #define X_LOG_DECL(x) #x,
 	X_LOG_ENUM
@@ -74,4 +77,41 @@ void x_log(int level, const char *fmt, ...)
 	va_end(ap);
 }
 
+int x_log_init(const char *log_level, const char *log_name)
+{
+	int loglevel = X_LOG_LEVEL_DBG; // TODO set to INFO
+	if (log_level) {
+		int l;
+		for (l = 0; l < X_LOG_LEVEL_MAX; ++l) {
+			if (strcmp(log_level, x_loglevel_names[l]) == 0) {
+				break;
+			}
+		}
+		if (l == X_LOG_LEVEL_MAX) {
+			x_log(X_LOG_LEVEL_ERR, "invalid log_level %s", log_level);
+			return -1;
+		}
+		loglevel = l;
+	}
+	int logfd = -1;
+	if (strcmp(log_name, "stderr") == 0) {
+		logfd = 2;
+	} else {
+		logfd = open(log_name, O_WRONLY | O_APPEND | O_CREAT, 0644);
+		if (logfd == -1) {
+			x_log(X_LOG_LEVEL_ERR, "fail to open log_name %s, errno=%d",
+					log_name, errno);
+			return -1;
+		}
+	}
+	if (x_logfd != 2) {
+		close(x_logfd);
+	}
+	x_logfd = logfd;
+	x_loglevel = loglevel;
+	x_log(X_LOG_LEVEL_NOTICE, "init log %s:%s logfd %d",
+			log_name, x_loglevel_names[loglevel],
+			logfd);
+	return 0;
+}
 
