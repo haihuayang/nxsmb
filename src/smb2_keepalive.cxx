@@ -1,6 +1,5 @@
 
 #include "smbd.hxx"
-#include "core.hxx"
 
 enum {
 	X_SMB2_KEEPALIVE_REQU_BODY_LEN = 0x04,

@@ -77,9 +77,9 @@ struct x_smbd_conf_t
 	uint32_t async_thread_count = 2;
 
 	uint32_t capacities = 0;
-	size_t max_trans_size = 1024 * 1024;
-	size_t max_read_size = 1024 * 1024;
-	size_t max_write_size = 1024 * 1024;
+	uint32_t max_trans_size = 1024 * 1024;
+	uint32_t max_read_size = 1024 * 1024;
+	uint32_t max_write_size = 1024 * 1024;
 
 	uint32_t capabilities;
 	uint16_t security_mode;

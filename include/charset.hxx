@@ -7,6 +7,7 @@
 #endif
 
 #include "include/xdefines.h"
+#include "include/bits.hxx"
 #include <string>
 #include <stdint.h>
 
@@ -42,8 +43,8 @@ OutputIt x_convert_utf16_to_utf8(InputIt begin, InputIt end, OutputIt oi)
 {
 	while (begin != end) {
 		char16_t c = *begin;
-		X_ASSERT(c < 0x100); // TODO
-		++oi = c;
+		// TODO multibytes
+		++oi = x_convert_assert<char>(c);
 		++begin;
 	}
 	return oi;
@@ -67,9 +68,9 @@ template <class InputIt, class OutputIt>
 OutputIt x_convert_utf16_to_lower_utf8(InputIt begin, InputIt end, OutputIt oi)
 {
 	while (begin != end) {
-		char16_t c = x_tolower(*begin);
-		X_ASSERT(c < 0x100); // TODO
-		++oi = c;
+		char16_t c = char16_t(x_tolower(*begin));
+		// TODO multibytes
+		++oi = x_convert_assert<char>(c);
 		++begin;
 	}
 	return oi;
@@ -93,9 +94,9 @@ template <class InputIt, class OutputIt>
 OutputIt x_convert_utf16_to_upper_utf8(InputIt begin, InputIt end, OutputIt oi)
 {
 	while (begin != end) {
-		char16_t c = x_toupper(*begin);
-		X_ASSERT(c < 0x100); // TODO
-		++oi = c;
+		char16_t c = char16_t(x_toupper(*begin));
+		// TODO multibytes
+		++oi = x_convert_assert<char>(c);
 		++begin;
 	}
 	return oi;

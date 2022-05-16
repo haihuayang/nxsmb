@@ -39,7 +39,8 @@ x_fnmatch_t *x_fnmatch_create(const std::u16string &pattern, bool icase)
 			u8.push_back('.');
 		} else if (escapes.find(c) != std::u16string::npos) {
 			u8.push_back('\\');
-			u8.push_back(c);
+			// TODO multibytes
+			u8.push_back(x_convert_assert<char>(c));
 		} else {
 			x_convert_utf16_to_utf8(&c, &c + 1, std::back_inserter(u8));
 		}

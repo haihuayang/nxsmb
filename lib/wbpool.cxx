@@ -1,4 +1,5 @@
 
+#include "include/bits.hxx"
 #include "include/wbpool.hxx"
 #include "include/evtmgmt.hxx"
 #include <mutex>
@@ -293,12 +294,12 @@ static int wbconn_dosend(wbconn_t &wbconn)
 	X_ASSERT(wbconn.wbcli->requ);
 	x_wbrequ_t *requ = wbconn.wbcli->requ;
 	X_ASSERT(wbconn.requ_off < requ->header.length);
-	int err;
+	ssize_t err;
 	if (wbconn.requ_off < sizeof(struct winbindd_request)) {
 		err = write(wbconn.fd, (uint8_t *)&requ->header + wbconn.requ_off,
 				sizeof(struct winbindd_request) - wbconn.requ_off);
 		if (err > 0) {
-			wbconn.requ_off += err;
+			wbconn.requ_off = x_convert_assert<uint32_t>(wbconn.requ_off + err);
 			if (wbconn.requ_off < sizeof(struct winbindd_request)) {
 				return -EAGAIN;
 			}
@@ -317,7 +318,7 @@ static int wbconn_dosend(wbconn_t &wbconn)
 		return -errno;
 	}
 
-	wbconn.requ_off += err;
+	wbconn.requ_off = x_convert_assert<uint32_t>(wbconn.requ_off + err);
 	if (wbconn.requ_off < requ->header.length) {
 		return -EAGAIN;
 	}
@@ -329,7 +330,7 @@ static int wbconn_dorecv(wbconn_t &wbconn)
 	X_ASSERT(wbconn.wbcli);
 	X_ASSERT(wbconn.wbcli->resp);
 	x_wbresp_t *resp = wbconn.wbcli->resp;
-	int err;
+	ssize_t err;
 	if (wbconn.resp_off < sizeof(struct winbindd_response)) {
 		err = read(wbconn.fd, ((uint8_t *)&resp->header + wbconn.resp_off),
 				sizeof(struct winbindd_response) - wbconn.resp_off);
@@ -338,7 +339,7 @@ static int wbconn_dorecv(wbconn_t &wbconn)
 		} else if (err == 0) {
 			return -EBADMSG;
 		}
-		wbconn.resp_off += err;
+		wbconn.resp_off = x_convert_assert<uint32_t>(wbconn.resp_off + err);
 		if (wbconn.resp_off == sizeof(struct winbindd_response)) {
 			X_ASSERT(resp->header.length >= sizeof(struct winbindd_response));
 			if (wbconn.resp_off == resp->header.length) {
@@ -358,7 +359,7 @@ static int wbconn_dorecv(wbconn_t &wbconn)
 	} else if (err == 0) {
 		return -EBADMSG;
 	}
-	wbconn.resp_off += err;
+	wbconn.resp_off = x_convert_assert<uint32_t>(wbconn.resp_off + err);
 	if (wbconn.resp_off < resp->header.length) {
 		return -EAGAIN;
 	}
@@ -496,7 +497,7 @@ int x_wbpool_request(x_wbpool_t *wbpool, x_wbcli_t *wbcli)
 {
 	wbconn_t *wbconn = nullptr;
 	wbcli->requ->header.length = sizeof(wbcli->requ->header);
-	wbcli->requ->header.extra_len = wbcli->requ->extra.size();
+	wbcli->requ->header.extra_len = x_convert_assert<uint32_t>(wbcli->requ->extra.size());
 	{
 		std::unique_lock<std::mutex> lock(wbpool->mutex);
 		wbconn = wbpool->ready_list.get_front();

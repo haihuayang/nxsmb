@@ -1,6 +1,5 @@
 
 #include "smbd.hxx"
-#include "core.hxx"
 #include "smbd_open.hxx"
 #include "include/charset.hxx"
 
@@ -166,7 +165,7 @@ static uint32_t encode_contexts(const x_smb2_state_create_t &state,
 			while (p != np) {
 				*p++ = 0;
 			}
-			ch->chain_offset = X_H2LE32(p - (uint8_t *)ch);
+			ch->chain_offset = X_H2LE32(x_convert_assert<uint32_t>(p - (uint8_t *)ch));
 		}
 
 		ch = (x_smb2_create_context_header_t *)p;
@@ -192,7 +191,7 @@ static uint32_t encode_contexts(const x_smb2_state_create_t &state,
 			while (p != np) {
 				*p++ = 0;
 			}
-			ch->chain_offset = X_H2LE32(p - (uint8_t *)ch);
+			ch->chain_offset = X_H2LE32(x_convert_assert<uint32_t>(p - (uint8_t *)ch));
 		}
 
 		ch = (x_smb2_create_context_header_t *)p;
@@ -220,7 +219,7 @@ static uint32_t encode_contexts(const x_smb2_state_create_t &state,
 			while (p != np) {
 				*p++ = 0;
 			}
-			ch->chain_offset = X_H2LE32(p - (uint8_t *)ch);
+			ch->chain_offset = X_H2LE32(x_convert_assert<uint32_t>(p - (uint8_t *)ch));
 		}
 
 		ch = (x_smb2_create_context_header_t *)p;
@@ -265,7 +264,7 @@ static uint32_t encode_contexts(const x_smb2_state_create_t &state,
 	if (ch) {
 		ch->chain_offset = 0;
 	}
-	return p - out_ptr;
+	return x_convert_assert<uint32_t>(p - out_ptr);
 }
 
 static bool decode_in_create(x_smb2_state_create_t &state,
@@ -364,7 +363,7 @@ static uint32_t encode_out_create(const x_smb2_state_create_t &state,
 		out_create->context_length = X_H2LE32(out_context_length);
 	}
 
-	return sizeof(x_smb2_out_create_t) + out_context_length;
+	return x_convert_assert<uint32_t>(sizeof(x_smb2_out_create_t) + out_context_length);
 }
 
 static void x_smb2_reply_create(x_smbd_conn_t *smbd_conn,

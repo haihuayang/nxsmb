@@ -43,7 +43,7 @@ static int parse_uuid(const std::string &str, uuid_t &uuid)
 		if (val2 < 0) {
 			return -1;
 		}
-		uv = (val << 4) | val2;
+		uv = uint8_t((val << 4) | val2);
 	}
 	return 0;
 }
@@ -53,9 +53,19 @@ static bool parse_bool(const std::string &str)
 	return str == "yes";
 }
 
-static int parse_integer(const std::string &str)
+static bool parse_uint32(const std::string &str, uint32_t &ret)
 {
-	return strtol(str.c_str(), nullptr, 0);
+	char *end;
+	unsigned long val = strtoul(str.c_str(), &end, 0);
+	if (*end) {
+	       return false;
+	}
+	uint32_t v = uint32_t(val);
+	if (v != val) {
+		return false;
+	}
+	ret = v;
+	return true;
 }
 
 static std::vector<std::string> parse_stringlist(const std::string &str)
@@ -141,14 +151,14 @@ static void load_ifaces(x_smbd_conf_t &smbd_conf)
 	smbd_conf.local_ifaces = ret_ifaces;
 }
 
-static void parse_global_param(x_smbd_conf_t &smbd_conf,
+static bool parse_global_param(x_smbd_conf_t &smbd_conf,
 		const std::string &name, const std::string &value)
 {
 	// global parameters
 	if (name == "client thread count") {
-		smbd_conf.client_thread_count = parse_integer(value);
+		return parse_uint32(value, smbd_conf.client_thread_count);
 	} else if (name == "async thread count") {
-		smbd_conf.async_thread_count = parse_integer(value);
+		return parse_uint32(value, smbd_conf.async_thread_count);
 	} else if (name == "netbios name") {
 		smbd_conf.netbios_name = value;
 	} else if (name == "dns domain") {
@@ -160,7 +170,7 @@ static void parse_global_param(x_smbd_conf_t &smbd_conf,
 	} else if (name == "lanman auth") {
 		smbd_conf.lanman_auth = parse_bool(value);
 	} else if (name == "smb2 max credits") {
-		smbd_conf.smb2_max_credits = parse_integer(value);
+		return parse_uint32(value, smbd_conf.smb2_max_credits);
 	} else if (name == "private dir") {
 		smbd_conf.private_dir = value;
 	} else if (name == "interfaces") {
@@ -175,7 +185,9 @@ static void parse_global_param(x_smbd_conf_t &smbd_conf,
 	} else {
 		X_LOG_WARN("unknown global param '%s' with value '%s'",
 				name.c_str(), value.c_str());
+		return false;
 	}
+	return true;
 }
 
 static bool split_option(const std::string opt, size_t pos,

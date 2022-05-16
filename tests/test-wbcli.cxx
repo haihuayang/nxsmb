@@ -41,11 +41,11 @@ static int winbind_open_pipe()
 
 	winbindd_init_request(&wbrequ, WINBINDD_INTERFACE_VERSION);
 
-	err = write(fd, &wbrequ, sizeof wbrequ);
+	write(fd, &wbrequ, sizeof wbrequ);
 
 	struct winbindd_response wbresp;
 
-	err = read(fd, &wbresp, sizeof wbresp);
+	read(fd, &wbresp, sizeof wbresp);
 
 	return 0;
 }

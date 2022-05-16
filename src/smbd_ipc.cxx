@@ -53,7 +53,7 @@ struct named_pipe_t
 	x_dcerpc_pipe_t rpc_pipe;
 	x_ncacn_packet_t pkt;
 	NTSTATUS return_status{NT_STATUS_OK};
-	uint16_t packet_read = 0;
+	uint32_t packet_read = 0;
 	uint32_t offset = 0;
 	std::vector<uint8_t> input;
 	std::vector<uint8_t> output;
@@ -96,7 +96,7 @@ static NTSTATUS named_pipe_read(
 		X_TODO;
 		return STATUS_PENDING; // should keep the original request
 	}
-	uint32_t data_copy = named_pipe->output.size() - named_pipe->offset;
+	uint32_t data_copy = x_convert_assert<uint32_t>(named_pipe->output.size()) - named_pipe->offset;
 	if (data_copy > requ_length) {
 		data_copy = requ_length;
 	}
@@ -285,7 +285,7 @@ static NTSTATUS process_dcerpc_request(
 		X_TODO_ASSERT(resp_type == idl::DCERPC_PKT_RESPONSE);
 		X_TODO_ASSERT(dce_status == 0);
 		idl::dcerpc_response response;
-		response.alloc_hint = output.size();
+		response.alloc_hint = x_convert_assert<uint32_t>(output.size());
 		response.context_id = 0;
 		response.cancel_count = 0;
 		response.stub_and_verifier.val.swap(output);
@@ -318,7 +318,7 @@ static inline NTSTATUS process_ncacn_pdu(
 		x_ncacn_packet_t resp_header = named_pipe->pkt;
 		resp_header.type = resp_type;
 		resp_header.pfc_flags = idl::DCERPC_PFC_FLAG_FIRST | idl::DCERPC_PFC_FLAG_LAST;
-		resp_header.frag_length = sizeof(x_ncacn_packet_t) + body_output.size();
+		resp_header.frag_length = x_convert_assert<uint16_t>(sizeof(x_ncacn_packet_t) + body_output.size());
 		resp_header.auth_length = 0;
 
 		named_pipe->output.resize(resp_header.frag_length);
@@ -350,7 +350,7 @@ static int named_pipe_write(
 	const uint8_t *data = _input_data;
 	if (named_pipe->packet_read < sizeof(x_ncacn_packet_t)) {
 		X_ASSERT(named_pipe->input.size() == 0);
-		uint32_t copy_len = sizeof(x_ncacn_packet_t) - named_pipe->packet_read;
+		uint32_t copy_len = x_convert_assert<uint32_t>(sizeof(x_ncacn_packet_t)) - named_pipe->packet_read;
 		if (copy_len > input_size) {
 			copy_len = input_size;
 		}
@@ -386,7 +386,7 @@ static int named_pipe_write(
 		/* complete pdu */
 		named_pipe->return_status = process_ncacn_pdu(ipc_object, named_pipe, smbd_sess);
 	}
-	return data - _input_data;
+	return x_convert_assert<uint32_t>(data - _input_data);
 }
 
 static NTSTATUS ipc_object_op_read(

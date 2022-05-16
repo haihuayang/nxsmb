@@ -16,7 +16,7 @@ static uint32_t lease_hash(const x_smb2_uuid_t &client_guid, const x_smb2_lease_
 	p = lease_key.data.data();
 	hash ^= p[0];
 	hash ^= p[1];
-	return (hash >> 32) ^ hash;
+	return uint32_t((hash >> 32) ^ hash);
 }
 
 
@@ -24,7 +24,7 @@ template <typename HashTraits>
 struct smbd_npool_t
 {
 	void init(uint32_t count, uint32_t mutex_count) {
-		size_t bucket_size = x_next_2_power(count);
+		uint32_t bucket_size = x_convert_assert<uint32_t>(x_next_2_power(count));
 		hashtable.init(bucket_size);
 		capacity = count;
 		std::vector<std::mutex> tmp(mutex_count);
@@ -47,7 +47,7 @@ x_smbd_lease_t::x_smbd_lease_t(const x_smb2_uuid_t &client_guid,
 {
 }
 
-uint32_t x_smbd_lease_get_state(const x_smbd_lease_t *smbd_lease)
+uint8_t x_smbd_lease_get_state(const x_smbd_lease_t *smbd_lease)
 {
 	return smbd_lease->lease_state;
 }
@@ -99,7 +99,7 @@ x_smbd_lease_t *x_smbd_lease_find(
 x_smbd_lease_t *x_smbd_lease_grant(
 		const x_smb2_uuid_t &client_guid,
 		x_smb2_lease_t *lease,
-		uint32_t granted,
+		uint8_t granted,
 		x_smbd_object_t *smbd_object)
 {
 	uint32_t hash = lease_hash(client_guid, lease->key);
@@ -111,7 +111,7 @@ x_smbd_lease_t *x_smbd_lease_grant(
 			});
 	if (!smbd_lease) {
 		smbd_lease = new x_smbd_lease_t(client_guid, lease->key, hash);
-		smbd_lease->lease_state = lease->state = granted;
+		lease->state = smbd_lease->lease_state = granted;
 		smbd_lease->lease_epoch = ++lease->epoch;
 		smbd_lease->smbd_object = smbd_object;
 		g_smbd_lease_pool.hashtable.insert(smbd_lease, hash);

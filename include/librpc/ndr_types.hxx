@@ -250,10 +250,10 @@ inline x_ndr_off_t x_ndr_scalars_unique_ptr(
 	(val).resize(int_val(__tmp_size_is_2));
 
 #define X_NDR_SCALARS_SIZE_IS_VECTOR_PUSH(tmp_sizeis, val, ndr, bpos, epos, flags) \
-	(tmp_sizeis) = (val).size();
+	x_convert_assert((tmp_sizeis), (val).size());
 
 #define X_NDR_SCALARS_SIZE_IS_VECTOR_PULL(tmp_sizeis, val, ndr, bpos, epos, flags) \
-	(tmp_sizeis) = (val).size();
+	x_convert_assert((tmp_sizeis), (val).size());
 
 #define X_NDR_SIZE_IS_POST_PUSH(tmp_sizeis, pos_sizeis, ndr, bpos, epos, flags) \
 	X_NDR_SCALARS_DEFAULT((tmp_sizeis), (ndr), (pos_sizeis), (epos), (flags), X_NDR_SWITCH_NONE)
@@ -271,8 +271,8 @@ inline x_ndr_off_t x_ndr_scalars_unique_ptr(
 	X_NDR_SCALARS_DEFAULT(uint3264((val).size()), (ndr), (bpos), (epos), (flags), X_NDR_SWITCH_NONE); \
 	X_NDR_SCALARS_DEFAULT(uint3264(0), (ndr), (bpos), (epos), (flags), X_NDR_SWITCH_NONE); \
 	X_NDR_SCALARS_DEFAULT(uint3264((val).size()), (ndr), (bpos), (epos), (flags), X_NDR_SWITCH_NONE); \
-	(tmp_sizeis) = (val).size(); \
-	(tmp_lengthis) = (val).size(); \
+	x_convert_assert((tmp_sizeis), (val).size()); \
+	x_convert_assert((tmp_lengthis), (val).size()); \
 } while (0)
 
 #define X_NDR_SCALARS_LENGTH_IS_VECTOR_2_PULL(tmp_sizeis, tmp_lengthis, val, ndr, bpos, epos, flags) do {\
@@ -284,15 +284,15 @@ inline x_ndr_off_t x_ndr_scalars_unique_ptr(
 		return -NDR_ERR_LENGTH; \
 	} \
 	(val).resize(int_val(__tmp_length_is_2)); \
-	(tmp_sizeis) = int_val(__tmp_size_is_2); \
-	(tmp_lengthis) = int_val(__tmp_length_is_2); \
+	x_convert_assert((tmp_sizeis), int_val(__tmp_size_is_2)); \
+	x_convert_assert((tmp_lengthis), int_val(__tmp_length_is_2)); \
 } while (0)
 
 #define X_NDR_SCALARS_LENGTH_IS_VECTOR_1_PUSH(size_is, tmp_lengthis, val, ndr, bpos, epos, flags) do { \
 	X_NDR_SCALARS_DEFAULT(uint3264(size_is), (ndr), (bpos), (epos), (flags), X_NDR_SWITCH_NONE); \
 	X_NDR_SCALARS_DEFAULT(uint3264(0), (ndr), (bpos), (epos), (flags), X_NDR_SWITCH_NONE); \
 	X_NDR_SCALARS_DEFAULT(uint3264((val).size()), (ndr), (bpos), (epos), (flags), X_NDR_SWITCH_NONE); \
-	(tmp_lengthis) = (val).size(); \
+	x_convert_assert((tmp_lengthis), (val).size()); \
 } while (0)
 
 #define X_NDR_SCALARS_LENGTH_IS_VECTOR_1_PULL(size_is, tmp_lengthis, val, ndr, bpos, epos, flags) do {\
@@ -335,7 +335,7 @@ template <> struct ndr_traits_t<uint3264>
 			uint64_t tmp;
 			x_ndr_off_t ret = x_ndr_pull_uint64_align(tmp, ndr, bpos, epos, flags, 8);
 			if (ret == 0) {
-				val.val = tmp;
+				val.val = x_convert_assert<uint32_t>(tmp); // TODO we not support 64 bit ndr
 			}
 			return ret;
 		}

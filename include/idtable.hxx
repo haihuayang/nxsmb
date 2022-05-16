@@ -7,28 +7,31 @@
 #endif
 
 #include "include/xdefines.h"
+#include "include/bits.hxx"
 #include <atomic>
 #include <memory>
 
 struct x_idtable_64_traits_t
 {
 	enum {
-		index_max = 0x7fffffffu,
-		index_null = 0xffffffffu,
+		index_max = 0x7ffffff8u,
+		index_null = 0x7fffffffu,
 		id_invalid = uint64_t(-1),
 	};
 	using id_type = uint64_t;
-	static constexpr uint64_t entry_to_gen(uint64_t val) {
+	using gen_type = uint32_t;
+	using index_type = uint32_t;
+	static constexpr uint32_t entry_to_gen(uint64_t val) {
 		return val & 0xfffffffful;
 	}
 	static constexpr uint64_t build_id(uint32_t gen, uint32_t index) {
 		return uint64_t(index) << 32 | gen;
 	}
 	static constexpr uint32_t id_to_index(uint64_t id) {
-		return id >> 32;
+		return uint32_t(id >> 32);
 	}
 	static constexpr uint32_t id_to_gen(uint64_t id) {
-		return uint32_t(id);
+		return uint32_t(id & 0xfffffffful);
 	}
 	static constexpr uint32_t inc_gen(uint32_t gen) {
 		return gen + 1;
@@ -43,20 +46,22 @@ struct x_idtable_32_traits_t
 		id_invalid = uint32_t(-1),
 	};
 	using id_type = uint32_t;
-	static constexpr uint32_t entry_to_gen(uint64_t val) {
-		return val & 0xfffful;
+	using gen_type = uint16_t;
+	using index_type = uint16_t;
+	static constexpr uint16_t entry_to_gen(uint64_t val) {
+		return val & 0xffffu;
 	}
 	static constexpr uint32_t build_id(uint16_t gen, uint16_t index) {
 		return uint32_t(index) << 16 | gen;
 	}
 	static constexpr uint16_t id_to_index(uint32_t id) {
-		return id >> 16;
+		return uint16_t(id >> 16);
 	}
-	static constexpr uint16_t id_to_gen(uint16_t id) {
-		return uint16_t(id);
+	static constexpr uint16_t id_to_gen(uint32_t id) {
+		return uint16_t(id & 0xffffu);
 	}
 	static constexpr uint16_t inc_gen(uint16_t gen) {
-		return gen + 1;
+		return uint16_t(gen + 1);
 	}
 };
 
@@ -64,6 +69,8 @@ template <class T, class Traits, class Delete = std::default_delete<T>>
 struct x_idtable_t
 {
 	using id_type = typename Traits::id_type;
+	using gen_type = typename Traits::gen_type;
+	using index_type = typename Traits::index_type;
 	enum { refcnt_max = 0x10000000u, };
 
 	struct entry_t
@@ -151,14 +158,14 @@ struct x_idtable_t
 		}
 		X_ASSERT(!entry->data);
 		entry->data = data;
-		id_type index = entry - entries;
-		id_type entry_gen = Traits::entry_to_gen(entry->header);
+		id_type index = id_type(entry - entries);
+		gen_type entry_gen = Traits::entry_to_gen(entry->header);
 		/* should set id first, otherwise there is a race, other thread
 		 * may lookup the entry before the caller get the id
 		 * idealy the id should be kept by the table, instead the object,
 		 * then how to get id from the object?
 		 */
-		id = Traits::build_id(entry_gen, (index + 1));
+		id = Traits::build_id(entry_gen, index_type(index + 1));
 		// TODO should be possible to use more loose memory order
 		entry->header = (entry_gen | (0x80000001ul << 32));
 		/* +1 to avoid id be 0 */
@@ -186,11 +193,11 @@ struct x_idtable_t
 		uint32_t gen = Traits::id_to_gen(id);
 		uint64_t oval = entry->header.load(std::memory_order_relaxed);
 		for (;;) {
-			if (Traits::id_to_gen(oval) != gen) {
+			if (Traits::entry_to_gen(oval) != gen) {
 				return std::make_pair(false, nullptr);
 			}
 
-			uint32_t refcnt = oval >> 32;
+			uint32_t refcnt = uint32_t(oval >> 32);
 			if (!(refcnt & 0x80000000u)) {
 				return std::make_pair(false, nullptr);
 			}
@@ -220,12 +227,12 @@ struct x_idtable_t
 		entry_t *entry = find_entry(id);
 		X_ASSERT(entry);
 
-		uint32_t gen = Traits::id_to_gen(id);
+		gen_type gen = Traits::id_to_gen(id);
 
 		uint64_t oval = entry->header.load(std::memory_order_relaxed);
 		for (;;) {
-			X_ASSERT(Traits::id_to_gen(oval) == gen);
-			uint32_t refcnt = oval >> 32;
+			X_ASSERT(Traits::entry_to_gen(oval) == gen);
+			uint32_t refcnt = uint32_t(oval >> 32);
 			X_ASSERT(refcnt & 0x80000000u);
 			refcnt &= 0x7fffffffu;
 			X_ASSERT(refcnt > 0);
@@ -253,7 +260,7 @@ struct x_idtable_t
 
 		uint64_t oval = entry->header.load(std::memory_order_relaxed);
 		for (;;) {
-			uint32_t refcnt = oval >> 32;
+			uint32_t refcnt = uint32_t(oval >> 32);
 			X_ASSERT(refcnt & 0x80000000u);
 			refcnt &= 0x7fffffffu;
 			X_ASSERT(refcnt > 0);
@@ -283,7 +290,7 @@ struct x_idtable_t
 		entry_t *entry = entries + index;
 		uint64_t oval = entry->header.load(std::memory_order_relaxed);
 		for (;;) {
-			uint32_t refcnt = oval >> 32;
+			uint32_t refcnt = uint32_t(oval >> 32);
 			if (!(refcnt & 0x80000000u)) {
 				return nullptr;
 			}
@@ -342,7 +349,7 @@ struct x_idtable_t
 	bool __decref(entry_t *entry) noexcept {
 		uint64_t oval = entry->header.load(std::memory_order_relaxed);
 		for (;;) {
-			uint32_t refcnt = oval >> 32;
+			uint32_t refcnt = uint32_t(oval >> 32);
 			X_ASSERT(refcnt & 0x80000000u);
 			refcnt &= 0x7fffffffu;
 			X_ASSERT(refcnt > 0);

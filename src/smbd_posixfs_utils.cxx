@@ -7,7 +7,7 @@
 
 int posixfs_dos_attr_get(int fd, dos_attr_t *dos_attr)
 {
-	int err = fgetxattr(fd, XATTR_DOS_ATTR, dos_attr, sizeof *dos_attr);
+	ssize_t err = fgetxattr(fd, XATTR_DOS_ATTR, dos_attr, sizeof *dos_attr);
 	// TODO int err = ioctl(fd, FS_IOC_GET_DOS_ATTR, &dos_attr);
 	X_ASSERT(err == sizeof *dos_attr);
 	return 0;
@@ -45,7 +45,7 @@ int posixfs_statex_getat(int dirfd, const char *name, posixfs_statex_t *statex)
 
 static int ntacl_get(int fd, std::vector<uint8_t> &out_data)
 {
-	int err = fgetxattr(fd, XATTR_NTACL, out_data.data(), out_data.size());
+	ssize_t err = fgetxattr(fd, XATTR_NTACL, out_data.data(), out_data.size());
 	if (err < 0) {
 		return -errno;
 	}

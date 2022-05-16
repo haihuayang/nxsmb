@@ -10,7 +10,7 @@ std::ostream &operator<<(std::ostream &os, NTTIME v)
 	}
 
 	time_t sec = v.val / (1000 * 1000 * 10) - NTTIME::TIME_FIXUP_CONSTANT;
-	uint32_t remain = v.val % (1000 * 1000 * 10);
+	unsigned long remain = v.val % (1000 * 1000 * 10);
 	struct tm tm;
 	localtime_r(&sec, &tm);
 
@@ -18,7 +18,7 @@ std::ostream &operator<<(std::ostream &os, NTTIME v)
 	strftime(buf1, sizeof buf1, "%Y-%m-%d %H:%M:%S", &tm);
 
 	char buf2[16];
-	snprintf(buf2, sizeof buf2, ".%07u ", remain);
+	snprintf(buf2, sizeof buf2, ".%07lu ", remain);
 
 	return os << buf1 << buf2;
 }

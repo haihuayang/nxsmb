@@ -1,6 +1,5 @@
 
 #include "smbd_open.hxx"
-#include "core.hxx"
 
 namespace {
 enum {
@@ -70,7 +69,7 @@ static void encode_out_getinfo(const x_smb2_state_getinfo_t &state,
 	out_getinfo->struct_size = X_H2LE16(sizeof(x_smb2_out_getinfo_t) +
 			(state.out_data.size() ? 1 : 0));
 	out_getinfo->output_buffer_offset = X_H2LE16(SMB2_HDR_BODY + sizeof(x_smb2_out_getinfo_t));
-	out_getinfo->output_buffer_length = X_H2LE32(state.out_data.size());
+	out_getinfo->output_buffer_length = X_H2LE32(x_convert_assert<uint32_t>(state.out_data.size()));
 	memcpy(out_getinfo + 1, state.out_data.data(), state.out_data.size());
 }
 

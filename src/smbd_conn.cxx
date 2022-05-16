@@ -162,7 +162,7 @@ int x_smbd_conn_negprot_smb1(x_smbd_conn_t *smbd_conn)
 }
 
 static void x_smbd_conn_queue(x_smbd_conn_t *smbd_conn, x_bufref_t *buf_head,
-		x_bufref_t *buf_tail, size_t length)
+		x_bufref_t *buf_tail, uint32_t length)
 {
 	x_bufref_t *bufref = buf_head;
 	X_ASSERT(bufref->buf->ref == 1);
@@ -201,8 +201,8 @@ static void x_smbd_conn_queue(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ
 static uint16_t x_smb2_calculate_credit(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ,
 		NTSTATUS status)
 {
-	uint32_t current_max_credits = smbd_conn->seq_bitmap.size() / 16;
-	current_max_credits = std::max(current_max_credits, 1u);
+	uint64_t current_max_credits = smbd_conn->seq_bitmap.size() / 16;
+	current_max_credits = std::max(current_max_credits, 1ul);
 
 	uint16_t credit_charged = std::max(smbd_requ->in_credit_charge, uint16_t(1u));
 	uint16_t credit_requested = std::max(smbd_requ->in_credit_requested, uint16_t(1u));
@@ -211,8 +211,8 @@ static uint16_t x_smb2_calculate_credit(x_smbd_conn_t *smbd_conn, x_smbd_requ_t 
 	X_ASSERT(credit_charged < smbd_conn->seq_bitmap.size());
 
 	// uint32_t additional_possible = smbd_conn->seq_bitmap.size() - credit_charged;
-	uint16_t additional_credits = credit_requested - 1;
-	uint16_t additional_max = 0;
+	uint32_t additional_credits = credit_requested - 1;
+	uint32_t additional_max = 0;
 
 	if (smbd_requ->opcode == SMB2_OP_NEGPROT) {
 	} else if (smbd_requ->opcode == SMB2_OP_SESSSETUP) {
@@ -223,20 +223,20 @@ static uint16_t x_smb2_calculate_credit(x_smbd_conn_t *smbd_conn, x_smbd_requ_t 
 		additional_max = 32;
 	}
 	additional_credits = std::min(additional_credits, additional_max);
-	uint16_t credit_granted = credit_charged + additional_credits;
+	uint64_t credit_granted = credit_charged + additional_credits;
 
 	uint64_t credits_possible = UINT64_MAX - smbd_conn->credit_seq_low;
 	if (credits_possible > 0) {
 		--credits_possible;
 	}
-	credits_possible = std::min(credits_possible, uint64_t(current_max_credits));
+	credits_possible = std::min(credits_possible, current_max_credits);
 	credits_possible -= smbd_conn->credit_seq_range;
 	if (credit_granted > credits_possible) {
 		credit_granted = credits_possible;
 	}
 	smbd_conn->credit_granted += credit_granted;
 	smbd_conn->credit_seq_range += credit_granted;
-	return credit_granted;
+	return x_convert_assert<uint16_t>(std::max(credit_granted, 0xfffful));
 }
 
 static uint32_t calculate_out_hdr_flags(uint32_t in_hdr_flags, uint32_t out_hdr_flags)
@@ -269,7 +269,7 @@ void x_smb2_reply(x_smbd_conn_t *smbd_conn,
 		x_bufref_t *buf_head,
 		x_bufref_t *buf_tail,
 		NTSTATUS status,
-		uint32_t reply_size)
+		size_t reply_size)
 {
 	smbd_requ->out_credit_granted = x_smb2_calculate_credit(smbd_conn, smbd_requ, status);
 	smbd_requ->out_hdr_flags = calculate_out_hdr_flags(smbd_requ->in_hdr_flags, smbd_requ->out_hdr_flags);
@@ -315,7 +315,7 @@ void x_smb2_reply(x_smbd_conn_t *smbd_conn,
 		smbd_requ->out_buf_head = buf_head;
 		smbd_requ->out_buf_tail = buf_tail;
 	}
-	smbd_requ->out_length += reply_size;
+	smbd_requ->out_length += x_convert_assert<uint32_t>(reply_size);
 }
 
 static int x_smbd_reply_error(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ,
@@ -711,7 +711,7 @@ static int x_smbd_conn_check_nbt_hdr(x_smbd_conn_t *smbd_conn)
 	if (smbd_conn->recv_len == sizeof(smbd_conn->nbt_hdr)) {
 		smbd_conn->recv_len = 0;
 		smbd_conn->nbt_hdr = ntohl(smbd_conn->nbt_hdr);
-		uint8_t msgtype = smbd_conn->nbt_hdr >> 24;
+		uint32_t msgtype = smbd_conn->nbt_hdr >> 24;
 		if (msgtype == NBSSmessage) {
 			uint32_t msgsize = smbd_conn->nbt_hdr & 0xffffff;
 			if (msgsize >= MAX_MSG_SIZE) {
@@ -734,14 +734,14 @@ static int x_smbd_conn_check_nbt_hdr(x_smbd_conn_t *smbd_conn)
 
 static bool x_smbd_conn_do_recv(x_smbd_conn_t *smbd_conn, x_fdevents_t &fdevents)
 {
-	int err;
+	ssize_t err;
 	X_LOG_DBG("%s %p x%lx x%llx", task_name, smbd_conn, smbd_conn->ep_id, fdevents);
 	if (smbd_conn->recv_buf == NULL) {
 		X_ASSERT(smbd_conn->recv_len < sizeof(smbd_conn->nbt_hdr));
 		err = read(smbd_conn->fd, (char *)&smbd_conn->nbt_hdr + smbd_conn->recv_len,
 				sizeof(smbd_conn->nbt_hdr) - smbd_conn->recv_len);
 		if (err > 0) {
-			smbd_conn->recv_len += err;
+			smbd_conn->recv_len = x_convert_assert<uint32_t>(smbd_conn->recv_len + err);
 			err = x_smbd_conn_check_nbt_hdr(smbd_conn);
 			if (err < 0) {
 				return true;
@@ -766,7 +766,7 @@ static bool x_smbd_conn_do_recv(x_smbd_conn_t *smbd_conn, x_fdevents_t &fdevents
 
 	err = readv(smbd_conn->fd, iovec, 2);
 	if (err > 0) {
-		smbd_conn->recv_len += err;
+		smbd_conn->recv_len = x_convert_assert<uint32_t>(smbd_conn->recv_len + err);
 		if (smbd_conn->recv_len >= smbd_conn->recv_buf->size) {
 			smbd_conn->recv_len -= smbd_conn->recv_buf->size;
 			bool ret = x_smbd_conn_process_nbt(smbd_conn);
@@ -814,7 +814,7 @@ static bool x_smbd_conn_do_send(x_smbd_conn_t *smbd_conn, x_fdevents_t &fdevents
 
 		ssize_t ret = writev(smbd_conn->fd, iov, niov);
 		if (ret > 0) {
-			size_t bytes = ret;
+			uint32_t bytes = x_convert_assert<uint32_t>(ret);
 			for ( ; bytes > 0; ) {
 				bufref = smbd_conn->send_buf_head;
 				if (bufref->length <= bytes) {

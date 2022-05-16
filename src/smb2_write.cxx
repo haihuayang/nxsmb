@@ -1,6 +1,5 @@
 
 #include "smbd.hxx"
-#include "core.hxx"
 #include "smbd_open.hxx"
 
 namespace {

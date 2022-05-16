@@ -28,8 +28,8 @@ NTSTATUS x_smb2_notify_marshall(
 	uint32_t offset = 0;
 	uint32_t rec_size = 0;
 	for (const auto &change: notify_changes) {
-		uint32_t pad_len = x_pad_len(rec_size, 4);
-		rec_size = 12 + 2 * change.second.size();
+		uint32_t pad_len = x_convert_assert<uint32_t>(x_pad_len(rec_size, 4));
+		rec_size = x_convert_assert<uint32_t>(12 + 2 * change.second.size());
 		uint32_t new_size = offset + pad_len + rec_size;
 		if (new_size > max_offset) {
 			offset = rec_size = 0;
@@ -41,7 +41,7 @@ NTSTATUS x_smb2_notify_marshall(
 		x_put_le32(output.data() + offset, pad_len); // last rec's next offset
 		offset += pad_len;
 		x_put_le32(output.data() + offset + 4, change.first);
-		x_put_le32(output.data() + offset + 8, change.second.size() * 2);
+		x_put_le32(output.data() + offset + 8, x_convert_assert<uint32_t>(change.second.size() * 2));
 		memcpy(output.data () + offset + 12, change.second.data(), change.second.size() * 2);
 	}
 	output.resize(offset + rec_size);

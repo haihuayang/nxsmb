@@ -1,6 +1,5 @@
 
 #include "smbd.hxx"
-#include "core.hxx"
 #include "smbd_open.hxx"
 
 namespace {
@@ -47,7 +46,7 @@ static void encode_out_notify(const x_smb2_state_notify_t &state,
 	x_smb2_out_notify_t *out_notify = (x_smb2_out_notify_t *)(out_hdr + SMB2_HDR_BODY);
 	out_notify->struct_size = X_H2LE16(sizeof(x_smb2_out_notify_t) + 1);
 	out_notify->output_buffer_offset = X_H2LE16(SMB2_HDR_BODY + sizeof(x_smb2_out_notify_t));
-	out_notify->output_buffer_length = X_H2LE32(state.out_data.size());
+	out_notify->output_buffer_length = X_H2LE32(x_convert_assert<uint32_t>(state.out_data.size()));
 	memcpy(out_notify + 1, state.out_data.data(), state.out_data.size());
 }
 

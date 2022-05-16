@@ -1,6 +1,5 @@
 
 #include "smbd.hxx"
-#include "core.hxx"
 #include "include/charset.hxx"
 #include "smbd_open.hxx"
 #include "smb2.hxx"
@@ -32,7 +31,7 @@ static bool decode_in_ioctl(x_smb2_state_ioctl_t &state,
 {
 	const uint8_t *in_hdr = in_buf->data + in_offset;
 	const x_smb2_in_ioctl_t *in_ioctl = (const x_smb2_in_ioctl_t *)(in_hdr + SMB2_HDR_BODY);
-	uint16_t in_input_offset = X_LE2H16(in_ioctl->input_offset);
+	uint32_t in_input_offset = X_LE2H16(in_ioctl->input_offset);
 	uint32_t in_input_length = X_LE2H32(in_ioctl->input_length);
 
 	if (!x_check_range<uint32_t>(in_input_offset, in_input_length,
@@ -186,14 +185,14 @@ static idl::x_ndr_off_t push_referral_v3(const x_referral_t &referral, idl::x_nd
 	const uint8_t zeroes[16] = {0, };
 	bpos = X_NDR_CHECK(idl::x_ndr_push_bytes(zeroes, ndr, bpos, epos, 16));
 
-	uint16_t size = bpos - base_pos;
+	uint16_t size = x_convert_assert<uint16_t>(bpos - base_pos);
 	idl::x_ndr_push_uint16(size, ndr, size_pos, epos, ndr_flags);
 	for (uint32_t i = 0; i < 2; ++i) {
-		path_pos = idl::x_ndr_push_uint16(bpos - base_pos, ndr, path_pos, epos, ndr_flags);
+		path_pos = idl::x_ndr_push_uint16(x_convert_assert<uint16_t>(bpos - base_pos), ndr, path_pos, epos, ndr_flags);
 		bpos = X_NDR_CHECK(idl::x_ndr_scalars_string(referral.path, ndr, bpos, epos, ndr_flags, false));
 	}
 
-	path_pos = idl::x_ndr_push_uint16(bpos - base_pos, ndr, path_pos, epos, ndr_flags);
+	path_pos = idl::x_ndr_push_uint16(x_convert_assert<uint16_t>(bpos - base_pos), ndr, path_pos, epos, ndr_flags);
 	bpos = X_NDR_CHECK(idl::x_ndr_scalars_string(referral.node, ndr, bpos, epos, ndr_flags, false));
 
 	return bpos;
@@ -204,7 +203,7 @@ static idl::x_ndr_off_t push_dfs_referral_resp(const x_dfs_referral_resp_t &resp
 		uint32_t flags)
 {
 	bpos = X_NDR_CHECK(idl::x_ndr_push_uint16(resp.path_consumed, ndr, bpos, epos, flags));
-	bpos = X_NDR_CHECK(idl::x_ndr_push_uint16(resp.referrals.size(), ndr, bpos, epos, flags));
+	bpos = X_NDR_CHECK(idl::x_ndr_push_uint16(x_convert_assert<uint16_t>(resp.referrals.size()), ndr, bpos, epos, flags));
 	bpos = X_NDR_CHECK(idl::x_ndr_push_uint32(DFS_HEADER_FLAG_REFERAL_SVR | DFS_HEADER_FLAG_STORAGE_SVR, ndr, bpos, epos, flags));
 	for (const auto& ref: resp.referrals) {
 		bpos = X_NDR_CHECK(push_referral_v3(ref, ndr, bpos, epos, idl::x_ndr_set_flags(flags, LIBNDR_FLAG_NOALIGN)));
@@ -223,7 +222,7 @@ static NTSTATUS push_ref_resp(const x_dfs_referral_resp_t &resp, size_t in_max_o
 	}
 	out_buf = x_buf_alloc(ndr_data.data.size());
 	memcpy(out_buf->data, ndr_data.data.data(), ndr_data.data.size());
-	out_buf_length = ndr_data.data.size();
+	out_buf_length = x_convert_assert<uint32_t>(ndr_data.data.size());
 	return NT_STATUS_OK;
 }
 
@@ -284,7 +283,7 @@ static NTSTATUS fsctl_dfs_get_refers_internal(
 	}
 
 	x_dfs_referral_resp_t dfs_referral_resp;
-	dfs_referral_resp.path_consumed = (in_file_name_end - in_file_name_ptr) * 2;
+	dfs_referral_resp.path_consumed = x_convert_assert<uint16_t>((in_file_name_end - in_file_name_ptr) * 2);
 	if (true || reqpath.size() == 0) {
 		std::u16string in_file_name{in_file_name_ptr, in_file_name_end};
 #if 1
@@ -521,7 +520,7 @@ static NTSTATUS x_smb2_fsctl_query_network_interface_info(
 		info->sockaddr = iface.ip;
 		last_info = info;
 	}
-	state.out_buf_length = sizeof(fsctl_net_iface_info_t) * local_ifaces.size();
+	state.out_buf_length = x_convert_assert<uint32_t>(sizeof(fsctl_net_iface_info_t) * local_ifaces.size());
 
 	return NT_STATUS_OK;
 }

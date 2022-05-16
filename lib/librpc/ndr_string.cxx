@@ -158,10 +158,10 @@ x_ndr_off_t x_ndr_scalars_size_length_string(const std::u16string &val, x_ndr_pu
 {
 	size_t length = val.size();
 	uint3264 tmp;
-	tmp.val = length + (((size_length_flags & str_size_noterm) == 0) ? 1 : 0);
+	tmp.val = x_convert_assert<uint32_t>(length + (((size_length_flags & str_size_noterm) == 0) ? 1 : 0));
 	X_NDR_SCALARS_DEFAULT(tmp, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
 	X_NDR_SCALARS_DEFAULT(uint3264(0), ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
-	tmp.val = length + (((size_length_flags & str_length_noterm) == 0) ? 1 : 0);
+	tmp.val = x_convert_assert<uint32_t>(length + (((size_length_flags & str_length_noterm) == 0) ? 1 : 0));
 	X_NDR_SCALARS_DEFAULT(tmp, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
 	return x_ndr_scalars_string(val, ndr, bpos, epos, flags, false);
 }

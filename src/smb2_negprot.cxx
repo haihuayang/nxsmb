@@ -1,5 +1,4 @@
 #include "smbd.hxx"
-#include "core.hxx"
 extern "C" {
 #include "samba/lib/util/samba_util.h"
 }
@@ -73,7 +72,7 @@ static NTSTATUS x_smbd_conn_reply_negprot(x_smbd_conn_t *smbd_conn, x_smbd_requ_
 	idl::NTTIME now = x_tick_to_nttime(tick_now);
 
 	const std::vector<uint8_t> &security_blob = x_smbd_get_negprot_spnego();
-	uint32_t dyn_len = security_blob.size();
+	size_t dyn_len = security_blob.size();
 
 	if (negprot.out_context.size() != 0) {
 		dyn_len = x_pad_len(security_blob.size(), 8);
@@ -112,8 +111,8 @@ static NTSTATUS x_smbd_conn_reply_negprot(x_smbd_conn_t *smbd_conn, x_smbd_requ_
 	out_resp->server_start_time = 0;
 
 	size_t offset = SMB2_HDR_BODY + sizeof(x_smb2_negprot_resp_t);
-	out_resp->security_buffer_offset = X_H2LE16(offset);
-	out_resp->security_buffer_length = X_H2LE16(security_blob.size());
+	out_resp->security_buffer_offset = X_H2LE16(x_convert_assert<uint16_t>(offset));
+	out_resp->security_buffer_length = X_H2LE16(x_convert_assert<uint16_t>(security_blob.size()));
 
 	if (security_blob.size()) {
 		memcpy(out_resp + 1, security_blob.data(), security_blob.size());
@@ -121,10 +120,10 @@ static NTSTATUS x_smbd_conn_reply_negprot(x_smbd_conn_t *smbd_conn, x_smbd_requ_
 	}
 
 	if (negprot.out_context_count != 0) {
-		uint32_t padlen = x_pad_len(offset, 8);
+		size_t padlen = x_pad_len(offset, 8);
 		memset(out_hdr + offset, 0, padlen - offset);
 		offset = padlen;
-		out_resp->context_offset = X_H2LE32(offset);
+		out_resp->context_offset = X_H2LE32(x_convert_assert<uint32_t>(offset));
 		memcpy(out_hdr + offset, negprot.out_context.data(), negprot.out_context.size());
 	} else {
 		out_resp->context_offset = 0;
@@ -149,7 +148,7 @@ int x_smbd_conn_process_smb1negprot(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smb
 	}
 
 	uint8_t wct = in_buf[HDR_WCT];
-	uint16_t vwv = in_buf[HDR_VWV] + (in_buf[HDR_VWV + 1] << 8);
+	uint16_t vwv = x_get_le16(in_buf + HDR_VWV);
 	if (len < (size_t)HDR_WCT + 2 *wct + vwv) {
 		return -EBADMSG;
 	}
@@ -187,14 +186,14 @@ enum {
 static NTSTATUS parse_context(const uint8_t *in_context, uint32_t in_context_length,
 		uint32_t in_context_count, uint32_t &ciphers)
 {
-	uint32_t offset = 0;
+	size_t offset = 0;
 	for (uint32_t ci = 0; ci < in_context_count; ++ci) {
 		if (offset + 8 > in_context_length) {
 			return NT_STATUS_INVALID_PARAMETER;
 		}
 		uint16_t type = x_get_le16(in_context + offset);
 		uint16_t length = x_get_le16(in_context + offset + 2);
-		uint32_t end = offset + 8 + length;
+		size_t end = offset + 8 + length;
 		if (end > in_context_length) {
 			return NT_STATUS_INVALID_PARAMETER;
 		}
@@ -272,7 +271,7 @@ static void generate_context(x_smb2_negprot_t &negprot, uint16_t cipher)
 	data += 2;
 	generate_random_buffer(data, 32);
 	data += 32;
-	uint32_t ctx_len = x_pad_len(data - output.data(), 8);
+	size_t ctx_len = x_pad_len(data - output.data(), 8);
 	data = output.data() + ctx_len;
 	x_put_le16(data, SMB2_ENCRYPTION_CAPABILITIES);
 	data += 2;

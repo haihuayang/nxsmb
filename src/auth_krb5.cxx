@@ -1353,7 +1353,7 @@ static bool strlower_m(char *s)
 {
 	for (; *s; ++s) {
 		X_ASSERT((*s & 0x80) == 0); // TODO
-		*s = std::tolower(*s);
+		*s = x_convert<char>(std::tolower(*s));
 	}
 	return true;
 }

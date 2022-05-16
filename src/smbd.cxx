@@ -13,7 +13,6 @@
 #include <getopt.h>
 
 #include "smbd_conf.hxx"
-#include "core.hxx"
 #include "network.hxx"
 #include "smbd_lease.hxx"
 #include "smbd_secrets.hxx"

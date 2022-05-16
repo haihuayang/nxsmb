@@ -1,5 +1,4 @@
 #include "smbd.hxx"
-#include "core.hxx"
 #include "misc.hxx"
 #include "smbd_ntacl.hxx"
 
@@ -46,7 +45,7 @@ static void x_smb2_reply_sesssetup(x_smbd_conn_t *smbd_conn,
 	x_put_le16(out_body, 0x08 + 1);
 	x_put_le16(out_body + 0x02, out_session_flags);
 	x_put_le16(out_body + 0x04, out_security_offset);
-	x_put_le16(out_body + 0x06, out_security.size());
+	x_put_le16(out_body + 0x06, x_convert_assert<uint16_t>(out_security.size()));
 
 	memcpy(out_body + sizeof(x_smb2_sesssetup_resp_t), out_security.data(), out_security.size());
 

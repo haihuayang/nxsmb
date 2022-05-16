@@ -1,6 +1,5 @@
 
 #include "smbd.hxx"
-#include "core.hxx"
 #include "smbd_open.hxx"
 
 enum {
@@ -61,7 +60,7 @@ static void encode_out_qdir(const x_smb2_state_qdir_t &state,
 
 	out_qdir->struct_size = X_H2LE16(sizeof(x_smb2_out_qdir_t) + 1);
 	out_qdir->offset = X_H2LE16(SMB2_HDR_BODY + sizeof(x_smb2_out_qdir_t));
-	out_qdir->length = X_H2LE32(state.out_data.size());
+	out_qdir->length = X_H2LE32(x_convert_assert<uint32_t>(state.out_data.size()));
 	memcpy(out_qdir + 1, state.out_data.data(), state.out_data.size());
 }
 

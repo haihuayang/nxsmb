@@ -33,7 +33,7 @@ static uint32_t net_share_enum_all_1(std::shared_ptr<idl::srvsvc_NetShareCtr1> &
 				type,
 				std::make_shared<std::u16string>()});
 	};
-	return ctr1->array->size();
+	return x_convert_assert<uint32_t>(ctr1->array->size());
 }
 
 static bool x_smbd_dcerpc_impl_srvsvc_NetShareEnumAll(

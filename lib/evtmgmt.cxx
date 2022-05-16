@@ -1,6 +1,7 @@
 
 #include "include/evtmgmt.hxx"
 #include "include/atomic.hxx"
+#include "include/bits.hxx"
 #include <string.h>
 #include <mutex>
 #include <queue>
@@ -101,7 +102,7 @@ struct x_evtmgmt_t
 	}
 
 	x_epoll_entry_t *find_by_id(uint64_t id) {
-		uint32_t fd = id;
+		uint32_t fd = x_convert<uint32_t>(id);
 		if (fd >= 1024) {
 			return NULL;
 		}
@@ -110,7 +111,7 @@ struct x_evtmgmt_t
 	}
 
 	int get_entry_fd(x_epoll_entry_t *entry) const {
-		return entry - epoll_job;
+		return x_convert<int>(entry - epoll_job);
 	}
 
 	void release(x_epoll_entry_t *entry) {
@@ -335,12 +336,12 @@ void x_evtmgmt_dispatch(x_evtmgmt_t *ep)
 	}
 
 	struct epoll_event ev;
-	int err = epoll_wait(ep->epfd, &ev, 1, std::max(wait_ns / 1000000, 1l));
+	int err = epoll_wait(ep->epfd, &ev, 1, std::max(x_convert<int>(wait_ns / 1000000), 1));
 	if (err > 0) {
 		if (ev.data.u64 == (uint64_t)ep->timerfd) {
 			uint64_t c;
-			err = read(ep->timerfd, &c, sizeof(c));
-			X_ASSERT(err == sizeof(c));
+			ssize_t ret = read(ep->timerfd, &c, sizeof(c));
+			X_ASSERT(size_t(ret) == sizeof(c));
 			X_DBG("timerfd read %lu", c);
 		} else {
 			post_fd_event(ep, ev.data.u64, ev.events);
@@ -362,7 +363,7 @@ x_evtmgmt_t *x_evtmgmt_create(x_threadpool_t *tpool, unsigned long entry_interva
 	int epfd = epoll_create(16);
 	X_ASSERT(epfd >= 0);
 
-	int timerfd = eventfd(0, EFD_CLOEXEC | EFD_NONBLOCK);
+	int timerfd = x_convert_assert<int>(eventfd(0, EFD_CLOEXEC | EFD_NONBLOCK));
 	X_ASSERT(timerfd >= 0);
 
 	struct epoll_event ev;

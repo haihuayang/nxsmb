@@ -1,12 +1,25 @@
 
 #include "smbd.hxx"
-#include "core.hxx"
 #include "include/charset.hxx"
 
-enum {
-	X_SMB2_TCON_REQU_BODY_LEN = 0x08,
-	X_SMB2_TCON_RESP_BODY_LEN = 0x10,
+struct x_smb2_tcon_requ_t
+{
+	uint16_t struct_size;
+	uint16_t flags;
+	uint16_t path_offset;
+	uint16_t path_length;
 };
+
+struct x_smb2_tcon_resp_t
+{
+	uint16_t struct_size;
+	uint8_t share_type;
+	uint8_t unused0;
+	uint32_t share_flags;
+	uint32_t share_capabilities;
+	uint32_t access_mask;
+};
+
 
 #if 0
 static x_smbd_tcon_t *make_tcon(x_smbd_sess_t *smbd_sess,
@@ -129,21 +142,21 @@ static void x_smb2_reply_tcon(x_smbd_conn_t *smbd_conn,
 		uint32_t out_access_mask)
 {
 	X_LOG_OP("%ld RESP SUCCESS tid=%x", smbd_requ->in_mid, x_smbd_tcon_get_id(smbd_tcon));
-	x_bufref_t *bufref = x_bufref_alloc(X_SMB2_TCON_RESP_BODY_LEN);
+	x_bufref_t *bufref = x_bufref_alloc(sizeof(x_smb2_tcon_resp_t));
 
 	uint8_t *out_hdr = bufref->get_data();
-	uint8_t *out_body = out_hdr + SMB2_HDR_BODY;
+	x_smb2_tcon_resp_t *out_resp = (x_smb2_tcon_resp_t *)(out_hdr + SMB2_HDR_BODY);
 
-	x_put_le16(out_body, X_SMB2_TCON_RESP_BODY_LEN);
-	x_put_le8(out_body + 0x02, out_share_type);
-	x_put_le8(out_body + 0x03, 0);
-	x_put_le32(out_body + 0x04, out_share_flags);
-	x_put_le32(out_body + 0x08, out_share_capabilities);
-	x_put_le32(out_body + 0x0c, out_access_mask);
+	out_resp->struct_size = X_H2LE16(sizeof(x_smb2_tcon_resp_t));
+	out_resp->share_type = X_H2LE8(out_share_type);
+	out_resp->unused0 = 0;
+	out_resp->share_flags = X_H2LE32(out_share_flags);
+	out_resp->share_capabilities = X_H2LE32(out_share_capabilities);
+	out_resp->access_mask = X_H2LE32(out_access_mask);
 
 	smbd_requ->smbd_tcon = smbd_tcon;
 	x_smb2_reply(smbd_conn, smbd_requ, bufref, bufref, status, 
-			SMB2_HDR_BODY + X_SMB2_TCON_RESP_BODY_LEN);
+			SMB2_HDR_BODY + sizeof(x_smb2_tcon_resp_t));
 }
 
 NTSTATUS x_smb2_process_tcon(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
@@ -151,22 +164,22 @@ NTSTATUS x_smb2_process_tcon(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 	X_LOG_OP("%ld TCON", smbd_requ->in_mid);
 	X_ASSERT(smbd_requ->smbd_chan && smbd_requ->smbd_sess);
 
-	if (smbd_requ->in_requ_len < SMB2_HDR_BODY + X_SMB2_TCON_REQU_BODY_LEN + 1) {
+	if (smbd_requ->in_requ_len < SMB2_HDR_BODY + sizeof(x_smb2_tcon_requ_t) + 1) {
 		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
 
 	const uint8_t *in_hdr = smbd_requ->get_in_data();
-	const uint8_t *in_body = in_hdr + SMB2_HDR_BODY;
+	const x_smb2_tcon_requ_t *in_requ = (const x_smb2_tcon_requ_t *)(in_hdr + SMB2_HDR_BODY);
 
 	/* TODO signing/encryption */
 
-	uint16_t in_path_offset = SVAL(in_body, 0x04);
-	uint16_t in_path_length = SVAL(in_body, 0x06);
+	uint16_t in_path_offset = X_LE2H16(in_requ->path_offset);
+	uint16_t in_path_length = X_LE2H16(in_requ->path_length);
 	if (in_path_length % 2 != 0) {
 		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
 
-	if (!x_check_range<uint32_t>(in_path_offset, in_path_length, SMB2_HDR_BODY + X_SMB2_TCON_REQU_BODY_LEN, smbd_requ->in_requ_len)) {
+	if (!x_check_range<uint32_t>(in_path_offset, in_path_length, SMB2_HDR_BODY + sizeof(x_smb2_tcon_requ_t), smbd_requ->in_requ_len)) {
 		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
 

@@ -29,8 +29,9 @@ bool x_smbd_stats_report_t::output(std::string &data)
 		return false;
 	}
 
-	os << smbd_counter_names[counter_index] << ": " << g_smbd_stats.counters[counter_index];
+	os << smbd_counter_names[counter_index] << ": " << g_smbd_stats.counters[counter_index] << std::endl;
 	++counter_index;
+	data = os.str();
 	return true;
 }
 

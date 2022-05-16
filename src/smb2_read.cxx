@@ -1,7 +1,6 @@
 
 #include "smbd.hxx"
 #include "smbd_open.hxx"
-#include "core.hxx"
 
 namespace {
 enum {

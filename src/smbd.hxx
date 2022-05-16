@@ -248,7 +248,7 @@ void x_smb2_reply(x_smbd_conn_t *smbd_conn,
 		x_bufref_t *buf_head,
 		x_bufref_t *buf_tail,
 		NTSTATUS status,
-		uint32_t reply_size);
+		size_t reply_size);
 #if 0
 struct x_smbd_open_t
 {

@@ -1,6 +1,5 @@
 
 #include "smbd.hxx"
-#include "core.hxx"
 
 struct x_smb2_tdis_t
 {

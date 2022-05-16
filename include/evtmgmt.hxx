@@ -27,7 +27,7 @@ static inline x_fdevents_t x_fdevents_init(uint32_t posted, uint32_t enabled)
 
 static inline uint32_t x_fdevents_processable(x_fdevents_t fdevents)
 {
-	return (fdevents >> 32) & fdevents;
+	return uint32_t((fdevents >> 32) & fdevents);
 }
 
 static inline x_fdevents_t x_fdevents_enable(x_fdevents_t fdevents, uint32_t events)

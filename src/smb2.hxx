@@ -6,10 +6,10 @@
 #error "Must be c++"
 #endif
 
+#include "include/xdefines.h"
 #include "samba/include/config.h"
 #include <atomic>
 #include <memory>
-#include "core.hxx"
 #include "misc.hxx"
 
 extern "C" {
@@ -222,11 +222,12 @@ struct x_buf_t
 	uint8_t data[];
 };
 
-static inline x_buf_t *x_buf_alloc(uint32_t size)
+static inline x_buf_t *x_buf_alloc(size_t size)
 {
+	X_ASSERT(size < 0x100000000ul);
 	x_buf_t *buf = (x_buf_t *)malloc(sizeof(x_buf_t) + size);
 	new (&buf->ref) std::atomic<uint32_t>(1);
-	buf->size = size;
+	buf->size = x_convert_assert<uint32_t>(size);
 	return buf;
 }
 
@@ -245,7 +246,7 @@ static inline void x_buf_release(x_buf_t *buf)
 	}
 }
 
-static inline x_buf_t *x_buf_alloc_out_buf(uint32_t body_size)
+static inline x_buf_t *x_buf_alloc_out_buf(size_t body_size)
 {
 	return x_buf_alloc(8 + SMB2_HDR_BODY + x_pad_len(body_size, 8));
 }
@@ -279,11 +280,12 @@ struct x_bufref_t
 	x_bufref_t *next{};
 };
 
-static inline x_bufref_t *x_bufref_alloc(uint32_t body_size)
+static inline x_bufref_t *x_bufref_alloc(size_t body_size)
 {
+	X_ASSERT(body_size + SMB2_HDR_BODY < 0x100000000ul);
 	x_buf_t *out_buf = x_buf_alloc_out_buf(body_size);
 	x_bufref_t *bufref = new x_bufref_t{out_buf, 8,
-		SMB2_HDR_BODY + body_size};
+		x_convert_assert<uint32_t>(SMB2_HDR_BODY + body_size)};
 	return bufref;
 }
 

@@ -19,8 +19,8 @@ enum {
 
 struct x_iface_t {
 	char name[IF_NAMESIZE];
-	int flags;
 	uint32_t if_index;
+	int flags;
 	uint32_t capability;
 	uint64_t linkspeed;
 	struct sockaddr_storage ip;

@@ -1,5 +1,6 @@
 
 #include "include/xdefines.h"
+#include "include/bits.hxx"
 #include "include/networking.hxx"
 #include <sys/types.h>
 #include <sys/ioctl.h>
@@ -517,10 +518,11 @@ static bool make_netmask(struct sockaddr_storage *pss_out,
 			return false;
 		}
 		for (i = 0; masklen >= 8; masklen -= 8, i++) {
-			*p++ = 0xff;
+			*p++ = x_convert<char>(0xff);
 		}
 		/* Deal with the partial byte. */
-		*p++ &= (0xff & ~(0xff>>masklen));
+		*p = x_convert<char>(*p & (0xff & ~(0xff>>masklen)));
+		p++;
 		i++;
 		for (;i < sizeof(struct in6_addr); i++) {
 			*p++ = '\0';
@@ -533,7 +535,7 @@ static bool make_netmask(struct sockaddr_storage *pss_out,
 			return false;
 		}
 		((struct sockaddr_in *)pss_out)->sin_addr.s_addr =
-			htonl(((0xFFFFFFFFL >> masklen) ^ 0xFFFFFFFFL));
+			htonl(((0xffffffffu >> masklen) ^ 0xffffffffu));
 		return true;
 	}
 	return false;
@@ -570,7 +572,7 @@ static void make_bcast_or_net(struct sockaddr_storage *pss_out,
 
 	for (i = 0; i < len; i++, p++, pmask++) {
 		if (make_bcast_p) {
-			*p = (*p & *pmask) | (*pmask ^ 0xff);
+			*p = x_convert<char>((*p & *pmask) | (*pmask ^ 0xff));
 		} else {
 			/* make_net */
 			*p = (*p & *pmask);
@@ -822,7 +824,7 @@ static void parse_extra_info(char *key, uint64_t *pspeed, uint32_t *pcap,
 				if (*end) {
 					X_LOG_WARN("Invalid key value (%s)", val);
 				}
-				*pif_index = if_index;
+				*pif_index = x_convert_assert<uint32_t>(if_index);
 			} else {
 				X_LOG_WARN("Key unknown: '%s'", key);
 			}

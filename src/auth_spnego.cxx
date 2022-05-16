@@ -63,7 +63,7 @@ static inline x_auth_spnego_t *auth_spnego_from_base(x_auth_t *base)
 }
 
 static void spnego_wrap(NTSTATUS status, MechType *mt, void *mic_data,
-		unsigned int mic_length, const std::vector<uint8_t> &subout,
+		uint32_t mic_length, const std::vector<uint8_t> &subout,
 		std::vector<uint8_t> &out)
 {
 	NegotiationToken nt_resp;
@@ -155,7 +155,7 @@ static NTSTATUS x_spnego_auth_targ_return(x_auth_spnego_t *spnego, NTSTATUS stat
 					mech_list_mic);
 		}
 
-		spnego_wrap(status, nullptr, mech_list_mic.data(), mech_list_mic.size(), subout, out);
+		spnego_wrap(status, nullptr, mech_list_mic.data(), x_convert_assert<uint32_t>(mech_list_mic.size()), subout, out);
 		spnego->state_position = x_auth_spnego_t::DONE;
 	} else if (NT_STATUS_EQUAL(status, NT_STATUS_MORE_PROCESSING_REQUIRED)) {
 		spnego_wrap(status, nullptr, nullptr, 0, subout, out);
@@ -273,7 +273,7 @@ static int decode_token(NegotiationToken &nt, const uint8_t *in_buf, size_t in_l
 static bool oid_equal(const heim_oid &hoid, gss_const_OID goid)
 {
 	gss_OID_desc oid_flat;
-	oid_flat.length = der_length_oid(&hoid);
+	oid_flat.length = x_convert_assert<uint32_t>(der_length_oid(&hoid));
 	std::unique_ptr<uint8_t[]> ptr{new uint8_t[oid_flat.length]};
 	oid_flat.elements = ptr.get();
 	size_t size;

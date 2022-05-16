@@ -22,7 +22,8 @@ struct x_smb2_lease_break_t
 	uint32_t flags;
 	x_smb2_lease_key_t key;
 	uint32_t state;
-	uint64_t duration; // not 8-byte aligned
+	uint32_t duration_low; // duration is not 8-byte aligned, so split into 2
+	uint32_t duration_high;
 } __attribute__((packed));
 
 struct x_smb2_lease_break_noti_t
@@ -43,9 +44,11 @@ static void decode_in_lease_break(x_smb2_state_lease_break_t &state,
 {
 	state.in_oplock_level = X_LE2H8(in_lease_break->oplock_level);
 	state.in_flags = X_LE2H32(in_lease_break->flags);
+	state.in_key = in_lease_break->key;
 	state.in_state = X_LE2H32(in_lease_break->state);
-	memcpy(&state.in_key, &in_lease_break->key, sizeof(state.in_key));
-	state.in_state = x_get_le64((const uint8_t *)&in_lease_break->duration);
+	uint64_t duration_low = X_LE2H32(in_lease_break->duration_low);
+	uint64_t duration_high = X_LE2H32(in_lease_break->duration_high);
+	state.in_duration = (duration_high << 32 | duration_low);
 }
 	
 static void decode_in_oplock_break(x_smb2_state_oplock_break_t &state,

@@ -69,8 +69,8 @@ struct x_auth_info_t
 	uint8_t user_session_key[16];
 	uint8_t lm_session_key[8];
 #endif
-	uint16_t logon_count;
-	uint16_t bad_password_count;
+	uint32_t logon_count;
+	uint32_t bad_password_count;
 
 	idl::NTTIME logon_time;
 	idl::NTTIME logoff_time;

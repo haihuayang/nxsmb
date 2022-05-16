@@ -7,6 +7,7 @@
 #endif
 
 #include "include/xdefines.h"
+#include "include/bits.hxx"
 #include <vector>
 #include <utility>
 #include <sstream>
@@ -64,7 +65,7 @@ void destruct(T &t) noexcept
 {
 	t.~T();
 }
-
+#if 0
 /* no std::size in c++14 */
 template <typename T>
 inline uint32_t get_size(const std::vector<T> &t)
@@ -78,7 +79,7 @@ inline uint32_t get_size(const std::array<T, N> &t)
 	return N;
 }
 /* end c++ helpers */
-
+#endif
 
 enum x_ndr_err_code_t : int {
 	NDR_ERR_SUCCESS = 0,
@@ -185,7 +186,7 @@ struct x_ndr_pull_buff_t {
 		++ptr_count;
 	}
 	const uint8_t *data;
-	uint32_t data_size;
+	size_t data_size;
 	uint32_t ptr_count = 0;
 };
 
@@ -311,7 +312,7 @@ typedef uint64_t hyper;
 typedef uint64_t uint64;
 typedef uint32_t boolean32;
 struct uint3264 {
-	uint3264(uint32_t v = 0) : val(v) { }
+	uint3264(uint64_t v = 0) : val(x_convert_assert<uint32_t>(v)) { }
 	bool operator==(uint3264 o) const {
 		return val == o.val;
 	}
@@ -404,7 +405,7 @@ struct x_ndr_ostreamer_t<T, x_ndr_type_bitmap> {
 		for (const auto &pair: traits_t::value_name_map) {
 			if (pair.first & nt) {
 				os << pair.second << ',' << x_hex_t<base_type>(pair.first) << next;
-				nt &= ~pair.first;
+				nt = x_convert_assert<base_type>(nt & (~pair.first));
 				if (nt == 0) {
 					break;
 				}
@@ -711,14 +712,6 @@ static inline bool x_ndr_be(uint32_t flags)
 {
 	return (flags & (LIBNDR_FLAG_BIGENDIAN|LIBNDR_FLAG_LITTLE_ENDIAN)) == LIBNDR_FLAG_BIGENDIAN;
 }
-
-#define X_NDR_BE(flags) (unlikely(((flags) & (LIBNDR_FLAG_BIGENDIAN|LIBNDR_FLAG_LITTLE_ENDIAN)) == LIBNDR_FLAG_BIGENDIAN))
-#define X_NDR_SVAL(ndr, flags, ofs) (X_NDR_BE(flags)?RSVAL(ndr.get_data(),ofs):SVAL(ndr.get_data(),ofs))
-#define X_NDR_IVAL(ndr, flags, ofs) (X_NDR_BE(flags)?RIVAL(ndr.get_data(),ofs):IVAL(ndr.get_data(),ofs))
-#define X_NDR_IVALS(ndr, flags, ofs) (X_NDR_BE(flags)?RIVALS(ndr.get_data(),ofs):IVALS(ndr.get_data(),ofs))
-#define X_NDR_SSVAL(ndr, flags, ofs, v) do { if (X_NDR_BE(flags))  { RSSVAL(ndr.get_data(),ofs,v); } else SSVAL(ndr.get_data(),ofs,v); } while (0)
-#define X_NDR_SIVAL(ndr, flags, ofs, v) do { if (X_NDR_BE(flags))  { RSIVAL(ndr.get_data(),ofs,v); } else SIVAL(ndr.get_data(),ofs,v); } while (0)
-#define X_NDR_SIVALS(ndr, flags, ofs, v) do { if (X_NDR_BE(flags))  { RSIVALS(ndr.get_data(),ofs,v); } else SIVALS(ndr.get_data(),ofs,v); } while (0)
 
 x_ndr_off_t x_ndr_push_uint32(uint32 v, x_ndr_push_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags);
 x_ndr_off_t x_ndr_pull_uint32(uint32 &v, x_ndr_pull_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags);
@@ -1034,7 +1027,7 @@ inline x_ndr_off_t x_ndr_scalars(std::array<T,C> &t, x_ndr_pull_t &ndr,
 
 struct x_ndr_subctx_t
 {
-	uint32_t content_size;
+	size_t content_size;
 	uint32_t flags = 0;
 };
 

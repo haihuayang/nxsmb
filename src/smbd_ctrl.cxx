@@ -20,8 +20,8 @@ struct x_smbd_ctrl_conn_t
 	std::string output;
 	uint32_t output_off = 0;
 	const int fd;
-	uint16_t recv_len = 0;
-	uint16_t recv_off = 0;
+	uint32_t recv_len = 0;
+	uint32_t recv_off = 0;
 	char recv_buf[256];
 };
 
@@ -30,7 +30,7 @@ static inline x_smbd_ctrl_conn_t *x_smbd_ctrl_conn_from_upcall(x_epoll_upcall_t 
 	return X_CONTAINER_OF(upcall, x_smbd_ctrl_conn_t, upcall);
 }
 
-static inline size_t ctrl_sockaddr_init(struct sockaddr_un *sun)
+static inline socklen_t ctrl_sockaddr_init(struct sockaddr_un *sun)
 {
 	sun->sun_family = AF_UNIX;
 	sun->sun_path[0] = '\0';
@@ -75,7 +75,7 @@ static bool x_smbd_ctrl_post_recv(x_smbd_ctrl_conn_t *smbd_ctrl_conn)
 	}
 
 	*eol = '\0';
-	smbd_ctrl_conn->recv_off = eol + 1 - smbd_ctrl_conn->recv_buf;
+	smbd_ctrl_conn->recv_off = x_convert_assert<uint32_t>(eol + 1 - smbd_ctrl_conn->recv_buf);
 
 	x_smbd_ctrl_command(smbd_ctrl_conn);
 
@@ -84,12 +84,12 @@ static bool x_smbd_ctrl_post_recv(x_smbd_ctrl_conn_t *smbd_ctrl_conn)
 
 static bool x_smbd_ctrl_conn_do_recv(x_smbd_ctrl_conn_t *smbd_ctrl_conn, x_fdevents_t &fdevents)
 {
-	int ret;
 	X_LOG_DBG("%s %p x%lx x%llx", task_name, smbd_ctrl_conn, smbd_ctrl_conn->ep_id, fdevents);
-	ret = read(smbd_ctrl_conn->fd, (char *)&smbd_ctrl_conn->recv_buf + smbd_ctrl_conn->recv_len,
+	ssize_t ret = read(smbd_ctrl_conn->fd,
+			(char *)&smbd_ctrl_conn->recv_buf + smbd_ctrl_conn->recv_len,
 			sizeof(smbd_ctrl_conn->recv_buf) - smbd_ctrl_conn->recv_len - 1);
 	if (ret > 0) {
-		smbd_ctrl_conn->recv_len += ret;
+		smbd_ctrl_conn->recv_len += x_convert_assert<uint32_t>(ret);
 		if (x_smbd_ctrl_post_recv(smbd_ctrl_conn)) {
 			fdevents = x_fdevents_disable(fdevents, FDEVT_IN);
 			fdevents = x_fdevents_enable(fdevents, FDEVT_OUT);
@@ -111,11 +111,11 @@ static bool x_smbd_ctrl_conn_do_send(x_smbd_ctrl_conn_t *smbd_ctrl_conn, x_fdeve
 {
 	X_LOG_DBG("%s %p x%lx x%llx", task_name, smbd_ctrl_conn, smbd_ctrl_conn->ep_id, fdevents);
 	for (;;) {
-		int ret = write(smbd_ctrl_conn->fd,
+		ssize_t ret = write(smbd_ctrl_conn->fd,
 				smbd_ctrl_conn->output.data() + smbd_ctrl_conn->output_off,
 				smbd_ctrl_conn->output.size() - smbd_ctrl_conn->output_off);
 		if (ret > 0) {
-			smbd_ctrl_conn->output_off += ret;
+			smbd_ctrl_conn->output_off += x_convert_assert<uint32_t>(ret);
 			if (smbd_ctrl_conn->output_off < smbd_ctrl_conn->output.size()) {
 				return false;
 			}

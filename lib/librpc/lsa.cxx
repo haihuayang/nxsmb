@@ -11,9 +11,11 @@ static x_ndr_off_t lsa_u16string_scalars(
 {
 	X_ASSERT(level == X_NDR_SWITCH_NONE);
 	X_NDR_HEADER_ALIGN(5, ndr, bpos, epos, flags);
-	uint16_t length = 0;
+	uint16_t length;
 	if (val) {
-		length = val->size() * 2;
+		length = x_convert_assert<uint16_t>(val->size() * 2);
+	} else {
+		length = 0;
 	}
 	X_NDR_SCALARS_DEFAULT(length, ndr, bpos, epos, flags, level);
 	X_NDR_SCALARS_DEFAULT(length, ndr, bpos, epos, flags, level);
@@ -135,12 +137,9 @@ x_ndr_off_t ndr_traits_t<lsa_StringLarge>::scalars(
 {
 	X_ASSERT(level == X_NDR_SWITCH_NONE);
 	X_NDR_HEADER_ALIGN(5, ndr, bpos, epos, flags);
-	uint16_t length = 0;
-	if (val.string) {
-		length = val.string->size() * 2;
-	}
-	X_NDR_SCALARS_DEFAULT(length, ndr, bpos, epos, flags, level);
-	X_NDR_SCALARS_DEFAULT(uint16_t(length + 2), ndr, bpos, epos, flags, level);
+	size_t length = (val.string) ?  (val.string->size() * 2) : 0;
+	X_NDR_SCALARS_DEFAULT(x_convert<uint16_t>(length), ndr, bpos, epos, flags, level);
+	X_NDR_SCALARS_DEFAULT(x_convert<uint16_t>(length + 2), ndr, bpos, epos, flags, level);
 	uint3264 ptr{0};
 	if (val.string) {
 		ptr.val = ndr.next_ptr();

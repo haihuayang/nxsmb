@@ -11,7 +11,7 @@ include files.mk
 
 TARGET_PROJECT_CFLAGS := -g3 -Wall -DPROJECT=$(PROJECT) -fsanitize=address
 TARGET_CFLAGS = $(TARGET_PROJECT_CFLAGS) -Wstrict-prototypes -MT $@ -MMD -MP -MF $@.d
-TARGET_CXXFLAGS = $(TARGET_PROJECT_CFLAGS) -std=c++17 -Werror -Wmissing-declarations -Wno-invalid-offsetof -Wno-multichar -MT $@ -MMD -MP -MF $@.d
+TARGET_CXXFLAGS = $(TARGET_PROJECT_CFLAGS) -std=c++17 -Werror -Wconversion -Wmissing-declarations -Wno-invalid-offsetof -Wno-multichar -MT $@ -MMD -MP -MF $@.d
 TARGET_LDFLAGS := $(TARGET_LDFLAGS) -fsanitize=address -g3
 
 TARGET_DIR_out := target.dbg.linux.x86_64
@@ -41,7 +41,7 @@ TARGET_SET_dir := bin lib lib/librpc librpc/idl src tests \
 
 .PHONY: all target_mkdir host_mkdir target_samba_gen
 TARGET_SET_tests := test-srvsvc \
-	test-timer  test-wbcli test-wbpool test-mbuf \
+	test-timer  test-wbcli test-wbpool \
 	test-security test-krb5pac test-ntlmssp \
 	test-iface test-idtable
 

@@ -37,8 +37,8 @@ extern "C" {
 
 static uint32_t crc32_calc_buffer(const uint8_t *data, size_t size)
 {
-	uint32_t ret = crc32(0, Z_NULL, 0);
-	return crc32(ret, data, size);
+	uint32_t ret = x_convert_assert<uint32_t>(crc32(0, Z_NULL, 0));
+	return x_convert_assert<uint32_t>(crc32(ret, data, x_convert_assert<uint32_t>(size)));
 }
 
 struct str_const_t {
@@ -157,7 +157,7 @@ static char *dom_sid_parse(idl::dom_sid &sid, const char *str, char end)
 		if (x > UINT32_MAX) {
 			return nullptr;
 		}
-		sid.sub_auths[sid.num_auths++] = x;
+		sid.sub_auths[sid.num_auths++] = x_convert<uint32_t>(x);
 
 		if (*q != '-') {
 			break;
@@ -237,7 +237,7 @@ static std::array<uint8_t, 16> ntlmssp_make_packet_signature(x_auth_ntlmssp_t *n
 		dump_data_pw("pdu data ", whole_pdu, pdu_length);
 
 		hmac_md5_update(seq_num, sizeof(seq_num), &ctx);
-		hmac_md5_update(whole_pdu, pdu_length, &ctx);
+		hmac_md5_update(whole_pdu, x_convert_assert<uint32_t>(pdu_length), &ctx);
 		hmac_md5_final(digest, &ctx);
 
 		if (encrypt_sig && (ntlmssp->neg_flags & idl::NTLMSSP_NEGOTIATE_KEY_EXCH)) {
@@ -870,10 +870,14 @@ static NTSTATUS ntlmssp_post_auth(x_auth_ntlmssp_t *ntlmssp, x_auth_info_t &auth
 	char *end;
 	for (uint32_t j = 0; j < auth.info3.num_groups; ++j) {
 		idl::samr_RidWithAttribute rid_with_attr;
-		rid_with_attr.rid = strtoul(p, &end, 0);
+		unsigned long val = strtoul(p, &end, 0);
 		if (!end || *end != ':') {
 			RETURN_ERR_NT_STATUS(NT_STATUS_LOGON_FAILURE);
 		}
+		if (val > UINT32_MAX) {
+			RETURN_ERR_NT_STATUS(NT_STATUS_LOGON_FAILURE);
+		}
+		rid_with_attr.rid = x_convert<uint32_t>(val);
 		p = end + 1;
 		rid_with_attr.attributes = idl::samr_GroupAttrs(strtoul(p, &end, 0));
 		if (!end || *end != '\n') {
@@ -890,10 +894,14 @@ static NTSTATUS ntlmssp_post_auth(x_auth_ntlmssp_t *ntlmssp, x_auth_info_t &auth
 			RETURN_ERR_NT_STATUS(NT_STATUS_LOGON_FAILURE);
 		}
 		p = end + 1;
-		sid_attr.attrs = strtoul(p, &end, 0);
+		unsigned long val = strtoul(p, &end, 0);
 		if (!end || *end != '\n') {
 			RETURN_ERR_NT_STATUS(NT_STATUS_LOGON_FAILURE);
 		}
+		if (val > UINT32_MAX) {
+			RETURN_ERR_NT_STATUS(NT_STATUS_LOGON_FAILURE);
+		}
+		sid_attr.attrs = x_convert<uint32_t>(val);
 		auth_info.other_sids.push_back(sid_attr);
 	}
 	// ntlmssp_server_postauth
@@ -936,14 +944,14 @@ static NTSTATUS ntlmssp_post_auth(x_auth_ntlmssp_t *ntlmssp, x_auth_info_t &auth
 		uint8_t mic_buffer[idl::NTLMSSP_MIC_SIZE] = { 0, };
 
 		hmac_md5_init_limK_to_64(auth_info.session_key.data(),
-					 auth_info.session_key.size(),
+					 x_convert_assert<uint32_t>(auth_info.session_key.size()),
 					 &ctx);
 
 		hmac_md5_update(ntlmssp->msg_negotiate.data(),
-				ntlmssp->msg_negotiate.size(),
+				x_convert_assert<uint32_t>(ntlmssp->msg_negotiate.size()),
 				&ctx);
 		hmac_md5_update(ntlmssp->msg_challenge.data(),
-				ntlmssp->msg_challenge.size(),
+				x_convert_assert<uint32_t>(ntlmssp->msg_challenge.size()),
 				&ctx);
 
 		/* checked were we set ntlmssp_state->new_spnego */
@@ -954,8 +962,8 @@ static NTSTATUS ntlmssp_post_auth(x_auth_ntlmssp_t *ntlmssp, x_auth_info_t &auth
 		hmac_md5_update(mic_buffer, idl::NTLMSSP_MIC_SIZE, &ctx);
 		hmac_md5_update(ntlmssp->msg_authenticate.data() +
 				(idl::NTLMSSP_MIC_OFFSET + idl::NTLMSSP_MIC_SIZE),
-				ntlmssp->msg_authenticate.size() -
-				(idl::NTLMSSP_MIC_OFFSET + idl::NTLMSSP_MIC_SIZE),
+				x_convert_assert<uint32_t>(ntlmssp->msg_authenticate.size() -
+					(idl::NTLMSSP_MIC_OFFSET + idl::NTLMSSP_MIC_SIZE)),
 				&ctx);
 		hmac_md5_final(mic_buffer, &ctx);
 
@@ -1050,8 +1058,8 @@ static void ntlmssp_check_password(x_auth_ntlmssp_t &ntlmssp, bool trusted, x_au
 
 	if (ntlmssp.client_lm_resp) {
 		auth_crap.lm_resp_len =
-			std::min(ntlmssp.client_lm_resp->Response.size(), 
-					sizeof(auth_crap.lm_resp));
+			x_convert_assert<uint32_t>(std::min(ntlmssp.client_lm_resp->Response.size(), 
+						sizeof(auth_crap.lm_resp)));
 		if (auth_crap.lm_resp_len) {
 			memcpy(auth_crap.lm_resp,
 					ntlmssp.client_lm_resp->Response.data(),
@@ -1060,11 +1068,11 @@ static void ntlmssp_check_password(x_auth_ntlmssp_t &ntlmssp, bool trusted, x_au
 	}
 
 	if (ntlmssp.client_nt_resp) {
-		auth_crap.nt_resp_len = ntlmssp.client_nt_resp->val.size();
+		auth_crap.nt_resp_len = x_convert_assert<uint32_t>(ntlmssp.client_nt_resp->val.size());
 		if (auth_crap.nt_resp_len > sizeof(auth_crap.nt_resp)) {
 			wbrequ.extra = ntlmssp.client_nt_resp->val;
 			wbrequ.header.flags |= WBFLAG_BIG_NTLMV2_BLOB;
-			wbrequ.header.extra_len = wbrequ.extra.size();
+			wbrequ.header.extra_len = x_convert_assert<uint32_t>(wbrequ.extra.size());
 			wbrequ.header.extra_data.data = (char *)wbrequ.extra.data();
 		} else if (auth_crap.nt_resp_len > 0) {
 			memcpy(auth_crap.nt_resp,

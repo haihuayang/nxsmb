@@ -49,12 +49,12 @@ x_smbd_lease_t *x_smbd_lease_find(
 x_smbd_lease_t *x_smbd_lease_grant(
 		const x_smb2_uuid_t &client_guid,
 		x_smb2_lease_t *lease,
-		uint32_t granted,
+		uint8_t granted,
 		x_smbd_object_t *smbd_object);
 
 void x_smbd_lease_release(x_smbd_lease_t *smbd_lease);
 
-uint32_t x_smbd_lease_get_state(const x_smbd_lease_t *smbd_lease);
+uint8_t x_smbd_lease_get_state(const x_smbd_lease_t *smbd_lease);
 
 bool x_smbd_lease_is_breaking(const x_smbd_lease_t *smbd_lease);
 

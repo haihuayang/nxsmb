@@ -13,7 +13,7 @@ struct qdir_t
 	uint64_t filepos = 0;
 	int save_errno = 0;
 	uint32_t file_number = 0;
-	uint16_t data_length = 0, data_offset = 0;
+	uint32_t data_length = 0, data_offset = 0;
 	uint8_t data[32 * 1024];
 };
 
@@ -839,7 +839,7 @@ static NTSTATUS grant_oplock(posixfs_object_t *posixfs_object,
 		x_smbd_lease_t **psmbd_lease)
 {
 	x_smbd_lease_t *smbd_lease = nullptr;
-	uint32_t granted = X_SMB2_LEASE_NONE;
+	uint8_t granted = X_SMB2_LEASE_NONE;
 	uint8_t oplock_level = state.oplock_level;
 	x_smb2_lease_t *lease = nullptr;
 	if (oplock_level == X_SMB2_OPLOCK_LEVEL_LEASE) {
@@ -900,7 +900,7 @@ static NTSTATUS grant_oplock(posixfs_object_t *posixfs_object,
 				/* Windows server allow WRITE_LEASE if new open
 				 * is stat open and no current one has no lease.
 				 */
-				granted &= ~X_SMB2_LEASE_WRITE;
+				granted &= uint8_t(~X_SMB2_LEASE_WRITE);
 			}
 		}
 
@@ -926,7 +926,7 @@ static NTSTATUS grant_oplock(posixfs_object_t *posixfs_object,
 
 	if (oplock_level == X_SMB2_OPLOCK_LEVEL_LEASE) {
 		if (got_oplock) {
-			granted &= ~X_SMB2_LEASE_HANDLE;
+			granted &= uint8_t(~X_SMB2_LEASE_HANDLE);
 		}
 		state.oplock_level = X_SMB2_OPLOCK_LEVEL_LEASE;
 		smbd_lease = x_smbd_lease_grant(
@@ -1470,10 +1470,10 @@ static x_job_t::retval_t posixfs_read_job_run(x_job_t *job)
 	if (ret < 0) {
 		status = NT_STATUS_INTERNAL_ERROR;
 	} else if (ret == 0) {
-		state->out_buf_length = ret;
+		state->out_buf_length = 0;
 		status = NT_STATUS_END_OF_FILE;
 	} else {
-		state->out_buf_length = ret;
+		state->out_buf_length = x_convert_assert<uint32_t>(ret);
 		status = NT_STATUS_OK;
 	}
 
@@ -1590,7 +1590,7 @@ static x_job_t::retval_t posixfs_write_job_run(x_job_t *job)
 		status = NT_STATUS_INTERNAL_ERROR;
 	} else {
 		posixfs_object->statex_modified = true; // TODO atomic
-		state->out_count = ret;
+		state->out_count = x_convert_assert<uint32_t>(ret);
 		state->out_remaining = 0;
 		status = NT_STATUS_OK;
 	}
@@ -1760,7 +1760,7 @@ static NTSTATUS getinfo_fs(posixfs_object_t *posixfs_object,
 		uint8_t *p = state.out_data.data();
 		x_put_le64(p, fsstat.f_blocks); p += 8;
 		x_put_le64(p, fsstat.f_bfree); p += 8;
-		x_put_le32(p, fsstat.f_bsize / 512); p += 4;
+		x_put_le32(p, x_convert_assert<uint32_t>(fsstat.f_bsize / 512)); p += 4;
 		x_put_le32(p, 512); p += 4;
 
 		return NT_STATUS_OK;
@@ -1924,7 +1924,7 @@ static const char *pseudo_entries[] = {
 };
 #define PSEUDO_ENTRIES_COUNT    ARRAY_SIZE(pseudo_entries)
 
-static int qdir_filldents(qdir_t &qdir, posixfs_object_t *posixfs_object)
+static long qdir_filldents(qdir_t &qdir, posixfs_object_t *posixfs_object)
 {
 	std::unique_lock<std::mutex> lock(posixfs_object->mutex);
 	lseek(posixfs_object->fd, qdir.filepos, SEEK_SET);
@@ -1944,9 +1944,9 @@ static const char *qdir_get(qdir_t &qdir, qdir_pos_t &pos, posixfs_object_t *pos
 	} else if (qdir.file_number >= PSEUDO_ENTRIES_COUNT) {
 		for (;;) {
 			if (qdir.data_offset >= qdir.data_length) {
-				int retval = qdir_filldents(qdir, posixfs_object);
+				long retval = qdir_filldents(qdir, posixfs_object);
 				if (retval > 0) {
-					qdir.data_length = retval;
+					qdir.data_length = x_convert_assert<uint32_t>(retval);
 					qdir.data_offset = 0;
 				} else if (retval == 0) {
 					qdir.save_errno = ENOENT;
@@ -2063,7 +2063,7 @@ static uint8_t *marshall_entry(posixfs_statex_t *statex, const char *fname,
 		x_put_le64(p, statex->get_end_of_file()); p += 8;
 		x_put_le64(p, statex->get_allocation()); p += 8;
 		x_put_le32(p, statex->file_attributes); p += 4;
-		x_put_le32(p, name.size() * 2); p += 4;
+		x_put_le32(p, x_convert_assert<uint32_t>(name.size() * 2)); p += 4;
 		if (statex->file_attributes & FILE_ATTRIBUTE_REPARSE_POINT) {
 			x_put_le32(p, IO_REPARSE_TAG_DFS);
 		} else {
@@ -2084,7 +2084,7 @@ static uint8_t *marshall_entry(posixfs_statex_t *statex, const char *fname,
 			x_put_le64(p, file_index); p += 8;
 			memcpy(p, name.data(), name.size() * 2);
 			p += name.size() * 2;
-			uint32_t len = p - pbegin;
+			size_t len = p - pbegin;
 			uint8_t *ptmp = pbegin + ((len + (align - 1)) & ~(align - 1));
 			memset(p, 0, ptmp - p);
 			p = ptmp;
@@ -2105,7 +2105,7 @@ static uint8_t *marshall_entry(posixfs_statex_t *statex, const char *fname,
 		x_put_le64(p, statex->get_end_of_file()); p += 8;
 		x_put_le64(p, statex->get_allocation()); p += 8;
 		x_put_le32(p, statex->file_attributes); p += 4;
-		x_put_le32(p, name.size() * 2); p += 4;
+		x_put_le32(p, x_convert_assert<uint32_t>(name.size() * 2)); p += 4;
 		if (statex->file_attributes & FILE_ATTRIBUTE_REPARSE_POINT) {
 			x_put_le32(p, IO_REPARSE_TAG_DFS);
 		} else {
@@ -2122,7 +2122,7 @@ static uint8_t *marshall_entry(posixfs_statex_t *statex, const char *fname,
 		{
 			memcpy(p, name.data(), name.size() * 2);
 			p += name.size() * 2;
-			uint32_t len = p - pbegin;
+			size_t len = p - pbegin;
 			uint8_t *ptmp = pbegin + ((len + (align - 1)) & ~(align - 1));
 			memset(p, 0, ptmp - p);
 			p = ptmp;
@@ -2142,7 +2142,7 @@ static uint8_t *marshall_entry(posixfs_statex_t *statex, const char *fname,
 		x_put_le64(p, statex->get_end_of_file()); p += 8;
 		x_put_le64(p, statex->get_allocation()); p += 8;
 		x_put_le32(p, statex->file_attributes); p += 4;
-		x_put_le32(p, name.size() * 2); p += 4;
+		x_put_le32(p, x_convert_assert<uint32_t>(name.size() * 2)); p += 4;
 		if (statex->file_attributes & FILE_ATTRIBUTE_REPARSE_POINT) {
 			x_put_le32(p, IO_REPARSE_TAG_DFS);
 		} else {
@@ -2158,7 +2158,7 @@ static uint8_t *marshall_entry(posixfs_statex_t *statex, const char *fname,
 		{
 			memcpy(p, name.data(), name.size() * 2);
 			p += name.size() * 2;
-			uint32_t len = p - pbegin;
+			size_t len = p - pbegin;
 			uint8_t *ptmp = pbegin + ((len + (align - 1)) & ~(align - 1));
 			memset(p, 0, ptmp - p);
 			p = ptmp;
@@ -2231,7 +2231,7 @@ static NTSTATUS posixfs_object_op_qdir(
 		if (p) {
 			++num;
 			if (plast) {
-				x_put_le32(plast, pcurr - plast);
+				x_put_le32(plast, x_convert_assert<uint32_t>(pcurr - plast));
 			}
 			plast = pcurr;
 			pcurr = p;
@@ -2315,7 +2315,8 @@ static NTSTATUS posixfs_lease_break(
 
 	modified = false;
 	if (smbd_lease->lease_state != state.in_state) {
-		smbd_lease->lease_state = state.in_state;
+		/* TODO should not assert with invalid client in_state */
+		smbd_lease->lease_state = x_convert_assert<uint8_t>(state.in_state);
 		modified = true;
 	}
 
@@ -2379,7 +2380,7 @@ static NTSTATUS posixfs_object_op_oplock_break(
 {
 	posixfs_open_t *posixfs_open = posixfs_open_from_base_t::container(smbd_requ->smbd_open);
 	posixfs_object_t *posixfs_object = posixfs_object_from_base_t::container(smbd_requ->smbd_object);
-	uint32_t out_oplock_level;
+	uint8_t out_oplock_level;
 	if (posixfs_open->oplock_break_sent == oplock_break_sent_t::OPLOCK_BREAK_TO_NONE_SENT || state->in_oplock_level == X_SMB2_OPLOCK_LEVEL_NONE) {
 		out_oplock_level = X_SMB2_OPLOCK_LEVEL_NONE;
 	} else {

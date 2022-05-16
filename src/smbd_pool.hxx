@@ -20,7 +20,7 @@ struct smbd_pool_t
 template <typename P>
 static inline void pool_init(P &pool, uint32_t count)
 {
-	size_t bucket_size = x_next_2_power(count);
+	uint32_t bucket_size = x_convert_assert<uint32_t>(x_next_2_power(count));
 	pool.hashtable.init(bucket_size);
 	pool.capacity = count;
 }
