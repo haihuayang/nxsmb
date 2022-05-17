@@ -49,7 +49,6 @@ TARGET_SET_tests := \
 	test-krb5pac \
 	test-ntlmssp \
 	test-iface \
-	test-log \
 	test-idtable \
 
 TARGET_SET_lib := nxsmb samba
@@ -101,9 +100,15 @@ all: $(TARGET_SET_tests:%=$(TARGET_DIR_out)/tests/%) \
 	$(TARGET_DIR_out)/bin/nxutils
 
 SET_src_nxsmbd := \
+	smbd \
 	smbd_stats \
+	smbd_requ \
+	smbd_conn \
+	smbd_sess \
+	smbd_chan \
+	smbd_tcon \
+	smbd_open \
 	smbd_secrets \
-	smbd_pool \
 	smbd_posixfs \
 	smbd_posixfs_utils \
 	smbd_ipc \
@@ -115,13 +120,6 @@ SET_src_nxsmbd := \
 	smbd_dcerpc_srvsvc \
 	smbd_dcerpc_dssetup \
 	smbd_dcerpc_lsarpc \
-	smbd \
-	smbd_requ \
-	smbd_conn \
-	smbd_sess \
-	smbd_chan \
-	smbd_tcon \
-	smbd_open \
 	smb2_negprot \
 	smb2_sesssetup \
 	smb2_logoff \

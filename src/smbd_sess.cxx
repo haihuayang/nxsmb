@@ -9,6 +9,7 @@ static smbd_sess_table_t *g_smbd_sess_table;
 
 struct x_smbd_sess_t
 {
+	enum { MAX_CHAN_COUNT = 32, };
 	x_smbd_sess_t() {
 		X_SMBD_COUNTER_INC(sess_create, 1);
 	}
@@ -28,11 +29,10 @@ struct x_smbd_sess_t
 	bool signing_required = false;
 	bool key_is_valid = false;
 	uint8_t chan_count = 0;
-	std::array<x_smbd_chan_t *, 32> chans = { nullptr, };
+	x_ddlist_t chan_list;
+	x_ddlist_t tcon_list;
 
 	x_smbd_key_set_t keys;
-
-	x_ddlist_t tcon_list;
 };
 
 template <>
@@ -86,7 +86,7 @@ std::shared_ptr<x_smbd_user_t> x_smbd_sess_get_user(const x_smbd_sess_t *smbd_se
 	return smbd_sess->smbd_user;
 }
 
-const x_smb2_key_t *x_smbd_sess_get_signing_key(x_smbd_sess_t *smbd_sess)
+const x_smb2_key_t *x_smbd_sess_get_signing_key(const x_smbd_sess_t *smbd_sess)
 {
 	// TODO memory order
 	if (smbd_sess->key_is_valid) {
@@ -95,57 +95,83 @@ const x_smb2_key_t *x_smbd_sess_get_signing_key(x_smbd_sess_t *smbd_sess)
 	return nullptr;
 }
 
-bool x_smbd_sess_add_chan(x_smbd_sess_t *smbd_sess, x_smbd_chan_t *smbd_chan)
+bool x_smbd_sess_link_chan(x_smbd_sess_t *smbd_sess, x_dlink_t *link)
 {
 	std::lock_guard<std::mutex> lock(smbd_sess->mutex);
-	if (smbd_sess->chan_count >= smbd_sess->chans.size()) {
+	if (smbd_sess->state == x_smbd_sess_t::S_DONE) {
 		return false;
 	}
-	for (uint32_t i = 0; i < smbd_sess->chans.size(); ++i) {
-		if (!smbd_sess->chans[i]) {
-			smbd_sess->chans[i] = x_smbd_ref_inc(smbd_chan);
-			++smbd_sess->chan_count;
-			return true;
-		}
+	if (smbd_sess->chan_count >= x_smbd_sess_t::MAX_CHAN_COUNT) {
+		return false;
 	}
-	X_ASSERT(false);
-	return false;
+	
+	smbd_sess->chan_list.push_back(link);
+	++smbd_sess->chan_count;
+	return true;
 }
 
-static bool smbd_sess_terminate(x_smbd_sess_t *smbd_sess)
+template <class L>
+static void smbd_sess_terminate(x_smbd_sess_t *smbd_sess, L &lock)
 {
-	std::array<x_smbd_chan_t *, 32> smbd_chans{};
-	uint8_t smbd_chan_count = 0;
-	std::unique_lock<std::mutex> lock(smbd_sess->mutex);
-	{
-		if (smbd_sess->state == x_smbd_sess_t::S_DONE) {
-			return false;
-		}
-		smbd_sess->state = x_smbd_sess_t::S_DONE;
-		smbd_sess->smbd_user = nullptr;
-		std::swap(smbd_chans, smbd_sess->chans);
-		std::swap(smbd_chan_count, smbd_sess->chan_count);
-	}
-	lock.unlock();
-	for (auto smbd_chan: smbd_chans) {
-		if (!smbd_chan) {
-			continue;
-		}
-		x_smbd_chan_logoff(smbd_chan);
-		x_smbd_ref_dec(smbd_sess);
-		--smbd_chan_count;
-	}
-	X_ASSERT(smbd_chan_count == 0);
-
 	x_dlink_t *link;
-	lock.lock();
+	smbd_sess->smbd_user = nullptr;
+
+	while ((link = smbd_sess->chan_list.get_front()) != nullptr) {
+		smbd_sess->chan_list.remove(link);
+		--smbd_sess->chan_count;
+		lock.unlock();
+		x_smbd_chan_logoff(link, smbd_sess);
+		lock.lock();
+	}
+
+	X_ASSERT(smbd_sess->chan_count == 0);
+
 	while ((link = smbd_sess->tcon_list.get_front()) != nullptr) {
 		smbd_sess->tcon_list.remove(link);
 		lock.unlock();
 		x_smbd_tcon_unlinked(link, smbd_sess);
 		lock.lock();
 	}
+}
+
+bool x_smbd_sess_unlink_chan(x_smbd_sess_t *smbd_sess, x_dlink_t *link)
+{
+	std::unique_lock<std::mutex> lock(smbd_sess->mutex);
+	if (!link->is_valid()) {
+		return false;
+	}
+	smbd_sess->chan_list.remove(link);
+	if (--smbd_sess->chan_count == 0) {
+		if (smbd_sess->state != x_smbd_sess_t::S_DONE) {
+			smbd_sess->state = x_smbd_sess_t::S_DONE;
+			smbd_sess_terminate(smbd_sess, lock);
+		}
+	}
 	return true;
+}
+
+#if 0
+	uint32_t chan_count;
+	{
+		std::lock_guard<std::mutex> lock(smbd_sess->mutex);
+		if (smbd_sess->state == x_smbd_sess_t::S_DONE) {
+			X_ASSERT(smbd_sess->chan_count == 0);
+			return;
+		}
+		uint32_t i;
+		for (i = 0; i < smbd_sess->chans.size(); ++i) {
+			if (smbd_sess->chans[i] == smbd_chan) {
+				X_SMBD_REF_DEC(smbd_sess->chans[i]);
+				--smbd_sess->chan_count;
+				break;
+			}
+		}
+		X_ASSERT(i != smbd_sess->chans.size());
+		chan_count = smbd_sess->chan_count;
+	}
+	if (chan_count == 0) {
+		smbd_sess_terminate(smbd_sess);
+	}
 }
 
 void x_smbd_sess_remove_chan(x_smbd_sess_t *smbd_sess, x_smbd_chan_t *smbd_chan)
@@ -172,13 +198,15 @@ void x_smbd_sess_remove_chan(x_smbd_sess_t *smbd_sess, x_smbd_chan_t *smbd_chan)
 		smbd_sess_terminate(smbd_sess);
 	}
 }
-
+#endif
 x_smbd_chan_t *x_smbd_sess_lookup_chan(x_smbd_sess_t *smbd_sess, x_smbd_conn_t *smbd_conn)
 {
+	x_dlink_t *link;
 	std::lock_guard<std::mutex> lock(smbd_sess->mutex);
-	for (auto smbd_chan: smbd_sess->chans) {
-		if (smbd_chan && x_smbd_chan_get_conn(smbd_chan) == smbd_conn) {
-			return x_smbd_ref_inc(smbd_chan);
+	for (link = smbd_sess->chan_list.get_front(); link; link = link->get_next()) {
+		x_smbd_chan_t *smbd_chan = x_smbd_chan_match(link, smbd_conn);
+		if (smbd_chan) {
+			return smbd_chan;
 		}
 	}
 	return nullptr;
@@ -186,10 +214,12 @@ x_smbd_chan_t *x_smbd_sess_lookup_chan(x_smbd_sess_t *smbd_sess, x_smbd_conn_t *
 
 x_smbd_chan_t *x_smbd_sess_get_active_chan(x_smbd_sess_t *smbd_sess)
 {
+	x_dlink_t *link;
 	std::lock_guard<std::mutex> lock(smbd_sess->mutex);
-	for (auto smbd_chan: smbd_sess->chans) {
-		if (smbd_chan && x_smbd_chan_is_active(smbd_chan)) {
-			return x_smbd_ref_inc(smbd_chan);
+	for (link = smbd_sess->chan_list.get_front(); link; link = link->get_next()) {
+		x_smbd_chan_t *smbd_chan = x_smbd_chan_get_active(link);
+		if (smbd_chan) {
+			return smbd_chan;
 		}
 	}
 	return nullptr;
@@ -234,11 +264,14 @@ NTSTATUS x_smbd_sess_auth_succeeded(x_smbd_sess_t *smbd_sess,
 
 NTSTATUS x_smbd_sess_logoff(x_smbd_sess_t *smbd_sess)
 {
-	if (smbd_sess_terminate(smbd_sess)) {
-		return NT_STATUS_OK;
-	} else {
+	std::unique_lock<std::mutex> lock(smbd_sess->mutex);
+	if (smbd_sess->state != x_smbd_sess_t::S_ACTIVE) {
 		return NT_STATUS_USER_SESSION_DELETED;
 	}
+	smbd_sess->state = x_smbd_sess_t::S_DONE;
+
+	smbd_sess_terminate(smbd_sess, lock);
+	return NT_STATUS_OK;
 }
 
 int x_smbd_sess_table_init(uint32_t count)

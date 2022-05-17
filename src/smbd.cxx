@@ -107,7 +107,7 @@ static void init_smbd()
 	TIMERQ_INIT(x_smbd_timer_t::SESSSETUP, 40);
 	TIMERQ_INIT(x_smbd_timer_t::BREAK, 35);
 
-	x_smbd_srv_init(smbd_conf->port);
+	x_smbd_conn_srv_init(smbd_conf->port);
 
 }
 

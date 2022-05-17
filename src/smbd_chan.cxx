@@ -44,6 +44,7 @@ struct x_smbd_chan_t
 	};
 
 	x_dlink_t conn_link;
+	x_dlink_t sess_link;
 	x_auth_upcall_t auth_upcall;
 	x_timerq_entry_t timer;
 
@@ -91,6 +92,13 @@ static inline void smbd_chan_unlink_conn(x_smbd_chan_t *smbd_chan, x_smbd_conn_t
 {
 	x_smbd_conn_unlink_chan(smbd_conn, &smbd_chan->conn_link);
 	x_smbd_ref_dec(smbd_chan);
+}
+
+static inline void smbd_chan_unlink_sess(x_smbd_chan_t *smbd_chan, x_smbd_sess_t *smbd_sess)
+{
+	if (x_smbd_sess_unlink_chan(smbd_sess, &smbd_chan->sess_link)) {
+		x_smbd_ref_dec(smbd_chan);
+	}
 }
 
 #if 0
@@ -298,7 +306,7 @@ static void smbd_chan_auth_timeout_evt_func(x_smbd_conn_t *smbd_conn, x_fdevt_us
 		if (smbd_chan->state == x_smbd_chan_t::S_WAIT_INPUT) {
 			smbd_chan->state = x_smbd_chan_t::S_FAILED;
 			smbd_chan_unlink_conn(smbd_chan, smbd_conn);
-			x_smbd_sess_remove_chan(smbd_chan->smbd_sess, smbd_chan);
+			smbd_chan_unlink_sess(smbd_chan, smbd_chan->smbd_sess);
 		}
 	}
 	delete evt;
@@ -439,10 +447,11 @@ x_smbd_chan_t *x_smbd_chan_create(x_smbd_sess_t *smbd_sess, x_smbd_conn_t *smbd_
 		return nullptr;
 	}
 
-	if (!x_smbd_sess_add_chan(smbd_sess, smbd_chan)) {
+	if (!x_smbd_sess_link_chan(smbd_sess, &smbd_chan->sess_link)) {
 		x_smbd_ref_dec(smbd_chan);
 		return nullptr;
 	}
+	x_smbd_ref_inc(smbd_chan); // ref by smbd_sess
 
 	smbd_chan->auth = x_smbd_create_auth();
 	smbd_chan->auth_upcall.cbs = &smbd_chan_auth_upcall_cbs;
@@ -468,9 +477,28 @@ void x_smbd_chan_unlinked(x_dlink_t *conn_link, x_smbd_conn_t *smbd_conn)
 		}
 	}
 	smbd_chan->state = x_smbd_chan_t::S_DONE;
-	x_smbd_sess_remove_chan(smbd_chan->smbd_sess, smbd_chan);
+	smbd_chan_unlink_sess(smbd_chan, smbd_chan->smbd_sess);
+
 	/* dec the ref hold by smbd_conn */
 	x_smbd_ref_dec(smbd_chan);
+}
+
+x_smbd_chan_t *x_smbd_chan_match(x_dlink_t *sess_link, x_smbd_conn_t *smbd_conn)
+{
+	x_smbd_chan_t *smbd_chan = X_CONTAINER_OF(sess_link, x_smbd_chan_t, sess_link);
+	if (smbd_chan->smbd_conn == smbd_conn) {
+		return x_smbd_ref_inc(smbd_chan);
+	}
+	return nullptr;
+}
+
+x_smbd_chan_t *x_smbd_chan_get_active(x_dlink_t *sess_link)
+{
+	x_smbd_chan_t *smbd_chan = X_CONTAINER_OF(sess_link, x_smbd_chan_t, sess_link);
+	if (smbd_chan->state == x_smbd_chan_t::S_ACTIVE) {
+		return x_smbd_ref_inc(smbd_chan);
+	}
+	return nullptr;
 }
 
 struct smbd_chan_logoff_evt_t
@@ -506,10 +534,13 @@ static void smbd_chan_logoff_evt_func(x_smbd_conn_t *smbd_conn, x_fdevt_user_t *
 	delete evt;
 }
 
-void x_smbd_chan_logoff(x_smbd_chan_t *smbd_chan)
+/* triggered by session logoff, may not in context of smbd_conn */
+void x_smbd_chan_logoff(x_dlink_t *sess_link, x_smbd_sess_t *smbd_sess)
 {
+	x_smbd_chan_t *smbd_chan = X_CONTAINER_OF(sess_link, x_smbd_chan_t, sess_link);
 	if (g_smbd_conn_curr == smbd_chan->smbd_conn) {
 		smbd_chan_logoff(g_smbd_conn_curr, smbd_chan);
+		x_smbd_ref_dec(smbd_chan);
 	} else {
 		smbd_chan_logoff_evt_t *evt = new smbd_chan_logoff_evt_t(smbd_chan);
 		evt->base.func = smbd_chan_logoff_evt_func;

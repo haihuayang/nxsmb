@@ -217,16 +217,6 @@ static inline void x_smbd_open_op_destroy(
 	return smbd_object->ops->destroy(smbd_object, smbd_open);
 }
 
-bool x_smbd_open_has_space();
-x_smbd_open_t *x_smbd_open_lookup(uint64_t id_presistent, uint64_t id_volatile,
-		const x_smbd_tcon_t *smbd_tcon);
-bool x_smbd_open_store(x_smbd_open_t *smbd_open);
-// x_smbd_open_t *x_smbd_open_lookup(uint64_t id_presistent, uint64_t id_volatile,
-//		uint32_t tid, const x_smbd_sess_t *smbd_sess);
-bool x_smbd_open_close(x_smbd_open_t *smbd_open);
-void x_smbd_open_unlinked(x_dlink_t *link, x_smbd_tcon_t *smbd_tcon);
-// void x_smbd_open_release(x_smbd_open_t *smbd_open);
-
 static inline void x_smbd_open_get_id(x_smbd_open_t *smbd_open, uint64_t &id_persistent,
 		uint64_t &id_volatile)
 {

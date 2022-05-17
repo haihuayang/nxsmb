@@ -246,8 +246,6 @@ static uint32_t calculate_out_hdr_flags(uint32_t in_hdr_flags, uint32_t out_hdr_
 	return out_hdr_flags;
 }
 
-uint64_t x_smbd_chan_get_sess_id(const x_smbd_chan_t *smbd_chan);
-					// smbd_requ->smbd_sess->id);
 void x_smbd_chan_sign(const x_smbd_chan_t *smbd_chan, uint16_t dialect,
 		x_bufref_t *buflist);
 
@@ -1020,7 +1018,7 @@ static const x_epoll_upcall_cbs_t x_smbd_srv_upcall_cbs = {
 };
 
 static x_smbd_srv_t g_smbd_srv;
-int x_smbd_srv_init(int port)
+int x_smbd_conn_srv_init(int port)
 {
 	int fd = tcplisten(port);
 	assert(fd >= 0);
@@ -1186,69 +1184,4 @@ NTSTATUS x_smbd_conn_validate_negotiate_info(const x_smbd_conn_t *smbd_conn,
 
 	return NT_STATUS_OK;
 }
-#if 0
-struct smbd_conn_evt_remove_chan_t
-{
-	smbd_conn_evt_remove_chan_t(x_smbd_chan_t *smbd_chan)
-		: smbd_chan(smbd_chan)
-	{ }
-	~smbd_conn_evt_remove_chan_t() {
-		if (smbd_chan) {
-			x_smbd_chan_decref(smbd_chan);
-		}
-	}
 
-	x_fdevt_user_t base;
-	x_smbd_chan_t *smbd_chan;
-};
-
-static void smbd_conn_evt_remove_chan_func(x_smbd_conn_t *smbd_conn, x_fdevt_user_t *fdevt_user, bool cancelled)
-{
-	smbd_chan_auth_upcall_evt_t *evt = X_CONTAINER_OF(fdevt_user, smbd_chan_auth_upcall_evt_t, base);
-
-
-	x_smbd_chan_t *smbd_chan = evt->smbd_chan;
-	X_ASSERT(smbd_chan->auth_requ);
-	x_smbd_requ_t *smbd_requ = smbd_chan->auth_requ;
-	smbd_chan->auth_requ = nullptr;
-
-	if (!cancelled && smbd_chan_set_state(smbd_chan, x_smbd_chan_t::S_PROCESSING,
-				x_smbd_chan_t::S_BLOCKED)) {
-		NTSTATUS status = smbd_chan_auth_updated(smbd_chan, smbd_requ, evt->status,
-				evt->auth_info);
-		x_smb2_sesssetup_done(smbd_chan->smbd_conn, smbd_requ, status, evt->out_security);
-	} else {
-		x_smbd_requ_decref(smbd_requ);
-	}
-	delete evt;
-}
-
-void x_smbd_conn_send_remove_chan(x_smbd_conn_t *smbd_conn, x_smbd_chan_t *smbd_chan)
-{
-	smbd
-}
-
-void x_smbd_conn_send_remove_chan(x_smbd_conn_t *smbd_conn, x_smbd_chan_t *smbd_chan)
-{
-	// TODO remove the chan from sess, conn ...
-}
-#if 0
-static bool x_smbd_conn_do_timer(x_smbd_conn_t *smbd_conn, x_fdevents_t &fdevents)
-{
-	X_LOG_DBG("%s %p x%lx x%llx", task_name, smbd_conn, smbd_conn->ep_id, fdevents);
-	x_smbd_chan_t *smbd_chan;
-	while ((smbd_chan = smbd_conn->chan_wait_input_list.get_front()) != nullptr) {
-		if (x_tick_cmp(smbd_chan->timeout, tick_now) > 0) {
-			break;
-		}
-		X_LOG_DBG("%p expired\n", smbd_chan);
-		x_smbd_chan_terminate(smbd_chan);
-		smbd_conn->chanion_wait_input_list.remove(smbd_chan);
-		smbd_chan->decref();
-	}
-
-	fdevents = x_fdevents_consume(fdevents, FDEVT_TIMER);
-	return false;
-}
-#endif
-#endif
