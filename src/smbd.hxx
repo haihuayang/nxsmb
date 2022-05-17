@@ -339,7 +339,6 @@ struct x_smbd_tcon_ops_t
 int x_smbd_tcon_table_init(uint32_t count);
 
 NTSTATUS x_smbd_tcon_op_create(x_smbd_tcon_t *smbd_tcon,
-		x_smbd_open_t **psmbd_open,
 		x_smbd_requ_t *smbd_requ,
 		std::unique_ptr<x_smb2_state_create_t> &state);
 

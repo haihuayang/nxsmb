@@ -1353,6 +1353,9 @@ static posixfs_open_t *create_posixfs_open(
 static void posixfs_object_remove(posixfs_object_t *posixfs_object,
 		posixfs_open_t *posixfs_open)
 {
+	if (!posixfs_open->object_link.is_valid()) {
+		return;
+	}
 	posixfs_object->open_list.remove(posixfs_open);
 	if (posixfs_object->open_list.empty()) {
 		if (posixfs_object->flags & posixfs_object_t::flag_delete_on_close) {
@@ -2412,7 +2415,13 @@ static std::string posixfs_object_op_get_path(
 static void posixfs_object_op_destroy(x_smbd_object_t *smbd_object,
 		x_smbd_open_t *smbd_open)
 {
-	X_TODO;
+	posixfs_object_t *posixfs_object = posixfs_object_from_base_t::container(smbd_object);
+	posixfs_open_t *posixfs_open = posixfs_open_from_base_t::container(smbd_open);
+	{
+		std::unique_lock<std::mutex> lock(posixfs_object->mutex);
+		posixfs_object_remove(posixfs_object, posixfs_open);
+	}
+	delete posixfs_open;
 }
 
 static const x_smbd_object_ops_t posixfs_object_ops = {

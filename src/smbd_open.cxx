@@ -79,12 +79,10 @@ x_smbd_open_t *x_smbd_open_lookup(uint64_t id_presistent, uint64_t id_volatile,
 
 static bool smbd_open_terminate(x_smbd_open_t *smbd_open)
 {
-	std::unique_lock<std::mutex> lock;
 	if (smbd_open->state == x_smbd_open_t::S_DONE) {
 		return false;
 	}
 	smbd_open->state = x_smbd_open_t::S_DONE;
-	lock.unlock();
 
 	g_smbd_open_table->remove(smbd_open->id);
 	x_smbd_ref_dec(smbd_open);

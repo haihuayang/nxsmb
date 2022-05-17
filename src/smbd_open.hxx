@@ -31,10 +31,10 @@ struct x_smbd_open_t
 	x_smbd_tcon_t * const smbd_tcon;
 	uint64_t id; // TODO we use it for both volatile and persisten id
 	enum {
-		// S_PENDING,
 		S_ACTIVE,
 		S_DONE,
-	} state = S_ACTIVE;
+	};
+	std::atomic<uint32_t> state{S_ACTIVE};
 
 	const uint32_t access_mask, share_access;
 };
@@ -218,8 +218,6 @@ static inline void x_smbd_open_op_destroy(
 }
 
 bool x_smbd_open_has_space();
-void x_smbd_open_init(x_smbd_open_t *smbd_open, x_smbd_object_t *smbd_object, x_smbd_tcon_t *smbd_tcon, uint32_t share_access, uint32_t access_mask);
-void x_smbd_open_insert_local(x_smbd_open_t *smbd_open);
 x_smbd_open_t *x_smbd_open_lookup(uint64_t id_presistent, uint64_t id_volatile,
 		const x_smbd_tcon_t *smbd_tcon);
 bool x_smbd_open_store(x_smbd_open_t *smbd_open);

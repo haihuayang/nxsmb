@@ -19,7 +19,6 @@ struct x_smbd_sess_t
 	std::mutex mutex;
 	std::shared_ptr<x_smbd_user_t> smbd_user;
 	uint64_t id;
-	std::atomic<int> refcnt;
 	enum {
 		S_INIT,
 		S_ACTIVE,

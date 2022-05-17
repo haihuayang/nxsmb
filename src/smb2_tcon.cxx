@@ -154,7 +154,6 @@ static void x_smb2_reply_tcon(x_smbd_conn_t *smbd_conn,
 	out_resp->share_capabilities = X_H2LE32(out_share_capabilities);
 	out_resp->access_mask = X_H2LE32(out_access_mask);
 
-	smbd_requ->smbd_tcon = smbd_tcon;
 	x_smb2_reply(smbd_conn, smbd_requ, bufref, bufref, status, 
 			SMB2_HDR_BODY + sizeof(x_smb2_tcon_resp_t));
 }
@@ -266,6 +265,7 @@ NTSTATUS x_smb2_process_tcon(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 
 	/* make_connection_snum *out_maximal_access = tcon->compat->share_access; */
 
+	smbd_requ->smbd_tcon = x_smbd_ref_inc(smbd_tcon);
 	x_smb2_reply_tcon(smbd_conn, smbd_tcon, smbd_requ, NT_STATUS_OK,
 			smbshare->type == TYPE_IPC ? SMB2_SHARE_TYPE_PIPE : SMB2_SHARE_TYPE_DISK,
 			out_share_flags,

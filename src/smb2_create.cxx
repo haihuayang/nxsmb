@@ -422,10 +422,9 @@ NTSTATUS x_smb2_process_create(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_req
 	}
 
 	X_LOG_OP("%ld CREATE '%s'", smbd_requ->in_mid, x_convert_utf16_to_utf8(state->in_name).c_str());
-       	x_smbd_open_t *smbd_open = nullptr;
 	smbd_requ->async_done_fn = x_smb2_create_async_done;
-	NTSTATUS status = x_smbd_tcon_op_create(smbd_requ->smbd_tcon, &smbd_open, smbd_requ, state);
-	if (smbd_open) {
+	NTSTATUS status = x_smbd_tcon_op_create(smbd_requ->smbd_tcon, smbd_requ, state);
+	if (NT_STATUS_IS_OK(status)) {
 		x_smb2_reply_create(smbd_conn, smbd_requ, *state);
 		return status;
 	} else {

@@ -106,7 +106,6 @@ x_smbd_tcon_t *x_smbd_tcon_lookup(uint32_t id, const x_smbd_sess_t *smbd_sess)
 }
 
 NTSTATUS x_smbd_tcon_op_create(x_smbd_tcon_t *smbd_tcon,
-		x_smbd_open_t **psmbd_open,
 		x_smbd_requ_t *smbd_requ,
 		std::unique_ptr<x_smb2_state_create_t> &state)
 {
@@ -117,8 +116,9 @@ NTSTATUS x_smbd_tcon_op_create(x_smbd_tcon_t *smbd_tcon,
 
        	x_smbd_open_t *smbd_open = nullptr;
 	/* TODO should we check the open limit before create the open */
-	NTSTATUS status = smbd_tcon->ops->create(smbd_tcon, psmbd_open, smbd_requ, state);
+	NTSTATUS status = smbd_tcon->ops->create(smbd_tcon, &smbd_open, smbd_requ, state);
 	if (smbd_open) {
+		X_ASSERT(NT_STATUS_IS_OK(status));
 		/* if client access the open from other channel now, it does not have
 		 * link into smbd_tcon, probably we should call x_smbd_open_store in the last
 		 */

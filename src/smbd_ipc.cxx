@@ -521,6 +521,8 @@ static std::string ipc_object_op_get_path(
 static void ipc_object_op_destroy(x_smbd_object_t *smbd_object,
 		x_smbd_open_t *smbd_open)
 {
+	named_pipe_t *named_pipe = from_smbd_open(smbd_open);
+	delete named_pipe;
 }
 
 static const x_smbd_object_ops_t x_smbd_ipc_object_ops = {
