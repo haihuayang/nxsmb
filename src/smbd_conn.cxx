@@ -367,7 +367,7 @@ static int x_smbd_reply_interim(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_re
 
 static void x_smbd_conn_cancel(x_smbd_conn_t *smbd_conn, uint64_t async_id)
 {
-	x_smbd_requ_t *smbd_requ = x_smbd_requ_lookup(async_id, smbd_conn);
+	x_smbd_requ_t *smbd_requ = x_smbd_requ_lookup(async_id, smbd_conn, true);
 	if (!smbd_requ) {
 		X_LOG_ERR("%ld not found", async_id);
 		return;

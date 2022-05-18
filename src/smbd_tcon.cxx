@@ -166,7 +166,6 @@ static bool smbd_tcon_terminate(x_smbd_tcon_t *smbd_tcon)
 		smbd_tcon->open_list.remove(link);
 		lock.unlock();
 		x_smbd_open_unlinked(link, smbd_tcon);
-		x_smbd_ref_dec(smbd_tcon);
 		lock.lock();
 	}
 	x_smbd_ref_dec(smbd_tcon); // ref by smbd_sess tcon_list

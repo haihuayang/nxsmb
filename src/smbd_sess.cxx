@@ -301,6 +301,7 @@ bool x_smbd_sess_list_t::output(std::string &data)
 			} else {
 				os << " - -";
 			}
+			os << std::endl;
 			return true;
 		});
 	if (ret) {

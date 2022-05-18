@@ -21,6 +21,8 @@
 	X_SMBD_COUNTER_DECL(tcon_delete) \
 	X_SMBD_COUNTER_DECL(open_create) \
 	X_SMBD_COUNTER_DECL(open_delete) \
+	X_SMBD_COUNTER_DECL(requ_create) \
+	X_SMBD_COUNTER_DECL(requ_delete) \
 
 enum {
 #undef X_SMBD_COUNTER_DECL

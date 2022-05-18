@@ -43,7 +43,6 @@ struct x_smbd_object_t;
 struct x_smbd_object_ops_t
 {
 	NTSTATUS (*close)(x_smbd_object_t *smbd_object,
-			x_smbd_conn_t *smbd_conn,
 			x_smbd_open_t *smbd_open,
 			x_smbd_requ_t *smbd_requ,
 			std::unique_ptr<x_smb2_state_close_t> &state);
@@ -96,12 +95,11 @@ struct x_smbd_object_t
 
 static inline NTSTATUS x_smbd_open_op_close(
 		x_smbd_open_t *smbd_open,
-		x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ,
 		std::unique_ptr<x_smb2_state_close_t> &state)
 {
 	x_smbd_object_t *smbd_object = smbd_open->smbd_object;
-	return smbd_object->ops->close(smbd_object, smbd_conn, smbd_open,
+	return smbd_object->ops->close(smbd_object, smbd_open,
 			smbd_requ, state);
 }
 

@@ -367,7 +367,6 @@ struct posixfs_notify_evt_t
 	x_fdevt_user_t base;
 	x_smbd_requ_t *smbd_requ;
 	std::vector<std::pair<uint32_t, std::u16string>> notify_changes;
-	// posixfs_open_t *posixfs_open;
 };
 
 static void posixfs_notify_func(x_smbd_conn_t *smbd_conn, x_fdevt_user_t *fdevt_user, bool terminated)
@@ -386,55 +385,6 @@ static void posixfs_notify_func(x_smbd_conn_t *smbd_conn, x_fdevt_user_t *fdevt_
 	delete evt;
 }
 
-#if 0
-static std::vector<std::pair<uint32_t, std::u16string>> get_notify_changes(posixfs_open_t *posixfs_open)
-{
-	std::vector<std::pair<uint32_t, std::u16string>> ret;
-	std::swap(ret, posixfs_open->notify_changes);
-	return ret;
-}
-
-static void posixfs_open_append_notify(posixfs_open_t *posixfs_open,
-		uint32_t action,
-		const std::u16string &path)
-{
-	/* already hold posixfs_object mutex */
-	X_LOG_DBG("append action=%d", action);
-	posixfs_open->notify_changes.push_back(std::make_pair(action, path));
-	posixfs_notify_evt_t *evt = new posixfs_notify_evt_t;
-	evt->base.func = posixfs_notify_func;
-	posixfs_open->base.incref();
-	evt->posixfs_open = posixfs_open;
-	x_smbd_conn_post_user(posixfs_open->base.smbd_tcon->smbd_sess->smbd_conn, &evt->base);
-}
-		x_smbd_requ_t *smbd_requ = posixfs_open->notify_requ_list.get_front();
-		posixfs_open->notify_requ_list.remove(smbd_requ);
-		x_smbd_requ_remove(smbd_requ);
-
-		x_smb2_state_notify_t *state{(x_smb2_state_notify_t *)smbd_requ->requ_state};
-		NTSTATUS status = x_smb2_notify_marshall(get_notify_changes(posixfs_open),
-				state->in_output_buffer_length, state->out_data);
-		smbd_requ->async_done_fn(smbd_conn, smbd_requ, status);
-#endif
-/* posixfs_object->mutex is locked */
-static inline void posixfs_open_append_notify(posixfs_open_t *posixfs_open,
-		uint32_t action,
-		const std::u16string &path)
-{
-	posixfs_open->notify_changes.push_back(std::make_pair(action, path));
-	x_smbd_requ_t *smbd_requ = posixfs_open->notify_requ_list.get_front();
-	if (smbd_requ) {
-		posixfs_open->notify_requ_list.remove(smbd_requ);
-		x_smbd_requ_remove(smbd_requ); // TODO ref?
-		posixfs_notify_evt_t *evt = new posixfs_notify_evt_t(smbd_requ,
-				std::move(posixfs_open->notify_changes));
-		evt->base.func = posixfs_notify_func;
-		if (!x_smbd_chan_post_user(smbd_requ->smbd_chan, &evt->base)) {
-			delete evt;
-		}
-	}
-}
-
 static void notify_fname_one(const std::shared_ptr<x_smbd_topdir_t> &topdir,
 		const std::u16string &path,
 		const std::u16string &fullpath,
@@ -449,7 +399,7 @@ static void notify_fname_one(const std::shared_ptr<x_smbd_topdir_t> &topdir,
 
 	std::u16string subpath;
 	/* TODO change to read lock */
-	std::lock_guard<std::mutex> lock(posixfs_object->mutex);
+	std::unique_lock<std::mutex> lock(posixfs_object->mutex);
 	auto &open_list = posixfs_object->open_list;
 	posixfs_open_t *curr_open;
 	for (curr_open = open_list.get_front(); curr_open; curr_open = open_list.next(curr_open)) {
@@ -466,7 +416,21 @@ static void notify_fname_one(const std::shared_ptr<x_smbd_topdir_t> &topdir,
 				subpath = fullpath.substr(path.size() + 1);
 			}
 		}
-		posixfs_open_append_notify(curr_open, action, subpath);
+		curr_open->notify_changes.push_back(std::make_pair(action, subpath));
+		x_smbd_requ_t *smbd_requ = curr_open->notify_requ_list.get_front();
+		if (smbd_requ) {
+			auto notify_changes = std::move(curr_open->notify_changes);
+			curr_open->notify_requ_list.remove(smbd_requ);
+			lock.unlock();
+			x_smbd_requ_remove(smbd_requ); // remove from async
+			posixfs_notify_evt_t *evt = new posixfs_notify_evt_t(smbd_requ,
+					std::move(notify_changes));
+			evt->base.func = posixfs_notify_func;
+			if (!x_smbd_chan_post_user(smbd_requ->smbd_chan, &evt->base)) {
+				delete evt;
+			}
+			lock.lock();
+		}
 	}
 	posixfs_object_release(posixfs_object);
 }
@@ -1283,7 +1247,7 @@ static posixfs_open_t *open_object_exist(
 		return nullptr;
 	}
 
-	x_smbd_lease_t *smbd_lease;
+	x_smbd_lease_t *smbd_lease = nullptr;
        	status = grant_oplock(posixfs_object,
 			curr_client_guid, *state, &smbd_lease);
 	X_ASSERT(NT_STATUS_IS_OK(status));
@@ -1376,7 +1340,6 @@ static void posixfs_object_remove(posixfs_object_t *posixfs_object,
 
 static NTSTATUS posixfs_object_op_close(
 		x_smbd_object_t *smbd_object,
-		x_smbd_conn_t *smbd_conn,
 		x_smbd_open_t *smbd_open,
 		x_smbd_requ_t *smbd_requ,
 		std::unique_ptr<x_smb2_state_close_t> &state)
@@ -1384,30 +1347,33 @@ static NTSTATUS posixfs_object_op_close(
 	posixfs_open_t *posixfs_open = posixfs_open_from_base_t::container(smbd_open);
 	posixfs_object_t *posixfs_object = posixfs_object_from_base_t::container(smbd_object);
 
+	std::unique_lock<std::mutex> lock(posixfs_object->mutex);
+
 	if (posixfs_open->smbd_lease) {
 		x_smbd_lease_release(posixfs_open->smbd_lease);
 		posixfs_open->smbd_lease = nullptr;
 	}
 
-	if (smbd_requ) {
-		/* Windows server send NT_STATUS_NOTIFY_CLEANUP
-		   when tree disconect.
-		   while samba not send.
-		   for simplicity we do not either for now
-		 */
-#if 0
-		for (x_smbd_requ_t *requ_notify = posixfs_open->notify_requ_list.get_front();
-				requ_notify; ) {
-			posixfs_open->notify_requ_list.remove(requ_notify);
-			std::unique_ptr<x_smb2_state_notify_t> notify_state{(x_smb2_state_notify_t *)requ_notify->requ_state};
-			requ_notify->requ_state = nullptr;
+	/* Windows server send NT_STATUS_NOTIFY_CLEANUP
+	   when tree disconect.
+	   while samba not send.
+	   for simplicity we do not either for now
+	 */
+	x_smbd_requ_t *requ_notify;
+	while ((requ_notify = posixfs_open->notify_requ_list.get_front()) != nullptr) {
+		posixfs_open->notify_requ_list.remove(requ_notify);
+		lock.unlock();
 
-			notify_state->done(smbd_conn, requ_notify, NT_STATUS_NOTIFY_CLEANUP);
-		}
-#endif
+		// TODO multi-thread safe
+		std::unique_ptr<x_smb2_state_notify_t> notify_state{(x_smb2_state_notify_t *)requ_notify->requ_state};
+		requ_notify->requ_state = nullptr;
+		x_smbd_requ_remove(requ_notify);
+		// TODO notify_state->done(smbd_conn, requ_notify, NT_STATUS_NOTIFY_CLEANUP);
+		x_smbd_ref_dec(requ_notify);
+
+		lock.lock();
 	}
 
-	std::unique_lock<std::mutex> lock(posixfs_object->mutex);
 	posixfs_object_remove(posixfs_object, posixfs_open);
 
 	share_mode_modified(posixfs_object);
@@ -2263,7 +2229,12 @@ static NTSTATUS posixfs_object_op_qdir(
 static void posixfs_notify_cancel(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 {
 	posixfs_open_t *posixfs_open = posixfs_open_from_base_t::container(smbd_requ->smbd_open);
-	posixfs_open->notify_requ_list.remove(smbd_requ);
+	posixfs_object_t *posixfs_object = posixfs_object_from_base_t::container(posixfs_open->base.smbd_object);
+
+	{
+		std::lock_guard<std::mutex> lock(posixfs_object->mutex);
+		posixfs_open->notify_requ_list.remove(smbd_requ);
+	}
 	x_smbd_conn_post_cancel(smbd_conn, smbd_requ);
 }
 

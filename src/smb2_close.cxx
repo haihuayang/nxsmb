@@ -94,7 +94,7 @@ NTSTATUS x_smb2_process_close(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ
 		}
 	}
 
-	NTSTATUS status = x_smbd_open_op_close(smbd_requ->smbd_open, smbd_conn,
+	NTSTATUS status = x_smbd_open_op_close(smbd_requ->smbd_open,
 			smbd_requ, state);
 	if (!NT_STATUS_IS_OK(status)) {
 		RETURN_OP_STATUS(smbd_requ, status);

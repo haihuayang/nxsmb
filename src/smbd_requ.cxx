@@ -1,14 +1,13 @@
 
 #include "smbd.hxx"
+#include "smbd_stats.hxx"
 #include "smbd_pool.hxx"
-
-static std::atomic<uint32_t> g_smbd_requ_count = 0;
 
 x_smbd_requ_t::x_smbd_requ_t(x_buf_t *in_buf)
 	: in_buf(in_buf)
 {
-	++g_smbd_requ_count;
 	X_LOG_DBG("create %p", this);
+	X_SMBD_COUNTER_INC(requ_create, 1);
 }
 
 x_smbd_requ_t::~x_smbd_requ_t()
@@ -29,7 +28,7 @@ x_smbd_requ_t::~x_smbd_requ_t()
 	/* TODO free them
 	x_smbd_object_t *smbd_object{};
 	*/
-	--g_smbd_requ_count;
+	X_SMBD_COUNTER_INC(requ_delete, 1);
 }
 
 X_DECLARE_MEMBER_TRAITS(smbd_requ_hash_traits, x_smbd_requ_t, hash_link)
@@ -41,16 +40,23 @@ static inline x_smbd_requ_t *smbd_requ_find_by_id(smbd_requ_pool_t &pool, uint64
 }
 
 static x_smbd_requ_t *smbd_requ_find_intl(smbd_requ_pool_t &pool, uint64_t id,
-		const x_smbd_conn_t *smbd_conn)
+		const x_smbd_conn_t *smbd_conn, bool remove)
 {
 	std::unique_lock<std::mutex> lock(pool.mutex);
 	x_smbd_requ_t *smbd_requ = smbd_requ_find_by_id(pool, id);
-	if (smbd_requ) {
-		if (x_smbd_chan_get_conn(smbd_requ->smbd_chan) == smbd_conn) {
-			return x_smbd_ref_inc(smbd_requ);
-		}
+	if (!smbd_requ) {
+		return nullptr;
 	}
-	return nullptr;
+	if (x_smbd_chan_get_conn(smbd_requ->smbd_chan) != smbd_conn) {
+		return nullptr;
+	}
+	if (remove) {
+		pool.hashtable.remove(smbd_requ);
+		--pool.count;
+	} else {
+		return x_smbd_ref_inc(smbd_requ);
+	}
+	return smbd_requ;
 }
 
 static uint64_t g_async_id = 0x0;
@@ -82,9 +88,9 @@ int x_smbd_requ_pool_init(uint32_t count)
 	return 0;
 }
 
-x_smbd_requ_t *x_smbd_requ_lookup(uint64_t id, const x_smbd_conn_t *smbd_conn)
+x_smbd_requ_t *x_smbd_requ_lookup(uint64_t id, const x_smbd_conn_t *smbd_conn, bool remove)
 {
-	return smbd_requ_find_intl(g_smbd_requ_pool, id, smbd_conn);
+	return smbd_requ_find_intl(g_smbd_requ_pool, id, smbd_conn, remove);
 }
 
 void x_smbd_requ_insert(x_smbd_requ_t *smbd_requ)

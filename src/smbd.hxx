@@ -316,7 +316,7 @@ inline void x_smbd_ref_dec(x_smbd_requ_t *smbd_requ)
 
 
 int x_smbd_requ_pool_init(uint32_t count);
-x_smbd_requ_t *x_smbd_requ_lookup(uint64_t id, const x_smbd_conn_t *smbd_conn);
+x_smbd_requ_t *x_smbd_requ_lookup(uint64_t id, const x_smbd_conn_t *smbd_conn, bool remove);
 void x_smbd_requ_insert(x_smbd_requ_t *smbd_requ);
 void x_smbd_requ_remove(x_smbd_requ_t *smbd_requ);
 
