@@ -34,7 +34,6 @@ struct x_smbd_share_t
 	bool read_only = false;
 	std::string name;
 	uuid_t uuid;
-	//std::string uuid;
 	std::string path;
 	bool abe = false;
 	bool nt_acl_support = true;

@@ -42,7 +42,6 @@ static int posixfs_set_basic_info(int fd,
 		posixfs_statex_t *statex)
 {
 	dos_attr_t dos_attr = { 0 };
-	// memset(&dos_attr, 0, sizeof dos_attr);
 	if (basic_info.file_attributes != 0) {
 		dos_attr.attr_mask |= DOS_SET_FILE_ATTR;
 		dos_attr.file_attrs = basic_info.file_attributes;
@@ -929,7 +928,7 @@ static posixfs_open_t *posixfs_open_create(
 		x_smbd_lease_t *smbd_lease)
 {
 	posixfs_open_t *posixfs_open = new posixfs_open_t(&posixfs_object->base,
-			smbd_tcon, state.in_share_access, state.granted_access);
+			smbd_tcon, state.granted_access, state.in_share_access);
 	posixfs_open->oplock_level = state.oplock_level;
 	posixfs_open->smbd_lease = smbd_lease;
 	++posixfs_object->use_count;
@@ -1034,7 +1033,7 @@ static posixfs_open_t *open_object_new(
 	posixfs_object->fd = fd;
 	posixfs_object->flags &= ~(posixfs_object_t::flag_not_exist);
 
-	x_smbd_lease_t *smbd_lease;
+	x_smbd_lease_t *smbd_lease = nullptr;
        	status = grant_oplock(posixfs_object,
 			x_smbd_conn_curr_client_guid(), state, &smbd_lease);
 	X_ASSERT(NT_STATUS_IS_OK(status));
@@ -1199,6 +1198,12 @@ static posixfs_open_t *open_object_exist(
 
 	if (!x_smbd_tcon_access_check(smbd_tcon, state->in_desired_access)) {
 		status = NT_STATUS_ACCESS_DENIED;
+		return nullptr;
+	}
+
+	if (posixfs_object->statex.file_attributes & FILE_ATTRIBUTE_REPARSE_POINT) {
+		X_LOG_DBG("object %s is reparse_point", posixfs_object->unix_path.c_str());
+		status = NT_STATUS_PATH_NOT_COVERED;
 		return nullptr;
 	}
 
@@ -2424,11 +2429,21 @@ static NTSTATUS x_smbd_resolve_path(
 		std::shared_ptr<x_smbd_topdir_t> &topdir,
 		std::u16string &path)
 {
-	/* TODO polymorphism for home/general share */
-	X_ASSERT(!dfs);
+	if (dfs) {
+		/* TODO we just skip the first 2 components for now */
+		auto pos = in_path.find(u'\\');
+		X_ASSERT(pos != std::u16string::npos);
+		pos = in_path.find(u'\\', pos + 1);
+		if (pos == std::u16string::npos) {
+			path = u"";
+		} else {
+			path = in_path.substr(pos + 1);
+		}
+	} else {
+		path = in_path;
+	}
 	auto smbd_share = x_smbd_tcon_get_share(smbd_tcon);
 	topdir = smbd_share->root_dir;
-	path = in_path;
 	return NT_STATUS_OK;
 }
 

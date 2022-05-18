@@ -226,7 +226,7 @@ NTSTATUS x_smb2_process_tcon(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 
 	uint32_t out_share_flags = 0;
 	uint32_t out_capabilities = 0;
-	if (false /* TODO smbshare->is_msdfs_root()*/) {
+	if (smbshare->msdfs_proxy.size()) {
 		out_share_flags |= SMB2_SHAREFLAG_DFS|SMB2_SHAREFLAG_DFS_ROOT;
 		out_capabilities |= SMB2_SHARE_CAP_DFS;
 	}

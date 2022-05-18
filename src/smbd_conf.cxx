@@ -272,6 +272,8 @@ static int parse_smbconf(x_smbd_conf_t &smbd_conf, const char *path,
 					share_spec->uuid = uuid;
 				} else if (name == "path") {
 					share_spec->path = value;
+				} else if (name == "msdfs proxy") {
+					share_spec->msdfs_proxy = value;
 				} else if (name == "abe") {
 					if (value == "yes") {
 						share_spec->abe = true;

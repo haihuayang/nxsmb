@@ -585,7 +585,8 @@ static NTSTATUS ipc_open_create(
 
 	named_pipe_t *named_pipe = new named_pipe_t(&ipc_object->base,
 			smbd_requ->smbd_tcon,
-			state->in_share_access, state->in_desired_access);
+			state->in_desired_access,
+			state->in_share_access);
 
 	state->out_info.out_allocation_size = 4096;
 	state->out_info.out_file_attributes = FILE_ATTRIBUTE_NORMAL;

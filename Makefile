@@ -108,6 +108,7 @@ SET_src_nxsmbd := \
 	smbd_chan \
 	smbd_tcon \
 	smbd_open \
+	smbd_object \
 	smbd_secrets \
 	smbd_posixfs \
 	smbd_posixfs_utils \

@@ -19,6 +19,8 @@
 	X_SMBD_COUNTER_DECL(chan_delete) \
 	X_SMBD_COUNTER_DECL(tcon_create) \
 	X_SMBD_COUNTER_DECL(tcon_delete) \
+	X_SMBD_COUNTER_DECL(object_create) \
+	X_SMBD_COUNTER_DECL(object_delete) \
 	X_SMBD_COUNTER_DECL(open_create) \
 	X_SMBD_COUNTER_DECL(open_delete) \
 	X_SMBD_COUNTER_DECL(requ_create) \

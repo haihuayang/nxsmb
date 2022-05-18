@@ -89,7 +89,8 @@ struct x_smbd_object_ops_t
 
 struct x_smbd_object_t
 {
-	x_smbd_object_t(const x_smbd_object_ops_t *ops) : ops(ops) { }
+	x_smbd_object_t(const x_smbd_object_ops_t *ops);
+	~x_smbd_object_t();
 	const x_smbd_object_ops_t *ops;
 };
 

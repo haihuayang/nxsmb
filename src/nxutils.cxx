@@ -22,7 +22,10 @@ static void usage(const char *progname)
 	fprintf(stderr, R"SSS(
 Usage: %s command ...
 available commands
-	create-share
+	init-top-dir
+	attrex
+	set-default-security-desc
+	show-security-desc
 )SSS", progname);
 	exit(1);
 }
@@ -168,6 +171,27 @@ static int show_attrex(char **argv)
 	return 0;
 }
 
+static int set_dos_attr(char **argv)
+{
+	const char *path = argv[0];
+	char *end;
+	unsigned long file_attrs = strtoul(argv[1], &end, 0);
+	int fd = open(path, O_RDONLY);
+	X_ASSERT(fd >= 0);
+	dos_attr_t dos_attr;
+	posixfs_dos_attr_get(fd, &dos_attr);
+
+	printf("modify file_attrs 0x%x to 0x%lx\n", dos_attr.file_attrs,
+			file_attrs);
+	dos_attr.file_attrs = x_convert_assert<uint32_t>(file_attrs);
+
+	posixfs_dos_attr_set(fd, &dos_attr);
+
+	close(fd);
+
+	return 0;
+}
+
 int main(int argc, char **argv)
 {
 	const char *command = argv[1];
@@ -175,6 +199,8 @@ int main(int argc, char **argv)
 		return init_top_dir(argv + 2);
 	} else if (strcmp(command, "attrex") == 0) {
 		return show_attrex(argv + 2);
+	} else if (strcmp(command, "set-dos-attr") == 0) {
+		return set_dos_attr(argv + 2);
 	} else if (strcmp(command, "set-default-security-desc") == 0) {
 		return set_default_security_desc(argv + 2);
 	} else if (strcmp(command, "show-security-desc") == 0) {
