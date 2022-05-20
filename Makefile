@@ -101,6 +101,7 @@ all: $(TARGET_SET_tests:%=$(TARGET_DIR_out)/tests/%) \
 
 SET_src_nxsmbd := \
 	smbd \
+	smbd_dfs \
 	smbd_stats \
 	smbd_requ \
 	smbd_conn \

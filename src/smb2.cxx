@@ -18,6 +18,24 @@ bool x_smb2_basic_info_decode(x_smb2_basic_info_t &basic_info,
 	return true;
 }
 
+bool x_smb2_rename_info_decode(bool &replace_if_exists,
+		std::u16string &file_name,
+		const std::vector<uint8_t> &in_data)
+{
+	if (in_data.size() < sizeof(x_smb2_rename_info_t)) {
+		return false;
+	}
+	const x_smb2_rename_info_t *in_info = (x_smb2_rename_info_t *)in_data.data();
+	uint32_t file_name_length = X_LE2H32(in_info->file_name_length);
+	if ((file_name_length % 2) != 0 || file_name_length + sizeof(x_smb2_rename_info_t) > in_data.size()) {
+		return false;
+	}
+	const char16_t *in_name = (const char16_t *)(in_info + 1);
+	file_name.assign(in_name, in_name + file_name_length / 2);
+	replace_if_exists = in_info->replace_if_exists;
+	return true;
+}
+
 NTSTATUS x_smb2_notify_marshall(
 		const std::vector<std::pair<uint32_t, std::u16string>> &notify_changes,
 		uint32_t max_offset,

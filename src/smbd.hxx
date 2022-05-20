@@ -321,6 +321,12 @@ void x_smbd_requ_insert(x_smbd_requ_t *smbd_requ);
 void x_smbd_requ_remove(x_smbd_requ_t *smbd_requ);
 
 
+NTSTATUS x_smbd_dfs_resolve_path(
+		const std::shared_ptr<x_smbd_share_t> &smbd_share,
+		const std::u16string &in_path,
+		bool dfs,
+		std::shared_ptr<x_smbd_topdir_t> &topdir,
+		std::u16string &path);
 
 void x_smb2_send_lease_break(x_smbd_conn_t *smbd_conn, x_smbd_sess_t *smbd_sess,
 		const x_smb2_lease_key_t *lease_key,

@@ -33,7 +33,6 @@ struct x_smbd_share_t
 	x_smbd_share_type_t type = TYPE_DEFAULT;
 	bool read_only = false;
 	std::string name;
-	uuid_t uuid;
 	std::string path;
 	bool abe = false;
 	bool nt_acl_support = true;
@@ -105,9 +104,9 @@ struct x_smbd_conf_t
 
 struct x_smbd_topdir_t
 {
-	x_smbd_topdir_t(std::shared_ptr<x_smbd_share_t> &s)
-		: smbd_share(s) { }
+	x_smbd_topdir_t(std::shared_ptr<x_smbd_share_t> &s);
 	const std::shared_ptr<x_smbd_share_t> smbd_share;
+	uint64_t const uuid;
 	int fd = -1;
 	std::atomic<uint32_t> watch_tree_cnt{0};
 };

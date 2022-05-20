@@ -377,10 +377,25 @@ struct x_smb2_basic_info_t
 	uint32_t file_attributes;
 };
 
+struct x_smb2_rename_info_t
+{
+	uint8_t replace_if_exists;
+	uint8_t unused0;
+	uint16_t unused1;
+	uint32_t root_directory_low;
+	uint32_t root_directory_high;
+	uint32_t file_name_length;
+	/* following variable length file_name */
+};
+
 bool x_smb2_standard_info_decode(x_smb2_standard_info_t &standard_info,
 		const std::vector<uint8_t> &in_data);
 
 bool x_smb2_basic_info_decode(x_smb2_basic_info_t &basic_info,
+		const std::vector<uint8_t> &in_data);
+
+bool x_smb2_rename_info_decode(bool &replace_if_exists,
+		std::u16string &file_name,
 		const std::vector<uint8_t> &in_data);
 
 NTSTATUS x_smb2_notify_marshall(

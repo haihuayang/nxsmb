@@ -176,7 +176,7 @@ struct posixfs_object_t
 		return S_ISDIR(statex.stat.st_mode);
 	}
 	x_dqlink_t hash_link;
-	const uint64_t hash;
+	uint64_t hash;
 	uint64_t unused_timestamp{0};
 	std::atomic<uint32_t> use_count{1}; // protected by bucket mutex
 	std::mutex mutex;
@@ -196,8 +196,10 @@ struct posixfs_object_t
 	bool statex_modified{false}; // TODO use flags
 	posixfs_statex_t statex;
 	const std::shared_ptr<x_smbd_topdir_t> topdir;
-	const std::u16string req_path;
+	/* protected by bucket mutex */
+	std::u16string req_path;
 	std::string unix_path;
+	/* protected by object mutex */
 	x_tp_ddlist_t<posixfs_open_object_traits> open_list;
 	x_tp_ddlist_t<requ_async_traits> defer_open_list;
 };
@@ -217,13 +219,25 @@ struct posixfs_object_pool_t
 
 static posixfs_object_pool_t posixfs_object_pool;
 
+static std::string convert_to_unix(const std::u16string &req_path)
+{
+	/* TODO case insenctive */
+	/* TODO does smb allow leading '/'? if so need to remove it */
+	std::string ret = x_convert_utf16_to_utf8(req_path);
+	for (auto &c: ret) {
+		if (c == '\\') {
+			c = '/';
+		}
+	}
+	return ret;
+}
+
 /* TODO dfs need one more fact refer the topdir */
-static uint64_t hash_object(const uuid_t &share_uuid, const std::u16string &path)
+static uint64_t hash_object(const std::shared_ptr<x_smbd_topdir_t> &topdir,
+		const std::u16string &path)
 {
 	uint64_t hash = std::hash<std::u16string>()(path);
-	const uint64_t *data = (const uint64_t *)share_uuid.data();
-	hash ^= data[0];
-	hash ^= data[1];
+	hash ^= topdir->uuid;
 	return hash;
 	//return (hash >> 32) ^ hash;
 }
@@ -242,8 +256,7 @@ static posixfs_object_t *posixfs_object_lookup(
 		const std::u16string &path,
 		bool create)
 {
-	auto &share_uuid = topdir->smbd_share->uuid;
-	auto hash = hash_object(share_uuid, path);
+	auto hash = hash_object(topdir, path);
 	auto &pool = posixfs_object_pool;
 	auto bucket_idx = hash % pool.buckets.size();
 	auto &bucket = pool.buckets[bucket_idx];
@@ -254,7 +267,7 @@ static posixfs_object_t *posixfs_object_lookup(
 
 	for (x_dqlink_t *link = bucket.head.get_front(); link; link = link->get_next()) {
 		elem = X_CONTAINER_OF(link, posixfs_object_t, hash_link);
-		if (elem->hash == hash && elem->topdir->smbd_share->uuid == share_uuid
+		if (elem->hash == hash && elem->topdir->uuid == topdir->uuid
 				&& elem->req_path == path) {
 			matched_object = elem;
 			break;
@@ -387,6 +400,7 @@ static void posixfs_notify_func(x_smbd_conn_t *smbd_conn, x_fdevt_user_t *fdevt_
 static void notify_fname_one(const std::shared_ptr<x_smbd_topdir_t> &topdir,
 		const std::u16string &path,
 		const std::u16string &fullpath,
+		const std::u16string *new_name_path,
 		uint32_t action,
 		uint32_t notify_filter,
 		bool last_level)
@@ -397,6 +411,7 @@ static void notify_fname_one(const std::shared_ptr<x_smbd_topdir_t> &topdir,
 	}
 
 	std::u16string subpath;
+	std::u16string new_subpath;
 	/* TODO change to read lock */
 	std::unique_lock<std::mutex> lock(posixfs_object->mutex);
 	auto &open_list = posixfs_object->open_list;
@@ -411,11 +426,21 @@ static void notify_fname_one(const std::shared_ptr<x_smbd_topdir_t> &topdir,
 		if (subpath.empty()) {
 			if (path.empty()) {
 				subpath = fullpath;
+				if (new_name_path) {
+					new_subpath = *new_name_path;
+				}
 			} else {
 				subpath = fullpath.substr(path.size() + 1);
+				if (new_name_path) {
+					new_subpath = new_name_path->substr(path.size() + 1);
+				}
 			}
 		}
 		curr_open->notify_changes.push_back(std::make_pair(action, subpath));
+		if (new_name_path) {
+			curr_open->notify_changes.push_back(std::make_pair(NOTIFY_ACTION_NEW_NAME,
+						new_subpath));
+		}
 		x_smbd_requ_t *smbd_requ = curr_open->notify_requ_list.get_front();
 		if (smbd_requ) {
 			auto notify_changes = std::move(curr_open->notify_changes);
@@ -434,25 +459,24 @@ static void notify_fname_one(const std::shared_ptr<x_smbd_topdir_t> &topdir,
 	posixfs_object_release(posixfs_object);
 }
 
-static void notify_fname(
-		posixfs_object_t *posixfs_object,
+static void notify_fname_intl(
+		std::shared_ptr<x_smbd_topdir_t> topdir,
+		const std::u16string req_path,
 		uint32_t action,
-		uint32_t notify_filter)
+		uint32_t notify_filter,
+		const std::u16string *new_name_path)
 {
-	X_LOG_DBG("path=%s action=%d filter=0x%x", posixfs_object->unix_path.c_str(),
-			action, notify_filter);
 	std::size_t curr_pos = 0, last_sep_pos = 0;
-	auto topdir = posixfs_object->topdir;
 	for (;;) {
-		auto found = posixfs_object->req_path.find('\\', curr_pos);
+		auto found = req_path.find('\\', curr_pos);
 		if (found == std::string::npos) {
 			break;
 		}
 		
 		if (topdir->watch_tree_cnt > 0) {
 			notify_fname_one(topdir,
-					posixfs_object->req_path.substr(0, last_sep_pos),
-					posixfs_object->req_path,
+					req_path.substr(0, last_sep_pos),
+					req_path, new_name_path,
 					action, notify_filter, false);
 		}
 		last_sep_pos = found;
@@ -460,22 +484,136 @@ static void notify_fname(
 	}
 
 	notify_fname_one(topdir,
-			posixfs_object->req_path.substr(0, last_sep_pos),
-			posixfs_object->req_path,
+			req_path.substr(0, last_sep_pos),
+			req_path, new_name_path,
 			action, notify_filter, true);
 }
 
-static std::string convert_to_unix(const std::u16string &req_path)
+static void notify_fname(
+		posixfs_object_t *posixfs_object,
+		uint32_t action,
+		uint32_t notify_filter)
 {
-	/* TODO case insenctive */
-	/* TODO does smb allow leading '/'? if so need to remove it */
-	std::string ret = x_convert_utf16_to_utf8(req_path);
-	for (auto &c: ret) {
-		if (c == '\\') {
-			c = '/';
+	X_LOG_DBG("path=%s action=%d filter=0x%x", posixfs_object->unix_path.c_str(),
+			action, notify_filter);
+	notify_fname_intl(posixfs_object->topdir, posixfs_object->req_path,
+			action, notify_filter, nullptr);
+}
+
+static void notify_rename(const std::shared_ptr<x_smbd_topdir_t> topdir,
+		const std::u16string dst_path,
+		const std::u16string src_path,
+		bool is_dir)
+{
+	auto dst_sep = dst_path.rfind(u'\\');
+	auto src_sep = src_path.rfind(u'\\');
+	uint32_t notify_filter = is_dir ? FILE_NOTIFY_CHANGE_DIR_NAME
+		: FILE_NOTIFY_CHANGE_FILE_NAME;
+	if (dst_sep == src_sep && memcmp(dst_path.data(), src_path.data(), dst_sep * 2) == 0) {
+		notify_fname_intl(topdir, src_path, NOTIFY_ACTION_OLD_NAME, notify_filter, &dst_path);
+
+	} else {
+		notify_fname_intl(topdir, src_path, NOTIFY_ACTION_REMOVED, notify_filter, nullptr);
+		notify_fname_intl(topdir, dst_path, NOTIFY_ACTION_ADDED, notify_filter, nullptr);
+	}
+}
+
+/* rename_internals_fsp */
+static NTSTATUS rename_object_intl(posixfs_object_pool_t::bucket_t &dst_bucket,
+		posixfs_object_pool_t::bucket_t &src_bucket,
+		const std::shared_ptr<x_smbd_topdir_t> &topdir,
+		posixfs_object_t *src_object,
+		const std::u16string &dst_path,
+		std::u16string &src_path,
+		uint64_t dst_hash)
+{
+	posixfs_object_t *dst_object = nullptr;
+	for (x_dqlink_t *link = dst_bucket.head.get_front(); link; link = link->get_next()) {
+		posixfs_object_t *elem = X_CONTAINER_OF(link, posixfs_object_t, hash_link);
+		if (elem->hash == dst_hash && elem->topdir->uuid == topdir->uuid
+				&& elem->req_path == dst_path) {
+			dst_object = elem;
+			break;
 		}
 	}
-	return ret;
+	if (dst_object && dst_object->exists()) {
+		/* TODO replace forced */
+		return NT_STATUS_OBJECT_NAME_COLLISION;
+	}
+
+	/* check if exists on file system */
+	std::string dst_unix_path = convert_to_unix(dst_path);
+	int fd = openat(topdir->fd, dst_unix_path.c_str(), O_RDONLY);
+	if (fd != -1) {
+		if (dst_object) {
+			dst_object->fd = fd;
+			/* so it needs to reload statex when using it */
+			dst_object->statex_modified = true;
+		} else {
+			close(fd);
+		}
+		return NT_STATUS_OBJECT_NAME_COLLISION;
+	}
+
+	if (dst_object) {
+		/* not exists, should none refer it??? */
+		dst_bucket.head.remove(&dst_object->hash_link);
+		X_ASSERT(dst_object->use_count == 0);
+		delete dst_object;
+	}
+
+	src_path = src_object->req_path;
+	src_bucket.head.remove(&src_object->hash_link);
+	src_object->hash = dst_hash;
+	src_object->req_path = dst_path;
+	src_object->unix_path = dst_unix_path;
+	dst_bucket.head.push_front(&src_object->hash_link);
+	return NT_STATUS_OK;
+}
+
+static NTSTATUS posixfs_object_rename(posixfs_object_t *posixfs_object,
+		const std::shared_ptr<x_smbd_share_t> &smbd_share,
+		bool dfs,
+		bool replace_if_exists,
+		const std::u16string &in_dst_path)
+{
+	std::u16string dst_path;
+	std::shared_ptr<x_smbd_topdir_t> topdir;
+	NTSTATUS status = x_smbd_dfs_resolve_path(smbd_share, in_dst_path, dfs,
+			topdir, dst_path);
+	if (!NT_STATUS_IS_OK(status)) {
+		return status;
+	}
+	
+	if (topdir->uuid != posixfs_object->topdir->uuid) {
+		/* we cannot move between filesystem */
+		return NT_STATUS_UNSUCCESSFUL; // TODO
+	}
+
+	auto &pool = posixfs_object_pool;
+	auto dst_hash = hash_object(topdir, dst_path);
+	auto dst_bucket_idx = dst_hash % pool.buckets.size();
+	auto &dst_bucket = pool.buckets[dst_bucket_idx];
+	auto src_bucket_idx = posixfs_object->hash % pool.buckets.size();
+
+	std::u16string src_path;
+	if (dst_bucket_idx == src_bucket_idx) {
+		std::lock_guard<std::mutex> lock(dst_bucket.mutex);
+		status = rename_object_intl(dst_bucket, dst_bucket, topdir,
+				posixfs_object,
+				dst_path, src_path, dst_hash);
+	} else {
+		auto &src_bucket = pool.buckets[src_bucket_idx];
+		std::scoped_lock lock(dst_bucket.mutex, src_bucket.mutex);
+		status = rename_object_intl(dst_bucket, dst_bucket, topdir,
+				posixfs_object,
+				dst_path, src_path, dst_hash);
+	}
+
+	if (NT_STATUS_IS_OK(status)) {
+		notify_rename(topdir, dst_path, src_path, posixfs_object->is_dir());
+	}
+	return status;
 }
 
 static posixfs_object_t *posixfs_object_open(
@@ -1683,15 +1821,20 @@ static NTSTATUS setinfo_file(posixfs_object_t *posixfs_object,
 			X_TODO;
 			return NT_STATUS_INTERNAL_ERROR;
 		}
-#if 0
 	} else if (state.in_info_level == SMB2_FILE_INFO_FILE_RENAME_INFORMATION) {
 		/* MS-FSA 2.1.5.14.11 */
-		x_smb2_rename_info_t rename;
-		status = decode_setinfo_rename(rename, state.in_data);
-		if (!NT_STATUS_IS_OK(status)) {
-			return status;
+		if (!smbd_requ->smbd_open->check_access(idl::SEC_STD_DELETE)) {
+			return NT_STATUS_ACCESS_DENIED;
 		}
-#endif
+		bool replace_if_exists;
+		std::u16string file_name;
+		if (!x_smb2_rename_info_decode(replace_if_exists, file_name, state.in_data)) {
+			return NT_STATUS_INVALID_PARAMETER;
+		}
+		return posixfs_object_rename(posixfs_object,
+				x_smbd_tcon_get_share(smbd_requ->smbd_tcon),
+				smbd_requ->in_hdr_flags & SMB2_HDR_FLAG_DFS,
+				replace_if_exists, file_name);
 	} else if (state.in_info_level == SMB2_FILE_INFO_FILE_DISPOSITION_INFORMATION) {
 		/* MS-FSA 2.1.5.14.3 */
 		if (state.in_data.size() < 1) {
@@ -2422,30 +2565,6 @@ posixfs_object_t::posixfs_object_t(uint64_t h,
 {
 }
 
-static NTSTATUS x_smbd_resolve_path(
-		x_smbd_tcon_t *smbd_tcon,
-		const std::u16string &in_path,
-		bool dfs,
-		std::shared_ptr<x_smbd_topdir_t> &topdir,
-		std::u16string &path)
-{
-	if (dfs) {
-		/* TODO we just skip the first 2 components for now */
-		auto pos = in_path.find(u'\\');
-		X_ASSERT(pos != std::u16string::npos);
-		pos = in_path.find(u'\\', pos + 1);
-		if (pos == std::u16string::npos) {
-			path = u"";
-		} else {
-			path = in_path.substr(pos + 1);
-		}
-	} else {
-		path = in_path;
-	}
-	auto smbd_share = x_smbd_tcon_get_share(smbd_tcon);
-	topdir = smbd_share->root_dir;
-	return NT_STATUS_OK;
-}
 
 static NTSTATUS posixfs_op_create(x_smbd_tcon_t *smbd_tcon,
 		x_smbd_open_t **psmbd_open,
@@ -2454,7 +2573,8 @@ static NTSTATUS posixfs_op_create(x_smbd_tcon_t *smbd_tcon,
 {
 	std::u16string path;
 	std::shared_ptr<x_smbd_topdir_t> topdir;
-	NTSTATUS status = x_smbd_resolve_path(smbd_tcon, state->in_name,
+	NTSTATUS status = x_smbd_dfs_resolve_path(
+			x_smbd_tcon_get_share(smbd_tcon), state->in_name,
 			smbd_requ->in_hdr_flags & SMB2_HDR_FLAG_DFS,
 			topdir, path);
 	if (!NT_STATUS_IS_OK(status)) {

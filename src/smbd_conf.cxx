@@ -9,7 +9,7 @@
 } while (0)
 
 static std::shared_ptr<x_smbd_conf_t> g_smbd_conf;
-
+#if 0
 static int hex(char c)
 {
 	if (c >= '0' && c <= '9') {
@@ -47,7 +47,7 @@ static int parse_uuid(const std::string &str, uuid_t &uuid)
 	}
 	return 0;
 }
-
+#endif
 static bool parse_bool(const std::string &str)
 {
 	return str == "yes";
@@ -263,6 +263,7 @@ static int parse_smbconf(x_smbd_conf_t &smbd_conf, const char *path,
 						X_PANIC("Unknown share type %s",
 								value.c_str());
 					}
+#if 0
 				} else if (name == "uuid") {
 					uuid_t uuid;
 					int ret = parse_uuid(value, uuid);
@@ -270,6 +271,7 @@ static int parse_smbconf(x_smbd_conf_t &smbd_conf, const char *path,
 						X_PANIC("Invalid uuid %s", value.c_str());
 					}
 					share_spec->uuid = uuid;
+#endif
 				} else if (name == "path") {
 					share_spec->path = value;
 				} else if (name == "msdfs proxy") {
@@ -314,6 +316,12 @@ static int parse_smbconf(x_smbd_conf_t &smbd_conf, const char *path,
 
 	load_ifaces(smbd_conf);
 	return 0;
+}
+
+static std::atomic<uint64_t> g_topdir_next_id = 0;
+x_smbd_topdir_t::x_smbd_topdir_t(std::shared_ptr<x_smbd_share_t> &s)
+		: smbd_share(s), uuid(g_topdir_next_id++)
+{
 }
 
 std::shared_ptr<x_smbd_conf_t> x_smbd_conf_get()
