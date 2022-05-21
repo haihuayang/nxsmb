@@ -64,6 +64,7 @@ typedef struct dos_attr_s {
 
 #define XATTR_DOS_ATTR "user.dos_attr"
 #define XATTR_NTACL "security.NTACL"
+#define XATTR_TLD_PATH "user.tld_path"
 
 int posixfs_dos_attr_get(int fd, dos_attr_t *dos_attr);
 int posixfs_dos_attr_set(int fd, const dos_attr_t *dos_attr);

@@ -1,12 +1,43 @@
 
-#include "smb2.hxx"
+#include "smbd.hxx"
 #include "smbd_conf.hxx"
 #include <fstream>
 #include <fcntl.h>
+#include <unistd.h>
 
 #define PARSE_FATAL(fmt, ...) do { \
 	X_PANIC(fmt "\n", __VA_ARGS__); \
 } while (0)
+
+struct share_spec_t
+{
+	share_spec_t(const std::string &name) : name(name) { }
+	std::string name;
+	std::string my_distribute_root;
+	std::vector<std::string> my_distribute_vgs;
+	std::string path;
+	bool read_only = false;
+	bool abe = false;
+	uint32_t max_referral_ttl = 300;
+
+#if 0
+	x_smbd_share_type_t type = TYPE_DEFAULT;
+	bool nt_acl_support = true;
+	uint32_t max_connections = 0;
+
+	std::shared_ptr<x_smbd_topdir_t> root_dir;
+	std::string msdfs_proxy;
+
+	bool is_dfs() const {
+		return my_distribute_root.size() || my_distribute_vgs.size();
+	}
+
+	bool abe_enabled() const {
+		// TODO
+		return false;
+	}
+#endif
+};
 
 static std::shared_ptr<x_smbd_conf_t> g_smbd_conf;
 #if 0
@@ -94,26 +125,39 @@ static std::string::size_type rskip(const std::string &s, std::string::size_type
 	return pos + 1;
 }
 
-static void add_share(x_smbd_conf_t &smbd_conf, std::shared_ptr<x_smbd_share_t> &share_spec)
+static void add_share(x_smbd_conf_t &smbd_conf,
+		const std::shared_ptr<x_smbd_share_t> &smbd_share)
 {
-	X_LOG_DBG("add share section %s", share_spec->name.c_str());
-	smbd_conf.shares[share_spec->name] = share_spec;
-	if (share_spec->type == TYPE_DEFAULT) {
+	X_LOG_DBG("add share section %s", smbd_share->name.c_str());
+	smbd_conf.shares[smbd_share->name] = smbd_share;
+#if 0
+	if (share_spec->type == TYPE_IPC) {
+
+	} else if (share_spec->my_distribute_root.size() > 0) {
+		/* dfs namespace */
+	} else {
 		/* TODO if the share is hosted by this node */
 		int fd = open(share_spec->path.c_str(), O_RDONLY);
 		X_ASSERT(fd != -1);
 		auto topdir = std::make_shared<x_smbd_topdir_t>(share_spec);
 		topdir->fd = fd;
 		share_spec->root_dir = topdir; /* TODO cycle reference  */
-	} else if (share_spec->type == TYPE_HOME) {
-		X_ASSERT(0);
-		/* if the files_at_root vg is host by this node,
-		   create a top_dir point the files_at_root vg.
+	}
+#endif
+}
 
-		   create a root_dir point the dir has all the vg mounted
-		 */
+static void add_share(x_smbd_conf_t &smbd_conf,
+		const share_spec_t &share_spec)
+{
+	if (false) {
+	} else if (share_spec.my_distribute_root.size() > 0) {
+		add_share(smbd_conf, x_smbd_dfs_namespace_create(share_spec.name, share_spec.my_distribute_root));
+	} else if (share_spec.my_distribute_vgs.size() > 0) {
+		X_ASSERT(share_spec.path.size() > 0);
+		add_share(smbd_conf, x_smbd_dfs_root_create(share_spec.name, share_spec.path, share_spec.my_distribute_vgs));
 	} else {
-		X_ASSERT(share_spec->type == TYPE_IPC);
+		X_ASSERT(share_spec.path.size() > 0);
+		add_share(smbd_conf, x_smbd_posixfs_share_create(share_spec.name, share_spec.path));
 	}
 }
 
@@ -194,6 +238,55 @@ static bool parse_global_param(x_smbd_conf_t &smbd_conf,
 	return true;
 }
 
+static bool parse_share_param(share_spec_t &share_spec,
+		const std::string &name, const std::string &value,
+		const char *path, unsigned int lineno)
+{
+	if (false) {
+#if 0
+	} else if (name == "type") {
+		/* TODO not support distribute share for now */
+		if (false && value == "HOME_SHARE") {
+			smbd_share.type = TYPE_HOME;
+		} else if (value == "DEFAULT_SHARE") {
+			smbd_share.type = TYPE_DEFAULT;
+		} else {
+			X_PANIC("Unknown share type %s",
+					value.c_str());
+		}
+	} else if (name == "uuid") {
+		uuid_t uuid;
+		int ret = parse_uuid(value, uuid);
+		if (ret < 0) {
+			X_PANIC("Invalid uuid %s", value.c_str());
+		}
+		smbd_share.uuid = uuid;
+	} else if (name == "msdfs proxy") {
+		smbd_share.msdfs_proxy = value;
+#endif
+	} else if (name == "path") {
+		share_spec.path = value;
+	} else if (name == "abe") {
+		if (value == "yes") {
+			share_spec.abe = true;
+		} else if (value == "no") {
+			share_spec.abe = false;
+		} else {
+			X_PANIC("Unexpected boolean %s at %s:%u",
+					value.c_str(), path, lineno);
+		}
+	} else if (name == "my distribute root") {
+		share_spec.my_distribute_root = value;
+	} else if (name == "my distribute vgs") {
+		share_spec.my_distribute_vgs = parse_stringlist(value);
+	} else {
+		X_LOG_WARN("unknown share param '%s' with value '%s'",
+				name.c_str(), value.c_str());
+		return false;
+	}
+	return true;
+}
+
 static bool split_option(const std::string opt, size_t pos,
 		std::string &name, std::string &value)
 {
@@ -213,11 +306,8 @@ static int parse_smbconf(x_smbd_conf_t &smbd_conf, const char *path,
 {
 	X_LOG_DBG("Loading smbd_conf from %s", path);
 
-	std::shared_ptr<x_smbd_share_t> share_spec = std::make_shared<x_smbd_share_t>("ipc$");
-	share_spec->type = TYPE_IPC;
-	share_spec->read_only = true;
-	add_share(smbd_conf, share_spec);
-	share_spec = nullptr;
+	// add_share(smbd_conf, share_spec);
+	std::unique_ptr<share_spec_t> share_spec;
 
 	smbd_conf.capabilities = SMB2_CAP_DFS | SMB2_CAP_LARGE_MTU | SMB2_CAP_LEASING
 		| SMB2_CAP_DIRECTORY_LEASING | SMB2_CAP_MULTI_CHANNEL;
@@ -239,11 +329,11 @@ static int parse_smbconf(x_smbd_conf_t &smbd_conf, const char *path,
 			}
 			std::string section = line.substr(pos + 1, end - pos - 1);
 			if (share_spec) {
-				add_share(smbd_conf, share_spec);
+				add_share(smbd_conf, *share_spec);
 				share_spec = nullptr;
 			}
 			if (section != "global") {
-				share_spec = std::make_shared<x_smbd_share_t>(section);
+				share_spec.reset(new share_spec_t(section));
 			}
 		} else {
 			std::string name, value;
@@ -253,46 +343,14 @@ static int parse_smbconf(x_smbd_conf_t &smbd_conf, const char *path,
 			}
 
 			if (share_spec) {
-				if (name == "type") {
-					/* TODO not support distribute share for now */
-					if (false && value == "HOME_SHARE") {
-						share_spec->type = TYPE_HOME;
-					} else if (value == "DEFAULT_SHARE") {
-						share_spec->type = TYPE_DEFAULT;
-					} else {
-						X_PANIC("Unknown share type %s",
-								value.c_str());
-					}
-#if 0
-				} else if (name == "uuid") {
-					uuid_t uuid;
-					int ret = parse_uuid(value, uuid);
-					if (ret < 0) {
-						X_PANIC("Invalid uuid %s", value.c_str());
-					}
-					share_spec->uuid = uuid;
-#endif
-				} else if (name == "path") {
-					share_spec->path = value;
-				} else if (name == "msdfs proxy") {
-					share_spec->msdfs_proxy = value;
-				} else if (name == "abe") {
-					if (value == "yes") {
-						share_spec->abe = true;
-					} else if (value == "no") {
-						share_spec->abe = false;
-					} else {
-						X_PANIC("Unexpected boolean %s at %s:%u",
-								value.c_str(), path, lineno);
-					}
-				}
+				parse_share_param(*share_spec, name, value, path, lineno);
 			} else {
 				parse_global_param(smbd_conf, name, value);
 			}
 		}
 	}
 	if (share_spec) {
-		add_share(smbd_conf, share_spec);
+		add_share(smbd_conf, *share_spec);
 	}
 
 	// override global params by argv
@@ -315,13 +373,9 @@ static int parse_smbconf(x_smbd_conf_t &smbd_conf, const char *path,
 	}
 
 	load_ifaces(smbd_conf);
-	return 0;
-}
 
-static std::atomic<uint64_t> g_topdir_next_id = 0;
-x_smbd_topdir_t::x_smbd_topdir_t(std::shared_ptr<x_smbd_share_t> &s)
-		: smbd_share(s), uuid(g_topdir_next_id++)
-{
+	add_share(smbd_conf, x_smbd_ipc_share_create());
+	return 0;
 }
 
 std::shared_ptr<x_smbd_conf_t> x_smbd_conf_get()

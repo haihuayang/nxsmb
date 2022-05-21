@@ -4,6 +4,7 @@
 #include "smbd_stats.hxx"
 #include "smbd_open.hxx"
 #include "include/idtable.hxx"
+#include "smbd_share.hxx"
 
 using smbd_tcon_table_t = x_idtable_t<x_smbd_tcon_t, x_idtable_32_traits_t>;
 static smbd_tcon_table_t *g_smbd_tcon_table;
@@ -12,9 +13,8 @@ struct x_smbd_tcon_t
 { 
 	x_smbd_tcon_t(x_smbd_sess_t *smbd_sess,
 			const std::shared_ptr<x_smbd_share_t> &share,
-			const x_smbd_tcon_ops_t *ops,
 			uint32_t share_access)
-       		: ops(ops), share_access(share_access)
+       		: share_access(share_access)
 		, smbd_sess(x_smbd_ref_inc(smbd_sess)), smbd_share(share) {
 		X_SMBD_COUNTER_INC(tcon_create, 1);
 	}
@@ -24,7 +24,6 @@ struct x_smbd_tcon_t
 	}
 
 	x_dlink_t sess_link; // protected by smbd_sess' mutex
-	const x_smbd_tcon_ops_t * const ops;
 	enum {
 		S_ACTIVE,
 		S_DONE,
@@ -54,9 +53,7 @@ x_smbd_tcon_t *x_smbd_tcon_create(x_smbd_sess_t *smbd_sess,
 		const std::shared_ptr<x_smbd_share_t> &smbshare,
 		uint32_t share_access)
 {
-	const x_smbd_tcon_ops_t *ops = (smbshare->type == TYPE_IPC) ?
-		x_smbd_ipc_get_tcon_ops() : x_smbd_posixfs_get_tcon_ops();
-	x_smbd_tcon_t *smbd_tcon = new x_smbd_tcon_t(smbd_sess, smbshare, ops, share_access);
+	x_smbd_tcon_t *smbd_tcon = new x_smbd_tcon_t(smbd_sess, smbshare, share_access);
 	if (!g_smbd_tcon_table->store(smbd_tcon, smbd_tcon->tid)) {
 		delete smbd_tcon;
 		return nullptr;
@@ -116,7 +113,7 @@ NTSTATUS x_smbd_tcon_op_create(x_smbd_tcon_t *smbd_tcon,
 
        	x_smbd_open_t *smbd_open = nullptr;
 	/* TODO should we check the open limit before create the open */
-	NTSTATUS status = smbd_tcon->ops->create(smbd_tcon, &smbd_open, smbd_requ, state);
+	NTSTATUS status = smbd_tcon->smbd_share->create(&smbd_open, smbd_requ, state);
 	if (smbd_open) {
 		X_ASSERT(NT_STATUS_IS_OK(status));
 		/* if client access the open from other channel now, it does not have

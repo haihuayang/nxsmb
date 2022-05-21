@@ -10,7 +10,7 @@
 #include "include/utils.hxx"
 #include "include/networking.hxx"
 #include "include/librpc/misc.hxx"
-#include "smb2.hxx"
+#include "smbd_share.hxx"
 #include <map>
 #include <atomic>
 
@@ -18,40 +18,6 @@ static inline bool lpcfg_param_bool(void *service, const char *type, const char 
 {
 	return default_v;
 }
-
-enum x_smbd_share_type_t {
-	TYPE_IPC,
-	TYPE_DEFAULT,
-	TYPE_HOME,
-};
-
-struct x_smbd_topdir_t;
-
-struct x_smbd_share_t
-{
-	x_smbd_share_t(const std::string &name) : name(name) { }
-	x_smbd_share_type_t type = TYPE_DEFAULT;
-	bool read_only = false;
-	std::string name;
-	std::string path;
-	bool abe = false;
-	bool nt_acl_support = true;
-	uint32_t max_referral_ttl = 300;
-	uint32_t max_connections = 0;
-
-	std::shared_ptr<x_smbd_topdir_t> root_dir;
-	std::string msdfs_proxy;
-#if 0
-	bool is_msdfs_root() const {
-		// TODO
-		return false && type != TYPE_IPC;
-	}
-#endif
-	bool abe_enabled() const {
-		// TODO
-		return false;
-	}
-};
 
 struct x_smbd_conf_t
 {
@@ -100,15 +66,6 @@ struct x_smbd_conf_t
 
 	std::vector<uint16_t> dialects{0x311, 0x310, 0x302, 0x210, 0x202};
 	std::map<std::string, std::shared_ptr<x_smbd_share_t>> shares;
-};
-
-struct x_smbd_topdir_t
-{
-	x_smbd_topdir_t(std::shared_ptr<x_smbd_share_t> &s);
-	const std::shared_ptr<x_smbd_share_t> smbd_share;
-	uint64_t const uuid;
-	int fd = -1;
-	std::atomic<uint32_t> watch_tree_cnt{0};
 };
 
 int x_smbd_conf_parse(const char *configfile, const std::vector<std::string> &cmdline_options);

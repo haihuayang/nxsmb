@@ -88,6 +88,26 @@ static inline size_t x_next_2_power(size_t num)
 	return ret;
 }
 
+static inline const char16_t *x_skip_sep(const char16_t *in, const char16_t *end)
+{
+	for ( ; in < end; ++in) {
+		if (*in != u'\\') {
+			break;
+		}
+	}
+	return in;
+}
+
+static inline const char16_t *x_next_sep(const char16_t *in, const char16_t *end)
+{
+	for ( ; in < end; ++in) {
+		if (*in == u'\\') {
+			break;
+		}
+	}
+	return in;
+}
+
 #define X_DEFINE_ENUM_FLAG_OPERATORS(T) \
 inline T operator~ (T a) { return static_cast<T>( ~static_cast<std::underlying_type<T>::type>(a) ); } \
 inline T operator| (T a, T b) { return static_cast<T>( static_cast<std::underlying_type<T>::type>(a) | static_cast<std::underlying_type<T>::type>(b) ); } \

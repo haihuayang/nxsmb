@@ -1,6 +1,7 @@
 
 #include "smbd_dcerpc.hxx"
 #include "include/librpc/dssetup.hxx"
+#include "smbd_conf.hxx"
 
 // secrets_fetch_domain_guid
 static const uint8_t hhdom2_guid[16] = { 0xDA, '(', 0xE2, 0x07, 'x', '2', 0xA3, 'L', 0xB7, 0x00, 0x0C, 0x0D, 'Y', 0x86, 'I', 0x9F };

@@ -8,6 +8,7 @@
 #include "include/librpc/wkssvc.hxx"
 #include "include/librpc/srvsvc.hxx"
 #include "include/librpc/security.hxx"
+#include "smbd_share.hxx"
 
 /* this guid indicates NDR encoding in a protocol tower */
 static const idl::ndr_syntax_id ndr_transfer_syntax_ndr = {
@@ -602,8 +603,7 @@ static NTSTATUS ipc_open_create(
 }
 
 
-static NTSTATUS x_smbd_tcon_ipc_op_create(x_smbd_tcon_t *smbd_tcon,
-		x_smbd_open_t **psmbd_open,
+static NTSTATUS ipc_op_create(x_smbd_open_t **psmbd_open,
 		x_smbd_requ_t *smbd_requ,
 		std::unique_ptr<x_smb2_state_create_t> &state)
 {
@@ -621,13 +621,46 @@ static NTSTATUS x_smbd_tcon_ipc_op_create(x_smbd_tcon_t *smbd_tcon,
 	return ipc_open_create(ipc_object, psmbd_open, smbd_requ, state);
 }
 
-static const x_smbd_tcon_ops_t x_smbd_tcon_ipc_ops = {
-	x_smbd_tcon_ipc_op_create,
+struct ipc_share_t : x_smbd_share_t
+{
+	ipc_share_t() : x_smbd_share_t("ipc$") {}
+	uint8_t get_type() const override {
+		return SMB2_SHARE_TYPE_PIPE;
+	}
+	bool is_dfs() const override {
+		return false;
+	}
+	bool abe_enabled() const override {
+		return false;
+	}
+	NTSTATUS create(x_smbd_open_t **psmbd_open,
+			x_smbd_requ_t *smbd_requ,
+			std::unique_ptr<x_smb2_state_create_t> &state) override {
+		return ipc_op_create(psmbd_open, smbd_requ, state);
+	}
+	NTSTATUS get_dfs_referral(x_dfs_referral_resp_t &dfs_referral,
+			const char16_t *in_full_path_begin,
+			const char16_t *in_full_path_end,
+			const char16_t *in_server_begin,
+			const char16_t *in_server_end,
+			const char16_t *in_share_begin,
+			const char16_t *in_share_end) const override
+	{
+		return NT_STATUS_FS_DRIVER_REQUIRED;
+	}
+	NTSTATUS resolve_path(const std::u16string &in_path,
+		bool dfs,
+		std::shared_ptr<x_smbd_topdir_t> &topdir,
+		std::u16string &path) override
+	{
+		X_ASSERT(false);
+		return NT_STATUS_INTERNAL_ERROR;
+	}
 };
 
-const x_smbd_tcon_ops_t *x_smbd_ipc_get_tcon_ops()
+std::shared_ptr<x_smbd_share_t> x_smbd_ipc_share_create()
 {
-	return &x_smbd_tcon_ipc_ops;
+	return std::make_shared<ipc_share_t>();
 }
 
 int x_smbd_ipc_init()

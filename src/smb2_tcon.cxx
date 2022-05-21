@@ -1,6 +1,8 @@
 
 #include "smbd.hxx"
 #include "include/charset.hxx"
+#include "smbd_share.hxx"
+#include "smbd_conf.hxx"
 
 struct x_smb2_tcon_requ_t
 {
@@ -226,7 +228,7 @@ NTSTATUS x_smb2_process_tcon(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 
 	uint32_t out_share_flags = 0;
 	uint32_t out_capabilities = 0;
-	if (smbshare->msdfs_proxy.size()) {
+	if (smbshare->is_dfs()) {
 		out_share_flags |= SMB2_SHAREFLAG_DFS|SMB2_SHAREFLAG_DFS_ROOT;
 		out_capabilities |= SMB2_SHARE_CAP_DFS;
 	}
@@ -267,7 +269,7 @@ NTSTATUS x_smb2_process_tcon(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 
 	smbd_requ->smbd_tcon = x_smbd_ref_inc(smbd_tcon);
 	x_smb2_reply_tcon(smbd_conn, smbd_tcon, smbd_requ, NT_STATUS_OK,
-			smbshare->type == TYPE_IPC ? SMB2_SHARE_TYPE_PIPE : SMB2_SHARE_TYPE_DISK,
+			smbshare->get_type(),
 			out_share_flags,
 			out_capabilities, share_access);
 	return NT_STATUS_OK;

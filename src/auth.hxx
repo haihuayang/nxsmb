@@ -13,7 +13,6 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <unistd.h>
-#include "smbd_conf.hxx"
 #include "smb2.hxx"
 #include "misc.hxx"
 #include "include/utils.hxx"

@@ -1,6 +1,7 @@
 
 #include "smbd_dcerpc.hxx"
 #include "include/librpc/wkssvc.hxx"
+#include "smbd_conf.hxx"
 
 static bool x_smbd_dcerpc_impl_wkssvc_NetWkstaGetInfo(
 		x_dcerpc_pipe_t &rpc_pipe,

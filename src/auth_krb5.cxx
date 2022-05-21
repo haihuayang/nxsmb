@@ -27,6 +27,7 @@ extern "C" {
 #undef min
 
 #include "smbd.hxx"
+#include "smbd_conf.hxx"
 #include "smbd_secrets.hxx"
 #include <cctype>
 #include <algorithm>

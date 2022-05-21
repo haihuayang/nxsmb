@@ -99,9 +99,15 @@ all: $(TARGET_SET_tests:%=$(TARGET_DIR_out)/tests/%) \
 	$(TARGET_DIR_out)/bin/nxsmbd \
 	$(TARGET_DIR_out)/bin/nxutils
 
+a = \
+
 SET_src_nxsmbd := \
-	smbd \
 	smbd_dfs \
+	smbd_share \
+	smbd_posixfs \
+	smbd_ipc \
+	smbd_conf smbd_share \
+	smbd \
 	smbd_stats \
 	smbd_requ \
 	smbd_conn \
@@ -111,9 +117,7 @@ SET_src_nxsmbd := \
 	smbd_open \
 	smbd_object \
 	smbd_secrets \
-	smbd_posixfs \
 	smbd_posixfs_utils \
-	smbd_ipc \
 	smbd_lease \
 	util_sid \
 	smbd_ctrl \
@@ -145,7 +149,6 @@ SET_src_nxsmbd := \
 	smb2 \
 	auth_ntlmssp auth_krb5 auth_spnego auth \
 	network misc fnmatch \
-	smbd_conf smbd_share \
 	smbd_ntacl \
 
 SET_src_nxutils := \

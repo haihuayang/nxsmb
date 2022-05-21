@@ -19,7 +19,6 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <unistd.h>
-#include "smbd_conf.hxx"
 #include "smb2.hxx"
 #include "smb2_state.hxx"
 #include "misc.hxx"
@@ -63,6 +62,8 @@ struct x_smbd_open_t;
 struct x_smbd_lease_t;
 struct x_smbd_object_t;
 struct x_smbd_requ_t;
+struct x_smbd_share_t;
+struct x_smbd_topdir_t;
 
 template <class T>
 T *x_smbd_ref_inc(T *);
@@ -208,13 +209,6 @@ bool x_smbd_chan_post_user(x_smbd_chan_t *smbd_chan, x_fdevt_user_t *fdevt_user)
 
 
 
-struct x_smbd_tcon_ops_t
-{
-	NTSTATUS (*create)(x_smbd_tcon_t *smbd_tcon, x_smbd_open_t **psmbd_open,
-			x_smbd_requ_t *smbd_requ,
-			std::unique_ptr<x_smb2_state_create_t> &state);
-};
-
 int x_smbd_tcon_table_init(uint32_t count);
 NTSTATUS x_smbd_tcon_op_create(x_smbd_tcon_t *smbd_tcon,
 		x_smbd_requ_t *smbd_requ,
@@ -244,9 +238,7 @@ void x_smbd_open_unlinked(x_dlink_t *link, x_smbd_tcon_t *smbd_tcon);
 
 
 int x_smbd_posixfs_init(size_t max_open);
-const x_smbd_tcon_ops_t *x_smbd_posixfs_get_tcon_ops();
 int x_smbd_ipc_init();
-const x_smbd_tcon_ops_t *x_smbd_ipc_get_tcon_ops();
 
 
 struct x_smbd_requ_t

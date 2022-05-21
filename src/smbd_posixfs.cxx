@@ -7,6 +7,7 @@
 #include "smbd_lease.hxx"
 #include <dirent.h>
 #include <sys/syscall.h>
+#include "smbd_share.hxx"
 
 struct qdir_t
 {
@@ -579,7 +580,8 @@ static NTSTATUS posixfs_object_rename(posixfs_object_t *posixfs_object,
 {
 	std::u16string dst_path;
 	std::shared_ptr<x_smbd_topdir_t> topdir;
-	NTSTATUS status = x_smbd_dfs_resolve_path(smbd_share, in_dst_path, dfs,
+	NTSTATUS status = smbd_share->resolve_path(
+			in_dst_path, dfs,
 			topdir, dst_path);
 	if (!NT_STATUS_IS_OK(status)) {
 		return status;
@@ -2565,16 +2567,51 @@ posixfs_object_t::posixfs_object_t(uint64_t h,
 {
 }
 
+struct posixfs_share_t : x_smbd_share_t
+{
+	posixfs_share_t(const std::string &name,
+			const std::string &path)
+		: x_smbd_share_t(name)
+	{
+		root_dir = x_smbd_topdir_create(path);
+	}
+					
+	uint8_t get_type() const override {
+		return SMB2_SHARE_TYPE_DISK;
+	}
+	bool is_dfs() const override { return false; }
+	/* TODO not support ABE for now */
+	bool abe_enabled() const override { return false; }
 
-static NTSTATUS posixfs_op_create(x_smbd_tcon_t *smbd_tcon,
+	NTSTATUS create(x_smbd_open_t **psmbd_open,
+			x_smbd_requ_t *smbd_requ,
+			std::unique_ptr<x_smb2_state_create_t> &state) override;
+	NTSTATUS get_dfs_referral(x_dfs_referral_resp_t &dfs_referral,
+			const char16_t *in_full_path_begin,
+			const char16_t *in_full_path_end,
+			const char16_t *in_server_begin,
+			const char16_t *in_server_end,
+			const char16_t *in_share_begin,
+			const char16_t *in_share_end) const override
+	{
+		return NT_STATUS_FS_DRIVER_REQUIRED;
+	}
+	NTSTATUS resolve_path(const std::u16string &in_path,
+		bool dfs,
+		std::shared_ptr<x_smbd_topdir_t> &topdir,
+		std::u16string &path) override;
+	std::shared_ptr<x_smbd_topdir_t> root_dir;
+};
+
+static NTSTATUS posixfs_op_create(posixfs_share_t &posixfs_share,
 		x_smbd_open_t **psmbd_open,
 		x_smbd_requ_t *smbd_requ,
 		std::unique_ptr<x_smb2_state_create_t> &state)
 {
 	std::u16string path;
 	std::shared_ptr<x_smbd_topdir_t> topdir;
-	NTSTATUS status = x_smbd_dfs_resolve_path(
-			x_smbd_tcon_get_share(smbd_tcon), state->in_name,
+	NTSTATUS status = posixfs_share.resolve_path(
+			state->in_name,
 			smbd_requ->in_hdr_flags & SMB2_HDR_FLAG_DFS,
 			topdir, path);
 	if (!NT_STATUS_IS_OK(status)) {
@@ -2618,13 +2655,42 @@ static NTSTATUS posixfs_op_create(x_smbd_tcon_t *smbd_tcon,
 	return NT_STATUS_OK;
 }
 
-static const x_smbd_tcon_ops_t x_smbd_tcon_posixfs_ops = {
-	posixfs_op_create,
-};
-
-const x_smbd_tcon_ops_t *x_smbd_posixfs_get_tcon_ops()
+NTSTATUS posixfs_share_t::create(x_smbd_open_t **psmbd_open,
+		x_smbd_requ_t *smbd_requ,
+		std::unique_ptr<x_smb2_state_create_t> &state)
 {
-	return &x_smbd_tcon_posixfs_ops;
+	return posixfs_op_create(*this, psmbd_open, smbd_requ, state);
+}
+
+NTSTATUS posixfs_share_t::resolve_path(
+		const std::u16string &in_path,
+		bool dfs,
+		std::shared_ptr<x_smbd_topdir_t> &topdir,
+		std::u16string &path)
+{
+	if (dfs) {
+		/* TODO we just skip the first 2 components for now */
+		auto pos = in_path.find(u'\\');
+		X_ASSERT(pos != std::u16string::npos);
+		pos = in_path.find(u'\\', pos + 1);
+		if (pos == std::u16string::npos) {
+			path = u"";
+		} else {
+			path = in_path.substr(pos + 1);
+		}
+	} else {
+		path = in_path;
+	}
+	topdir = root_dir;
+	return NT_STATUS_OK;
+}
+
+
+std::shared_ptr<x_smbd_share_t> x_smbd_posixfs_share_create(
+		const std::string &name,
+		const std::string &path)
+{
+	return std::make_shared<posixfs_share_t>(name, path);
 }
 
 int x_smbd_posixfs_init(size_t max_open)

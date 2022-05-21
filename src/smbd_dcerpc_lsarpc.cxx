@@ -1,6 +1,7 @@
 
 #include "smbd_dcerpc.hxx"
 #include "include/librpc/lsa.hxx"
+#include "smbd_conf.hxx"
 
 enum lsa_handle_type_t {
 	LSA_HANDLE_POLICY_TYPE = 1,

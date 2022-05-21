@@ -2,6 +2,7 @@
 extern "C" {
 #include "samba/lib/util/samba_util.h"
 }
+#include "smbd_conf.hxx"
 
 namespace {
 

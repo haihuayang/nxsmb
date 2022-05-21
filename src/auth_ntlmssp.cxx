@@ -25,6 +25,7 @@ extern "C" {
 #undef min
 
 #include "smbd.hxx"
+#include "smbd_conf.hxx"
 #include <cctype>
 #include <algorithm>
 #include "include/asn1_wrap.hxx"
