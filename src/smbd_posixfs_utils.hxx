@@ -8,9 +8,15 @@
 
 #include "samba/include/config.h"
 #include "include/xdefines.h"
+#include "smbd_ntacl.hxx"
 #include <vector>
 #include <sys/stat.h>
 #include <stdint.h>
+#include <memory>
+extern "C" {
+#include "samba/lib/util/samba_util.h"
+#include "samba/libcli/util/ntstatus.h"
+}
 
 struct posixfs_statex_t
 {
@@ -72,7 +78,11 @@ int posixfs_statex_get(int fd, posixfs_statex_t *statex);
 int posixfs_statex_getat(int dirfd, const char *name, posixfs_statex_t *statex);
 int posixfs_get_ntacl_blob(int fd, std::vector<uint8_t> &blob);
 int posixfs_set_ntacl_blob(int fd, const std::vector<uint8_t> &blob);
+NTSTATUS posixfs_get_sd(int fd, std::shared_ptr<idl::security_descriptor> &psd);
 void posixfs_post_create(int fd, uint32_t file_attrs, posixfs_statex_t *statex,
+		const std::vector<uint8_t> &ntacl_blob);
+int posixfs_create(int dirfd, bool is_dir, const char *path,
+		posixfs_statex_t *statex,
 		const std::vector<uint8_t> &ntacl_blob);
 
 

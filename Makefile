@@ -102,9 +102,10 @@ all: $(TARGET_SET_tests:%=$(TARGET_DIR_out)/tests/%) \
 a = \
 
 SET_src_nxsmbd := \
+	smbd_simplefs \
+	smbd_posixfs \
 	smbd_dfs \
 	smbd_share \
-	smbd_posixfs \
 	smbd_ipc \
 	smbd_conf smbd_share \
 	smbd \
@@ -156,6 +157,7 @@ SET_src_nxutils := \
 	smbd_posixfs_utils \
 	smbd_ntacl \
 	util_sid \
+	misc \
 
 $(TARGET_DIR_out)/bin/nxsmbd: $(SET_src_nxsmbd:%=$(TARGET_DIR_out)/src/%.o) $(TARGET_SET_lib:%=$(TARGET_DIR_out)/lib%.a)
 	$(CXX) -g $(TARGET_LDFLAGS) -o $@ $^ -lpthread -lresolv -ldl

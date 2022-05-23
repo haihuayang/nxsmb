@@ -241,6 +241,12 @@ static NTSTATUS fsctl_dfs_get_refers_internal(
 
 	const char16_t *in_file_name_begin = (const char16_t *)(in_file_name_data);
 	const char16_t *in_file_name_end = (const char16_t *)(in_file_name_data + in_file_name_size);
+	/* trim back 0 */
+	for (; in_file_name_end > in_file_name_begin; --in_file_name_end) {
+		if (in_file_name_end[-1] != char16_t(0)) {
+			break;
+		}
+	}
 	
 	const char16_t *in_server_begin = x_skip_sep(in_file_name_begin, in_file_name_end);
 	const char16_t *in_server_end = x_next_sep(in_server_begin, in_file_name_end);

@@ -534,8 +534,11 @@ static const x_smbd_object_ops_t x_smbd_ipc_object_ops = {
 	ipc_object_op_ioctl,
 	ipc_object_op_qdir,
 	ipc_object_op_notify,
-	nullptr,
-	nullptr,
+	nullptr, // op_lease_break
+	nullptr, // op_oplock_break
+	nullptr, // op_rename
+	nullptr, // op_set_delete_on_close
+	nullptr, // op_unlink
 	ipc_object_op_get_path,
 	ipc_object_op_destroy,
 };
@@ -633,7 +636,7 @@ struct ipc_share_t : x_smbd_share_t
 	bool abe_enabled() const override {
 		return false;
 	}
-	NTSTATUS create(x_smbd_open_t **psmbd_open,
+	NTSTATUS create_open(x_smbd_open_t **psmbd_open,
 			x_smbd_requ_t *smbd_requ,
 			std::unique_ptr<x_smb2_state_create_t> &state) override {
 		return ipc_op_create(psmbd_open, smbd_requ, state);
@@ -647,14 +650,6 @@ struct ipc_share_t : x_smbd_share_t
 			const char16_t *in_share_end) const override
 	{
 		return NT_STATUS_FS_DRIVER_REQUIRED;
-	}
-	NTSTATUS resolve_path(const std::u16string &in_path,
-		bool dfs,
-		std::shared_ptr<x_smbd_topdir_t> &topdir,
-		std::u16string &path) override
-	{
-		X_ASSERT(false);
-		return NT_STATUS_INTERNAL_ERROR;
 	}
 };
 

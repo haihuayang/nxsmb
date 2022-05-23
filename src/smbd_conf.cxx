@@ -18,6 +18,7 @@ struct share_spec_t
 	std::string path;
 	bool read_only = false;
 	bool abe = false;
+	bool dfs_test = false;
 	uint32_t max_referral_ttl = 300;
 
 #if 0
@@ -151,13 +152,13 @@ static void add_share(x_smbd_conf_t &smbd_conf,
 {
 	if (false) {
 	} else if (share_spec.my_distribute_root.size() > 0) {
-		add_share(smbd_conf, x_smbd_dfs_namespace_create(share_spec.name, share_spec.my_distribute_root));
+		add_share(smbd_conf, x_smbd_dfs_link_create(share_spec.name, share_spec.my_distribute_root));
 	} else if (share_spec.my_distribute_vgs.size() > 0) {
 		X_ASSERT(share_spec.path.size() > 0);
 		add_share(smbd_conf, x_smbd_dfs_root_create(share_spec.name, share_spec.path, share_spec.my_distribute_vgs));
 	} else {
 		X_ASSERT(share_spec.path.size() > 0);
-		add_share(smbd_conf, x_smbd_posixfs_share_create(share_spec.name, share_spec.path));
+		add_share(smbd_conf, x_smbd_simplefs_share_create(share_spec.name, share_spec.path));
 	}
 }
 
@@ -279,6 +280,10 @@ static bool parse_share_param(share_spec_t &share_spec,
 		share_spec.my_distribute_root = value;
 	} else if (name == "my distribute vgs") {
 		share_spec.my_distribute_vgs = parse_stringlist(value);
+	} else if (name == "read only") {
+		share_spec.read_only = parse_bool(value);
+	} else if (name == "dfs test") {
+		share_spec.dfs_test = parse_bool(value);
 	} else {
 		X_LOG_WARN("unknown share param '%s' with value '%s'",
 				name.c_str(), value.c_str());

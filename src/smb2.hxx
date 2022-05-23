@@ -382,6 +382,7 @@ struct x_smb2_rename_info_t
 	uint8_t replace_if_exists;
 	uint8_t unused0;
 	uint16_t unused1;
+	uint32_t unused2;
 	uint32_t root_directory_low;
 	uint32_t root_directory_high;
 	uint32_t file_name_length;

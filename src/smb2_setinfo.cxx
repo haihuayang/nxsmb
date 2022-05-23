@@ -71,22 +71,40 @@ static void x_smb2_reply_setinfo(x_smbd_conn_t *smbd_conn,
 			SMB2_HDR_BODY + sizeof(x_smb2_out_setinfo_t));
 }
 
-#if 0
-static NTSTATUS process_setinfo(x_smbd_conn_t *smbd_conn,
-		x_smbd_requ_t *smbd_requ,
-		std::unique<x_smb2_state_setinfo_t> &state)
+static NTSTATUS smb2_setinfo_dispatch(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ,
+		std::unique_ptr<x_smb2_state_setinfo_t> &state)
 {
 	if (state->in_info_class == SMB2_GETINFO_FILE) {
-		return x_smbd_open_op_setinfo_file(smbd_conn, smbd_requ, state);
-	} else if (state->in_info_class == SMB2_GETINFO_FS) {
-		return x_smbd_open_op_setinfo_fs(smbd_conn, smbd_requ, state);
-	} else if (state->in_info_class == SMB2_GETINFO_SECURITY) {
-		return setinfo_security(disk_open, smbd_requ, *state);
-	} else {
-		return NT_STATUS_INVALID_PARAMETER;
+		if (state->in_info_level == SMB2_FILE_INFO_FILE_RENAME_INFORMATION) {
+			/* MS-FSA 2.1.5.14.11 */
+			if (!smbd_requ->smbd_open->check_access(idl::SEC_STD_DELETE)) {
+				RETURN_OP_STATUS(smbd_requ, NT_STATUS_ACCESS_DENIED);
+			}
+			bool replace_if_exists;
+			std::u16string file_name;
+			if (!x_smb2_rename_info_decode(replace_if_exists, file_name, state->in_data)) {
+				RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
+			}
+			return x_smbd_open_op_rename(smbd_requ->smbd_open, smbd_requ,
+					replace_if_exists, file_name);
+		} else if (state->in_info_level == SMB2_FILE_INFO_FILE_DISPOSITION_INFORMATION) {
+			/* MS-FSA 2.1.5.14.3 */
+			if (!smbd_requ->smbd_open->check_access(idl::SEC_STD_DELETE)) {
+				RETURN_OP_STATUS(smbd_requ, NT_STATUS_ACCESS_DENIED);
+			}
+			if (state->in_data.size() < 1) {
+				RETURN_OP_STATUS(smbd_requ, NT_STATUS_INFO_LENGTH_MISMATCH);
+			}
+			bool delete_on_close = (state->in_data[0] != 0);
+			return x_smbd_open_op_set_delete_on_close(smbd_requ->smbd_open, smbd_requ,
+					delete_on_close);
+		}
 	}
+
+	/* different INFO request different access, so check access inside the op func */
+	return x_smbd_open_op_setinfo(smbd_requ->smbd_open, smbd_conn, smbd_requ, state);
 }
-#endif
+
 NTSTATUS x_smb2_process_setinfo(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 {
 	if (smbd_requ->in_requ_len < SMB2_HDR_BODY + sizeof(x_smb2_in_setinfo_t)) {
@@ -112,10 +130,7 @@ NTSTATUS x_smb2_process_setinfo(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_re
 		}
 	}
 
-	x_smbd_object_t *smbd_object = smbd_requ->smbd_open->smbd_object;
-
-	/* different INFO request different access, so check access inside the op func */
-	NTSTATUS status = smbd_object->ops->setinfo(smbd_object, smbd_conn, smbd_requ, state);
+	NTSTATUS status = smb2_setinfo_dispatch(smbd_conn, smbd_requ, state);
 	if (NT_STATUS_IS_OK(status)) {
 		x_smb2_reply_setinfo(smbd_conn, smbd_requ, *state);
 		return status;

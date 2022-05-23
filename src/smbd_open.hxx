@@ -83,6 +83,16 @@ struct x_smbd_object_ops_t
 			x_smbd_conn_t *smbd_conn,
 			x_smbd_requ_t *smbd_requ,
 			std::unique_ptr<x_smb2_state_oplock_break_t> &state);
+	NTSTATUS (*rename)(x_smbd_object_t *smbd_object,
+			x_smbd_open_t *smbd_open,
+			x_smbd_requ_t *smbd_requ,
+			bool replace_if_exists,
+			const std::u16string &new_path);
+	NTSTATUS (*set_delete_on_close)(x_smbd_object_t *smbd_object,
+			x_smbd_open_t *smbd_open,
+			x_smbd_requ_t *smbd_requ,
+			bool delete_on_close);
+	NTSTATUS (*unlink)(x_smbd_object_t *smbd_object, int fd);
 	std::string (*get_path)(const x_smbd_object_t *smbd_object);
 	void (*destroy)(x_smbd_object_t *smbd_object, x_smbd_open_t *smbd_open);
 };
@@ -130,6 +140,26 @@ static inline NTSTATUS x_smbd_open_op_write(
 	}
 	return smbd_object->ops->write(smbd_object, smbd_conn,
 			smbd_requ, state);
+}
+
+static inline NTSTATUS x_smbd_open_op_getinfo(x_smbd_open_t *smbd_open,
+		x_smbd_conn_t *smbd_conn,
+		x_smbd_requ_t *smbd_requ,
+		std::unique_ptr<x_smb2_state_getinfo_t> &state)
+{
+	x_smbd_object_t *smbd_object = smbd_open->smbd_object;
+	return smbd_object->ops->getinfo(smbd_object,
+			smbd_conn, smbd_requ, state);
+}
+
+static inline NTSTATUS x_smbd_open_op_setinfo(x_smbd_open_t *smbd_open,
+		x_smbd_conn_t *smbd_conn,
+		x_smbd_requ_t *smbd_requ,
+		std::unique_ptr<x_smb2_state_setinfo_t> &state)
+{
+	x_smbd_object_t *smbd_object = smbd_open->smbd_object;
+	return smbd_object->ops->setinfo(smbd_object,
+			smbd_conn, smbd_requ, state);
 }
 
 static inline NTSTATUS x_smbd_open_op_ioctl(
@@ -200,6 +230,34 @@ static inline NTSTATUS x_smbd_open_op_oplock_break(
 	}
 	return smbd_object->ops->oplock_break(smbd_object, smbd_conn,
 			smbd_requ, state);
+}
+
+static inline NTSTATUS x_smbd_open_op_rename(
+		x_smbd_open_t *smbd_open,
+		x_smbd_requ_t *smbd_requ,
+		bool replace_if_exists,
+		const std::u16string &new_path)
+{
+	x_smbd_object_t *smbd_object = smbd_open->smbd_object;
+	return smbd_object->ops->rename(smbd_object, smbd_open,
+			smbd_requ, replace_if_exists, new_path);
+}
+
+static inline NTSTATUS x_smbd_open_op_set_delete_on_close(
+		x_smbd_open_t *smbd_open,
+		x_smbd_requ_t *smbd_requ,
+		bool delete_on_close)
+{
+	x_smbd_object_t *smbd_object = smbd_open->smbd_object;
+	return smbd_object->ops->set_delete_on_close(smbd_object, smbd_open,
+			smbd_requ, delete_on_close);
+}
+
+static inline NTSTATUS x_smbd_object_unlink(
+		x_smbd_object_t *smbd_object,
+		int fd)
+{
+	return smbd_object->ops->unlink(smbd_object, fd);
 }
 
 static inline std::string x_smbd_open_op_get_path(

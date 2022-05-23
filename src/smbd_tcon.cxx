@@ -113,7 +113,7 @@ NTSTATUS x_smbd_tcon_op_create(x_smbd_tcon_t *smbd_tcon,
 
        	x_smbd_open_t *smbd_open = nullptr;
 	/* TODO should we check the open limit before create the open */
-	NTSTATUS status = smbd_tcon->smbd_share->create(&smbd_open, smbd_requ, state);
+	NTSTATUS status = smbd_tcon->smbd_share->create_open(&smbd_open, smbd_requ, state);
 	if (smbd_open) {
 		X_ASSERT(NT_STATUS_IS_OK(status));
 		/* if client access the open from other channel now, it does not have
