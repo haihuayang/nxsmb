@@ -1468,10 +1468,17 @@ static void posixfs_object_remove(posixfs_object_t *posixfs_object,
 	posixfs_object->open_list.remove(posixfs_open);
 	if (posixfs_object->open_list.empty()) {
 		if (posixfs_object->flags & posixfs_object_t::flag_delete_on_close) {
-			uint32_t notify_filter = posixfs_object->is_dir() ?
-				FILE_NOTIFY_CHANGE_DIR_NAME : FILE_NOTIFY_CHANGE_FILE_NAME;
+			uint32_t notify_filter;
+			int unlink_flags;
+			if (posixfs_object->is_dir()) {
+				notify_filter = FILE_NOTIFY_CHANGE_DIR_NAME;
+				unlink_flags = AT_REMOVEDIR;
+			} else {
+				notify_filter = FILE_NOTIFY_CHANGE_FILE_NAME;
+				unlink_flags = 0;
+			}
 
-			int err = unlinkat(posixfs_object->topdir->fd, posixfs_object->unix_path.c_str(), 0); // AT_REMOVEDIR ?
+			int err = unlinkat(posixfs_object->topdir->fd, posixfs_object->unix_path.c_str(), unlink_flags);
 			X_ASSERT(err == 0);
 			err = close(posixfs_object->fd);
 			X_ASSERT(err == 0);
