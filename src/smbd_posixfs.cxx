@@ -810,61 +810,68 @@ static inline uint8_t get_lease_type(const posixfs_open_t *posixfs_open)
 		return 0;
 	}
 }
-#if 0
+
 struct posixfs_break_evt_t
 {
+	~posixfs_break_evt_t() {
+		if (smbd_sess) {
+			x_smbd_ref_dec(smbd_sess);
+		}
+		x_smbd_ref_dec(&posixfs_open->base);
+	}
 	x_fdevt_user_t base;
 	posixfs_open_t *posixfs_open;
-	uint32_t breakto;
+	x_smbd_sess_t *smbd_sess = nullptr;
+	uint8_t breakto;
 };
 
-static void posixfs_break_func(x_smbd_conn_t *smbd_conn, x_fdevt_user_t *fdevt_user, bool cancelled)
+static void posixfs_break_func(x_smbd_conn_t *smbd_conn, x_fdevt_user_t *fdevt_user, bool terminated)
 {
 	posixfs_break_evt_t *evt = X_CONTAINER_OF(fdevt_user, posixfs_break_evt_t, base);
 	X_LOG_DBG("evt=%p", evt);
 
-	posixfs_open_t *posixfs_open = evt->posixfs_open;
-	uint32_t breakto = evt->breakto;
-	delete evt;
-
-	if (cancelled) {
-		x_smbd_ref_dec(&posixfs_open->base);
+	if (terminated) {
+		delete evt;
 		return;
 	}
 
+	posixfs_open_t *posixfs_open = evt->posixfs_open;
+	posixfs_object_t *posixfs_object = posixfs_object_from_base_t::container(posixfs_open->base.smbd_object);
+
+	std::lock_guard<std::mutex> lock(posixfs_object->mutex);
 	if (posixfs_open->smbd_lease) {
 		/* TODO check breaking */
 		x_smb2_send_lease_break(smbd_conn,
-				posixfs_open->base.smbd_tcon->smbd_sess,
+				evt->smbd_sess,
 				&posixfs_open->smbd_lease->lease_key,
 				0, // TODO epoch
 				SMB2_NOTIFY_BREAK_LEASE_FLAG_ACK_REQUIRED, // TODO
 				posixfs_open->smbd_lease->lease_state,
-				breakto);
+				evt->breakto);
 	} else {
 		if (posixfs_open->oplock_break_sent != oplock_break_sent_t::OPLOCK_BREAK_NOT_SENT) {
-			posixfs_open->oplock_break_sent = breakto == X_SMB2_OPLOCK_LEVEL_II ?
+			posixfs_open->oplock_break_sent = evt->breakto == X_SMB2_OPLOCK_LEVEL_II ?
 				oplock_break_sent_t::OPLOCK_BREAK_TO_LEVEL_II_SENT : oplock_break_sent_t::OPLOCK_BREAK_TO_NONE_SENT;
 			x_smb2_send_oplock_break(smbd_conn,
-					posixfs_open->base.smbd_tcon->smbd_sess,
+					evt->smbd_sess,
 					&posixfs_open->base,
-					breakto);
+					evt->breakto);
 		}
 	}
+	delete evt;
 }
-#endif
+
 static void send_break(posixfs_open_t *posixfs_open,
-		uint32_t breakto)
+		uint8_t breakto)
 {
-	X_TODO;
-#if 0
 	/* already hold posixfs_object mutex */
 	posixfs_break_evt_t *evt = new posixfs_break_evt_t;
 	evt->base.func = posixfs_break_func;
 	x_smbd_ref_inc(&posixfs_open->base);
 	evt->posixfs_open = posixfs_open;
 	evt->breakto = breakto;
-	x_smbd_chan_t *smbd_chan = x_smbd_sess_get_active_chan(posixfs_open->base.smbd_tcon->smbd_sess);
+	evt->smbd_sess = x_smbd_tcon_get_sess(posixfs_open->base.smbd_tcon);
+	x_smbd_chan_t *smbd_chan = x_smbd_sess_get_active_chan(evt->smbd_sess);
 	if (smbd_chan) {
 		if (x_smbd_chan_post_user(smbd_chan, &evt->base)) {
 			return;
@@ -873,7 +880,6 @@ static void send_break(posixfs_open_t *posixfs_open,
 	}
 	X_LOG_ERR("failed to post send_break %p", smbd_chan);
 	delete evt;
-#endif
 }
 
 /* caller locked posixfs_object */
@@ -903,9 +909,9 @@ static bool delay_for_oplock(posixfs_object_t *posixfs_object,
 	posixfs_open_t *curr_open;
 	for (curr_open = open_list.get_front(); curr_open; curr_open = open_list.next(curr_open)) {
 		/* TODO mutex curr_open ? */
-		uint32_t e_lease_type = get_lease_type(curr_open);
-		uint32_t delay_mask = 0;
-		uint32_t break_to;
+		uint8_t e_lease_type = get_lease_type(curr_open);
+		uint8_t break_to;
+		uint8_t delay_mask = 0;
 		if (curr_open->oplock_level == X_SMB2_OPLOCK_LEVEL_LEASE) {
 			if (lease && x_smbd_lease_match(curr_open->smbd_lease,
 						client_guid, lease->key)) {
@@ -919,10 +925,10 @@ static bool delay_for_oplock(posixfs_object_t *posixfs_object,
 			delay_mask = X_SMB2_LEASE_WRITE;
 		}
 
-		break_to = e_lease_type & ~delay_mask;
+		break_to = x_convert<uint8_t>(e_lease_type & ~delay_mask);
 
 		if (will_overwrite) {
-			break_to &= ~X_SMB2_LEASE_HANDLE;
+			break_to = x_convert<uint8_t>(break_to & ~X_SMB2_LEASE_HANDLE);
 		}
 
 		if ((e_lease_type & ~break_to) == 0) {
@@ -937,14 +943,14 @@ static bool delay_for_oplock(posixfs_object_t *posixfs_object,
 			 * Otherwise vfs_set_filelen() will trigger the
 			 * break.
 			 */
-			break_to &= ~(X_SMB2_LEASE_READ|X_SMB2_LEASE_WRITE);
+			break_to = x_convert<uint8_t>(break_to & ~(X_SMB2_LEASE_READ|X_SMB2_LEASE_WRITE));
 		}
 
 		if (curr_open->oplock_level != X_SMB2_OPLOCK_LEVEL_LEASE) {
 			/*
 			 * Oplocks only support breaking to R or NONE.
 			 */
-			break_to &= ~(X_SMB2_LEASE_HANDLE|X_SMB2_LEASE_WRITE);
+			break_to = x_convert<uint8_t>(break_to & ~(X_SMB2_LEASE_HANDLE|X_SMB2_LEASE_WRITE));
 		}
 		++break_count;
 		send_break(curr_open, break_to);
@@ -964,10 +970,6 @@ static NTSTATUS grant_oplock(posixfs_object_t *posixfs_object,
 		x_smb2_state_create_t &state,
 		x_smbd_lease_t **psmbd_lease)
 {
-	/* TODO */
-	state.oplock_level = X_SMB2_OPLOCK_LEVEL_NONE;
-	return NT_STATUS_OK;
-
 	x_smbd_lease_t *smbd_lease = nullptr;
 	uint8_t granted = X_SMB2_LEASE_NONE;
 	uint8_t oplock_level = state.oplock_level;

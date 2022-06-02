@@ -318,7 +318,7 @@ static void smbd_chan_auth_input_timeout(x_timerq_entry_t *timerq_entry)
 	x_smbd_chan_t *smbd_chan = X_CONTAINER_OF(timerq_entry, x_smbd_chan_t, timer);
 	smbd_chan_auth_timeout_evt_t *evt = new smbd_chan_auth_timeout_evt_t(smbd_chan);
 	evt->base.func = smbd_chan_auth_timeout_evt_func;
-	if (!x_smbd_conn_post_user_2(smbd_chan->smbd_conn, &evt->base)) {
+	if (!x_smbd_conn_post_user(smbd_chan->smbd_conn, &evt->base)) {
 		/* smbd_conn is done, smbd_chan is decref by deleting evt */
 		delete evt;
 	}
@@ -395,7 +395,7 @@ static void smbd_chan_auth_upcall_func(x_auth_upcall_t *auth_upcall, NTSTATUS st
 	smbd_chan_auth_upcall_evt_t *evt = new smbd_chan_auth_upcall_evt_t(
 			smbd_chan, status, out_security, auth_info);
 	evt->base.func = smbd_chan_auth_upcall_evt_func;
-	if (!x_smbd_conn_post_user_2(smbd_chan->smbd_conn, &evt->base)) {
+	if (!x_smbd_conn_post_user(smbd_chan->smbd_conn, &evt->base)) {
 		delete evt;
 	}
 }
@@ -544,7 +544,7 @@ void x_smbd_chan_logoff(x_dlink_t *sess_link, x_smbd_sess_t *smbd_sess)
 	} else {
 		smbd_chan_logoff_evt_t *evt = new smbd_chan_logoff_evt_t(smbd_chan);
 		evt->base.func = smbd_chan_logoff_evt_func;
-		if (!x_smbd_conn_post_user_2(smbd_chan->smbd_conn, &evt->base)) {
+		if (!x_smbd_conn_post_user(smbd_chan->smbd_conn, &evt->base)) {
 			delete evt;
 		}
 	}
@@ -552,5 +552,5 @@ void x_smbd_chan_logoff(x_dlink_t *sess_link, x_smbd_sess_t *smbd_sess)
 
 bool x_smbd_chan_post_user(x_smbd_chan_t *smbd_chan, x_fdevt_user_t *fdevt_user)
 {
-	return x_smbd_conn_post_user_2(smbd_chan->smbd_conn, fdevt_user);
+	return x_smbd_conn_post_user(smbd_chan->smbd_conn, fdevt_user);
 }

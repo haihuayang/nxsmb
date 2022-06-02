@@ -83,6 +83,11 @@ bool x_smbd_tcon_match(const x_smbd_tcon_t *smbd_tcon, const x_smbd_sess_t *smbd
 	return smbd_tcon->smbd_sess == smbd_sess && smbd_tcon->tid == tid;
 }
 
+x_smbd_sess_t *x_smbd_tcon_get_sess(const x_smbd_tcon_t *smbd_tcon)
+{
+	return x_smbd_ref_inc(smbd_tcon->smbd_sess);
+}
+
 std::shared_ptr<x_smbd_share_t> x_smbd_tcon_get_share(const x_smbd_tcon_t *smbd_tcon)
 {
 	return smbd_tcon->smbd_share;

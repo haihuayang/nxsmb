@@ -149,7 +149,7 @@ void x_smbd_conn_update_preauth(x_smbd_conn_t *smbd_conn,
 const x_smb2_preauth_t *x_smbd_conn_get_preauth(x_smbd_conn_t *smbd_conn);
 void x_smbd_conn_link_chan(x_smbd_conn_t *smbd_conn, x_dlink_t *link);
 void x_smbd_conn_unlink_chan(x_smbd_conn_t *smbd_conn, x_dlink_t *link);
-bool x_smbd_conn_post_user_2(x_smbd_conn_t *smbd_conn, x_fdevt_user_t *fdevt_user);
+bool x_smbd_conn_post_user(x_smbd_conn_t *smbd_conn, x_fdevt_user_t *fdevt_user);
 void x_smbd_conn_post_cancel(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ);
 void x_smbd_conn_send_unsolicited(x_smbd_conn_t *smbd_conn, x_smbd_sess_t *smbd_sess,
 		x_bufref_t *buf, uint16_t opcode);
@@ -219,6 +219,7 @@ x_smbd_tcon_t *x_smbd_tcon_create(x_smbd_sess_t *smbd_sess,
 uint32_t x_smbd_tcon_get_id(const x_smbd_tcon_t *smbd_tcon);
 bool x_smbd_tcon_access_check(const x_smbd_tcon_t *smbd_tcon, uint32_t desired_access);
 bool x_smbd_tcon_match(const x_smbd_tcon_t *smbd_tcon, const x_smbd_sess_t *smbd_sess, uint32_t tid);
+x_smbd_sess_t *x_smbd_tcon_get_sess(const x_smbd_tcon_t *smbd_tcon);
 std::shared_ptr<x_smbd_share_t> x_smbd_tcon_get_share(const x_smbd_tcon_t *smbd_tcon);
 x_smbd_tcon_t *x_smbd_tcon_lookup(uint32_t id, const x_smbd_sess_t *smbd_sess);
 bool x_smbd_tcon_unlink_open(x_smbd_tcon_t *smbd_tcon, x_dlink_t *link);

@@ -1032,7 +1032,7 @@ int x_smbd_conn_srv_init(int port)
 	return 0;
 }
 
-bool x_smbd_conn_post_user_2(x_smbd_conn_t *smbd_conn, x_fdevt_user_t *fdevt_user)
+bool x_smbd_conn_post_user(x_smbd_conn_t *smbd_conn, x_fdevt_user_t *fdevt_user)
 {
 	bool notify = false;
 	bool queued = false;
@@ -1132,7 +1132,7 @@ void x_smbd_conn_post_cancel(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 {
 	x_smbd_cancel_evt_t *evt = new x_smbd_cancel_evt_t(smbd_requ);
 	evt->base.func = x_smbd_cancel_func;
-	x_smbd_conn_post_user_2(smbd_conn, &evt->base);
+	x_smbd_conn_post_user(smbd_conn, &evt->base);
 }
 
 void x_smbd_conn_set_async(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ,
