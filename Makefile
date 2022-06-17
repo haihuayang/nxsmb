@@ -424,28 +424,28 @@ $(TARGET_SET_idl:%=$(TARGET_DIR_out)/librpc/idl/%.json): $(TARGET_DIR_out)/librp
 target_samba_gen: $(TARGET_GEN_samba)
 
 $(patsubst %,$(TARGET_DIR_out)/samba/source4/heimdal/lib/wind/bidi_table.%,c h): samba/source4/heimdal/lib/wind/rfc3454.txt
-	python samba/source4/heimdal/lib/wind/gen-bidi.py $< $(dir $@)
+	$(PYTHON) samba/source4/heimdal/lib/wind/gen-bidi.py $< $(dir $@)
 
 $(patsubst %,$(TARGET_DIR_out)/samba/source4/heimdal/lib/wind/map_table.%,c h): samba/source4/heimdal/lib/wind/rfc3454.txt
-	python samba/source4/heimdal/lib/wind/gen-map.py $< $(dir $@)
+	$(PYTHON) samba/source4/heimdal/lib/wind/gen-map.py $< $(dir $@)
 
 $(patsubst %,$(TARGET_DIR_out)/samba/source4/heimdal/lib/wind/errorlist_table.%,c h): samba/source4/heimdal/lib/wind/rfc3454.txt
-	python samba/source4/heimdal/lib/wind/gen-errorlist.py $< $(dir $@)
+	$(PYTHON) samba/source4/heimdal/lib/wind/gen-errorlist.py $< $(dir $@)
 
 $(patsubst %,$(TARGET_DIR_out)/samba/source4/heimdal/lib/wind/normalize_table.%,c h): samba/source4/heimdal/lib/wind/UnicodeData.txt samba/source4/heimdal/lib/wind/CompositionExclusions-3.2.0.txt
-	python samba/source4/heimdal/lib/wind/gen-normalize.py $^ $(dir $@)
+	$(PYTHON) samba/source4/heimdal/lib/wind/gen-normalize.py $^ $(dir $@)
 
 $(patsubst %,$(TARGET_DIR_out)/samba/source4/heimdal/lib/wind/combining_table.%,c h): samba/source4/heimdal/lib/wind/UnicodeData.txt
-	python samba/source4/heimdal/lib/wind/gen-combining.py $< $(dir $@)
+	$(PYTHON) samba/source4/heimdal/lib/wind/gen-combining.py $< $(dir $@)
 
 $(TARGET_DIR_out)/samba/include/config.h: scripts/generate-config
 	scripts/generate-config > $@
 
 $(TARGET_GEN_ntstatus:%=$(TARGET_DIR_out)/samba/libcli/util/%): samba/libcli/util/ntstatus_err_table.txt
-	/usr/bin/python3 samba/source4/scripting/bin/gen_ntstatus.py $< $(TARGET_GEN_ntstatus:%=$(TARGET_DIR_out)/samba/libcli/util/%)
+	$(PYTHON) samba/source4/scripting/bin/gen_ntstatus.py $< $(TARGET_GEN_ntstatus:%=$(TARGET_DIR_out)/samba/libcli/util/%)
 
 $(TARGET_GEN_werror:%=$(TARGET_DIR_out)/samba/libcli/util/%): samba/libcli/util/werror_err_table.txt
-	/usr/bin/python3 samba/source4/scripting/bin/gen_werror.py $< $(TARGET_GEN_werror:%=$(TARGET_DIR_out)/samba/libcli/util/%)
+	$(PYTHON) samba/source4/scripting/bin/gen_werror.py $< $(TARGET_GEN_werror:%=$(TARGET_DIR_out)/samba/libcli/util/%)
 
 target_idl: $(TARGET_SET_idl:%=$(TARGET_DIR_out)/librpc/idl/%.idl.ndr.cxx) $(TARGET_SET_idl:%=$(TARGET_DIR_out)/librpc/idl/%.idl.hxx)
 

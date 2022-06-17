@@ -265,7 +265,8 @@ static NTSTATUS fsctl_dfs_get_refers_internal(
 
 	auto smbd_conf = x_smbd_conf_get();
 	std::string share = x_convert_utf16_to_lower_utf8(in_share_begin, in_share_end);
-	std::shared_ptr<x_smbd_share_t> smbd_share = x_smbd_find_share(share);
+	x_smbd_tcon_type_t tcon_type;
+	std::shared_ptr<x_smbd_share_t> smbd_share = x_smbd_find_share(share, &tcon_type);
 	if (!smbd_share) {
 		X_TODO;
 		// find_service user_share
@@ -274,6 +275,7 @@ static NTSTATUS fsctl_dfs_get_refers_internal(
 
 	x_dfs_referral_resp_t dfs_referral_resp;
 	NTSTATUS status = smbd_share->get_dfs_referral(dfs_referral_resp,
+			tcon_type,
 			in_file_name_begin, in_file_name_end,
 			in_server_begin, in_server_end,
 			in_share_begin, in_share_end);

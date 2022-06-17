@@ -10,9 +10,10 @@
 #include "smbd_posixfs_utils.hxx"
 #include <sys/file.h>
 
-static const char *pesudo_tld_dir = ".tlds";
 static constexpr uint32_t default_referral_ttl = 10;
 
+#if 0
+static const char *pesudo_tld_dir = ".tlds";
 struct dfs_root_t : x_smbd_share_t
 {
 	dfs_root_t(const std::string &name, const std::string &path,
@@ -627,6 +628,84 @@ std::shared_ptr<x_smbd_share_t> x_smbd_dfs_link_create(const std::string &name,
 		const std::string &dfs_root)
 {
 	return std::make_shared<dfs_link_t>(name, dfs_root);
+}
+#endif
+
+struct dfs_share_t : x_smbd_share_t
+{
+	dfs_share_t(const std::string &name, const std::vector<std::string> &volumes)
+		: x_smbd_share_t(name), volumes(volumes)
+	{
+	}
+	uint8_t get_type() const override { return SMB2_SHARE_TYPE_DISK; }
+	bool is_dfs() const override { return true; }
+	bool abe_enabled() const override { return false; }
+	NTSTATUS create_open(x_smbd_open_t **psmbd_open,
+			x_smbd_requ_t *smbd_requ,
+			std::unique_ptr<x_smb2_state_create_t> &state) override
+	{
+		return NT_STATUS_PATH_NOT_COVERED;
+	}
+	NTSTATUS get_dfs_referral(x_dfs_referral_resp_t &dfs_referral,
+			x_smbd_tcon_type_t tcon_type,
+			const char16_t *in_full_path_begin,
+			const char16_t *in_full_path_end,
+			const char16_t *in_server_begin,
+			const char16_t *in_server_end,
+			const char16_t *in_share_begin,
+			const char16_t *in_share_end) const override;
+	const std::vector<std::string> volumes;
+	uint32_t max_referral_ttl = default_referral_ttl;
+};
+
+NTSTATUS dfs_share_t::get_dfs_referral(x_dfs_referral_resp_t &dfs_referral_resp,
+		x_smbd_tcon_type_t tcon_type,
+		const char16_t *in_full_path_begin,
+		const char16_t *in_full_path_end,
+		const char16_t *in_server_begin,
+		const char16_t *in_server_end,
+		const char16_t *in_share_begin,
+		const char16_t *in_share_end) const
+{
+	if (tcon_type == x_smbd_tcon_type_t::DEFAULT) {
+		const auto &first = volumes[0];
+		auto smbd_conf = x_smbd_conf_get();
+		const auto it = smbd_conf->volume_map.find(first);
+		X_ASSERT(it != smbd_conf->volume_map.end()); // TODO
+		auto node_name = it->second;
+
+		std::u16string alt_path(in_full_path_begin, in_share_end);
+		std::string node = "\\" + node_name + "." + smbd_conf->dns_domain + "\\&";
+		std::u16string node16 = x_convert_utf8_to_utf16(node);
+		node16.append(in_share_begin, in_share_end);
+		dfs_referral_resp.referrals.push_back(x_referral_t{DFS_SERVER_ROOT, 0,
+				max_referral_ttl, alt_path, node16});
+		dfs_referral_resp.header_flags = DFS_HEADER_FLAG_REFERAL_SVR | DFS_HEADER_FLAG_STORAGE_SVR;
+		dfs_referral_resp.path_consumed = x_convert_assert<uint16_t>(alt_path.length() * 2);
+
+
+	} else if (tcon_type == x_smbd_tcon_type_t::DEREFER) {
+		X_TODO;
+#if 0
+		/* distribute namespace */
+		std::u16string alt_path(in_full_path_begin, in_share_end);
+		std::u16string node = u'\\' + std::u16string(in_server_begin, in_server_end)
+			+ u'\\' + x_convert_utf8_to_utf16(dfs_root);
+		dfs_referral_resp.referrals.push_back(x_referral_t{DFS_SERVER_ROOT, 0,
+				max_referral_ttl, alt_path, node});
+		dfs_referral_resp.header_flags = DFS_HEADER_FLAG_REFERAL_SVR | DFS_HEADER_FLAG_STORAGE_SVR;
+		dfs_referral_resp.path_consumed = x_convert_assert<uint16_t>(alt_path.length() * 2);
+#endif
+	} else {
+		return NT_STATUS_ACCESS_DENIED; // TODO
+	}
+	return NT_STATUS_OK;
+}
+
+std::shared_ptr<x_smbd_share_t> x_smbd_dfs_share_create(const std::string &name,
+		const std::vector<std::string> &volumes)
+{
+	return std::make_shared<dfs_share_t>(name, volumes);
 }
 #if 0
 NTSTATUS x_smbd_dfs_resolve_path(

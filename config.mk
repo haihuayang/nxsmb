@@ -27,3 +27,4 @@ HOST_CFLAGS :=
 CXX := g++
 CC := gcc
 HOSTCC := gcc
+PYTHON := python3

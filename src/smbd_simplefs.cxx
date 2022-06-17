@@ -97,6 +97,7 @@ struct simplefs_share_t : x_smbd_share_t
 			x_smbd_requ_t *smbd_requ,
 			std::unique_ptr<x_smb2_state_create_t> &state) override;
 	NTSTATUS get_dfs_referral(x_dfs_referral_resp_t &dfs_referral,
+			x_smbd_tcon_type_t tcon_type,
 			const char16_t *in_full_path_begin,
 			const char16_t *in_full_path_end,
 			const char16_t *in_server_begin,

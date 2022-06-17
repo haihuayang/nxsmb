@@ -20,6 +20,7 @@ struct share_spec_t
 	bool abe = false;
 	bool dfs_test = false;
 	uint32_t max_referral_ttl = 300;
+	std::vector<std::string> volumes;
 
 #if 0
 	x_smbd_share_type_t type = TYPE_DEFAULT;
@@ -111,6 +112,22 @@ static std::vector<std::string> parse_stringlist(const std::string &str)
 	return ret;
 }
 
+static bool parse_map(std::map<std::string, std::string> &map, const std::string &str)
+{
+	std::istringstream is(str);
+	std::string token;
+	while (std::getline(is, token, ' ')) {
+		auto sep = token.find(':');
+		if (sep == std::string::npos) {
+			return false;
+		}
+		std::string vg = token.substr(0, sep);
+		std::string node = token.substr(sep + 1);
+		map[vg] = node;
+	}
+	return true;
+}
+
 static std::string::size_type skip(const std::string &s, std::string::size_type pos, std::string::size_type end)
 {
 	for ( ; pos < end && isspace(s[pos]); ++pos) {
@@ -151,11 +168,13 @@ static void add_share(x_smbd_conf_t &smbd_conf,
 		const share_spec_t &share_spec)
 {
 	if (false) {
-	} else if (share_spec.my_distribute_root.size() > 0) {
-		add_share(smbd_conf, x_smbd_dfs_link_create(share_spec.name, share_spec.my_distribute_root));
+	} else if (share_spec.volumes.size() > 0) {
+		add_share(smbd_conf, x_smbd_dfs_share_create(share_spec.name, share_spec.volumes));
+#if 0
 	} else if (share_spec.my_distribute_vgs.size() > 0) {
 		X_ASSERT(share_spec.path.size() > 0);
 		add_share(smbd_conf, x_smbd_dfs_root_create(share_spec.name, share_spec.path, share_spec.my_distribute_vgs));
+#endif
 	} else {
 		X_ASSERT(share_spec.path.size() > 0);
 		add_share(smbd_conf, x_smbd_simplefs_share_create(share_spec.name, share_spec.path));
@@ -222,6 +241,12 @@ static bool parse_global_param(x_smbd_conf_t &smbd_conf,
 		return parse_uint32(value, smbd_conf.smb2_max_credits);
 	} else if (name == "private dir") {
 		smbd_conf.private_dir = value;
+	} else if (name == "node") {
+		smbd_conf.node = value;
+	} else if (name == "my:nodes") {
+		smbd_conf.nodes = parse_stringlist(value);
+	} else if (name == "my:volume map") {
+		return parse_map(smbd_conf.volume_map, value);
 	} else if (name == "interfaces") {
 		smbd_conf.interfaces = parse_stringlist(value);
 	} else if (name == "server multi channel support") {
@@ -282,6 +307,8 @@ static bool parse_share_param(share_spec_t &share_spec,
 		share_spec.my_distribute_vgs = parse_stringlist(value);
 	} else if (name == "read only") {
 		share_spec.read_only = parse_bool(value);
+	} else if (name == "my:volumes") {
+		share_spec.volumes = parse_stringlist(value);
 	} else if (name == "dfs test") {
 		share_spec.dfs_test = parse_bool(value);
 	} else {
@@ -377,6 +404,27 @@ static int parse_smbconf(x_smbd_conf_t &smbd_conf, const char *path,
 		smbd_conf.security_mode |= SMB2_NEGOTIATE_SIGNING_REQUIRED;
 	}
 
+	if (smbd_conf.node.empty()) {
+		char hostname[1024];
+		int err = gethostname(hostname, sizeof hostname);
+		X_ASSERT(err == 0);
+		char *sep = strchr(hostname, '.');
+		if (sep) {
+			smbd_conf.node.assign(hostname, sep);
+		} else {
+			smbd_conf.node = hostname;
+		}
+	}
+
+	if (smbd_conf.dns_domain.empty()) {
+		smbd_conf.dns_domain = smbd_conf.realm;
+	}
+
+	/* TODO utf8 */
+	for (auto &c: smbd_conf.realm) {
+		c = x_convert_assert<char>(std::toupper(c));
+	}
+
 	load_ifaces(smbd_conf);
 
 	add_share(smbd_conf, x_smbd_ipc_share_create());
@@ -388,13 +436,38 @@ std::shared_ptr<x_smbd_conf_t> x_smbd_conf_get()
 	return g_smbd_conf;
 }
 
-std::shared_ptr<x_smbd_share_t> x_smbd_find_share(const std::string &name)
+std::shared_ptr<x_smbd_share_t> x_smbd_find_share(const std::string &name,
+		x_smbd_tcon_type_t *ptype)
 {
-	auto it = g_smbd_conf->shares.find(name);
-	if (it != g_smbd_conf->shares.end()) {
-		return it->second;
+	if (!ptype) {
+		auto it = g_smbd_conf->shares.find(name);
+		if (it != g_smbd_conf->shares.end()) {
+			return it->second;
+		}
+		return nullptr;
 	}
-	return nullptr;
+
+	x_smbd_tcon_type_t tcon_type = x_smbd_tcon_type_t::DEFAULT;
+
+	const char *in_share_s = name.c_str();
+	if (ptype) {
+		if (*in_share_s == '&') {
+			++in_share_s;
+			tcon_type = x_smbd_tcon_type_t::DEREFER;
+		} else if (*in_share_s == '-') {
+			++in_share_s;
+			tcon_type = x_smbd_tcon_type_t::TARGET;
+		}
+	}
+	{
+		auto it = g_smbd_conf->shares.find(in_share_s);
+		if (it != g_smbd_conf->shares.end()) {
+			*ptype = tcon_type;
+			return it->second;
+		}
+		return nullptr;
+	}
+
 	/* TODO USER_SHARE */
 }
 
@@ -413,7 +486,8 @@ int x_smbd_conf_parse(const char *configfile, const std::vector<std::string> &cm
 x_smbd_conf_t::x_smbd_conf_t()
 {
 	strcpy((char *)&guid, "nxsmbd");
-	private_dir = "/var/lib/samba/private";
+	// private_dir = "/var/lib/samba/private";
+	private_dir = "/usr/local/samba/private";
 }
 
 

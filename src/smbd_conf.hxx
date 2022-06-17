@@ -36,9 +36,8 @@ struct x_smbd_conf_t
 
 	x_smb2_uuid_t guid; // uint8_t guid[16];
 	int port = 445;
-	int backend_port = 446;
-	uint32_t client_thread_count = 2;
-	uint32_t async_thread_count = 2;
+	uint32_t client_thread_count = 1;
+	uint32_t async_thread_count = 1;
 
 	uint32_t capacities = 0;
 	uint32_t max_trans_size = 1024 * 1024;
@@ -66,11 +65,14 @@ struct x_smbd_conf_t
 
 	std::vector<uint16_t> dialects{0x311, 0x310, 0x302, 0x210, 0x202};
 	std::map<std::string, std::shared_ptr<x_smbd_share_t>> shares;
+	std::string node;
+	std::vector<std::string> nodes;
+	std::map<std::string, std::string> volume_map;
 };
 
 int x_smbd_conf_parse(const char *configfile, const std::vector<std::string> &cmdline_options);
 std::shared_ptr<x_smbd_conf_t> x_smbd_conf_get();
-std::shared_ptr<x_smbd_share_t> x_smbd_find_share(const std::string &name);
+std::shared_ptr<x_smbd_share_t> x_smbd_find_share(const std::string &name, x_smbd_tcon_type_t *ptype);
 
 #endif /* __smbconf__hxx__ */
 

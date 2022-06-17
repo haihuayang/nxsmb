@@ -13,8 +13,9 @@ struct x_smbd_tcon_t
 { 
 	x_smbd_tcon_t(x_smbd_sess_t *smbd_sess,
 			const std::shared_ptr<x_smbd_share_t> &share,
+			x_smbd_tcon_type_t tcon_type,
 			uint32_t share_access)
-       		: share_access(share_access)
+       		: tcon_type(tcon_type), share_access(share_access)
 		, smbd_sess(x_smbd_ref_inc(smbd_sess)), smbd_share(share) {
 		X_SMBD_COUNTER_INC(tcon_create, 1);
 	}
@@ -29,6 +30,7 @@ struct x_smbd_tcon_t
 		S_DONE,
 	} state = S_ACTIVE;
 	uint32_t tid;
+	const x_smbd_tcon_type_t tcon_type;
 	const uint32_t share_access;
 	x_smbd_sess_t * const smbd_sess;
 	std::shared_ptr<x_smbd_share_t> smbd_share;
@@ -51,9 +53,10 @@ void x_smbd_ref_dec(x_smbd_tcon_t *smbd_tcon)
 
 x_smbd_tcon_t *x_smbd_tcon_create(x_smbd_sess_t *smbd_sess, 
 		const std::shared_ptr<x_smbd_share_t> &smbshare,
+		x_smbd_tcon_type_t tcon_type,
 		uint32_t share_access)
 {
-	x_smbd_tcon_t *smbd_tcon = new x_smbd_tcon_t(smbd_sess, smbshare, share_access);
+	x_smbd_tcon_t *smbd_tcon = new x_smbd_tcon_t(smbd_sess, smbshare, tcon_type, share_access);
 	if (!g_smbd_tcon_table->store(smbd_tcon, smbd_tcon->tid)) {
 		delete smbd_tcon;
 		return nullptr;

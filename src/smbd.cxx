@@ -140,7 +140,7 @@ int main(int argc, char **argv)
 	bool daemon = false;
 	int optind = 0;
 	for (;;) {
-		int c = getopt_long(argc, argv, "c:t:",
+		int c = getopt_long(argc, argv, "c:t:o:",
 				long_options, &optind);
 		if (c == -1) {
 			break;
@@ -161,7 +161,7 @@ int main(int argc, char **argv)
 	}
 
 	if (!configfile) {
-		configfile = "/etc/samba/smb.conf";
+		configfile = "/usr/local/samba/etc/smb.conf";
 	}
 	int err = x_smbd_conf_parse(configfile, cmdline_options);
 	if (err < 0) {

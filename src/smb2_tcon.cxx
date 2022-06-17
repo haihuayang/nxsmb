@@ -200,16 +200,28 @@ NTSTATUS x_smb2_process_tcon(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 	}
 
 	std::string host{in_path_s, in_share_s};
-	std::string share{in_share_s + 1};
+	++in_share_s;
+
+	std::string share{in_share_s};
 
 	X_LOG_OP("%ld TCON %s", smbd_requ->in_mid, in_path.c_str());
 
-	auto smbshare = x_smbd_find_share(share);
-	if (!smbshare) {
+	x_smbd_tcon_type_t tcon_type;
+	auto smbd_share = x_smbd_find_share(share, &tcon_type);
+	if (!smbd_share) {
 		RETURN_OP_STATUS(smbd_requ, NT_STATUS_BAD_NETWORK_NAME);
 	}
 
-	uint32_t share_access = create_share_access_mask(smbshare,
+	bool is_dfs = false;
+	if (smbd_share->is_dfs()) {
+		is_dfs = true;
+	} else {
+		if (tcon_type != x_smbd_tcon_type_t::DEFAULT) {
+			RETURN_OP_STATUS(smbd_requ, NT_STATUS_BAD_NETWORK_NAME);
+		}
+	}
+
+	uint32_t share_access = create_share_access_mask(smbd_share,
 			smbd_requ->smbd_chan);
 
 	if ((share_access & (idl::SEC_FILE_READ_DATA|idl::SEC_FILE_WRITE_DATA)) == 0) {
@@ -221,18 +233,18 @@ NTSTATUS x_smb2_process_tcon(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 		RETURN_OP_STATUS(smbd_requ, NT_STATUS_ACCESS_DENIED);
 	}
 
-	auto smbd_tcon = x_smbd_tcon_create(smbd_requ->smbd_sess, smbshare, share_access);
+	auto smbd_tcon = x_smbd_tcon_create(smbd_requ->smbd_sess, smbd_share, tcon_type, share_access);
 	if (!smbd_tcon) {
 		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INSUFFICIENT_RESOURCES);
 	}
 
 	uint32_t out_share_flags = 0;
 	uint32_t out_capabilities = 0;
-	if (smbshare->is_dfs()) {
+	if (is_dfs && tcon_type != x_smbd_tcon_type_t::TARGET) {
 		out_share_flags |= SMB2_SHAREFLAG_DFS|SMB2_SHAREFLAG_DFS_ROOT;
 		out_capabilities |= SMB2_SHARE_CAP_DFS;
 	}
-	if (smbshare->abe_enabled()) {
+	if (smbd_share->abe_enabled()) {
 		out_share_flags |= SMB2_SHAREFLAG_ACCESS_BASED_DIRECTORY_ENUM;
 	}
 #if 0
@@ -269,7 +281,7 @@ NTSTATUS x_smb2_process_tcon(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 
 	smbd_requ->smbd_tcon = x_smbd_ref_inc(smbd_tcon);
 	x_smb2_reply_tcon(smbd_conn, smbd_tcon, smbd_requ, NT_STATUS_OK,
-			smbshare->get_type(),
+			smbd_share->get_type(),
 			out_share_flags,
 			out_capabilities, share_access);
 	return NT_STATUS_OK;

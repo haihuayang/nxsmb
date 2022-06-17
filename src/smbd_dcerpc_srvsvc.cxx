@@ -28,7 +28,7 @@ static uint32_t net_share_enum_all_1(std::shared_ptr<idl::srvsvc_NetShareCtr1> &
 	for (auto &it: smbd_conf->shares) {
 		auto &share = it.second;
 		idl::srvsvc_ShareType type =
-			(share->get_type() == SMB2_SHARE_TYPE_DISK ? idl::STYPE_IPC_HIDDEN : idl::STYPE_DISKTREE);
+			(share->get_type() == SMB2_SHARE_TYPE_DISK ? idl::STYPE_DISKTREE : idl::STYPE_IPC_HIDDEN);
 		ctr1->array->push_back(idl::srvsvc_NetShareInfo1{
 				std::make_shared<std::u16string>(x_convert_utf8_to_utf16(share->name)),
 				type,
@@ -102,7 +102,7 @@ static bool x_smbd_dcerpc_impl_srvsvc_NetShareGetInfo(
 		idl::srvsvc_NetShareGetInfo &arg)
 {
 	std::string share_name = x_convert_utf16_to_utf8(arg.share_name);
-	auto smbd_share = x_smbd_find_share(share_name);
+	auto smbd_share = x_smbd_find_share(share_name, nullptr);
 	if (!smbd_share) {
 		arg.__result = WERR_INVALID_NAME;
 		return true;

@@ -1349,7 +1349,7 @@ x_auth_t *x_auth_create_krb5(x_auth_context_t *context)
 	x_auth_krb5_t *auth_krb5 = new x_auth_krb5_t(context, &auth_krb5_ops);
 	return &auth_krb5->auth;
 }
-
+#if 0
 static bool strlower_m(char *s)
 {
 	for (; *s; ++s) {
@@ -1358,7 +1358,7 @@ static bool strlower_m(char *s)
 	}
 	return true;
 }
-
+#endif
 // TODO smb_krb5_parse_name convert to utf8
 #define x_krb5_parse_name krb5_parse_name
 /**
@@ -1408,8 +1408,8 @@ static int x_krb5_create_key_from_string(krb5_context context,
 	return ret;
 }
 
-static
-krb5_principal kerberos_fetch_salt_princ_for_host_princ(
+static krb5_principal kerberos_fetch_salt_princ_for_host_princ(
+		const x_smbd_conf_t &smbd_conf,
 		krb5_context context,
 		krb5_principal host_princ,
 		int enctype)
@@ -1417,8 +1417,8 @@ krb5_principal kerberos_fetch_salt_princ_for_host_princ(
 	krb5_principal ret_princ = NULL;
 
 	/* lookup new key first */
-	// const char *salt_princ_s = "host/hhnxsmb.child4.afs.minerva.com@CHILD4.AFS.MINERVA.COM";
-	const char *salt_princ_s = "host/hhnxsmb2.hhdom2.hhlab@HHDOM2.HHLAB";
+
+	// const char *salt_princ_s = nullptr; // = "host/hhnxsmb2.hhdom2.hhlab@HHDOM2.HHLAB";
 #if 0
 	char *unparsed_name = NULL, *salt_princ_s = NULL;
 	if ( (salt_princ_s = kerberos_secrets_fetch_des_salt()) == NULL ) {
@@ -1434,7 +1434,16 @@ krb5_principal kerberos_fetch_salt_princ_for_host_princ(
 		}
 	}
 #endif
-	if (x_krb5_parse_name(context, salt_princ_s, &ret_princ) != 0) {
+	std::string salt_princ_s = "host/";
+	salt_princ_s += smbd_conf.netbios_name;
+	salt_princ_s += '.';
+	for (auto c: smbd_conf.realm) {
+		salt_princ_s += x_convert_assert<char>(std::tolower(c));
+	}
+	salt_princ_s += "@";
+	salt_princ_s += smbd_conf.realm;
+
+	if (x_krb5_parse_name(context, salt_princ_s.c_str(), &ret_princ) != 0) {
 		ret_princ = NULL;
 	}
 
@@ -1443,94 +1452,82 @@ krb5_principal kerberos_fetch_salt_princ_for_host_princ(
 
 	return ret_princ;
 }
-#if 0
-static krb5_error_code get_node_principals(krb5_context krbctx, krb5_principals *princs)
+
+static krb5_error_code create_principal(krb5_context krbctx,
+		krb5_principal *princ,
+		const std::string &short_name,
+		const std::string &domain,
+		const std::string &realm)
 {
-	krb5_error_code ret;
-	char *host_princ_s = NULL;
-	krb5_principal princ;
-	int err;
-	// x_krb5_principals_ptr_t ret_princs = std::unique_ptr<Principals, void (*)(Principals *)>(
-		//	(krb5_principals)calloc(sizeof(Principals), 1), 
-
-	krb5_principals ret_princs = (krb5_principals)calloc(sizeof(*ret_princs), 1);
-
-	if (!ret_princs) {
-		return -1; //return std::unique_ptr<Principals, void (*)(Principals *)>();
-	}
-
-	std::vector<std::string> cluster_nodes = lpcfg_cluster_nodes();
-	for (auto &node: cluster_nodes) {
-		err = asprintf(&host_princ_s, "cifs/%s@%s",
-				node.c_str(), lpcfg_realm());
-		if (err == -1) {
-			goto fail;
-		}
-
-		if (!strlower_m(host_princ_s)) {
-			SAFE_FREE(host_princ_s);
-			return -1;
-		}
-		ret = x_krb5_parse_name(krbctx, host_princ_s, &princ);
-		SAFE_FREE(host_princ_s);
-		if (ret) {
-			DEBUG(1, (__location__ ": smb_krb5_parse_name(%s) "
-						"failed (%s)\n",
-						host_princ_s, error_message(ret)));
-			goto fail;
-		}
-		err = add_Principals(ret_princs, princ);
-		if (err != 0) {
-			goto fail;
-		}
-
-		krb5_free_principal(krbctx, princ);
-	}
-	*princs = ret_princs;
-
-	return ret;
-fail:
-	free_Principals(ret_princs);
-	return -1;
-}
-#endif
-static krb5_error_code get_host_principal(
-		const std::shared_ptr<x_smbd_conf_t> &smbd_conf,
-		krb5_context krbctx,
-		krb5_principal *host_princ)
-{
-	krb5_error_code ret;
-	char *host_princ_s = NULL;
-	int err;
-
 	/* must be utf8 */
-	err = asprintf(&host_princ_s, "cifs/%s.%s@%s", smbd_conf->netbios_name.c_str(),
-			smbd_conf->realm.c_str(), smbd_conf->realm.c_str());
-	if (err == -1) {
-		return -1;
+	std::string str = "cifs/" + short_name;
+	if (domain.size()) {
+		str += "." + domain;
+	}
+	str += "@" + realm;
+
+	for (auto &c: str) {
+		c = x_convert_assert<char>(std::tolower(c));
 	}
 
-	if (!strlower_m(host_princ_s)) {
-		SAFE_FREE(host_princ_s);
-		return -1;
-	}
-	ret = x_krb5_parse_name(krbctx, host_princ_s, host_princ);
+	krb5_error_code ret = x_krb5_parse_name(krbctx, str.c_str(), princ);
 	if (ret) {
-		DEBUG(1, (__location__ ": smb_krb5_parse_name(%s) "
-			  "failed (%s)\n",
-			  host_princ_s, error_message(ret)));
+		X_LOG_ERR("smb_krb5_parse_name(%s) failed (%s)",
+			  str.c_str(), error_message(ret));
 	}
 
-	SAFE_FREE(host_princ_s);
 	return ret;
+}
+
+static krb5_error_code get_alias_principals(
+		const x_smbd_conf_t &smbd_conf,
+		krb5_context krbctx,
+		krb5_principals aliases)
+{
+	krb5_principal princ;
+	krb5_error_code kerr = create_principal(krbctx, &princ, smbd_conf.netbios_name,
+                        std::string(), smbd_conf.realm);
+	if (kerr) {
+		return kerr;
+	}
+
+	kerr = add_Principals(aliases, princ);
+	if (kerr) {
+		return kerr;
+	}
+
+	for (auto &node: smbd_conf.nodes) {
+		kerr = create_principal(krbctx, &princ, node,
+				smbd_conf.realm, smbd_conf.realm);
+		if (kerr) {
+			return kerr;
+		}
+		kerr = add_Principals(aliases, princ);
+		if (kerr) {
+			krb5_free_principal(krbctx, princ);
+			return kerr;
+		}
+	}
+
+	return 0;
+}
+
+static krb5_error_code get_host_principal(
+		const x_smbd_conf_t &smbd_conf,
+		krb5_context krbctx,
+		krb5_principal *princ)
+{
+	return create_principal(krbctx, princ, smbd_conf.netbios_name, smbd_conf.realm,
+			smbd_conf.realm);
 }
 
 static int kerberos_key_from_string(krb5_context context,
-					krb5_principal host_princ,
-					krb5_data *password,
-					krb5_keyblock *key,
-					krb5_enctype enctype,
-					bool no_salt)
+		const x_smbd_conf_t &smbd_conf,
+		krb5_principal host_princ,
+		krb5_data *password,
+		krb5_keyblock *key,
+		krb5_enctype enctype,
+		bool no_salt)
 {
 	krb5_principal salt_princ = NULL;
 	int ret;
@@ -1549,7 +1546,7 @@ static int kerberos_key_from_string(krb5_context context,
 		KRB5_KEY_TYPE(key) = enctype;
 		return 0;
 	}
-	salt_princ = kerberos_fetch_salt_princ_for_host_princ(context, host_princ, enctype);
+	salt_princ = kerberos_fetch_salt_princ_for_host_princ(smbd_conf, context, host_princ, enctype);
 	ret = x_krb5_create_key_from_string(context,
 					      salt_princ ? salt_princ : host_princ,
 					      NULL,
@@ -1562,8 +1559,9 @@ static int kerberos_key_from_string(krb5_context context,
 	return ret;
 }
 
+/* TODO patch heimdal to add aliases */
 static krb5_error_code fill_keytab_from_password(
-		const std::shared_ptr<x_smbd_conf_t> smbd_conf,
+		const x_smbd_conf_t &smbd_conf,
 		krb5_context krbctx,
 		krb5_keytab keytab,
 		krb5_principal princ,
@@ -1578,8 +1576,7 @@ static krb5_error_code fill_keytab_from_password(
 
 	ret = krb5_get_permitted_enctypes(krbctx, &enctypes);
 	if (ret) {
-		DEBUG(1, (__location__
-			  ": Can't determine permitted enctypes!\n"));
+		X_LOG_ERR("Can't determine permitted enctypes!");
 		return ret;
 	}
 
@@ -1590,12 +1587,12 @@ static krb5_error_code fill_keytab_from_password(
 	for (i = 0; enctypes[i]; i++) {
 		krb5_keyblock key;
 
-		if (kerberos_key_from_string(krbctx, princ,
+		if (kerberos_key_from_string(krbctx, smbd_conf, princ,
 						    &pwd_data, &key,
 						    enctypes[i], false)) {
-			DEBUG(10, ("Failed to create key for enctype %d "
-				   "(error: %s)\n",
-				   enctypes[i], error_message(ret)));
+			X_LOG_DBG("Failed to create key for enctype %d "
+				   "(error: %s)",
+				   enctypes[i], error_message(ret));
 			continue;
 		}
 
@@ -1606,9 +1603,9 @@ static krb5_error_code fill_keytab_from_password(
 		ret = krb5_kt_add_entry(krbctx, keytab, &kt_entry);
 		krb5_free_keyblock_contents(krbctx, &key);
 		if (ret) {
-			DEBUG(1, (__location__ ": Failed to add entry to "
-				  "keytab for enctype %d (error: %s)\n",
-				   enctypes[i], error_message(ret)));
+			X_LOG_ERR("Failed to add entry to "
+				  "keytab for enctype %d (error: %s)",
+				   enctypes[i], error_message(ret));
 			goto out;
 		}
 
@@ -1626,18 +1623,16 @@ static krb5_error_code fill_mem_keytab_from_secrets(
 		krb5_context krbctx,
 		krb5_keytab keytab)
 {
-	krb5_error_code ret;
+	krb5_error_code kerr;
 	krb5_kt_cursor kt_cursor;
 	krb5_keytab_entry kt_entry;
-	krb5_principal princ = NULL;
-	krb5_principals node_princs = NULL;
 	krb5_kvno kvno = 0; /* FIXME: fetch current vno from KDC ? */
 
 	auto smbd_conf = x_smbd_conf_get();
 
 	std::string pwd = x_smbd_secrets_fetch_machine_password(smbd_conf->workgroup);
 	if (pwd.empty()) {
-		DEBUG(2, (__location__ ": failed to fetch machine password\n"));
+		X_LOG_ERR("failed to fetch machine password");
 		return KRB5_LIBOS_CANTREADPWD;
 	}
 
@@ -1702,42 +1697,46 @@ static krb5_error_code fill_mem_keytab_from_secrets(
 #endif
 	/* keytab is not up to date, fill it up */
 
-	ret = get_host_principal(smbd_conf, krbctx, &princ);
-	if (ret) {
-		DEBUG(1, (__location__ ": Failed to get host principal!\n"));
-		return ret;
+	krb5_principal princ = nullptr;
+	kerr = get_host_principal(*smbd_conf, krbctx, &princ);
+	if (kerr) {
+		X_LOG_ERR("Failed to get host principal!");
+		return kerr;
 	}
 	auto unique_princ = x_krb5_principal_ptr_t(princ, [krbctx](krb5_principal p) {
 		krb5_free_principal(krbctx, p);
 	});
-#if 0
-	TODO cluster node princs
-	ret = get_node_principals(krbctx, &node_princs);
-	if (ret) {
-		DEBUG(1, (__location__ ": Failed to get cluster principals!\n"));
-		return ret;
+
+	krb5_principals alias_princs = (krb5_principals)calloc(sizeof(*alias_princs), 1);
+	if (!alias_princs) {
+		return -1;
 	}
-	auto unique_princs = x_krb5_principals_ptr_t(node_princs, [krbctx](krb5_principals p) {
+
+	auto unique_princs = x_krb5_principals_ptr_t(alias_princs, [krbctx](krb5_principals p) {
 		free_Principals(p);
 	});
-#endif
-	ret = fill_keytab_from_password(smbd_conf, krbctx, keytab,
-					princ, node_princs, kvno, pwd);
-	if (ret) {
-		DEBUG(1, (__location__ ": Failed to fill memory keytab!\n"));
-		return ret;
+
+	kerr = get_alias_principals(*smbd_conf, krbctx, alias_princs);
+	if (kerr) {
+		X_LOG_ERR("Failed to get cluster principals!");
+		return kerr;
+	}
+	kerr = fill_keytab_from_password(*smbd_conf, krbctx, keytab,
+					princ, alias_princs, kvno, pwd);
+	if (kerr) {
+		X_LOG_ERR("Failed to fill memory keytab!");
+		return kerr;
 	}
 
 	std::string pwd_old = x_smbd_secrets_fetch_prev_machine_password(smbd_conf->workgroup);
 	if (pwd_old.empty()) {
-		DEBUG(10, (__location__ ": no prev machine password\n"));
+		X_LOG_DBG("no prev machine password");
 	} else {
-		ret = fill_keytab_from_password(smbd_conf, krbctx, keytab,
-				princ, node_princs, kvno -1, pwd_old);
-		if (ret) {
-			DEBUG(1, (__location__
-				  ": Failed to fill memory keytab!\n"));
-			return ret;
+		kerr = fill_keytab_from_password(*smbd_conf, krbctx, keytab,
+				princ, alias_princs, kvno -1, pwd_old);
+		if (kerr) {
+			X_LOG_ERR("Failed to fill memory keytab!");
+			return kerr;
 		}
 	}
 	return 0;
