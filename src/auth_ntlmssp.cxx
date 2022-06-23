@@ -998,6 +998,7 @@ static void ntlmssp_check_password_cb_reply(x_wbcli_t *wbcli, int err)
 {
 	x_auth_ntlmssp_t *ntlmssp = X_CONTAINER_OF(wbcli, x_auth_ntlmssp_t, wbcli);
 	X_ASSERT(ntlmssp->state_position == x_auth_ntlmssp_t::S_CHECK_PASSWORD);
+	X_LOG_DBG("err=%d", err);
 
 	x_auth_upcall_t *auth_upcall = ntlmssp->auth_upcall;
 	ntlmssp->auth_upcall = nullptr;
@@ -1140,6 +1141,7 @@ x_auth_ntlmssp_t::x_auth_ntlmssp_t(x_auth_context_t *context, const x_auth_ops_t
 	// gensec_ntlmssp_server_start
 	allow_lm_response = smbd_conf->lanman_auth;
 	allow_lm_key = (allow_lm_response && lpcfg_param_bool(NULL, "ntlmssp_server", "allow_lm_key", false));
+	// TODO smbclient fails logon when force_old_spnego is true
 	force_old_spnego = lpcfg_param_bool(NULL, "ntlmssp_server", "force_old_spnego", false);
 
 	neg_flags = idl::NTLMSSP_NEGOTIATE_NTLM | idl::NTLMSSP_NEGOTIATE_VERSION;

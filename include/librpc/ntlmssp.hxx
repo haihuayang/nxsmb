@@ -209,7 +209,7 @@ struct CHALLENGE_MESSAGE {
 	std::shared_ptr<std::string> TargetName;/* [relative, flag(x_ndr_ntlmssp_negotiated_string_flags(NegotiateFlags))] */
 	NEGOTIATE NegotiateFlags;
 	std::array<uint8, 8> ServerChallenge;
-	std::array<uint8, 8> Reserved;/* [noprint] */
+	std::array<uint8, 8> Reserved{};/* [noprint] */
 	std::shared_ptr<AV_PAIR_LIST> TargetInfo; //  x_ndr_relative_ptr_t<AV_PAIR_LIST, uint16, uint16> TargetInfo;/* [relative] */
 	ntlmssp_Version Version;/* [switch_is(NegotiateFlags&NTLMSSP_NEGOTIATE_VERSION)] */
 } /* [public, flag(LIBNDR_PRINT_ARRAY_HEX)] */;

@@ -237,7 +237,7 @@ static uint16_t x_smb2_calculate_credit(x_smbd_conn_t *smbd_conn, x_smbd_requ_t 
 	}
 	smbd_conn->credit_granted += credit_granted;
 	smbd_conn->credit_seq_range += credit_granted;
-	return x_convert_assert<uint16_t>(std::max(credit_granted, 0xfffful));
+	return x_convert_assert<uint16_t>(std::min(credit_granted, 0xfffful));
 }
 
 static uint32_t calculate_out_hdr_flags(uint32_t in_hdr_flags, uint32_t out_hdr_flags)
