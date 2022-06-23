@@ -67,12 +67,12 @@ struct x_smbd_conf_t
 	std::map<std::string, std::shared_ptr<x_smbd_share_t>> shares;
 	std::string node;
 	std::vector<std::string> nodes;
-	std::map<std::string, std::string> volume_map;
+	std::map<std::string, std::pair<std::string, std::shared_ptr<x_smbd_share_t>>> volume_map;
 };
 
 int x_smbd_conf_parse(const char *configfile, const std::vector<std::string> &cmdline_options);
 std::shared_ptr<x_smbd_conf_t> x_smbd_conf_get();
-std::shared_ptr<x_smbd_share_t> x_smbd_find_share(const std::string &name, x_smbd_tcon_type_t *ptype);
+std::shared_ptr<x_smbd_share_t> x_smbd_find_share(const std::string &name, std::string &volume);
 
 #endif /* __smbconf__hxx__ */
 

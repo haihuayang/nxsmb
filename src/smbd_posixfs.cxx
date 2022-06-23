@@ -559,11 +559,14 @@ static NTSTATUS rename_object_intl(posixfs_object_pool_t::bucket_t &dst_bucket,
 
 NTSTATUS posixfs_object_rename(x_smbd_object_t *smbd_object,
 		x_smbd_requ_t *smbd_requ,
-		std::shared_ptr<x_smbd_topdir_t> &dst_topdir,
+		std::shared_ptr<x_smbd_topdir_t> dst_topdir,
 		const std::u16string &dst_path,
 		bool replace_if_exists)
 {
 	posixfs_object_t *posixfs_object = posixfs_object_from_base_t::container(smbd_object);
+	if (!dst_topdir) {
+		dst_topdir = posixfs_object->topdir;
+	}
 
 	auto &pool = posixfs_object_pool;
 	auto dst_hash = hash_object(dst_topdir, dst_path);
@@ -591,6 +594,19 @@ NTSTATUS posixfs_object_rename(x_smbd_object_t *smbd_object,
 	}
 	return status;
 }
+
+NTSTATUS posixfs_object_op_rename(x_smbd_object_t *smbd_object,
+		x_smbd_open_t *smbd_open,
+		x_smbd_requ_t *smbd_requ,
+		bool replace_if_exists,
+		const std::u16string &new_path)
+{
+	/* does it happen renaming cross topdir? if not we do not need dst_topdir */
+	std::shared_ptr<x_smbd_topdir_t> dst_topdir;
+	return posixfs_object_rename(smbd_object, smbd_requ, 
+			dst_topdir, new_path, replace_if_exists);
+}
+
 #if 0
 static NTSTATUS posixfs_object_rename(posixfs_object_t *posixfs_object,
 		const std::shared_ptr<x_smbd_share_t> &smbd_share,
@@ -2807,6 +2823,34 @@ int posixfs_object_statex_getat(posixfs_object_t *dir_obj, const char *name,
 		posixfs_statex_t *statex)
 {
 	return posixfs_statex_getat(dir_obj->fd, name, statex);
+}
+
+int posixfs_mktld(const std::shared_ptr<x_smbd_user_t> &smbd_user,
+		const x_smbd_topdir_t &topdir,
+		const std::string &name,
+		std::vector<uint8_t> &ntacl_blob)
+{
+	std::shared_ptr<idl::security_descriptor> top_psd, psd;
+	NTSTATUS status = posixfs_get_sd(topdir.fd, top_psd);
+	X_ASSERT(NT_STATUS_IS_OK(status));
+
+	status = make_child_sec_desc(psd, top_psd,
+			*smbd_user, true);
+	X_ASSERT(NT_STATUS_IS_OK(status));
+
+	create_acl_blob(ntacl_blob, psd, idl::XATTR_SD_HASH_TYPE_NONE, std::array<uint8_t, idl::XATTR_SD_HASH_SIZE>());
+
+	posixfs_statex_t statex;
+	/* if parent is not enable inherit, make_sec_desc */
+	int fd = posixfs_create(topdir.fd,
+			true,
+			name.c_str(),
+			&statex,
+			ntacl_blob);
+
+	X_ASSERT(fd != -1);
+	close(fd);
+	return 0;
 }
 
 

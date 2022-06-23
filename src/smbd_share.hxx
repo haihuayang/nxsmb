@@ -8,6 +8,8 @@
 
 #include "smbd.hxx"
 
+struct x_smbd_conf_t;
+
 struct x_referral_t
 {
 	// uint32_t proximity;
@@ -42,9 +44,9 @@ struct x_smbd_share_t
 	virtual bool abe_enabled() const = 0;
 	virtual NTSTATUS create_open(x_smbd_open_t **psmbd_open,
 			x_smbd_requ_t *smbd_requ,
+			const std::string &volume,
 			std::unique_ptr<x_smb2_state_create_t> &state) = 0;
 	virtual NTSTATUS get_dfs_referral(x_dfs_referral_resp_t &dfs_referral,
-			x_smbd_tcon_type_t tcon_type,
 			const char16_t *in_full_path_begin,
 			const char16_t *in_full_path_end,
 			const char16_t *in_server_begin,
@@ -79,7 +81,8 @@ struct x_smbd_topdir_t
 std::shared_ptr<x_smbd_topdir_t> x_smbd_topdir_create(const std::string &path);
 
 std::shared_ptr<x_smbd_share_t> x_smbd_ipc_share_create();
-std::shared_ptr<x_smbd_share_t> x_smbd_dfs_share_create(const std::string &name,
+std::shared_ptr<x_smbd_share_t> x_smbd_dfs_share_create(const x_smbd_conf_t &smbd_conf,
+		const std::string &name,
 		const std::vector<std::string> &vgs);
 std::shared_ptr<x_smbd_share_t> x_smbd_dfs_link_create(const std::string &name, const std::string &dfs_root);
 std::shared_ptr<x_smbd_share_t> x_smbd_dfs_root_create(const std::string &name, const std::string &path, const std::vector<std::string> &vgs);

@@ -13,13 +13,16 @@ struct x_smbd_tcon_t
 { 
 	x_smbd_tcon_t(x_smbd_sess_t *smbd_sess,
 			const std::shared_ptr<x_smbd_share_t> &share,
-			x_smbd_tcon_type_t tcon_type,
+			const std::string &volume,
 			uint32_t share_access)
-       		: tcon_type(tcon_type), share_access(share_access)
-		, smbd_sess(x_smbd_ref_inc(smbd_sess)), smbd_share(share) {
+       		: share_access(share_access)
+		, smbd_sess(x_smbd_ref_inc(smbd_sess)), smbd_share(share)
+		, volume(volume)
+       	{
 		X_SMBD_COUNTER_INC(tcon_create, 1);
 	}
-	~x_smbd_tcon_t() {
+	~x_smbd_tcon_t()
+	{
 		x_smbd_ref_dec(smbd_sess);
 		X_SMBD_COUNTER_INC(tcon_delete, 1);
 	}
@@ -30,10 +33,10 @@ struct x_smbd_tcon_t
 		S_DONE,
 	} state = S_ACTIVE;
 	uint32_t tid;
-	const x_smbd_tcon_type_t tcon_type;
 	const uint32_t share_access;
 	x_smbd_sess_t * const smbd_sess;
-	std::shared_ptr<x_smbd_share_t> smbd_share;
+	const std::shared_ptr<x_smbd_share_t> smbd_share;
+	const std::string volume;
 	std::mutex mutex;
 	x_ddlist_t open_list;
 };
@@ -53,10 +56,10 @@ void x_smbd_ref_dec(x_smbd_tcon_t *smbd_tcon)
 
 x_smbd_tcon_t *x_smbd_tcon_create(x_smbd_sess_t *smbd_sess, 
 		const std::shared_ptr<x_smbd_share_t> &smbshare,
-		x_smbd_tcon_type_t tcon_type,
+		const std::string &volume,
 		uint32_t share_access)
 {
-	x_smbd_tcon_t *smbd_tcon = new x_smbd_tcon_t(smbd_sess, smbshare, tcon_type, share_access);
+	x_smbd_tcon_t *smbd_tcon = new x_smbd_tcon_t(smbd_sess, smbshare, volume, share_access);
 	if (!g_smbd_tcon_table->store(smbd_tcon, smbd_tcon->tid)) {
 		delete smbd_tcon;
 		return nullptr;
@@ -121,7 +124,9 @@ NTSTATUS x_smbd_tcon_op_create(x_smbd_tcon_t *smbd_tcon,
 
        	x_smbd_open_t *smbd_open = nullptr;
 	/* TODO should we check the open limit before create the open */
-	NTSTATUS status = smbd_tcon->smbd_share->create_open(&smbd_open, smbd_requ, state);
+	NTSTATUS status = smbd_tcon->smbd_share->create_open(&smbd_open,
+			smbd_requ, smbd_tcon->volume, state);
+
 	if (smbd_open) {
 		X_ASSERT(NT_STATUS_IS_OK(status));
 		/* if client access the open from other channel now, it does not have

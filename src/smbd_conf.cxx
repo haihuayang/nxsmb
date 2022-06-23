@@ -112,7 +112,7 @@ static std::vector<std::string> parse_stringlist(const std::string &str)
 	return ret;
 }
 
-static bool parse_map(std::map<std::string, std::string> &map, const std::string &str)
+static bool parse_volume_map(std::map<std::string, std::pair<std::string, std::shared_ptr<x_smbd_share_t>>> &map, const std::string &str)
 {
 	std::istringstream is(str);
 	std::string token;
@@ -121,9 +121,9 @@ static bool parse_map(std::map<std::string, std::string> &map, const std::string
 		if (sep == std::string::npos) {
 			return false;
 		}
-		std::string vg = token.substr(0, sep);
+		std::string volume = token.substr(0, sep);
 		std::string node = token.substr(sep + 1);
-		map[vg] = node;
+		map[volume] = std::make_pair<std::string, std::shared_ptr<x_smbd_share_t>>(std::move(node), nullptr);
 	}
 	return true;
 }
@@ -169,7 +169,15 @@ static void add_share(x_smbd_conf_t &smbd_conf,
 {
 	if (false) {
 	} else if (share_spec.volumes.size() > 0) {
-		add_share(smbd_conf, x_smbd_dfs_share_create(share_spec.name, share_spec.volumes));
+		auto share = x_smbd_dfs_share_create(smbd_conf, share_spec.name, share_spec.volumes);
+		for (const auto &v: share_spec.volumes) {
+			auto it = smbd_conf.volume_map.find(v);
+			X_ASSERT(it != smbd_conf.volume_map.end());
+			X_ASSERT(!it->second.second);
+			it->second.second = share;
+		}
+
+		add_share(smbd_conf, share);
 #if 0
 	} else if (share_spec.my_distribute_vgs.size() > 0) {
 		X_ASSERT(share_spec.path.size() > 0);
@@ -246,7 +254,7 @@ static bool parse_global_param(x_smbd_conf_t &smbd_conf,
 	} else if (name == "my:nodes") {
 		smbd_conf.nodes = parse_stringlist(value);
 	} else if (name == "my:volume map") {
-		return parse_map(smbd_conf.volume_map, value);
+		return parse_volume_map(smbd_conf.volume_map, value);
 	} else if (name == "interfaces") {
 		smbd_conf.interfaces = parse_stringlist(value);
 	} else if (name == "server multi channel support") {
@@ -338,7 +346,7 @@ static int parse_smbconf(x_smbd_conf_t &smbd_conf, const char *path,
 {
 	X_LOG_DBG("Loading smbd_conf from %s", path);
 
-	// add_share(smbd_conf, share_spec);
+	std::vector<std::unique_ptr<share_spec_t>> share_specs;
 	std::unique_ptr<share_spec_t> share_spec;
 
 	smbd_conf.capabilities = SMB2_CAP_DFS | SMB2_CAP_LARGE_MTU | SMB2_CAP_LEASING
@@ -361,7 +369,7 @@ static int parse_smbconf(x_smbd_conf_t &smbd_conf, const char *path,
 			}
 			std::string section = line.substr(pos + 1, end - pos - 1);
 			if (share_spec) {
-				add_share(smbd_conf, *share_spec);
+				share_specs.push_back(std::move(share_spec));
 				share_spec = nullptr;
 			}
 			if (section != "global") {
@@ -382,7 +390,7 @@ static int parse_smbconf(x_smbd_conf_t &smbd_conf, const char *path,
 		}
 	}
 	if (share_spec) {
-		add_share(smbd_conf, *share_spec);
+		share_specs.push_back(std::move(share_spec));
 	}
 
 	// override global params by argv
@@ -427,6 +435,9 @@ static int parse_smbconf(x_smbd_conf_t &smbd_conf, const char *path,
 
 	load_ifaces(smbd_conf);
 
+	for (auto &ss: share_specs) {
+		add_share(smbd_conf, *ss);
+	}
 	add_share(smbd_conf, x_smbd_ipc_share_create());
 	return 0;
 }
@@ -437,36 +448,32 @@ std::shared_ptr<x_smbd_conf_t> x_smbd_conf_get()
 }
 
 std::shared_ptr<x_smbd_share_t> x_smbd_find_share(const std::string &name,
-		x_smbd_tcon_type_t *ptype)
+		std::string &volume)
 {
-	if (!ptype) {
-		auto it = g_smbd_conf->shares.find(name);
-		if (it != g_smbd_conf->shares.end()) {
-			return it->second;
-		}
-		return nullptr;
-	}
-
-	x_smbd_tcon_type_t tcon_type = x_smbd_tcon_type_t::DEFAULT;
-
+	auto smbd_conf = x_smbd_conf_get();
 	const char *in_share_s = name.c_str();
-	if (ptype) {
-		if (*in_share_s == '&') {
-			++in_share_s;
-			tcon_type = x_smbd_tcon_type_t::DEREFER;
-		} else if (*in_share_s == '-') {
-			++in_share_s;
-			tcon_type = x_smbd_tcon_type_t::TARGET;
+	if (*in_share_s == '-') {
+		++in_share_s;
+		if (*in_share_s == '-') {
+			std::string vol_tmp = in_share_s + 1;
+			auto it = smbd_conf->volume_map.find(vol_tmp);
+			if (it == smbd_conf->volume_map.end()) {
+				return nullptr;
+			}
+			volume = std::move(vol_tmp);
+			return it->second.second;
 		}
 	}
-	{
-		auto it = g_smbd_conf->shares.find(in_share_s);
-		if (it != g_smbd_conf->shares.end()) {
-			*ptype = tcon_type;
-			return it->second;
-		}
+
+	auto it = smbd_conf->shares.find(in_share_s);
+	if (it == smbd_conf->shares.end()) {
 		return nullptr;
 	}
+
+	if (in_share_s != name.c_str()) {
+		volume = "-";
+	}
+	return it->second;
 
 	/* TODO USER_SHARE */
 }

@@ -74,6 +74,11 @@ std::string posixfs_object_op_get_path(
 		const x_smbd_object_t *smbd_object);
 void posixfs_object_op_destroy(x_smbd_object_t *smbd_object,
 		x_smbd_open_t *smbd_open);
+NTSTATUS posixfs_object_op_rename(x_smbd_object_t *smbd_object,
+		x_smbd_open_t *smbd_open,
+		x_smbd_requ_t *smbd_requ,
+		bool replace_if_exists,
+		const std::u16string &new_path);
 
 
 int posixfs_object_get_statex(const posixfs_object_t *posixfs_object, posixfs_statex_t *statex);
@@ -93,12 +98,17 @@ NTSTATUS posixfs_object_qdir(
 			uint32_t file_number));
 NTSTATUS posixfs_object_rename(x_smbd_object_t *smbd_object,
 		x_smbd_requ_t *smbd_requ,
-		std::shared_ptr<x_smbd_topdir_t> &dst_topdir,
+		std::shared_ptr<x_smbd_topdir_t> dst_topdir,
 		const std::u16string &dst_path,
 		bool replace_if_exists);
 
 x_smbd_object_t *x_smbd_posixfs_object_open_parent(const x_smbd_object_ops_t *ops,
 		const x_smbd_object_t *child_object);
+
+int posixfs_mktld(const std::shared_ptr<x_smbd_user_t> &smbd_user,
+		const x_smbd_topdir_t &topdir,
+		const std::string &name,
+		std::vector<uint8_t> &ntacl_blob);
 
 #endif /* __smbd_posixfs__hxx__ */
 

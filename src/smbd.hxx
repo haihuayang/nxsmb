@@ -53,11 +53,13 @@ enum class x_smbd_timer_t {
 void x_smbd_add_timer(x_smbd_timer_t timer_id, x_timerq_entry_t *entry);
 bool x_smbd_cancel_timer(x_smbd_timer_t timer_id, x_timerq_entry_t *entry);
 
+#if 0
 enum class x_smbd_tcon_type_t {
 	DEFAULT,
-	DEREFER,
-	TARGET,
+	DFS_ROOT,
+	DFS_VOLUME,
 };
+#endif
 
 struct x_smbd_conn_t;
 struct x_smbd_sess_t;
@@ -220,7 +222,7 @@ NTSTATUS x_smbd_tcon_op_create(x_smbd_tcon_t *smbd_tcon,
 		std::unique_ptr<x_smb2_state_create_t> &state);
 x_smbd_tcon_t *x_smbd_tcon_create(x_smbd_sess_t *smbd_sess, 
 		const std::shared_ptr<x_smbd_share_t> &smbshare,
-		x_smbd_tcon_type_t tcon_type,
+		const std::string &volume,
 		uint32_t share_access);
 uint32_t x_smbd_tcon_get_id(const x_smbd_tcon_t *smbd_tcon);
 bool x_smbd_tcon_access_check(const x_smbd_tcon_t *smbd_tcon, uint32_t desired_access);

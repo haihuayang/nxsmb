@@ -102,8 +102,9 @@ static bool x_smbd_dcerpc_impl_srvsvc_NetShareGetInfo(
 		idl::srvsvc_NetShareGetInfo &arg)
 {
 	std::string share_name = x_convert_utf16_to_utf8(arg.share_name);
-	auto smbd_share = x_smbd_find_share(share_name, nullptr);
-	if (!smbd_share) {
+	std::string volume;
+	auto smbd_share = x_smbd_find_share(share_name, volume);
+	if (!smbd_share || !volume.empty()) {
 		arg.__result = WERR_INVALID_NAME;
 		return true;
 	}

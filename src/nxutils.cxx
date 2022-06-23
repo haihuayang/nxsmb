@@ -89,18 +89,68 @@ static int show_security_desc(char **argv)
 	return 0;
 }
 
-static int init_top_dir(char **argv)
+static int init_default_dir(int dirfd)
 {
-	const char *path = argv[0];
-	int fd = open(path, O_RDONLY);
-	X_ASSERT(fd >= 0);
 	posixfs_statex_t statex;
 	auto psd = make_share_sec_desc();
 	std::vector<uint8_t> ntacl_blob;
 	create_acl_blob(ntacl_blob, psd, idl::XATTR_SD_HASH_TYPE_NONE, std::array<uint8_t, idl::XATTR_SD_HASH_SIZE>());
 
-	posixfs_post_create(fd, FILE_ATTRIBUTE_DIRECTORY, &statex, ntacl_blob);
+	posixfs_post_create(dirfd, FILE_ATTRIBUTE_DIRECTORY, &statex, ntacl_blob);
+	return 0;
+}
+
+static int init_top_dir(char **argv)
+{
+	const char *path = argv[0];
+	int fd = open(path, O_RDONLY);
+	X_ASSERT(fd >= 0);
+	X_ASSERT(0 == init_default_dir(fd));
 	close(fd);
+	return 0;
+}
+
+static int make_default_dir(int dirfd, const char *name)
+{
+	int err = mkdirat(dirfd, name, 0777);
+	X_ASSERT(err == 0);
+	int fd = openat(dirfd, name, O_RDONLY);
+	X_ASSERT(fd >= 0);
+	X_ASSERT(0 == init_default_dir(fd));
+	return fd;
+}
+
+static int init_volume(char **argv)
+{
+	bool root = false;
+	while (*argv) {
+		if (strcmp(*argv, "-r") == 0) {
+			root = true;
+		} else if ((*argv)[0] == '-') {
+			X_ASSERT(false);
+		} else {
+			break;
+		}
+		++argv;
+	}
+
+	const char *path = argv[0];
+	X_ASSERT(path);
+
+	int vol_fd = open(path, O_RDONLY);
+	X_ASSERT(vol_fd >= 0);
+
+	int data_fd = make_default_dir(vol_fd, "data");
+	X_ASSERT(data_fd >= 0);
+	close(data_fd);
+
+	if (root) {
+		int root_fd = make_default_dir(vol_fd, "root");
+		X_ASSERT(root_fd >= 0);
+		int err = mkdirat(root_fd, ".tlds", 0777);
+		X_ASSERT(err == 0);
+		close(root_fd);
+	}
 	return 0;
 }
 
@@ -197,6 +247,8 @@ int main(int argc, char **argv)
 	const char *command = argv[1];
 	if (strcmp(command, "init-top-dir") == 0) {
 		return init_top_dir(argv + 2);
+	} else if (strcmp(command, "init-volume") == 0) {
+		return init_volume(argv + 2);
 	} else if (strcmp(command, "attrex") == 0) {
 		return show_attrex(argv + 2);
 	} else if (strcmp(command, "set-dos-attr") == 0) {

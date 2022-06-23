@@ -206,8 +206,8 @@ NTSTATUS x_smb2_process_tcon(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 
 	X_LOG_OP("%ld TCON %s", smbd_requ->in_mid, in_path.c_str());
 
-	x_smbd_tcon_type_t tcon_type;
-	auto smbd_share = x_smbd_find_share(share, &tcon_type);
+	std::string volume;
+	auto smbd_share = x_smbd_find_share(share, volume);
 	if (!smbd_share) {
 		RETURN_OP_STATUS(smbd_requ, NT_STATUS_BAD_NETWORK_NAME);
 	}
@@ -215,10 +215,8 @@ NTSTATUS x_smb2_process_tcon(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 	bool is_dfs = false;
 	if (smbd_share->is_dfs()) {
 		is_dfs = true;
-	} else {
-		if (tcon_type != x_smbd_tcon_type_t::DEFAULT) {
-			RETURN_OP_STATUS(smbd_requ, NT_STATUS_BAD_NETWORK_NAME);
-		}
+	} else if (volume.size()) {
+		RETURN_OP_STATUS(smbd_requ, NT_STATUS_BAD_NETWORK_NAME);
 	}
 
 	uint32_t share_access = create_share_access_mask(smbd_share,
@@ -233,14 +231,14 @@ NTSTATUS x_smb2_process_tcon(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 		RETURN_OP_STATUS(smbd_requ, NT_STATUS_ACCESS_DENIED);
 	}
 
-	auto smbd_tcon = x_smbd_tcon_create(smbd_requ->smbd_sess, smbd_share, tcon_type, share_access);
+	auto smbd_tcon = x_smbd_tcon_create(smbd_requ->smbd_sess, smbd_share, volume, share_access);
 	if (!smbd_tcon) {
 		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INSUFFICIENT_RESOURCES);
 	}
 
 	uint32_t out_share_flags = 0;
 	uint32_t out_capabilities = 0;
-	if (is_dfs && tcon_type != x_smbd_tcon_type_t::TARGET) {
+	if (is_dfs && (volume.size() == 0 || volume == "-")) {
 		out_share_flags |= SMB2_SHAREFLAG_DFS|SMB2_SHAREFLAG_DFS_ROOT;
 		out_capabilities |= SMB2_SHARE_CAP_DFS;
 	}
