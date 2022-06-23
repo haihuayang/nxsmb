@@ -223,12 +223,34 @@ static void load_ifaces(x_smbd_conf_t &smbd_conf)
 	smbd_conf.local_ifaces = ret_ifaces;
 }
 
+static bool parse_log_level(const std::string &value, unsigned int &loglevel)
+{
+	uint32_t ll;
+	if (!parse_uint32(value, ll)) {
+		return false;
+	}
+	if (ll > 10) {
+		loglevel = X_LOG_LEVEL_VERB;
+	} else if (ll > 5) {
+		loglevel = X_LOG_LEVEL_DBG;
+	} else if (ll > 3) {
+		loglevel = X_LOG_LEVEL_OP;
+	} else if (ll > 1) {
+		loglevel = X_LOG_LEVEL_NOTICE;
+	} else if (ll > 0) {
+		loglevel = X_LOG_LEVEL_WARN;
+	} else {
+		loglevel = X_LOG_LEVEL_ERR;
+	}
+	return true;
+}
+
 static bool parse_global_param(x_smbd_conf_t &smbd_conf,
 		const std::string &name, const std::string &value)
 {
 	// global parameters
 	if (name == "log level") {
-		smbd_conf.log_level = value;
+		return parse_log_level(value, smbd_conf.log_level);
 	} else if (name == "log name") {
 		smbd_conf.log_name = value;
 	} else if (name == "client thread count") {

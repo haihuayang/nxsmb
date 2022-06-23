@@ -10,7 +10,7 @@
 #include <sys/time.h>
 #include <fcntl.h>
 
-int x_loglevel = X_LOG_LEVEL_DBG;
+unsigned int x_loglevel = X_LOG_LEVEL_DBG;
 int x_logfd = 2; // stderr
 
 static void vlog(const char *name, const char *fmt, va_list ap)
@@ -77,22 +77,9 @@ void x_log(int level, const char *fmt, ...)
 	va_end(ap);
 }
 
-int x_log_init(const char *log_level, const char *log_name)
+int x_log_init(unsigned int loglevel, const char *log_name)
 {
-	int loglevel = X_LOG_LEVEL_DBG; // TODO set to INFO
-	if (log_level) {
-		int l;
-		for (l = 0; l < X_LOG_LEVEL_MAX; ++l) {
-			if (strcmp(log_level, x_loglevel_names[l]) == 0) {
-				break;
-			}
-		}
-		if (l == X_LOG_LEVEL_MAX) {
-			x_log(X_LOG_LEVEL_ERR, "invalid log_level %s", log_level);
-			return -1;
-		}
-		loglevel = l;
-	}
+	X_ASSERT(loglevel < X_LOG_LEVEL_MAX);
 	int logfd = -1;
 	if (strcmp(log_name, "stderr") == 0) {
 		logfd = 2;

@@ -55,7 +55,7 @@ struct x_smbd_conf_t
 	uint32_t smb2_max_credits = 8192;
 	bool host_msdfs = true;
 
-	std::string log_level;
+	unsigned int log_level = X_LOG_LEVEL_DBG;
 	std::string log_name = "stderr";
 	std::string netbios_name, workgroup, dns_domain, realm;
 	std::string private_dir;
