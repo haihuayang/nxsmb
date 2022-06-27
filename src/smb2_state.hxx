@@ -8,6 +8,7 @@
 
 #include "defines.hxx"
 #include "smb2.hxx"
+#include "include/librpc/security.hxx"
 
 struct x_smb2_state_read_t
 {
@@ -173,6 +174,7 @@ struct x_smb2_state_create_t
 	uint32_t in_share_access;
 	uint32_t in_create_disposition;
 	uint32_t in_create_options;
+	std::shared_ptr<idl::security_descriptor> in_security_descriptor;
 
 	x_smb2_lease_t lease;
 

@@ -104,7 +104,9 @@ void posixfs_post_create(int fd, uint32_t file_attrs, posixfs_statex_t *statex,
 	X_ASSERT(err == 0);
 	statex->file_attributes = file_attrs;
 	statex->birth_time = statex->stat.st_mtim;
-	posixfs_set_ntacl_blob(fd, ntacl_blob);
+	if (!ntacl_blob.empty()) {
+		posixfs_set_ntacl_blob(fd, ntacl_blob);
+	}
 }
 
 int posixfs_create(int dirfd, bool is_dir, const char *path,

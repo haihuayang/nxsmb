@@ -127,6 +127,15 @@ static bool decode_contexts(x_smb2_state_create_t &state,
 				state.contexts |= X_SMB2_CONTEXT_FLAG_QFID;
 			} else if (tag == X_SMB2_CREATE_TAG_MXAC) {
 				state.contexts |= X_SMB2_CONTEXT_FLAG_MXAC;
+			} else if (tag == X_SMB2_CREATE_TAG_SECD) {
+				auto sd = std::make_shared<idl::security_descriptor>();
+				idl::x_ndr_off_t ret = idl::x_ndr_pull(*sd,
+						data + data_off, data_len, 0);
+				if (ret <= 0) {
+					X_LOG_WARN("failed parsing TAG_SECD, ndr %d", ret);
+					return false;
+				}
+				state.in_security_descriptor = sd;
 			} else {
 #if 0
 				// TODO

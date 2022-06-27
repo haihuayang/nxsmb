@@ -1190,9 +1190,11 @@ static NTSTATUS get_parent_sd(const posixfs_object_t *posixfs_object,
 	return status;
 }
 
-/* TODO pass sec_desc context
-#define SMB2_CREATE_TAG_SECD "SecD"
- */
+static inline bool is_sd_empty(const idl::security_descriptor &sd)
+{
+	return !sd.owner_sid && !sd.group_sid && !sd.dacl && !sd.sacl;
+}
+
 static posixfs_open_t *open_object_new(
 		posixfs_object_t *posixfs_object,
 		x_smbd_sess_t *smbd_sess,
@@ -1215,15 +1217,23 @@ static posixfs_open_t *open_object_new(
 	}
 
 	std::shared_ptr<idl::security_descriptor> psd;
-	status = make_child_sec_desc(psd, parent_psd,
-			*smbd_user,
-			state.in_create_options & FILE_DIRECTORY_FILE);
-	if (!NT_STATUS_IS_OK(status)) {
-		return nullptr;
+	if (state.in_security_descriptor) {
+		if (!is_sd_empty(*state.in_security_descriptor)) {
+			psd = state.in_security_descriptor;
+		}
+	} else {
+		status = make_child_sec_desc(psd, parent_psd,
+				*smbd_user,
+				state.in_create_options & FILE_DIRECTORY_FILE);
+		if (!NT_STATUS_IS_OK(status)) {
+			return nullptr;
+		}
 	}
 
 	std::vector<uint8_t> ntacl_blob;
-	create_acl_blob(ntacl_blob, psd, idl::XATTR_SD_HASH_TYPE_NONE, std::array<uint8_t, idl::XATTR_SD_HASH_SIZE>());
+	if (psd) {
+		create_acl_blob(ntacl_blob, psd, idl::XATTR_SD_HASH_TYPE_NONE, std::array<uint8_t, idl::XATTR_SD_HASH_SIZE>());
+	}
 
 	/* if parent is not enable inherit, make_sec_desc */
 	int fd = posixfs_create(posixfs_object->topdir->fd,
