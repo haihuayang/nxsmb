@@ -86,7 +86,6 @@ std::shared_ptr<x_smbd_share_t> x_smbd_dfs_share_create(const x_smbd_conf_t &smb
 		const std::vector<std::string> &vgs);
 std::shared_ptr<x_smbd_share_t> x_smbd_dfs_link_create(const std::string &name, const std::string &dfs_root);
 std::shared_ptr<x_smbd_share_t> x_smbd_dfs_root_create(const std::string &name, const std::string &path, const std::vector<std::string> &vgs);
-// std::shared_ptr<x_smbd_share_t> x_smbd_posixfs_share_create(const std::string &name, const std::string &path);
 std::shared_ptr<x_smbd_share_t> x_smbd_simplefs_share_create(const std::string &name, const std::string &path);
 int x_smbd_simplefs_mktld(const std::shared_ptr<x_smbd_user_t> &smbd_user,
 		std::shared_ptr<x_smbd_share_t> &smbd_share,

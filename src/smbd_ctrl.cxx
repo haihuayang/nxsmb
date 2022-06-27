@@ -4,6 +4,9 @@
 /* to access ctrl,
    socat ABSTRACT-CONNECT:nxsmbctrl -
  */
+
+#define END_OF_MSG	">>>EOM<<<\n\0"
+
 struct x_smbd_ctrl_t
 {
 	x_epoll_upcall_t upcall;
@@ -44,7 +47,7 @@ static void x_smbd_ctrl_output(x_smbd_ctrl_conn_t *smbd_ctrl_conn)
 	X_LOG_DBG("have_more %d, output %s", have_more, smbd_ctrl_conn->output.c_str());
 	if (!have_more) {
 		smbd_ctrl_conn->handler.reset();
-		smbd_ctrl_conn->output.push_back('\0');
+		smbd_ctrl_conn->output += END_OF_MSG;
 	}
 	smbd_ctrl_conn->output_off = 0;
 }
@@ -60,7 +63,7 @@ static void x_smbd_ctrl_command(x_smbd_ctrl_conn_t *smbd_ctrl_conn)
 	} else if (strcmp(smbd_ctrl_conn->recv_buf, "list-open") == 0) {
 		smbd_ctrl_conn->handler.reset(x_smbd_open_list_create());
 	} else {
-		smbd_ctrl_conn->output = "Invalid command\0";
+		smbd_ctrl_conn->output = "Invalid command" END_OF_MSG;
 		return;
 	}
 	x_smbd_ctrl_output(smbd_ctrl_conn);

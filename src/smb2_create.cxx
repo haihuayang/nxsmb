@@ -421,6 +421,11 @@ NTSTATUS x_smb2_process_create(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_req
 		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
 
+	if ((state->in_create_options & FILE_DELETE_ON_CLOSE) &&
+			!(state->in_desired_access & idl::SEC_STD_DELETE)) {
+		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
+	}
+
 	X_LOG_OP("%ld CREATE '%s'", smbd_requ->in_mid, x_convert_utf16_to_utf8(state->in_name).c_str());
 	smbd_requ->async_done_fn = x_smb2_create_async_done;
 	NTSTATUS status = x_smbd_tcon_op_create(smbd_requ->smbd_tcon, smbd_requ, state);

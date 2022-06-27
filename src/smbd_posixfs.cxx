@@ -1106,18 +1106,49 @@ static NTSTATUS grant_oplock(posixfs_object_t *posixfs_object,
 	return NT_STATUS_OK;
 }
 
+/* posixfs_object mutex is locked */
+static NTSTATUS posixfs_object_set_delete_on_close(posixfs_object_t *posixfs_object,
+		bool delete_on_close)
+{
+	if (delete_on_close) {
+		if (posixfs_object->statex.file_attributes & FILE_ATTRIBUTE_READONLY) {
+			return NT_STATUS_CANNOT_DELETE;
+		}
+		if (true /*!is_stream_open(posixfs_open) */) {
+			posixfs_object->flags |= posixfs_object_t::flag_delete_on_close;
+		} else {
+			X_TODO;
+		}
+	} else {
+		/* TODO handle streams */
+		posixfs_object->flags &= ~posixfs_object_t::flag_delete_on_close;
+	}
+	return NT_STATUS_OK;
+}
+
 static posixfs_open_t *posixfs_open_create(
+		NTSTATUS *pstatus,
 		x_smbd_tcon_t *smbd_tcon,
 		posixfs_object_t *posixfs_object,
 		const x_smb2_state_create_t &state,
 		x_smbd_lease_t *smbd_lease)
 {
+	NTSTATUS status;
+	if (state.in_create_options & FILE_DELETE_ON_CLOSE) {
+		status = posixfs_object_set_delete_on_close(posixfs_object, true);
+		if (!NT_STATUS_IS_OK(status)) {
+			*pstatus = status;
+			return nullptr;
+		}
+	}
+
 	posixfs_open_t *posixfs_open = new posixfs_open_t(&posixfs_object->base,
 			smbd_tcon, state.granted_access, state.in_share_access);
 	posixfs_open->oplock_level = state.oplock_level;
 	posixfs_open->smbd_lease = smbd_lease;
 	++posixfs_object->use_count;
 	posixfs_object->open_list.push_back(posixfs_open);
+	*pstatus = NT_STATUS_OK;
 	return posixfs_open;
 }
 
@@ -1225,7 +1256,7 @@ static posixfs_open_t *open_object_new(
 			x_smbd_conn_curr_client_guid(), state, &smbd_lease);
 	X_ASSERT(NT_STATUS_IS_OK(status));
 	reply_requ_create(state, posixfs_object, FILE_WAS_CREATED);
-	return posixfs_open_create(smbd_tcon, posixfs_object, state, smbd_lease);
+	return posixfs_open_create(&status, smbd_tcon, posixfs_object, state, smbd_lease);
 }
 
 static bool can_delete_file_in_directory(
@@ -1404,17 +1435,28 @@ static posixfs_open_t *open_object_exist(
 	state->out_maximal_access = se_calculate_maximal_access(*psd, *smbd_user);
 	uint32_t desired_access = state->in_desired_access & ~idl::SEC_FLAG_MAXIMUM_ALLOWED;
 
-	uint32_t granted = (desired_access & state->out_maximal_access);
-	if (granted != desired_access) {
+	uint32_t granted = state->out_maximal_access;
+	if (state->in_desired_access & idl::SEC_FLAG_MAXIMUM_ALLOWED) {
+		if (posixfs_object->statex.file_attributes & FILE_ATTRIBUTE_READONLY) {
+			granted &= ~(idl::SEC_FILE_WRITE_DATA | idl::SEC_FILE_APPEND_DATA);
+		}
+	} else {
+		granted = (desired_access & state->out_maximal_access);
+	}
+
+	uint32_t rejected_mask = desired_access & ~granted;
+	if (rejected_mask == idl::SEC_STD_DELETE) {
+	       	if (!can_delete_file_in_directory(posixfs_object,
+					smbd_tcon, *smbd_user)) {
+			status = NT_STATUS_ACCESS_DENIED;
+			return nullptr;
+		}
+	} else if (rejected_mask != 0) {
 		status = NT_STATUS_ACCESS_DENIED;
 		return nullptr;
 	}
 
-	if (state->in_desired_access & idl::SEC_FLAG_MAXIMUM_ALLOWED) {
-		state->granted_access = state->out_maximal_access;
-	} else {
-		state->granted_access = granted;
-	}
+	state->granted_access = granted;
 
 	auto &curr_client_guid = x_smbd_conn_curr_client_guid();
 	bool conflict = open_mode_check(posixfs_object, state->in_desired_access, state->in_share_access);
@@ -1444,7 +1486,7 @@ static posixfs_open_t *open_object_exist(
 			curr_client_guid, *state, &smbd_lease);
 	X_ASSERT(NT_STATUS_IS_OK(status));
 	reply_requ_create(*state, posixfs_object, FILE_WAS_OPENED);
-	return posixfs_open_create(smbd_tcon, posixfs_object, *state, smbd_lease);
+	return posixfs_open_create(&status, smbd_tcon, posixfs_object, *state, smbd_lease);
 }
 
 static posixfs_open_t *create_posixfs_open(
@@ -2550,20 +2592,8 @@ NTSTATUS posixfs_object_op_set_delete_on_close(
 		bool delete_on_close)
 {
 	posixfs_object_t *posixfs_object = posixfs_object_from_base_t::container(smbd_object);
-	if (delete_on_close) {
-		if (posixfs_object->statex.file_attributes & FILE_ATTRIBUTE_READONLY) {
-			return NT_STATUS_CANNOT_DELETE;
-		}
-		if (true /*!is_stream_open(posixfs_open) */) {
-			posixfs_object->flags |= posixfs_object_t::flag_delete_on_close;
-		} else {
-			X_TODO;
-		}
-	} else {
-		/* TODO handle streams */
-		posixfs_object->flags &= ~posixfs_object_t::flag_delete_on_close;
-	}
-	return NT_STATUS_OK;
+	std::lock_guard<std::mutex> lock(posixfs_object->mutex);
+	return posixfs_object_set_delete_on_close(posixfs_object, delete_on_close);
 }
 
 std::string posixfs_object_op_get_path(

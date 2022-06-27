@@ -21,24 +21,6 @@ struct share_spec_t
 	bool dfs_test = false;
 	uint32_t max_referral_ttl = 300;
 	std::vector<std::string> volumes;
-
-#if 0
-	x_smbd_share_type_t type = TYPE_DEFAULT;
-	bool nt_acl_support = true;
-	uint32_t max_connections = 0;
-
-	std::shared_ptr<x_smbd_topdir_t> root_dir;
-	std::string msdfs_proxy;
-
-	bool is_dfs() const {
-		return my_distribute_root.size() || my_distribute_vgs.size();
-	}
-
-	bool abe_enabled() const {
-		// TODO
-		return false;
-	}
-#endif
 };
 
 static std::shared_ptr<x_smbd_conf_t> g_smbd_conf;
@@ -422,7 +404,7 @@ static int parse_smbconf(x_smbd_conf_t &smbd_conf, const char *path,
 			continue;
 		}
 		std::string name, value;
-		if (!split_option(line, pos, name, value)) {
+		if (!split_option(opt, pos, name, value)) {
 			X_PANIC("No '=' at argv %s",
 					opt.c_str());
 		}
