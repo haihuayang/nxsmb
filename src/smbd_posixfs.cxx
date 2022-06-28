@@ -1532,6 +1532,15 @@ static posixfs_open_t *create_posixfs_open(
 			posixfs_open = open_object_new(posixfs_object, smbd_requ->smbd_sess, smbd_tcon, *state, status);
 		}
 
+	} else if (state->in_create_disposition == FILE_OVERWRITE) {
+		if (posixfs_object->exists()) {
+			int err = ftruncate(posixfs_object->fd, 0);
+			X_TODO_ASSERT(err == 0);
+			posixfs_open = open_object_exist(posixfs_object, smbd_requ->smbd_sess, smbd_tcon, state, status, smbd_requ);
+		} else {
+			status = NT_STATUS_OBJECT_NAME_NOT_FOUND;
+		}
+
 	} else if (state->in_create_disposition == FILE_OVERWRITE_IF ||
 			state->in_create_disposition == FILE_SUPERSEDE) {
 		/* TODO
@@ -1542,14 +1551,14 @@ static posixfs_open_t *create_posixfs_open(
 		 */
 		if (posixfs_object->exists()) {
 			int err = ftruncate(posixfs_object->fd, 0);
-			X_ASSERT(err == 0); // TODO
+			X_TODO_ASSERT(err == 0);
 			posixfs_open = open_object_exist(posixfs_object, smbd_requ->smbd_sess, smbd_tcon, state, status, smbd_requ);
 		} else {
 			posixfs_open = open_object_new(posixfs_object, smbd_requ->smbd_sess, smbd_tcon, *state, status);
 		}
 
 	} else {
-		X_TODO;
+		status = NT_STATUS_INVALID_PARAMETER;
 	}
 
 	if (!posixfs_open) {
