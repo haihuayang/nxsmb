@@ -1,15 +1,14 @@
 
 #include "smb2.hxx"
 
-bool x_smb2_basic_info_decode(x_smb2_basic_info_t &basic_info,
+bool x_smb2_file_basic_info_decode(x_smb2_file_basic_info_t &basic_info,
 		const std::vector<uint8_t> &in_data)
 {
-	/* x_smb2_basic_info_t size is not 0x24 */
-	if (in_data.size() < 0x24) {
+	if (in_data.size() < sizeof(x_smb2_file_basic_info_t)) {
 		return false;
 	}
 	/* TODO bigendian */
-	x_smb2_basic_info_t *in_info = (x_smb2_basic_info_t *)in_data.data();
+	x_smb2_file_basic_info_t *in_info = (x_smb2_file_basic_info_t *)in_data.data();
 	basic_info.creation = in_info->creation;
 	basic_info.last_access = in_info->last_access;
 	basic_info.last_write = in_info->last_write;

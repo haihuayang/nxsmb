@@ -39,7 +39,7 @@ static bool is_null_ntime(idl::NTTIME nt)
 
 static int posixfs_set_basic_info(int fd,
 		uint32_t &notify_actions,
-		const x_smb2_basic_info_t &basic_info,
+		const x_smb2_file_basic_info_t &basic_info,
 		posixfs_statex_t *statex)
 {
 	dos_attr_t dos_attr = { 0 };
@@ -1882,29 +1882,72 @@ NTSTATUS posixfs_object_op_write(
 }
 
 static NTSTATUS getinfo_file(posixfs_object_t *posixfs_object,
+		x_smbd_open_t *smbd_open,
 		x_smb2_state_getinfo_t &state)
 {
-	if (state.in_info_level == SMB2_FILE_INFO_FILE_NETWORK_OPEN_INFORMATION) {
-		if (state.in_output_buffer_length < 56) {
+	if (state.in_info_level == SMB2_FILE_INFO_FILE_ALL_INFORMATION) {
+		if (state.in_output_buffer_length < sizeof(x_smb2_file_all_info_t)) {
 			return STATUS_BUFFER_OVERFLOW;
 		}
-		state.out_data.resize(56);
-		uint8_t *p = state.out_data.data();
-		
-		const auto statex = &posixfs_object->statex;
-		p = put_find_timespec(p, statex->birth_time);
-		p = put_find_timespec(p, statex->stat.st_atim);
-		p = put_find_timespec(p, statex->stat.st_mtim);
-		p = put_find_timespec(p, statex->stat.st_ctim);
-		x_put_le64(p, statex->get_allocation()); p += 8;
-		x_put_le64(p, statex->get_end_of_file()); p += 8;
-		x_put_le32(p, statex->file_attributes); p += 4;
-		x_put_le32(p, 0); p += 4;
+		state.out_data.resize(sizeof(x_smb2_file_all_info_t));
+		x_smb2_file_all_info_t *info =
+			(x_smb2_file_all_info_t *)state.out_data.data();
 
-		return NT_STATUS_OK;
+		const auto &statex = posixfs_object->statex;
+		info->basic_info.creation = X_H2LE64(x_timespec_to_nttime(statex.birth_time));
+		info->basic_info.last_access = X_H2LE64(x_timespec_to_nttime(statex.stat.st_atim));
+		info->basic_info.last_write = X_H2LE64(x_timespec_to_nttime(statex.stat.st_mtim));
+		info->basic_info.change = X_H2LE64(x_timespec_to_nttime(statex.stat.st_ctim));
+		info->basic_info.file_attributes = X_H2LE32(statex.file_attributes);
+		info->basic_info.unused = 0;
+
+		info->standard_info.allocation_size = X_H2LE64(statex.get_allocation());
+		info->standard_info.end_of_file = X_H2LE64(statex.get_end_of_file());
+		uint8_t delete_pending = 
+			(posixfs_object->flags & posixfs_object_t::flag_delete_on_close) ? 1 : 0;
+		/* not sure why samba for nlink to 1 for directory, just follow it */
+		uint32_t nlink = x_convert<uint32_t>(statex.stat.st_nlink);
+		if (nlink && S_ISDIR(statex.stat.st_mode)) {
+			nlink = 1;
+		}
+		if (nlink > 0) {
+			nlink -= delete_pending;
+		}
+
+		info->standard_info.nlinks = X_H2LE32(nlink);
+		info->standard_info.delete_pending = delete_pending;
+		info->standard_info.directory = S_ISDIR(statex.stat.st_mode) ? 1 : 0;
+		info->standard_info.unused = 0;
+
+		info->file_id = X_H2LE64(statex.stat.st_ino);
+		info->ea_size = 0; // not supported
+		info->access_flags = X_H2LE32(smbd_open->access_mask);
+		info->current_offset = 0; // TODO
+		info->mode = 0;
+		info->alignment_requirement = 0;
+		info->file_name_length = 0;
+		info->unused = 0;
+	} else if (state.in_info_level == SMB2_FILE_INFO_FILE_NETWORK_OPEN_INFORMATION) {
+		if (state.in_output_buffer_length < sizeof(x_smb2_file_network_open_info_t)) {
+			return STATUS_BUFFER_OVERFLOW;
+		}
+		state.out_data.resize(sizeof(x_smb2_file_network_open_info_t));
+		x_smb2_file_network_open_info_t *info =
+			(x_smb2_file_network_open_info_t *)state.out_data.data();
+		
+		const auto &statex = posixfs_object->statex;
+		info->creation = X_H2LE64(x_timespec_to_nttime(statex.birth_time));
+		info->last_access = X_H2LE64(x_timespec_to_nttime(statex.stat.st_atim));
+		info->last_write = X_H2LE64(x_timespec_to_nttime(statex.stat.st_mtim));
+		info->change = X_H2LE64(x_timespec_to_nttime(statex.stat.st_ctim));
+		info->allocation_size = X_H2LE64(statex.get_allocation());
+		info->end_of_file = X_H2LE64(statex.get_end_of_file());
+		info->file_attributes = X_H2LE32(statex.file_attributes);
+		info->unused = 0;
 	} else {
 		return NT_STATUS_INVALID_LEVEL;
 	}
+	return NT_STATUS_OK;
 }
 
 static NTSTATUS setinfo_file(posixfs_object_t *posixfs_object,
@@ -1912,15 +1955,12 @@ static NTSTATUS setinfo_file(posixfs_object_t *posixfs_object,
 		x_smb2_state_setinfo_t &state)
 {
 	if (state.in_info_level == SMB2_FILE_INFO_FILE_BASIC_INFORMATION) {
-		if (state.in_data.size() < 0x24) {
-			return NT_STATUS_INFO_LENGTH_MISMATCH;
-		}
 		if (!smbd_requ->smbd_open->check_access(idl::SEC_FILE_WRITE_ATTRIBUTE)) {
 			return NT_STATUS_ACCESS_DENIED;
 		}
 
-		x_smb2_basic_info_t basic_info;
-		if (!x_smb2_basic_info_decode(basic_info, state.in_data)) {
+		x_smb2_file_basic_info_t basic_info;
+		if (!x_smb2_file_basic_info_decode(basic_info, state.in_data)) {
 			return NT_STATUS_INVALID_PARAMETER;
 		}
 
@@ -2100,6 +2140,7 @@ static NTSTATUS getinfo_quota(posixfs_object_t *posixfs_object,
 
 NTSTATUS posixfs_object_op_getinfo(
 		x_smbd_object_t *smbd_object,
+		x_smbd_open_t *smbd_open,
 		x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ,
 		std::unique_ptr<x_smb2_state_getinfo_t> &state)
@@ -2107,7 +2148,7 @@ NTSTATUS posixfs_object_op_getinfo(
 	posixfs_object_t *posixfs_object = posixfs_object_from_base_t::container(smbd_object);
 
 	if (state->in_info_class == SMB2_GETINFO_FILE) {
-		return getinfo_file(posixfs_object, *state);
+		return getinfo_file(posixfs_object, smbd_open, *state);
 	} else if (state->in_info_class == SMB2_GETINFO_FS) {
 		return getinfo_fs(posixfs_object, *state);
 	} else if (state->in_info_class == SMB2_GETINFO_SECURITY) {

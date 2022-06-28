@@ -361,20 +361,50 @@ struct x_smb2_create_close_info_t
 	uint32_t out_file_attributes{0};
 };
 
-struct x_smb2_standard_info_t
+struct x_smb2_file_standard_info_t
 {
-	uint32_t create_time;
-	uint32_t access_time;
-	uint32_t modify_time;
+	uint64_t allocation_size;
+	uint64_t end_of_file;
+	uint32_t nlinks;
+	uint8_t delete_pending;
+	uint8_t directory;
+	uint16_t unused{0};
 };
 
-struct x_smb2_basic_info_t
+struct x_smb2_file_basic_info_t
 {
 	idl::NTTIME creation;
 	idl::NTTIME last_access;
 	idl::NTTIME last_write;
 	idl::NTTIME change;
 	uint32_t file_attributes;
+	uint32_t unused{0};
+};
+
+struct x_smb2_file_network_open_info_t
+{
+	idl::NTTIME creation;
+	idl::NTTIME last_access;
+	idl::NTTIME last_write;
+	idl::NTTIME change;
+	uint64_t allocation_size;
+	uint64_t end_of_file;
+	uint32_t file_attributes;
+	uint32_t unused{0};
+};
+
+struct x_smb2_file_all_info_t
+{
+	x_smb2_file_basic_info_t basic_info;
+	x_smb2_file_standard_info_t standard_info;
+	uint64_t file_id;
+	uint32_t ea_size;
+	uint32_t access_flags;
+	uint64_t current_offset;
+	uint32_t mode;
+	uint32_t alignment_requirement;
+	uint32_t file_name_length;
+	uint32_t unused;
 };
 
 struct x_smb2_rename_info_t
@@ -389,10 +419,10 @@ struct x_smb2_rename_info_t
 	/* following variable length file_name */
 };
 
-bool x_smb2_standard_info_decode(x_smb2_standard_info_t &standard_info,
+bool x_smb2_file_standard_info_decode(x_smb2_file_standard_info_t &standard_info,
 		const std::vector<uint8_t> &in_data);
 
-bool x_smb2_basic_info_decode(x_smb2_basic_info_t &basic_info,
+bool x_smb2_file_basic_info_decode(x_smb2_file_basic_info_t &basic_info,
 		const std::vector<uint8_t> &in_data);
 
 bool x_smb2_rename_info_decode(bool &replace_if_exists,

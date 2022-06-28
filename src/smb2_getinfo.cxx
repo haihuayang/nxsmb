@@ -113,8 +113,7 @@ NTSTATUS x_smb2_process_getinfo(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_re
 		}
 	}
 
-	x_smbd_object_t *smbd_object = smbd_requ->smbd_open->smbd_object;
-	NTSTATUS status = smbd_object->ops->getinfo(smbd_object,
+	NTSTATUS status = x_smbd_open_op_getinfo(smbd_requ->smbd_open,
 		       	smbd_conn, smbd_requ,
 			state);
 	if (NT_STATUS_IS_OK(status)) {

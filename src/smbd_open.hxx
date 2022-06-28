@@ -55,6 +55,7 @@ struct x_smbd_object_ops_t
 			x_smbd_requ_t *smbd_requ,
 			std::unique_ptr<x_smb2_state_write_t> &state);
 	NTSTATUS (*getinfo)(x_smbd_object_t *smbd_object,
+			x_smbd_open_t *smbd_open,
 			x_smbd_conn_t *smbd_conn,
 			x_smbd_requ_t *smbd_requ,
 			std::unique_ptr<x_smb2_state_getinfo_t> &state);
@@ -148,7 +149,7 @@ static inline NTSTATUS x_smbd_open_op_getinfo(x_smbd_open_t *smbd_open,
 		std::unique_ptr<x_smb2_state_getinfo_t> &state)
 {
 	x_smbd_object_t *smbd_object = smbd_open->smbd_object;
-	return smbd_object->ops->getinfo(smbd_object,
+	return smbd_object->ops->getinfo(smbd_object, smbd_open,
 			smbd_conn, smbd_requ, state);
 }
 

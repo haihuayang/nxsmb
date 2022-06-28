@@ -421,6 +421,7 @@ static NTSTATUS ipc_object_op_write(
 
 static NTSTATUS ipc_object_op_getinfo(
 		x_smbd_object_t *smbd_object,
+		x_smbd_open_t *smbd_open,
 		x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ,
 		std::unique_ptr<x_smb2_state_getinfo_t> &state)
@@ -429,18 +430,19 @@ static NTSTATUS ipc_object_op_getinfo(
 	/* SMB2_GETINFO_FILE, SMB2_FILE_STANDARD_INFO */
 	if (state->in_info_class == SMB2_GETINFO_FILE &&
 			state->in_info_level == SMB2_FILE_INFO_FILE_STANDARD_INFORMATION) {
-		/* only little endian */
-		struct {
-			uint64_t allocation_size;
-			uint64_t end_of_file;
-			uint32_t link_count;
-			uint8_t delete_pending;
-			uint8_t is_directory;
-			uint16_t reserve;
-		} standard_info = {
-			4096, 0, 1, 1, 0, 0
-		};
-		state->out_data.assign((const uint8_t *)&standard_info, (const uint8_t *)(&standard_info + 1));
+		if (state->in_output_buffer_length < sizeof(x_smb2_file_standard_info_t)) {
+			return STATUS_BUFFER_OVERFLOW;
+		}
+		state->out_data.resize(sizeof(x_smb2_file_standard_info_t));
+		x_smb2_file_standard_info_t *info =
+			(x_smb2_file_standard_info_t *)state->out_data.data();
+		
+		info->allocation_size = X_H2LE64(4096);
+		info->end_of_file = 0;
+		info->nlinks = X_H2LE32(1);
+		info->delete_pending = 1; // not sure why samba assign 1
+		info->directory = 0;
+		info->unused = 0;
 		return NT_STATUS_OK;
 	} else {
 		return NT_STATUS_NOT_SUPPORTED;
