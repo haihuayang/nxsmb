@@ -83,6 +83,7 @@ void posixfs_post_create(int fd, uint32_t file_attrs, posixfs_statex_t *statex,
 		const std::vector<uint8_t> &ntacl_blob);
 int posixfs_create(int dirfd, bool is_dir, const char *path,
 		posixfs_statex_t *statex,
+		uint32_t file_attrs,
 		const std::vector<uint8_t> &ntacl_blob);
 
 

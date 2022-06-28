@@ -1240,6 +1240,7 @@ static posixfs_open_t *open_object_new(
 			state.in_create_options & FILE_DIRECTORY_FILE,
 			posixfs_object->unix_path.c_str(),
 			&posixfs_object->statex,
+			state.in_file_attributes,
 			ntacl_blob);
 
 	if (fd < 0) {
@@ -2927,6 +2928,7 @@ int posixfs_mktld(const std::shared_ptr<x_smbd_user_t> &smbd_user,
 			true,
 			name.c_str(),
 			&statex,
+			0,
 			ntacl_blob);
 
 	X_ASSERT(fd != -1);

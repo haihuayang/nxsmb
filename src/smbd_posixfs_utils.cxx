@@ -109,8 +109,10 @@ void posixfs_post_create(int fd, uint32_t file_attrs, posixfs_statex_t *statex,
 	}
 }
 
+/* TODO we can use file_attrs to indicate if it is a dir */
 int posixfs_create(int dirfd, bool is_dir, const char *path,
 		posixfs_statex_t *statex,
+		uint32_t file_attrs,
 		const std::vector<uint8_t> &ntacl_blob)
 {
 	int fd;
@@ -127,7 +129,15 @@ int posixfs_create(int dirfd, bool is_dir, const char *path,
 			return -errno;
 		}
 	}
-	posixfs_post_create(fd, is_dir ? FILE_ATTRIBUTE_DIRECTORY : FILE_ATTRIBUTE_ARCHIVE,
+	file_attrs &= FILE_ATTRIBUTE_ALL_MASK;
+	if (is_dir) {
+		file_attrs &= ~(uint32_t)FILE_ATTRIBUTE_ARCHIVE;
+		file_attrs |= (uint32_t)FILE_ATTRIBUTE_DIRECTORY;
+	} else {
+		file_attrs |= (uint32_t)FILE_ATTRIBUTE_ARCHIVE;
+		file_attrs &= ~(uint32_t)FILE_ATTRIBUTE_DIRECTORY;
+	}
+	posixfs_post_create(fd, file_attrs,
 			statex, ntacl_blob);
 	return fd;
 }

@@ -209,6 +209,7 @@ int x_smbd_simplefs_mktld(const std::shared_ptr<x_smbd_user_t> &smbd_user,
 			true,
 			name.c_str(),
 			&statex,
+			0,
 			ntacl_blob);
 
 	X_ASSERT(fd != -1);
