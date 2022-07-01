@@ -82,7 +82,7 @@ struct x_auto_ref_t
 static inline size_t x_next_2_power(size_t num)
 {
 	size_t ret = 1;
-	while (ret <= num) {
+	while (ret < num) {
 		ret <<= 1;
 	}
 	return ret;
