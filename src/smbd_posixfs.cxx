@@ -1430,7 +1430,11 @@ static posixfs_open_t *open_object_exist(
 		return nullptr;
 	}
 
-	if (!x_smbd_tcon_access_check(smbd_tcon, state->in_desired_access)) {
+	if ((posixfs_object->statex.file_attributes & FILE_ATTRIBUTE_READONLY) &&
+			(state->in_desired_access & (idl::SEC_FILE_WRITE_DATA | idl::SEC_FILE_APPEND_DATA))) {
+		X_LOG_NOTICE("deny access 0x%x to %s due to readonly 0x%x",
+				state->in_desired_access, posixfs_object->unix_path.c_str(),
+				posixfs_object->statex.file_attributes);
 		status = NT_STATUS_ACCESS_DENIED;
 		return nullptr;
 	}
@@ -1448,7 +1452,9 @@ static posixfs_open_t *open_object_exist(
 	}
 
 	auto smbd_user = x_smbd_sess_get_user(smbd_sess);
+	uint32_t share_access = x_smbd_tcon_get_share_access(smbd_tcon);
 	state->out_maximal_access = se_calculate_maximal_access(*psd, *smbd_user);
+	state->out_maximal_access &= share_access;
 	uint32_t desired_access = state->in_desired_access & ~idl::SEC_FLAG_MAXIMUM_ALLOWED;
 
 	uint32_t granted = state->out_maximal_access;
@@ -1471,8 +1477,6 @@ static posixfs_open_t *open_object_exist(
 		status = NT_STATUS_ACCESS_DENIED;
 		return nullptr;
 	}
-
-	state->granted_access = granted;
 
 	auto &curr_client_guid = x_smbd_conn_curr_client_guid();
 	bool conflict = open_mode_check(posixfs_object, state->in_desired_access, state->in_share_access);

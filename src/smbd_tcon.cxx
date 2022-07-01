@@ -84,6 +84,11 @@ bool x_smbd_tcon_access_check(const x_smbd_tcon_t *smbd_tcon, uint32_t desired_a
 	return (desired_access & ~smbd_tcon->share_access) == 0;
 }
 
+uint32_t x_smbd_tcon_get_share_access(const x_smbd_tcon_t *smbd_tcon)
+{
+	return smbd_tcon->share_access;
+}
+
 bool x_smbd_tcon_match(const x_smbd_tcon_t *smbd_tcon, const x_smbd_sess_t *smbd_sess, uint32_t tid)
 {
 	return smbd_tcon->smbd_sess == smbd_sess && smbd_tcon->tid == tid;
