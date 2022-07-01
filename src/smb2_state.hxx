@@ -193,6 +193,7 @@ struct x_smb2_state_create_t
 	std::shared_ptr<idl::security_descriptor> in_security_descriptor;
 
 	x_smb2_lease_t lease;
+	uint64_t in_allocation_size{0};
 
 	std::u16string in_name;
 

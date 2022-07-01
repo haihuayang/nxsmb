@@ -41,7 +41,8 @@ struct posixfs_statex_t
 		if (S_ISDIR(stat.st_mode)) {
 			return 0;
 		}
-		return stat.st_blocks * 512;
+		/* TODO */
+		return std::max(stat.st_blocks * 512, stat.st_size);
 	}
 
 	/* TODO for now we use st_dev as the fs id. st_dev can change in remounting,
@@ -84,6 +85,7 @@ void posixfs_post_create(int fd, uint32_t file_attrs, posixfs_statex_t *statex,
 int posixfs_create(int dirfd, bool is_dir, const char *path,
 		posixfs_statex_t *statex,
 		uint32_t file_attrs,
+		uint64_t allocation_size,
 		const std::vector<uint8_t> &ntacl_blob);
 
 

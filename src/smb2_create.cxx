@@ -125,6 +125,12 @@ static bool decode_contexts(x_smb2_state_create_t &state,
 				}
 			} else if (tag == X_SMB2_CREATE_TAG_QFID) {
 				state.contexts |= X_SMB2_CONTEXT_FLAG_QFID;
+			} else if (tag == X_SMB2_CREATE_TAG_ALSI) {
+				if (data_len != sizeof(uint64_t)) {
+					return false;
+				}
+				const uint64_t *pdata = (uint64_t *)(data + data_off);
+				state.in_allocation_size = X_LE2H64(*pdata);
 			} else if (tag == X_SMB2_CREATE_TAG_MXAC) {
 				state.contexts |= X_SMB2_CONTEXT_FLAG_MXAC;
 			} else if (tag == X_SMB2_CREATE_TAG_SECD) {
@@ -427,6 +433,14 @@ NTSTATUS x_smb2_process_create(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_req
 
 	auto state = std::make_unique<x_smb2_state_create_t>();
 	if (!decode_in_create(*state, in_hdr, smbd_requ->in_requ_len)) {
+		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
+	}
+
+	if (state->in_create_options & (0xff000000u | FILE_RESERVER_OPFILTER)) {
+		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
+	}
+
+	if (state->in_file_attributes & (FILE_ATTRIBUTE_DEVICE | FILE_ATTRIBUTE_VOLUME)) {
 		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
 

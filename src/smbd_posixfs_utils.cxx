@@ -113,6 +113,7 @@ void posixfs_post_create(int fd, uint32_t file_attrs, posixfs_statex_t *statex,
 int posixfs_create(int dirfd, bool is_dir, const char *path,
 		posixfs_statex_t *statex,
 		uint32_t file_attrs,
+		uint64_t allocation_size,
 		const std::vector<uint8_t> &ntacl_blob)
 {
 	int fd;
@@ -129,6 +130,16 @@ int posixfs_create(int dirfd, bool is_dir, const char *path,
 			return -errno;
 		}
 	}
+	if (allocation_size) {
+		int err = ftruncate(fd, allocation_size);
+		if (err < 0) {
+			int save_errno = errno;
+			err = unlinkat(dirfd, path, is_dir ? AT_REMOVEDIR : 0);
+			X_ASSERT(err == 0);
+			return -save_errno;
+		}
+	}
+
 	file_attrs &= FILE_ATTRIBUTE_ALL_MASK;
 	if (is_dir) {
 		file_attrs &= ~(uint32_t)FILE_ATTRIBUTE_ARCHIVE;
@@ -137,6 +148,7 @@ int posixfs_create(int dirfd, bool is_dir, const char *path,
 		file_attrs |= (uint32_t)FILE_ATTRIBUTE_ARCHIVE;
 		file_attrs &= ~(uint32_t)FILE_ATTRIBUTE_DIRECTORY;
 	}
+	/* TODO delete file if fail */
 	posixfs_post_create(fd, file_attrs,
 			statex, ntacl_blob);
 	return fd;

@@ -1246,6 +1246,7 @@ static posixfs_open_t *open_object_new(
 			posixfs_object->unix_path.c_str(),
 			&posixfs_object->statex,
 			state.in_file_attributes,
+			state.in_allocation_size,
 			ntacl_blob);
 
 	if (fd < 0) {
@@ -1561,7 +1562,9 @@ static posixfs_open_t *create_posixfs_open(
 		 * (requiring delete access) then recreates it.
 		 */
 		if (posixfs_object->exists()) {
-			int err = ftruncate(posixfs_object->fd, 0);
+			int err = ftruncate(posixfs_object->fd, state->in_allocation_size);
+			X_TODO_ASSERT(err == 0);
+			err = posixfs_statex_get(posixfs_object->fd, &posixfs_object->statex);
 			X_TODO_ASSERT(err == 0);
 			posixfs_open = open_object_exist(posixfs_object, smbd_requ->smbd_sess, smbd_tcon, state, status, smbd_requ);
 		} else {
@@ -3158,7 +3161,7 @@ int posixfs_mktld(const std::shared_ptr<x_smbd_user_t> &smbd_user,
 			true,
 			name.c_str(),
 			&statex,
-			0,
+			0, 0,
 			ntacl_blob);
 
 	X_ASSERT(fd != -1);

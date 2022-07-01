@@ -185,7 +185,7 @@ static NTSTATUS simplefs_object_op_rename(x_smbd_object_t *smbd_object,
 	return posixfs_object_rename(smbd_object, smbd_requ, 
 			simplefs_share.root_dir, new_path, replace_if_exists);
 }
-
+#if 0
 int x_smbd_simplefs_mktld(const std::shared_ptr<x_smbd_user_t> &smbd_user,
 		std::shared_ptr<x_smbd_share_t> &smbd_share,
 		const std::string &name,
@@ -211,6 +211,7 @@ int x_smbd_simplefs_mktld(const std::shared_ptr<x_smbd_user_t> &smbd_user,
 			name.c_str(),
 			&statex,
 			0,
+			0,
 			ntacl_blob);
 
 	X_ASSERT(fd != -1);
@@ -224,4 +225,4 @@ int x_smbd_simplefs_rmtld(std::shared_ptr<x_smbd_share_t> &smbd_share,
 	simplefs_share_t &simplefs_share = dynamic_cast<simplefs_share_t &>(*smbd_share);
 	return unlinkat(simplefs_share.root_dir->fd, name.c_str(), AT_REMOVEDIR);
 }
-
+#endif
