@@ -1,11 +1,6 @@
 
 #include "smbd.hxx"
 
-enum {
-	X_SMB2_KEEPALIVE_REQU_BODY_LEN = 0x04,
-	X_SMB2_KEEPALIVE_RESP_BODY_LEN = 0x04,
-};
-
 struct x_smb2_keepalive_t
 {
 	uint16_t struct_size;

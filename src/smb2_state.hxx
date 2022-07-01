@@ -51,6 +51,22 @@ struct x_smb2_state_write_t
 	uint32_t out_remaining;
 };
 
+struct x_smb2_lock_element_t
+{
+	uint64_t offset;
+	uint64_t length;
+	uint32_t flags;
+	uint32_t unused;
+};
+
+struct x_smb2_state_lock_t
+{
+	uint64_t in_file_id_persistent;
+	uint64_t in_file_id_volatile;
+	uint32_t in_lock_sequence_index;
+	std::vector<x_smb2_lock_element_t> in_lock_elements;
+};
+
 struct x_smb2_state_getinfo_t
 {
 	uint8_t  in_info_class;

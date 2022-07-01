@@ -531,6 +531,7 @@ static const x_smbd_object_ops_t x_smbd_ipc_object_ops = {
 	ipc_object_op_close,
 	ipc_object_op_read,
 	ipc_object_op_write,
+	nullptr, // op_lock
 	ipc_object_op_getinfo,
 	ipc_object_op_setinfo,
 	ipc_object_op_ioctl,

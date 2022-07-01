@@ -33,6 +33,11 @@ NTSTATUS posixfs_object_op_write(
 		x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ,
 		std::unique_ptr<x_smb2_state_write_t> &state);
+NTSTATUS posixfs_object_op_lock(
+		x_smbd_object_t *smbd_object,
+		x_smbd_conn_t *smbd_conn,
+		x_smbd_requ_t *smbd_requ,
+		std::unique_ptr<x_smb2_state_lock_t> &state);
 NTSTATUS posixfs_object_op_getinfo(
 		x_smbd_object_t *smbd_object,
 		x_smbd_open_t *smbd_open,

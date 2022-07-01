@@ -129,9 +129,12 @@ struct posixfs_open_t
 	/* open's on the same file sharing the same lease can have different parent key */
 	x_smb2_lease_key_t parent_lease_key;
 	x_smbd_lease_t *smbd_lease{};
+	uint8_t lock_sequency_array[64];
 	/* notify_requ_list and notify_changes protected by posixfs_object->mutex */
 	x_tp_ddlist_t<requ_async_traits> notify_requ_list;
+	x_tp_ddlist_t<requ_async_traits> lock_requ_list;
 	std::vector<std::pair<uint32_t, std::u16string>> notify_changes;
+	std::vector<x_smb2_lock_element_t> locks;
 };
 X_DECLARE_MEMBER_TRAITS(posixfs_open_object_traits, posixfs_open_t, object_link)
 X_DECLARE_MEMBER_TRAITS(posixfs_open_from_base_t, posixfs_open_t, base)
@@ -294,6 +297,8 @@ static void posixfs_object_release(posixfs_object_t *posixfs_object)
 		posixfs_object->unused_timestamp = tick_now;
 	}
 }
+
+static void posixfs_re_lock(posixfs_object_t *posixfs_object);
 
 struct posixfs_defer_open_evt_t
 {
@@ -1589,6 +1594,10 @@ static void posixfs_object_remove(posixfs_object_t *posixfs_object,
 		return;
 	}
 	posixfs_object->open_list.remove(posixfs_open);
+	if (posixfs_open->locks.size()) {
+		posixfs_re_lock(posixfs_object);
+	}
+
 	if (posixfs_object->open_list.empty()) {
 		if (posixfs_object->flags & posixfs_object_t::flag_delete_on_close) {
 			uint32_t notify_filter;
@@ -1890,6 +1899,212 @@ NTSTATUS posixfs_object_op_write(
 	return NT_STATUS_OK;
 #endif
 }
+
+static bool byte_range_overlap(uint64_t ofs1,
+		uint64_t len1,
+		uint64_t ofs2,
+		uint64_t len2)
+{
+	uint64_t last1;
+	uint64_t last2;
+
+	/*
+	 * This is based on [MS-FSA] 2.1.4.10
+	 * Algorithm for Determining If a Range Access
+	 * Conflicts with Byte-Range Locks
+	 */
+
+	/*
+	 * The {0, 0} range doesn't conflict with any byte-range lock
+	 */
+	if (ofs1 == 0 && len1 == 0) {
+		return false;
+	}
+	if (ofs2 == 0 && len2 == 0) {
+		return false;
+	}
+
+	/*
+	 * The caller should have checked that the ranges are
+	 * valid.
+	 */
+	last1 = ofs1 + len1 - 1;
+	last2 = ofs2 + len2 - 1;
+
+	/*
+	 * If one range starts after the last
+	 * byte of the other range there's
+	 * no conflict.
+	 */
+	if (ofs1 > last2) {
+		return false;
+	}
+	if (ofs2 > last1) {
+		return false;
+	}
+
+	return true;
+}
+
+/* SMB2_LOCK */
+static bool brl_overlap(const x_smb2_lock_element_t &le1, const x_smb2_lock_element_t &le2)
+{
+	return byte_range_overlap(le1.offset, le1.length, le2.offset, le2.length);
+}
+
+static bool brl_conflict(const posixfs_object_t *posixfs_object,
+		const posixfs_open_t *posixfs_open,
+		const x_smb2_lock_element_t &le)
+{
+	auto &open_list = posixfs_object->open_list;
+	const posixfs_open_t *curr_open;
+	for (curr_open = open_list.get_front(); curr_open; curr_open = open_list.next(curr_open)) {
+		for (auto &l: curr_open->locks) {
+			if (!(le.flags & SMB2_LOCK_FLAG_EXCLUSIVE) &&
+					!(l.flags & SMB2_LOCK_FLAG_EXCLUSIVE)) {
+				continue;
+			}
+
+			/* A READ lock can stack on top of a WRITE lock if they are
+			 * the same open */
+			if ((l.flags & SMB2_LOCK_FLAG_EXCLUSIVE) &&
+					!(le.flags & SMB2_LOCK_FLAG_EXCLUSIVE) &&
+					curr_open == posixfs_open) {
+				continue;
+			}
+
+			if (brl_overlap(le, l)) {
+				return true;
+			}
+		}
+	}
+	return false;
+}
+
+static bool brl_conflict(const posixfs_object_t *posixfs_object,
+		const posixfs_open_t *posixfs_open,
+		const std::vector<x_smb2_lock_element_t> &locks)
+{
+	for (auto &le: locks) {
+		if (brl_conflict(posixfs_object, posixfs_open, le)) {
+			return true;
+		}
+	}
+	return false;
+}
+
+static void posixfs_lock_cancel(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
+{
+	posixfs_open_t *posixfs_open = posixfs_open_from_base_t::container(smbd_requ->smbd_open);
+	posixfs_object_t *posixfs_object = posixfs_object_from_base_t::container(posixfs_open->base.smbd_object);
+
+	{
+		std::lock_guard<std::mutex> lock(posixfs_object->mutex);
+		posixfs_open->lock_requ_list.remove(smbd_requ);
+	}
+	x_smbd_conn_post_cancel(smbd_conn, smbd_requ);
+}
+
+struct posixfs_lock_evt_t
+{
+	explicit posixfs_lock_evt_t(x_smbd_requ_t *requ)
+		: smbd_requ(requ)
+	{ }
+	~posixfs_lock_evt_t() {
+		x_smbd_ref_dec(smbd_requ);
+	}
+	x_fdevt_user_t base;
+	x_smbd_requ_t *smbd_requ;
+};
+
+static void posixfs_lock_func(x_smbd_conn_t *smbd_conn, x_fdevt_user_t *fdevt_user, bool terminated)
+{
+	posixfs_lock_evt_t *evt = X_CONTAINER_OF(fdevt_user, posixfs_lock_evt_t, base);
+	X_LOG_DBG("evt=%p", evt);
+
+	if (!terminated) {
+		x_smbd_requ_t *smbd_requ = evt->smbd_requ;
+		smbd_requ->async_done_fn(smbd_conn, smbd_requ, NT_STATUS_OK);
+	}
+
+	delete evt;
+}
+
+static void posixfs_re_lock(posixfs_object_t *posixfs_object)
+{
+	/* TODO it is not fair, it always scan the lock from open_list */
+	posixfs_open_t *posixfs_open;
+	auto &open_list = posixfs_object->open_list;
+	for (posixfs_open = open_list.get_front(); posixfs_open; posixfs_open = open_list.next(posixfs_open)) {
+		x_smbd_requ_t *smbd_requ = posixfs_open->lock_requ_list.get_front();
+		while (smbd_requ) {
+			x_smbd_requ_t *next_requ = posixfs_open->lock_requ_list.next(smbd_requ);
+			x_smb2_state_lock_t *state{(x_smb2_state_lock_t *)smbd_requ->requ_state};
+			if (!brl_conflict(posixfs_object, posixfs_open, state->in_lock_elements)) {
+				posixfs_open->lock_requ_list.remove(smbd_requ);
+				x_smbd_requ_remove(smbd_requ); // remove from async
+				posixfs_lock_evt_t *evt = new posixfs_lock_evt_t(smbd_requ);
+				evt->base.func = posixfs_lock_func;
+				if (!x_smbd_chan_post_user(smbd_requ->smbd_chan, &evt->base)) {
+					delete evt;
+				}
+			}
+			smbd_requ = next_requ;
+		}
+	}
+}
+
+NTSTATUS posixfs_object_op_lock(
+		x_smbd_object_t *smbd_object,
+		x_smbd_conn_t *smbd_conn,
+		x_smbd_requ_t *smbd_requ,
+		std::unique_ptr<x_smb2_state_lock_t> &state)
+{
+	posixfs_object_t *posixfs_object = posixfs_object_from_base_t::container(smbd_object);
+	if (posixfs_object->is_dir()) {
+		return NT_STATUS_INVALID_PARAMETER;
+	}
+
+	posixfs_open_t *posixfs_open = posixfs_open_from_base_t::container(smbd_requ->smbd_open);
+	std::lock_guard<std::mutex> lock(posixfs_object->mutex);
+
+	if (state->in_lock_elements[0].flags & SMB2_LOCK_FLAG_UNLOCK) {
+		for (auto &l1: state->in_lock_elements) {
+			auto it = posixfs_open->locks.begin();
+			for (; it != posixfs_open->locks.end(); ++it) {
+				if (it->offset == l1.offset && it->length == l1.length) {
+					break;
+				}
+			}
+			if (it == posixfs_open->locks.end()) {
+				X_LOG_NOTICE("failed to unlock");
+				return NT_STATUS_RANGE_NOT_LOCKED;
+			}
+			posixfs_open->locks.erase(it);
+		}
+		posixfs_re_lock(posixfs_object);
+		return NT_STATUS_OK;
+	} else {
+		bool conflict = brl_conflict(posixfs_object, posixfs_open, state->in_lock_elements);
+		if (!conflict) {
+			posixfs_open->locks.insert(posixfs_open->locks.end(),
+					state->in_lock_elements.begin(),
+					state->in_lock_elements.end());
+			return NT_STATUS_OK;
+		} else if (state->in_lock_elements[0].flags & SMB2_LOCK_FLAG_FAIL_IMMEDIATELY) {
+			return NT_STATUS_LOCK_NOT_GRANTED;
+		} else {
+			X_ASSERT(state->in_lock_elements.size() == 1);
+			X_LOG_DBG("lock conflict");
+			smbd_requ->requ_state = state.release();
+			x_smbd_ref_inc(smbd_requ);
+			posixfs_open->lock_requ_list.push_back(smbd_requ);
+			x_smbd_conn_set_async(smbd_conn, smbd_requ, posixfs_lock_cancel);
+			return NT_STATUS_PENDING;
+		}
+	}
+}
+
 
 static NTSTATUS getinfo_file(posixfs_object_t *posixfs_object,
 		x_smbd_open_t *smbd_open,
