@@ -300,6 +300,146 @@ static void posixfs_object_release(posixfs_object_t *posixfs_object)
 
 static void posixfs_re_lock(posixfs_object_t *posixfs_object);
 
+static bool byte_range_overlap(uint64_t ofs1,
+		uint64_t len1,
+		uint64_t ofs2,
+		uint64_t len2)
+{
+	uint64_t last1;
+	uint64_t last2;
+
+	/*
+	 * This is based on [MS-FSA] 2.1.4.10
+	 * Algorithm for Determining If a Range Access
+	 * Conflicts with Byte-Range Locks
+	 */
+
+	/*
+	 * The {0, 0} range doesn't conflict with any byte-range lock
+	 */
+	if (ofs1 == 0 && len1 == 0) {
+		return false;
+	}
+	if (ofs2 == 0 && len2 == 0) {
+		return false;
+	}
+
+	/*
+	 * The caller should have checked that the ranges are
+	 * valid.
+	 */
+	last1 = ofs1 + len1 - 1;
+	last2 = ofs2 + len2 - 1;
+
+	/*
+	 * If one range starts after the last
+	 * byte of the other range there's
+	 * no conflict.
+	 */
+	if (ofs1 > last2) {
+		return false;
+	}
+	if (ofs2 > last1) {
+		return false;
+	}
+
+	return true;
+}
+
+/* SMB2_LOCK */
+static bool brl_overlap(const x_smb2_lock_element_t &le1, const x_smb2_lock_element_t &le2)
+{
+	return byte_range_overlap(le1.offset, le1.length, le2.offset, le2.length);
+}
+
+static bool brl_conflict(const posixfs_object_t *posixfs_object,
+		const posixfs_open_t *posixfs_open,
+		const x_smb2_lock_element_t &le)
+{
+	auto &open_list = posixfs_object->open_list;
+	const posixfs_open_t *curr_open;
+	for (curr_open = open_list.get_front(); curr_open; curr_open = open_list.next(curr_open)) {
+		for (auto &l: curr_open->locks) {
+			if (!(le.flags & SMB2_LOCK_FLAG_EXCLUSIVE) &&
+					!(l.flags & SMB2_LOCK_FLAG_EXCLUSIVE)) {
+				continue;
+			}
+
+			/* A READ lock can stack on top of a WRITE lock if they are
+			 * the same open */
+			if ((l.flags & SMB2_LOCK_FLAG_EXCLUSIVE) &&
+					!(le.flags & SMB2_LOCK_FLAG_EXCLUSIVE) &&
+					curr_open == posixfs_open) {
+				continue;
+			}
+
+			if (brl_overlap(le, l)) {
+				return true;
+			}
+		}
+	}
+	return false;
+}
+
+static bool brl_conflict(const posixfs_object_t *posixfs_object,
+		const posixfs_open_t *posixfs_open,
+		const std::vector<x_smb2_lock_element_t> &locks)
+{
+	for (auto &le: locks) {
+		if (brl_conflict(posixfs_object, posixfs_open, le)) {
+			return true;
+		}
+	}
+	return false;
+}
+
+static bool brl_conflict_other(const posixfs_object_t *posixfs_object,
+		const posixfs_open_t *posixfs_open,
+		const x_smb2_lock_element_t &le)
+{
+	auto &open_list = posixfs_object->open_list;
+	const posixfs_open_t *curr_open;
+	for (curr_open = open_list.get_front(); curr_open; curr_open = open_list.next(curr_open)) {
+		for (auto &l: curr_open->locks) {
+			if (!(le.flags & SMB2_LOCK_FLAG_EXCLUSIVE) &&
+					!(l.flags & SMB2_LOCK_FLAG_EXCLUSIVE)) {
+				continue;
+			}
+
+			if (!brl_overlap(le, l)) {
+				continue;
+			}
+
+			if (curr_open != posixfs_open) {
+				return true;
+			}
+
+			/*
+			 * Incoming WRITE locks conflict with existing READ locks even
+			 * if the context is the same. JRA. See LOCKTEST7 in
+			 * smbtorture.
+			 */
+			if (!(l.flags & SMB2_LOCK_FLAG_EXCLUSIVE) &&
+					(le.flags & SMB2_LOCK_FLAG_EXCLUSIVE)) {
+				return true;
+			}
+		}
+	}
+	return false;
+}
+
+static bool check_io_brl_conflict(posixfs_object_t *posixfs_object,
+		const posixfs_open_t *posixfs_open,
+		uint64_t offset, uint64_t length, bool is_write)
+{
+	struct x_smb2_lock_element_t le;
+	le.offset = offset;
+	le.length = length;
+	le.flags = is_write ? SMB2_LOCK_FLAG_EXCLUSIVE : SMB2_LOCK_FLAG_SHARED;
+	std::lock_guard<std::mutex> lock(posixfs_object->mutex);
+	return brl_conflict_other(posixfs_object, posixfs_open, le);
+}
+
 struct posixfs_defer_open_evt_t
 {
 	x_fdevt_user_t base;
@@ -1531,6 +1671,10 @@ static posixfs_open_t *create_posixfs_open(
 		}
 
 	} else if (state->in_create_disposition == FILE_OPEN) {
+		if (state->in_timestamp != 0) {
+			status = NT_STATUS_OBJECT_NAME_NOT_FOUND;
+			return nullptr;
+		}
 		if (posixfs_object->exists()) {
 			posixfs_open = open_object_exist(posixfs_object, smbd_requ->smbd_sess, smbd_tcon, state, status, smbd_requ);
 		} else {
@@ -1538,6 +1682,10 @@ static posixfs_open_t *create_posixfs_open(
 		}
 
 	} else if (state->in_create_disposition == FILE_OPEN_IF) {
+		if (state->in_timestamp != 0) {
+			status = NT_STATUS_OBJECT_NAME_NOT_FOUND;
+			return nullptr;
+		}
 		if (posixfs_object->exists()) {
 			posixfs_open = open_object_exist(posixfs_object, smbd_requ->smbd_sess, smbd_tcon, state, status, smbd_requ);
 		} else {
@@ -1555,6 +1703,11 @@ static posixfs_open_t *create_posixfs_open(
 
 	} else if (state->in_create_disposition == FILE_OVERWRITE_IF ||
 			state->in_create_disposition == FILE_SUPERSEDE) {
+		if (state->in_timestamp != 0) {
+			/* TODO */
+			status = NT_STATUS_OBJECT_NAME_NOT_FOUND;
+			return nullptr;
+		}
 		/* TODO
 		 * Currently we're using FILE_SUPERSEDE as the same as
 		 * FILE_OVERWRITE_IF but they really are
@@ -1771,6 +1924,12 @@ NTSTATUS posixfs_object_op_read(
 		std::unique_ptr<x_smb2_state_read_t> &state)
 {
 	posixfs_object_t *posixfs_object = posixfs_object_from_base_t::container(smbd_object);
+	posixfs_open_t *posixfs_open = posixfs_open_from_base_t::container(smbd_requ->smbd_open);
+
+	if (check_io_brl_conflict(posixfs_object, posixfs_open, state->in_offset, state->in_length, false)) {
+		return NT_STATUS_FILE_LOCK_CONFLICT;
+	}
+
 	++posixfs_object->use_count;
 	x_smbd_ref_inc(smbd_requ);
 	posixfs_read_job_t *read_job = new posixfs_read_job_t(posixfs_object, smbd_requ);
@@ -1889,6 +2048,12 @@ NTSTATUS posixfs_object_op_write(
 		std::unique_ptr<x_smb2_state_write_t> &state)
 {
 	posixfs_object_t *posixfs_object = posixfs_object_from_base_t::container(smbd_object);
+	posixfs_open_t *posixfs_open = posixfs_open_from_base_t::container(smbd_requ->smbd_open);
+
+	if (check_io_brl_conflict(posixfs_object, posixfs_open, state->in_offset, state->in_buf_length, true)) {
+		return NT_STATUS_FILE_LOCK_CONFLICT;
+	}
+
 	++posixfs_object->use_count;
 	x_smbd_ref_inc(smbd_requ);
 	posixfs_write_job_t *write_job = new posixfs_write_job_t(posixfs_object, smbd_requ);
@@ -1907,99 +2072,6 @@ NTSTATUS posixfs_object_op_write(
 	}
 	return NT_STATUS_OK;
 #endif
-}
-
-static bool byte_range_overlap(uint64_t ofs1,
-		uint64_t len1,
-		uint64_t ofs2,
-		uint64_t len2)
-{
-	uint64_t last1;
-	uint64_t last2;
-
-	/*
-	 * This is based on [MS-FSA] 2.1.4.10
-	 * Algorithm for Determining If a Range Access
-	 * Conflicts with Byte-Range Locks
-	 */
-
-	/*
-	 * The {0, 0} range doesn't conflict with any byte-range lock
-	 */
-	if (ofs1 == 0 && len1 == 0) {
-		return false;
-	}
-	if (ofs2 == 0 && len2 == 0) {
-		return false;
-	}
-
-	/*
-	 * The caller should have checked that the ranges are
-	 * valid.
-	 */
-	last1 = ofs1 + len1 - 1;
-	last2 = ofs2 + len2 - 1;
-
-	/*
-	 * If one range starts after the last
-	 * byte of the other range there's
-	 * no conflict.
-	 */
-	if (ofs1 > last2) {
-		return false;
-	}
-	if (ofs2 > last1) {
-		return false;
-	}
-
-	return true;
-}
-
-/* SMB2_LOCK */
-static bool brl_overlap(const x_smb2_lock_element_t &le1, const x_smb2_lock_element_t &le2)
-{
-	return byte_range_overlap(le1.offset, le1.length, le2.offset, le2.length);
-}
-
-static bool brl_conflict(const posixfs_object_t *posixfs_object,
-		const posixfs_open_t *posixfs_open,
-		const x_smb2_lock_element_t &le)
-{
-	auto &open_list = posixfs_object->open_list;
-	const posixfs_open_t *curr_open;
-	for (curr_open = open_list.get_front(); curr_open; curr_open = open_list.next(curr_open)) {
-		for (auto &l: curr_open->locks) {
-			if (!(le.flags & SMB2_LOCK_FLAG_EXCLUSIVE) &&
-					!(l.flags & SMB2_LOCK_FLAG_EXCLUSIVE)) {
-				continue;
-			}
-
-			/* A READ lock can stack on top of a WRITE lock if they are
-			 * the same open */
-			if ((l.flags & SMB2_LOCK_FLAG_EXCLUSIVE) &&
-					!(le.flags & SMB2_LOCK_FLAG_EXCLUSIVE) &&
-					curr_open == posixfs_open) {
-				continue;
-			}
-
-			if (brl_overlap(le, l)) {
-				return true;
-			}
-		}
-	}
-	return false;
-}
-
-static bool brl_conflict(const posixfs_object_t *posixfs_object,
-		const posixfs_open_t *posixfs_open,
-		const std::vector<x_smb2_lock_element_t> &locks)
-{
-	for (auto &le: locks) {
-		if (brl_conflict(posixfs_object, posixfs_open, le)) {
-			return true;
-		}
-	}
-	return false;
 }
 
 static void posixfs_lock_cancel(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)

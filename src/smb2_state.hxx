@@ -194,6 +194,7 @@ struct x_smb2_state_create_t
 
 	x_smb2_lease_t lease;
 	uint64_t in_allocation_size{0};
+	uint64_t in_timestamp{0};
 
 	std::u16string in_name;
 

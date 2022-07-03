@@ -131,6 +131,12 @@ static bool decode_contexts(x_smb2_state_create_t &state,
 				}
 				const uint64_t *pdata = (uint64_t *)(data + data_off);
 				state.in_allocation_size = X_LE2H64(*pdata);
+			} else if (tag == X_SMB2_CREATE_TAG_TWRP) {
+				if (data_len != sizeof(uint64_t)) {
+					return false;
+				}
+				const uint64_t *pdata = (uint64_t *)(data + data_off);
+				state.in_timestamp = X_LE2H64(*pdata);
 			} else if (tag == X_SMB2_CREATE_TAG_MXAC) {
 				state.contexts |= X_SMB2_CONTEXT_FLAG_MXAC;
 			} else if (tag == X_SMB2_CREATE_TAG_SECD) {
@@ -142,6 +148,18 @@ static bool decode_contexts(x_smb2_state_create_t &state,
 					return false;
 				}
 				state.in_security_descriptor = sd;
+			} else if (tag == X_SMB2_CREATE_TAG_EXTA) {
+				X_TODO;
+			} else if (tag == X_SMB2_CREATE_TAG_DHNQ) {
+				// TODO
+			} else if (tag == X_SMB2_CREATE_TAG_DHNC) {
+				// TODO
+			} else if (tag == X_SMB2_CREATE_TAG_DH2Q) {
+				// TODO
+			} else if (tag == X_SMB2_CREATE_TAG_DH2C) {
+				// TODO
+			} else if (tag == X_SMB2_CREATE_TAG_AAPL) {
+				// TODO
 			} else {
 #if 0
 				// TODO
@@ -151,6 +169,8 @@ static bool decode_contexts(x_smb2_state_create_t &state,
 				ctx.data.assign(data + data_off, data + data_off + data_len);
 #endif
 			}
+		} else if (tag_len < 4) {
+			return false;
 		} else {
 			/* ignore */
 		}
@@ -254,28 +274,6 @@ static uint32_t encode_contexts(const x_smb2_state_create_t &state,
 		p += sizeof state.out_qfid_info;
 	}
 
-#if 0
-	for (auto &ctx: contexts) {
-		if (pchain) {
-			p = out_ptr + x_pad_len(p - out_ptr, 8);
-			if (p != out_ptr) {
-				memset(out_ptr, 0, p - out_ptr);
-			}
-			x_put_le32(pchain, p - pchain);
-		}
-		pchain = p;
-		p += 4;
-		x_put_le16(p, 0x10); p += 2; // tag offset
-		x_put_le16(p, 0x4); p += 2; // tag length (4 byte), but not 4 byte align, so we use 16bits, since it should be small
-		x_put_le16(p, 0x0); p += 2;
-		x_put_le16(p, 0x18); p += 2; // data offset
-		x_put_le32(p, ctx.data.size()); p += 4; // data length
-		x_put_be32(p, ctx.tag); p += 4;
-		x_put_le32(p, 0); p += 4;
-		memcpy(p, ctx.data.data(), ctx.data.size());
-		p += ctx.data.size();
-	}
-#endif
 	if (ch) {
 		ch->chain_offset = 0;
 	}
