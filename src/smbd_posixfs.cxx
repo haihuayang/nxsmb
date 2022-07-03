@@ -1478,6 +1478,8 @@ static posixfs_open_t *open_object_exist(
 		return nullptr;
 	}
 
+	state->granted_access = granted;
+
 	auto &curr_client_guid = x_smbd_conn_curr_client_guid();
 	bool conflict = open_mode_check(posixfs_object, state->in_desired_access, state->in_share_access);
 	if (delay_for_oplock(posixfs_object, curr_client_guid,
