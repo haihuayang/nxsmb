@@ -17,6 +17,7 @@ struct x_smbd_ctrl_handler_t
 x_smbd_ctrl_handler_t *x_smbd_sess_list_create();
 x_smbd_ctrl_handler_t *x_smbd_tcon_list_create();
 x_smbd_ctrl_handler_t *x_smbd_open_list_create();
+x_smbd_ctrl_handler_t *x_smbd_requ_list_create();
 x_smbd_ctrl_handler_t *x_smbd_stats_report_create();
 
 

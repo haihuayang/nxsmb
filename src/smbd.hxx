@@ -265,21 +265,17 @@ struct x_smbd_requ_t
 	}
 
 	x_job_t job;
-	x_dqlink_t hash_link;
 	x_dlink_t async_link; // link into open
 	void *requ_state = nullptr;
 
-	int refcnt = 1;
-
 	x_buf_t *in_buf;
-	// const uint8_t *in_hdr;
+	uint64_t id;
 	uint32_t in_offset, in_requ_len;
 	bool compound_followed = false;
 	bool async = false;
 	uint16_t opcode;
 
 	NTSTATUS status{NT_STATUS_OK};
-	uint64_t async_id{};
 	uint64_t in_mid;
 	uint32_t in_tid;
 	uint32_t in_hdr_flags;
@@ -301,26 +297,13 @@ struct x_smbd_requ_t
 };
 X_DECLARE_MEMBER_TRAITS(requ_async_traits, x_smbd_requ_t, async_link)
 
-template <>
-inline x_smbd_requ_t *x_smbd_ref_inc(x_smbd_requ_t *smbd_requ)
-{
-	X_ASSERT(smbd_requ->refcnt++ > 0);
-	return smbd_requ;
-}
-
-template <>
-inline void x_smbd_ref_dec(x_smbd_requ_t *smbd_requ)
-{
-	if (unlikely(--smbd_requ->refcnt == 0)) {
-		delete smbd_requ;
-	}
-}
-
 
 int x_smbd_requ_pool_init(uint32_t count);
-x_smbd_requ_t *x_smbd_requ_lookup(uint64_t id, const x_smbd_conn_t *smbd_conn, bool remove);
-void x_smbd_requ_insert(x_smbd_requ_t *smbd_requ);
-void x_smbd_requ_remove(x_smbd_requ_t *smbd_requ);
+x_smbd_requ_t *x_smbd_requ_create(x_buf_t *in_buf);
+uint64_t x_smbd_requ_get_async_id(const x_smbd_requ_t *smbd_requ);
+x_smbd_requ_t *x_smbd_requ_async_lookup(uint64_t id, const x_smbd_conn_t *smbd_conn, bool remove);
+void x_smbd_requ_async_insert(x_smbd_requ_t *smbd_requ);
+void x_smbd_requ_async_remove(x_smbd_requ_t *smbd_requ);
 
 
 NTSTATUS x_smbd_dfs_resolve_path(

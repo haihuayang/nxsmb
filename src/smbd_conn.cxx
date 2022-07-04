@@ -287,10 +287,8 @@ void x_smb2_reply(x_smbd_conn_t *smbd_conn,
 	}
 	SBVAL(out_hdr, SMB2_HDR_MESSAGE_ID, smbd_requ->in_mid);
 	if (smbd_requ->async) {
-		X_ASSERT(smbd_requ->async_id != 0);
 		SIVAL(out_hdr, SMB2_HDR_FLAGS, smbd_requ->out_hdr_flags | SMB2_HDR_FLAG_REDIRECT | SMB2_HDR_FLAG_ASYNC);
-		// we use mid as async_id
-		SBVAL(out_hdr, SMB2_HDR_ASYNC_ID, smbd_requ->async_id);
+		SBVAL(out_hdr, SMB2_HDR_ASYNC_ID, x_smbd_requ_get_async_id(smbd_requ));
 	} else {
 		SIVAL(out_hdr, SMB2_HDR_FLAGS, smbd_requ->out_hdr_flags | SMB2_HDR_FLAG_REDIRECT);
 		SIVAL(out_hdr, SMB2_HDR_PID, 0xfeff);
@@ -368,7 +366,7 @@ static int x_smbd_reply_interim(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_re
 
 static void x_smbd_conn_cancel(x_smbd_conn_t *smbd_conn, uint64_t async_id)
 {
-	x_smbd_requ_t *smbd_requ = x_smbd_requ_lookup(async_id, smbd_conn, true);
+	x_smbd_requ_t *smbd_requ = x_smbd_requ_async_lookup(async_id, smbd_conn, true);
 	if (!smbd_requ) {
 		X_LOG_ERR("%ld not found", async_id);
 		return;
@@ -602,7 +600,6 @@ static int x_smbd_conn_process_smb2(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smb
 			continue;
 		}
 
-		smbd_requ->async_id = 0;
 		smbd_requ->cancel_fn = nullptr;
 		smbd_requ->in_mid = x_get_le64(in_buf + SMB2_HDR_MESSAGE_ID);
 		smbd_requ->in_credit_charge = x_get_le16(in_buf + SMB2_HDR_CREDIT_CHARGE);
@@ -652,7 +649,7 @@ static int x_smbd_conn_process_smb(x_smbd_conn_t *smbd_conn, x_buf_t *buf)
 	}
 	int32_t smbhdr = x_get_be32(buf->data + offset);
 
-	x_smbd_ptr_t<x_smbd_requ_t> smbd_requ{new x_smbd_requ_t(x_buf_get(buf))};
+	x_smbd_ptr_t<x_smbd_requ_t> smbd_requ{x_smbd_requ_create(x_buf_get(buf))};
 	
 	if (smbhdr == X_SMB2_MAGIC) {
 		if (len < SMB2_HDR_BODY) {
@@ -1140,7 +1137,7 @@ void x_smbd_conn_set_async(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ,
 {
 	X_ASSERT(!smbd_requ->cancel_fn);
 	smbd_requ->cancel_fn = cancel_fn;
-	x_smbd_requ_insert(smbd_requ);
+	x_smbd_requ_async_insert(smbd_requ);
 }
 
 NTSTATUS x_smbd_conn_validate_negotiate_info(const x_smbd_conn_t *smbd_conn,

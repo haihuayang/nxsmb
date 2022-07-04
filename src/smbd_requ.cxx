@@ -1,7 +1,11 @@
 
 #include "smbd.hxx"
 #include "smbd_stats.hxx"
-#include "smbd_pool.hxx"
+#include "smbd_ctrl.hxx"
+#include "include/idtable.hxx"
+
+using smbd_requ_table_t = x_idtable_t<x_smbd_requ_t, x_idtable_64_traits_t>;
+static smbd_requ_table_t *g_smbd_requ_table;
 
 x_smbd_requ_t::x_smbd_requ_t(x_buf_t *in_buf)
 	: in_buf(in_buf)
@@ -31,76 +35,109 @@ x_smbd_requ_t::~x_smbd_requ_t()
 	X_SMBD_COUNTER_INC(requ_delete, 1);
 }
 
-X_DECLARE_MEMBER_TRAITS(smbd_requ_hash_traits, x_smbd_requ_t, hash_link)
-using smbd_requ_pool_t = smbd_pool_t<smbd_requ_hash_traits>;
-
-static inline x_smbd_requ_t *smbd_requ_find_by_id(smbd_requ_pool_t &pool, uint64_t id)
+template <>
+x_smbd_requ_t *x_smbd_ref_inc(x_smbd_requ_t *smbd_requ)
 {
-	return pool.hashtable.find(id, [id](const x_smbd_requ_t &s) { return s.async_id == id; });
+	g_smbd_requ_table->incref(smbd_requ->id);
+	return smbd_requ;
 }
 
-static x_smbd_requ_t *smbd_requ_find_intl(smbd_requ_pool_t &pool, uint64_t id,
-		const x_smbd_conn_t *smbd_conn, bool remove)
+template <>
+void x_smbd_ref_dec(x_smbd_requ_t *smbd_requ)
 {
-	std::unique_lock<std::mutex> lock(pool.mutex);
-	x_smbd_requ_t *smbd_requ = smbd_requ_find_by_id(pool, id);
-	if (!smbd_requ) {
+	g_smbd_requ_table->decref(smbd_requ->id);
+}
+
+x_smbd_requ_t *x_smbd_requ_create(x_buf_t *in_buf)
+{
+	auto smbd_requ = new x_smbd_requ_t(in_buf);
+	if (!g_smbd_requ_table->store(smbd_requ, smbd_requ->id)) {
+		delete smbd_requ;
 		return nullptr;
 	}
-	if (x_smbd_chan_get_conn(smbd_requ->smbd_chan) != smbd_conn) {
+	X_LOG_DBG("0x%lx %p", smbd_requ->id, smbd_requ);
+	return smbd_requ;
+}
+
+uint64_t x_smbd_requ_get_async_id(const x_smbd_requ_t *smbd_requ)
+{
+	if (!smbd_requ->async) {
+		return 0;
+	}
+	return smbd_requ->id;
+}
+
+x_smbd_requ_t *x_smbd_requ_async_lookup(uint64_t id, const x_smbd_conn_t *smbd_conn, bool remove)
+{
+	/* skip client_guid checking, since session bind is signed,
+	 * the check does not improve security
+	 */
+	auto ret = g_smbd_requ_table->lookup(id);
+	if (!ret.first) {
 		return nullptr;
 	}
+
+	x_smbd_requ_t *smbd_requ = ret.second;
+	if (!smbd_requ->async || x_smbd_chan_get_conn(smbd_requ->smbd_chan) != smbd_conn) {
+		x_smbd_ref_dec(smbd_requ);
+		return nullptr;
+	}
+
 	if (remove) {
-		pool.hashtable.remove(smbd_requ);
-		--pool.count;
-	} else {
-		return x_smbd_ref_inc(smbd_requ);
+		smbd_requ->async = false;
+		x_smbd_ref_dec(smbd_requ);
 	}
 	return smbd_requ;
 }
 
-static uint64_t g_async_id = 0x0;
-static void smbd_requ_insert_intl(smbd_requ_pool_t &pool, x_smbd_requ_t *smbd_requ)
+void x_smbd_requ_async_insert(x_smbd_requ_t *smbd_requ)
 {
-	std::unique_lock<std::mutex> lock(pool.mutex);
-	for (;;) {
-		/* TODO to reduce hash conflict */
-		smbd_requ->async_id = g_async_id++;
-		if (smbd_requ->async_id == 0) {
-			continue;
-		}
-		x_smbd_ptr_t<x_smbd_requ_t> exist{smbd_requ_find_by_id(pool, smbd_requ->async_id)};
-		if (!exist) {
-			break;
-		}
-	}
-	pool.hashtable.insert(smbd_requ, smbd_requ->async_id);
+	smbd_requ->async = true;
+	x_smbd_ref_inc(smbd_requ);
 }
 
-
-
-static smbd_requ_pool_t g_smbd_requ_pool;
-
+void x_smbd_requ_async_remove(x_smbd_requ_t *smbd_requ)
+{
+	X_ASSERT(smbd_requ->async);
+	smbd_requ->async = false;
+	x_smbd_ref_dec(smbd_requ);
+}
 
 int x_smbd_requ_pool_init(uint32_t count)
 {
-	pool_init(g_smbd_requ_pool, count);
+	g_smbd_requ_table = new smbd_requ_table_t(count);
 	return 0;
 }
 
-x_smbd_requ_t *x_smbd_requ_lookup(uint64_t id, const x_smbd_conn_t *smbd_conn, bool remove)
+struct x_smbd_requ_list_t : x_smbd_ctrl_handler_t
 {
-	return smbd_requ_find_intl(g_smbd_requ_pool, id, smbd_conn, remove);
+	x_smbd_requ_list_t() : iter(g_smbd_requ_table->iter_start()) {
+	}
+	bool output(std::string &data) override;
+	smbd_requ_table_t::iter_t iter;
+};
+
+bool x_smbd_requ_list_t::output(std::string &data)
+{
+	std::ostringstream os;
+
+	bool ret = g_smbd_requ_table->iter_entry(iter, [&os](const x_smbd_requ_t *smbd_requ) {
+			/* TODO list channels */
+			os << idl::x_hex_t<uint64_t>(smbd_requ->id) << ' '
+			<< idl::x_hex_t<uint64_t>(smbd_requ->in_mid);
+			os << std::endl;
+			return true;
+		});
+	if (ret) {
+		data = os.str(); // TODO avoid copying
+		return true;
+	} else {
+		return false;
+	}
 }
 
-void x_smbd_requ_insert(x_smbd_requ_t *smbd_requ)
+x_smbd_ctrl_handler_t *x_smbd_requ_list_create()
 {
-	x_smbd_ref_inc(smbd_requ);
-	smbd_requ_insert_intl(g_smbd_requ_pool, smbd_requ);
-}
-
-void x_smbd_requ_remove(x_smbd_requ_t *smbd_requ)
-{
-	pool_release(g_smbd_requ_pool, smbd_requ);
+	return new x_smbd_requ_list_t;
 }
 
