@@ -1572,6 +1572,18 @@ static posixfs_open_t *open_object_exist(
 		return nullptr;
 	}
 
+	if (posixfs_object->is_dir()) {
+		if (state->in_create_options & FILE_NON_DIRECTORY_FILE) {
+			status = NT_STATUS_FILE_IS_A_DIRECTORY;
+			return nullptr;
+		}
+	} else {
+		if (state->in_create_options & FILE_DIRECTORY_FILE) {
+			status = NT_STATUS_NOT_A_DIRECTORY;
+			return nullptr;
+		}
+	}
+
 	if ((posixfs_object->statex.file_attributes & FILE_ATTRIBUTE_READONLY) &&
 			(state->in_desired_access & (idl::SEC_FILE_WRITE_DATA | idl::SEC_FILE_APPEND_DATA))) {
 		X_LOG_NOTICE("deny access 0x%x to %s due to readonly 0x%x",
