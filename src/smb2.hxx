@@ -419,6 +419,102 @@ struct x_smb2_rename_info_t
 	/* following variable length file_name */
 };
 
+struct x_smb2_file_dir_info_t
+{
+	uint32_t next_offset;
+	uint32_t file_index;
+	idl::NTTIME creation;
+	idl::NTTIME last_access;
+	idl::NTTIME last_write;
+	idl::NTTIME change;
+	uint64_t end_of_file;
+	uint64_t allocation_size;
+	uint32_t file_attributes;
+	uint32_t file_name_length;
+	char16_t file_name[]; // variable length
+} __attribute__ ((packed));
+
+struct x_smb2_file_both_dir_info_t
+{
+	uint32_t next_offset;
+	uint32_t file_index;
+	idl::NTTIME creation;
+	idl::NTTIME last_access;
+	idl::NTTIME last_write;
+	idl::NTTIME change;
+	uint64_t end_of_file;
+	uint64_t allocation_size;
+	uint32_t file_attributes;
+	uint32_t file_name_length;
+	uint32_t ea_size;
+	uint16_t short_name_length;
+	char16_t short_name[12];
+	char16_t file_name[]; // variable length
+} __attribute__ ((packed));
+
+struct x_smb2_file_full_dir_info_t
+{
+	uint32_t next_offset;
+	uint32_t file_index;
+	idl::NTTIME creation;
+	idl::NTTIME last_access;
+	idl::NTTIME last_write;
+	idl::NTTIME change;
+	uint64_t end_of_file;
+	uint64_t allocation_size;
+	uint32_t file_attributes;
+	uint32_t file_name_length;
+	uint32_t ea_size;
+	char16_t file_name[]; // variable length
+} __attribute__ ((packed));
+
+struct x_smb2_file_id_full_dir_info_t
+{
+	uint32_t next_offset;
+	uint32_t file_index;
+	idl::NTTIME creation;
+	idl::NTTIME last_access;
+	idl::NTTIME last_write;
+	idl::NTTIME change;
+	uint64_t end_of_file;
+	uint64_t allocation_size;
+	uint32_t file_attributes;
+	uint32_t file_name_length;
+	uint32_t ea_size;
+	uint32_t unused0;
+	uint64_t file_id;
+	char16_t file_name[]; // variable length
+} __attribute__ ((packed));
+
+struct x_smb2_file_id_both_dir_info_t
+{
+	uint32_t next_offset;
+	uint32_t file_index;
+	idl::NTTIME creation;
+	idl::NTTIME last_access;
+	idl::NTTIME last_write;
+	idl::NTTIME change;
+	uint64_t end_of_file;
+	uint64_t allocation_size;
+	uint32_t file_attributes;
+	uint32_t file_name_length;
+	uint32_t ea_size;
+	uint16_t short_name_length;
+	char16_t short_name[12];
+	uint16_t unused0;
+	uint32_t file_id_low; // file_id is not 8 byte aligned, so split into 2 fields
+	uint32_t file_id_high;
+	char16_t file_name[]; // variable length
+} __attribute__ ((packed));
+
+struct x_smb2_file_names_info_t
+{
+	uint32_t next_offset;
+	uint32_t file_index;
+	uint32_t file_name_length;
+	char16_t file_name[]; // variable length
+} __attribute__ ((packed));
+
 bool x_smb2_file_standard_info_decode(x_smb2_file_standard_info_t &standard_info,
 		const std::vector<uint8_t> &in_data);
 

@@ -25,13 +25,6 @@ struct qdir_pos_t
 	uint64_t filepos;
 };
 
-static uint8_t *put_find_timespec(uint8_t *p, struct timespec ts)
-{
-	auto nttime = x_timespec_to_nttime(ts);
-	memcpy(p, &nttime, sizeof nttime); // TODO byte order
-	return p + sizeof nttime;
-}
-
 static bool is_null_ntime(idl::NTTIME nt)
 {
 	return nt.val == 0 || nt.val == (uint64_t)-1;
@@ -2588,134 +2581,234 @@ static void qdir_unget(qdir_t &qdir, qdir_pos_t &pos)
 	qdir.filepos = pos.filepos;
 }
 
-
-static uint8_t *marshall_entry(posixfs_statex_t *statex, const char *fname,
-		uint8_t *pbegin, uint8_t *pend, uint32_t align,
-		int info_level)
+struct x_smb2_chain_marshall_t
 {
-	uint8_t *p = pbegin;
-	std::u16string name = x_convert_utf8_to_utf16(fname);
-	switch (info_level) {
-	case SMB2_FIND_ID_BOTH_DIRECTORY_INFO:
-		// TODO check size if (p + name.size() * 2 + 
-		if (p + 300 > pend) {
+	uint8_t *pbase, *pend;
+	uint32_t alignment;
+	uint32_t last_begin{0}, last_end{0};
+	uint8_t *get_begin(uint32_t rec_size) {
+		uint32_t begin = last_end;
+		if (last_end != 0) {
+			begin = x_convert_assert<uint32_t>(x_pad_len(last_end, alignment));
+		}
+		if (pbase + begin + rec_size > pend) {
 			return nullptr;
 		}
-		SIVAL(p, 0, 0); p += 4;
-		SIVAL(p, 0, 0); p += 4;
-		p = put_find_timespec(p, statex->birth_time);
-		p = put_find_timespec(p, statex->stat.st_atim);
-		p = put_find_timespec(p, statex->stat.st_mtim);
-		p = put_find_timespec(p, statex->stat.st_ctim);
-		x_put_le64(p, statex->get_end_of_file()); p += 8;
-		x_put_le64(p, statex->get_allocation()); p += 8;
-		x_put_le32(p, statex->file_attributes); p += 4;
-		x_put_le32(p, x_convert_assert<uint32_t>(name.size() * 2)); p += 4;
-		if (statex->file_attributes & FILE_ATTRIBUTE_REPARSE_POINT) {
-			x_put_le32(p, IO_REPARSE_TAG_DFS);
-		} else {
-			/*
-			 * OS X specific SMB2 extension negotiated via
-			 * AAPL create context: return max_access in
-			 * ea_size field.
-			 */
-			x_put_le32(p, 0);
+		if (begin != last_end) {
+			memset(pbase + last_end, 0, begin - last_end);
 		}
-		p += 4;
-		
-		memset(p, 0, 26); p += 26; // shortname
-		x_put_le16(p, 0); p += 2; // aapl mode
+		uint32_t *last_next = (uint32_t *)(pbase + last_begin);
+		*last_next = X_H2LE32(begin - last_begin);
+		last_begin = begin;
+		last_end = begin + rec_size;
+		return pbase + begin;
+	}
+	uint32_t get_size() const {
+		return last_end;
+	}
+};
 
+static bool marshall_entry(x_smb2_chain_marshall_t &marshall,
+		const posixfs_statex_t &statex, const char *fname,
+		int info_level)
+{
+	std::u16string name = x_convert_utf8_to_utf16(fname);
+	uint8_t *pbegin;
+	uint32_t rec_size;
+
+	switch (info_level) {
+	case SMB2_FIND_ID_BOTH_DIRECTORY_INFO:
+		rec_size = x_convert_assert<uint32_t>(sizeof(x_smb2_file_id_both_dir_info_t) + name.size() * 2);
+		pbegin = marshall.get_begin(rec_size);
+		if (!pbegin) {
+			return false;
+		}
 		{
-			uint64_t file_index = statex->stat.st_ino; // TODO
-			x_put_le64(p, file_index); p += 8;
-			memcpy(p, name.data(), name.size() * 2);
-			p += name.size() * 2;
-			size_t len = p - pbegin;
-			uint8_t *ptmp = pbegin + ((len + (align - 1)) & ~(align - 1));
-			memset(p, 0, ptmp - p);
-			p = ptmp;
+			x_smb2_file_id_both_dir_info_t *info = (x_smb2_file_id_both_dir_info_t *)pbegin;
+			info->next_offset = 0;
+			info->file_index = 0;
+			info->creation = X_H2LE64(x_timespec_to_nttime(statex.birth_time));
+			info->last_access = X_H2LE64(x_timespec_to_nttime(statex.stat.st_atim));
+			info->last_write = X_H2LE64(x_timespec_to_nttime(statex.stat.st_mtim));
+			info->change = X_H2LE64(x_timespec_to_nttime(statex.stat.st_ctim));
+			info->end_of_file = X_H2LE64(statex.get_end_of_file());
+			info->allocation_size = X_H2LE64(statex.get_allocation());
+			info->file_attributes = X_H2LE32(statex.file_attributes);
+			info->file_name_length = X_H2LE32(x_convert_assert<uint32_t>(name.size() * 2));
+			if (statex.file_attributes & FILE_ATTRIBUTE_REPARSE_POINT) {
+				info->ea_size = X_H2LE32(IO_REPARSE_TAG_DFS);
+			} else {
+				/*
+				 * OS X specific SMB2 extension negotiated via
+				 * AAPL create context: return max_access in
+				 * ea_size field.
+				 */
+				info->ea_size = 0;
+			}
+		
+			// TODO get short name
+			info->short_name_length = 0;
+			memset(info->short_name, 0, sizeof info->short_name);
+			info->unused0 = 0; // aapl mode
+
+			uint64_t file_index = statex.stat.st_ino; // TODO
+			info->file_id_low = X_H2LE32(file_index & 0xffffffff);
+			info->file_id_high = X_H2LE32(x_convert<uint32_t>(file_index >> 32));
+			// TODO byte order
+			memcpy(info->file_name, name.data(), name.size() * 2);
+		}
+		break;
+
+	case SMB2_FIND_ID_FULL_DIRECTORY_INFO:
+		rec_size = x_convert_assert<uint32_t>(sizeof(x_smb2_file_id_full_dir_info_t) + name.size() * 2);
+		pbegin = marshall.get_begin(rec_size);
+		if (!pbegin) {
+			return false;
+		}
+		{
+			x_smb2_file_id_full_dir_info_t *info = (x_smb2_file_id_full_dir_info_t *)pbegin;
+			info->next_offset = 0;
+			info->file_index = 0;
+			info->creation = X_H2LE64(x_timespec_to_nttime(statex.birth_time));
+			info->last_access = X_H2LE64(x_timespec_to_nttime(statex.stat.st_atim));
+			info->last_write = X_H2LE64(x_timespec_to_nttime(statex.stat.st_mtim));
+			info->change = X_H2LE64(x_timespec_to_nttime(statex.stat.st_ctim));
+			info->end_of_file = X_H2LE64(statex.get_end_of_file());
+			info->allocation_size = X_H2LE64(statex.get_allocation());
+			info->file_attributes = X_H2LE32(statex.file_attributes);
+			info->file_name_length = X_H2LE32(x_convert_assert<uint32_t>(name.size() * 2));
+			if (statex.file_attributes & FILE_ATTRIBUTE_REPARSE_POINT) {
+				info->ea_size = X_H2LE32(IO_REPARSE_TAG_DFS);
+			} else {
+				/*
+				 * OS X specific SMB2 extension negotiated via
+				 * AAPL create context: return max_access in
+				 * ea_size field.
+				 */
+				info->ea_size = 0;
+			}
+		
+			info->unused0 = 0; // aapl mode
+
+			info->file_id = X_H2LE64(statex.stat.st_ino);
+			// TODO byte order
+			memcpy(info->file_name, name.data(), name.size() * 2);
+		}
+		break;
+
+	case SMB2_FIND_DIRECTORY_INFO:
+		rec_size = x_convert_assert<uint32_t>(sizeof(x_smb2_file_dir_info_t) + name.size() * 2);
+		pbegin = marshall.get_begin(rec_size);
+		if (!pbegin) {
+			return false;
+		}
+		{
+			x_smb2_file_dir_info_t *info = (x_smb2_file_dir_info_t *)pbegin;
+			info->next_offset = 0;
+			info->file_index = 0;
+			info->creation = X_H2LE64(x_timespec_to_nttime(statex.birth_time));
+			info->last_access = X_H2LE64(x_timespec_to_nttime(statex.stat.st_atim));
+			info->last_write = X_H2LE64(x_timespec_to_nttime(statex.stat.st_mtim));
+			info->change = X_H2LE64(x_timespec_to_nttime(statex.stat.st_ctim));
+			info->end_of_file = X_H2LE64(statex.get_end_of_file());
+			info->allocation_size = X_H2LE64(statex.get_allocation());
+			info->file_attributes = X_H2LE32(statex.file_attributes);
+			info->file_name_length = X_H2LE32(x_convert_assert<uint32_t>(name.size() * 2));
+			// TODO byte order
+			memcpy(info->file_name, name.data(), name.size() * 2);
 		}
 		break;
 
 	case SMB2_FIND_BOTH_DIRECTORY_INFO:
-		// TODO check size if (p + name.size() * 2 + 
-		if (p + 300 > pend) {
-			return nullptr;
+		rec_size = x_convert_assert<uint32_t>(sizeof(x_smb2_file_both_dir_info_t) + name.size() * 2);
+		pbegin = marshall.get_begin(rec_size);
+		if (!pbegin) {
+			return false;
 		}
-		SIVAL(p, 0, 0); p += 4;
-		SIVAL(p, 0, 0); p += 4;
-		p = put_find_timespec(p, statex->birth_time);
-		p = put_find_timespec(p, statex->stat.st_atim);
-		p = put_find_timespec(p, statex->stat.st_mtim);
-		p = put_find_timespec(p, statex->stat.st_ctim);
-		x_put_le64(p, statex->get_end_of_file()); p += 8;
-		x_put_le64(p, statex->get_allocation()); p += 8;
-		x_put_le32(p, statex->file_attributes); p += 4;
-		x_put_le32(p, x_convert_assert<uint32_t>(name.size() * 2)); p += 4;
-		if (statex->file_attributes & FILE_ATTRIBUTE_REPARSE_POINT) {
-			x_put_le32(p, IO_REPARSE_TAG_DFS);
-		} else {
-			/*
-			 * OS X specific SMB2 extension negotiated via
-			 * AAPL create context: return max_access in
-			 * ea_size field.
-			 */
-			x_put_le32(p, 0);
-		}
-		p += 4;
-		
-		memset(p, 0, 26); p += 26; // shortname
 		{
-			memcpy(p, name.data(), name.size() * 2);
-			p += name.size() * 2;
-			size_t len = p - pbegin;
-			uint8_t *ptmp = pbegin + ((len + (align - 1)) & ~(align - 1));
-			memset(p, 0, ptmp - p);
-			p = ptmp;
+			x_smb2_file_both_dir_info_t *info = (x_smb2_file_both_dir_info_t *)pbegin;
+			info->next_offset = 0;
+			info->file_index = 0;
+			info->creation = X_H2LE64(x_timespec_to_nttime(statex.birth_time));
+			info->last_access = X_H2LE64(x_timespec_to_nttime(statex.stat.st_atim));
+			info->last_write = X_H2LE64(x_timespec_to_nttime(statex.stat.st_mtim));
+			info->change = X_H2LE64(x_timespec_to_nttime(statex.stat.st_ctim));
+			info->end_of_file = X_H2LE64(statex.get_end_of_file());
+			info->allocation_size = X_H2LE64(statex.get_allocation());
+			info->file_attributes = X_H2LE32(statex.file_attributes);
+			info->file_name_length = X_H2LE32(x_convert_assert<uint32_t>(name.size() * 2));
+			if (statex.file_attributes & FILE_ATTRIBUTE_REPARSE_POINT) {
+				info->ea_size = X_H2LE32(IO_REPARSE_TAG_DFS);
+			} else {
+				/*
+				 * OS X specific SMB2 extension negotiated via
+				 * AAPL create context: return max_access in
+				 * ea_size field.
+				 */
+				info->ea_size = 0;
+			}
+		
+			// TODO get short name
+			info->short_name_length = 0;
+			memset(info->short_name, 0, sizeof info->short_name);
+			// TODO byte order
+			memcpy(info->file_name, name.data(), name.size() * 2);
 		}
 		break;
 
 	case SMB2_FIND_FULL_DIRECTORY_INFO:
-		if (p + 300 > pend) {
-			return nullptr;
+		rec_size = x_convert_assert<uint32_t>(sizeof(x_smb2_file_full_dir_info_t) + name.size() * 2);
+		pbegin = marshall.get_begin(rec_size);
+		if (!pbegin) {
+			return false;
 		}
-		SIVAL(p, 0, 0); p += 4;
-		SIVAL(p, 0, 0); p += 4;
-		p = put_find_timespec(p, statex->birth_time);
-		p = put_find_timespec(p, statex->stat.st_atim);
-		p = put_find_timespec(p, statex->stat.st_mtim);
-		p = put_find_timespec(p, statex->stat.st_ctim);
-		x_put_le64(p, statex->get_end_of_file()); p += 8;
-		x_put_le64(p, statex->get_allocation()); p += 8;
-		x_put_le32(p, statex->file_attributes); p += 4;
-		x_put_le32(p, x_convert_assert<uint32_t>(name.size() * 2)); p += 4;
-		if (statex->file_attributes & FILE_ATTRIBUTE_REPARSE_POINT) {
-			x_put_le32(p, IO_REPARSE_TAG_DFS);
-		} else {
-			/*
-			 * OS X specific SMB2 extension negotiated via
-			 * AAPL create context: return max_access in
-			 * ea_size field.
-			 */
-			x_put_le32(p, 0);
-		}
-		p += 4;
-		
 		{
-			memcpy(p, name.data(), name.size() * 2);
-			p += name.size() * 2;
-			size_t len = p - pbegin;
-			uint8_t *ptmp = pbegin + ((len + (align - 1)) & ~(align - 1));
-			memset(p, 0, ptmp - p);
-			p = ptmp;
+			x_smb2_file_full_dir_info_t *info = (x_smb2_file_full_dir_info_t *)pbegin;
+			info->next_offset = 0;
+			info->file_index = 0;
+			info->creation = X_H2LE64(x_timespec_to_nttime(statex.birth_time));
+			info->last_access = X_H2LE64(x_timespec_to_nttime(statex.stat.st_atim));
+			info->last_write = X_H2LE64(x_timespec_to_nttime(statex.stat.st_mtim));
+			info->change = X_H2LE64(x_timespec_to_nttime(statex.stat.st_ctim));
+			info->end_of_file = X_H2LE64(statex.get_end_of_file());
+			info->allocation_size = X_H2LE64(statex.get_allocation());
+			info->file_attributes = X_H2LE32(statex.file_attributes);
+			info->file_name_length = X_H2LE32(x_convert_assert<uint32_t>(name.size() * 2));
+			if (statex.file_attributes & FILE_ATTRIBUTE_REPARSE_POINT) {
+				info->ea_size = X_H2LE32(IO_REPARSE_TAG_DFS);
+			} else {
+				/*
+				 * OS X specific SMB2 extension negotiated via
+				 * AAPL create context: return max_access in
+				 * ea_size field.
+				 */
+				info->ea_size = 0;
+			}
+		
+			// TODO byte order
+			memcpy(info->file_name, name.data(), name.size() * 2);
+		}
+		break;
+
+	case SMB2_FIND_NAME_INFO:
+		rec_size = x_convert_assert<uint32_t>(sizeof(x_smb2_file_names_info_t) + name.size() * 2);
+		pbegin = marshall.get_begin(rec_size);
+		if (!pbegin) {
+			return false;
+		}
+		{
+			x_smb2_file_names_info_t *info = (x_smb2_file_names_info_t *)pbegin;
+			info->next_offset = 0;
+			info->file_index = 0;
+			info->file_name_length = X_H2LE32(x_convert_assert<uint32_t>(name.size() * 2));
+			memcpy(info->file_name, name.data(), name.size() * 2);
 		}
 		break;
 
 	default:
 		X_ASSERT(0);
 	}
-	return p;
+	return true;
 }
 
 NTSTATUS posixfs_object_qdir(
@@ -2754,10 +2847,9 @@ NTSTATUS posixfs_object_qdir(
 
 	qdir_t *qdir = posixfs_open->qdir;
 	state->out_data.resize(state->in_output_buffer_length);
-	uint8_t *pbegin = state->out_data.data();
-	uint8_t *pend = state->out_data.data() + state->out_data.size();
-	uint8_t *pcurr =  pbegin, *plast = nullptr;
 	uint32_t num = 0, matched_count = 0;
+
+	x_smb2_chain_marshall_t marshall{state->out_data.data(), state->out_data.data() + state->out_data.size(), 8};
 
 	x_fnmatch_t *fnmatch = x_fnmatch_create(state->in_name, true);
 	while (num < max_count) {
@@ -2781,14 +2873,8 @@ NTSTATUS posixfs_object_qdir(
 		}
 
 		++matched_count;
-		uint8_t *p = marshall_entry(&statex, ent_name, pcurr, pend, 8, state->in_info_level);
-		if (p) {
+		if (marshall_entry(marshall, statex, ent_name, state->in_info_level)) {
 			++num;
-			if (plast) {
-				x_put_le32(plast, x_convert_assert<uint32_t>(pcurr - plast));
-			}
-			plast = pcurr;
-			pcurr = p;
 		} else {
 			qdir_unget(*qdir, qdir_pos);
 			max_count = num;
@@ -2796,8 +2882,7 @@ NTSTATUS posixfs_object_qdir(
 	}
 
 	if (num > 0) {
-		state->out_data.resize(pcurr - pbegin);
-		// x_put_le32(plast, 0);
+		state->out_data.resize(marshall.get_size());
 		return NT_STATUS_OK;
 	}
 	
