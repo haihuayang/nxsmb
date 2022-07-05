@@ -253,7 +253,7 @@ int x_smbd_ipc_init();
 
 struct x_smbd_requ_t
 {
-	explicit x_smbd_requ_t(x_buf_t *in_buf);
+	explicit x_smbd_requ_t(x_buf_t *in_buf, uint32_t in_msgsize);
 	~x_smbd_requ_t();
 
 	const uint8_t *get_in_data() const {
@@ -270,7 +270,7 @@ struct x_smbd_requ_t
 
 	x_buf_t *in_buf;
 	uint64_t id;
-	uint32_t in_offset, in_requ_len;
+	uint32_t in_msgsize, in_offset, in_requ_len;
 	bool compound_followed = false;
 	bool async = false;
 	uint16_t opcode;
@@ -286,6 +286,8 @@ struct x_smbd_requ_t
 	uint16_t out_credit_granted;
 
 	uint32_t out_length = 0;
+	uint32_t last_reply_size = 0;
+	x_smb2_header_t *last_hdr{};
 	x_bufref_t *out_buf_head{}, *out_buf_tail{};
 	x_smbd_sess_t *smbd_sess{};
 	x_smbd_chan_t *smbd_chan{};
@@ -299,7 +301,7 @@ X_DECLARE_MEMBER_TRAITS(requ_async_traits, x_smbd_requ_t, async_link)
 
 
 int x_smbd_requ_pool_init(uint32_t count);
-x_smbd_requ_t *x_smbd_requ_create(x_buf_t *in_buf);
+x_smbd_requ_t *x_smbd_requ_create(x_buf_t *in_buf, uint32_t in_msgsize);
 uint64_t x_smbd_requ_get_async_id(const x_smbd_requ_t *smbd_requ);
 x_smbd_requ_t *x_smbd_requ_async_lookup(uint64_t id, const x_smbd_conn_t *smbd_conn, bool remove);
 void x_smbd_requ_async_insert(x_smbd_requ_t *smbd_requ);

@@ -45,6 +45,28 @@ enum {
 	X_SMB2_OP_DECL(SETINFO) \
 	X_SMB2_OP_DECL(BREAK) \
 
+struct x_smb2_header_t
+{
+	uint32_t protocol_id;
+	uint16_t length;
+	uint16_t credit_charge;
+	uint32_t status;
+	uint16_t opcode;
+	uint16_t credit;
+	uint32_t flags;
+	uint32_t next_command;
+	uint64_t mid;
+	union {
+		struct {
+			uint32_t pid;
+			uint32_t tid;
+		};
+		uint64_t async_id;
+	};
+	uint64_t sess_id;
+	uint8_t signature[16];
+};
+
 enum {
         SMB2_FILE_INFO_FILE_DIRECTORY_INFORMATION = 1,
         SMB2_FILE_INFO_FILE_FULL_DIRECTORY_INFORMATION = 2,
@@ -222,8 +244,12 @@ struct x_buf_t
 	uint8_t data[];
 };
 
+/* every buf's capacity is time of 8,
+   and the length is also time of 8 except the last one
+ */
 static inline x_buf_t *x_buf_alloc(size_t size)
 {
+	size = x_pad_len(size, 8);
 	X_ASSERT(size < 0x100000000ul);
 	x_buf_t *buf = (x_buf_t *)malloc(sizeof(x_buf_t) + size);
 	new (&buf->ref) std::atomic<uint32_t>(1);
@@ -248,7 +274,7 @@ static inline void x_buf_release(x_buf_t *buf)
 
 static inline x_buf_t *x_buf_alloc_out_buf(size_t body_size)
 {
-	return x_buf_alloc(8 + SMB2_HDR_BODY + x_pad_len(body_size, 8));
+	return x_buf_alloc(8 + SMB2_HDR_BODY + body_size);
 }
 
 static inline uint8_t *x_buf_get_out_hdr(x_buf_t *buf)

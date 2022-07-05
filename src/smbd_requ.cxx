@@ -7,8 +7,8 @@
 using smbd_requ_table_t = x_idtable_t<x_smbd_requ_t, x_idtable_64_traits_t>;
 static smbd_requ_table_t *g_smbd_requ_table;
 
-x_smbd_requ_t::x_smbd_requ_t(x_buf_t *in_buf)
-	: in_buf(in_buf)
+x_smbd_requ_t::x_smbd_requ_t(x_buf_t *in_buf, uint32_t in_msgsize)
+	: in_buf(in_buf), in_msgsize(in_msgsize)
 {
 	X_LOG_DBG("create %p", this);
 	X_SMBD_COUNTER_INC(requ_create, 1);
@@ -48,9 +48,9 @@ void x_smbd_ref_dec(x_smbd_requ_t *smbd_requ)
 	g_smbd_requ_table->decref(smbd_requ->id);
 }
 
-x_smbd_requ_t *x_smbd_requ_create(x_buf_t *in_buf)
+x_smbd_requ_t *x_smbd_requ_create(x_buf_t *in_buf, uint32_t in_msgsize)
 {
-	auto smbd_requ = new x_smbd_requ_t(in_buf);
+	auto smbd_requ = new x_smbd_requ_t(in_buf, in_msgsize);
 	if (!g_smbd_requ_table->store(smbd_requ, smbd_requ->id)) {
 		delete smbd_requ;
 		return nullptr;
