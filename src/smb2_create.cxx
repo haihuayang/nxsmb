@@ -149,7 +149,7 @@ static bool decode_contexts(x_smb2_state_create_t &state,
 				}
 				state.in_security_descriptor = sd;
 			} else if (tag == X_SMB2_CREATE_TAG_EXTA) {
-				X_TODO;
+				// TODO;
 			} else if (tag == X_SMB2_CREATE_TAG_DHNQ) {
 				// TODO
 			} else if (tag == X_SMB2_CREATE_TAG_DHNC) {
