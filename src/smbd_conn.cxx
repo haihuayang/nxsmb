@@ -625,7 +625,7 @@ static int x_smbd_conn_process_smb2(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smb
 			return -EBADMSG;
 		}
 
-		if (!NT_STATUS_IS_OK(smbd_requ->status) && (smbd_requ->in_hdr_flags & SMB2_HDR_FLAG_CHAINED)) {
+		if (false && !NT_STATUS_IS_OK(smbd_requ->status) && (smbd_requ->in_hdr_flags & SMB2_HDR_FLAG_CHAINED)) {
 			X_SMBD_REPLY_ERROR(smbd_conn, smbd_requ, smbd_requ->status);
 			continue;
 		}
@@ -636,10 +636,7 @@ static int x_smbd_conn_process_smb2(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smb
 			continue;
 		} else if (NT_STATUS_EQUAL(status, NT_STATUS_PENDING)) {
 			X_SMBD_REPLY_INTERIM(smbd_conn, smbd_requ);
-			if (false && offset + in_requ_len < smbd_requ->in_msgsize) {
-				X_TODO;
-				return 0;
-			}
+			break;
 		} else if (NT_STATUS_EQUAL(status, X_NT_STATUS_INTERNAL_BLOCKED)) {
 			return 0;
 		} else {
