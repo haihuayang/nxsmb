@@ -37,12 +37,6 @@ struct x_smb2_negprot_resp_t
 	uint32_t context_offset;
 };
 
-#if 0
-enum {
-	X_SMB2_NEGPROT_REQU_BODY_LEN = 0x24,
-	X_SMB2_NEGPROT_RESP_BODY_LEN = 0x40,
-};
-#endif
 struct x_smb2_negprot_t 
 {
 	uint16_t out_dialect;
@@ -53,15 +47,6 @@ struct x_smb2_negprot_t
 	std::vector<uint8_t> out_context;
 };
 
-}
-
-static inline uint16_t get_security_mode(const x_smbd_conf_t &smbd_conf)
-{
-	uint16_t security_mode = SMB2_NEGOTIATE_SIGNING_ENABLED;
-	if (smbd_conf.signing_required) {
-		security_mode |= SMB2_NEGOTIATE_SIGNING_REQUIRED;
-	}
-	return security_mode;
 }
 
 static NTSTATUS x_smbd_conn_reply_negprot(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ,
@@ -172,7 +157,7 @@ int x_smbd_conn_process_smb1negprot(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smb
 	const std::shared_ptr<x_smbd_conf_t> smbd_conf = x_smbd_conf_get();
 	x_smb2_negprot_t negprot;
 	negprot.out_dialect = 0x2ff;
-	negprot.out_security_mode = get_security_mode(*smbd_conf);
+	negprot.out_security_mode = smbd_conf->security_mode;
 	negprot.out_capabilities = smbd_conf->capabilities & 
 		~(SMB2_CAP_DIRECTORY_LEASING | SMB2_CAP_MULTI_CHANNEL);
 	x_smbd_conn_reply_negprot(smbd_conn, smbd_requ, *smbd_conf, negprot);
@@ -370,6 +355,7 @@ NTSTATUS x_smb2_process_negprot(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_re
 		generate_context(negprot, negprot.out_cipher);
 	}
 
+	negprot.out_security_mode = smbd_conf->security_mode;
 	// TODO should it consider client capabilities?
 	negprot.out_capabilities = smbd_conf->capabilities;
 	if (negprot.out_dialect < SMB3_DIALECT_REVISION_300) {

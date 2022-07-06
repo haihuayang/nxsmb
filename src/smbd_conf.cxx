@@ -249,6 +249,10 @@ static bool parse_global_param(x_smbd_conf_t &smbd_conf,
 		smbd_conf.workgroup = value;
 	} else if (name == "lanman auth") {
 		smbd_conf.lanman_auth = parse_bool(value);
+	} else if (name == "server signing") {
+		if (value == "mandatory") {
+			smbd_conf.security_mode |= SMB2_NEGOTIATE_SIGNING_REQUIRED;
+		}
 	} else if (name == "smb2 max credits") {
 		return parse_uint32(value, smbd_conf.smb2_max_credits);
 	} else if (name == "private dir") {
@@ -409,11 +413,6 @@ static int parse_smbconf(x_smbd_conf_t &smbd_conf, const char *path,
 					opt.c_str());
 		}
 		parse_global_param(smbd_conf, name, value);
-	}
-
-	smbd_conf.security_mode = SMB2_NEGOTIATE_SIGNING_ENABLED;
-	if (false /* signing_required*/) {
-		smbd_conf.security_mode |= SMB2_NEGOTIATE_SIGNING_REQUIRED;
 	}
 
 	if (smbd_conf.node.empty()) {
