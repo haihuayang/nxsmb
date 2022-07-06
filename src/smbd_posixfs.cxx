@@ -65,7 +65,7 @@ static int posixfs_set_basic_info(int fd,
 	}
 
 	if (!is_null_ntime(basic_info.last_write)) {
-		uts[0] = x_nttime_to_timespec(basic_info.last_write);
+		uts[1] = x_nttime_to_timespec(basic_info.last_write);
 		notify_actions |= FILE_NOTIFY_CHANGE_LAST_WRITE;
 		++count;
 	}
