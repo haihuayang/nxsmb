@@ -39,6 +39,7 @@ NTSTATUS x_smb2_process_logoff(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_req
 
 	x_smb2_reply_logoff(smbd_conn, smbd_requ, status);
 	X_SMBD_REF_DEC(smbd_requ->smbd_chan);
-	X_SMBD_REF_DEC(smbd_requ->smbd_sess);
+	/* X_SMBD_REF_DEC(smbd_requ->smbd_sess); we lease smbd_chan not clean
+	   so it is able to sign */
 	return NT_STATUS_OK;
 }

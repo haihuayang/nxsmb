@@ -287,7 +287,7 @@ struct x_smbd_requ_t
 
 	uint32_t out_length = 0;
 	uint32_t last_reply_size = 0;
-	x_smb2_header_t *last_hdr{};
+	x_bufref_t *last_buf_head{}; // it does not hold reference of buf
 	x_bufref_t *out_buf_head{}, *out_buf_tail{};
 	x_smbd_sess_t *smbd_sess{};
 	x_smbd_chan_t *smbd_chan{};
