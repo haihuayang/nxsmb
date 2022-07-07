@@ -12,7 +12,7 @@ void x_smb2_key_derivation(const uint8_t *KI, size_t KI_len,
 		x_smb2_key_t &key)
 {
 	struct HMACSHA256Context ctx;
-	uint8_t buf[4];
+	uint32_t buf;
 	static const uint8_t zero = 0;
 	uint8_t digest[SHA256_DIGEST_LENGTH];
 	uint32_t i = 1;
@@ -25,13 +25,15 @@ void x_smb2_key_derivation(const uint8_t *KI, size_t KI_len,
 	 */
 	hmac_sha256_init(KI, KI_len, &ctx);
 
-	RSIVAL(buf, 0, i);
-	hmac_sha256_update(buf, sizeof(buf), &ctx);
-	hmac_sha256_update((const uint8_t *)label.data, label.size, &ctx);
-	hmac_sha256_update(&zero, 1, &ctx);
-	hmac_sha256_update((const uint8_t *)context.data, context.size, &ctx);
-	RSIVAL(buf, 0, L);
-	hmac_sha256_update(buf, sizeof(buf), &ctx);
+#define HMAC_UPDATE(d, s, c) hmac_sha256_update((const uint8_t *)(d), (s), (c))
+
+	buf = X_H2BE32(i);
+	HMAC_UPDATE(&buf, sizeof(buf), &ctx);
+	HMAC_UPDATE(label.data, label.size, &ctx);
+	HMAC_UPDATE(&zero, 1, &ctx);
+	HMAC_UPDATE(context.data, context.size, &ctx);
+	buf = X_H2BE32(L);
+	HMAC_UPDATE(&buf, sizeof(buf), &ctx);
 
 	hmac_sha256_final(digest, &ctx);
 
