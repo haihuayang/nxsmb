@@ -196,7 +196,9 @@ struct x_smb2_state_create_t
 	uint64_t in_allocation_size{0};
 	uint64_t in_timestamp{0};
 
-	std::u16string in_name;
+	bool is_dollar_data = false;
+	std::u16string in_name; // TODO handle stream
+	std::u16string in_strm;
 
 	uint8_t out_create_flags;
 	uint32_t out_create_action;

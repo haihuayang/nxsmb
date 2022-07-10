@@ -280,7 +280,23 @@ static uint32_t encode_contexts(const x_smb2_state_create_t &state,
 	return x_convert_assert<uint32_t>(p - out_ptr);
 }
 
-static bool decode_in_create(x_smb2_state_create_t &state,
+static bool is_dollar_data(const char16_t *begin, const char16_t *end)
+{
+	static const char16_t dollar_data[] = u"$DATA";
+	if (end - begin == 5) {
+		const char16_t *dd = dollar_data;
+		for ( ; begin != end; ++begin, ++dd) {
+			char16_t upper = std::use_facet<std::ctype<char16_t>>(std::locale()).toupper(*begin);
+			if (upper != *dd) {
+				return false;
+			}
+		}
+		return true;
+	}
+	return false;
+}
+
+static NTSTATUS decode_in_create(x_smb2_state_create_t &state,
 		const uint8_t *in_hdr, uint32_t in_len)
 {
 	const x_smb2_in_create_t *in_create = (const x_smb2_in_create_t *)(in_hdr + SMB2_HDR_BODY);
@@ -291,12 +307,12 @@ static bool decode_in_create(x_smb2_state_create_t &state,
 
 	if (in_name_length % 2 != 0 || !x_check_range<uint32_t>(in_name_offset, in_name_length, 
 				SMB2_HDR_BODY + sizeof(x_smb2_in_create_t), in_len)) {
-		return false;
+		return NT_STATUS_INVALID_PARAMETER;
 	}
 
 	if (!x_check_range<uint32_t>(in_context_offset, in_context_length, 
 				SMB2_HDR_BODY + sizeof(x_smb2_in_create_t), in_len)) {
-		return false;
+		return NT_STATUS_INVALID_PARAMETER;
 	}
 
 	state.oplock_level         = in_create->oplock_level;
@@ -307,20 +323,37 @@ static bool decode_in_create(x_smb2_state_create_t &state,
 	state.in_create_disposition   = X_LE2H32(in_create->create_disposition);
 	state.in_create_options       = X_LE2H32(in_create->create_options);
 
-	state.in_name.assign((char16_t *)(in_hdr + in_name_offset),
-			(char16_t *)(in_hdr + in_name_offset + in_name_length));
+	const char16_t *in_name_begin = (const char16_t *)(in_hdr + in_name_offset);
+	const char16_t *in_name_end = (const char16_t *)(in_hdr + in_name_offset + in_name_length);
+	const char16_t *in_path_end = x_next_sep(in_name_begin, in_name_end, u':');
 
-	if (in_context_length == 0) {
-		return true;
+	if (in_path_end != in_name_end) {
+		const char16_t *in_strm_begin = in_path_end + 1;
+		const char16_t *in_strm_end = x_next_sep(in_strm_begin, in_name_end, u':');
+		if (in_strm_end != in_name_end) {
+			if (!is_dollar_data(in_strm_end + 1, in_name_end)) {
+				return NT_STATUS_OBJECT_NAME_INVALID;
+			}
+			if (in_strm_begin != in_strm_end) {
+				state.in_strm.assign(in_strm_begin, in_strm_end);
+			}
+			state.is_dollar_data = true;
+		} else {
+			if (in_strm_begin == in_strm_end) {
+				return NT_STATUS_OBJECT_NAME_INVALID;
+			}
+			state.in_strm.assign(in_strm_begin, in_strm_end);
+		}
 	}
+	state.in_name.assign(in_name_begin, in_path_end);
 
-	if (!decode_contexts(state,
+	if (in_context_length != 0 && !decode_contexts(state,
 				in_hdr + in_context_offset,
 				in_context_length)) {
-		return false;
+		return NT_STATUS_INVALID_PARAMETER;
 	}
 
-	return true;
+	return NT_STATUS_OK;
 }
 
 struct x_smb2_out_create_t
@@ -430,8 +463,9 @@ NTSTATUS x_smb2_process_create(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_req
 	/* TODO check limit of open for both total and per conn*/
 
 	auto state = std::make_unique<x_smb2_state_create_t>();
-	if (!decode_in_create(*state, in_hdr, smbd_requ->in_requ_len)) {
-		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
+	NTSTATUS status = decode_in_create(*state, in_hdr, smbd_requ->in_requ_len);
+	if (!NT_STATUS_IS_OK(status)) {
+		RETURN_OP_STATUS(smbd_requ, status);
 	}
 
 	if (state->in_create_options & (0xff000000u | FILE_RESERVER_OPFILTER)) {
@@ -453,7 +487,7 @@ NTSTATUS x_smb2_process_create(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_req
 
 	X_LOG_OP("%ld CREATE '%s'", smbd_requ->in_mid, x_convert_utf16_to_utf8(state->in_name).c_str());
 	smbd_requ->async_done_fn = x_smb2_create_async_done;
-	NTSTATUS status = x_smbd_tcon_op_create(smbd_requ->smbd_tcon, smbd_requ, state);
+	status = x_smbd_tcon_op_create(smbd_requ->smbd_tcon, smbd_requ, state);
 	if (NT_STATUS_IS_OK(status)) {
 		x_smb2_reply_create(smbd_conn, smbd_requ, *state);
 		return status;

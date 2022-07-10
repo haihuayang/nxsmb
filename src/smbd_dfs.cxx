@@ -773,8 +773,8 @@ static NTSTATUS dfs_share_get_dfs_referral(const dfs_share_t &dfs_share,
 	}
 	
 	const char16_t *in_tld_begin, *in_tld_end;
-	in_tld_begin = x_skip_sep(in_share_end + 1, in_full_path_end);
-	in_tld_end = x_next_sep(in_tld_begin, in_full_path_end);
+	in_tld_begin = x_skip_sep(in_share_end + 1, in_full_path_end, u'\\');
+	in_tld_end = x_next_sep(in_tld_begin, in_full_path_end, u'\\');
 
 	std::string tld = x_convert_utf16_to_lower_utf8(in_tld_begin, in_tld_end);
 	if (tld == pesudo_tld_dir) {

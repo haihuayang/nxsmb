@@ -248,8 +248,8 @@ static NTSTATUS fsctl_dfs_get_refers_internal(
 		}
 	}
 	
-	const char16_t *in_server_begin = x_skip_sep(in_file_name_begin, in_file_name_end);
-	const char16_t *in_server_end = x_next_sep(in_server_begin, in_file_name_end);
+	const char16_t *in_server_begin = x_skip_sep(in_file_name_begin, in_file_name_end, u'\\');
+	const char16_t *in_server_end = x_next_sep(in_server_begin, in_file_name_end, u'\\');
 
 	if (in_server_end == in_file_name_end) {
 		return NT_STATUS_INVALID_PARAMETER;
@@ -257,7 +257,7 @@ static NTSTATUS fsctl_dfs_get_refers_internal(
 	/* TODO check server name */
 
 	const char16_t *in_share_begin = in_server_end + 1;
-	const char16_t *in_share_end = x_next_sep(in_share_begin, in_file_name_end);
+	const char16_t *in_share_end = x_next_sep(in_share_begin, in_file_name_end, u'\\');
 
 	if (in_share_end == in_share_begin) {
 		return NT_STATUS_INVALID_PARAMETER;

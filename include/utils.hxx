@@ -88,20 +88,20 @@ static inline size_t x_next_2_power(size_t num)
 	return ret;
 }
 
-static inline const char16_t *x_skip_sep(const char16_t *in, const char16_t *end)
+static inline const char16_t *x_skip_sep(const char16_t *in, const char16_t *end, char16_t sep)
 {
 	for ( ; in < end; ++in) {
-		if (*in != u'\\') {
+		if (*in != sep) {
 			break;
 		}
 	}
 	return in;
 }
 
-static inline const char16_t *x_next_sep(const char16_t *in, const char16_t *end)
+static inline const char16_t *x_next_sep(const char16_t *in, const char16_t *end, char16_t sep)
 {
 	for ( ; in < end; ++in) {
-		if (*in == u'\\') {
+		if (*in == sep) {
 			break;
 		}
 	}

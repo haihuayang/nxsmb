@@ -2263,6 +2263,8 @@ static NTSTATUS getinfo_file(posixfs_object_t *posixfs_object,
 		info->end_of_file = X_H2LE64(statex.get_end_of_file());
 		info->file_attributes = X_H2LE32(statex.file_attributes);
 		info->unused = 0;
+	} else if (state.in_info_level == SMB2_FILE_INFO_FILE_STREAM_INFORMATION) {
+		X_TODO;
 	} else {
 		return NT_STATUS_INVALID_LEVEL;
 	}
