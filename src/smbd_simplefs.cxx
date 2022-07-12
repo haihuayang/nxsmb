@@ -53,12 +53,6 @@ static NTSTATUS simplefs_object_op_qdir(
 			simplefs_process_entry);
 }
 
-static NTSTATUS simplefs_object_op_rename(x_smbd_object_t *smbd_object,
-		x_smbd_open_t *smbd_open,
-		x_smbd_requ_t *smbd_requ,
-		bool replace_if_exists,
-		const std::u16string &new_path);
-
 static const x_smbd_object_ops_t simplefs_object_ops = {
 	posixfs_object_op_close,
 	posixfs_object_op_read,
@@ -71,7 +65,7 @@ static const x_smbd_object_ops_t simplefs_object_ops = {
 	posixfs_object_op_notify,
 	posixfs_object_op_lease_break,
 	posixfs_object_op_oplock_break,
-	simplefs_object_op_rename,
+	posixfs_object_op_rename,
 	posixfs_object_op_set_delete_on_close,
 	posixfs_object_op_unlink,
 	posixfs_object_op_get_path,
@@ -172,57 +166,3 @@ std::shared_ptr<x_smbd_share_t> x_smbd_simplefs_share_create(
 	return std::make_shared<simplefs_share_t>(name, path);
 }
 
-static NTSTATUS simplefs_object_op_rename(x_smbd_object_t *smbd_object,
-		x_smbd_open_t *smbd_open,
-		x_smbd_requ_t *smbd_requ,
-		bool replace_if_exists,
-		const std::u16string &new_path)
-{
-	std::u16string path;
-	auto smbd_share = x_smbd_tcon_get_share(smbd_requ->smbd_tcon);
-	auto &simplefs_share = dynamic_cast<simplefs_share_t &>(*smbd_share);
-
-	return posixfs_object_rename(smbd_object, smbd_requ, 
-			simplefs_share.root_dir, new_path, replace_if_exists);
-}
-#if 0
-int x_smbd_simplefs_mktld(const std::shared_ptr<x_smbd_user_t> &smbd_user,
-		std::shared_ptr<x_smbd_share_t> &smbd_share,
-		const std::string &name,
-		std::vector<uint8_t> &ntacl_blob)
-{
-	simplefs_share_t &simplefs_share = dynamic_cast<simplefs_share_t &>(*smbd_share);
-	auto topdir = simplefs_share.root_dir;
-
-	std::shared_ptr<idl::security_descriptor> top_psd, psd;
-	NTSTATUS status = posixfs_get_sd(topdir->fd, top_psd);
-	X_ASSERT(NT_STATUS_IS_OK(status));
-
-	status = make_child_sec_desc(psd, top_psd,
-			*smbd_user, true);
-	X_ASSERT(NT_STATUS_IS_OK(status));
-
-	create_acl_blob(ntacl_blob, psd, idl::XATTR_SD_HASH_TYPE_NONE, std::array<uint8_t, idl::XATTR_SD_HASH_SIZE>());
-
-	posixfs_statex_t statex;
-	/* if parent is not enable inherit, make_sec_desc */
-	int fd = posixfs_create(topdir->fd,
-			true,
-			name.c_str(),
-			&statex,
-			0,
-			0,
-			ntacl_blob);
-
-	X_ASSERT(fd != -1);
-	close(fd);
-	return 0;
-}
-
-int x_smbd_simplefs_rmtld(std::shared_ptr<x_smbd_share_t> &smbd_share,
-		const std::string &name)
-{
-	simplefs_share_t &simplefs_share = dynamic_cast<simplefs_share_t &>(*smbd_share);
-	return unlinkat(simplefs_share.root_dir->fd, name.c_str(), AT_REMOVEDIR);
-}
-#endif

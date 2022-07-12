@@ -386,9 +386,8 @@ static NTSTATUS dfs_tld_object_op_rename(x_smbd_object_t *smbd_object,
 		return NT_STATUS_ACCESS_DENIED;
 	}
 
-	dfs_share_t &share = dynamic_cast<dfs_share_t &>(*x_smbd_tcon_get_share(smbd_requ->smbd_tcon));
 	return posixfs_object_rename(smbd_object, smbd_requ,
-			share.root_dir, new_path.substr(sep + 1), replace_if_exists);
+			new_path.substr(sep + 1), replace_if_exists);
 }
 
 

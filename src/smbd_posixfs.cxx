@@ -698,74 +698,11 @@ static NTSTATUS rename_object_intl(posixfs_object_pool_t::bucket_t &dst_bucket,
 
 NTSTATUS posixfs_object_rename(x_smbd_object_t *smbd_object,
 		x_smbd_requ_t *smbd_requ,
-		std::shared_ptr<x_smbd_topdir_t> dst_topdir,
 		const std::u16string &dst_path,
 		bool replace_if_exists)
 {
 	posixfs_object_t *posixfs_object = posixfs_object_from_base_t::container(smbd_object);
-	if (!dst_topdir) {
-		dst_topdir = posixfs_object->topdir;
-	}
-
-	auto &pool = posixfs_object_pool;
-	auto dst_hash = hash_object(dst_topdir, dst_path);
-	auto dst_bucket_idx = dst_hash % pool.buckets.size();
-	auto &dst_bucket = pool.buckets[dst_bucket_idx];
-	auto src_bucket_idx = posixfs_object->hash % pool.buckets.size();
-
-	NTSTATUS status;
-	std::u16string src_path;
-	if (dst_bucket_idx == src_bucket_idx) {
-		std::lock_guard<std::mutex> lock(dst_bucket.mutex);
-		status = rename_object_intl(dst_bucket, dst_bucket, dst_topdir,
-				posixfs_object,
-				dst_path, src_path, dst_hash);
-	} else {
-		auto &src_bucket = pool.buckets[src_bucket_idx];
-		std::scoped_lock lock(dst_bucket.mutex, src_bucket.mutex);
-		status = rename_object_intl(dst_bucket, dst_bucket, dst_topdir,
-				posixfs_object,
-				dst_path, src_path, dst_hash);
-	}
-
-	if (NT_STATUS_IS_OK(status)) {
-		notify_rename(dst_topdir, dst_path, src_path, posixfs_object->is_dir());
-	}
-	return status;
-}
-
-NTSTATUS posixfs_object_op_rename(x_smbd_object_t *smbd_object,
-		x_smbd_open_t *smbd_open,
-		x_smbd_requ_t *smbd_requ,
-		bool replace_if_exists,
-		const std::u16string &new_path)
-{
-	/* does it happen renaming cross topdir? if not we do not need dst_topdir */
-	std::shared_ptr<x_smbd_topdir_t> dst_topdir;
-	return posixfs_object_rename(smbd_object, smbd_requ, 
-			dst_topdir, new_path, replace_if_exists);
-}
-
-#if 0
-static NTSTATUS posixfs_object_rename(posixfs_object_t *posixfs_object,
-		const std::shared_ptr<x_smbd_share_t> &smbd_share,
-		bool dfs,
-		bool replace_if_exists,
-		const std::u16string &in_dst_path)
-{
-	std::u16string dst_path;
-	std::shared_ptr<x_smbd_topdir_t> topdir;
-	NTSTATUS status = smbd_share->resolve_path(
-			in_dst_path, dfs,
-			topdir, dst_path);
-	if (!NT_STATUS_IS_OK(status)) {
-		return status;
-	}
-	
-	if (topdir->uuid != posixfs_object->topdir->uuid) {
-		/* we cannot move between filesystem */
-		return NT_STATUS_UNSUCCESSFUL; // TODO
-	}
+	auto &topdir = posixfs_object->topdir;
 
 	auto &pool = posixfs_object_pool;
 	auto dst_hash = hash_object(topdir, dst_path);
@@ -773,6 +710,7 @@ static NTSTATUS posixfs_object_rename(posixfs_object_t *posixfs_object,
 	auto &dst_bucket = pool.buckets[dst_bucket_idx];
 	auto src_bucket_idx = posixfs_object->hash % pool.buckets.size();
 
+	NTSTATUS status;
 	std::u16string src_path;
 	if (dst_bucket_idx == src_bucket_idx) {
 		std::lock_guard<std::mutex> lock(dst_bucket.mutex);
@@ -792,7 +730,17 @@ static NTSTATUS posixfs_object_rename(posixfs_object_t *posixfs_object,
 	}
 	return status;
 }
-#endif
+
+NTSTATUS posixfs_object_op_rename(x_smbd_object_t *smbd_object,
+		x_smbd_open_t *smbd_open,
+		x_smbd_requ_t *smbd_requ,
+		bool replace_if_exists,
+		const std::u16string &new_path)
+{
+	return posixfs_object_rename(smbd_object, smbd_requ, 
+			new_path, replace_if_exists);
+}
+
 static posixfs_object_t *posixfs_object_open(
 		const x_smbd_object_ops_t *ops,
 		const std::shared_ptr<x_smbd_topdir_t> &topdir,
@@ -2298,45 +2246,6 @@ static NTSTATUS setinfo_file(posixfs_object_t *posixfs_object,
 			X_TODO;
 			return NT_STATUS_INTERNAL_ERROR;
 		}
-#if 0
-	} else if (state.in_info_level == SMB2_FILE_INFO_FILE_RENAME_INFORMATION) {
-		/* MS-FSA 2.1.5.14.11 */
-		if (!smbd_requ->smbd_open->check_access(idl::SEC_STD_DELETE)) {
-			return NT_STATUS_ACCESS_DENIED;
-		}
-		bool replace_if_exists;
-		std::u16string file_name;
-		if (!x_smb2_rename_info_decode(replace_if_exists, file_name, state.in_data)) {
-			return NT_STATUS_INVALID_PARAMETER;
-		}
-		return posixfs_object_rename(posixfs_object,
-				x_smbd_tcon_get_share(smbd_requ->smbd_tcon),
-				smbd_requ->in_hdr_flags & SMB2_HDR_FLAG_DFS,
-				replace_if_exists, file_name);
-	} else if (state.in_info_level == SMB2_FILE_INFO_FILE_DISPOSITION_INFORMATION) {
-		/* MS-FSA 2.1.5.14.3 */
-		if (state.in_data.size() < 1) {
-			return NT_STATUS_INFO_LENGTH_MISMATCH;
-		}
-		if (!smbd_requ->smbd_open->check_access(idl::SEC_STD_DELETE)) {
-			return NT_STATUS_ACCESS_DENIED;
-		}
-		bool delete_on_close = (state.in_data[0] != 0);
-		if (delete_on_close) {
-			if (posixfs_object->statex.file_attributes & FILE_ATTRIBUTE_READONLY) {
-				return NT_STATUS_CANNOT_DELETE;
-			}
-			if (true /*!is_stream_open(posixfs_open) */) {
-				posixfs_object->flags |= posixfs_object_t::flag_delete_on_close;
-			} else {
-				X_TODO;
-			}
-		} else {
-			/* TODO handle streams */
-			posixfs_object->flags &= ~posixfs_object_t::flag_delete_on_close;
-		}
-		return NT_STATUS_OK;
-#endif
 	} else {
 		return NT_STATUS_INVALID_LEVEL;
 	}
@@ -3132,148 +3041,6 @@ posixfs_object_t::posixfs_object_t(const x_smbd_object_ops_t *ops,
 {
 }
 
-#if 0
-static const x_smbd_object_ops_t posixfs_object_ops = {
-	posixfs_object_op_close,
-	posixfs_object_op_read,
-	posixfs_object_op_write,
-	posixfs_object_op_getinfo,
-	posixfs_object_op_setinfo,
-	posixfs_object_op_ioctl,
-	posixfs_object_op_qdir,
-	posixfs_object_op_notify,
-	posixfs_object_op_lease_break,
-	posixfs_object_op_oplock_break,
-	posixfs_object_op_get_path,
-	posixfs_object_op_destroy,
-};
-
-struct posixfs_share_t : x_smbd_share_t
-{
-	posixfs_share_t(const std::string &name,
-			const std::string &path)
-		: x_smbd_share_t(name)
-	{
-		root_dir = x_smbd_topdir_create(path);
-	}
-					
-	uint8_t get_type() const override {
-		return SMB2_SHARE_TYPE_DISK;
-	}
-	bool is_dfs() const override { return false; }
-	/* TODO not support ABE for now */
-	bool abe_enabled() const override { return false; }
-
-	NTSTATUS create(x_smbd_open_t **psmbd_open,
-			x_smbd_requ_t *smbd_requ,
-			std::unique_ptr<x_smb2_state_create_t> &state) override;
-	NTSTATUS get_dfs_referral(x_dfs_referral_resp_t &dfs_referral,
-			const char16_t *in_full_path_begin,
-			const char16_t *in_full_path_end,
-			const char16_t *in_server_begin,
-			const char16_t *in_server_end,
-			const char16_t *in_share_begin,
-			const char16_t *in_share_end) const override
-	{
-		return NT_STATUS_FS_DRIVER_REQUIRED;
-	}
-	NTSTATUS resolve_path(const std::u16string &in_path,
-		bool dfs,
-		std::shared_ptr<x_smbd_topdir_t> &topdir,
-		std::u16string &path) override;
-	std::shared_ptr<x_smbd_topdir_t> root_dir;
-};
-
-static NTSTATUS posixfs_op_create(posixfs_share_t &posixfs_share,
-		x_smbd_open_t **psmbd_open,
-		x_smbd_requ_t *smbd_requ,
-		std::unique_ptr<x_smb2_state_create_t> &state)
-{
-	std::u16string path;
-	std::shared_ptr<x_smbd_topdir_t> topdir;
-	NTSTATUS status = posixfs_share.resolve_path(
-			state->in_name,
-			smbd_requ->in_hdr_flags & SMB2_HDR_FLAG_DFS,
-			topdir, path);
-	if (!NT_STATUS_IS_OK(status)) {
-		return status;
-	}
-
-	/* TODO only local filesystem for now, support dfs later */
-	posixfs_object_t *posixfs_object = posixfs_object_open(
-			topdir, path);
-
-	posixfs_open_t *posixfs_open = create_posixfs_open(posixfs_object,
-			status, smbd_requ, state);
-	if (!posixfs_open) {
-		// TODO if (NT_STATUS_EQUAL(status, 
-		/* if succeed, it do not release it because the open hold it */
-		posixfs_object_release(posixfs_object);
-		return status;
-	}
-
-	if (state->out_create_action == FILE_WAS_CREATED) {
-		notify_fname(posixfs_object, NOTIFY_ACTION_ADDED,
-				(state->in_create_options & FILE_DIRECTORY_FILE) ? FILE_NOTIFY_CHANGE_DIR_NAME : FILE_NOTIFY_CHANGE_FILE_NAME);
-	}
-
-	uint32_t contexts = state->contexts;
-	state->contexts = 0;
-	/* TODO we support MXAC and QFID for now,
-	   without QFID Windows 10 client query
-	   couple getinfo SMB2_FILE_INFO_FILE_NETWORK_OPEN_INFORMATION */
-	if (contexts & X_SMB2_CONTEXT_FLAG_MXAC) {
-		state->contexts |= X_SMB2_CONTEXT_FLAG_MXAC;
-	}
-	if (contexts & X_SMB2_CONTEXT_FLAG_QFID) {
-		state->contexts |= X_SMB2_CONTEXT_FLAG_QFID;
-		x_put_le64(state->out_qfid_info, posixfs_object->statex.stat.st_ino);
-		x_put_le64(state->out_qfid_info + 8, posixfs_object->statex.stat.st_dev);
-		memset(state->out_qfid_info + 16, 0, 16);
-	}
-
-	*psmbd_open = &posixfs_open->base;
-	return NT_STATUS_OK;
-}
-
-NTSTATUS posixfs_share_t::create(x_smbd_open_t **psmbd_open,
-		x_smbd_requ_t *smbd_requ,
-		std::unique_ptr<x_smb2_state_create_t> &state)
-{
-	return posixfs_op_create(*this, psmbd_open, smbd_requ, state);
-}
-
-NTSTATUS posixfs_share_t::resolve_path(
-		const std::u16string &in_path,
-		bool dfs,
-		std::shared_ptr<x_smbd_topdir_t> &topdir,
-		std::u16string &path)
-{
-	if (dfs) {
-		/* TODO we just skip the first 2 components for now */
-		auto pos = in_path.find(u'\\');
-		X_ASSERT(pos != std::u16string::npos);
-		pos = in_path.find(u'\\', pos + 1);
-		if (pos == std::u16string::npos) {
-			path = u"";
-		} else {
-			path = in_path.substr(pos + 1);
-		}
-	} else {
-		path = in_path;
-	}
-	topdir = root_dir;
-	return NT_STATUS_OK;
-}
-
-
-std::shared_ptr<x_smbd_share_t> x_smbd_posixfs_share_create(
-		const std::string &name,
-		const std::string &path)
-{
-	return std::make_shared<posixfs_share_t>(name, path);
-}
-#endif
 int x_smbd_posixfs_init(size_t max_open)
 {
 	size_t bucket_size = x_next_2_power(max_open);
@@ -3347,5 +3114,4 @@ int posixfs_mktld(const std::shared_ptr<x_smbd_user_t> &smbd_user,
 	close(fd);
 	return 0;
 }
-
 

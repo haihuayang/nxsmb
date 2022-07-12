@@ -104,7 +104,6 @@ NTSTATUS posixfs_object_qdir(
 			uint32_t file_number));
 NTSTATUS posixfs_object_rename(x_smbd_object_t *smbd_object,
 		x_smbd_requ_t *smbd_requ,
-		std::shared_ptr<x_smbd_topdir_t> dst_topdir,
 		const std::u16string &dst_path,
 		bool replace_if_exists);
 
