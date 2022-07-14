@@ -38,13 +38,19 @@ static bool decode_in_write(x_smb2_state_write_t &state,
 	}
 
 	state.in_offset = X_LE2H64(in_write->offset);
+	if (state.in_offset + in_length < state.in_offset) {
+		return false;
+	}
+
 	state.in_file_id_persistent = X_LE2H64(in_write->file_id_persistent);
 	state.in_file_id_volatile = X_LE2H64(in_write->file_id_volatile);
 	state.in_flags = X_LE2H8(in_write->flags);
 
-	state.in_buf = x_buf_get(in_buf);
-	state.in_buf_offset = in_offset + in_data_offset;
-	state.in_buf_length = in_length;
+	if (in_length > 0) {
+		state.in_buf = x_buf_get(in_buf);
+		state.in_buf_offset = in_offset + in_data_offset;
+		state.in_buf_length = in_length;
+	}
 	return true;
 }
 
@@ -125,9 +131,17 @@ NTSTATUS x_smb2_process_write(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ
 		RETURN_OP_STATUS(smbd_requ, NT_STATUS_ACCESS_DENIED);
 	}
 
-	smbd_requ->async_done_fn = x_smb2_write_async_done;
-	NTSTATUS status = x_smbd_open_op_write(smbd_requ->smbd_open, smbd_conn, smbd_requ,
-			state);
+	NTSTATUS status;
+	if (state->in_buf) {
+		smbd_requ->async_done_fn = x_smb2_write_async_done;
+		status = x_smbd_open_op_write(smbd_requ->smbd_open, smbd_conn, smbd_requ,
+				state);
+	} else {
+		state->out_count = 0;
+		state->out_remaining = 0;
+		status = NT_STATUS_OK;
+	}
+
 	if (NT_STATUS_IS_OK(status)) {
 		x_smb2_reply_write(smbd_conn, smbd_requ, *state);
 		return status;

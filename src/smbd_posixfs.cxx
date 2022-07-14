@@ -720,7 +720,7 @@ NTSTATUS posixfs_object_rename(x_smbd_object_t *smbd_object,
 	} else {
 		auto &src_bucket = pool.buckets[src_bucket_idx];
 		std::scoped_lock lock(dst_bucket.mutex, src_bucket.mutex);
-		status = rename_object_intl(dst_bucket, dst_bucket, topdir,
+		status = rename_object_intl(dst_bucket, src_bucket, topdir,
 				posixfs_object,
 				dst_path, src_path, dst_hash);
 	}

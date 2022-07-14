@@ -54,8 +54,13 @@ static void x_smb2_reply_read(x_smbd_conn_t *smbd_conn,
 	X_LOG_OP("%ld RESP SUCCESS", smbd_requ->in_mid);
 
 	x_bufref_t *bufref = x_bufref_alloc(sizeof(x_smb2_out_read_t));
-	x_bufref_t *out_data = new x_bufref_t(state.out_buf, 0, state.out_buf_length);
-	state.out_buf = nullptr;
+	x_bufref_t *out_data;
+	if (state.out_buf) {
+		out_data = new x_bufref_t(state.out_buf, 0, state.out_buf_length);
+		state.out_buf = nullptr;
+	} else {
+		out_data = bufref;
+	}
 
 	uint8_t *out_hdr = bufref->get_data();
 
@@ -63,7 +68,7 @@ static void x_smb2_reply_read(x_smbd_conn_t *smbd_conn,
 	out_read->struct_size = X_H2LE16(sizeof(x_smb2_out_read_t) + 1);
 	out_read->data_offset = SMB2_HDR_BODY + sizeof(x_smb2_out_read_t);
 	out_read->reserved0 = 0;
-	out_read->data_length = X_H2LE32(out_data->length);
+	out_read->data_length = X_H2LE32(state.out_buf_length);
 	out_read->data_remaining = 0;
 	out_read->reserved1 = 0;
 
@@ -103,6 +108,10 @@ NTSTATUS x_smb2_process_read(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 	X_LOG_OP("%ld READ 0x%lx, 0x%lx", smbd_requ->in_mid,
 			state->in_file_id_persistent, state->in_file_id_volatile);
 
+	if (state->in_offset + state->in_length < state->in_offset) {
+		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
+	}
+
 	if (!smbd_requ->smbd_open) {
 		smbd_requ->smbd_open = x_smbd_open_lookup(state->in_file_id_persistent,
 				state->in_file_id_volatile,
@@ -116,9 +125,16 @@ NTSTATUS x_smb2_process_read(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 		RETURN_OP_STATUS(smbd_requ, NT_STATUS_ACCESS_DENIED);
 	}
 
-	smbd_requ->async_done_fn = x_smb2_read_async_done;
-	NTSTATUS status = x_smbd_open_op_read(smbd_requ->smbd_open, smbd_conn, smbd_requ,
-			state);
+	NTSTATUS status;
+	if (state->in_length == 0) {
+		state->out_buf_length = 0;
+		status = NT_STATUS_OK;
+	} else {
+		smbd_requ->async_done_fn = x_smb2_read_async_done;
+		status = x_smbd_open_op_read(smbd_requ->smbd_open, smbd_conn, smbd_requ,
+				state);
+	}
+
 	if (NT_STATUS_IS_OK(status)) {
 		x_smb2_reply_read(smbd_conn, smbd_requ, *state);
 		return status;
