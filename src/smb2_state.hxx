@@ -197,6 +197,7 @@ struct x_smb2_state_create_t
 	uint64_t in_timestamp{0};
 
 	bool is_dollar_data = false;
+	bool end_with_sep = false;
 	std::u16string in_name; // TODO handle stream
 	std::u16string in_strm;
 

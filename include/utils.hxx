@@ -98,6 +98,16 @@ static inline const char16_t *x_skip_sep(const char16_t *in, const char16_t *end
 	return in;
 }
 
+static inline const char16_t *x_rskip_sep(const char16_t *in, const char16_t *end, char16_t sep)
+{
+	for ( ; in > end; --in) {
+		if (in[-1] != sep) {
+			break;
+		}
+	}
+	return in;
+}
+
 static inline const char16_t *x_next_sep(const char16_t *in, const char16_t *end, char16_t sep)
 {
 	for ( ; in < end; ++in) {

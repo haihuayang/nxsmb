@@ -26,9 +26,9 @@ bool x_smbd_open_has_space()
 }
 
 x_smbd_open_t::x_smbd_open_t(x_smbd_object_t *so, x_smbd_tcon_t *st,
-		uint32_t am, uint32_t sa)
+		uint32_t am, uint32_t sa, long priv_data)
 	: smbd_object(so), smbd_tcon(x_smbd_ref_inc(st))
-	, access_mask(am), share_access(sa)
+	, access_mask(am), share_access(sa), priv_data(priv_data)
 {
 	X_SMBD_COUNTER_INC(open_create, 1);
 }

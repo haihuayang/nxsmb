@@ -127,10 +127,33 @@ NTSTATUS x_smbd_tcon_op_create(x_smbd_tcon_t *smbd_tcon,
 		return NT_STATUS_INSUFFICIENT_RESOURCES;
 	}
 
+	std::shared_ptr<x_smbd_topdir_t> topdir;
+	std::u16string path;
+	long path_priv_data{};
+	long open_priv_data{};
+	NTSTATUS status = smbd_tcon->smbd_share->resolve_path(
+			topdir, path, path_priv_data, open_priv_data,
+			smbd_requ->in_hdr_flags & SMB2_HDR_FLAG_DFS,
+			state->in_name.data(),
+			state->in_name.data() + state->in_name.length(),
+			smbd_tcon->volume);
+	if (!NT_STATUS_IS_OK(status)) {
+		return status;
+	}
+
+	x_smbd_object_t *smbd_object{};
+	status = topdir->ops->open_object(&smbd_object, topdir, path, path_priv_data);
+	if (!NT_STATUS_IS_OK(status)) {
+		return status;
+	}
+
        	x_smbd_open_t *smbd_open = nullptr;
 	/* TODO should we check the open limit before create the open */
-	NTSTATUS status = smbd_tcon->smbd_share->create_open(&smbd_open,
-			smbd_requ, smbd_tcon->volume, state);
+	status = smbd_tcon->smbd_share->create_open(&smbd_open, smbd_object, 
+			smbd_requ, smbd_tcon->volume, state,
+			open_priv_data);
+
+	x_smbd_object_release(smbd_object);
 
 	if (smbd_open) {
 		X_ASSERT(NT_STATUS_IS_OK(status));

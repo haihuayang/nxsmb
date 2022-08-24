@@ -12,10 +12,9 @@
 struct posixfs_open_t;
 struct posixfs_object_t;
 
-NTSTATUS posixfs_create_open(const x_smbd_object_ops_t *ops,
-		x_smbd_open_t **psmbd_open,
+NTSTATUS posixfs_create_open(x_smbd_open_t **psmbd_open,
 		std::shared_ptr<x_smbd_topdir_t> &topdir,
-		const std::u16string &path,
+		const std::u16string &path, uint64_t path_data,
 		x_smbd_requ_t *smbd_requ,
 		std::unique_ptr<x_smb2_state_create_t> &state);
 NTSTATUS posixfs_object_op_close(
@@ -25,16 +24,19 @@ NTSTATUS posixfs_object_op_close(
 		std::unique_ptr<x_smb2_state_close_t> &state);
 NTSTATUS posixfs_object_op_read(
 		x_smbd_object_t *smbd_object,
+		x_smbd_open_t *smbd_open,
 		x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ,
 		std::unique_ptr<x_smb2_state_read_t> &state);
 NTSTATUS posixfs_object_op_write(
 		x_smbd_object_t *smbd_object,
+		x_smbd_open_t *smbd_open,
 		x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ,
 		std::unique_ptr<x_smb2_state_write_t> &state);
 NTSTATUS posixfs_object_op_lock(
 		x_smbd_object_t *smbd_object,
+		x_smbd_open_t *smbd_open,
 		x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ,
 		std::unique_ptr<x_smb2_state_lock_t> &state);
@@ -76,6 +78,12 @@ NTSTATUS posixfs_object_op_set_delete_on_close(
 		x_smbd_requ_t *smbd_requ,
 		bool delete_on_close);
 NTSTATUS posixfs_object_op_unlink(x_smbd_object_t *smbd_object, int fd);
+void posixfs_notify_fname(
+		std::shared_ptr<x_smbd_topdir_t> topdir,
+		const std::u16string req_path,
+		uint32_t action,
+		uint32_t notify_filter,
+		const std::u16string *new_name_path);
 std::string posixfs_object_op_get_path(
 		const x_smbd_object_t *smbd_object);
 void posixfs_object_op_destroy(x_smbd_object_t *smbd_object,
@@ -85,6 +93,8 @@ NTSTATUS posixfs_object_op_rename(x_smbd_object_t *smbd_object,
 		x_smbd_requ_t *smbd_requ,
 		bool replace_if_exists,
 		const std::u16string &new_path);
+void posixfs_op_release_object(x_smbd_object_t *smbd_object);
+uint32_t posixfs_op_get_attributes(const x_smbd_object_t *smbd_object);
 
 
 int posixfs_object_get_statex(const posixfs_object_t *posixfs_object, posixfs_statex_t *statex);
@@ -107,8 +117,22 @@ NTSTATUS posixfs_object_rename(x_smbd_object_t *smbd_object,
 		const std::u16string &dst_path,
 		bool replace_if_exists);
 
-x_smbd_object_t *x_smbd_posixfs_object_open_parent(const x_smbd_object_ops_t *ops,
-		const x_smbd_object_t *child_object);
+x_smbd_object_t *posixfs_open_object(
+		std::shared_ptr<x_smbd_topdir_t> &topdir,
+		const std::u16string &path, uint64_t path_data);
+
+NTSTATUS x_smbd_posixfs_open_object(x_smbd_object_t **psmbd_object,
+		std::shared_ptr<x_smbd_topdir_t> &topdir,
+		const std::u16string &path, uint64_t path_data);
+
+NTSTATUS x_smbd_posixfs_create_open(x_smbd_open_t **psmbd_open,
+		x_smbd_object_t *smbd_object,
+		x_smbd_requ_t *smbd_requ,
+		std::unique_ptr<x_smb2_state_create_t> &state,
+		long priv_data);
+std::unique_lock<std::mutex> x_smbd_posixfs_lock_object(x_smbd_object_t *smbd_object);
+
+x_smbd_object_t *x_smbd_posixfs_object_open_parent(const x_smbd_object_t *child_object);
 
 int posixfs_mktld(const std::shared_ptr<x_smbd_user_t> &smbd_user,
 		const x_smbd_topdir_t &topdir,

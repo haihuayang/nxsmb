@@ -47,7 +47,7 @@ struct named_pipe_t
 {
 	named_pipe_t(x_smbd_object_t *so, x_smbd_tcon_t *st,
 			uint32_t am, uint32_t sa)
-		: base(so, st, am, sa) { }
+		: base(so, st, am, sa, 0) { }
 	x_smbd_open_t base;
 	// const x_dcerpc_iface_t *iface;
 	std::vector<x_bind_context_t> bind_contexts;
@@ -392,6 +392,7 @@ static int named_pipe_write(
 
 static NTSTATUS ipc_object_op_read(
 		x_smbd_object_t *smbd_object,
+		x_smbd_open_t *smbd_open,
 		x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ,
 		std::unique_ptr<x_smb2_state_read_t> &state)
@@ -405,6 +406,7 @@ static NTSTATUS ipc_object_op_read(
 
 static NTSTATUS ipc_object_op_write(
 		x_smbd_object_t *smbd_object,
+		x_smbd_open_t *smbd_open,
 		x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ,
 		std::unique_ptr<x_smb2_state_write_t> &state)
@@ -485,6 +487,7 @@ static NTSTATUS ipc_object_op_ioctl(
 
 static NTSTATUS ipc_object_op_qdir(
 		x_smbd_object_t *smbd_object,
+		x_smbd_open_t *smbd_open,
 		x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ,
 		std::unique_ptr<x_smb2_state_qdir_t> &state)
@@ -527,36 +530,12 @@ static void ipc_object_op_destroy(x_smbd_object_t *smbd_object,
 	delete named_pipe;
 }
 
-static const x_smbd_object_ops_t x_smbd_ipc_object_ops = {
-	ipc_object_op_close,
-	ipc_object_op_read,
-	ipc_object_op_write,
-	nullptr, // op_lock
-	ipc_object_op_getinfo,
-	ipc_object_op_setinfo,
-	ipc_object_op_ioctl,
-	ipc_object_op_qdir,
-	ipc_object_op_notify,
-	nullptr, // op_lease_break
-	nullptr, // op_oplock_break
-	nullptr, // op_rename
-	nullptr, // op_set_delete_on_close
-	nullptr, // op_unlink
-	ipc_object_op_get_path,
-	ipc_object_op_destroy,
-};
-
 static x_smbd_ipc_object_t ipc_object_tbl[] = {
 	&x_smbd_dcerpc_srvsvc,
 	&x_smbd_dcerpc_wkssvc,
 	&x_smbd_dcerpc_dssetup,
 	&x_smbd_dcerpc_lsarpc,
 };
-
-x_smbd_ipc_object_t::x_smbd_ipc_object_t(const x_dcerpc_iface_t *iface)
-		: base(&x_smbd_ipc_object_ops), iface(iface)
-{
-}
 
 static x_smbd_ipc_object_t *find_ipc_object_by_name(const std::string &name)
 {
@@ -579,17 +558,45 @@ static const x_dcerpc_iface_t *find_iface_by_syntax(
 	return nullptr;
 }
 
-static NTSTATUS ipc_open_create(
-		x_smbd_ipc_object_t *ipc_object,
-		x_smbd_open_t **psmbd_open,
-		x_smbd_requ_t *smbd_requ,
-		std::unique_ptr<x_smb2_state_create_t> &state)
+static NTSTATUS ipc_open_object(x_smbd_object_t **psmbd_object,
+		std::shared_ptr<x_smbd_topdir_t> &topdir,
+		const std::u16string &path,
+		long path_priv_data)
 {
+	X_ASSERT(path_priv_data == 0);
+	std::string in_name_utf8 = x_convert_utf16_to_utf8(path);
+#if 0
+	std::u16string in_name;
+	in_name.reserve(state->in_name.size());
+	std::transform(std::begin(state->in_name), std::end(state->in_name),
+			std::back_inserter(in_name), tolower);
+#endif
+	x_smbd_ipc_object_t *ipc_object = find_ipc_object_by_name(in_name_utf8);
+	if (!ipc_object) {
+		return NT_STATUS_OBJECT_NAME_NOT_FOUND;
+	}
+	*psmbd_object = &ipc_object->base;
+	return NT_STATUS_OK;
+}
+
+static NTSTATUS ipc_create_open(x_smbd_open_t **psmbd_open,
+			x_smbd_object_t *smbd_object,
+			x_smbd_requ_t *smbd_requ,
+			const std::string &volume,
+			std::unique_ptr<x_smb2_state_create_t> &state,
+			long open_priv_data)
+{
+	X_ASSERT(open_priv_data == 0);
+	if (state->end_with_sep) {
+		return NT_STATUS_OBJECT_NAME_INVALID;
+	}
+
 	if (state->in_desired_access & idl::SEC_STD_DELETE) {
 		*psmbd_open = nullptr;
 		return NT_STATUS_ACCESS_DENIED;
 	}
 
+	x_smbd_ipc_object_t *ipc_object = from_smbd_object(smbd_object);
 	named_pipe_t *named_pipe = new named_pipe_t(&ipc_object->base,
 			smbd_requ->smbd_tcon,
 			state->in_desired_access,
@@ -608,28 +615,58 @@ static NTSTATUS ipc_open_create(
 	return NT_STATUS_OK;
 }
 
-
-static NTSTATUS ipc_op_create(x_smbd_open_t **psmbd_open,
-		x_smbd_requ_t *smbd_requ,
-		std::unique_ptr<x_smb2_state_create_t> &state)
+static void ipc_op_release_object(x_smbd_object_t *smbd_object)
 {
-	std::string in_name_utf8 = x_convert_utf16_to_utf8(state->in_name);
-#if 0
-	std::u16string in_name;
-	in_name.reserve(state->in_name.size());
-	std::transform(std::begin(state->in_name), std::end(state->in_name),
-			std::back_inserter(in_name), tolower);
-#endif
-	x_smbd_ipc_object_t *ipc_object = find_ipc_object_by_name(in_name_utf8);
-	if (!ipc_object) {
-		return NT_STATUS_OBJECT_NAME_NOT_FOUND;
-	}
-	return ipc_open_create(ipc_object, psmbd_open, smbd_requ, state);
+	// do nothing
+}
+
+static uint32_t ipc_op_get_attributes(const x_smbd_object_t *smbd_object)
+{
+	return FILE_ATTRIBUTE_NORMAL;
+}
+
+static const x_smbd_object_ops_t x_smbd_ipc_object_ops = {
+	ipc_open_object,
+	ipc_object_op_close,
+	ipc_object_op_read,
+	ipc_object_op_write,
+	nullptr, // op_lock
+	ipc_object_op_getinfo,
+	ipc_object_op_setinfo,
+	ipc_object_op_ioctl,
+	ipc_object_op_qdir,
+	ipc_object_op_notify,
+	nullptr, // op_lease_break
+	nullptr, // op_oplock_break
+	nullptr, // op_rename
+	nullptr, // op_set_delete_on_close
+	nullptr, // op_unlink
+	nullptr, // notify_fname
+	ipc_object_op_get_path,
+	ipc_object_op_destroy,
+	ipc_op_release_object,
+	ipc_op_get_attributes,
+};
+
+static std::shared_ptr<x_smbd_topdir_t> ipc_get_topdir()
+{
+	static std::shared_ptr<x_smbd_topdir_t> topdir = 
+		x_smbd_topdir_create("", &x_smbd_ipc_object_ops);
+	return topdir;
+}
+
+x_smbd_ipc_object_t::x_smbd_ipc_object_t(const x_dcerpc_iface_t *iface)
+		: base(ipc_get_topdir(), 0), iface(iface)
+{
+	base.flags = x_smbd_object_t::flag_initialized;
+	base.type = x_smbd_object_t::type_file;
 }
 
 struct ipc_share_t : x_smbd_share_t
 {
-	ipc_share_t() : x_smbd_share_t("ipc$") {}
+	ipc_share_t() : x_smbd_share_t("ipc$")
+			, topdir(ipc_get_topdir()) {
+	}
 	uint8_t get_type() const override {
 		return SMB2_SHARE_TYPE_PIPE;
 	}
@@ -639,11 +676,20 @@ struct ipc_share_t : x_smbd_share_t
 	bool abe_enabled() const override {
 		return false;
 	}
-	NTSTATUS create_open(x_smbd_open_t **psmbd_open,
-			x_smbd_requ_t *smbd_requ,
-			const std::string &volume,
-			std::unique_ptr<x_smb2_state_create_t> &state) override {
-		return ipc_op_create(psmbd_open, smbd_requ, state);
+
+	NTSTATUS resolve_path(std::shared_ptr<x_smbd_topdir_t> &topdir,
+			std::u16string &out_path,
+			long &path_priv_data,
+			long &open_priv_data,
+			bool dfs,
+			const char16_t *in_path_begin,
+			const char16_t *in_path_end,
+			const std::string &volume) override {
+		topdir = this->topdir;
+		out_path.assign(in_path_begin, in_path_end);
+		path_priv_data = 0;
+		open_priv_data = 0;
+		return NT_STATUS_OK;
 	}
 	NTSTATUS get_dfs_referral(x_dfs_referral_resp_t &dfs_referral,
 			const char16_t *in_full_path_begin,
@@ -655,6 +701,17 @@ struct ipc_share_t : x_smbd_share_t
 	{
 		return NT_STATUS_FS_DRIVER_REQUIRED;
 	}
+
+	NTSTATUS create_open(x_smbd_open_t **psmbd_open,
+			x_smbd_object_t *smbd_object,
+			x_smbd_requ_t *smbd_requ,
+			const std::string &volume,
+			std::unique_ptr<x_smb2_state_create_t> &state,
+			long open_priv_data) override {
+		return ipc_create_open(psmbd_open, smbd_object, smbd_requ,
+				volume, state, open_priv_data);
+	}
+	const std::shared_ptr<x_smbd_topdir_t> topdir;
 };
 
 std::shared_ptr<x_smbd_share_t> x_smbd_ipc_share_create()
@@ -666,4 +723,10 @@ int x_smbd_ipc_init()
 {
 	return 0;
 }
+#if 0
+static std::unique_lock<std::mutex> ipc_lock_object(x_smbd_object_t *psmbd_object)
+{
+	return {};
+}
+#endif
 

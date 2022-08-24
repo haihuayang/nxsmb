@@ -35,6 +35,17 @@ struct x_dfs_referral_resp_t
 	std::vector<x_referral_t> referrals;
 };
 
+struct x_smbd_object_ops_t;
+struct x_smbd_topdir_t
+{
+	x_smbd_topdir_t(const x_smbd_object_ops_t *ops, int fd);
+	~x_smbd_topdir_t();
+	const x_smbd_object_ops_t * const ops;
+	uint64_t const uuid;
+	const int fd;
+	std::atomic<uint32_t> watch_tree_cnt{0};
+};
+
 struct x_smbd_share_t
 {
 	x_smbd_share_t(const std::string &name) : name(name) { }
@@ -42,10 +53,6 @@ struct x_smbd_share_t
 	virtual uint8_t get_type() const = 0;
 	virtual bool is_dfs() const = 0;
 	virtual bool abe_enabled() const = 0;
-	virtual NTSTATUS create_open(x_smbd_open_t **psmbd_open,
-			x_smbd_requ_t *smbd_requ,
-			const std::string &volume,
-			std::unique_ptr<x_smb2_state_create_t> &state) = 0;
 	virtual NTSTATUS get_dfs_referral(x_dfs_referral_resp_t &dfs_referral,
 			const char16_t *in_full_path_begin,
 			const char16_t *in_full_path_end,
@@ -53,13 +60,20 @@ struct x_smbd_share_t
 			const char16_t *in_server_end,
 			const char16_t *in_share_begin,
 			const char16_t *in_share_end) const = 0;
-#if 0
-	/* TODO looks like resolve_path should not be here */
-	virtual NTSTATUS resolve_path(const std::u16string &in_path,
-		bool dfs,
-		std::shared_ptr<x_smbd_topdir_t> &topdir,
-		std::u16string &path) = 0;
-#endif
+	virtual NTSTATUS resolve_path(std::shared_ptr<x_smbd_topdir_t> &topdir,
+			std::u16string &out_path,
+			long &path_priv_data,
+			long &open_priv_data,
+			bool dfs,
+			const char16_t *in_path_begin,
+			const char16_t *in_path_end,
+			const std::string &volume) = 0;
+	virtual NTSTATUS create_open(x_smbd_open_t **psmbd_open,
+			x_smbd_object_t *smbd_object,
+			x_smbd_requ_t *smbd_requ,
+			const std::string &volume,
+			std::unique_ptr<x_smb2_state_create_t> &state,
+			long open_priv_data) = 0;
 	std::string name;
 	bool read_only = false;
 	bool dfs_test = false;
@@ -67,18 +81,7 @@ struct x_smbd_share_t
 	std::vector<std::string> vgs;
 };
 
-struct x_smbd_topdir_t;
-struct x_smbd_topdir_t
-{
-	x_smbd_topdir_t();
-	~x_smbd_topdir_t();
-	// const std::shared_ptr<x_smbd_share_t> smbd_share;
-	uint64_t const uuid;
-	int fd = -1;
-	std::atomic<uint32_t> watch_tree_cnt{0};
-};
-
-std::shared_ptr<x_smbd_topdir_t> x_smbd_topdir_create(const std::string &path);
+std::shared_ptr<x_smbd_topdir_t> x_smbd_topdir_create(const std::string &path, const x_smbd_object_ops_t *ops);
 
 std::shared_ptr<x_smbd_share_t> x_smbd_ipc_share_create();
 std::shared_ptr<x_smbd_share_t> x_smbd_dfs_share_create(const x_smbd_conf_t &smbd_conf,
