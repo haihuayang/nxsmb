@@ -168,7 +168,7 @@ struct posixfs_object_t
 	bool statex_modified{false}; // TODO use flags
 	posixfs_statex_t statex;
 	/* protected by bucket mutex */
-	std::u16string req_path;
+	// std::u16string req_path;
 	std::string unix_path;
 	/* protected by object mutex */
 	x_tp_ddlist_t<posixfs_open_object_traits> open_list;
@@ -255,7 +255,7 @@ static posixfs_object_t *posixfs_object_lookup(
 	for (x_dqlink_t *link = bucket.head.get_front(); link; link = link->get_next()) {
 		elem = X_CONTAINER_OF(link, posixfs_object_t, hash_link);
 		if (elem->hash == hash && elem->base.topdir->uuid == topdir->uuid
-				&& elem->req_path == path) {
+				&& elem->base.path == path) {
 			matched_object = elem;
 			break;
 		}
@@ -639,7 +639,7 @@ static void notify_fname(
 {
 	X_LOG_DBG("path=%s action=%d filter=0x%x", posixfs_object->unix_path.c_str(),
 			action, notify_filter);
-	notify_fname_intl(posixfs_object->base.topdir, posixfs_object->req_path,
+	notify_fname_intl(posixfs_object->base.topdir, posixfs_object->base.path,
 			action, notify_filter, nullptr);
 }
 
@@ -674,7 +674,7 @@ static NTSTATUS rename_object_intl(posixfs_object_pool_t::bucket_t &dst_bucket,
 	for (x_dqlink_t *link = dst_bucket.head.get_front(); link; link = link->get_next()) {
 		posixfs_object_t *elem = X_CONTAINER_OF(link, posixfs_object_t, hash_link);
 		if (elem->hash == dst_hash && elem->base.topdir->uuid == topdir->uuid
-				&& elem->req_path == dst_path) {
+				&& elem->base.path == dst_path) {
 			dst_object = elem;
 			break;
 		}
@@ -711,10 +711,10 @@ static NTSTATUS rename_object_intl(posixfs_object_pool_t::bucket_t &dst_bucket,
 		delete dst_object;
 	}
 
-	src_path = src_object->req_path;
+	src_path = src_object->base.path;
 	src_bucket.head.remove(&src_object->hash_link);
 	src_object->hash = dst_hash;
-	src_object->req_path = dst_path;
+	src_object->base.path = dst_path;
 	src_object->unix_path = dst_unix_path;
 	dst_bucket.head.push_front(&src_object->hash_link);
 	return NT_STATUS_OK;
@@ -1306,7 +1306,7 @@ static int open_parent(const std::shared_ptr<x_smbd_topdir_t> &topdir,
 static NTSTATUS get_parent_sd(const posixfs_object_t *posixfs_object,
 		std::shared_ptr<idl::security_descriptor> &psd)
 {
-	int fd = open_parent(posixfs_object->base.topdir, posixfs_object->req_path);
+	int fd = open_parent(posixfs_object->base.topdir, posixfs_object->base.path);
 	if (fd == -1) {
 		return x_map_nt_error_from_unix(-errno);
 	}
@@ -3033,13 +3033,6 @@ NTSTATUS posixfs_object_op_set_delete_on_close(
 	return posixfs_object_set_delete_on_close(posixfs_object, delete_on_close);
 }
 
-std::string posixfs_object_op_get_path(
-		const x_smbd_object_t *smbd_object)
-{
-	posixfs_object_t *posixfs_object = posixfs_object_from_base_t::container(smbd_object);
-	return posixfs_object->unix_path;
-}
-
 void posixfs_object_op_destroy(x_smbd_object_t *smbd_object,
 		x_smbd_open_t *smbd_open)
 {
@@ -3127,7 +3120,7 @@ posixfs_object_t::posixfs_object_t(
 		uint64_t h,
 		const std::shared_ptr<x_smbd_topdir_t> &topdir,
 		const std::u16string &p, uint64_t path_data)
-	: base(topdir, path_data), hash(h), req_path(p)
+	: base(topdir, path_data, p), hash(h)
 {
 }
 
@@ -3160,7 +3153,7 @@ int posixfs_object_get_statex(const posixfs_object_t *posixfs_object,
 int posixfs_object_get_parent_statex(const posixfs_object_t *dir_obj,
 		posixfs_statex_t *statex)
 {
-	if (dir_obj->req_path.empty()) {
+	if (dir_obj->base.path.empty()) {
 		/* TODO should lock dir_obj */
 		/* not go beyond share root */
 		*statex = dir_obj->statex;

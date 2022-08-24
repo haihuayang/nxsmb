@@ -257,7 +257,6 @@ X_DCERPC_FUNCTION_ENUM_lsarpc
 
 const x_dcerpc_iface_t x_smbd_dcerpc_lsarpc = {
 	{ idl::lsarpc_uuid, idl::lsarpc_version },
-	"lsarpc",
 	X_ARRAY_SIZE(lsarpc_fns),
 	lsarpc_fns,
 };

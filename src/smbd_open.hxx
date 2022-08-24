@@ -123,7 +123,6 @@ struct x_smbd_object_ops_t
 			uint32_t action,
 			uint32_t notify_filter,
 			const std::u16string *new_name_path);
-	std::string (*get_path)(const x_smbd_object_t *smbd_object);
 	void (*destroy)(x_smbd_object_t *smbd_object, x_smbd_open_t *smbd_open);
 	void (*release_object)(x_smbd_object_t *smbd_object);
 	uint32_t (*get_attributes)(const x_smbd_object_t *smbd_object);
@@ -131,7 +130,8 @@ struct x_smbd_object_ops_t
 
 struct x_smbd_object_t
 {
-	x_smbd_object_t(const std::shared_ptr<x_smbd_topdir_t> &topdir, long priv_data);
+	x_smbd_object_t(const std::shared_ptr<x_smbd_topdir_t> &topdir, long priv_data,
+			const std::u16string &path);
 	~x_smbd_object_t();
 	std::shared_ptr<x_smbd_topdir_t> topdir;
 	const long priv_data;
@@ -149,6 +149,7 @@ struct x_smbd_object_t
 		type_dir = 2,
 	};
 	uint16_t type = type_not_exist;
+	std::u16string path;
 };
 #if 0
 static inline std::unique_lock<std::mutex> x_smbd_lock_object(x_smbd_object_t *smbd_object)
@@ -329,7 +330,7 @@ static inline NTSTATUS x_smbd_object_unlink(
 static inline std::string x_smbd_object_get_path(
 		const x_smbd_object_t *smbd_object)
 {
-	return smbd_object->topdir->ops->get_path(smbd_object);
+	return x_convert_utf16_to_utf8(smbd_object->path);
 }
 
 static inline std::string x_smbd_open_op_get_path(

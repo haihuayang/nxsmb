@@ -62,7 +62,7 @@ struct named_pipe_t
 
 struct x_smbd_ipc_object_t
 {
-	x_smbd_ipc_object_t(const x_dcerpc_iface_t *iface);
+	x_smbd_ipc_object_t(const std::u16string &name, const x_dcerpc_iface_t *iface);
 	x_smbd_object_t base;
 	const x_dcerpc_iface_t * const iface;
 };
@@ -220,7 +220,7 @@ static NTSTATUS process_dcerpc_bind(
 	} else {
 		bind_ack.assoc_group_id = 0x53f0;
 	}
-	bind_ack.secondary_address= "\\PIPE\\" + ipc_object->iface->iface_name;
+	bind_ack.secondary_address= "\\PIPE\\" + x_convert_utf16_to_utf8(ipc_object->base.path);
 
 	x_ndr_push(bind_ack, body_output, ndr_flags);
 	resp_type = idl::DCERPC_PKT_BIND_ACK;
@@ -516,13 +516,6 @@ static NTSTATUS ipc_object_op_close(
 	return NT_STATUS_OK;
 }
 
-static std::string ipc_object_op_get_path(
-		const x_smbd_object_t *smbd_object)
-{
-	const x_smbd_ipc_object_t *ipc_object = from_smbd_object(smbd_object);
-	return ipc_object->iface->iface_name;
-}
-
 static void ipc_object_op_destroy(x_smbd_object_t *smbd_object,
 		x_smbd_open_t *smbd_open)
 {
@@ -530,17 +523,19 @@ static void ipc_object_op_destroy(x_smbd_object_t *smbd_object,
 	delete named_pipe;
 }
 
+#define USTR(x) u##x
+#define DECL_RPC(x) { USTR(#x), &x_smbd_dcerpc_##x }
 static x_smbd_ipc_object_t ipc_object_tbl[] = {
-	&x_smbd_dcerpc_srvsvc,
-	&x_smbd_dcerpc_wkssvc,
-	&x_smbd_dcerpc_dssetup,
-	&x_smbd_dcerpc_lsarpc,
+	DECL_RPC(srvsvc),
+	DECL_RPC(wkssvc),
+	DECL_RPC(dssetup),
+	DECL_RPC(lsarpc),
 };
 
-static x_smbd_ipc_object_t *find_ipc_object_by_name(const std::string &name)
+static x_smbd_ipc_object_t *find_ipc_object_by_name(const std::u16string &path)
 {
 	for (auto &ipc: ipc_object_tbl) {
-		if (strcasecmp(ipc.iface->iface_name.c_str(), name.c_str()) == 0) {
+		if (path == ipc.base.path) {
 			return &ipc;
 		}
 	}
@@ -564,14 +559,12 @@ static NTSTATUS ipc_open_object(x_smbd_object_t **psmbd_object,
 		long path_priv_data)
 {
 	X_ASSERT(path_priv_data == 0);
-	std::string in_name_utf8 = x_convert_utf16_to_utf8(path);
-#if 0
 	std::u16string in_name;
-	in_name.reserve(state->in_name.size());
-	std::transform(std::begin(state->in_name), std::end(state->in_name),
+	in_name.reserve(path.size());
+	std::transform(std::begin(path), std::end(path),
 			std::back_inserter(in_name), tolower);
-#endif
-	x_smbd_ipc_object_t *ipc_object = find_ipc_object_by_name(in_name_utf8);
+
+	x_smbd_ipc_object_t *ipc_object = find_ipc_object_by_name(in_name);
 	if (!ipc_object) {
 		return NT_STATUS_OBJECT_NAME_NOT_FOUND;
 	}
@@ -642,7 +635,6 @@ static const x_smbd_object_ops_t x_smbd_ipc_object_ops = {
 	nullptr, // op_set_delete_on_close
 	nullptr, // op_unlink
 	nullptr, // notify_fname
-	ipc_object_op_get_path,
 	ipc_object_op_destroy,
 	ipc_op_release_object,
 	ipc_op_get_attributes,
@@ -655,8 +647,9 @@ static std::shared_ptr<x_smbd_topdir_t> ipc_get_topdir()
 	return topdir;
 }
 
-x_smbd_ipc_object_t::x_smbd_ipc_object_t(const x_dcerpc_iface_t *iface)
-		: base(ipc_get_topdir(), 0), iface(iface)
+x_smbd_ipc_object_t::x_smbd_ipc_object_t(const std::u16string &path,
+		const x_dcerpc_iface_t *iface)
+		: base(ipc_get_topdir(), 0, path), iface(iface)
 {
 	base.flags = x_smbd_object_t::flag_initialized;
 	base.type = x_smbd_object_t::type_file;

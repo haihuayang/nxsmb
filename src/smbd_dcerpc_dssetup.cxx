@@ -58,7 +58,6 @@ X_DCERPC_FUNCTION_ENUM_dssetup
 
 const x_dcerpc_iface_t x_smbd_dcerpc_dssetup = {
 	{ idl::dssetup_uuid, idl::dssetup_version },
-	"dssetup",
 	X_ARRAY_SIZE(dssetup_fns),
 	dssetup_fns,
 };

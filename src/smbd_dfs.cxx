@@ -774,7 +774,6 @@ static const x_smbd_object_ops_t dfs_root_object_ops = {
 	dfs_root_object_op_set_delete_on_close,
 	dfs_root_object_op_unlink,
 	dfs_root_notify_fname,
-	posixfs_object_op_get_path,
 	posixfs_object_op_destroy,
 	posixfs_op_release_object,
 };
@@ -1085,7 +1084,6 @@ static const x_smbd_object_ops_t dfs_volume_object_ops = {
 	posixfs_object_op_set_delete_on_close,
 	posixfs_object_op_unlink,
 	posixfs_notify_fname,
-	posixfs_object_op_get_path,
 	posixfs_object_op_destroy,
 	posixfs_op_release_object,
 };

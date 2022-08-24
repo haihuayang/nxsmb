@@ -84,8 +84,6 @@ void posixfs_notify_fname(
 		uint32_t action,
 		uint32_t notify_filter,
 		const std::u16string *new_name_path);
-std::string posixfs_object_op_get_path(
-		const x_smbd_object_t *smbd_object);
 void posixfs_object_op_destroy(x_smbd_object_t *smbd_object,
 		x_smbd_open_t *smbd_open);
 NTSTATUS posixfs_object_op_rename(x_smbd_object_t *smbd_object,

@@ -76,7 +76,6 @@ X_DCERPC_FUNCTION_ENUM_wkssvc
 
 const x_dcerpc_iface_t x_smbd_dcerpc_wkssvc = {
 	{ idl::wkssvc_uuid, idl::wkssvc_version },
-	"wkssvc",
 	X_ARRAY_SIZE(wkssvc_fns),
 	wkssvc_fns,
 };

@@ -31,7 +31,6 @@ typedef idl::dcerpc_nca_status (*x_dcerpc_rpc_fn_t)(
 
 struct x_dcerpc_iface_t {
 	idl::ndr_syntax_id syntax_id;
-	const std::string iface_name;
 	uint32_t n_cmd;
 	const x_dcerpc_rpc_fn_t *cmds;
 };
