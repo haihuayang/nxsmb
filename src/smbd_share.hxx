@@ -73,7 +73,8 @@ struct x_smbd_share_t
 			x_smbd_requ_t *smbd_requ,
 			const std::string &volume,
 			std::unique_ptr<x_smb2_state_create_t> &state,
-			long open_priv_data) = 0;
+			long open_priv_data,
+			std::vector<x_smb2_change_t>& changes) = 0;
 	std::string name;
 	bool read_only = false;
 	bool dfs_test = false;

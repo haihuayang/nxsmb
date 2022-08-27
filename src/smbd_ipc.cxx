@@ -455,7 +455,8 @@ static NTSTATUS ipc_object_op_setinfo(
 		x_smbd_object_t *smbd_object,
 		x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ,
-		std::unique_ptr<x_smb2_state_setinfo_t> &state)
+		std::unique_ptr<x_smb2_state_setinfo_t> &state,
+		std::vector<x_smb2_change_t> &changes)
 {
 	return NT_STATUS_NOT_SUPPORTED;
 }
@@ -508,7 +509,8 @@ static NTSTATUS ipc_object_op_close(
 		x_smbd_object_t *smbd_object,
 		x_smbd_open_t *smbd_open,
 		x_smbd_requ_t *smbd_requ,
-		std::unique_ptr<x_smb2_state_close_t> &state)
+		std::unique_ptr<x_smb2_state_close_t> &state,
+		std::vector<x_smb2_change_t> &changes)
 {
 	if (smbd_requ) {
 		state->out_flags = 0;
@@ -553,10 +555,11 @@ static const x_dcerpc_iface_t *find_iface_by_syntax(
 	return nullptr;
 }
 
-static NTSTATUS ipc_open_object(x_smbd_object_t **psmbd_object,
+static x_smbd_object_t *ipc_open_object(NTSTATUS *pstatus,
 		std::shared_ptr<x_smbd_topdir_t> &topdir,
 		const std::u16string &path,
-		long path_priv_data)
+		long path_priv_data,
+		bool create_if)
 {
 	X_ASSERT(path_priv_data == 0);
 	std::u16string in_name;
@@ -566,10 +569,9 @@ static NTSTATUS ipc_open_object(x_smbd_object_t **psmbd_object,
 
 	x_smbd_ipc_object_t *ipc_object = find_ipc_object_by_name(in_name);
 	if (!ipc_object) {
-		return NT_STATUS_OBJECT_NAME_NOT_FOUND;
+		*pstatus = NT_STATUS_OBJECT_NAME_NOT_FOUND;
 	}
-	*psmbd_object = &ipc_object->base;
-	return NT_STATUS_OK;
+	return &ipc_object->base;
 }
 
 static NTSTATUS ipc_create_open(x_smbd_open_t **psmbd_open,
@@ -594,6 +596,11 @@ static NTSTATUS ipc_create_open(x_smbd_open_t **psmbd_open,
 			smbd_requ->smbd_tcon,
 			state->in_desired_access,
 			state->in_share_access);
+	if (!x_smbd_open_store(&named_pipe->base)) {
+		delete named_pipe;
+		*psmbd_open = nullptr;
+		return NT_STATUS_INSUFFICIENT_RESOURCES;
+	}
 
 	state->out_info.out_allocation_size = 4096;
 	state->out_info.out_file_attributes = FILE_ATTRIBUTE_NORMAL;
@@ -700,7 +707,8 @@ struct ipc_share_t : x_smbd_share_t
 			x_smbd_requ_t *smbd_requ,
 			const std::string &volume,
 			std::unique_ptr<x_smb2_state_create_t> &state,
-			long open_priv_data) override {
+			long open_priv_data,
+			std::vector<x_smb2_change_t> &changes) override {
 		return ipc_create_open(psmbd_open, smbd_object, smbd_requ,
 				volume, state, open_priv_data);
 	}

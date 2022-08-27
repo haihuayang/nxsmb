@@ -45,10 +45,11 @@ struct x_smbd_open_t
 struct x_smbd_object_t;
 struct x_smbd_object_ops_t
 {
-	NTSTATUS (*open_object)(x_smbd_object_t **psmbd_object,
+	x_smbd_object_t *(*open_object)(NTSTATUS *pstatus,
 			std::shared_ptr<x_smbd_topdir_t> &topdir,
 			const std::u16string &path,
-			long path_priv_data);
+			long path_priv_data,
+			bool create_if_missed);
 #if 0
 	std::unique_lock<std::mutex> (*lock_object)(x_smbd_object_t *smbd_object);
 	NTSTATUS (*create_open)(x_smbd_open_t **psmbd_open,
@@ -61,7 +62,8 @@ struct x_smbd_object_ops_t
 	NTSTATUS (*close)(x_smbd_object_t *smbd_object,
 			x_smbd_open_t *smbd_open,
 			x_smbd_requ_t *smbd_requ,
-			std::unique_ptr<x_smb2_state_close_t> &state);
+			std::unique_ptr<x_smb2_state_close_t> &state,
+			std::vector<x_smb2_change_t> &changes);
 	NTSTATUS (*read)(x_smbd_object_t *smbd_object,
 			x_smbd_open_t *smbd_open,
 			x_smbd_conn_t *smbd_conn,
@@ -85,7 +87,8 @@ struct x_smbd_object_ops_t
 	NTSTATUS (*setinfo)(x_smbd_object_t *smbd_object,
 			x_smbd_conn_t *smbd_conn,
 			x_smbd_requ_t *smbd_requ,
-			std::unique_ptr<x_smb2_state_setinfo_t> &state);
+			std::unique_ptr<x_smb2_state_setinfo_t> &state,
+			std::vector<x_smb2_change_t> &changes);
 	NTSTATUS (*ioctl)(x_smbd_object_t *smbd_object,
 			x_smbd_conn_t *smbd_conn,
 			x_smbd_requ_t *smbd_requ,
@@ -112,17 +115,19 @@ struct x_smbd_object_ops_t
 			x_smbd_open_t *smbd_open,
 			x_smbd_requ_t *smbd_requ,
 			bool replace_if_exists,
-			const std::u16string &new_path);
+			const std::u16string &new_path,
+			std::vector<x_smb2_change_t> &changes);
 	NTSTATUS (*set_delete_on_close)(x_smbd_object_t *smbd_object,
 			x_smbd_open_t *smbd_open,
 			x_smbd_requ_t *smbd_requ,
 			bool delete_on_close);
 	NTSTATUS (*unlink)(x_smbd_object_t *smbd_object, int fd);
-	void (*notify_fname)(std::shared_ptr<x_smbd_topdir_t> topdir,
-			const std::u16string req_path,
-			uint32_t action,
+	void (*notify_change)(x_smbd_object_t *smbd_object,
+			uint32_t notify_action,
 			uint32_t notify_filter,
-			const std::u16string *new_name_path);
+			const std::u16string &path,
+			const std::u16string *new_name_path,
+			bool last_level);
 	void (*destroy)(x_smbd_object_t *smbd_object, x_smbd_open_t *smbd_open);
 	void (*release_object)(x_smbd_object_t *smbd_object);
 	uint32_t (*get_attributes)(const x_smbd_object_t *smbd_object);
@@ -163,8 +168,14 @@ static inline NTSTATUS x_smbd_open_op_close(
 		std::unique_ptr<x_smb2_state_close_t> &state)
 {
 	x_smbd_object_t *smbd_object = smbd_open->smbd_object;
-	return smbd_object->topdir->ops->close(smbd_object, smbd_open,
-			smbd_requ, state);
+	auto topdir = smbd_object->topdir;
+	std::vector<x_smb2_change_t> changes;
+	auto status = topdir->ops->close(smbd_object, smbd_open,
+			smbd_requ, state, changes);
+	if (NT_STATUS_IS_OK(status)) {
+		x_smbd_notify_change(topdir, changes);
+	}
+	return status;
 }
 
 static inline NTSTATUS x_smbd_open_op_read(
@@ -222,11 +233,12 @@ static inline NTSTATUS x_smbd_open_op_getinfo(x_smbd_open_t *smbd_open,
 static inline NTSTATUS x_smbd_open_op_setinfo(x_smbd_open_t *smbd_open,
 		x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ,
-		std::unique_ptr<x_smb2_state_setinfo_t> &state)
+		std::unique_ptr<x_smb2_state_setinfo_t> &state,
+		std::vector<x_smb2_change_t> &changes)
 {
 	x_smbd_object_t *smbd_object = smbd_open->smbd_object;
 	return smbd_object->topdir->ops->setinfo(smbd_object,
-			smbd_conn, smbd_requ, state);
+			smbd_conn, smbd_requ, state, changes);
 }
 
 static inline NTSTATUS x_smbd_open_op_ioctl(
@@ -303,11 +315,12 @@ static inline NTSTATUS x_smbd_open_op_rename(
 		x_smbd_open_t *smbd_open,
 		x_smbd_requ_t *smbd_requ,
 		bool replace_if_exists,
-		const std::u16string &new_path)
+		const std::u16string &new_path,
+		std::vector<x_smb2_change_t> &changes)
 {
 	x_smbd_object_t *smbd_object = smbd_open->smbd_object;
 	return smbd_object->topdir->ops->rename(smbd_object, smbd_open,
-			smbd_requ, replace_if_exists, new_path);
+			smbd_requ, replace_if_exists, new_path, changes);
 }
 
 static inline NTSTATUS x_smbd_open_op_set_delete_on_close(
@@ -318,6 +331,17 @@ static inline NTSTATUS x_smbd_open_op_set_delete_on_close(
 	x_smbd_object_t *smbd_object = smbd_open->smbd_object;
 	return smbd_object->topdir->ops->set_delete_on_close(smbd_object, smbd_open,
 			smbd_requ, delete_on_close);
+}
+
+static inline void x_smbd_object_notify_change(x_smbd_object_t *smbd_object,
+			uint32_t notify_action,
+			uint32_t notify_filter,
+			const std::u16string &path,
+			const std::u16string *new_path,
+			bool last_level)
+{
+	return smbd_object->topdir->ops->notify_change(smbd_object,
+			notify_action, notify_filter, path, new_path, last_level);
 }
 
 static inline NTSTATUS x_smbd_object_unlink(

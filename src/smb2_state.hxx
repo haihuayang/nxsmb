@@ -10,6 +10,14 @@
 #include "smb2.hxx"
 #include "include/librpc/security.hxx"
 
+struct x_smb2_change_t
+{
+	uint32_t action;
+	uint32_t filter;
+	std::u16string path;
+	std::u16string new_path;
+};
+
 struct x_smb2_state_read_t
 {
 	uint8_t in_flags;
@@ -202,6 +210,7 @@ struct x_smb2_state_create_t
 	std::u16string in_strm;
 
 	uint8_t out_create_flags;
+	bool base_created = false;
 	uint32_t out_create_action;
 	uint32_t out_maximal_access{0};
 	uint8_t out_qfid_info[32];

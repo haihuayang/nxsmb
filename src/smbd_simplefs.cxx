@@ -54,16 +54,6 @@ static NTSTATUS simplefs_object_op_qdir(
 			simplefs_process_entry);
 }
 
-static void simplefs_notify_fname(std::shared_ptr<x_smbd_topdir_t> topdir,
-		const std::u16string req_path,
-		uint32_t action,
-		uint32_t notify_filter,
-		const std::u16string *new_name_path)
-{
-	X_TODO;
-}
-
-
 static const x_smbd_object_ops_t simplefs_object_ops = {
 	nullptr,
 	posixfs_object_op_close,
@@ -80,7 +70,7 @@ static const x_smbd_object_ops_t simplefs_object_ops = {
 	posixfs_object_op_rename,
 	posixfs_object_op_set_delete_on_close,
 	posixfs_object_op_unlink,
-	simplefs_notify_fname,
+	posixfs_object_notify_change,
 	posixfs_object_op_destroy,
 	posixfs_op_release_object,
 };
@@ -106,7 +96,8 @@ struct simplefs_share_t : x_smbd_share_t
 			x_smbd_requ_t *smbd_requ,
 			const std::string &volume,
 			std::unique_ptr<x_smb2_state_create_t> &state,
-			long open_priv_data) override;
+			long open_priv_data,
+			std::vector<x_smb2_change_t> &changes) override;
 
 	NTSTATUS resolve_path(std::shared_ptr<x_smbd_topdir_t> &topdir,
 			std::u16string &out_path,
@@ -165,9 +156,12 @@ NTSTATUS simplefs_share_t::create_open(x_smbd_open_t **psmbd_open,
 		x_smbd_requ_t *smbd_requ,
 		const std::string &volume,
 		std::unique_ptr<x_smb2_state_create_t> &state,
-		long open_priv_data)
+		long open_priv_data,
+		std::vector<x_smb2_change_t> &changes)
 {
-	return x_smbd_posixfs_create_open(psmbd_open, smbd_object, smbd_requ, state, open_priv_data);
+	std::lock_guard<std::mutex> lock(smbd_object->mutex);
+	return x_smbd_posixfs_create_open(psmbd_open, smbd_object, smbd_requ,
+			state, open_priv_data, changes);
 }
 
 std::shared_ptr<x_smbd_share_t> x_smbd_simplefs_share_create(

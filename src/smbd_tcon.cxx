@@ -141,17 +141,22 @@ NTSTATUS x_smbd_tcon_op_create(x_smbd_tcon_t *smbd_tcon,
 		return status;
 	}
 
-	x_smbd_object_t *smbd_object{};
-	status = topdir->ops->open_object(&smbd_object, topdir, path, path_priv_data);
-	if (!NT_STATUS_IS_OK(status)) {
+	x_smbd_object_t *smbd_object = topdir->ops->open_object(&status,
+			topdir, path, path_priv_data, true);
+	if (!smbd_object) {
 		return status;
 	}
 
+	/* changes may include many stream deletion */
+	std::vector<x_smb2_change_t> changes;
        	x_smbd_open_t *smbd_open = nullptr;
 	/* TODO should we check the open limit before create the open */
 	status = smbd_tcon->smbd_share->create_open(&smbd_open, smbd_object, 
 			smbd_requ, smbd_tcon->volume, state,
-			open_priv_data);
+			open_priv_data,
+			changes);
+
+	x_smbd_notify_change(topdir, changes);
 
 	x_smbd_object_release(smbd_object);
 
@@ -163,19 +168,10 @@ NTSTATUS x_smbd_tcon_op_create(x_smbd_tcon_t *smbd_tcon,
 		{
 			std::lock_guard<std::mutex> lock(smbd_tcon->mutex);
 			if (smbd_tcon->state != x_smbd_tcon_t::S_ACTIVE) {
-				x_smbd_open_op_destroy(smbd_open);
+				x_smbd_open_terminate(smbd_open);
 				return NT_STATUS_NETWORK_NAME_DELETED;
 			}
 			smbd_tcon->open_list.push_back(&smbd_open->tcon_link);
-		}
-		if (!x_smbd_open_store(smbd_open)) {
-			X_LOG_WARN("has no space for open although we create it");
-			{
-				std::lock_guard<std::mutex> lock(smbd_tcon->mutex);
-				smbd_tcon->open_list.remove(&smbd_open->tcon_link);
-			}
-			x_smbd_open_op_destroy(smbd_open);
-			return NT_STATUS_INSUFFICIENT_RESOURCES;
 		}
 		x_smbd_ref_inc(smbd_open); // ref by smbd_tcon open_list
 		smbd_requ->smbd_open = x_smbd_ref_inc(smbd_open);

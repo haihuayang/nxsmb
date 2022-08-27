@@ -241,7 +241,7 @@ static posixfs_object_t *posixfs_object_lookup(
 		const std::shared_ptr<x_smbd_topdir_t> &topdir,
 		const std::u16string &path,
 		uint64_t path_data,
-		bool create)
+		bool create_if)
 {
 	auto hash = hash_object(topdir, path);
 	auto &pool = posixfs_object_pool;
@@ -262,7 +262,7 @@ static posixfs_object_t *posixfs_object_lookup(
 	}
 
 	if (!matched_object) {
-		if (!create) {
+		if (!create_if) {
 			return nullptr;
 		}
 		if (elem && elem->use_count == 0 &&
@@ -272,6 +272,7 @@ static posixfs_object_t *posixfs_object_lookup(
 			matched_object = elem;
 		} else {
 			matched_object = new posixfs_object_t(hash, topdir, path, path_data);
+			X_ASSERT(matched_object);
 			bucket.head.push_front(&matched_object->hash_link);
 			++pool.count;
 		}
@@ -509,7 +510,7 @@ struct posixfs_notify_evt_t
 	x_smbd_requ_t *smbd_requ;
 	std::vector<std::pair<uint32_t, std::u16string>> notify_changes;
 };
-#if 0
+
 static void posixfs_notify_func(x_smbd_conn_t *smbd_conn, x_fdevt_user_t *fdevt_user, bool terminated)
 {
 	posixfs_notify_evt_t *evt = X_CONTAINER_OF(fdevt_user, posixfs_notify_evt_t, base);
@@ -526,23 +527,19 @@ static void posixfs_notify_func(x_smbd_conn_t *smbd_conn, x_fdevt_user_t *fdevt_
 	delete evt;
 }
 
-static void notify_fname_one(const std::shared_ptr<x_smbd_topdir_t> &topdir,
-		const std::u16string &path,
+void posixfs_object_notify_change(x_smbd_object_t *smbd_object,
+		uint32_t notify_action,
+		uint32_t notify_filter,
 		const std::u16string &fullpath,
 		const std::u16string *new_name_path,
-		uint32_t action,
-		uint32_t notify_filter,
 		bool last_level)
 {
-	posixfs_object_t *posixfs_object = posixfs_object_lookup(topdir, path, false);
-	if (!posixfs_object) {
-		return;
-	}
+	posixfs_object_t *posixfs_object = posixfs_object_from_base_t::container(smbd_object);
 
 	std::u16string subpath;
 	std::u16string new_subpath;
 	/* TODO change to read lock */
-	std::unique_lock<std::mutex> lock(posixfs_object->mutex);
+	std::unique_lock<std::mutex> lock(posixfs_object->base.mutex);
 	auto &open_list = posixfs_object->open_list;
 	posixfs_open_t *curr_open;
 	for (curr_open = open_list.get_front(); curr_open; curr_open = open_list.next(curr_open)) {
@@ -553,42 +550,50 @@ static void notify_fname_one(const std::shared_ptr<x_smbd_topdir_t> &topdir,
 			continue;
 		}
 		if (subpath.empty()) {
-			if (path.empty()) {
+			if (smbd_object->path.empty()) {
 				subpath = fullpath;
 				if (new_name_path) {
 					new_subpath = *new_name_path;
 				}
 			} else {
-				subpath = fullpath.substr(path.size() + 1);
+				subpath = fullpath.substr(smbd_object->path.size() + 1);
 				if (new_name_path) {
-					new_subpath = new_name_path->substr(path.size() + 1);
+					new_subpath = new_name_path->substr(smbd_object->path.size() + 1);
 				}
 			}
 		}
-		curr_open->notify_changes.push_back(std::make_pair(action, subpath));
+		bool orig_empty = curr_open->notify_changes.empty();
+		curr_open->notify_changes.push_back(std::make_pair(notify_action, subpath));
 		if (new_name_path) {
 			curr_open->notify_changes.push_back(std::make_pair(NOTIFY_ACTION_NEW_NAME,
 						new_subpath));
 		}
-		x_smbd_requ_t *smbd_requ = curr_open->notify_requ_list.get_front();
-		if (smbd_requ) {
-			auto notify_changes = std::move(curr_open->notify_changes);
-			curr_open->notify_requ_list.remove(smbd_requ);
-			lock.unlock();
-			/* TODO should be in context of conn */
-			x_smbd_requ_async_remove(smbd_requ); // remove from async
-			posixfs_notify_evt_t *evt = new posixfs_notify_evt_t(smbd_requ,
-					std::move(notify_changes));
-			evt->base.func = posixfs_notify_func;
-			if (!x_smbd_chan_post_user(smbd_requ->smbd_chan, &evt->base)) {
-				delete evt;
-			}
-			lock.lock();
+
+		if (!orig_empty) {
+		       continue;
 		}
+
+		x_smbd_requ_t *smbd_requ = curr_open->notify_requ_list.get_front();
+		if (!smbd_requ) {
+			continue;
+		}
+
+		auto notify_changes = std::move(curr_open->notify_changes);
+		curr_open->notify_requ_list.remove(smbd_requ);
+		lock.unlock();
+
+		/* TODO should be in context of conn */
+		x_smbd_requ_async_remove(smbd_requ); // remove from async
+		posixfs_notify_evt_t *evt = new posixfs_notify_evt_t(smbd_requ,
+				std::move(notify_changes));
+		evt->base.func = posixfs_notify_func;
+		if (!x_smbd_chan_post_user(smbd_requ->smbd_chan, &evt->base)) {
+			delete evt;
+		}
+		lock.lock();
 	}
-	posixfs_object_release(posixfs_object);
 }
-#endif
+#if 0
 static void notify_fname_intl(
 		std::shared_ptr<x_smbd_topdir_t> topdir,
 		const std::u16string req_path,
@@ -660,7 +665,7 @@ static void notify_rename(const std::shared_ptr<x_smbd_topdir_t> topdir,
 		notify_fname_intl(topdir, dst_path, NOTIFY_ACTION_ADDED, notify_filter, nullptr);
 	}
 }
-
+#endif
 /* rename_internals_fsp */
 static NTSTATUS rename_object_intl(posixfs_object_pool_t::bucket_t &dst_bucket,
 		posixfs_object_pool_t::bucket_t &src_bucket,
@@ -723,7 +728,8 @@ static NTSTATUS rename_object_intl(posixfs_object_pool_t::bucket_t &dst_bucket,
 NTSTATUS posixfs_object_rename(x_smbd_object_t *smbd_object,
 		x_smbd_requ_t *smbd_requ,
 		const std::u16string &dst_path,
-		bool replace_if_exists)
+		bool replace_if_exists,
+		std::vector<x_smb2_change_t> &changes)
 {
 	posixfs_object_t *posixfs_object = posixfs_object_from_base_t::container(smbd_object);
 	auto &topdir = posixfs_object->base.topdir;
@@ -750,9 +756,13 @@ NTSTATUS posixfs_object_rename(x_smbd_object_t *smbd_object,
 	}
 
 	if (NT_STATUS_IS_OK(status)) {
-		notify_rename(topdir, dst_path, src_path,
-				posixfs_object->base.type == x_smbd_object_t::type_dir);
+		changes.push_back(x_smb2_change_t{NOTIFY_ACTION_OLD_NAME,
+				posixfs_object->base.type == x_smbd_object_t::type_dir ?
+					FILE_NOTIFY_CHANGE_DIR_NAME :
+					FILE_NOTIFY_CHANGE_FILE_NAME,
+				src_path, dst_path});
 	}
+
 	return status;
 }
 
@@ -760,19 +770,24 @@ NTSTATUS posixfs_object_op_rename(x_smbd_object_t *smbd_object,
 		x_smbd_open_t *smbd_open,
 		x_smbd_requ_t *smbd_requ,
 		bool replace_if_exists,
-		const std::u16string &new_path)
+		const std::u16string &new_path,
+		std::vector<x_smb2_change_t> &changes)
 {
 	return posixfs_object_rename(smbd_object, smbd_requ, 
-			new_path, replace_if_exists);
+			new_path, replace_if_exists, changes);
 }
 
 static posixfs_object_t *posixfs_object_open(
 		const std::shared_ptr<x_smbd_topdir_t> &topdir,
 		const std::u16string &path,
-		uint64_t path_data)
+		uint64_t path_data,
+		bool create_if)
 {
 	posixfs_object_t *posixfs_object = posixfs_object_lookup(topdir, path,
-			path_data, true);
+			path_data, create_if);
+	if (!posixfs_object) {
+		return nullptr;
+	}
 
 	std::unique_lock<std::mutex> lock(posixfs_object->base.mutex);
 	if (!(posixfs_object->base.flags & x_smbd_object_t::flag_initialized)) {
@@ -1259,6 +1274,12 @@ static posixfs_open_t *posixfs_open_create(
 			smbd_tcon, state.granted_access, state.in_share_access, priv_data);
 	posixfs_open->oplock_level = state.oplock_level;
 	posixfs_open->smbd_lease = smbd_lease;
+	if (!x_smbd_open_store(&posixfs_open->base)) {
+		delete posixfs_open;
+		*pstatus = NT_STATUS_INSUFFICIENT_RESOURCES;
+		return nullptr;
+	}
+
 	++posixfs_object->use_count;
 	posixfs_object->open_list.push_back(posixfs_open);
 	*pstatus = NT_STATUS_OK;
@@ -1667,8 +1688,6 @@ static posixfs_open_t *create_posixfs_open(
 {
 	posixfs_open_t *posixfs_open = nullptr;
 	x_smbd_tcon_t *smbd_tcon = smbd_requ->smbd_tcon;
-	// x_smbd_conn_t *smbd_conn = smbd_requ->smbd_sess->smbd_conn;
-	std::unique_lock<std::mutex> lock(posixfs_object->base.mutex);
 
 	if (state->in_create_disposition == FILE_CREATE) {
 		if (posixfs_object->exists()) {
@@ -1765,7 +1784,8 @@ NTSTATUS posixfs_object_op_unlink(x_smbd_object_t *smbd_object, int fd)
 }
 
 static void posixfs_object_remove(posixfs_object_t *posixfs_object,
-		posixfs_open_t *posixfs_open)
+		posixfs_open_t *posixfs_open,
+		std::vector<x_smb2_change_t> &changes)
 {
 	if (!posixfs_open->object_link.is_valid()) {
 		return;
@@ -1786,8 +1806,8 @@ static void posixfs_object_remove(posixfs_object_t *posixfs_object,
 
 			NTSTATUS status = x_smbd_object_unlink(&posixfs_object->base, posixfs_object->fd);
 			if (NT_STATUS_IS_OK(status)) {
-				notify_fname(posixfs_object, NOTIFY_ACTION_REMOVED,
-						notify_filter);
+				changes.push_back(x_smb2_change_t{NOTIFY_ACTION_REMOVED, notify_filter,
+							posixfs_object->base.path, {}});
 			}
 		}
 	}
@@ -1797,7 +1817,8 @@ NTSTATUS posixfs_object_op_close(
 		x_smbd_object_t *smbd_object,
 		x_smbd_open_t *smbd_open,
 		x_smbd_requ_t *smbd_requ,
-		std::unique_ptr<x_smb2_state_close_t> &state)
+		std::unique_ptr<x_smb2_state_close_t> &state,
+		std::vector<x_smb2_change_t> &changes)
 {
 	posixfs_open_t *posixfs_open = posixfs_open_from_base_t::container(smbd_open);
 	posixfs_object_t *posixfs_object = posixfs_object_from_base_t::container(smbd_object);
@@ -1829,7 +1850,7 @@ NTSTATUS posixfs_object_op_close(
 		lock.lock();
 	}
 
-	posixfs_object_remove(posixfs_object, posixfs_open);
+	posixfs_object_remove(posixfs_object, posixfs_open, changes);
 
 	share_mode_modified(posixfs_object);
 
@@ -2285,7 +2306,8 @@ static NTSTATUS getinfo_file(posixfs_object_t *posixfs_object,
 
 static NTSTATUS setinfo_file(posixfs_object_t *posixfs_object,
 		x_smbd_requ_t *smbd_requ,
-		x_smb2_state_setinfo_t &state)
+		x_smb2_state_setinfo_t &state,
+		std::vector<x_smb2_change_t> &changes)
 {
 	if (state.in_info_level == SMB2_FILE_INFO_FILE_BASIC_INFORMATION) {
 		if (!smbd_requ->smbd_open->check_access(idl::SEC_FILE_WRITE_ATTRIBUTE)) {
@@ -2303,7 +2325,8 @@ static NTSTATUS setinfo_file(posixfs_object_t *posixfs_object,
 				&posixfs_object->statex);
 		if (err == 0) {
 			if (notify_actions) {
-				notify_fname(posixfs_object, NOTIFY_ACTION_MODIFIED, notify_actions);
+				changes.push_back(x_smb2_change_t{NOTIFY_ACTION_MODIFIED,
+						notify_actions, posixfs_object->base.path, {}});
 			}
 			return NT_STATUS_OK;
 		} else {
@@ -2386,7 +2409,8 @@ static NTSTATUS getinfo_security(posixfs_object_t *posixfs_object,
 
 static NTSTATUS setinfo_security(posixfs_object_t *posixfs_object,
 		x_smbd_requ_t *smbd_requ,
-		const x_smb2_state_setinfo_t &state)
+		const x_smb2_state_setinfo_t &state,
+		std::vector<x_smb2_change_t> &changes)
 {
 	uint32_t security_info_sent = state.in_additional & idl::SMB_SUPPORTED_SECINFO_FLAGS;
 	idl::security_descriptor sd;
@@ -2421,8 +2445,8 @@ static NTSTATUS setinfo_security(posixfs_object_t *posixfs_object,
 		return x_map_nt_error_from_unix(-err);
 	}
 
-	notify_fname(posixfs_object, NOTIFY_ACTION_MODIFIED,
-			FILE_NOTIFY_CHANGE_SECURITY);
+	changes.push_back(x_smb2_change_t{NOTIFY_ACTION_MODIFIED, FILE_NOTIFY_CHANGE_SECURITY,
+			posixfs_object->base.path, {}});
 	return NT_STATUS_OK;
 }
 
@@ -2460,18 +2484,19 @@ NTSTATUS posixfs_object_op_setinfo(
 		x_smbd_object_t *smbd_object,
 		x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ,
-		std::unique_ptr<x_smb2_state_setinfo_t> &state)
+		std::unique_ptr<x_smb2_state_setinfo_t> &state,
+		std::vector<x_smb2_change_t> &changes)
 {
 	posixfs_object_t *posixfs_object = posixfs_object_from_base_t::container(smbd_object);
 
 	if (state->in_info_class == SMB2_GETINFO_FILE) {
-		return setinfo_file(posixfs_object, smbd_requ, *state);
+		return setinfo_file(posixfs_object, smbd_requ, *state, changes);
 #if 0
 	} else if (state->in_info_class == SMB2_GETINFO_FS) {
 		return setinfo_fs(posixfs_object, smbd_requ, *state);
 #endif
 	} else if (state->in_info_class == SMB2_GETINFO_SECURITY) {
-		return setinfo_security(posixfs_object, smbd_requ, *state);
+		return setinfo_security(posixfs_object, smbd_requ, *state, changes);
 	} else {
 		return NT_STATUS_INVALID_PARAMETER;
 	}
@@ -3036,21 +3061,24 @@ NTSTATUS posixfs_object_op_set_delete_on_close(
 void posixfs_object_op_destroy(x_smbd_object_t *smbd_object,
 		x_smbd_open_t *smbd_open)
 {
-	posixfs_object_t *posixfs_object = posixfs_object_from_base_t::container(smbd_object);
 	posixfs_open_t *posixfs_open = posixfs_open_from_base_t::container(smbd_open);
+#if 0
+	posixfs_object_t *posixfs_object = posixfs_object_from_base_t::container(smbd_object);
 	{
 		std::unique_lock<std::mutex> lock(posixfs_object->base.mutex);
 		posixfs_object_remove(posixfs_object, posixfs_open);
 	}
+#endif
 	delete posixfs_open;
 }
 
-x_smbd_object_t *posixfs_open_object(
+x_smbd_object_t *posixfs_open_object(NTSTATUS *pstatus,
 		std::shared_ptr<x_smbd_topdir_t> &topdir,
-		const std::u16string &path, uint64_t path_data)
+		const std::u16string &path, uint64_t path_data,
+		bool create_if)
 {
 	posixfs_object_t *posixfs_object = posixfs_object_open(
-			topdir, path, path_data);
+			topdir, path, path_data, create_if);
 	if (posixfs_object) {
 		return &posixfs_object->base;
 	} else {
@@ -3197,11 +3225,13 @@ int posixfs_mktld(const std::shared_ptr<x_smbd_user_t> &smbd_user,
 	return 0;
 }
 
+/* smbd_object's mutex is locked */
 NTSTATUS x_smbd_posixfs_create_open(x_smbd_open_t **psmbd_open,
 		x_smbd_object_t *smbd_object,
 		x_smbd_requ_t *smbd_requ,
 		std::unique_ptr<x_smb2_state_create_t> &state,
-		long priv_data)
+		long priv_data,
+		std::vector<x_smb2_change_t> &changes)
 {
 	NTSTATUS status;
 	posixfs_object_t *posixfs_object = posixfs_object_from_base_t::container(smbd_object);
@@ -3213,8 +3243,10 @@ NTSTATUS x_smbd_posixfs_create_open(x_smbd_open_t **psmbd_open,
 	}
 
 	if (state->out_create_action == FILE_WAS_CREATED) {
-		notify_fname(posixfs_object, NOTIFY_ACTION_ADDED,
-				(state->in_create_options & FILE_DIRECTORY_FILE) ? FILE_NOTIFY_CHANGE_DIR_NAME : FILE_NOTIFY_CHANGE_FILE_NAME);
+		changes.push_back(x_smb2_change_t{NOTIFY_ACTION_ADDED, 
+				uint16_t((state->in_create_options & FILE_DIRECTORY_FILE) ? FILE_NOTIFY_CHANGE_DIR_NAME : FILE_NOTIFY_CHANGE_FILE_NAME),
+				posixfs_object->base.path,
+				{}});
 	}
 
 	uint32_t contexts = state->contexts;

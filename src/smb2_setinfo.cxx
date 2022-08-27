@@ -72,7 +72,8 @@ static void x_smb2_reply_setinfo(x_smbd_conn_t *smbd_conn,
 }
 
 static NTSTATUS smb2_setinfo_dispatch(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ,
-		std::unique_ptr<x_smb2_state_setinfo_t> &state)
+		std::unique_ptr<x_smb2_state_setinfo_t> &state,
+		std::vector<x_smb2_change_t> &changes)
 {
 	if (state->in_info_class == SMB2_GETINFO_FILE) {
 		if (state->in_info_level == SMB2_FILE_INFO_FILE_RENAME_INFORMATION) {
@@ -86,7 +87,7 @@ static NTSTATUS smb2_setinfo_dispatch(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *s
 				RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 			}
 			return x_smbd_open_op_rename(smbd_requ->smbd_open, smbd_requ,
-					replace_if_exists, file_name);
+					replace_if_exists, file_name, changes);
 		} else if (state->in_info_level == SMB2_FILE_INFO_FILE_DISPOSITION_INFORMATION) {
 			/* MS-FSA 2.1.5.14.3 */
 			if (!smbd_requ->smbd_open->check_access(idl::SEC_STD_DELETE)) {
@@ -102,7 +103,8 @@ static NTSTATUS smb2_setinfo_dispatch(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *s
 	}
 
 	/* different INFO request different access, so check access inside the op func */
-	return x_smbd_open_op_setinfo(smbd_requ->smbd_open, smbd_conn, smbd_requ, state);
+	return x_smbd_open_op_setinfo(smbd_requ->smbd_open, smbd_conn, smbd_requ,
+			state, changes);
 }
 
 NTSTATUS x_smb2_process_setinfo(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
@@ -130,8 +132,10 @@ NTSTATUS x_smb2_process_setinfo(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_re
 		}
 	}
 
-	NTSTATUS status = smb2_setinfo_dispatch(smbd_conn, smbd_requ, state);
+	std::vector<x_smb2_change_t> changes;
+	NTSTATUS status = smb2_setinfo_dispatch(smbd_conn, smbd_requ, state, changes);
 	if (NT_STATUS_IS_OK(status)) {
+		x_smbd_notify_change(smbd_requ->smbd_open->smbd_object->topdir, changes);
 		x_smb2_reply_setinfo(smbd_conn, smbd_requ, *state);
 		return status;
 	}

@@ -102,6 +102,7 @@ all: $(TARGET_SET_tests:%=$(TARGET_DIR_out)/tests/%) \
 a = \
 
 SET_src_nxsmbd := \
+	smbd_notify \
 	smbd_dfs \
 	smbd_simplefs \
 	smbd_posixfs \

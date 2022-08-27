@@ -77,7 +77,7 @@ x_smbd_open_t *x_smbd_open_lookup(uint64_t id_presistent, uint64_t id_volatile,
 	return nullptr;
 }
 
-static bool smbd_open_terminate(x_smbd_open_t *smbd_open)
+bool x_smbd_open_terminate(x_smbd_open_t *smbd_open)
 {
 	if (smbd_open->state == x_smbd_open_t::S_DONE) {
 		return false;
@@ -97,15 +97,16 @@ static bool smbd_open_terminate(x_smbd_open_t *smbd_open)
 bool x_smbd_open_close(x_smbd_open_t *smbd_open)
 {
 	if (x_smbd_tcon_unlink_open(smbd_open->smbd_tcon, &smbd_open->tcon_link)) {
-		return smbd_open_terminate(smbd_open);
+		return x_smbd_open_terminate(smbd_open);
 	}
+	X_ASSERT(false);
 	return false;
 }
 
 void x_smbd_open_unlinked(x_dlink_t *link, x_smbd_tcon_t *smbd_tcon)
 {
 	x_smbd_open_t *smbd_open = X_CONTAINER_OF(link, x_smbd_open_t, tcon_link);
-	smbd_open_terminate(smbd_open);
+	x_smbd_open_terminate(smbd_open);
 }
 
 struct x_smbd_open_list_t : x_smbd_ctrl_handler_t
