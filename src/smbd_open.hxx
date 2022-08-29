@@ -49,16 +49,8 @@ struct x_smbd_object_ops_t
 			std::shared_ptr<x_smbd_topdir_t> &topdir,
 			const std::u16string &path,
 			long path_priv_data,
-			bool create_if_missed);
-#if 0
-	std::unique_lock<std::mutex> (*lock_object)(x_smbd_object_t *smbd_object);
-	NTSTATUS (*create_open)(x_smbd_open_t **psmbd_open,
-			x_smbd_object_t *smbd_object,
-			x_smbd_requ_t *smbd_requ,
-			const std::string &volume,
-			std::unique_ptr<x_smb2_state_create_t> &state,
-			long open_priv_data);
-#endif
+			bool create_if);
+
 	NTSTATUS (*close)(x_smbd_object_t *smbd_object,
 			x_smbd_open_t *smbd_open,
 			x_smbd_requ_t *smbd_requ,
@@ -140,7 +132,6 @@ struct x_smbd_object_t
 	~x_smbd_object_t();
 	std::shared_ptr<x_smbd_topdir_t> topdir;
 	const long priv_data;
-	//uint32_t attributes = FILE_ATTRIBUTE_INVALID;
 	std::mutex mutex;
 	enum {
 		flag_initialized = 0x1,
@@ -156,12 +147,7 @@ struct x_smbd_object_t
 	uint16_t type = type_not_exist;
 	std::u16string path;
 };
-#if 0
-static inline std::unique_lock<std::mutex> x_smbd_lock_object(x_smbd_object_t *smbd_object)
-{
-	return smbd_object->topdir->ops->lock_object(smbd_object);
-}
-#endif
+
 static inline NTSTATUS x_smbd_open_op_close(
 		x_smbd_open_t *smbd_open,
 		x_smbd_requ_t *smbd_requ,

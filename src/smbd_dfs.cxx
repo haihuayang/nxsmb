@@ -60,28 +60,6 @@ struct dfs_share_t : x_smbd_share_t
 	dfs_share_t(const x_smbd_conf_t &smbd_conf,
 			const std::string &name,
 			const std::vector<std::string> &volumes);
-#if 0
-		: x_smbd_share_t(name), volumes(volumes)
-	{
-		auto first_volume = volumes[0];
-		std::string root_node;
-		X_ASSERT(find_node_by_volume(smbd_conf, root_node, first_volume));
-		if (root_node == smbd_conf.node) {
-			std::string path = volumes_dir;
-			path += "/" + first_volume + "/root";
-			root_dir = x_smbd_topdir_create(path);
-		}
-		for (const auto &volume: volumes) {
-			std::string node;
-			X_ASSERT(find_node_by_volume(smbd_conf, node, volume));
-			if (node == smbd_conf.node) {
-				std::string path = volumes_dir;
-				path += "/" + volume + "/data";
-				local_volume_data_dir[volume] = x_smbd_topdir_create(path);
-			}
-		}
-	}
-#endif
 	uint8_t get_type() const override { return SMB2_SHARE_TYPE_DISK; }
 	bool is_dfs() const override { return true; }
 	bool abe_enabled() const override { return false; }
@@ -323,23 +301,7 @@ static bool dfs_tld_manager_process_entry(posixfs_statex_t *statex,
 
 	return ret == 0;
 }
-#if 0
-static NTSTATUS dfs_tld_manager_object_op_qdir(
-		x_smbd_object_t *smbd_object,
-		x_smbd_conn_t *smbd_conn,
-		x_smbd_requ_t *smbd_requ,
-		std::unique_ptr<x_smb2_state_qdir_t> &state)
-{
-	x_smbd_object_t *parent_object = x_smbd_posixfs_object_open_parent(
-			&dfs_root_object_ops,
-			smbd_object);
-	NTSTATUS status = posixfs_object_qdir(parent_object, smbd_conn, smbd_requ, state,
-			pseudo_entries, PSEUDO_ENTRIES_COUNT,
-			dfs_tld_manager_process_entry);
-	// TODO release object x_smbd_object_release(parent_object);
-	return status;
-}
-#endif
+
 static inline void create_new_tld(dfs_share_t &dfs_share,
 		x_smbd_requ_t *smbd_requ,
 		const std::string &name)
@@ -762,7 +724,6 @@ static NTSTATUS dfs_root_create_open(dfs_share_t &dfs_share,
 
 static const x_smbd_object_ops_t dfs_root_object_ops = {
 	dfs_root_op_open_object,
-	// dfs_root_op_create_open,
 	posixfs_object_op_close,
 	dfs_root_object_op_read,
 	dfs_root_object_op_write,
@@ -781,170 +742,7 @@ static const x_smbd_object_ops_t dfs_root_object_ops = {
 	posixfs_object_op_destroy,
 	posixfs_op_release_object,
 };
-#if 0
-static const x_smbd_object_ops_t dfs_tld_manager_object_ops = {
-	posixfs_object_op_close,
-	nullptr,
-	nullptr,
-	nullptr,
-	posixfs_object_op_getinfo,
-	posixfs_object_op_setinfo,
-	posixfs_object_op_ioctl,
-	dfs_tld_manager_object_op_qdir,
-	posixfs_object_op_notify,
-	nullptr, // TODO posixfs_object_op_lease_break,
-	nullptr, // posixfs_object_op_oplock_break,
-	nullptr, // rename
-	nullptr, // set_delete_on_close
-	nullptr, // unlink
-	posixfs_object_op_get_path,
-	posixfs_object_op_destroy,
-};
 
-static const x_smbd_object_ops_t dfs_tld_object_ops = {
-	posixfs_object_op_close,
-	nullptr,
-	nullptr,
-	nullptr,
-	posixfs_object_op_getinfo,
-	posixfs_object_op_setinfo,
-	posixfs_object_op_ioctl,
-	dfs_tld_object_op_qdir,
-	nullptr,
-	posixfs_object_op_lease_break,
-	posixfs_object_op_oplock_break,
-	dfs_tld_object_op_rename,
-	posixfs_object_op_set_delete_on_close,
-	dfs_tld_object_op_unlink,
-	posixfs_object_op_get_path,
-	posixfs_object_op_destroy,
-};
-
-static const x_smbd_object_ops_t dfs_file_object_ops = {
-	posixfs_object_op_close,
-	posixfs_object_op_read,
-	posixfs_object_op_write,
-	posixfs_object_op_lock,
-	posixfs_object_op_getinfo,
-	posixfs_object_op_setinfo,
-	posixfs_object_op_ioctl,
-	nullptr,
-	nullptr,
-	posixfs_object_op_lease_break,
-	posixfs_object_op_oplock_break,
-	nullptr, // TODO rename
-	posixfs_object_op_set_delete_on_close,
-	posixfs_object_op_unlink,
-	posixfs_object_op_get_path,
-	posixfs_object_op_destroy,
-};
-#endif
-#if 0
-static NTSTATUS dfs_root_create_open(dfs_share_t &dfs_share,
-		x_smbd_open_t **psmbd_open,
-		x_smbd_requ_t *smbd_requ,
-		std::unique_ptr<x_smb2_state_create_t> &state)
-{
-	std::u16string path;
-	std::shared_ptr<x_smbd_topdir_t> topdir;
-	bool end_with_sep; // TODO when end_with_sep is true, return STATUS_OBJECT_NAME_INVALID if the object is a file
-	NTSTATUS status = dfs_root_resolve_path(dfs_share, state->in_name,
-			smbd_requ->in_hdr_flags & SMB2_HDR_FLAG_DFS,
-			topdir, path, end_with_sep);
-	if (!NT_STATUS_IS_OK(status)) {
-		return status;
-	}
-
-	if (path.size() == 0) {
-		return posixfs_create_open(psmbd_open,
-				topdir, path, dfs_path_type_root,
-				smbd_requ, state);
-	}
-	
-	std::string utf8_path = x_convert_utf16_to_lower_utf8(path);
-	if (utf8_path == pesudo_tld_dir) {
-		if (state->in_desired_access & idl::SEC_STD_DELETE) {
-			*psmbd_open = nullptr;
-			return NT_STATUS_ACCESS_DENIED;
-		}
-		return posixfs_create_open(psmbd_open,
-				topdir, path, dfs_path_type_tld_manager,
-				smbd_requ, state);
-	}
-
-	std::string first_level;
-	auto sep = utf8_path.find('\\');
-	if (sep != std::string::npos) {
-		first_level = utf8_path.substr(0, sep);
-	} else {
-		first_level = utf8_path;
-	}
-
-	if (first_level == pesudo_tld_dir) {
-		/* since we check utf8_path == pesudo_tld_dir, there is must a sep */
-		auto sep2 = utf8_path.find('\\', sep + 1);
-		if (sep2 != std::string::npos) {
-			return NT_STATUS_OBJECT_NAME_NOT_FOUND;
-		}
-
-		std::string tld = utf8_path.substr(sep + 1);
-
-		auto tlo_state = get_tlo_state(topdir, tld);
-		if (tlo_state == top_level_object_state_t::is_file) {
-			return NT_STATUS_OBJECT_NAME_NOT_FOUND;
-		}
-
-		if (tlo_state == top_level_object_state_t::is_dir) {
-			if (state->in_create_disposition == FILE_CREATE) {
-				return NT_STATUS_OBJECT_NAME_COLLISION;
-			}
-			/* dfs_tld_object_ops */
-			return posixfs_create_open(/*&dfs_tld_object_ops, */psmbd_open,
-					topdir, x_convert_utf8_to_utf16(tld),
-					dfs_path_type_tld_object,
-					smbd_requ, state);
-		}
-
-		if (state->in_create_disposition != FILE_OPEN_IF && state->in_create_disposition != FILE_CREATE) {
-			return NT_STATUS_OBJECT_NAME_NOT_FOUND;
-		}
-
-		if (!(state->in_create_options & FILE_DIRECTORY_FILE)) {
-			return NT_STATUS_ACCESS_DENIED;
-		}
-
-		create_new_tld(dfs_share, smbd_requ, tld);
-		state->in_create_disposition = FILE_OPEN_IF;
-		return posixfs_create_open(/* &dfs_tld_object_ops,*/ psmbd_open,
-				topdir, x_convert_utf8_to_utf16(tld),
-				dfs_path_type_tld_object,
-				smbd_requ, state);
-	}
-
-	if (get_tlo_state(topdir, first_level) == top_level_object_state_t::is_dir) {
-		return NT_STATUS_PATH_NOT_COVERED;
-	}
-
-	if (sep != std::string::npos) {
-		return NT_STATUS_OBJECT_NAME_NOT_FOUND;
-	}
-
-	if (!(state->in_create_options & FILE_DIRECTORY_FILE)) {
-		return posixfs_create_open(/*&dfs_file_object_ops,*/ psmbd_open,
-				topdir, path, dfs_path_type_file,
-				smbd_requ, state);
-	}
-
-	return NT_STATUS_ACCESS_DENIED;
-#if 0
-	if (state->in_create_disposition == FILE_OPEN_IF || state->in_create_disposition == FILE_CREATE) {
-		create_new_tld(*this, first_level);
-		return NT_STATUS_PATH_NOT_COVERED;
-	}
-	return NT_STATUS_INTERNAL_ERROR;
-#endif
-}
-#endif
 static bool dfs_volume_process_entry(posixfs_statex_t *statex,
 		posixfs_object_t *dir_obj,
 		const char *ent_name,
@@ -1033,44 +831,6 @@ static NTSTATUS dfs_volume_create_open(x_smbd_open_t **psmbd_open,
 			smbd_object,
 			smbd_requ, state, open_priv_data, changes);
 }
-#if 0
-static NTSTATUS dfs_volume_create_open(dfs_share_t &dfs_share,
-		x_smbd_open_t **psmbd_open,
-		x_smbd_requ_t *smbd_requ,
-		const std::string &volume,
-		std::unique_ptr<x_smb2_state_create_t> &state)
-{
-	std::u16string path;
-	std::shared_ptr<x_smbd_topdir_t> topdir;
-	bool end_with_sep; // TODO when end_with_sep is true, return STATUS_OBJECT_NAME_INVALID if the object is a file
-	NTSTATUS status = dfs_volume_resolve_path(dfs_share, volume, state->in_name,
-			smbd_requ->in_hdr_flags & SMB2_HDR_FLAG_DFS,
-			topdir, path, end_with_sep);
-	if (!NT_STATUS_IS_OK(status)) {
-		return status;
-	}
-
-	auto pos = path.find(u'\\');
-	if (pos == std::u16string::npos) {
-		/* we do not allow create/delete top level object */
-		if (state->in_create_disposition == FILE_CREATE ||
-				state->in_create_disposition == FILE_OVERWRITE ||
-				state->in_create_disposition == FILE_OVERWRITE_IF ||
-				state->in_create_disposition == FILE_SUPERSEDE) {
-			return NT_STATUS_ACCESS_DENIED;
-		}
-		if (state->in_desired_access & idl::SEC_STD_DELETE) {
-			return NT_STATUS_ACCESS_DENIED;
-		}
-		state->in_create_disposition = FILE_OPEN;
-	}
-
-	return posixfs_create_open(
-			psmbd_open,
-			topdir, path, 0,
-			smbd_requ, state);
-}
-#endif
 
 static const x_smbd_object_ops_t dfs_volume_object_ops = {
 	dfs_volume_op_open_object,

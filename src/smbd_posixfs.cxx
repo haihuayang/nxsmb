@@ -593,79 +593,7 @@ void posixfs_object_notify_change(x_smbd_object_t *smbd_object,
 		lock.lock();
 	}
 }
-#if 0
-static void notify_fname_intl(
-		std::shared_ptr<x_smbd_topdir_t> topdir,
-		const std::u16string req_path,
-		uint32_t action,
-		uint32_t notify_filter,
-		const std::u16string *new_name_path)
-{
-	topdir->ops->notify_fname(topdir, req_path, action, notify_filter, new_name_path);
-}
 
-void posixfs_notify_fname(
-		std::shared_ptr<x_smbd_topdir_t> topdir,
-		const std::u16string req_path,
-		uint32_t action,
-		uint32_t notify_filter,
-		const std::u16string *new_name_path)
-{
-	X_TODO;
-#if 0
-	std::size_t curr_pos = 0, last_sep_pos = 0;
-	for (;;) {
-		auto found = req_path.find('\\', curr_pos);
-		if (found == std::string::npos) {
-			break;
-		}
-		
-		if (topdir->watch_tree_cnt > 0) {
-			notify_fname_one(topdir,
-					req_path.substr(0, last_sep_pos),
-					req_path, new_name_path,
-					action, notify_filter, false);
-		}
-		last_sep_pos = found;
-		curr_pos = found + 1;
-	}
-
-	notify_fname_one(topdir,
-			req_path.substr(0, last_sep_pos),
-			req_path, new_name_path,
-			action, notify_filter, true);
-#endif
-}
-
-static void notify_fname(
-		posixfs_object_t *posixfs_object,
-		uint32_t action,
-		uint32_t notify_filter)
-{
-	X_LOG_DBG("path=%s action=%d filter=0x%x", posixfs_object->unix_path.c_str(),
-			action, notify_filter);
-	notify_fname_intl(posixfs_object->base.topdir, posixfs_object->base.path,
-			action, notify_filter, nullptr);
-}
-
-static void notify_rename(const std::shared_ptr<x_smbd_topdir_t> topdir,
-		const std::u16string dst_path,
-		const std::u16string src_path,
-		bool is_dir)
-{
-	auto dst_sep = dst_path.rfind(u'\\');
-	auto src_sep = src_path.rfind(u'\\');
-	uint32_t notify_filter = is_dir ? FILE_NOTIFY_CHANGE_DIR_NAME
-		: FILE_NOTIFY_CHANGE_FILE_NAME;
-	if (dst_sep == src_sep && (dst_sep == std::u16string::npos || memcmp(dst_path.data(), src_path.data(), dst_sep * 2)) == 0) {
-		notify_fname_intl(topdir, src_path, NOTIFY_ACTION_OLD_NAME, notify_filter, &dst_path);
-
-	} else {
-		notify_fname_intl(topdir, src_path, NOTIFY_ACTION_REMOVED, notify_filter, nullptr);
-		notify_fname_intl(topdir, dst_path, NOTIFY_ACTION_ADDED, notify_filter, nullptr);
-	}
-}
-#endif
 /* rename_internals_fsp */
 static NTSTATUS rename_object_intl(posixfs_object_pool_t::bucket_t &dst_bucket,
 		posixfs_object_pool_t::bucket_t &src_bucket,
@@ -832,31 +760,6 @@ static NTSTATUS posixfs_object_get_sd(posixfs_object_t *posixfs_object,
 	std::unique_lock<std::mutex> lock(posixfs_object->base.mutex);
 	return posixfs_object_get_sd__(posixfs_object, psd);
 }
-
-#if 0
-static posixfs_object_t *posixfs_object_open_parent(
-		const posixfs_object_t *child_object)
-{
-	if (child_object->req_path.empty()) {
-		return nullptr;
-	}
-
-	std::u16string parent_path;
-	auto sep = child_object->req_path.rfind('\\');
-	if (sep != std::u16string::npos) {
-		parent_path = child_object->req_path.substr(0, sep);
-	}
-
-	posixfs_object_t *parent_object = posixfs_object_open(
-			child_object->base.topdir, parent_path);
-	if (!parent_object->exists() || !parent_object->is_dir()) {
-		/* it should not happend */
-		posixfs_object_release(parent_object);
-		return nullptr;
-	}
-	return parent_object;
-}
-#endif
 
 static bool is_stat_open(uint32_t access_mask)
 {
