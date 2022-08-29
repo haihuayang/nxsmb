@@ -125,6 +125,7 @@ bool x_smbd_open_list_t::output(std::string &data)
 			os << idl::x_hex_t<uint64_t>(smbd_open->id) << ' '
 			<< idl::x_hex_t<uint32_t>(smbd_open->access_mask) << ' '
 			<< idl::x_hex_t<uint32_t>(smbd_open->share_access) << ' '
+			<< idl::x_hex_t<uint32_t>(smbd_open->notify_filter) << ' '
 			<< idl::x_hex_t<uint32_t>(x_smbd_tcon_get_id(smbd_open->smbd_tcon)) << " '"
 			<< x_smbd_open_op_get_path(smbd_open) << "'" << std::endl;
 			return true;

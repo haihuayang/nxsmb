@@ -116,7 +116,6 @@ struct posixfs_open_t
 	x_smbd_open_t base;
 	x_dlink_t object_link;
 	qdir_t *qdir = nullptr;
-	uint32_t notify_filter = 0;
 	uint8_t oplock_level{X_SMB2_OPLOCK_LEVEL_NONE};
 	oplock_break_sent_t oplock_break_sent{oplock_break_sent_t::OPLOCK_BREAK_NOT_SENT};
 	/* open's on the same file sharing the same lease can have different parent key */
@@ -543,10 +542,10 @@ void posixfs_object_notify_change(x_smbd_object_t *smbd_object,
 	auto &open_list = posixfs_object->open_list;
 	posixfs_open_t *curr_open;
 	for (curr_open = open_list.get_front(); curr_open; curr_open = open_list.next(curr_open)) {
-		if (!(curr_open->notify_filter & notify_filter)) {
+		if (!(curr_open->base.notify_filter & notify_filter)) {
 			continue;
 		}
-		if (!last_level && !(curr_open->notify_filter & X_FILE_NOTIFY_CHANGE_WATCH_TREE)) {
+		if (!last_level && !(curr_open->base.notify_filter & X_FILE_NOTIFY_CHANGE_WATCH_TREE)) {
 			continue;
 		}
 		if (subpath.empty()) {
@@ -1738,6 +1737,11 @@ NTSTATUS posixfs_object_op_close(
 	   while samba not send.
 	   for simplicity we do not either for now
 	 */
+	if (posixfs_open->base.notify_filter & X_FILE_NOTIFY_CHANGE_WATCH_TREE) {
+		/* TODO make it atomic */
+		X_ASSERT(smbd_object->topdir->watch_tree_cnt > 0);
+		--smbd_object->topdir->watch_tree_cnt;
+	}
 	x_smbd_requ_t *requ_notify;
 	while ((requ_notify = posixfs_open->notify_requ_list.get_front()) != nullptr) {
 		posixfs_open->notify_requ_list.remove(requ_notify);
@@ -2827,10 +2831,11 @@ NTSTATUS posixfs_object_op_notify(
 	std::lock_guard<std::mutex> lock(posixfs_object->base.mutex);
 
 	/* notify filter cannot be overwritten */
-	if (posixfs_open->notify_filter == 0) {
-		posixfs_open->notify_filter = state->in_filter | X_FILE_NOTIFY_CHANGE_VALID;
+	if (posixfs_open->base.notify_filter == 0) {
+		posixfs_open->base.notify_filter = state->in_filter | X_FILE_NOTIFY_CHANGE_VALID;
 		if (state->in_flags & SMB2_WATCH_TREE) {
-			posixfs_open->notify_filter |= X_FILE_NOTIFY_CHANGE_WATCH_TREE;
+			posixfs_open->base.notify_filter |= X_FILE_NOTIFY_CHANGE_WATCH_TREE;
+			++smbd_object->topdir->watch_tree_cnt;
 		}
 	}
 

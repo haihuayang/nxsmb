@@ -20,7 +20,7 @@ enum {
 	dfs_object_type_tld_manager,
 	dfs_object_type_root_top_level,
 
-	// dfs_object_type_volume_root,
+	dfs_object_type_volume_root,
 	dfs_object_type_volume_normal,
 	dfs_object_type_volume_top_level,
 };
@@ -166,6 +166,11 @@ static NTSTATUS dfs_volume_resolve_path(
 		const char16_t *in_path_end,
 		const std::string &volume)
 {
+	auto it = dfs_share.local_volume_data_dir.find(volume);
+	if (it == dfs_share.local_volume_data_dir.end()) {
+		return NT_STATUS_OBJECT_NAME_NOT_FOUND;
+	}
+
 	const char16_t *path_start;
 	if (dfs) {
 		/* TODO we just skip the first 2 components for now */
@@ -182,21 +187,18 @@ static NTSTATUS dfs_volume_resolve_path(
 	}
 
 	if (path_start == in_path_end) {
-		/* we do not allow open the volume root directly */
-		X_LOG_WARN("reject open on volume root %s", volume.c_str());
-		return NT_STATUS_ACCESS_DENIED;
-	}
-
-	auto sep = x_next_sep(path_start, in_path_end, u'\\');
-	if (sep == in_path_end) {
-		path_priv_data = dfs_object_type_volume_top_level;
+		/* shoule we deny open the volume root directly? */
+		path_priv_data = dfs_object_type_volume_root;
 	} else {
-		path_priv_data = dfs_object_type_volume_normal;
+		auto sep = x_next_sep(path_start, in_path_end, u'\\');
+		if (sep == in_path_end) {
+			path_priv_data = dfs_object_type_volume_top_level;
+		} else {
+			path_priv_data = dfs_object_type_volume_normal;
+		}
 	}
 	open_priv_data = dfs_open_type_none;
 	path.assign(path_start, in_path_end);
-	auto it = dfs_share.local_volume_data_dir.find(volume);
-	X_TODO_ASSERT(it != dfs_share.local_volume_data_dir.end());
 	topdir = it->second;
 	return NT_STATUS_OK;
 }
@@ -793,14 +795,6 @@ static x_smbd_object_t *dfs_volume_op_open_object(NTSTATUS *pstatus,
 		long path_priv_data,
 		bool create_if)
 {
-#if 0
-	uint64_t path_data = dfs_path_type_volume_normal;
-	if (path.empty()) {
-		path_data = dfs_path_type_volume_root;
-	} else if (path.find(u'\\') == std::u16string::npos) {
-		path_data = dfs_path_type_volume_tld;
-	}
-#endif
 	return posixfs_open_object(pstatus, topdir, path, path_priv_data, create_if);
 }
 
@@ -832,9 +826,23 @@ static NTSTATUS dfs_volume_create_open(x_smbd_open_t **psmbd_open,
 			smbd_requ, state, open_priv_data, changes);
 }
 
+static NTSTATUS dfs_volume_object_op_rename(x_smbd_object_t *smbd_object,
+		x_smbd_open_t *smbd_open,
+		x_smbd_requ_t *smbd_requ,
+		bool replace_if_exists,
+		const std::u16string &new_path,
+		std::vector<x_smb2_change_t> &changes)
+{
+	/* not allow rename to top level */
+	if (new_path.find(u'\\') == std::u16string::npos) {
+		return NT_STATUS_ACCESS_DENIED;
+	}
+	return posixfs_object_op_rename(smbd_object, smbd_open, smbd_requ,
+			replace_if_exists, new_path, changes);
+}
+
 static const x_smbd_object_ops_t dfs_volume_object_ops = {
 	dfs_volume_op_open_object,
-	// dfs_volume_op_create_open,
 	posixfs_object_op_close,
 	posixfs_object_op_read,
 	posixfs_object_op_write,
@@ -846,7 +854,7 @@ static const x_smbd_object_ops_t dfs_volume_object_ops = {
 	posixfs_object_op_notify,
 	posixfs_object_op_lease_break,
 	posixfs_object_op_oplock_break,
-	posixfs_object_op_rename,
+	dfs_volume_object_op_rename,
 	posixfs_object_op_set_delete_on_close,
 	posixfs_object_op_unlink,
 	posixfs_object_notify_change,
