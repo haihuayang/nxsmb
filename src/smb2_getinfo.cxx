@@ -2,11 +2,6 @@
 #include "smbd_open.hxx"
 
 namespace {
-enum {
-	X_SMB2_GETINFO_REQU_BODY_LEN = 0x28,
-	X_SMB2_GETINFO_RESP_BODY_LEN = 0x08,
-};
-}
 
 struct x_smb2_in_getinfo_t
 {
@@ -22,6 +17,15 @@ struct x_smb2_in_getinfo_t
 	uint64_t file_id_persistent;
 	uint64_t file_id_volatile;
 };
+
+struct x_smb2_out_getinfo_t
+{
+	uint16_t struct_size;
+	uint16_t output_buffer_offset;
+	uint32_t output_buffer_length;
+};
+
+}
 
 static bool decode_in_getinfo(x_smb2_state_getinfo_t &state,
 		const uint8_t *in_hdr, uint32_t in_len)
@@ -55,19 +59,11 @@ static bool decode_in_getinfo(x_smb2_state_getinfo_t &state,
 	return true;
 }
 
-struct x_smb2_out_getinfo_t
-{
-	uint16_t struct_size;
-	uint16_t output_buffer_offset;
-	uint32_t output_buffer_length;
-};
-
 static void encode_out_getinfo(const x_smb2_state_getinfo_t &state,
 		uint8_t *out_hdr)
 {
 	x_smb2_out_getinfo_t *out_getinfo = (x_smb2_out_getinfo_t *)(out_hdr + SMB2_HDR_BODY);
-	out_getinfo->struct_size = X_H2LE16(sizeof(x_smb2_out_getinfo_t) +
-			(state.out_data.size() ? 1 : 0));
+	out_getinfo->struct_size = X_H2LE16(sizeof(x_smb2_out_getinfo_t) + 1);
 	out_getinfo->output_buffer_offset = X_H2LE16(SMB2_HDR_BODY + sizeof(x_smb2_out_getinfo_t));
 	out_getinfo->output_buffer_length = X_H2LE32(x_convert_assert<uint32_t>(state.out_data.size()));
 	memcpy(out_getinfo + 1, state.out_data.data(), state.out_data.size());
