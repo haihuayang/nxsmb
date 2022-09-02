@@ -93,6 +93,7 @@ NTSTATUS posixfs_object_op_rename(x_smbd_object_t *smbd_object,
 		x_smbd_requ_t *smbd_requ,
 		bool replace_if_exists,
 		const std::u16string &new_path,
+		const std::u16string &new_stream_name,
 		std::vector<x_smb2_change_t> &changes);
 void posixfs_op_release_object(x_smbd_object_t *smbd_object);
 uint32_t posixfs_op_get_attributes(const x_smbd_object_t *smbd_object);
@@ -115,7 +116,8 @@ NTSTATUS posixfs_object_qdir(
 			uint32_t file_number));
 NTSTATUS posixfs_object_rename(x_smbd_object_t *smbd_object,
 		x_smbd_requ_t *smbd_requ,
-		const std::u16string &dst_path,
+		const std::u16string &new_path,
+		const std::u16string &new_stream_name,
 		bool replace_if_exists,
 		std::vector<x_smb2_change_t> &changes);
 

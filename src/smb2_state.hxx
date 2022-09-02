@@ -206,8 +206,8 @@ struct x_smb2_state_create_t
 
 	bool is_dollar_data = false;
 	bool end_with_sep = false;
-	std::u16string in_name; // TODO handle stream
-	std::u16string in_strm;
+	std::u16string in_path;
+	std::u16string in_ads_name;
 
 	uint8_t out_create_flags;
 	bool base_created = false;

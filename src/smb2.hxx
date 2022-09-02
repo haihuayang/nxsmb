@@ -372,6 +372,10 @@ struct x_smb2_op_state_t
 };
 #endif
 
+NTSTATUS x_smb2_parse_stream_name(std::u16string &stream_name,
+		bool &is_dollar_data,
+		const char16_t *begin, const char16_t *end);
+
 struct x_smb2_state_negprot_t
 {
 };
@@ -541,14 +545,23 @@ struct x_smb2_file_names_info_t
 	char16_t file_name[]; // variable length
 } __attribute__ ((packed));
 
+struct x_smb2_file_stream_name_info_t
+{
+	uint32_t next_offset;
+	uint32_t name_length;
+	uint64_t size;
+	uint64_t allocation_size;
+	char16_t name[]; // variable length
+} __attribute__ ((packed));
+
 bool x_smb2_file_standard_info_decode(x_smb2_file_standard_info_t &standard_info,
 		const std::vector<uint8_t> &in_data);
 
 bool x_smb2_file_basic_info_decode(x_smb2_file_basic_info_t &basic_info,
 		const std::vector<uint8_t> &in_data);
 
-bool x_smb2_rename_info_decode(bool &replace_if_exists,
-		std::u16string &file_name,
+NTSTATUS x_smb2_rename_info_decode(bool &replace_if_exists,
+		std::u16string &path, std::u16string &stream_name,
 		const std::vector<uint8_t> &in_data);
 
 NTSTATUS x_smb2_notify_marshall(
@@ -559,6 +572,33 @@ NTSTATUS x_smb2_notify_marshall(
 uint16_t x_smb2_dialect_match(const std::vector<uint16_t> &sdialects,
 		const uint16_t *dialects,
 		size_t dialect_count);
+
+struct x_smb2_chain_marshall_t
+{
+	uint8_t *pbase, *pend;
+	uint32_t alignment;
+	uint32_t last_begin{0}, last_end{0};
+	uint8_t *get_begin(uint32_t rec_size) {
+		uint32_t begin = last_end;
+		if (last_end != 0) {
+			begin = x_convert_assert<uint32_t>(x_pad_len(last_end, alignment));
+		}
+		if (pbase + begin + rec_size > pend) {
+			return nullptr;
+		}
+		if (begin != last_end) {
+			memset(pbase + last_end, 0, begin - last_end);
+		}
+		uint32_t *last_next = (uint32_t *)(pbase + last_begin);
+		*last_next = X_H2LE32(begin - last_begin);
+		last_begin = begin;
+		last_end = begin + rec_size;
+		return pbase + begin;
+	}
+	uint32_t get_size() const {
+		return last_end;
+	}
+};
 
 #endif /* __smb2__hxx__ */
 

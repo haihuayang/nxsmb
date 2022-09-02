@@ -82,12 +82,14 @@ static NTSTATUS smb2_setinfo_dispatch(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *s
 				RETURN_OP_STATUS(smbd_requ, NT_STATUS_ACCESS_DENIED);
 			}
 			bool replace_if_exists;
-			std::u16string file_name;
-			if (!x_smb2_rename_info_decode(replace_if_exists, file_name, state->in_data)) {
-				RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
+			std::u16string path, stream_name;
+			NTSTATUS status = x_smb2_rename_info_decode(replace_if_exists,
+					path, stream_name, state->in_data);
+			if (!NT_STATUS_IS_OK(status)) {
+				RETURN_OP_STATUS(smbd_requ, status);
 			}
 			return x_smbd_open_op_rename(smbd_requ->smbd_open, smbd_requ,
-					replace_if_exists, file_name, changes);
+					replace_if_exists, path, stream_name, changes);
 		} else if (state->in_info_level == SMB2_FILE_INFO_FILE_DISPOSITION_INFORMATION) {
 			/* MS-FSA 2.1.5.14.3 */
 			if (!smbd_requ->smbd_open->check_access(idl::SEC_STD_DELETE)) {

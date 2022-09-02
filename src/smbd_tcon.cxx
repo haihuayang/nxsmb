@@ -134,8 +134,8 @@ NTSTATUS x_smbd_tcon_op_create(x_smbd_tcon_t *smbd_tcon,
 	NTSTATUS status = smbd_tcon->smbd_share->resolve_path(
 			topdir, path, path_priv_data, open_priv_data,
 			smbd_requ->in_hdr_flags & SMB2_HDR_FLAG_DFS,
-			state->in_name.data(),
-			state->in_name.data() + state->in_name.length(),
+			state->in_path.data(),
+			state->in_path.data() + state->in_path.length(),
 			smbd_tcon->volume);
 	if (!NT_STATUS_IS_OK(status)) {
 		return status;

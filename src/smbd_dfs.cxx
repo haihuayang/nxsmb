@@ -358,6 +358,7 @@ static NTSTATUS dfs_root_object_op_rename(x_smbd_object_t *smbd_object,
 		x_smbd_requ_t *smbd_requ,
 		bool replace_if_exists,
 		const std::u16string &new_path,
+		const std::u16string &new_stream_name,
 		std::vector<x_smb2_change_t> &changes)
 {
 	if (smbd_object->priv_data == dfs_object_type_dfs_root) {
@@ -387,7 +388,7 @@ static NTSTATUS dfs_root_object_op_rename(x_smbd_object_t *smbd_object,
 		}
 
 		return posixfs_object_rename(smbd_object, smbd_requ,
-				new_path.substr(sep + 1), replace_if_exists, changes);
+				new_path.substr(sep + 1), new_stream_name, replace_if_exists, changes);
 	} else {
 		X_ASSERT(smbd_open->priv_data == 0);
 		auto sep = new_path.find(u'\\');
@@ -395,7 +396,7 @@ static NTSTATUS dfs_root_object_op_rename(x_smbd_object_t *smbd_object,
 			return NT_STATUS_ACCESS_DENIED;
 		}
 		return posixfs_object_rename(smbd_object, smbd_requ,
-				new_path, replace_if_exists, changes);
+				new_path, new_stream_name, replace_if_exists, changes);
 	}
 }
 
@@ -668,9 +669,15 @@ static NTSTATUS dfs_root_create_open(dfs_share_t &dfs_share,
 {
 	std::lock_guard lock(smbd_object->mutex);
 	if (smbd_object->priv_data == dfs_object_type_dfs_root) {
+		if (state->in_ads_name.size() > 0) {
+			return NT_STATUS_ACCESS_DENIED;
+		}
 		return x_smbd_posixfs_create_open(psmbd_open, smbd_object, smbd_requ,
 				state, open_priv_data, changes);
 	} else if (smbd_object->priv_data == dfs_object_type_tld_manager) {
+		if (state->in_ads_name.size() > 0) {
+			return NT_STATUS_ACCESS_DENIED;
+		}
 		return x_smbd_posixfs_create_open(psmbd_open, smbd_object, smbd_requ,
 				state, open_priv_data, changes);
 	}
@@ -831,6 +838,7 @@ static NTSTATUS dfs_volume_object_op_rename(x_smbd_object_t *smbd_object,
 		x_smbd_requ_t *smbd_requ,
 		bool replace_if_exists,
 		const std::u16string &new_path,
+		const std::u16string &new_stream_name,
 		std::vector<x_smb2_change_t> &changes)
 {
 	/* not allow rename to top level */
@@ -838,7 +846,7 @@ static NTSTATUS dfs_volume_object_op_rename(x_smbd_object_t *smbd_object,
 		return NT_STATUS_ACCESS_DENIED;
 	}
 	return posixfs_object_op_rename(smbd_object, smbd_open, smbd_requ,
-			replace_if_exists, new_path, changes);
+			replace_if_exists, new_path, new_stream_name, changes);
 }
 
 static const x_smbd_object_ops_t dfs_volume_object_ops = {

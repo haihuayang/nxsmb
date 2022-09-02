@@ -12,7 +12,6 @@
 #include "smbd_lease.hxx"
 #include "smbd_share.hxx"
 
-
 struct x_smbd_open_t
 {
 	x_smbd_open_t(x_smbd_object_t *so, x_smbd_tcon_t *st,
@@ -109,6 +108,7 @@ struct x_smbd_object_ops_t
 			x_smbd_requ_t *smbd_requ,
 			bool replace_if_exists,
 			const std::u16string &new_path,
+			const std::u16string &new_stream_name,
 			std::vector<x_smb2_change_t> &changes);
 	NTSTATUS (*set_delete_on_close)(x_smbd_object_t *smbd_object,
 			x_smbd_open_t *smbd_open,
@@ -137,7 +137,7 @@ struct x_smbd_object_t
 	enum {
 		flag_initialized = 0x1,
 		flag_modified = 0x2,
-		flag_delete_on_close = 0x4,
+		// flag_delete_on_close = 0x4,
 	};
 	uint16_t flags = 0;
 	enum {
@@ -303,11 +303,12 @@ static inline NTSTATUS x_smbd_open_op_rename(
 		x_smbd_requ_t *smbd_requ,
 		bool replace_if_exists,
 		const std::u16string &new_path,
+		const std::u16string &new_stream_name,
 		std::vector<x_smb2_change_t> &changes)
 {
 	x_smbd_object_t *smbd_object = smbd_open->smbd_object;
 	return smbd_object->topdir->ops->rename(smbd_object, smbd_open,
-			smbd_requ, replace_if_exists, new_path, changes);
+			smbd_requ, replace_if_exists, new_path, new_stream_name, changes);
 }
 
 static inline NTSTATUS x_smbd_open_op_set_delete_on_close(

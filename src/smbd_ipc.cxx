@@ -430,25 +430,27 @@ static NTSTATUS ipc_object_op_getinfo(
 {
 	/* TODO should access check ? */
 	/* SMB2_GETINFO_FILE, SMB2_FILE_STANDARD_INFO */
-	if (state->in_info_class == SMB2_GETINFO_FILE &&
-			state->in_info_level == SMB2_FILE_INFO_FILE_STANDARD_INFORMATION) {
-		if (state->in_output_buffer_length < sizeof(x_smb2_file_standard_info_t)) {
-			return STATUS_BUFFER_OVERFLOW;
+	if (state->in_info_class == SMB2_GETINFO_FILE) {
+		if (state->in_info_level == SMB2_FILE_INFO_FILE_STANDARD_INFORMATION) {
+			if (state->in_output_buffer_length < sizeof(x_smb2_file_standard_info_t)) {
+				return STATUS_BUFFER_OVERFLOW;
+			}
+			state->out_data.resize(sizeof(x_smb2_file_standard_info_t));
+			x_smb2_file_standard_info_t *info =
+				(x_smb2_file_standard_info_t *)state->out_data.data();
+			
+			info->allocation_size = X_H2LE64(4096);
+			info->end_of_file = 0;
+			info->nlinks = X_H2LE32(1);
+			info->delete_pending = 1; // not sure why samba assign 1
+			info->directory = 0;
+			info->unused = 0;
+			return NT_STATUS_OK;
+		} else if (state->in_info_level == SMB2_FILE_INFO_FILE_STREAM_INFORMATION) {
+			return NT_STATUS_INVALID_PARAMETER;
 		}
-		state->out_data.resize(sizeof(x_smb2_file_standard_info_t));
-		x_smb2_file_standard_info_t *info =
-			(x_smb2_file_standard_info_t *)state->out_data.data();
-		
-		info->allocation_size = X_H2LE64(4096);
-		info->end_of_file = 0;
-		info->nlinks = X_H2LE32(1);
-		info->delete_pending = 1; // not sure why samba assign 1
-		info->directory = 0;
-		info->unused = 0;
-		return NT_STATUS_OK;
-	} else {
-		return NT_STATUS_NOT_SUPPORTED;
-	}
+	} 
+	return NT_STATUS_NOT_SUPPORTED;
 }
 
 static NTSTATUS ipc_object_op_setinfo(
@@ -584,6 +586,10 @@ static NTSTATUS ipc_create_open(x_smbd_open_t **psmbd_open,
 	X_ASSERT(open_priv_data == 0);
 	if (state->end_with_sep) {
 		return NT_STATUS_OBJECT_NAME_INVALID;
+	}
+
+	if (state->in_ads_name.size() > 0 || state->is_dollar_data) {
+		return NT_STATUS_OBJECT_NAME_NOT_FOUND;
 	}
 
 	if (state->in_desired_access & idl::SEC_STD_DELETE) {

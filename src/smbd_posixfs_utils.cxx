@@ -10,6 +10,12 @@ extern "C" {
 #include "samba/libcli/smb/smb2_constants.h"
 }
 
+#if 0
+ssize_t posixfs_getxattr(int fd, const char *name, void *data, size_t size);
+{
+	ssize_t err = fgetxattr(fd, name, );
+}
+#endif
 int posixfs_dos_attr_get(int fd, dos_attr_t *dos_attr)
 {
 	ssize_t err = fgetxattr(fd, XATTR_DOS_ATTR, dos_attr, sizeof *dos_attr);

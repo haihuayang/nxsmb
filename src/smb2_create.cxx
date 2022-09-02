@@ -280,22 +280,6 @@ static uint32_t encode_contexts(const x_smb2_state_create_t &state,
 	return x_convert_assert<uint32_t>(p - out_ptr);
 }
 
-static bool is_dollar_data(const char16_t *begin, const char16_t *end)
-{
-	static const char16_t dollar_data[] = u"$DATA";
-	if (end - begin == 5) {
-		const char16_t *dd = dollar_data;
-		for ( ; begin != end; ++begin, ++dd) {
-			char16_t upper = std::use_facet<std::ctype<char16_t>>(std::locale()).toupper(*begin);
-			if (upper != *dd) {
-				return false;
-			}
-		}
-		return true;
-	}
-	return false;
-}
-
 static NTSTATUS decode_in_create(x_smb2_state_create_t &state,
 		const uint8_t *in_hdr, uint32_t in_len)
 {
@@ -328,27 +312,17 @@ static NTSTATUS decode_in_create(x_smb2_state_create_t &state,
 	const char16_t *in_path_end = x_next_sep(in_name_begin, in_name_end, u':');
 
 	if (in_path_end != in_name_end) {
-		const char16_t *in_strm_begin = in_path_end + 1;
-		const char16_t *in_strm_end = x_next_sep(in_strm_begin, in_name_end, u':');
-		if (in_strm_end != in_name_end) {
-			if (!is_dollar_data(in_strm_end + 1, in_name_end)) {
-				return NT_STATUS_OBJECT_NAME_INVALID;
-			}
-			if (in_strm_begin != in_strm_end) {
-				state.in_strm.assign(in_strm_begin, in_strm_end);
-			}
-			state.is_dollar_data = true;
-		} else {
-			if (in_strm_begin == in_strm_end) {
-				return NT_STATUS_OBJECT_NAME_INVALID;
-			}
-			state.in_strm.assign(in_strm_begin, in_strm_end);
+		NTSTATUS status = x_smb2_parse_stream_name(state.in_ads_name,
+				state.is_dollar_data,
+				in_path_end + 1, in_name_end);
+		if (!NT_STATUS_IS_OK(status)) {
+			return status;
 		}
 	}
 	const char16_t *in_path_end_trimed = x_rskip_sep(in_path_end,
 			in_name_begin, u'\\');
-	state.in_name.assign(in_name_begin, in_path_end_trimed);
 	state.end_with_sep = in_path_end_trimed != in_path_end;
+	state.in_path.assign(in_name_begin, in_path_end_trimed);
 
 	if (in_context_length != 0 && !decode_contexts(state,
 				in_hdr + in_context_offset,
@@ -479,6 +453,11 @@ NTSTATUS x_smb2_process_create(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_req
 		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
 
+	if ((state->in_create_options & FILE_DIRECTORY_FILE) &&
+			(state->in_ads_name.size() || state->is_dollar_data)) {
+		RETURN_OP_STATUS(smbd_requ, NT_STATUS_NOT_A_DIRECTORY);
+	}
+
 	if (state->in_file_attributes & (FILE_ATTRIBUTE_DEVICE | FILE_ATTRIBUTE_VOLUME)) {
 		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
@@ -492,7 +471,8 @@ NTSTATUS x_smb2_process_create(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_req
 		RETURN_OP_STATUS(smbd_requ, NT_STATUS_ACCESS_DENIED);
 	}
 
-	X_LOG_OP("%ld CREATE '%s'", smbd_requ->in_mid, x_convert_utf16_to_utf8(state->in_name).c_str());
+	/* TODO log stream too */
+	X_LOG_OP("%ld CREATE '%s'", smbd_requ->in_mid, x_convert_utf16_to_utf8(state->in_path).c_str());
 	smbd_requ->async_done_fn = x_smb2_create_async_done;
 	status = x_smbd_tcon_op_create(smbd_requ->smbd_tcon, smbd_requ, state);
 	if (NT_STATUS_IS_OK(status)) {
