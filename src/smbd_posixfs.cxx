@@ -1827,6 +1827,17 @@ static posixfs_open_t *open_object_exist_ads(
 		return nullptr;
 	}
 
+	if (!posixfs_ads->initialized) {
+		std::vector<uint8_t> data(64 * 1024);
+		ssize_t err = fgetxattr(posixfs_object->fd, posixfs_ads->xattr_name.c_str(),
+				data.data(), data.size());
+		X_TODO_ASSERT(err >= ssize_t(sizeof(posixfs_ads_header_t)));
+		const posixfs_ads_header_t *header = (const posixfs_ads_header_t *)data.data();
+		posixfs_ads->eof = x_convert_assert<uint32_t>(err - (sizeof(posixfs_ads_header_t)));
+		posixfs_ads->allocation_size = X_LE2H32(header->allocation_size);
+		posixfs_ads->initialized = true;
+	}
+
 	if ((posixfs_object->statex.file_attributes & FILE_ATTRIBUTE_READONLY) &&
 			(state->in_desired_access & (idl::SEC_FILE_WRITE_DATA | idl::SEC_FILE_APPEND_DATA))) {
 		X_LOG_NOTICE("deny access 0x%x to %s due to readonly 0x%x",
@@ -1836,6 +1847,7 @@ static posixfs_open_t *open_object_exist_ads(
 		return nullptr;
 	}
 
+	/* is this check needed? */
 	if (posixfs_object->statex.file_attributes & FILE_ATTRIBUTE_REPARSE_POINT) {
 		X_LOG_DBG("object %s is reparse_point", posixfs_object->unix_path.c_str());
 		status = NT_STATUS_PATH_NOT_COVERED;
@@ -1905,7 +1917,7 @@ static posixfs_open_t *open_object_exist_ads(
 	X_ASSERT(NT_STATUS_IS_OK(status));
 	reply_requ_create(*state, posixfs_object, FILE_WAS_OPENED);
 	return posixfs_open_create(&status, smbd_requ->smbd_tcon,
-			posixfs_object, &posixfs_object->default_stream,
+			posixfs_object, &posixfs_ads->base,
 			*state, smbd_lease, priv_data);
 }
 
@@ -2495,6 +2507,70 @@ static void posixfs_read_cancel(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_re
 	x_smbd_conn_post_cancel(smbd_conn, smbd_requ);
 }
 
+static NTSTATUS posixfs_ads_read(posixfs_object_t *posixfs_object,
+		posixfs_ads_t *ads,
+		x_smb2_state_read_t &state)
+{
+	if (state.in_length == 0) {
+		state.out_buf_length = 0;
+		return NT_STATUS_OK;
+	}
+	if (state.in_offset >= ads->eof) {
+		state.out_buf_length = 0;
+		return NT_STATUS_END_OF_FILE;
+	}
+	uint64_t max_read = ads->eof - state.in_offset;
+	if (max_read > state.in_length) {
+		max_read = state.in_length;
+	}
+	std::vector<uint8_t> content(0x10000);
+	ssize_t ret = fgetxattr(posixfs_object->fd, ads->xattr_name.c_str(), content.data(), content.size());
+	X_TODO_ASSERT(ret >= ssize_t(sizeof(posixfs_ads_header_t)));
+	const posixfs_ads_header_t *ads_hdr = (const posixfs_ads_header_t *)content.data();
+	uint32_t version = X_LE2H32(ads_hdr->version);
+	X_TODO_ASSERT(version == 0);
+	X_TODO_ASSERT(ret == ssize_t(ads->eof + sizeof(posixfs_ads_header_t)));
+	state.out_buf = x_buf_alloc(max_read);
+	memcpy(state.out_buf->data, (uint8_t *)(ads_hdr + 1) + state.in_offset,
+			max_read);
+	state.out_buf_length = x_convert<uint32_t>(max_read);
+	return NT_STATUS_OK;
+}
+
+static NTSTATUS posixfs_ads_write(posixfs_object_t *posixfs_object,
+		posixfs_ads_t *posixfs_ads,
+		x_smb2_state_write_t &state)
+{
+	uint64_t last_offset = state.in_offset + state.in_buf_length;
+	if (last_offset > posixfs_ads_max_length) {
+		return NT_STATUS_DISK_FULL; // windows server return this
+	}
+	std::vector<uint8_t> content(0x10000);
+	ssize_t ret = fgetxattr(posixfs_object->fd, posixfs_ads->xattr_name.c_str(), content.data(), content.size());
+	X_TODO_ASSERT(ret >= ssize_t(sizeof(posixfs_ads_header_t)));
+	posixfs_ads_header_t *ads_hdr = (posixfs_ads_header_t *)content.data();
+	uint32_t version = X_LE2H32(ads_hdr->version);
+	uint32_t allocation_size = X_LE2H32(ads_hdr->allocation_size);
+	X_TODO_ASSERT(version == 0);
+	memcpy((uint8_t *)(ads_hdr + 1) + state.in_offset,
+			state.in_buf->data + state.in_buf_offset,
+			state.in_buf_length);
+	uint64_t orig_eof = ret - sizeof(posixfs_ads_header_t);
+	if (last_offset > orig_eof) {
+		content.resize(sizeof(posixfs_ads_header_t) + last_offset);
+		if (allocation_size < last_offset) {
+			ads_hdr->allocation_size = X_H2LE32(x_convert<uint32_t>(last_offset));
+			posixfs_ads->allocation_size = x_convert<uint32_t>(last_offset);
+		}
+		posixfs_ads->eof = x_convert<uint32_t>(last_offset);
+	} else {
+		content.resize(sizeof(posixfs_ads_header_t) + orig_eof);
+	}
+	ret = fsetxattr(posixfs_object->fd, posixfs_ads->xattr_name.c_str(), content.data(), content.size(), 0);
+	X_TODO_ASSERT(ret == 0);
+	return NT_STATUS_OK;
+}
+
 NTSTATUS posixfs_object_op_read(
 		x_smbd_object_t *smbd_object,
 		x_smbd_open_t *smbd_open,
@@ -2504,9 +2580,17 @@ NTSTATUS posixfs_object_op_read(
 {
 	posixfs_object_t *posixfs_object = posixfs_object_from_base_t::container(smbd_object);
 	posixfs_open_t *posixfs_open = posixfs_open_from_base_t::container(smbd_requ->smbd_open);
-
 	if (check_io_brl_conflict(posixfs_object, posixfs_open, state->in_offset, state->in_length, false)) {
 		return NT_STATUS_FILE_LOCK_CONFLICT;
+	}
+
+	if (!is_default_stream(posixfs_object, posixfs_open->stream)) {
+		posixfs_ads_t *ads = X_CONTAINER_OF(posixfs_open->stream, posixfs_ads_t, base);
+		return posixfs_ads_read(posixfs_object, ads, *state);
+	}
+
+	if (posixfs_object_is_dir(posixfs_object)) {
+		return NT_STATUS_INVALID_DEVICE_REQUEST;
 	}
 
 	++posixfs_object->use_count;
@@ -2635,6 +2719,15 @@ NTSTATUS posixfs_object_op_write(
 
 	if (check_io_brl_conflict(posixfs_object, posixfs_open, state->in_offset, state->in_buf_length, true)) {
 		return NT_STATUS_FILE_LOCK_CONFLICT;
+	}
+
+	if (!is_default_stream(posixfs_object, posixfs_open->stream)) {
+		posixfs_ads_t *ads = X_CONTAINER_OF(posixfs_open->stream, posixfs_ads_t, base);
+		return posixfs_ads_write(posixfs_object, ads, *state);
+	}
+
+	if (posixfs_object_is_dir(posixfs_object)) {
+		return NT_STATUS_INVALID_DEVICE_REQUEST;
 	}
 
 	++posixfs_object->use_count;
