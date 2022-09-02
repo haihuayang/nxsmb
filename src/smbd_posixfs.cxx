@@ -1651,7 +1651,7 @@ static posixfs_open_t *posixfs_create_open_new_object(
 
 /* caller should hold posixfs_object's mutex */
 template <class T>
-static int posixfs_ads_foreach_1(posixfs_object_t *posixfs_object, T &&visitor)
+static int posixfs_ads_foreach_1(const posixfs_object_t *posixfs_object, T &&visitor)
 {
 	std::vector<char> buf(0x10000);
 	ssize_t ret = flistxattr(posixfs_object->fd, buf.data(), buf.size());
@@ -1676,13 +1676,13 @@ static int posixfs_ads_foreach_1(posixfs_object_t *posixfs_object, T &&visitor)
 }
 
 template <class T>
-static int posixfs_ads_foreach_2(posixfs_object_t *posixfs_object, T &&visitor)
+static int posixfs_ads_foreach_2(const posixfs_object_t *posixfs_object, T &&visitor)
 {
 	return posixfs_ads_foreach_1(posixfs_object, [=] (const char *xattr_name,
 				const char *stream_name) {
 			std::vector<uint8_t> content(0x10000);
 			ssize_t ret = fgetxattr(posixfs_object->fd, xattr_name, content.data(), content.size());
-			X_TODO_ASSERT(ret >= sizeof(posixfs_ads_header_t));
+			X_TODO_ASSERT(ret >= x_convert<ssize_t>(sizeof(posixfs_ads_header_t)));
 			const posixfs_ads_header_t *ads_hdr = (posixfs_ads_header_t *)content.data();
 			uint32_t version = X_LE2H32(ads_hdr->version);
 			uint32_t allocation_size = X_LE2H32(ads_hdr->allocation_size);
@@ -2772,6 +2772,53 @@ NTSTATUS posixfs_object_op_lock(
 	}
 }
 
+static bool marshall_stream_info(x_smb2_chain_marshall_t &marshall,
+		const char *stream_name,
+		uint64_t size, uint64_t allocation_size)
+{
+	std::u16string name = x_convert_utf8_to_utf16(stream_name);
+	name += u":$DATA";
+
+	uint32_t rec_size = x_convert_assert<uint32_t>(sizeof(x_smb2_file_stream_name_info_t) + name.size() * 2);
+	uint8_t *pbegin = marshall.get_begin(rec_size);
+	if (!pbegin) {
+		return false;
+	}
+	x_smb2_file_stream_name_info_t *info = (x_smb2_file_stream_name_info_t *)pbegin;
+	info->next_offset = 0;
+	info->name_length = X_H2LE32(x_convert_assert<uint32_t>(name.size() * 2));
+	info->size = X_H2LE64(size);
+	info->allocation_size = X_H2LE64(allocation_size);
+	// TODO byte order
+	memcpy(info->name, name.data(), name.size() * 2);
+	return true;
+}
+
+static NTSTATUS getinfo_stream_info(const posixfs_object_t *posixfs_object,
+		x_smb2_state_getinfo_t &state)
+{
+	state.out_data.resize(state.in_output_buffer_length);
+	x_smb2_chain_marshall_t marshall{state.out_data.data(), state.out_data.data() + state.out_data.size(), 8};
+
+	if (!posixfs_object_is_dir(posixfs_object)) {
+		if (!marshall_stream_info(marshall, "", posixfs_object->statex.get_end_of_file(),
+					posixfs_object->statex.get_allocation())) {
+			return STATUS_BUFFER_OVERFLOW;
+		}
+	}
+
+	bool marshall_ret = true;
+	posixfs_ads_foreach_2(posixfs_object,
+			[&marshall, &marshall_ret] (const char *stream_name, uint64_t eof, uint64_t alloc) {
+			marshall_ret = marshall_stream_info(marshall, stream_name, eof, alloc);
+			return marshall_ret;
+		});
+	if (!marshall_ret) {
+		return STATUS_BUFFER_OVERFLOW;
+	}
+	state.out_data.resize(marshall.get_size());
+	return NT_STATUS_OK;
+}
 
 static NTSTATUS getinfo_file(posixfs_object_t *posixfs_object,
 		x_smbd_open_t *smbd_open,
@@ -2836,7 +2883,7 @@ static NTSTATUS getinfo_file(posixfs_object_t *posixfs_object,
 		info->file_attributes = X_H2LE32(statex.file_attributes);
 		info->unused = 0;
 	} else if (state.in_info_level == SMB2_FILE_INFO_FILE_STREAM_INFORMATION) {
-		X_TODO;
+		return getinfo_stream_info(posixfs_object, state);
 	} else {
 		return NT_STATUS_INVALID_LEVEL;
 	}
