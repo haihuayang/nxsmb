@@ -2961,8 +2961,7 @@ static bool marshall_stream_info(x_smb2_chain_marshall_t &marshall,
 	info->name_length = X_H2LE32(x_convert_assert<uint32_t>(name.size() * 2));
 	info->size = X_H2LE64(size);
 	info->allocation_size = X_H2LE64(allocation_size);
-	// TODO byte order
-	memcpy(info->name, name.data(), name.size() * 2);
+	x_utf16le_encode(name, info->name);
 	return true;
 }
 

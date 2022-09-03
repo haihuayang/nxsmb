@@ -1,4 +1,5 @@
 
+#include "include/charset.hxx"
 #include "smb2.hxx"
 
 static bool name_is_dollar_data(const char16_t *begin, const char16_t *end)
@@ -7,7 +8,13 @@ static bool name_is_dollar_data(const char16_t *begin, const char16_t *end)
 	if (end - begin == 5) {
 		const char16_t *dd = dollar_data;
 		for ( ; begin != end; ++begin, ++dd) {
-			char16_t upper = std::use_facet<std::ctype<char16_t>>(std::locale()).toupper(*begin);
+			if (*dd == *begin) {
+				continue;
+			}
+			/* we do not need to convert to codepoint to compare
+			 * dollar_data
+			 */
+			auto upper = x_toupper(*begin);
 			if (upper != *dd) {
 				return false;
 			}
@@ -27,13 +34,14 @@ NTSTATUS x_smb2_parse_stream_name(std::u16string &stream_name,
 		if (!name_is_dollar_data(sep + 1, end)) {
 			return NT_STATUS_OBJECT_NAME_INVALID;
 		}
-		stream_name.assign(begin, sep);
+		stream_name = x_utf16le_decode(begin, sep);
+		/* is_dollar_data is true when stream name is empty */
 		is_dollar_data = (begin == sep);
 	} else {
 		if (begin == end) {
 			return NT_STATUS_OBJECT_NAME_INVALID;
 		}
-		stream_name.assign(begin, sep);
+		stream_name = x_utf16le_decode(begin, sep);
 		is_dollar_data = false;
 	}
 	return NT_STATUS_OK;
@@ -75,7 +83,7 @@ NTSTATUS x_smb2_rename_info_decode(bool &replace_if_exists,
 	const char16_t *in_name_end = in_name_begin + file_name_length / 2;
 	const char16_t *sep = x_next_sep(in_name_begin, in_name_end, u':');
 	if (sep == in_name_end) {
-		path.assign(in_name_begin, in_name_end);
+		path = x_utf16le_decode(in_name_begin, in_name_end);
 		stream_name.clear();
 	} else if (sep == in_name_begin) {
 		bool is_dollar_data;
@@ -124,8 +132,7 @@ NTSTATUS x_smb2_notify_marshall(
 		info->next_offset = 0;
 		info->action = X_H2LE32(change.first);
 		info->file_name_length = X_H2LE32(x_convert_assert<uint32_t>(change.second.size() * 2));
-		/* TODO byte order */
-		memcpy(info->file_name, change.second.data(), change.second.size() * 2);
+		x_utf16le_encode(change.second, info->file_name);
 	}
 	output.resize(marshall.get_size());
 	return NT_STATUS_OK;

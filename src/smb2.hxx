@@ -496,6 +496,7 @@ struct x_smb2_file_full_dir_info_t
 	uint32_t file_name_length;
 	uint32_t ea_size;
 	char16_t file_name[]; // variable length
+	/* not 8 bytes alignment, have to be packed */
 } __attribute__ ((packed));
 
 struct x_smb2_file_id_full_dir_info_t
@@ -532,8 +533,7 @@ struct x_smb2_file_id_both_dir_info_t
 	uint16_t short_name_length;
 	char16_t short_name[12];
 	uint16_t unused0;
-	uint32_t file_id_low; // file_id is not 8 byte aligned, so split into 2 fields
-	uint32_t file_id_high;
+	uint64_t file_id;
 	char16_t file_name[]; // variable length
 } __attribute__ ((packed));
 

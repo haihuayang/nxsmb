@@ -141,6 +141,25 @@ static inline std::u16string x_convert_utf8_to_utf16(const std::string &src)
 	return x_convert_utf8_to_utf16(std::begin(src), std::end(src));
 }
 
+static inline std::u16string x_utf16le_decode(const char16_t *begin,
+		const char16_t *end)
+{
+	/* TODO big endian */
+	return std::u16string(begin, end);
+}
+
+static inline char16_t *x_utf16le_encode(const std::u16string &s,
+		void *ptr)
+{
+	/* TODO big endian */
+	/* ptr has enough space, and alignment 2 bytes */
+	X_ASSERT(long(ptr) % 2 == 0);
+	char16_t *begin = (char16_t *)ptr;
+	for (auto ch: s) {
+		*begin++ = X_H2LE16(ch);
+	}
+	return begin;
+}
 
 #endif /* __charset__hxx__ */
 

@@ -99,10 +99,8 @@ bool x_smbd_marshall_dir_entry(x_smb2_chain_marshall_t &marshall,
 			info->unused0 = 0; // aapl mode
 
 			uint64_t file_index = object_meta.inode; // TODO
-			info->file_id_low = X_H2LE32(file_index & 0xffffffff);
-			info->file_id_high = X_H2LE32(x_convert<uint32_t>(file_index >> 32));
-			// TODO byte order
-			memcpy(info->file_name, name.data(), name.size() * 2);
+			info->file_id = X_H2LE64(file_index);
+			x_utf16le_encode(name, info->file_name);
 		}
 		break;
 
@@ -138,8 +136,7 @@ bool x_smbd_marshall_dir_entry(x_smb2_chain_marshall_t &marshall,
 			info->unused0 = 0; // aapl mode
 
 			info->file_id = X_H2LE64(object_meta.inode);
-			// TODO byte order
-			memcpy(info->file_name, name.data(), name.size() * 2);
+			x_utf16le_encode(name, info->file_name);
 		}
 		break;
 
@@ -161,8 +158,7 @@ bool x_smbd_marshall_dir_entry(x_smb2_chain_marshall_t &marshall,
 			info->allocation_size = X_H2LE64(stream_meta.allocation_size);
 			info->file_attributes = X_H2LE32(object_meta.file_attributes);
 			info->file_name_length = X_H2LE32(x_convert_assert<uint32_t>(name.size() * 2));
-			// TODO byte order
-			memcpy(info->file_name, name.data(), name.size() * 2);
+			x_utf16le_encode(name, info->file_name);
 		}
 		break;
 
@@ -198,8 +194,7 @@ bool x_smbd_marshall_dir_entry(x_smb2_chain_marshall_t &marshall,
 			// TODO get short name
 			info->short_name_length = 0;
 			memset(info->short_name, 0, sizeof info->short_name);
-			// TODO byte order
-			memcpy(info->file_name, name.data(), name.size() * 2);
+			x_utf16le_encode(name, info->file_name);
 		}
 		break;
 
@@ -232,8 +227,7 @@ bool x_smbd_marshall_dir_entry(x_smb2_chain_marshall_t &marshall,
 				info->ea_size = 0;
 			}
 		
-			// TODO byte order
-			memcpy(info->file_name, name.data(), name.size() * 2);
+			x_utf16le_encode(name, info->file_name);
 		}
 		break;
 
@@ -248,7 +242,7 @@ bool x_smbd_marshall_dir_entry(x_smb2_chain_marshall_t &marshall,
 			info->next_offset = 0;
 			info->file_index = 0;
 			info->file_name_length = X_H2LE32(x_convert_assert<uint32_t>(name.size() * 2));
-			memcpy(info->file_name, name.data(), name.size() * 2);
+			x_utf16le_encode(name, info->file_name);
 		}
 		break;
 
