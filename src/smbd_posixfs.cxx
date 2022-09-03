@@ -163,7 +163,7 @@ struct posixfs_ads_t
 	x_dlink_t object_link; // link into object
 	bool exists = false;
 	bool initialized = false;
-	const std::u16string name;
+	std::u16string name;
 	std::string xattr_name;
 };
 X_DECLARE_MEMBER_TRAITS(posixfs_ads_object_traits, posixfs_ads_t, object_link)
@@ -216,6 +216,50 @@ static inline bool is_default_stream(const posixfs_object_t *object,
 		const posixfs_stream_t *stream)
 {
 	return stream == &object->default_stream;
+}
+
+/* caller should hold posixfs_object's mutex */
+template <class T>
+static int posixfs_ads_foreach_1(const posixfs_object_t *posixfs_object, T &&visitor)
+{
+	std::vector<char> buf(0x10000);
+	ssize_t ret = flistxattr(posixfs_object->fd, buf.data(), buf.size());
+	X_TODO_ASSERT(ret >= 0);
+	if (ret == 0) {
+		return 0;
+	}
+	size_t listxattr_len = ret;
+	X_TODO_ASSERT(buf[listxattr_len - 1] == '\0');
+	const char *data = buf.data();
+	const char *end = data + listxattr_len;
+	for ( ; data < end; data = data + strlen(data) + 1) {
+		if (strncmp(data, POSIXFS_ADS_PREFIX, strlen(POSIXFS_ADS_PREFIX)) != 0) {
+			continue;
+		}
+		const char *stream_name = data + strlen(POSIXFS_ADS_PREFIX);
+		if (!visitor(data, stream_name)) {
+			break;
+		}
+	}
+	return 0;
+}
+
+template <class T>
+static int posixfs_ads_foreach_2(const posixfs_object_t *posixfs_object, T &&visitor)
+{
+	return posixfs_ads_foreach_1(posixfs_object, [=] (const char *xattr_name,
+				const char *stream_name) {
+			std::vector<uint8_t> content(0x10000);
+			ssize_t ret = fgetxattr(posixfs_object->fd, xattr_name, content.data(), content.size());
+			X_TODO_ASSERT(ret >= x_convert<ssize_t>(sizeof(posixfs_ads_header_t)));
+			const posixfs_ads_header_t *ads_hdr = (posixfs_ads_header_t *)content.data();
+			uint32_t version = X_LE2H32(ads_hdr->version);
+			uint32_t allocation_size = X_LE2H32(ads_hdr->allocation_size);
+			X_TODO_ASSERT(version == 0);
+
+			return visitor(stream_name, ret - sizeof(posixfs_ads_header_t),
+					allocation_size);
+		});
 }
 
 struct posixfs_object_pool_t
@@ -697,6 +741,58 @@ static NTSTATUS rename_object_intl(posixfs_object_pool_t::bucket_t &new_bucket,
 	return NT_STATUS_OK;
 }
 
+static NTSTATUS rename_ads_intl(posixfs_object_t *posixfs_object,
+		posixfs_ads_t *posixfs_ads,
+                bool replace_if_exists,
+                const std::u16string &new_stream_name)
+{
+	std::lock_guard<std::mutex> lock(posixfs_object->base.mutex);
+	posixfs_ads_t *other_ads;
+	for (other_ads = posixfs_object->ads_list.get_front(); other_ads;
+			other_ads = posixfs_object->ads_list.next(other_ads)) {
+		if (other_ads == posixfs_ads) {
+			continue;
+		}
+		if (other_ads->name == new_stream_name) { // TODO case insensitive
+			/* windows server behavior */
+			return replace_if_exists ? NT_STATUS_INVALID_PARAMETER :
+				NT_STATUS_OBJECT_NAME_COLLISION;
+		}
+	}
+
+	bool collision = false;
+	std::string new_name_utf8 = x_convert_utf16_to_utf8(new_stream_name);
+	posixfs_ads_foreach_1(posixfs_object, [=, &collision] (const char *xattr_name,
+				const char *stream_name) {
+			if (strcasecmp(stream_name, new_name_utf8.c_str()) == 0) {
+				if (replace_if_exists) {
+					fremovexattr(posixfs_object->fd, xattr_name);
+				} else {
+					collision = true;
+				}
+				return false;
+			}
+			return true;
+		});
+
+	if (collision) {
+		return NT_STATUS_OBJECT_NAME_COLLISION;
+	}
+
+	std::vector<uint8_t> data(64 * 1024);
+	ssize_t ret = fgetxattr(posixfs_object->fd, posixfs_ads->xattr_name.c_str(),
+			data.data(), data.size());
+	X_TODO_ASSERT(ret >= 0);
+
+	std::string new_xattr_name = POSIXFS_ADS_PREFIX + new_name_utf8;
+	fsetxattr(posixfs_object->fd, new_xattr_name.c_str(), data.data(), ret, 0);
+	posixfs_ads->name = new_stream_name;
+	posixfs_ads->xattr_name = new_xattr_name;
+
+	/* notify_fname */
+	return NT_STATUS_OK;
+}
+
 NTSTATUS posixfs_object_rename(x_smbd_object_t *smbd_object,
 		x_smbd_requ_t *smbd_requ,
 		const std::u16string &new_path,
@@ -705,6 +801,20 @@ NTSTATUS posixfs_object_rename(x_smbd_object_t *smbd_object,
 		std::vector<x_smb2_change_t> &changes)
 {
 	posixfs_object_t *posixfs_object = posixfs_object_from_base_t::container(smbd_object);
+	posixfs_open_t *posixfs_open = posixfs_open_from_base_t::container(smbd_requ->smbd_open);
+	if (!is_default_stream(posixfs_object, posixfs_open->stream)) {
+		if (new_path.size()) {
+			return NT_STATUS_INVALID_PARAMETER;
+		}
+		posixfs_ads_t *posixfs_ads = X_CONTAINER_OF(posixfs_open->stream,
+				posixfs_ads_t, base);
+		if (posixfs_ads->name == new_stream_name) { // TODO case insensitive
+			return NT_STATUS_OK;
+		}
+		return rename_ads_intl(posixfs_object, posixfs_ads,
+				replace_if_exists, new_stream_name);
+	}
+
 	auto &topdir = posixfs_object->base.topdir;
 
 	auto &pool = posixfs_object_pool;
@@ -1657,50 +1767,6 @@ static posixfs_open_t *posixfs_create_open_new_object(
 			FILE_WAS_CREATED);
 	return posixfs_open_create(&status, smbd_requ->smbd_tcon, posixfs_object,
 			&posixfs_object->default_stream, state, smbd_lease, priv_data);
-}
-
-/* caller should hold posixfs_object's mutex */
-template <class T>
-static int posixfs_ads_foreach_1(const posixfs_object_t *posixfs_object, T &&visitor)
-{
-	std::vector<char> buf(0x10000);
-	ssize_t ret = flistxattr(posixfs_object->fd, buf.data(), buf.size());
-	X_TODO_ASSERT(ret >= 0);
-	if (ret == 0) {
-		return 0;
-	}
-	size_t listxattr_len = ret;
-	X_TODO_ASSERT(buf[listxattr_len - 1] == '\0');
-	const char *data = buf.data();
-	const char *end = data + listxattr_len;
-	for ( ; data < end; data = data + strlen(data) + 1) {
-		if (strncmp(data, POSIXFS_ADS_PREFIX, strlen(POSIXFS_ADS_PREFIX)) != 0) {
-			continue;
-		}
-		const char *stream_name = data + strlen(POSIXFS_ADS_PREFIX);
-		if (!visitor(data, stream_name)) {
-			break;
-		}
-	}
-	return 0;
-}
-
-template <class T>
-static int posixfs_ads_foreach_2(const posixfs_object_t *posixfs_object, T &&visitor)
-{
-	return posixfs_ads_foreach_1(posixfs_object, [=] (const char *xattr_name,
-				const char *stream_name) {
-			std::vector<uint8_t> content(0x10000);
-			ssize_t ret = fgetxattr(posixfs_object->fd, xattr_name, content.data(), content.size());
-			X_TODO_ASSERT(ret >= x_convert<ssize_t>(sizeof(posixfs_ads_header_t)));
-			const posixfs_ads_header_t *ads_hdr = (posixfs_ads_header_t *)content.data();
-			uint32_t version = X_LE2H32(ads_hdr->version);
-			uint32_t allocation_size = X_LE2H32(ads_hdr->allocation_size);
-			X_TODO_ASSERT(version == 0);
-
-			return visitor(stream_name, ret - sizeof(posixfs_ads_header_t),
-					allocation_size);
-		});
 }
 
 static posixfs_ads_t *posixfs_ads_add(
