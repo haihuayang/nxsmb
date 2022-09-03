@@ -129,7 +129,7 @@ NTSTATUS posixfs_object_rename(x_smbd_object_t *smbd_object,
 
 x_smbd_object_t *posixfs_open_object(NTSTATUS *pstatus,
 		std::shared_ptr<x_smbd_topdir_t> &topdir,
-		const std::u16string &path, uint64_t path_data,
+		const std::u16string &path, long path_data,
 		bool create_if);
 
 void posixfs_object_notify_change(x_smbd_object_t *smbd_object,

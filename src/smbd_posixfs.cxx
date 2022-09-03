@@ -3574,7 +3574,7 @@ void posixfs_object_op_destroy(x_smbd_object_t *smbd_object,
 
 x_smbd_object_t *posixfs_open_object(NTSTATUS *pstatus,
 		std::shared_ptr<x_smbd_topdir_t> &topdir,
-		const std::u16string &path, uint64_t path_data,
+		const std::u16string &path, long path_data,
 		bool create_if)
 {
 	posixfs_object_t *posixfs_object = posixfs_object_open(
