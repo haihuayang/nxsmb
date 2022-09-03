@@ -247,7 +247,9 @@ static inline top_level_object_state_t get_tlo_state(const std::shared_ptr<x_smb
 		top_level_object_state_t::is_file;
 }
 
-static bool dfs_root_process_entry(posixfs_statex_t *statex,
+static bool dfs_root_process_entry(
+		x_smbd_object_meta_t *object_meta,
+		x_smbd_stream_meta_t *stream_meta,
 		posixfs_object_t *dir_obj,
 		const char *ent_name,
 		uint32_t file_number)
@@ -256,23 +258,26 @@ static bool dfs_root_process_entry(posixfs_statex_t *statex,
 	int ret = 0;
 	if (file_number >= PSEUDO_ENTRIES_COUNT) {
 		/* TODO check ntacl if ABE is enabled */
-		ret = posixfs_object_statex_getat(dir_obj, ent_name, statex);
+		ret = posixfs_object_statex_getat(dir_obj, ent_name,
+				object_meta, stream_meta);
 		if (ret != 0) {
 			return false;
 		}
-		if (statex->file_attributes & FILE_ATTRIBUTE_DIRECTORY && strcmp(ent_name, pesudo_tld_dir) != 0) {
-			statex->file_attributes |= FILE_ATTRIBUTE_REPARSE_POINT;
+		if (object_meta->file_attributes & FILE_ATTRIBUTE_DIRECTORY && strcmp(ent_name, pesudo_tld_dir) != 0) {
+			object_meta->file_attributes |= FILE_ATTRIBUTE_REPARSE_POINT;
 		}
 	} else {
 		/* TODO should lock dir_obj */
 		/* since this is root dir, .. is same as . */
-		ret = posixfs_object_get_statex(dir_obj, statex);
+		ret = posixfs_object_get_statex(dir_obj, object_meta, stream_meta);
 	}
 
 	return ret == 0;
 }
 
-static bool dfs_tld_manager_process_entry(posixfs_statex_t *statex,
+static bool dfs_tld_manager_process_entry(
+		x_smbd_object_meta_t *object_meta,
+		x_smbd_stream_meta_t *stream_meta,
 		posixfs_object_t *dir_obj,
 		const char *ent_name,
 		uint32_t file_number)
@@ -285,20 +290,20 @@ static bool dfs_tld_manager_process_entry(posixfs_statex_t *statex,
 		if (strcmp(ent_name, pesudo_tld_dir) == 0) {
 			return false;
 		}
-		ret = posixfs_object_statex_getat(dir_obj, ent_name, statex);
+		ret = posixfs_object_statex_getat(dir_obj, ent_name, object_meta, stream_meta);
 		if (ret != 0) {
 			return false;
 		}
-		if (!(statex->file_attributes & FILE_ATTRIBUTE_DIRECTORY)) {
+		if (!(object_meta->file_attributes & FILE_ATTRIBUTE_DIRECTORY)) {
 			return false;
 		}
-		statex->file_attributes &= uint32_t(~FILE_ATTRIBUTE_REPARSE_POINT);
+		object_meta->file_attributes &= uint32_t(~FILE_ATTRIBUTE_REPARSE_POINT);
 	} else if (file_number == 0) {
 		/* TODO should lock dir_obj */
-		ret = posixfs_object_get_statex(dir_obj, statex);
+		ret = posixfs_object_get_statex(dir_obj, object_meta, stream_meta);
 	} else {
 		X_ASSERT(file_number == 1);
-		ret = posixfs_object_get_parent_statex(dir_obj, statex);
+		ret = posixfs_object_get_parent_statex(dir_obj, object_meta, stream_meta);
 	}
 
 	return ret == 0;
@@ -345,9 +350,10 @@ static inline void create_new_tld(dfs_share_t &dfs_share,
 	} else {
 		X_TODO;
 	}
-	posixfs_statex_t statex;
+	x_smbd_object_meta_t object_meta;
+	x_smbd_stream_meta_t stream_meta;
 	posixfs_post_create(fd, FILE_ATTRIBUTE_DIRECTORY,
-			&statex, ntacl_blob);
+			&object_meta, &stream_meta, ntacl_blob);
 
 	set_tld_target(fd, volume, uuid_str);
 	close(fd);
@@ -487,7 +493,9 @@ static NTSTATUS dfs_root_object_op_lock(
 }
 
 
-static bool dfs_tld_process_entry(posixfs_statex_t *statex,
+static bool dfs_tld_process_entry(
+		x_smbd_object_meta_t *object_meta,
+		x_smbd_stream_meta_t *stream_meta,
 		posixfs_object_t *dir_obj,
 		const char *ent_name,
 		uint32_t file_number)
@@ -498,7 +506,7 @@ static bool dfs_tld_process_entry(posixfs_statex_t *statex,
 		return false;
 	} else {
 		/* TODO parent dir should be pesudo_tld_dir */
-		ret = posixfs_object_get_statex(dir_obj, statex);
+		ret = posixfs_object_get_statex(dir_obj, object_meta, stream_meta);
 	}
 
 	return ret == 0;
@@ -752,7 +760,9 @@ static const x_smbd_object_ops_t dfs_root_object_ops = {
 	posixfs_op_release_object,
 };
 
-static bool dfs_volume_process_entry(posixfs_statex_t *statex,
+static bool dfs_volume_process_entry(
+		x_smbd_object_meta_t *object_meta,
+		x_smbd_stream_meta_t *stream_meta,
 		posixfs_object_t *dir_obj,
 		const char *ent_name,
 		uint32_t file_number)
@@ -762,12 +772,12 @@ static bool dfs_volume_process_entry(posixfs_statex_t *statex,
 	int ret = 0;
 	if (file_number >= ARRAY_SIZE(pseudo_entries)) {
 		/* TODO check ntacl if ABE is enabled */
-		ret = posixfs_object_statex_getat(dir_obj, ent_name, statex);
+		ret = posixfs_object_statex_getat(dir_obj, ent_name, object_meta, stream_meta);
 	} else if (file_number == 0) {
 		/* TODO should lock dir_obj */
-		ret = posixfs_object_get_statex(dir_obj, statex);
+		ret = posixfs_object_get_statex(dir_obj, object_meta, stream_meta);
 	} else if (file_number == 1) {
-		ret = posixfs_object_get_parent_statex(dir_obj, statex);
+		ret = posixfs_object_get_parent_statex(dir_obj, object_meta, stream_meta);
 	} else {
 		return -1; // TODO not support snapshot for now
 #if 0

@@ -11,6 +11,7 @@
 #include "smb2.hxx"
 #include "smbd_lease.hxx"
 #include "smbd_share.hxx"
+#include "smbd_file.hxx"
 
 struct x_smbd_open_t
 {

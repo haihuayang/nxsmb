@@ -102,10 +102,11 @@ all: $(TARGET_SET_tests:%=$(TARGET_DIR_out)/tests/%) \
 a = \
 
 SET_src_nxsmbd := \
+	smbd_file_info \
+	smbd_posixfs \
 	smbd_notify \
 	smbd_dfs \
 	smbd_simplefs \
-	smbd_posixfs \
 	smbd_share \
 	smbd_ipc \
 	smbd_conf smbd_share \

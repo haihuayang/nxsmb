@@ -10,7 +10,9 @@ static const char *pseudo_entries[] = {
 };
 #define PSEUDO_ENTRIES_COUNT    ARRAY_SIZE(pseudo_entries)
 
-static bool simplefs_process_entry(posixfs_statex_t *statex,
+static bool simplefs_process_entry(
+		x_smbd_object_meta_t *object_meta,
+		x_smbd_stream_meta_t *stream_meta,
 		posixfs_object_t *dir_obj,
 		const char *ent_name,
 		uint32_t file_number)
@@ -20,12 +22,13 @@ static bool simplefs_process_entry(posixfs_statex_t *statex,
 	int ret = 0;
 	if (file_number >= PSEUDO_ENTRIES_COUNT) {
 		/* TODO check ntacl if ABE is enabled */
-		ret = posixfs_object_statex_getat(dir_obj, ent_name, statex);
+		ret = posixfs_object_statex_getat(dir_obj, ent_name,
+				object_meta, stream_meta);
 	} else if (file_number == 0) {
 		/* TODO should lock dir_obj */
-		ret = posixfs_object_get_statex(dir_obj, statex);
+		ret = posixfs_object_get_statex(dir_obj, object_meta, stream_meta);
 	} else if (file_number == 1) {
-		ret = posixfs_object_get_parent_statex(dir_obj, statex);
+		ret = posixfs_object_get_parent_statex(dir_obj, object_meta, stream_meta);
 	} else {
 		return -1; // TODO not support snapshot for now
 #if 0

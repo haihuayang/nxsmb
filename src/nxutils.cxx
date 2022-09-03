@@ -91,12 +91,13 @@ static int show_security_desc(char **argv)
 
 static int init_default_dir(int dirfd)
 {
-	posixfs_statex_t statex;
+	x_smbd_object_meta_t object_meta;
+	x_smbd_stream_meta_t stream_meta;
 	auto psd = make_share_sec_desc();
 	std::vector<uint8_t> ntacl_blob;
 	create_acl_blob(ntacl_blob, psd, idl::XATTR_SD_HASH_TYPE_NONE, std::array<uint8_t, idl::XATTR_SD_HASH_SIZE>());
 
-	posixfs_post_create(dirfd, FILE_ATTRIBUTE_DIRECTORY, &statex, ntacl_blob);
+	posixfs_post_create(dirfd, FILE_ATTRIBUTE_DIRECTORY, &object_meta, &stream_meta, ntacl_blob);
 	return 0;
 }
 
@@ -169,7 +170,7 @@ static NTSTATUS get_sd(int fd,
 	return parse_acl_blob(blob, psd, &hash_type, &version, hash);
 }
 
-static void output_timespec(const char *name, const struct timespec *ts)
+static inline void output_timespec(const char *name, const struct timespec *ts)
 {
 	struct tm *lt = localtime(&ts->tv_sec);
 	printf("%s: %d-%02d-%02d %02d:%02d:%02d %c%ld %ld.%09ld\n",
@@ -185,14 +186,32 @@ static void output_timespec(const char *name, const struct timespec *ts)
 			ts->tv_sec, ts->tv_nsec);
 }
 
+static void output_nttime(const char *name, const idl::NTTIME nttime)
+{
+	struct timespec ts = x_nttime_to_timespec(nttime);
+	struct tm *lt = localtime(&ts.tv_sec);
+	printf("%s: %d-%02d-%02d %02d:%02d:%02d %c%ld %ld.%09ld\n",
+			name,
+			lt->tm_year + 1900,
+			lt->tm_mon + 1,
+			lt->tm_mday,
+			lt->tm_hour,
+			lt->tm_min,
+			lt->tm_sec,
+			lt->tm_gmtoff > 0 ? '+' : '-',
+			abs(lt->tm_gmtoff),
+			ts.tv_sec, ts.tv_nsec);
+}
+
 static int show_attrex(char **argv)
 {
 	const char *path = argv[0];
 	int fd = open(path, O_RDONLY);
 	X_ASSERT(fd >= 0);
-	posixfs_statex_t statex;
+	x_smbd_object_meta_t object_meta;
+	x_smbd_stream_meta_t stream_meta;
 
-	int err = posixfs_statex_get(fd, &statex);
+	int err = posixfs_statex_get(fd, &object_meta, &stream_meta);
 	X_ASSERT(err == 0);
 
 	std::shared_ptr<idl::security_descriptor> psd;
@@ -202,25 +221,21 @@ static int show_attrex(char **argv)
 	close(fd);
 
 	printf("File: '%s'\n", path);
-	printf("Size: %lu\n", statex.stat.st_size);
-	printf("Blocks: %lu\n", statex.stat.st_blocks);
-	printf("IOBlock: %lu\n", statex.stat.st_blksize);
-	printf("Device: 0x%lx\n", statex.stat.st_dev);
-	printf("Ino: %lu\n", statex.stat.st_ino);
-	printf("Nlink: %lu\n", statex.stat.st_nlink);
-	printf("Mode: 0%o\n", statex.stat.st_mode);
-	printf("Uid: %d\n", statex.stat.st_uid);
-	printf("Gid: %d\n", statex.stat.st_gid);
-	output_timespec("Access", &statex.stat.st_atim);
-	output_timespec("Modify", &statex.stat.st_mtim);
-	output_timespec("Change", &statex.stat.st_ctim);
-	output_timespec("Birth", &statex.birth_time);
-	printf("DosAttr: 0x%x\n", statex.file_attributes);
+	printf("Fsid: 0x%lx\n", object_meta.fsid);
+	printf("Inode: %lu\n", object_meta.inode);
+	printf("Nlink: %lu\n", object_meta.nlink);
+	output_nttime("Birth", object_meta.creation);
+	output_nttime("Access", object_meta.last_access);
+	output_nttime("Modify", object_meta.last_write);
+	output_nttime("Change", object_meta.change);
+	printf("Size: %lu\n", stream_meta.end_of_file);
+	printf("Allocation: %lu\n", stream_meta.allocation_size);
+	printf("DosAttr: 0x%x\n", object_meta.file_attributes);
 	printf("NTACL: %s\n", idl_tostring(*psd).c_str());
 
 	return 0;
 }
-
+#if 0
 static int set_dos_attr(char **argv)
 {
 	const char *path = argv[0];
@@ -241,7 +256,7 @@ static int set_dos_attr(char **argv)
 
 	return 0;
 }
-
+#endif
 int main(int argc, char **argv)
 {
 	const char *command = argv[1];
@@ -251,8 +266,10 @@ int main(int argc, char **argv)
 		return init_volume(argv + 2);
 	} else if (strcmp(command, "attrex") == 0) {
 		return show_attrex(argv + 2);
+#if 0
 	} else if (strcmp(command, "set-dos-attr") == 0) {
 		return set_dos_attr(argv + 2);
+#endif
 	} else if (strcmp(command, "set-default-security-desc") == 0) {
 		return set_default_security_desc(argv + 2);
 	} else if (strcmp(command, "show-security-desc") == 0) {
