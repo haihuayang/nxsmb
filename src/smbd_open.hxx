@@ -124,7 +124,8 @@ struct x_smbd_object_ops_t
 			bool last_level);
 	void (*destroy)(x_smbd_object_t *smbd_object, x_smbd_open_t *smbd_open);
 	void (*release_object)(x_smbd_object_t *smbd_object);
-	uint32_t (*get_attributes)(const x_smbd_object_t *smbd_object);
+	std::u16string (*get_path)(const x_smbd_object_t *smbd_object,
+			const x_smbd_open_t *smbd_open);
 };
 
 struct x_smbd_object_t
@@ -340,16 +341,13 @@ static inline NTSTATUS x_smbd_object_unlink(
 	return smbd_object->topdir->ops->unlink(smbd_object, fd);
 }
 
-static inline std::string x_smbd_object_get_path(
-		const x_smbd_object_t *smbd_object)
-{
-	return x_convert_utf16_to_utf8(smbd_object->path);
-}
-
 static inline std::string x_smbd_open_op_get_path(
 		const x_smbd_open_t *smbd_open)
 {
-	return x_smbd_object_get_path(smbd_open->smbd_object);
+	x_smbd_object_t *smbd_object = smbd_open->smbd_object;
+	std::u16string path = smbd_object->topdir->ops->get_path(
+			smbd_object, smbd_open);
+	return x_convert_utf16_to_utf8(path);
 }
 
 static inline void x_smbd_open_op_destroy(
@@ -370,11 +368,12 @@ static inline void x_smbd_object_release(x_smbd_object_t *smbd_object)
 {
 	smbd_object->topdir->ops->release_object(smbd_object);
 }
-
+#if 0
+	uint32_t (*get_attributes)(const x_smbd_object_t *smbd_object);
 static inline uint32_t x_smbd_object_get_attributes(const x_smbd_object_t *smbd_object)
 {
 	return smbd_object->topdir->ops->get_attributes(smbd_object);
 }
-
+#endif
 #endif /* __smbd_open__hxx__ */
 

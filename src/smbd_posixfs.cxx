@@ -1809,6 +1809,9 @@ static posixfs_ads_t *posixfs_ads_open(
 			}
 			return true;
 		});
+	if (ads) {
+		posixfs_object->ads_list.push_front(ads);
+	}
 	return ads;
 }
 
@@ -3561,13 +3564,17 @@ void posixfs_object_op_destroy(x_smbd_object_t *smbd_object,
 		x_smbd_open_t *smbd_open)
 {
 	posixfs_open_t *posixfs_open = posixfs_open_from_base_t::container(smbd_open);
-#if 0
 	posixfs_object_t *posixfs_object = posixfs_object_from_base_t::container(smbd_object);
 	{
 		std::unique_lock<std::mutex> lock(posixfs_object->base.mutex);
-		posixfs_object_remove(posixfs_object, posixfs_open);
+		if (!is_default_stream(posixfs_object, posixfs_open->stream)) {
+			posixfs_ads_t *posixfs_ads = X_CONTAINER_OF(posixfs_open->stream,
+					posixfs_ads_t, base);
+			posixfs_ads_release(posixfs_object, posixfs_ads);
+		} else {
+			++posixfs_open->stream->ref_count;
+		}
 	}
-#endif
 	delete posixfs_open;
 }
 
@@ -3595,6 +3602,20 @@ uint32_t posixfs_op_get_attributes(const x_smbd_object_t *smbd_object)
 {
 	const posixfs_object_t *posixfs_object = posixfs_object_from_base_t::container(smbd_object);
 	return posixfs_object->meta.file_attributes;
+}
+
+std::u16string posixfs_op_get_path(const x_smbd_object_t *smbd_object,
+		const x_smbd_open_t *smbd_open)
+{
+	posixfs_object_t *posixfs_object = posixfs_object_from_base_t::container(smbd_object);
+	posixfs_open_t *posixfs_open = posixfs_open_from_base_t::container(smbd_open);
+	if (is_default_stream(posixfs_object, posixfs_open->stream)) {
+		return smbd_object->path;
+	} else {
+		posixfs_ads_t *posixfs_ads = X_CONTAINER_OF(posixfs_open->stream,
+				posixfs_ads_t, base);
+		return smbd_object->path + u":" + posixfs_ads->name;
+	}
 }
 
 

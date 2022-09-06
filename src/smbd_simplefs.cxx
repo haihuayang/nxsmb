@@ -76,6 +76,7 @@ static const x_smbd_object_ops_t simplefs_object_ops = {
 	posixfs_object_notify_change,
 	posixfs_object_op_destroy,
 	posixfs_op_release_object,
+	posixfs_op_get_path,
 };
 
 struct simplefs_share_t : x_smbd_share_t

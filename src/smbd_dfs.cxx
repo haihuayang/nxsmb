@@ -311,10 +311,11 @@ static bool dfs_tld_manager_process_entry(
 
 static inline void create_new_tld(dfs_share_t &dfs_share,
 		x_smbd_requ_t *smbd_requ,
-		const std::string &name)
+		const std::u16string &u16name)
 {
 	// tld creation is started from the node host the share root
 	X_ASSERT(dfs_share.root_dir);
+	auto name = x_convert_utf16_to_utf8(u16name);
 
 	uint8_t uuid[16];
 	generate_random_buffer(uuid, sizeof uuid);
@@ -705,7 +706,7 @@ static NTSTATUS dfs_root_create_open(dfs_share_t &dfs_share,
 				return NT_STATUS_ACCESS_DENIED;
 			} else {
 				// TODO create new tld
-				create_new_tld(dfs_share, smbd_requ, x_smbd_object_get_path(smbd_object));
+				create_new_tld(dfs_share, smbd_requ, smbd_object->path);
 				state->in_create_disposition = FILE_OPEN_IF;
 				return x_smbd_posixfs_create_open(psmbd_open,
 						smbd_object, smbd_requ,
@@ -758,6 +759,7 @@ static const x_smbd_object_ops_t dfs_root_object_ops = {
 	dfs_root_notify_change,
 	posixfs_object_op_destroy,
 	posixfs_op_release_object,
+	posixfs_op_get_path,
 };
 
 static bool dfs_volume_process_entry(
@@ -878,6 +880,7 @@ static const x_smbd_object_ops_t dfs_volume_object_ops = {
 	posixfs_object_notify_change,
 	posixfs_object_op_destroy,
 	posixfs_op_release_object,
+	posixfs_op_get_path,
 };
 
 NTSTATUS dfs_share_t::resolve_path(std::shared_ptr<x_smbd_topdir_t> &topdir,

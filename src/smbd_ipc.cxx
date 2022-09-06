@@ -625,10 +625,16 @@ static void ipc_op_release_object(x_smbd_object_t *smbd_object)
 {
 	// do nothing
 }
-
+#if 0
 static uint32_t ipc_op_get_attributes(const x_smbd_object_t *smbd_object)
 {
 	return FILE_ATTRIBUTE_NORMAL;
+}
+#endif
+static std::u16string ipc_op_get_path(const x_smbd_object_t *smbd_object,
+		const x_smbd_open_t *smbd_open)
+{
+	return smbd_object->path;
 }
 
 static const x_smbd_object_ops_t x_smbd_ipc_object_ops = {
@@ -650,7 +656,7 @@ static const x_smbd_object_ops_t x_smbd_ipc_object_ops = {
 	nullptr, // notify_fname
 	ipc_object_op_destroy,
 	ipc_op_release_object,
-	ipc_op_get_attributes,
+	ipc_op_get_path,
 };
 
 static std::shared_ptr<x_smbd_topdir_t> ipc_get_topdir()
