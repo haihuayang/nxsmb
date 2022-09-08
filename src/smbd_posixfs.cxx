@@ -2436,7 +2436,11 @@ NTSTATUS posixfs_object_op_unlink(x_smbd_object_t *smbd_object, int fd)
 	posixfs_object_t *posixfs_object = posixfs_object_from_base_t::container(smbd_object);
 	int err = unlinkat(posixfs_object->base.topdir->fd, posixfs_object->unix_path.c_str(),
 			posixfs_object_is_dir(posixfs_object) ? AT_REMOVEDIR : 0);
-	X_ASSERT(err == 0);
+	if (err != 0) {
+		X_TODO_ASSERT(errno == ENOTEMPTY);
+		return NT_STATUS_DIRECTORY_NOT_EMPTY;
+	}
+
 	err = close(posixfs_object->fd);
 	X_ASSERT(err == 0);
 	posixfs_object->fd = -1;
