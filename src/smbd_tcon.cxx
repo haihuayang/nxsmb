@@ -156,8 +156,6 @@ NTSTATUS x_smbd_tcon_op_create(x_smbd_tcon_t *smbd_tcon,
 			open_priv_data,
 			changes);
 
-	x_smbd_notify_change(topdir, changes);
-
 	x_smbd_object_release(smbd_object);
 
 	if (smbd_open) {
@@ -168,14 +166,21 @@ NTSTATUS x_smbd_tcon_op_create(x_smbd_tcon_t *smbd_tcon,
 		{
 			std::lock_guard<std::mutex> lock(smbd_tcon->mutex);
 			if (smbd_tcon->state != x_smbd_tcon_t::S_ACTIVE) {
-				x_smbd_open_terminate(smbd_open);
-				return NT_STATUS_NETWORK_NAME_DELETED;
+				std::unique_ptr<x_smb2_state_close_t> state;
+				x_smbd_open_close(smbd_open, nullptr, state, changes);
+				status = NT_STATUS_NETWORK_NAME_DELETED;
+			} else {
+				smbd_tcon->open_list.push_back(&smbd_open->tcon_link);
 			}
-			smbd_tcon->open_list.push_back(&smbd_open->tcon_link);
 		}
-		x_smbd_ref_inc(smbd_open); // ref by smbd_tcon open_list
-		smbd_requ->smbd_open = x_smbd_ref_inc(smbd_open);
+		if (NT_STATUS_IS_OK(status)) {
+			x_smbd_ref_inc(smbd_open); // ref by smbd_tcon open_list
+			smbd_requ->smbd_open = x_smbd_ref_inc(smbd_open);
+		}
 	}
+
+	x_smbd_notify_change(topdir, changes);
+
 	return status;
 }
 
@@ -194,14 +199,19 @@ static bool smbd_tcon_terminate(x_smbd_tcon_t *smbd_tcon)
 	g_smbd_tcon_table->remove(smbd_tcon->tid);
 	x_smbd_ref_dec(smbd_tcon);
 
+	std::vector<x_smb2_change_t> changes;
 	x_dlink_t *link;
 	lock.lock();
 	while ((link = smbd_tcon->open_list.get_front()) != nullptr) {
 		smbd_tcon->open_list.remove(link);
 		lock.unlock();
-		x_smbd_open_unlinked(link, smbd_tcon);
+		x_smbd_open_unlinked(link, smbd_tcon, changes);
 		lock.lock();
 	}
+	lock.unlock();
+
+	// TODO get topdir, x_smbd_notify_change(topdir, changes);
+
 	x_smbd_ref_dec(smbd_tcon); // ref by smbd_sess tcon_list
 	return true;
 }

@@ -242,9 +242,12 @@ bool x_smbd_open_has_space();
 x_smbd_open_t *x_smbd_open_lookup(uint64_t id_presistent, uint64_t id_volatile,
 		const x_smbd_tcon_t *smbd_tcon);
 bool x_smbd_open_store(x_smbd_open_t *smbd_open);
-bool x_smbd_open_close(x_smbd_open_t *smbd_open);
-bool x_smbd_open_terminate(x_smbd_open_t *smbd_open);
-void x_smbd_open_unlinked(x_dlink_t *link, x_smbd_tcon_t *smbd_tcon);
+NTSTATUS x_smbd_open_close(x_smbd_open_t *smbd_open,
+		x_smbd_requ_t *smbd_requ,
+		std::unique_ptr<x_smb2_state_close_t> &state,
+		std::vector<x_smb2_change_t> &changes);
+void x_smbd_open_unlinked(x_dlink_t *link, x_smbd_tcon_t *smbd_tcon,
+		std::vector<x_smb2_change_t> &changes);
 
 
 

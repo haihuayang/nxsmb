@@ -100,11 +100,6 @@ NTSTATUS x_smb2_process_close(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ
 		RETURN_OP_STATUS(smbd_requ, status);
 	}
 
-	bool ret = x_smbd_open_close(smbd_requ->smbd_open);
-	X_SMBD_REF_DEC(smbd_requ->smbd_open);
-	if (!ret) {
-		return NT_STATUS_FILE_CLOSED;
-	}
 	x_smb2_reply_close(smbd_conn, smbd_requ, *state);
 	return status;
 }

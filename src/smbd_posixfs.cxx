@@ -374,18 +374,58 @@ static posixfs_object_t *posixfs_object_lookup(
 	return matched_object;
 }
 
+static inline void posixfs_object_incref(posixfs_object_t *posixfs_object)
+{
+	X_ASSERT(++posixfs_object->use_count > 1);
+}
+
+static inline void posixfs_object_decref(posixfs_object_t *posixfs_object)
+{
+	X_ASSERT(--posixfs_object->use_count > 0);
+}
+
+static inline void posixfs_stream_incref(posixfs_stream_t *posixfs_stream)
+{
+	X_ASSERT(++posixfs_stream->ref_count > 1);
+}
+
+static inline void posixfs_stream_decref(posixfs_stream_t *posixfs_stream)
+{
+	X_ASSERT(--posixfs_stream->ref_count > 0);
+}
+
+static inline void posixfs_object_add_ads(posixfs_object_t *posixfs_object,
+		posixfs_ads_t *posixfs_ads)
+{
+	posixfs_object->ads_list.push_front(posixfs_ads);
+}
+
+static inline void posixfs_object_remove_ads(posixfs_object_t *posixfs_object,
+		posixfs_ads_t *posixfs_ads)
+{
+	posixfs_object->ads_list.remove(posixfs_ads);
+}
+
 static void posixfs_object_release(posixfs_object_t *posixfs_object)
 {
 	auto &pool = posixfs_object_pool;
 	auto bucket_idx = posixfs_object->hash % pool.buckets.size();
 	auto &bucket = pool.buckets[bucket_idx];
+	bool free = false;
 
-	/* TODO optimize when use_count > 1 */
-	std::unique_lock<std::mutex> lock(bucket.mutex);
+	{
+		/* TODO optimize when use_count > 1 */
+		std::unique_lock<std::mutex> lock(bucket.mutex);
 
-	X_ASSERT(posixfs_object->use_count > 0);
-	if (--posixfs_object->use_count == 0) {
-		posixfs_object->unused_timestamp = tick_now;
+		X_ASSERT(posixfs_object->use_count > 0);
+		if (--posixfs_object->use_count == 0) {
+			posixfs_object->unused_timestamp = tick_now;
+			bucket.head.remove(&posixfs_object->hash_link);
+			free = true;
+		}
+	}
+	if (free) {
+		delete posixfs_object;
 	}
 }
 
@@ -1342,7 +1382,8 @@ static posixfs_open_t *posixfs_open_create(
 		return nullptr;
 	}
 
-	++posixfs_stream->ref_count;
+	posixfs_stream_incref(posixfs_stream);
+	posixfs_object_incref(posixfs_object);
 	posixfs_stream->open_list.push_back(posixfs_open);
 	*pstatus = NT_STATUS_OK;
 	return posixfs_open;
@@ -1473,6 +1514,7 @@ static NTSTATUS posixfs_new_object(
 		return NT_STATUS_OBJECT_NAME_COLLISION;
 	}
 
+	posixfs_object->default_stream.meta.delete_on_close = false;
 	X_ASSERT(posixfs_object->fd == -1);
 	X_ASSERT(posixfs_object->base.type == x_smbd_object_t::type_not_exist);
 	posixfs_object_update_type(posixfs_object);
@@ -1623,6 +1665,22 @@ static inline NTSTATUS check_object_access(
 	}
 }
 
+static void defer_open(
+		posixfs_object_t *posixfs_object,
+		posixfs_stream_t *posixfs_stream,
+		x_smbd_requ_t *smbd_requ,
+		std::unique_ptr<x_smb2_state_create_t> &state)
+{
+	smbd_requ->requ_state = state.release();
+	/* TODO add timer */
+	x_smbd_ref_inc(smbd_requ);
+	posixfs_stream_incref(posixfs_stream);
+	posixfs_object_incref(posixfs_object);
+	posixfs_stream->defer_open_list.push_back(smbd_requ);
+	smbd_requ->smbd_object = &posixfs_object->base;
+	x_smbd_conn_set_async(g_smbd_conn_curr, smbd_requ, posixfs_create_cancel);
+}
+
 static posixfs_open_t *posixfs_create_open_exist_object(
 		posixfs_object_t *posixfs_object,
 		x_smbd_requ_t *smbd_requ,
@@ -1708,13 +1766,8 @@ static posixfs_open_t *posixfs_create_open_exist_object(
 					&state->lease : nullptr,
 				state->in_create_disposition,
 				conflict, true)) {
-		smbd_requ->requ_state = state.release();
-		/* TODO add timer */
-		x_smbd_ref_inc(smbd_requ);
-		posixfs_object->default_stream.defer_open_list.push_back(smbd_requ);
-		++posixfs_object->use_count;
-		smbd_requ->smbd_object = &posixfs_object->base;
-		x_smbd_conn_set_async(g_smbd_conn_curr, smbd_requ, posixfs_create_cancel);
+		defer_open(posixfs_object, &posixfs_object->default_stream,
+				smbd_requ, state);
 		status = NT_STATUS_PENDING;
 		return nullptr;
 	}
@@ -1774,7 +1827,7 @@ static posixfs_ads_t *posixfs_ads_add(
 		const std::u16string &name)
 {
 	posixfs_ads_t *posixfs_ads = new posixfs_ads_t(name);
-	posixfs_object->ads_list.push_front(posixfs_ads);
+	posixfs_object_add_ads(posixfs_object, posixfs_ads);
 	return posixfs_ads;
 }
 
@@ -1810,7 +1863,7 @@ static posixfs_ads_t *posixfs_ads_open(
 			return true;
 		});
 	if (ads) {
-		posixfs_object->ads_list.push_front(ads);
+		posixfs_object_add_ads(posixfs_object, ads);
 	}
 	return ads;
 }
@@ -1819,7 +1872,7 @@ static void posixfs_ads_release(posixfs_object_t *posixfs_object,
 		posixfs_ads_t *ads)
 {
 	if (--ads->base.ref_count == 0) {
-		posixfs_object->ads_list.remove(ads);
+		posixfs_object_remove_ads(posixfs_object, ads);
 		delete ads;
 	}
 }
@@ -1967,19 +2020,14 @@ static posixfs_open_t *open_object_exist_ads(
 			&posixfs_ads->base,
 			state->in_desired_access, state->in_share_access);
 	if (delay_for_oplock(posixfs_object,
-				&posixfs_object->default_stream,
+				&posixfs_ads->base,
 				curr_client_guid,
 				state->oplock_level == X_SMB2_OPLOCK_LEVEL_LEASE ?
 					&state->lease : nullptr,
 				state->in_create_disposition,
 				conflict, true)) {
-		smbd_requ->requ_state = state.release();
-		/* TODO add timer */
-		x_smbd_ref_inc(smbd_requ);
-		posixfs_object->default_stream.defer_open_list.push_back(smbd_requ);
-		++posixfs_object->use_count;
-		smbd_requ->smbd_object = &posixfs_object->base;
-		x_smbd_conn_set_async(g_smbd_conn_curr, smbd_requ, posixfs_create_cancel);
+		defer_open(posixfs_object, &posixfs_ads->base,
+				smbd_requ, state);
 		status = NT_STATUS_PENDING;
 		return nullptr;
 	}
@@ -2405,6 +2453,7 @@ static void posixfs_object_remove(posixfs_object_t *posixfs_object,
 	}
 	posixfs_stream_t *posixfs_stream = posixfs_open->stream;
 	posixfs_stream->open_list.remove(posixfs_open);
+
 	if (posixfs_open->locks.size()) {
 		posixfs_re_lock(posixfs_stream);
 	}
@@ -2494,6 +2543,7 @@ NTSTATUS posixfs_object_op_close(
 					posixfs_open->stream->meta);
 		}
 	}
+
 	return NT_STATUS_OK;
 }
 
@@ -3572,7 +3622,7 @@ void posixfs_object_op_destroy(x_smbd_object_t *smbd_object,
 					posixfs_ads_t, base);
 			posixfs_ads_release(posixfs_object, posixfs_ads);
 		} else {
-			++posixfs_open->stream->ref_count;
+			posixfs_stream_decref(posixfs_open->stream);
 		}
 	}
 	delete posixfs_open;
@@ -3634,17 +3684,7 @@ int x_smbd_posixfs_init(size_t max_open)
 	posixfs_object_pool.buckets.swap(buckets);
 	return 0;
 }
-#if 0
-x_smbd_object_t *x_smbd_posixfs_object_open_parent(const x_smbd_object_t *child_object)
-{
-	posixfs_object_t *posixfs_object = posixfs_object_from_base_t::container(child_object);
-	posixfs_object_t *parent_object = posixfs_object_open_parent(posixfs_object);
-	if (parent_object) {
-		return &parent_object->base;
-	}
-	return nullptr;
-}
-#endif
+
 int posixfs_object_get_statex(const posixfs_object_t *posixfs_object,
 		x_smbd_object_meta_t *object_meta,
 		x_smbd_stream_meta_t *stream_meta)

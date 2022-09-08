@@ -151,21 +151,10 @@ struct x_smbd_object_t
 	std::u16string path;
 };
 
-static inline NTSTATUS x_smbd_open_op_close(
+NTSTATUS x_smbd_open_op_close(
 		x_smbd_open_t *smbd_open,
 		x_smbd_requ_t *smbd_requ,
-		std::unique_ptr<x_smb2_state_close_t> &state)
-{
-	x_smbd_object_t *smbd_object = smbd_open->smbd_object;
-	auto topdir = smbd_object->topdir;
-	std::vector<x_smb2_change_t> changes;
-	auto status = topdir->ops->close(smbd_object, smbd_open,
-			smbd_requ, state, changes);
-	if (NT_STATUS_IS_OK(status)) {
-		x_smbd_notify_change(topdir, changes);
-	}
-	return status;
-}
+		std::unique_ptr<x_smb2_state_close_t> &state);
 
 static inline NTSTATUS x_smbd_open_op_read(
 		x_smbd_open_t *smbd_open,
