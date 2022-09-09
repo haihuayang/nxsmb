@@ -3005,7 +3005,7 @@ static bool marshall_stream_info(x_smb2_chain_marshall_t &marshall,
 		const char *stream_name,
 		uint64_t size, uint64_t allocation_size)
 {
-	std::u16string name = x_convert_utf8_to_utf16(stream_name);
+	std::u16string name = u":" + x_convert_utf8_to_utf16(stream_name);
 	name += u":$DATA";
 
 	uint32_t rec_size = x_convert_assert<uint32_t>(sizeof(x_smb2_file_stream_name_info_t) + name.size() * 2);
