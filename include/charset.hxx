@@ -161,5 +161,11 @@ static inline char16_t *x_utf16le_encode(const std::u16string &s,
 	return begin;
 }
 
+static inline bool x_strcase_equal(const std::u16string &s1, const std::u16string &s2)
+{
+	/* TODO case */
+	return s1 == s2;
+}
+
 #endif /* __charset__hxx__ */
 
