@@ -1665,6 +1665,31 @@ static inline NTSTATUS check_object_access(
 	}
 }
 
+static bool check_ads_share_access(posixfs_object_t *posixfs_object,
+		uint32_t granted)
+{
+	posixfs_ads_t *posixfs_ads;
+	for (posixfs_ads = posixfs_object->ads_list.get_front();
+			posixfs_ads;
+			posixfs_ads = posixfs_object->ads_list.next(posixfs_ads)) {
+		posixfs_open_t *other_open;
+		for (other_open = posixfs_ads->base.open_list.get_front();
+				other_open;
+				other_open = posixfs_ads->base.open_list.next(other_open)) {
+			if (!(other_open->base.share_access & FILE_SHARE_WRITE)) {
+				X_LOG_NOTICE("ads %s share-access %d violate access 0x%x",
+						posixfs_ads->xattr_name.c_str(),
+						other_open->base.share_access,
+						posixfs_object->unix_path.c_str(),
+						granted);
+
+				return false;
+			}
+		}
+	}
+	return true;
+}
+
 static void defer_open(
 		posixfs_object_t *posixfs_object,
 		posixfs_stream_t *posixfs_stream,
@@ -1751,6 +1776,13 @@ static posixfs_open_t *posixfs_create_open_exist_object(
 	} else if (rejected_mask != 0) {
 		status = NT_STATUS_ACCESS_DENIED;
 		return nullptr;
+	}
+
+	if (granted & idl::SEC_STD_DELETE) {
+		if (!check_ads_share_access(posixfs_object, granted)) {
+			status = NT_STATUS_SHARING_VIOLATION;
+			return nullptr;
+		}
 	}
 
 	state->granted_access = granted;
