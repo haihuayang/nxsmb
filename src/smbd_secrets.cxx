@@ -46,7 +46,7 @@
 #define SECRETS_AUTH_PASSWORD  "SECRETS/AUTH_PASSWORD"
 
 static struct tdb_context *g_secrets_db_ctx;
-#if 0
+
 struct secrets_fetch_state_t
 {
 	secrets_fetch_state_t(std::vector<uint8_t> *d) : data(d) { }
@@ -60,7 +60,6 @@ static int secrets_fetch_parser(TDB_DATA key, TDB_DATA data,
 	state->data->assign(data.dptr, data.dptr + data.dsize);
 	return 0;
 }
-
 
 /* read a entry from the secrets database - the caller must free the result
    if size is non-null then the size of the entry is put in there
@@ -76,7 +75,7 @@ static int secrets_fetch(const std::string &key, std::vector<uint8_t> &data)
 			secrets_fetch_parser, &state);
 	return err;
 }
-#endif
+
 struct secrets_fetch_string_state_t
 {
 	secrets_fetch_string_state_t(std::string *d) : data(d) { }
@@ -163,6 +162,16 @@ const std::string x_smbd_secrets_fetch_prev_machine_password(const std::string &
 	} else {
 		return "";
 	}
+}
+
+bool x_smbd_secrets_fetch_domain_guid(const std::string &domain, idl::GUID &guid)
+{
+	std::vector<uint8_t> data;
+	int ret = secrets_fetch(SECRETS_DOMAIN_GUID "/" + domain, data);
+	X_ASSERT(ret == 0);
+	X_ASSERT(data.size() == sizeof guid);
+	memcpy(&guid, data.data(), sizeof guid);
+	return true;
 }
 
 int x_smbd_secrets_init()

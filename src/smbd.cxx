@@ -70,7 +70,8 @@ static void init_smbd()
 	g_smbd.tpool_evtmgmt = tpool;
 
 	g_evtmgmt = x_evtmgmt_create(tpool, 0);
-	g_smbd.wbpool = x_wbpool_create(g_evtmgmt, 2);
+	g_smbd.wbpool = x_wbpool_create(g_evtmgmt, 2,
+			smbd_conf->samba_locks_dir + "/winbindd_privileged/pipe");
 
 	x_smbd_open_table_init(X_SMBD_MAX_OPEN);
 	x_smbd_tcon_table_init(X_SMBD_MAX_TCON);
@@ -161,7 +162,7 @@ int main(int argc, char **argv)
 	}
 
 	if (!configfile) {
-		configfile = "/usr/local/samba/etc/smb.conf";
+		configfile = "/my/samba/etc/smb.conf";
 	}
 	int err = x_smbd_conf_parse(configfile, cmdline_options);
 	if (err < 0) {

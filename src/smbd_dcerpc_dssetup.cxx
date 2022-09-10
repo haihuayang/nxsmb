@@ -2,9 +2,7 @@
 #include "smbd_dcerpc.hxx"
 #include "include/librpc/dssetup.hxx"
 #include "smbd_conf.hxx"
-
-// secrets_fetch_domain_guid
-static const uint8_t hhdom2_guid[16] = { 0xDA, '(', 0xE2, 0x07, 'x', '2', 0xA3, 'L', 0xB7, 0x00, 0x0C, 0x0D, 'Y', 0x86, 'I', 0x9F };
+#include "smbd_secrets.hxx"
 
 static bool x_smbd_dcerpc_impl_dssetup_DsRoleGetPrimaryDomainInformation(
 		x_dcerpc_pipe_t &rpc_pipe,
@@ -24,7 +22,9 @@ static bool x_smbd_dcerpc_impl_dssetup_DsRoleGetPrimaryDomainInformation(
 		info->basic.domain = std::make_shared<std::u16string>(x_convert_utf8_to_utf16(smbd_conf->workgroup));
 		info->basic.dns_domain = std::make_shared<std::u16string>(x_convert_utf8_to_utf16(smbd_conf->realm));
 		info->basic.forest = info->basic.dns_domain;
-		memcpy(&info->basic.domain_guid, hhdom2_guid, sizeof(idl::GUID));
+		idl::GUID domain_guid;
+		x_smbd_secrets_fetch_domain_guid(smbd_conf->workgroup, domain_guid);
+		memcpy(&info->basic.domain_guid, &domain_guid, sizeof(idl::GUID));
 		arg.__result = WERR_OK;
 		break;
 	}

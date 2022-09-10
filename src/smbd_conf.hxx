@@ -58,6 +58,7 @@ struct x_smbd_conf_t
 	std::string log_name = "stderr";
 	std::string netbios_name, workgroup, dns_domain, realm;
 	std::string private_dir;
+	std::string samba_locks_dir;
 	std::vector<std::string> cluster_nodes;
 	std::vector<std::string> interfaces;
 	std::vector<x_iface_t> local_ifaces;
@@ -66,6 +67,7 @@ struct x_smbd_conf_t
 	std::map<std::string, std::shared_ptr<x_smbd_share_t>> shares;
 	std::string node;
 	std::vector<std::string> nodes;
+	std::string volume_dir;
 	std::map<std::string, std::pair<std::string, std::shared_ptr<x_smbd_share_t>>> volume_map;
 };
 

@@ -57,7 +57,7 @@ X_DECLARE_MEMBER_TRAITS(wbconn_dlink_traits, wbconn_t, dlink)
 	
 struct x_wbpool_t
 {
-	x_wbpool_t(x_evtmgmt_t *ep, unsigned int count);
+	x_wbpool_t(x_evtmgmt_t *ep, unsigned int count, const std::string &wbpipe);
 	x_timer_t timer; // reconnect timer
 	x_evtmgmt_t *evtmgmt;
 	std::mutex mutex;
@@ -69,6 +69,7 @@ struct x_wbpool_t
 	x_tp_ddlist_t<wbconn_dlink_traits> ready_list; //  TODO front is ready, back is disconnected
 	x_tp_ddlist_t<wbconn_dlink_traits> disconnected_list;
 	std::vector<wbconn_t> wbconns;
+	const std::string wbpipe;
 };
 
 static inline pid_t wbconn_getpid(wbconn_t *wbconn) 
@@ -126,14 +127,13 @@ static int set_sock_flags(int fd)
 
 
 #define WINBINDD_SOCKET_PATH "/var/run/winbindd/pipe"
-// #define WINBINDD_PRIV_SOCKET_PATH "/home/samba/lib/winbindd_privileged/pipe"
-// #define WINBINDD_PRIV_SOCKET_PATH "/var/lib/samba/winbindd_privileged/pipe"
-#define WINBINDD_PRIV_SOCKET_PATH "/usr/local/samba/var/locks/winbindd_privileged/pipe"
-static int winbindd_open_pipe()
+#define WINBINDD_PRIV_SOCKET_PATH "/home/samba/lib/winbindd_privileged/pipe"
+static int winbindd_open_pipe(const std::string &wbpipe)
 {
 	struct sockaddr_un sun;
 	sun.sun_family = AF_UNIX;
-	size_t ret = snprintf(sun.sun_path, sizeof(sun.sun_path), "%s", WINBINDD_PRIV_SOCKET_PATH);
+	size_t ret = snprintf(sun.sun_path, sizeof(sun.sun_path), "%s",
+			wbpipe.c_str());
 	X_ASSERT(ret < sizeof(sun.sun_path));
 	int fd = socket(AF_UNIX, SOCK_STREAM, 0);
 	X_ASSERT(fd >= 0);
@@ -179,7 +179,7 @@ static int wb_connect(x_wbpool_t *wbpool, wbconn_t *wbconn)
 {
 	X_ASSERT(wbconn->fd == -1);
 
-	int fd = winbindd_open_pipe();
+	int fd = winbindd_open_pipe(wbpool->wbpipe);
 	if (fd < 0) {
 		return fd;
 	}
@@ -282,8 +282,8 @@ static const x_timer_upcall_cbs_t wbpool_timer_cbs = {
 	wbpool_timer_done,
 };
 
-x_wbpool_t::x_wbpool_t(x_evtmgmt_t *ep, unsigned int count)
-	: evtmgmt{ep}, wbconns{count}
+x_wbpool_t::x_wbpool_t(x_evtmgmt_t *ep, unsigned int count, const std::string &wbpipe)
+	: evtmgmt{ep}, wbconns{count}, wbpipe{wbpipe}
 {
 	timer.cbs = &wbpool_timer_cbs;
 }
@@ -476,10 +476,11 @@ static const x_epoll_upcall_cbs_t wbconn_upcall_cbs = {
 	wbconn_upcall_cb_unmonitor,
 };
 
-x_wbpool_t *x_wbpool_create(x_evtmgmt_t *evtmgmt, unsigned int count)
+x_wbpool_t *x_wbpool_create(x_evtmgmt_t *evtmgmt, unsigned int count,
+		const std::string &wbpipe)
 {
 	X_ASSERT(count != 0);
-	x_wbpool_t *wbpool = new x_wbpool_t{evtmgmt, count};
+	x_wbpool_t *wbpool = new x_wbpool_t{evtmgmt, count, wbpipe};
 	wbconn_t *wbconn;
 	for (unsigned int i = 0; i < count; ++i) {
 		wbconn = &wbpool->wbconns[i];

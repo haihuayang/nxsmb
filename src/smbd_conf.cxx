@@ -259,8 +259,12 @@ static bool parse_global_param(x_smbd_conf_t &smbd_conf,
 		smbd_conf.private_dir = value;
 	} else if (name == "node") {
 		smbd_conf.node = value;
+	} else if (name == "my:samba locks dir") {
+		smbd_conf.samba_locks_dir = value;
 	} else if (name == "my:nodes") {
 		smbd_conf.nodes = parse_stringlist(value);
+	} else if (name == "my:volume dir") {
+		smbd_conf.volume_dir = value;
 	} else if (name == "my:volume map") {
 		return parse_volume_map(smbd_conf.volume_map, value);
 	} else if (name == "interfaces") {
@@ -349,6 +353,16 @@ static bool split_option(const std::string opt, size_t pos,
 	return true;
 }
 
+static std::string get_samba_path(const std::string &config_path)
+{
+	auto sep = config_path.rfind('/');
+	X_ASSERT(sep != std::string::npos);
+	X_ASSERT(sep > 0);
+	sep = config_path.rfind('/', sep - 1);
+	X_ASSERT(sep != std::string::npos);
+	return config_path.substr(0, sep);
+}
+
 static int parse_smbconf(x_smbd_conf_t &smbd_conf, const char *path,
 		const std::vector<std::string> &cmdline_options)
 {
@@ -362,6 +376,12 @@ static int parse_smbconf(x_smbd_conf_t &smbd_conf, const char *path,
 
 	std::string line;
 	std::ifstream in(path);
+
+	auto samba_path = get_samba_path(path);
+	smbd_conf.private_dir = samba_path + "/private";
+	smbd_conf.samba_locks_dir = samba_path + "/var/locks";
+
+
 	unsigned int lineno = 0;
 	while (std::getline(in, line)) {
 		++lineno;
@@ -496,8 +516,6 @@ int x_smbd_conf_parse(const char *configfile, const std::vector<std::string> &cm
 x_smbd_conf_t::x_smbd_conf_t()
 {
 	strcpy((char *)&guid, "nxsmbd");
-	// private_dir = "/var/lib/samba/private";
-	private_dir = "/usr/local/samba/private";
 }
 
 

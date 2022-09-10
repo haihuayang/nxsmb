@@ -11,7 +11,6 @@
 #include <sys/file.h>
 
 static const uint32_t default_referral_ttl = 10;
-static const char *volumes_dir = "/data/volumes";
 static const char *pesudo_tld_dir = ".tlds";
 
 enum {
@@ -431,7 +430,7 @@ static NTSTATUS dfs_root_object_op_unlink(x_smbd_object_t *smbd_object, int fd)
 
 		// TODO find the node host the volume,
 		// if it is remote, send message to it
-		std::string dir = volumes_dir;
+		std::string dir = x_smbd_conf_get()->volume_dir;
 		dir += '/';
 		dir += volume;
 		dir += '/';
@@ -1070,7 +1069,7 @@ dfs_share_t::dfs_share_t(const x_smbd_conf_t &smbd_conf,
 	std::string root_node;
 	X_ASSERT(find_node_by_volume(smbd_conf, root_node, first_volume));
 	if (root_node == smbd_conf.node) {
-		std::string path = volumes_dir;
+		std::string path = smbd_conf.volume_dir;
 		path += "/" + first_volume + "/root";
 		root_dir = x_smbd_topdir_create(path, &dfs_root_object_ops);
 	}
@@ -1078,7 +1077,7 @@ dfs_share_t::dfs_share_t(const x_smbd_conf_t &smbd_conf,
 		std::string node;
 		X_ASSERT(find_node_by_volume(smbd_conf, node, volume));
 		if (node == smbd_conf.node) {
-			std::string path = volumes_dir;
+			std::string path = smbd_conf.volume_dir;
 			path += "/" + volume + "/data";
 			local_volume_data_dir[volume] = x_smbd_topdir_create(path, &dfs_volume_object_ops);
 		}

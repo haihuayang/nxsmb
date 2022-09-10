@@ -54,9 +54,11 @@ static void get_domain_info(x_wbpool_t *wbpool, const char *dom_name)
 }
 
 static x_wbpool_t *wbpool;
+static const char *workgroup;
+
 static long get_domain_info_timer_func(x_timer_t *timer)
 {
-	get_domain_info(wbpool, "HHDOM2");
+	get_domain_info(wbpool, workgroup);
 	return 3000;
 }
 
@@ -70,11 +72,13 @@ static const x_timer_upcall_cbs_t get_domain_info_timer_cbs = {
 	get_domain_info_timer_done,
 };
 
-int main()
+int main(int argc, char **argv)
 {
+	workgroup = argv[1];
+	const char *wbpipe = argv[2];
 	x_threadpool_t *tpool = x_threadpool_create(2);
 	x_evtmgmt_t *evtmgmt = x_evtmgmt_create(tpool, 2000000000);
-	wbpool = x_wbpool_create(evtmgmt, 2);
+	wbpool = x_wbpool_create(evtmgmt, 2, wbpipe);
 
 	x_timer_t timer;
 	timer.cbs = &get_domain_info_timer_cbs;

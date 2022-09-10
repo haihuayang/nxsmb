@@ -11,6 +11,7 @@
 #include <vector>
 #include <memory>
 #include <functional>
+#include <string>
 
 extern "C" {
 #include "samba/nsswitch/winbind_struct_protocol.h"
@@ -49,7 +50,8 @@ struct x_wbcli_t
 	x_wbresp_t *resp;
 };
 
-x_wbpool_t *x_wbpool_create(x_evtmgmt_t *ep, unsigned int count);
+x_wbpool_t *x_wbpool_create(x_evtmgmt_t *ep, unsigned int count,
+		const std::string &wbpipe);
 
 int x_wbpool_request(x_wbpool_t *wbpool, x_wbcli_t *wbcli);
 

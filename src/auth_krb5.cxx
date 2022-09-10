@@ -1418,7 +1418,6 @@ static krb5_principal kerberos_fetch_salt_princ_for_host_princ(
 
 	/* lookup new key first */
 
-	// const char *salt_princ_s = nullptr; // = "host/hhnxsmb2.hhdom2.hhlab@HHDOM2.HHLAB";
 #if 0
 	char *unparsed_name = NULL, *salt_princ_s = NULL;
 	if ( (salt_princ_s = kerberos_secrets_fetch_des_salt()) == NULL ) {
