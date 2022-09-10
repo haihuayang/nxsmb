@@ -1,6 +1,17 @@
 
 #include "smbd_open.hxx"
 
+void x_smbd_get_file_info(x_smb2_file_basic_info_t &info,
+		const x_smbd_object_meta_t &object_meta)
+{
+	info.creation.val = X_H2LE64(object_meta.creation.val);
+	info.last_access.val = X_H2LE64(object_meta.last_access.val);
+	info.last_write.val = X_H2LE64(object_meta.last_write.val);
+	info.change.val = X_H2LE64(object_meta.change.val);
+	info.file_attributes = X_H2LE32(object_meta.file_attributes);
+	info.unused = 0;
+}
+
 void x_smbd_get_file_info(x_smb2_file_all_info_t &info,
 		const x_smbd_object_meta_t &object_meta,
 		const x_smbd_stream_meta_t &stream_meta,

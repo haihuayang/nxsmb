@@ -3132,7 +3132,16 @@ static NTSTATUS getinfo_file(posixfs_object_t *posixfs_object,
 		x_smb2_state_getinfo_t &state)
 {
 	posixfs_open_t *posixfs_open = posixfs_open_from_base_t::container(smbd_open);
-	if (state.in_info_level == SMB2_FILE_INFO_FILE_ALL_INFORMATION) {
+	if (state.in_info_level == SMB2_FILE_INFO_FILE_BASIC_INFORMATION) {
+		if (state.in_output_buffer_length < sizeof(x_smb2_file_basic_info_t)) {
+			return STATUS_BUFFER_OVERFLOW;
+		}
+		state.out_data.resize(sizeof(x_smb2_file_basic_info_t));
+		x_smb2_file_basic_info_t *info =
+			(x_smb2_file_basic_info_t *)state.out_data.data();
+
+		x_smbd_get_file_info(*info, posixfs_object->meta);
+	} else if (state.in_info_level == SMB2_FILE_INFO_FILE_ALL_INFORMATION) {
 		if (state.in_output_buffer_length < sizeof(x_smb2_file_all_info_t)) {
 			return STATUS_BUFFER_OVERFLOW;
 		}

@@ -31,6 +31,9 @@ struct x_smbd_stream_meta_t
 	bool delete_on_close = false;
 };
 
+void x_smbd_get_file_info(x_smb2_file_basic_info_t &info,
+		const x_smbd_object_meta_t &object_meta);
+
 void x_smbd_get_file_info(x_smb2_file_all_info_t &info,
 		const x_smbd_object_meta_t &object_meta,
 		const x_smbd_stream_meta_t &stream_meta,
