@@ -1,5 +1,6 @@
 
 #include "smbd_open.hxx"
+#include "smbd_stats.hxx"
 #include "smbd_posixfs.hxx"
 #include <fcntl.h>
 #include <sys/statvfs.h>
@@ -158,7 +159,13 @@ struct posixfs_stream_t
 
 struct posixfs_ads_t
 {
-	posixfs_ads_t(const std::u16string &name) : name(name) { }
+	posixfs_ads_t(const std::u16string &name) : name(name) {
+		X_SMBD_COUNTER_INC(ads_create, 1);
+	}
+	~posixfs_ads_t() {
+		X_SMBD_COUNTER_INC(ads_delete, 1);
+	}
+
 	posixfs_stream_t base;
 	x_dlink_t object_link; // link into object
 	bool exists = false;
@@ -2480,12 +2487,29 @@ NTSTATUS posixfs_object_op_unlink(x_smbd_object_t *smbd_object, int fd)
 	return NT_STATUS_OK;
 }
 
-static void posixfs_object_remove(posixfs_object_t *posixfs_object,
+static bool have_active_open(posixfs_object_t *posixfs_object)
+{
+	if (!posixfs_object->default_stream.open_list.empty()) {
+		return true;
+	}
+	
+	for (posixfs_ads_t *posixfs_ads = posixfs_object->ads_list.get_front();
+			posixfs_ads;
+			posixfs_ads = posixfs_object->ads_list.next(posixfs_ads)) {
+		if (!posixfs_ads->base.open_list.empty()) {
+			return true;
+		}
+	}
+	return false;
+}
+
+static NTSTATUS posixfs_object_remove(posixfs_object_t *posixfs_object,
 		posixfs_open_t *posixfs_open,
 		std::vector<x_smb2_change_t> &changes)
 {
 	if (!posixfs_open->object_link.is_valid()) {
-		return;
+		X_ASSERT(false);
+		return NT_STATUS_OK;
 	}
 	posixfs_stream_t *posixfs_stream = posixfs_open->stream;
 	posixfs_stream->open_list.remove(posixfs_open);
@@ -2494,34 +2518,56 @@ static void posixfs_object_remove(posixfs_object_t *posixfs_object,
 		posixfs_re_lock(posixfs_stream);
 	}
 
-	if (posixfs_stream->open_list.empty() &&
-			posixfs_stream->meta.delete_on_close) {
-		if (!is_default_stream(posixfs_object, posixfs_stream)) {
-			posixfs_ads_t *ads = X_CONTAINER_OF(posixfs_stream,
-					posixfs_ads_t, base);
-			int ret = fremovexattr(posixfs_object->fd, ads->xattr_name.c_str());
-			X_TODO_ASSERT(ret == 0);
-			// TODO should it also notify object MODIFIED
-			changes.push_back(x_smb2_change_t{NOTIFY_ACTION_REMOVED_STREAM,
-					FILE_NOTIFY_CHANGE_STREAM_NAME,
-					posixfs_object->base.path + u':' + ads->name,
-					{}});
-
-		} else if (!posixfs_object->ads_list.get_front()) {
-			uint32_t notify_filter;
-			if (posixfs_object_is_dir(posixfs_object)) {
-				notify_filter = FILE_NOTIFY_CHANGE_DIR_NAME;
-			} else {
-				notify_filter = FILE_NOTIFY_CHANGE_FILE_NAME;
-			}
-
-			NTSTATUS status = x_smbd_object_unlink(&posixfs_object->base, posixfs_object->fd);
-			if (NT_STATUS_IS_OK(status)) {
-				changes.push_back(x_smb2_change_t{NOTIFY_ACTION_REMOVED, notify_filter,
-						posixfs_object->base.path, {}});
-			}
-		}
+	if (!posixfs_stream->open_list.empty()) {
+		return NT_STATUS_OK;
 	}
+
+	auto orig_changes_size = changes.size();
+	if (posixfs_object->default_stream.meta.delete_on_close &&
+			!have_active_open(posixfs_object)) {
+		posixfs_ads_foreach_1(posixfs_object, [posixfs_object, &changes] (
+					const char *xattr_name,
+					const char *stream_name) {
+				changes.push_back(x_smb2_change_t{
+						NOTIFY_ACTION_REMOVED_STREAM,
+						FILE_NOTIFY_CHANGE_STREAM_NAME,
+						posixfs_object->base.path + u':' + x_convert_utf8_to_utf16(stream_name),
+						{}});
+				return true;
+			});
+
+		uint32_t notify_filter = posixfs_object_is_dir(posixfs_object) ?
+			FILE_NOTIFY_CHANGE_DIR_NAME : FILE_NOTIFY_CHANGE_FILE_NAME;
+
+		NTSTATUS status = x_smbd_object_unlink(&posixfs_object->base, posixfs_object->fd);
+		if (!NT_STATUS_IS_OK(status)) {
+			changes.resize(orig_changes_size);
+			X_LOG_WARN("fail to unlink %s status=%x",
+					posixfs_object->unix_path.c_str(), status.v);
+			return status;
+		}
+		for (posixfs_ads_t *posixfs_ads = posixfs_object->ads_list.get_front();
+				posixfs_ads;
+				posixfs_ads = posixfs_object->ads_list.next(posixfs_ads)) {
+			posixfs_ads->exists = false;
+		}
+		changes.push_back(x_smb2_change_t{NOTIFY_ACTION_REMOVED, notify_filter,
+				posixfs_object->base.path, {}});
+	} else if (!is_default_stream(posixfs_object, posixfs_stream) &&
+			posixfs_stream->meta.delete_on_close) {
+		posixfs_ads_t *ads = X_CONTAINER_OF(posixfs_stream,
+				posixfs_ads_t, base);
+		int ret = fremovexattr(posixfs_object->fd, ads->xattr_name.c_str());
+		X_TODO_ASSERT(ret == 0);
+		ads->exists = false;
+		// TODO should it also notify object MODIFIED
+		changes.push_back(x_smb2_change_t{NOTIFY_ACTION_REMOVED_STREAM,
+				FILE_NOTIFY_CHANGE_STREAM_NAME,
+				posixfs_object->base.path + u':' + ads->name,
+				{}});
+	}
+
+	return NT_STATUS_OK;
 }
 
 NTSTATUS posixfs_object_op_close(
