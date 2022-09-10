@@ -180,7 +180,8 @@ int posixfs_create(int dirfd, bool is_dir, const char *path,
 		}
 	}
 
-	file_attrs &= FILE_ATTRIBUTE_ALL_MASK;
+	// file_attrs &= FILE_ATTRIBUTE_ALL_MASK;
+	file_attrs &= SAMBA_ATTRIBUTES_MASK;
 	if (is_dir) {
 		file_attrs &= ~(uint32_t)FILE_ATTRIBUTE_ARCHIVE;
 		file_attrs |= (uint32_t)FILE_ATTRIBUTE_DIRECTORY;

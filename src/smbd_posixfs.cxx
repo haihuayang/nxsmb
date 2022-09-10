@@ -1471,6 +1471,7 @@ static NTSTATUS posixfs_new_object(
 		posixfs_object_t *posixfs_object,
 		x_smbd_requ_t *smbd_requ,
 		x_smb2_state_create_t &state,
+		uint32_t file_attributes,
 		uint64_t allocation_size,
 		std::shared_ptr<idl::security_descriptor> &psd)
 {
@@ -1512,8 +1513,8 @@ static NTSTATUS posixfs_new_object(
 			posixfs_object->unix_path.c_str(),
 			&posixfs_object->meta,
 			&posixfs_object->default_stream.meta,
-			state.in_file_attributes,
-			state.in_allocation_size,
+			file_attributes,
+			allocation_size,
 			ntacl_blob);
 
 	if (fd < 0) {
@@ -1837,7 +1838,7 @@ static posixfs_open_t *posixfs_create_open_new_object(
 {
 	std::shared_ptr<idl::security_descriptor> psd;
 	status = posixfs_new_object(posixfs_object, smbd_requ,
-			state, state.in_allocation_size, psd);
+			state, state.in_file_attributes, state.in_allocation_size, psd);
 	if (!NT_STATUS_IS_OK(status)) {
 		return nullptr;
 	}
@@ -2236,7 +2237,7 @@ static posixfs_open_t *posixfs_create_open_new_object_ads(posixfs_object_t *posi
 {
 	std::shared_ptr<idl::security_descriptor> psd;
 	status = posixfs_new_object(posixfs_object, smbd_requ,
-			*state, 0, psd);
+			*state, 0, 0, psd);
 	if (!NT_STATUS_IS_OK(status)) {
 		return nullptr;
 	}
@@ -3131,6 +3132,13 @@ static NTSTATUS getinfo_file(posixfs_object_t *posixfs_object,
 		x_smbd_open_t *smbd_open,
 		x_smb2_state_getinfo_t &state)
 {
+	/* TODO should move it into smb2_getinfo??  does other class request
+	   the same access??
+	 */
+	if (!smbd_open->check_access(idl::SEC_FILE_READ_ATTRIBUTE)) {
+		return NT_STATUS_ACCESS_DENIED;
+	}
+
 	posixfs_open_t *posixfs_open = posixfs_open_from_base_t::container(smbd_open);
 	if (state.in_info_level == SMB2_FILE_INFO_FILE_BASIC_INFORMATION) {
 		if (state.in_output_buffer_length < sizeof(x_smb2_file_basic_info_t)) {
