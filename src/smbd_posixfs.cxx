@@ -1684,7 +1684,7 @@ static bool check_ads_share_access(posixfs_object_t *posixfs_object,
 		for (other_open = posixfs_ads->base.open_list.get_front();
 				other_open;
 				other_open = posixfs_ads->base.open_list.next(other_open)) {
-			if (!(other_open->base.share_access & FILE_SHARE_WRITE)) {
+			if (!(other_open->base.share_access & FILE_SHARE_DELETE)) {
 				X_LOG_NOTICE("ads %s share-access %d violate access 0x%x",
 						posixfs_ads->xattr_name.c_str(),
 						other_open->base.share_access,
