@@ -95,7 +95,7 @@ NTSTATUS x_smb2_rename_info_decode(bool &replace_if_exists,
 		path.clear();
 	} else {
 		/* rename not allow both path and stream */
-		return NT_STATUS_INVALID_PARAMETER;
+		return NT_STATUS_NOT_SUPPORTED;
 	}
 
 	replace_if_exists = in_info->replace_if_exists;
