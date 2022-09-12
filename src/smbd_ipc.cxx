@@ -610,7 +610,7 @@ static NTSTATUS ipc_create_open(x_smbd_open_t **psmbd_open,
 
 	state->out_info.out_allocation_size = 4096;
 	state->out_info.out_file_attributes = FILE_ATTRIBUTE_NORMAL;
-	state->oplock_level = 0;
+	state->out_oplock_level = 0;
 	state->out_create_flags = 0;
 	state->out_create_action = FILE_WAS_OPENED;
 	state->contexts = 0;
@@ -621,8 +621,10 @@ static NTSTATUS ipc_create_open(x_smbd_open_t **psmbd_open,
 	return NT_STATUS_OK;
 }
 
-static void ipc_op_release_object(x_smbd_object_t *smbd_object)
+static void ipc_op_release_object(x_smbd_object_t *smbd_object,
+		x_smbd_stream_t *smbd_stream)
 {
+	X_ASSERT(!smbd_stream);
 	// do nothing
 }
 #if 0
@@ -717,6 +719,7 @@ struct ipc_share_t : x_smbd_share_t
 	NTSTATUS create_open(x_smbd_open_t **psmbd_open,
 			x_smbd_object_t *smbd_object,
 			x_smbd_requ_t *smbd_requ,
+			x_smbd_lease_t *smbd_lease,
 			const std::string &volume,
 			std::unique_ptr<x_smb2_state_create_t> &state,
 			long open_priv_data,

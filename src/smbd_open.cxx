@@ -25,9 +25,11 @@ bool x_smbd_open_has_space()
 	return g_smbd_open_table->alloc_count + g_smbd_open_extra < g_smbd_open_table->count;
 }
 
-x_smbd_open_t::x_smbd_open_t(x_smbd_object_t *so, x_smbd_tcon_t *st,
+x_smbd_open_t::x_smbd_open_t(x_smbd_object_t *so,
+		// x_smbd_stream_t *strm,
+		x_smbd_tcon_t *st,
 		uint32_t am, uint32_t sa, long priv_data)
-	: smbd_object(so), smbd_tcon(x_smbd_ref_inc(st))
+	: smbd_object(so), /*smbd_stream(strm), */smbd_tcon(x_smbd_ref_inc(st))
 	, access_mask(am), share_access(sa), priv_data(priv_data)
 {
 	X_SMBD_COUNTER_INC(open_create, 1);
@@ -36,7 +38,7 @@ x_smbd_open_t::x_smbd_open_t(x_smbd_object_t *so, x_smbd_tcon_t *st,
 x_smbd_open_t::~x_smbd_open_t()
 {
 	x_smbd_ref_dec(smbd_tcon);
-	x_smbd_object_release(smbd_object);
+	x_smbd_object_release(smbd_object, nullptr);
 	X_SMBD_COUNTER_INC(open_delete, 1);
 }
 

@@ -118,7 +118,7 @@ static bool decode_contexts(x_smb2_state_create_t &state,
 		if (tag_len == 4) {
 			uint32_t tag = x_get_be32(data + tag_off);
 			if (tag == X_SMB2_CREATE_TAG_RQLS) {
-				if (state.oplock_level == X_SMB2_OPLOCK_LEVEL_LEASE) {
+				if (state.in_oplock_level == X_SMB2_OPLOCK_LEVEL_LEASE) {
 					has_RqLs = decode_smb2_lease(state.lease,
 							data + data_off,
 							data_len);
@@ -182,8 +182,9 @@ static bool decode_contexts(x_smb2_state_create_t &state,
 			break;
 		}
 	}
-	if (state.oplock_level == X_SMB2_OPLOCK_LEVEL_LEASE && !has_RqLs) {
-		state.oplock_level = X_SMB2_OPLOCK_LEVEL_NONE;
+	if (state.in_oplock_level == X_SMB2_OPLOCK_LEVEL_LEASE && !has_RqLs) {
+		X_LOG_WARN("missing RqLs");
+		state.in_oplock_level = X_SMB2_OPLOCK_LEVEL_NONE;
 	}
 	return true;
 }
@@ -194,7 +195,7 @@ static uint32_t encode_contexts(const x_smb2_state_create_t &state,
 	uint8_t *p = out_ptr;
 	x_smb2_create_context_header_t *ch = nullptr;
 
-	if (state.oplock_level == X_SMB2_OPLOCK_LEVEL_LEASE) {
+	if (state.out_oplock_level == X_SMB2_OPLOCK_LEVEL_LEASE) {
 		if (ch) {
 			uint8_t *np = out_ptr + x_pad_len(p - out_ptr, 8);
 			while (p != np) {
@@ -299,7 +300,7 @@ static NTSTATUS decode_in_create(x_smb2_state_create_t &state,
 		return NT_STATUS_INVALID_PARAMETER;
 	}
 
-	state.oplock_level         = in_create->oplock_level;
+	state.in_oplock_level         = in_create->oplock_level;
 	state.in_impersonation_level  = X_LE2H32(in_create->impersonation_level);
 	state.in_desired_access       = X_LE2H32(in_create->desired_access);
 	state.in_file_attributes      = X_LE2H32(in_create->file_attributes);
@@ -361,7 +362,7 @@ static uint32_t encode_out_create(const x_smb2_state_create_t &state,
 	x_smb2_out_create_t *out_create = (x_smb2_out_create_t *)(out_hdr + SMB2_HDR_BODY);
 
 	out_create->struct_size = X_H2LE16(sizeof(x_smb2_out_create_t) + 1);
-	out_create->oplock_level = state.oplock_level;
+	out_create->oplock_level = state.out_oplock_level;
 	out_create->create_flags = state.out_create_flags;
 	out_create->create_action = X_H2LE32(state.out_create_action);
 	out_create->create_ts = X_H2LE64(state.out_info.out_create_ts.val);
@@ -474,7 +475,16 @@ NTSTATUS x_smb2_process_create(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_req
 	/* TODO log stream too */
 	X_LOG_OP("%ld CREATE '%s'", smbd_requ->in_mid, x_convert_utf16_to_utf8(state->in_path).c_str());
 	smbd_requ->async_done_fn = x_smb2_create_async_done;
-	status = x_smbd_tcon_op_create(smbd_requ->smbd_tcon, smbd_requ, state);
+	x_smbd_lease_t *smbd_lease = nullptr;
+	if (state->in_oplock_level == X_SMB2_OPLOCK_LEVEL_LEASE) {
+		smbd_lease = x_smbd_lease_find(x_smbd_conn_curr_client_guid(),
+				state->lease.key, true);
+	}
+	status = x_smbd_tcon_op_create(smbd_requ->smbd_tcon, smbd_requ,
+			smbd_lease, state);
+	if (smbd_lease) {
+		x_smbd_ref_dec(smbd_lease);
+	}
 	if (NT_STATUS_IS_OK(status)) {
 		x_smb2_reply_create(smbd_conn, smbd_requ, *state);
 		return status;

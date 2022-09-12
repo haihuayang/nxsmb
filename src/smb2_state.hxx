@@ -189,7 +189,8 @@ enum {
 
 struct x_smb2_state_create_t
 {
-	uint8_t oplock_level;
+	uint8_t in_oplock_level;
+	uint8_t out_oplock_level;
 	uint32_t contexts{0};
 
 	uint32_t in_impersonation_level;

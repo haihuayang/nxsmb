@@ -120,6 +120,7 @@ x_smbd_tcon_t *x_smbd_tcon_lookup(uint32_t id, const x_smbd_sess_t *smbd_sess)
 
 NTSTATUS x_smbd_tcon_op_create(x_smbd_tcon_t *smbd_tcon,
 		x_smbd_requ_t *smbd_requ,
+		x_smbd_lease_t *smbd_lease,
 		std::unique_ptr<x_smb2_state_create_t> &state)
 {
 	X_ASSERT(!smbd_requ->smbd_open);
@@ -152,11 +153,10 @@ NTSTATUS x_smbd_tcon_op_create(x_smbd_tcon_t *smbd_tcon,
        	x_smbd_open_t *smbd_open = nullptr;
 	/* TODO should we check the open limit before create the open */
 	status = smbd_tcon->smbd_share->create_open(&smbd_open, smbd_object, 
-			smbd_requ, smbd_tcon->volume, state,
-			open_priv_data,
-			changes);
+			smbd_requ, smbd_lease, smbd_tcon->volume, state,
+			open_priv_data, changes);
 
-	x_smbd_object_release(smbd_object);
+	x_smbd_object_release(smbd_object, nullptr);
 
 	if (smbd_open) {
 		X_ASSERT(NT_STATUS_IS_OK(status));

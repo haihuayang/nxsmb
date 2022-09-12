@@ -71,6 +71,7 @@ struct x_smbd_share_t
 	virtual NTSTATUS create_open(x_smbd_open_t **psmbd_open,
 			x_smbd_object_t *smbd_object,
 			x_smbd_requ_t *smbd_requ,
+			x_smbd_lease_t *smbd_lease,
 			const std::string &volume,
 			std::unique_ptr<x_smb2_state_create_t> &state,
 			long open_priv_data,

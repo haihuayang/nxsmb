@@ -74,6 +74,7 @@ struct dfs_share_t : x_smbd_share_t
 	NTSTATUS create_open(x_smbd_open_t **psmbd_open,
 			x_smbd_object_t *smbd_object,
 			x_smbd_requ_t *smbd_requ,
+			x_smbd_lease_t *smbd_lease,
 			const std::string &volume,
 			std::unique_ptr<x_smb2_state_create_t> &state,
 			long open_priv_data,
@@ -534,7 +535,7 @@ static NTSTATUS dfs_root_object_op_qdir(
 		status = posixfs_object_qdir(root_object, smbd_conn, smbd_requ, state,
 				pseudo_entries, PSEUDO_ENTRIES_COUNT,
 				dfs_tld_manager_process_entry);
-		x_smbd_object_release(root_object);
+		x_smbd_object_release(root_object, nullptr);
 		return status;
 	}
 	
@@ -671,6 +672,7 @@ static NTSTATUS dfs_root_create_open(dfs_share_t &dfs_share,
 		x_smbd_open_t **psmbd_open,
 		x_smbd_object_t *smbd_object,
 		x_smbd_requ_t *smbd_requ,
+		x_smbd_lease_t *smbd_lease,
 		std::unique_ptr<x_smb2_state_create_t> &state,
 		long open_priv_data,
 		std::vector<x_smb2_change_t> &changes)
@@ -681,13 +683,13 @@ static NTSTATUS dfs_root_create_open(dfs_share_t &dfs_share,
 			return NT_STATUS_ACCESS_DENIED;
 		}
 		return x_smbd_posixfs_create_open(psmbd_open, smbd_object, smbd_requ,
-				state, open_priv_data, changes);
+				smbd_lease, state, open_priv_data, changes);
 	} else if (smbd_object->priv_data == dfs_object_type_tld_manager) {
 		if (state->in_ads_name.size() > 0) {
 			return NT_STATUS_ACCESS_DENIED;
 		}
 		return x_smbd_posixfs_create_open(psmbd_open, smbd_object, smbd_requ,
-				state, open_priv_data, changes);
+				smbd_lease, state, open_priv_data, changes);
 	}
 
 	X_ASSERT(smbd_object->priv_data == dfs_object_type_root_top_level);
@@ -696,7 +698,7 @@ static NTSTATUS dfs_root_create_open(dfs_share_t &dfs_share,
 		if (smbd_object->type == x_smbd_object_t::type_dir) {
 			return x_smbd_posixfs_create_open(psmbd_open,
 					smbd_object, smbd_requ,
-					state, open_priv_data, changes);
+					smbd_lease, state, open_priv_data, changes);
 		} else {
 			X_ASSERT(smbd_object->type == x_smbd_object_t::type_not_exist);
 			if (state->in_create_disposition != FILE_OPEN_IF && state->in_create_disposition != FILE_CREATE) {
@@ -708,7 +710,7 @@ static NTSTATUS dfs_root_create_open(dfs_share_t &dfs_share,
 				create_new_tld(dfs_share, smbd_requ, smbd_object->path);
 				state->in_create_disposition = FILE_OPEN_IF;
 				return x_smbd_posixfs_create_open(psmbd_open,
-						smbd_object, smbd_requ,
+						smbd_object, smbd_requ, smbd_lease,
 						state, open_priv_data, changes);
 			}
 		}
@@ -718,7 +720,7 @@ static NTSTATUS dfs_root_create_open(dfs_share_t &dfs_share,
 			return NT_STATUS_PATH_NOT_COVERED;
 		} else if (smbd_object->type == x_smbd_object_t::type_file) {
 			return x_smbd_posixfs_create_open(psmbd_open,
-					smbd_object, smbd_requ,
+					smbd_object, smbd_requ, smbd_lease,
 					state, open_priv_data, changes);
 		} else {
 			X_ASSERT(smbd_object->type == x_smbd_object_t::type_not_exist);
@@ -730,7 +732,7 @@ static NTSTATUS dfs_root_create_open(dfs_share_t &dfs_share,
 				return NT_STATUS_OBJECT_NAME_INVALID;
 			}
 			return x_smbd_posixfs_create_open(psmbd_open,
-					smbd_object, smbd_requ,
+					smbd_object, smbd_requ, smbd_lease,
 					state, open_priv_data, changes);
 		}
 	}
@@ -819,6 +821,7 @@ static x_smbd_object_t *dfs_volume_op_open_object(NTSTATUS *pstatus,
 static NTSTATUS dfs_volume_create_open(x_smbd_open_t **psmbd_open,
 		x_smbd_object_t *smbd_object,
 		x_smbd_requ_t *smbd_requ,
+		x_smbd_lease_t *smbd_lease,
 		const std::string &volume,
 		std::unique_ptr<x_smb2_state_create_t> &state,
 		long open_priv_data,
@@ -840,8 +843,8 @@ static NTSTATUS dfs_volume_create_open(x_smbd_open_t **psmbd_open,
 
 	std::lock_guard lock(smbd_object->mutex);
 	return x_smbd_posixfs_create_open(psmbd_open,
-			smbd_object,
-			smbd_requ, state, open_priv_data, changes);
+			smbd_object, smbd_requ, smbd_lease,
+			state, open_priv_data, changes);
 }
 
 static NTSTATUS dfs_volume_object_op_rename(x_smbd_object_t *smbd_object,
@@ -1045,6 +1048,7 @@ NTSTATUS dfs_share_t::get_dfs_referral(x_dfs_referral_resp_t &dfs_referral_resp,
 NTSTATUS dfs_share_t::create_open(x_smbd_open_t **psmbd_open,
 		x_smbd_object_t *smbd_object,
 		x_smbd_requ_t *smbd_requ,
+		x_smbd_lease_t *smbd_lease,
 		const std::string &volume,
 		std::unique_ptr<x_smb2_state_create_t> &state,
 		long open_priv_data,
@@ -1053,10 +1057,10 @@ NTSTATUS dfs_share_t::create_open(x_smbd_open_t **psmbd_open,
 	X_ASSERT(!volume.empty());
 	if (volume == "-") {
 		return dfs_root_create_open(*this, psmbd_open, smbd_object,
-				smbd_requ, state, open_priv_data, changes);
+				smbd_requ, smbd_lease, state, open_priv_data, changes);
 	} else {
 		return dfs_volume_create_open(psmbd_open, smbd_object,
-				smbd_requ, volume, state, open_priv_data, changes);
+				smbd_requ, smbd_lease, volume, state, open_priv_data, changes);
 	}
 }
 

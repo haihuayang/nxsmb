@@ -119,14 +119,14 @@ static NTSTATUS x_smb2_process_lease_break(x_smbd_conn_t *smbd_conn,
 	auto state = std::make_unique<x_smb2_state_lease_break_t>();
 	decode_in_lease_break(*state, in_lease_break);
 	x_smbd_lease_t *smbd_lease = x_smbd_lease_find(x_smbd_conn_curr_client_guid(),
-			state->in_key);
+			state->in_key, false);
 	if (!smbd_lease) {
 		return NT_STATUS_INVALID_PARAMETER;
 	}
 
 	NTSTATUS status = x_smbd_lease_op_break(smbd_lease, smbd_conn,
 			smbd_requ, state);
-	x_smbd_lease_release(smbd_lease);
+	x_smbd_ref_dec(smbd_lease);
 
 	return status;
 }

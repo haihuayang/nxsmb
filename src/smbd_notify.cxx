@@ -19,7 +19,7 @@ static void notify_one_level(std::shared_ptr<x_smbd_topdir_t> &topdir,
 	x_smbd_object_notify_change(smbd_object, notify_action, notify_filter,
 			fullpath, new_fullpath, last_level);
 
-	x_smbd_object_release(smbd_object);
+	x_smbd_object_release(smbd_object, nullptr);
 }
 
 static void notify_change(std::shared_ptr<x_smbd_topdir_t> &topdir,

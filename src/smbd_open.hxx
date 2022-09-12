@@ -30,6 +30,7 @@ struct x_smbd_open_t
 
 	x_dlink_t tcon_link; // protected by the mutex of smbd_tcon
 	x_smbd_object_t * const smbd_object;
+	// x_smbd_stream_t * const smbd_stream;
 	x_smbd_tcon_t * const smbd_tcon;
 	uint64_t id; // TODO we use it for both volatile and persisten id
 	enum {
@@ -123,7 +124,7 @@ struct x_smbd_object_ops_t
 			const std::u16string *new_name_path,
 			bool last_level);
 	void (*destroy)(x_smbd_object_t *smbd_object, x_smbd_open_t *smbd_open);
-	void (*release_object)(x_smbd_object_t *smbd_object);
+	void (*release_object)(x_smbd_object_t *smbd_object, x_smbd_stream_t *smbd_stream);
 	std::u16string (*get_path)(const x_smbd_object_t *smbd_object,
 			const x_smbd_open_t *smbd_open);
 };
@@ -267,12 +268,16 @@ static inline NTSTATUS x_smbd_lease_op_break(
 		x_smbd_requ_t *smbd_requ,
 		std::unique_ptr<x_smb2_state_lease_break_t> &state)
 {
+	X_TODO;
+	return NT_STATUS_INVALID_DEVICE_REQUEST;
+#if 0
 	x_smbd_object_t *smbd_object = smbd_lease->smbd_object;
 	auto op_fn = smbd_object->topdir->ops->lease_break;
 	if (!op_fn) {
 		return NT_STATUS_INVALID_DEVICE_REQUEST;
 	}
 	return op_fn(smbd_object, smbd_conn, smbd_requ, smbd_lease, state);
+#endif
 }
 
 static inline NTSTATUS x_smbd_open_op_oplock_break(
@@ -353,9 +358,10 @@ static inline void x_smbd_open_get_id(x_smbd_open_t *smbd_open, uint64_t &id_per
 	id_volatile = smbd_open->id;
 }
 
-static inline void x_smbd_object_release(x_smbd_object_t *smbd_object)
+static inline void x_smbd_object_release(x_smbd_object_t *smbd_object,
+		x_smbd_stream_t *smbd_stream)
 {
-	smbd_object->topdir->ops->release_object(smbd_object);
+	smbd_object->topdir->ops->release_object(smbd_object, smbd_stream);
 }
 #if 0
 	uint32_t (*get_attributes)(const x_smbd_object_t *smbd_object);

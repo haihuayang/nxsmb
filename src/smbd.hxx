@@ -219,6 +219,7 @@ bool x_smbd_chan_post_user(x_smbd_chan_t *smbd_chan, x_fdevt_user_t *fdevt_user)
 int x_smbd_tcon_table_init(uint32_t count);
 NTSTATUS x_smbd_tcon_op_create(x_smbd_tcon_t *smbd_tcon,
 		x_smbd_requ_t *smbd_requ,
+		x_smbd_lease_t *smbd_lease,
 		std::unique_ptr<x_smb2_state_create_t> &state);
 x_smbd_tcon_t *x_smbd_tcon_create(x_smbd_sess_t *smbd_sess, 
 		const std::shared_ptr<x_smbd_share_t> &smbshare,
