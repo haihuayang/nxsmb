@@ -283,6 +283,13 @@ struct posixfs_object_pool_t
 
 static posixfs_object_pool_t posixfs_object_pool;
 
+#define CHECK_LEASE(l, obj, strm) do { \
+	if ((l) && !x_smbd_lease_match((l), (obj), (strm))) { \
+		return NT_STATUS_INVALID_PARAMETER; \
+	} \
+} while (0)
+
+
 static std::string convert_to_unix(const std::u16string &req_path)
 {
 	/* TODO case insenctive */
@@ -1719,34 +1726,25 @@ static void defer_open(
 	x_smbd_conn_set_async(g_smbd_conn_curr, smbd_requ, posixfs_create_cancel);
 }
 
-static posixfs_open_t *posixfs_create_open_exist_object(
+static NTSTATUS posixfs_create_open_exist_object(
+		posixfs_open_t *&posixfs_open,
 		posixfs_object_t *posixfs_object,
 		x_smbd_requ_t *smbd_requ,
 		x_smbd_lease_t *smbd_lease,
 		std::unique_ptr<x_smb2_state_create_t> &state,
-		long priv_data,
-		NTSTATUS &status)
+		long priv_data)
 {
-	if (smbd_lease && !x_smbd_lease_match(smbd_lease, &posixfs_object->base,
-				&posixfs_object->default_stream)) {
-		status = NT_STATUS_INVALID_PARAMETER;
-		return nullptr;
-	}
-
 	if (posixfs_object->default_stream.meta.delete_on_close) {
-		status = NT_STATUS_DELETE_PENDING;
-		return nullptr;
+		return NT_STATUS_DELETE_PENDING;
 	}
 
 	if (posixfs_object->base.type == x_smbd_object_t::type_dir) {
 		if (state->in_create_options & FILE_NON_DIRECTORY_FILE) {
-			status = NT_STATUS_FILE_IS_A_DIRECTORY;
-			return nullptr;
+			return NT_STATUS_FILE_IS_A_DIRECTORY;
 		}
 	} else {
 		if (state->in_create_options & FILE_DIRECTORY_FILE) {
-			status = NT_STATUS_NOT_A_DIRECTORY;
-			return nullptr;
+			return NT_STATUS_NOT_A_DIRECTORY;
 		}
 	}
 
@@ -1755,20 +1753,18 @@ static posixfs_open_t *posixfs_create_open_exist_object(
 		X_LOG_NOTICE("deny access 0x%x to %s due to readonly 0x%x",
 				state->in_desired_access, posixfs_object->unix_path.c_str(),
 				posixfs_object->meta.file_attributes);
-		status = NT_STATUS_ACCESS_DENIED;
-		return nullptr;
+		return NT_STATUS_ACCESS_DENIED;
 	}
 
 	if (posixfs_object->meta.file_attributes & FILE_ATTRIBUTE_REPARSE_POINT) {
 		X_LOG_DBG("object %s is reparse_point", posixfs_object->unix_path.c_str());
-		status = NT_STATUS_PATH_NOT_COVERED;
-		return nullptr;
+		return NT_STATUS_PATH_NOT_COVERED;
 	}
 
 	std::shared_ptr<idl::security_descriptor> psd;
-	status = posixfs_object_get_sd__(posixfs_object, psd);
+	NTSTATUS status = posixfs_object_get_sd__(posixfs_object, psd);
 	if (!NT_STATUS_IS_OK(status)) {
-		return nullptr;
+		return status;
 	}
 
 	auto smbd_user = x_smbd_sess_get_user(smbd_requ->smbd_sess);
@@ -1790,18 +1786,15 @@ static posixfs_open_t *posixfs_create_open_exist_object(
 	if (rejected_mask == idl::SEC_STD_DELETE) {
 	       	if (!can_delete_file_in_directory(posixfs_object,
 					smbd_requ->smbd_tcon, *smbd_user)) {
-			status = NT_STATUS_ACCESS_DENIED;
-			return nullptr;
+			return NT_STATUS_ACCESS_DENIED;
 		}
 	} else if (rejected_mask != 0) {
-		status = NT_STATUS_ACCESS_DENIED;
-		return nullptr;
+		return NT_STATUS_ACCESS_DENIED;
 	}
 
 	if (granted & idl::SEC_STD_DELETE) {
 		if (!check_ads_share_access(posixfs_object, granted)) {
-			status = NT_STATUS_SHARING_VIOLATION;
-			return nullptr;
+			return NT_STATUS_SHARING_VIOLATION;
 		}
 	}
 
@@ -1819,48 +1812,41 @@ static posixfs_open_t *posixfs_create_open_exist_object(
 				conflict, true)) {
 		defer_open(posixfs_object, &posixfs_object->default_stream,
 				smbd_requ, state);
-		status = NT_STATUS_PENDING;
-		return nullptr;
+		return NT_STATUS_PENDING;
 	}
 
 	if (conflict) {
-		status = NT_STATUS_SHARING_VIOLATION;
-		return nullptr;
+		return NT_STATUS_SHARING_VIOLATION;
 	}
 
        	status = grant_oplock(posixfs_object,
 			&posixfs_object->default_stream,
 			smbd_lease, *state);
 	if (!NT_STATUS_IS_OK(status)) {
-		return nullptr;
+		return status;
 	}
 
 	reply_requ_create(*state, posixfs_object, &posixfs_object->default_stream,
 			FILE_WAS_OPENED);
-	return posixfs_open_create(&status, smbd_requ->smbd_tcon, posixfs_object,
+	posixfs_open = posixfs_open_create(&status, smbd_requ->smbd_tcon, posixfs_object,
 			&posixfs_object->default_stream,
 			*state, smbd_lease, priv_data);
+	return status;
 }
 
-static posixfs_open_t *posixfs_create_open_new_object(
+static NTSTATUS posixfs_create_open_new_object(
+		posixfs_open_t *&posixfs_open,
 		posixfs_object_t *posixfs_object,
 		x_smbd_requ_t *smbd_requ,
 		x_smbd_lease_t *smbd_lease,
 		x_smb2_state_create_t &state,
-		long priv_data,
-		NTSTATUS &status)
+		long priv_data)
 {
-	if (smbd_lease && !x_smbd_lease_match(smbd_lease, &posixfs_object->base,
-				&posixfs_object->default_stream)) {
-		status = NT_STATUS_INVALID_PARAMETER;
-		return nullptr;
-	}
-
 	std::shared_ptr<idl::security_descriptor> psd;
-	status = posixfs_new_object(posixfs_object, smbd_requ,
+	NTSTATUS status = posixfs_new_object(posixfs_object, smbd_requ,
 			state, state.in_file_attributes, state.in_allocation_size, psd);
 	if (!NT_STATUS_IS_OK(status)) {
-		return nullptr;
+		return status;
 	}
 
 	auto smbd_user = x_smbd_sess_get_user(smbd_requ->smbd_sess);
@@ -1877,8 +1863,28 @@ static posixfs_open_t *posixfs_create_open_new_object(
 	X_ASSERT(NT_STATUS_IS_OK(status));
 	reply_requ_create(state, posixfs_object, &posixfs_object->default_stream,
 			FILE_WAS_CREATED);
-	return posixfs_open_create(&status, smbd_requ->smbd_tcon, posixfs_object,
+	posixfs_open = posixfs_open_create(&status, smbd_requ->smbd_tcon, posixfs_object,
 			&posixfs_object->default_stream, state, smbd_lease, priv_data);
+	return status;
+}
+
+static NTSTATUS posixfs_create_open_overwrite_object(
+		posixfs_open_t *&posixfs_open,
+		posixfs_object_t *posixfs_object,
+		x_smbd_requ_t *smbd_requ,
+		x_smbd_lease_t *smbd_lease,
+		std::unique_ptr<x_smb2_state_create_t> &state,
+		long priv_data)
+{
+	CHECK_LEASE(smbd_lease, &posixfs_object->base, nullptr);
+
+	// TODO DELETE_ALL_STREAM;
+	int err = ftruncate(posixfs_object->fd, 0);
+	X_TODO_ASSERT(err == 0);
+	return posixfs_create_open_exist_object(posixfs_open,
+			posixfs_object,
+			smbd_requ, smbd_lease,
+			state, priv_data);
 }
 
 static posixfs_ads_t *posixfs_ads_add(
@@ -1965,12 +1971,6 @@ static posixfs_open_t *open_object_new_ads(
 		NTSTATUS &status)
 {
 	X_ASSERT(!posixfs_ads->exists);
-
-	if (smbd_lease && !x_smbd_lease_match(smbd_lease, &posixfs_object->base,
-				&posixfs_ads->base)) {
-		status = NT_STATUS_INVALID_PARAMETER;
-		return nullptr;
-	}
 
 	if (posixfs_object->default_stream.meta.delete_on_close) {
 		status = NT_STATUS_DELETE_PENDING;
@@ -2112,58 +2112,52 @@ static posixfs_open_t *open_object_exist_ads(
 			*state, smbd_lease, priv_data);
 }
 
-static posixfs_open_t *posixfs_create_open_overwrite_ads(
+static NTSTATUS posixfs_create_open_overwrite_ads(
+		posixfs_open_t *&posixfs_open,
 		posixfs_object_t *posixfs_object,
 		x_smbd_requ_t *smbd_requ,
 		x_smbd_lease_t *smbd_lease,
 		std::unique_ptr<x_smb2_state_create_t> &state,
-		long priv_data,
-		NTSTATUS &status)
+		long priv_data)
 {
 	posixfs_ads_t *posixfs_ads = posixfs_ads_open(
 			posixfs_object,
 			state->in_ads_name,
 			true);
-	if (smbd_lease && !x_smbd_lease_match(smbd_lease, &posixfs_object->base,
-				posixfs_ads ? &posixfs_ads->base : nullptr)) {
-		status = NT_STATUS_INVALID_PARAMETER;
-		return nullptr;
-	}
+	CHECK_LEASE(smbd_lease, &posixfs_object->base,
+			posixfs_ads ? &posixfs_ads->base : nullptr);
 
 	if (!posixfs_ads) {
-		status = NT_STATUS_OBJECT_NAME_NOT_FOUND;
-		return nullptr;
+		return NT_STATUS_OBJECT_NAME_NOT_FOUND;
 	}
 
 	posixfs_ads_reset(posixfs_object, posixfs_ads, 0);
-	posixfs_open_t *posixfs_open = open_object_exist_ads(posixfs_object,
+	NTSTATUS status = NT_STATUS_OK;
+	posixfs_open = open_object_exist_ads(posixfs_object,
 			posixfs_ads,
 			smbd_requ,
 			smbd_lease,
 			state, priv_data, status);
 	posixfs_ads_release(posixfs_object, posixfs_ads);
-	return posixfs_open;
+	return status;
 }
 
-static posixfs_open_t *posixfs_create_open_overwrite_ads_if(
+static NTSTATUS posixfs_create_open_overwrite_ads_if(
+		posixfs_open_t *&posixfs_open,
 		posixfs_object_t *posixfs_object,
 		x_smbd_requ_t *smbd_requ,
 		x_smbd_lease_t *smbd_lease,
 		std::unique_ptr<x_smb2_state_create_t> &state,
-		long priv_data,
-		NTSTATUS &status)
+		long priv_data)
 {
-	posixfs_open_t *posixfs_open{};
 	posixfs_ads_t *posixfs_ads = posixfs_ads_open(
 			posixfs_object,
 			state->in_ads_name,
 			false);
-	if (smbd_lease && !x_smbd_lease_match(smbd_lease, &posixfs_object->base,
-				posixfs_ads ? &posixfs_ads->base : nullptr)) {
-		status = NT_STATUS_INVALID_PARAMETER;
-		return nullptr;
-	}
+	CHECK_LEASE(smbd_lease, &posixfs_object->base,
+			posixfs_ads ? &posixfs_ads->base : nullptr);
 
+	NTSTATUS status = NT_STATUS_OK;
 	if (posixfs_ads && posixfs_ads->exists) {
 		posixfs_ads_reset(posixfs_object, posixfs_ads, 0);
 	} else {
@@ -2179,64 +2173,59 @@ static posixfs_open_t *posixfs_create_open_overwrite_ads_if(
 				priv_data, status);
 	}
 	posixfs_ads_release(posixfs_object, posixfs_ads);
-	return posixfs_open;
+	return status;
 }
 
 
-static posixfs_open_t *posix_create_open_exist_ads(posixfs_object_t *posixfs_object,
+static NTSTATUS posix_create_open_exist_ads(
+		posixfs_open_t *&posixfs_open,
+		posixfs_object_t *posixfs_object,
 		x_smbd_requ_t *smbd_requ,
 		x_smbd_lease_t *smbd_lease,
 		std::unique_ptr<x_smb2_state_create_t> &state,
-		long priv_data,
-		NTSTATUS &status)
+		long priv_data)
 {
-	posixfs_open_t *posixfs_open{};
 	posixfs_ads_t *posixfs_ads = posixfs_ads_open(
 			posixfs_object,
 			state->in_ads_name,
 			true);
-	if (smbd_lease && !x_smbd_lease_match(smbd_lease, &posixfs_object->base,
-				posixfs_ads ? &posixfs_ads->base : nullptr)) {
-		status = NT_STATUS_INVALID_PARAMETER;
-		return nullptr;
-	}
+
+	CHECK_LEASE(smbd_lease, &posixfs_object->base,
+			posixfs_ads ? &posixfs_ads->base : nullptr);
 
 	if (!posixfs_ads) {
-		status = NT_STATUS_OBJECT_NAME_NOT_FOUND;
-	} else {
-		posixfs_open = open_object_exist_ads(
-				posixfs_object,
-				posixfs_ads,
-				smbd_requ,
-				smbd_lease,
-				state, priv_data, status);
-		posixfs_ads_release(posixfs_object, posixfs_ads);
+		return NT_STATUS_OBJECT_NAME_NOT_FOUND;
 	}
-	return posixfs_open;
+
+	NTSTATUS status = NT_STATUS_OK;
+	posixfs_open = open_object_exist_ads(
+			posixfs_object,
+			posixfs_ads,
+			smbd_requ,
+			smbd_lease,
+			state, priv_data, status);
+	posixfs_ads_release(posixfs_object, posixfs_ads);
+	return status;
 }
 
-static posixfs_open_t *posixfs_create_open_new_ads(posixfs_object_t *posixfs_object,
+static NTSTATUS posixfs_create_open_new_ads(
+		posixfs_open_t *&posixfs_open,
+		posixfs_object_t *posixfs_object,
 		x_smbd_requ_t *smbd_requ,
 		x_smbd_lease_t *smbd_lease,
 		std::unique_ptr<x_smb2_state_create_t> &state,
-		long priv_data,
-		NTSTATUS &status)
+		long priv_data)
 {
 	posixfs_ads_t *posixfs_ads = posixfs_ads_open(
 			posixfs_object,
 			state->in_ads_name,
 			false);
-	if (smbd_lease && !x_smbd_lease_match(smbd_lease, &posixfs_object->base,
-				posixfs_ads ? &posixfs_ads->base : nullptr)) {
-		status = NT_STATUS_INVALID_PARAMETER;
-		return nullptr;
-	}
 
-	posixfs_open_t *posixfs_open{};
 	if (!posixfs_ads) {
 		posixfs_ads = posixfs_ads_add(posixfs_object,
 				state->in_ads_name);
 	}
+	NTSTATUS status = NT_STATUS_OK;
 	if (posixfs_ads->exists) {
 		status = NT_STATUS_OBJECT_NAME_COLLISION;
 	} else {
@@ -2248,27 +2237,26 @@ static posixfs_open_t *posixfs_create_open_new_ads(posixfs_object_t *posixfs_obj
 				*state, priv_data, status);
 	}
 	posixfs_ads_release(posixfs_object, posixfs_ads);
-	return posixfs_open;
+	return status;
 }
 
-static posixfs_open_t *posixfs_create_open_new_ads_if(posixfs_object_t *posixfs_object,
+static NTSTATUS posixfs_create_open_new_ads_if(
+		posixfs_open_t *&posixfs_open,
+		posixfs_object_t *posixfs_object,
 		x_smbd_requ_t *smbd_requ,
 		x_smbd_lease_t *smbd_lease,
 		std::unique_ptr<x_smb2_state_create_t> &state,
-		long priv_data,
-		NTSTATUS &status)
+		long priv_data)
 {
-	if (smbd_lease && !x_smbd_lease_match(smbd_lease, &posixfs_object->base,
-				nullptr)) {
-		status = NT_STATUS_INVALID_PARAMETER;
-		return nullptr;
-	}
-
 	posixfs_ads_t *posixfs_ads = posixfs_ads_open(
 			posixfs_object,
 			state->in_ads_name,
 			false);
-	posixfs_open_t *posixfs_open{};
+
+	CHECK_LEASE(smbd_lease, &posixfs_object->base,
+			posixfs_ads ? &posixfs_ads->base : nullptr);
+
+	NTSTATUS status = NT_STATUS_OK;
 	if (posixfs_ads && posixfs_ads->exists) {
 		posixfs_open = open_object_exist_ads(
 				posixfs_object,
@@ -2290,190 +2278,225 @@ static posixfs_open_t *posixfs_create_open_new_ads_if(posixfs_object_t *posixfs_
 				priv_data, status);
 	}
 	posixfs_ads_release(posixfs_object, posixfs_ads);
-	return posixfs_open;
+	return status;
 }
 
-static posixfs_open_t *posixfs_create_open_new_object_ads(posixfs_object_t *posixfs_object,
+static NTSTATUS posixfs_create_open_new_object_ads(
+		posixfs_open_t *&posixfs_open,
+		posixfs_object_t *posixfs_object,
 		x_smbd_requ_t *smbd_requ,
 		x_smbd_lease_t *smbd_lease,
 		std::unique_ptr<x_smb2_state_create_t> &state,
-		long priv_data,
-		NTSTATUS &status)
+		long priv_data)
 {
-	if (smbd_lease && !x_smbd_lease_match(smbd_lease, &posixfs_object->base,
-				nullptr)) {
-		status = NT_STATUS_INVALID_PARAMETER;
-		return nullptr;
-	}
-
 	std::shared_ptr<idl::security_descriptor> psd;
-	status = posixfs_new_object(posixfs_object, smbd_requ,
+	NTSTATUS status = posixfs_new_object(posixfs_object, smbd_requ,
 			*state, 0, 0, psd);
 	if (!NT_STATUS_IS_OK(status)) {
-		return nullptr;
+		return status;
 	}
 
 	posixfs_ads_t *posixfs_ads = posixfs_ads_add(
 			posixfs_object,
 			state->in_ads_name);
-	posixfs_open_t *posixfs_open = open_object_new_ads(
+	posixfs_open = open_object_new_ads(
 			posixfs_object,
 			posixfs_ads,
 			smbd_requ,
 			smbd_lease,
 			*state, priv_data, status);
 	posixfs_ads_release(posixfs_object, posixfs_ads);
-	return posixfs_open;
+	return status;
 }
 
-static posixfs_open_t *posixfs_create_open(
+static NTSTATUS posixfs_create_open(
+		posixfs_open_t *&posixfs_open,
 		posixfs_object_t *posixfs_object,
-		NTSTATUS &status,
 		x_smbd_requ_t *smbd_requ,
 		x_smbd_lease_t *smbd_lease,
 		std::unique_ptr<x_smb2_state_create_t> &state,
 		long priv_data)
 {
-	posixfs_open_t *posixfs_open = nullptr;
-
 	if (state->in_create_disposition == FILE_CREATE) {
+		CHECK_LEASE(smbd_lease, &posixfs_object->base, nullptr);
+
 		if (!posixfs_object->exists()) {
 			if (state->end_with_sep) {
-				status = NT_STATUS_OBJECT_NAME_INVALID;
-			} else if (state->in_ads_name.size() == 0) {
-				posixfs_open = posixfs_create_open_new_object(
+				return NT_STATUS_OBJECT_NAME_INVALID;
+			}
+			if (state->in_ads_name.size() == 0) {
+				return posixfs_create_open_new_object(
+						posixfs_open,
 						posixfs_object,
 						smbd_requ, smbd_lease,
-						*state, priv_data, status);
+						*state, priv_data);
 			} else {
-				posixfs_open = posixfs_create_open_new_object_ads(
+				return posixfs_create_open_new_object_ads(
+						posixfs_open,
 						posixfs_object,
 						smbd_requ, smbd_lease,
-						state, priv_data, status);
+						state, priv_data);
 			}
 		} else {
 			if (state->in_ads_name.size() == 0) {
-				status = NT_STATUS_OBJECT_NAME_COLLISION;
+				return NT_STATUS_OBJECT_NAME_COLLISION;
 			} else {
-				posixfs_open = posixfs_create_open_new_ads(
+				return posixfs_create_open_new_ads(
+						posixfs_open,
 						posixfs_object,
 						smbd_requ, smbd_lease,
-						state, priv_data, status);
+						state, priv_data);
 			}
 		}
 
 	} else if (state->in_create_disposition == FILE_OPEN) {
 		if (state->in_timestamp != 0) {
 			X_TODO; /* TODO snapshot */
-			status = NT_STATUS_OBJECT_NAME_NOT_FOUND;
-		} else if (!posixfs_object->exists()) {
-			status = NT_STATUS_OBJECT_NAME_NOT_FOUND;
+			return NT_STATUS_OBJECT_NAME_NOT_FOUND;
+		}
+		if (!posixfs_object->exists()) {
+			/* check lease first */
+			CHECK_LEASE(smbd_lease, &posixfs_object->base, nullptr);
+
+			return NT_STATUS_OBJECT_NAME_NOT_FOUND;
 		} else if (posixfs_object_is_dir(posixfs_object)) {
 			if (state->is_dollar_data) {
-				status = NT_STATUS_FILE_IS_A_DIRECTORY;
+				CHECK_LEASE(smbd_lease, &posixfs_object->base, nullptr);
+
+				return NT_STATUS_FILE_IS_A_DIRECTORY;
 			} else if (state->in_ads_name.size() == 0) {
-				posixfs_open = posixfs_create_open_exist_object(
+				CHECK_LEASE(smbd_lease, &posixfs_object->base, nullptr);
+
+				return posixfs_create_open_exist_object(
+						posixfs_open,
 						posixfs_object,
 						smbd_requ, smbd_lease,
-						state, priv_data, status);
+						state, priv_data);
 			} else {
-				posixfs_open = posix_create_open_exist_ads(
+				/* lease check inside posix_create_open_exist_ads */
+				return posix_create_open_exist_ads(
+						posixfs_open,
 						posixfs_object,
 						smbd_requ, smbd_lease,
-						state, priv_data, status);
+						state, priv_data);
 			}
 		} else {
 			if (state->end_with_sep) {
-				status = NT_STATUS_OBJECT_NAME_INVALID;
+				CHECK_LEASE(smbd_lease, &posixfs_object->base, nullptr);
+
+				return NT_STATUS_OBJECT_NAME_INVALID;
 			} else if (state->in_ads_name.size() == 0) {
-				posixfs_open = posixfs_create_open_exist_object(
+				CHECK_LEASE(smbd_lease, &posixfs_object->base, nullptr);
+
+				return posixfs_create_open_exist_object(
+						posixfs_open,
 						posixfs_object,
 						smbd_requ, smbd_lease,
-						state, priv_data, status);
+						state, priv_data);
 			} else {
-				posixfs_open = posix_create_open_exist_ads(
+				/* lease check inside posix_create_open_exist_ads */
+				return posix_create_open_exist_ads(
+						posixfs_open,
 						posixfs_object,
 						smbd_requ, smbd_lease,
-						state, priv_data, status);
+						state, priv_data);
 			}
 		}
 
 	} else if (state->in_create_disposition == FILE_OPEN_IF) {
 		if (state->in_timestamp != 0) {
 			/* TODO snapshot */
-			status = NT_STATUS_OBJECT_NAME_NOT_FOUND;
+			return NT_STATUS_OBJECT_NAME_NOT_FOUND;
 		} else if (!posixfs_object->exists()) {
+			CHECK_LEASE(smbd_lease, &posixfs_object->base, nullptr);
+
 			if (state->end_with_sep) {
-				status = NT_STATUS_OBJECT_NAME_INVALID;
+				return NT_STATUS_OBJECT_NAME_INVALID;
 			} else if (state->in_ads_name.size() == 0) {
-				posixfs_open = posixfs_create_open_new_object(
+				return posixfs_create_open_new_object(
+						posixfs_open,
 						posixfs_object,
 						smbd_requ, smbd_lease,
-						*state, priv_data, status);
+						*state, priv_data);
 			} else {
-				posixfs_open = posixfs_create_open_new_object_ads(
+				return posixfs_create_open_new_object_ads(
+						posixfs_open,
 						posixfs_object,
 						smbd_requ, smbd_lease,
-						state, priv_data, status);
+						state, priv_data);
 			}
 		} else if (posixfs_object_is_dir(posixfs_object)) {
 			if (state->is_dollar_data) {
-				status = NT_STATUS_FILE_IS_A_DIRECTORY;
+				CHECK_LEASE(smbd_lease, &posixfs_object->base, nullptr);
+
+				return NT_STATUS_FILE_IS_A_DIRECTORY;
 			} else if (state->in_ads_name.size() == 0) {
-				posixfs_open = posixfs_create_open_exist_object(
+				CHECK_LEASE(smbd_lease, &posixfs_object->base, nullptr);
+
+				return posixfs_create_open_exist_object(
+						posixfs_open,
 						posixfs_object,
 						smbd_requ, smbd_lease,
-						state, priv_data, status);
+						state, priv_data);
 			} else {
-				posixfs_open = posixfs_create_open_new_ads_if(
+				return posixfs_create_open_new_ads_if(
+						posixfs_open,
 						posixfs_object,
 						smbd_requ, smbd_lease,
-						state, priv_data, status);
+						state, priv_data);
 			}
 		} else {
 			if (state->in_ads_name.size() == 0) {
-				posixfs_open = posixfs_create_open_exist_object(
+				CHECK_LEASE(smbd_lease, &posixfs_object->base, nullptr);
+
+				return posixfs_create_open_exist_object(
+						posixfs_open,
 						posixfs_object,
 						smbd_requ, smbd_lease,
-						state, priv_data, status);
+						state, priv_data);
 			} else {
-				posixfs_open = posixfs_create_open_new_ads_if(
+				return posixfs_create_open_new_ads_if(
+						posixfs_open,
 						posixfs_object,
 						smbd_requ, smbd_lease,
-						state, priv_data, status);
+						state, priv_data);
 			}
 		}
 
 	} else if (state->in_create_disposition == FILE_OVERWRITE) {
 		if (!posixfs_object->exists()) {
-			status = NT_STATUS_OBJECT_NAME_NOT_FOUND;
+			CHECK_LEASE(smbd_lease, &posixfs_object->base, nullptr);
+
+			return NT_STATUS_OBJECT_NAME_NOT_FOUND;
 		} else if (posixfs_object_is_dir(posixfs_object)) {
 			if (state->in_ads_name.size() == 0) {
+				CHECK_LEASE(smbd_lease, &posixfs_object->base, nullptr);
+
 				if (state->is_dollar_data) {
-					status = NT_STATUS_FILE_IS_A_DIRECTORY;
+					return NT_STATUS_FILE_IS_A_DIRECTORY;
 				} else {
-					status = NT_STATUS_INVALID_PARAMETER;
+					return NT_STATUS_INVALID_PARAMETER;
 				}
 			} else {
-				posixfs_open = posixfs_create_open_overwrite_ads(
+				return posixfs_create_open_overwrite_ads(
+						posixfs_open,
 						posixfs_object,
 						smbd_requ, smbd_lease,
-						state, priv_data, status);
+						state, priv_data);
 			}
 		} else {
 			if (state->in_ads_name.size() == 0) {
-				// TODO DELETE_ALL_STREAM;
-				int err = ftruncate(posixfs_object->fd, 0);
-				X_TODO_ASSERT(err == 0);
-				posixfs_open = posixfs_create_open_exist_object(
+				return posixfs_create_open_overwrite_object(
+						posixfs_open,
 						posixfs_object,
 						smbd_requ, smbd_lease,
-						state, priv_data, status);
+						state, priv_data);
 			} else {
-				posixfs_open = posixfs_create_open_overwrite_ads(
+				return posixfs_create_open_overwrite_ads(
+						posixfs_open,
 						posixfs_object,
 						smbd_requ, smbd_lease,
-						state, priv_data, status);
+						state, priv_data);
 			}
 		}
 	
@@ -2487,60 +2510,60 @@ static posixfs_open_t *posixfs_create_open(
 		 */
 		if (state->in_timestamp != 0) {
 			/* TODO */
-			status = NT_STATUS_OBJECT_NAME_NOT_FOUND;
+			return NT_STATUS_OBJECT_NAME_NOT_FOUND;
 		} else if (!posixfs_object->exists()) {
+			CHECK_LEASE(smbd_lease, &posixfs_object->base, nullptr);
+
 			if (state->end_with_sep) {
-				status = NT_STATUS_OBJECT_NAME_INVALID;
+				return NT_STATUS_OBJECT_NAME_INVALID;
 			} else if (state->in_ads_name.size() == 0) {
-				posixfs_open = posixfs_create_open_new_object(
+				return posixfs_create_open_new_object(
+						posixfs_open,
 						posixfs_object,
 						smbd_requ, smbd_lease,
-						*state, priv_data, status);
+						*state, priv_data);
 			} else {
-				posixfs_open = posixfs_create_open_new_object_ads(
+				return posixfs_create_open_new_object_ads(
+						posixfs_open,
 						posixfs_object,
 						smbd_requ, smbd_lease,
-						state, priv_data, status);
+						state, priv_data);
 			}
 		} else if (posixfs_object_is_dir(posixfs_object)) {
 			if (state->in_ads_name.size() == 0) {
+				CHECK_LEASE(smbd_lease, &posixfs_object->base, nullptr);
+
 				if (state->is_dollar_data) {
-					status = NT_STATUS_FILE_IS_A_DIRECTORY;
+					return NT_STATUS_FILE_IS_A_DIRECTORY;
 				} else {
-					status = NT_STATUS_INVALID_PARAMETER;
+					return NT_STATUS_INVALID_PARAMETER;
 				}
 			} else {
-				posixfs_open = posixfs_create_open_overwrite_ads_if(
+				return posixfs_create_open_overwrite_ads_if(
+						posixfs_open,
 						posixfs_object,
 						smbd_requ, smbd_lease,
-						state, priv_data, status);
+						state, priv_data);
 			}
 		} else {
 			if (state->in_ads_name.size() == 0) {
-				// TODO DELETE_ALL_STREAM;
-				int err = ftruncate(posixfs_object->fd, 0);
-				X_TODO_ASSERT(err == 0);
-				posixfs_open = posixfs_create_open_exist_object(
+				return posixfs_create_open_overwrite_object(
+						posixfs_open,
 						posixfs_object,
 						smbd_requ, smbd_lease,
-						state, priv_data, status);
+						state, priv_data);
 			} else {
-				posixfs_open = posixfs_create_open_overwrite_ads_if(
+				return posixfs_create_open_overwrite_ads_if(
+						posixfs_open,
 						posixfs_object,
 						smbd_requ, smbd_lease,
-						state, priv_data, status);
+						state, priv_data);
 			}
 		}
 
 	} else {
-		status = NT_STATUS_INVALID_PARAMETER;
+		return NT_STATUS_INVALID_PARAMETER;
 	}
-
-	if (!posixfs_open) {
-		return nullptr;
-	}
-
-	return posixfs_open;
 }
 
 /* TODO should not hold the posixfs_object's mutex */
@@ -3937,11 +3960,11 @@ NTSTATUS x_smbd_posixfs_create_open(x_smbd_open_t **psmbd_open,
 		long priv_data,
 		std::vector<x_smb2_change_t> &changes)
 {
-	NTSTATUS status;
 	posixfs_object_t *posixfs_object = posixfs_object_from_base_t::container(smbd_object);
 
-	posixfs_open_t *posixfs_open = posixfs_create_open(posixfs_object,
-			status, smbd_requ, smbd_lease, state, priv_data);
+	posixfs_open_t *posixfs_open = nullptr;
+	NTSTATUS status = posixfs_create_open(posixfs_open, posixfs_object,
+			smbd_requ, smbd_lease, state, priv_data);
 	if (!posixfs_open) {
 		return status;
 	}

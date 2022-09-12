@@ -22,8 +22,7 @@ struct x_smbd_lease_t
 	uint16_t lease_epoch{0};
 	bool breaking{false};
 	uint32_t breaking_to_requested{0}, breaking_to_required{0};
-	std::atomic<uint32_t> open_cnt;
-	std::atomic<uint32_t> ref_cnt;
+	std::atomic<uint32_t> open_cnt{0};
 };
 
 X_DECLARE_MEMBER_TRAITS(smbd_lease_hash_traits, x_smbd_lease_t, hash_link)
@@ -164,6 +163,8 @@ bool x_smbd_lease_grant(x_smbd_lease_t *smbd_lease,
 	auto lock = smbd_lease_lock(smbd_lease);
 
 	if (!smbd_lease->smbd_object) {
+		smbd_lease->smbd_object = smbd_object;
+		smbd_lease->smbd_stream = smbd_stream;
 		lease.state = smbd_lease->lease_state = granted;
 		smbd_lease->lease_epoch = ++lease.epoch;
 		return true;
