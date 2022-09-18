@@ -373,8 +373,7 @@ static uint32_t encode_out_create(const x_smb2_state_create_t &state,
 	out_create->end_of_file = X_H2LE64(state.out_info.out_end_of_file);
 	out_create->file_attributes = X_H2LE32(state.out_info.out_file_attributes);
 	out_create->reserved0 = 0;
-	uint64_t id_persistent, id_volatile;
-	x_smbd_open_get_id(smbd_open, id_persistent, id_volatile);
+	auto [id_persistent, id_volatile] = x_smbd_open_get_id(smbd_open);
 	out_create->file_id_persistent = X_H2LE64(id_persistent);
 	out_create->file_id_volatile = X_H2LE64(id_volatile);
 

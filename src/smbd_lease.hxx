@@ -10,7 +10,10 @@
 #include "include/librpc/misc.hxx"
 #include "include/list.hxx"
 #include "smb2.hxx"
+#include "smb2_state.hxx"
 
+struct x_smbd_conn_t;
+struct x_smbd_requ_t;
 struct x_smbd_lease_t;
 struct x_smbd_object_t;
 struct x_smbd_stream_t;
@@ -35,7 +38,21 @@ bool x_smbd_lease_grant(x_smbd_lease_t *smbd_lease,
 
 uint8_t x_smbd_lease_get_state(const x_smbd_lease_t *smbd_lease);
 
+bool x_smbd_lease_require_break(x_smbd_lease_t *smbd_lease,
+		x_smb2_lease_key_t &lease_key,
+		uint8_t &new_state, /* in out */
+		uint8_t &curr_state,
+		uint16_t &epoch,
+		uint32_t &flags);
+NTSTATUS x_smbd_lease_process_break(x_smbd_lease_t *smbd_lease,
+		x_smbd_conn_t *smbd_conn,
+		x_smbd_requ_t *smbd_requ,
+		std::unique_ptr<x_smb2_state_lease_break_t> &state);
+NTSTATUS x_smbd_lease_process_break(x_smbd_lease_t *smbd_lease,
+		const x_smb2_state_lease_break_t &state);
+
 bool x_smbd_lease_is_breaking(const x_smbd_lease_t *smbd_lease);
+bool x_smbd_lease_set_breaking_if(x_smbd_lease_t *smbd_lease);
 
 bool x_smbd_lease_match(const x_smbd_lease_t *smbd_lease,
 		x_smbd_object_t *smbd_object,

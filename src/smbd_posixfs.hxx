@@ -63,12 +63,9 @@ NTSTATUS posixfs_object_op_notify(
 		x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ,
 		std::unique_ptr<x_smb2_state_notify_t> &state);
-NTSTATUS posixfs_object_op_lease_break(
+void posixfs_object_op_lease_break(
 		x_smbd_object_t *smbd_object,
-		x_smbd_conn_t *smbd_conn,
-		x_smbd_requ_t *smbd_requ,
-		x_smbd_lease_t *smbd_lease,
-		std::unique_ptr<x_smb2_state_lease_break_t> &state);
+		x_smbd_stream_t *smbd_stream);
 NTSTATUS posixfs_object_op_oplock_break(
 		x_smbd_object_t *smbd_object,
 		x_smbd_conn_t *smbd_conn,

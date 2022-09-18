@@ -96,11 +96,8 @@ struct x_smbd_object_ops_t
 			x_smbd_conn_t *smbd_conn,
 			x_smbd_requ_t *smbd_requ,
 			std::unique_ptr<x_smb2_state_notify_t> &state);
-	NTSTATUS (*lease_break)(x_smbd_object_t *smbd_object,
-			x_smbd_conn_t *smbd_conn,
-			x_smbd_requ_t *smbd_requ,
-			x_smbd_lease_t *smbd_lease,
-			std::unique_ptr<x_smb2_state_lease_break_t> &state);
+	void (*lease_break)(x_smbd_object_t *smbd_object,
+			x_smbd_stream_t *smbd_stream);
 	NTSTATUS (*oplock_break)(x_smbd_object_t *smbd_object,
 			x_smbd_conn_t *smbd_conn,
 			x_smbd_requ_t *smbd_requ,
@@ -262,6 +259,15 @@ static inline NTSTATUS x_smbd_open_op_notify(
 	return op_fn(smbd_object, smbd_conn, smbd_requ, state);
 }
 
+static inline void x_smbd_object_op_break_lease(
+		x_smbd_object_t *smbd_object,
+		x_smbd_stream_t *smbd_stream)
+{
+	auto op_fn = smbd_object->topdir->ops->lease_break;
+	X_ASSERT(op_fn);
+	op_fn(smbd_object, smbd_stream);
+}
+
 static inline NTSTATUS x_smbd_lease_op_break(
 		x_smbd_lease_t *smbd_lease,
 		x_smbd_conn_t *smbd_conn,
@@ -351,11 +357,9 @@ static inline void x_smbd_open_op_destroy(
 	return smbd_object->topdir->ops->destroy(smbd_object, smbd_open);
 }
 
-static inline void x_smbd_open_get_id(x_smbd_open_t *smbd_open, uint64_t &id_persistent,
-		uint64_t &id_volatile)
+static inline std::pair<uint64_t, uint64_t> x_smbd_open_get_id(x_smbd_open_t *smbd_open)
 {
-	id_persistent = smbd_open->id;
-	id_volatile = smbd_open->id;
+	return { smbd_open->id, smbd_open->id };
 }
 
 static inline void x_smbd_object_release(x_smbd_object_t *smbd_object,

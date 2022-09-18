@@ -322,11 +322,10 @@ NTSTATUS x_smbd_dfs_resolve_path(
 
 void x_smb2_send_lease_break(x_smbd_conn_t *smbd_conn, x_smbd_sess_t *smbd_sess,
 		const x_smb2_lease_key_t *lease_key,
-		uint16_t new_epoch,
-		uint32_t flags,
-		uint32_t current_state, uint32_t new_state);
+		uint8_t current_state, uint8_t new_state,
+		uint16_t new_epoch, uint32_t flags);
 void x_smb2_send_oplock_break(x_smbd_conn_t *smbd_conn, x_smbd_sess_t *smbd_sess,
-		const x_smbd_open_t *smbd_open, uint8_t oplock_level);
+		uint64_t id_persistent, uint64_t id_volatile, uint8_t oplock_level);
 
 
 void x_smbd_wbpool_request(x_wbcli_t *wbcli);

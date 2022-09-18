@@ -153,10 +153,9 @@ struct x_smb2_state_notify_t
 
 struct x_smb2_state_lease_break_t
 {
-	uint8_t in_oplock_level;
 	uint32_t in_flags;
-	x_smb2_lease_key_t in_key;
 	uint32_t in_state;
+	x_smb2_lease_key_t in_key;
 	uint64_t in_duration;
 };
 

@@ -1069,69 +1069,143 @@ static inline uint8_t get_lease_type(const posixfs_open_t *posixfs_open)
 	}
 }
 
-struct posixfs_break_evt_t
+static void posixfs_send_lease_break_func(x_smbd_conn_t *smbd_conn, x_fdevt_user_t *fdevt_user, bool terminated);
+struct posixfs_send_lease_break_evt_t
 {
-	~posixfs_break_evt_t() {
+	posixfs_send_lease_break_evt_t(x_smbd_sess_t *smbd_sess,
+			const x_smb2_lease_key_t &lease_key,
+			uint8_t curr_state,
+			uint8_t new_state,
+			uint16_t new_epoch,
+			uint32_t flags)
+		: smbd_sess(smbd_sess)
+		, lease_key(lease_key)
+		, curr_state(curr_state)
+		, new_state(new_state)
+		, new_epoch(new_epoch)
+		, flags(flags)
+	{
+		base.func = posixfs_send_lease_break_func;
+	}
+
+	~posixfs_send_lease_break_evt_t()
+	{
 		if (smbd_sess) {
 			x_smbd_ref_dec(smbd_sess);
 		}
-		x_smbd_ref_dec(&posixfs_open->base);
 	}
+
 	x_fdevt_user_t base;
-	posixfs_open_t *posixfs_open;
-	x_smbd_sess_t *smbd_sess = nullptr;
-	uint8_t breakto;
+	x_smbd_sess_t * const smbd_sess;
+	const x_smb2_lease_key_t lease_key;
+	const uint8_t curr_state, new_state;
+	const uint16_t new_epoch;
+	const uint32_t flags;
 };
 
-static void posixfs_break_func(x_smbd_conn_t *smbd_conn, x_fdevt_user_t *fdevt_user, bool terminated)
+static void posixfs_send_lease_break_func(x_smbd_conn_t *smbd_conn, x_fdevt_user_t *fdevt_user, bool terminated)
 {
-	X_TODO;
-#if 0
-	posixfs_break_evt_t *evt = X_CONTAINER_OF(fdevt_user, posixfs_break_evt_t, base);
+	posixfs_send_lease_break_evt_t *evt = X_CONTAINER_OF(fdevt_user,
+			posixfs_send_lease_break_evt_t, base);
 	X_LOG_DBG("evt=%p", evt);
 
-	if (terminated) {
-		delete evt;
+	if (!terminated) {
+		x_smb2_send_lease_break(smbd_conn,
+				evt->smbd_sess,
+				&evt->lease_key,
+				evt->curr_state,
+				evt->new_state,
+				evt->new_epoch,
+				evt->flags);
+	}
+	delete evt;
+}
+
+static void do_break_lease(posixfs_open_t *posixfs_open,
+		uint8_t break_to)
+{
+	x_smb2_lease_key_t lease_key;
+	uint8_t curr_state;
+	uint16_t new_epoch;
+	uint32_t flags;
+
+	bool send_break = x_smbd_lease_require_break(posixfs_open->smbd_lease,
+			lease_key, break_to, curr_state,
+			new_epoch, flags);
+	if (!send_break) {
 		return;
 	}
 
-	posixfs_open_t *posixfs_open = evt->posixfs_open;
-	posixfs_object_t *posixfs_object = posixfs_object_from_base_t::container(posixfs_open->base.smbd_object);
-
-	std::lock_guard<std::mutex> lock(posixfs_object->base.mutex);
-	if (posixfs_open->smbd_lease) {
-		/* TODO check breaking */
-		x_smb2_send_lease_break(smbd_conn,
-				evt->smbd_sess,
-				&posixfs_open->smbd_lease->lease_key,
-				0, // TODO epoch
-				SMB2_NOTIFY_BREAK_LEASE_FLAG_ACK_REQUIRED, // TODO
-				posixfs_open->smbd_lease->lease_state,
-				evt->breakto);
-	} else {
-		if (posixfs_open->oplock_break_sent != oplock_break_sent_t::OPLOCK_BREAK_NOT_SENT) {
-			posixfs_open->oplock_break_sent = evt->breakto == X_SMB2_OPLOCK_LEVEL_II ?
-				oplock_break_sent_t::OPLOCK_BREAK_TO_LEVEL_II_SENT : oplock_break_sent_t::OPLOCK_BREAK_TO_NONE_SENT;
-			x_smb2_send_oplock_break(smbd_conn,
-					evt->smbd_sess,
-					&posixfs_open->base,
-					evt->breakto);
+	x_smbd_sess_t *smbd_sess = x_smbd_tcon_get_sess(posixfs_open->base.smbd_tcon);
+	posixfs_send_lease_break_evt_t *evt = new posixfs_send_lease_break_evt_t(
+			smbd_sess, lease_key, curr_state, break_to, new_epoch, flags);
+	x_smbd_chan_t *smbd_chan = x_smbd_sess_get_active_chan(smbd_sess);
+	if (smbd_chan) {
+		if (x_smbd_chan_post_user(smbd_chan, &evt->base)) {
+			return;
 		}
+		x_smbd_ref_dec(smbd_chan);
 	}
+	X_LOG_ERR("failed to post send_lease_break %p", smbd_chan);
 	delete evt;
-#endif
 }
 
-static void send_break(posixfs_open_t *posixfs_open,
-		uint8_t breakto)
+static void posixfs_send_oplock_break_func(x_smbd_conn_t *smbd_conn, x_fdevt_user_t *fdevt_user, bool terminated);
+struct posixfs_send_oplock_break_evt_t
 {
+	posixfs_send_oplock_break_evt_t(x_smbd_sess_t *smbd_sess,
+			uint64_t open_persistent_id,
+			uint64_t open_volatile_id,
+			uint8_t oplock_level)
+		: smbd_sess(smbd_sess)
+		, open_persistent_id(open_persistent_id)
+		, open_volatile_id(open_volatile_id)
+		, oplock_level(oplock_level)
+	{
+		base.func = posixfs_send_oplock_break_func;
+	}
+
+	~posixfs_send_oplock_break_evt_t()
+	{
+		if (smbd_sess) {
+			x_smbd_ref_dec(smbd_sess);
+		}
+	}
+
+	x_fdevt_user_t base;
+	x_smbd_sess_t *smbd_sess = nullptr;
+	uint64_t open_persistent_id, open_volatile_id;
+	uint8_t oplock_level;
+};
+
+static void posixfs_send_oplock_break_func(x_smbd_conn_t *smbd_conn, x_fdevt_user_t *fdevt_user, bool terminated)
+{
+	posixfs_send_oplock_break_evt_t *evt = X_CONTAINER_OF(fdevt_user,
+			posixfs_send_oplock_break_evt_t, base);
+	X_LOG_DBG("evt=%p", evt);
+
+	if (!terminated) {
+		x_smb2_send_oplock_break(smbd_conn,
+				evt->smbd_sess,
+				evt->open_persistent_id,
+				evt->open_volatile_id,
+				evt->oplock_level);
+	}
+	delete evt;
+}
+
+static void do_break_oplock(posixfs_open_t *posixfs_open,
+		uint8_t break_to)
+{
+	/* TODO timer */
 	/* already hold posixfs_object mutex */
-	posixfs_break_evt_t *evt = new posixfs_break_evt_t;
-	evt->base.func = posixfs_break_func;
-	x_smbd_ref_inc(&posixfs_open->base);
-	evt->posixfs_open = posixfs_open;
-	evt->breakto = breakto;
-	evt->smbd_sess = x_smbd_tcon_get_sess(posixfs_open->base.smbd_tcon);
+	auto [ persistent_id, volatile_id ] = x_smbd_open_get_id(&posixfs_open->base); 
+	x_smbd_sess_t *smbd_sess = x_smbd_tcon_get_sess(posixfs_open->base.smbd_tcon);
+	posixfs_send_oplock_break_evt_t *evt = new posixfs_send_oplock_break_evt_t(
+			smbd_sess, persistent_id, volatile_id,
+			break_to == X_SMB2_LEASE_READ ? X_SMB2_OPLOCK_LEVEL_II :
+				X_SMB2_OPLOCK_LEVEL_NONE);
+
 	x_smbd_chan_t *smbd_chan = x_smbd_sess_get_active_chan(evt->smbd_sess);
 	if (smbd_chan) {
 		if (x_smbd_chan_post_user(smbd_chan, &evt->base)) {
@@ -1147,7 +1221,6 @@ static void send_break(posixfs_open_t *posixfs_open,
 static bool delay_for_oplock(posixfs_object_t *posixfs_object,
 		posixfs_stream_t *posixfs_stream,
 		x_smbd_lease_t *smbd_lease,
-		const x_smb2_lease_t *lease,
 		uint32_t create_disposition,
 		bool have_sharing_violation,
 		bool first_open_attempt)
@@ -1175,7 +1248,7 @@ static bool delay_for_oplock(posixfs_object_t *posixfs_object,
 		uint8_t break_to;
 		uint8_t delay_mask = 0;
 		if (curr_open->oplock_level == X_SMB2_OPLOCK_LEVEL_LEASE) {
-			if (lease && curr_open->smbd_lease == smbd_lease) {
+			if (smbd_lease && curr_open->smbd_lease == smbd_lease) {
 				continue;
 			}
 		}
@@ -1193,7 +1266,7 @@ static bool delay_for_oplock(posixfs_object_t *posixfs_object,
 		}
 
 		if ((e_lease_type & ~break_to) == 0) {
-			if (curr_open->oplock_level == X_SMB2_OPLOCK_LEVEL_LEASE && x_smbd_lease_is_breaking(curr_open->smbd_lease)) {
+			if (curr_open->smbd_lease && x_smbd_lease_is_breaking(curr_open->smbd_lease)) {
 				delay = true;
 			}
 			continue;
@@ -1214,7 +1287,11 @@ static bool delay_for_oplock(posixfs_object_t *posixfs_object,
 			break_to = x_convert<uint8_t>(break_to & ~(X_SMB2_LEASE_HANDLE|X_SMB2_LEASE_WRITE));
 		}
 		++break_count;
-		send_break(curr_open, break_to);
+		if (curr_open->smbd_lease) {
+			do_break_lease(curr_open, break_to);
+		} else {
+			do_break_oplock(curr_open, break_to);
+		}
 		if (e_lease_type & delay_mask) {
 			delay = true;
 		}
@@ -1806,8 +1883,6 @@ static NTSTATUS posixfs_create_open_exist_object(
 	if (delay_for_oplock(posixfs_object,
 				&posixfs_object->default_stream,
 				smbd_lease,
-				state->in_oplock_level == X_SMB2_OPLOCK_LEVEL_LEASE ?
-					&state->lease : nullptr,
 				state->in_create_disposition,
 				conflict, true)) {
 		defer_open(posixfs_object, &posixfs_object->default_stream,
@@ -2087,8 +2162,6 @@ static posixfs_open_t *open_object_exist_ads(
 	if (delay_for_oplock(posixfs_object,
 				&posixfs_ads->base,
 				smbd_lease,
-				state->in_oplock_level == X_SMB2_OPLOCK_LEVEL_LEASE ?
-					&state->lease : nullptr,
 				state->in_create_disposition,
 				conflict, true)) {
 		defer_open(posixfs_object, &posixfs_ads->base,
@@ -3692,79 +3765,13 @@ NTSTATUS posixfs_object_op_notify(
 	}
 }
 
-static NTSTATUS posixfs_lease_break(
-		x_smbd_lease_t *smbd_lease,
-		const x_smb2_state_lease_break_t &state,
-		bool &modified)
-{
-	X_TODO;
-#if 0
-	/* TODO atomic */
-	if ((state.in_state & smbd_lease->breaking_to_requested) != state.in_state) {
-		X_LOG_DBG("Attempt to upgrade from %d to %d - expected %d\n",
-				(int)smbd_lease->lease_state, (int)state.in_state,
-				(int)smbd_lease->breaking_to_requested);
-		return NT_STATUS_REQUEST_NOT_ACCEPTED;
-	}
-
-	modified = false;
-	if (smbd_lease->lease_state != state.in_state) {
-		/* TODO should not assert with invalid client in_state */
-		smbd_lease->lease_state = x_convert_assert<uint8_t>(state.in_state);
-		modified = true;
-	}
-
-	if ((state.in_state & (~smbd_lease->breaking_to_required)) != 0) {
-		X_LOG_DBG("lease state %d not fully broken from %d to %d\n",
-				(int)state.in_state,
-				(int)smbd_lease->lease_state,
-				(int)smbd_lease->breaking_to_required);
-		smbd_lease->breaking_to_requested = smbd_lease->breaking_to_required;
-		if (smbd_lease->lease_state & (~X_SMB2_LEASE_READ)) {
-			/*
-			 * Here we break in steps, as windows does
-			 * see the breaking3 and v2_breaking3 tests.
-			 */
-			smbd_lease->breaking_to_requested |= X_SMB2_LEASE_READ;
-		}
-		modified = true;
-		return NT_STATUS_OPLOCK_BREAK_IN_PROGRESS;
-	}
-
-	X_LOG_DBG("breaking from %d to %d - expected %d\n",
-			(int)smbd_lease->lease_state, (int)state.in_state,
-			(int)smbd_lease->breaking_to_requested);
-
-	smbd_lease->breaking_to_requested = 0;
-	smbd_lease->breaking_to_required = 0;
-	smbd_lease->breaking = false;
-#endif
-	return NT_STATUS_OK;
-}
-
-NTSTATUS posixfs_object_op_lease_break(
+void posixfs_object_op_lease_break(
 		x_smbd_object_t *smbd_object,
-		x_smbd_conn_t *smbd_conn,
-		x_smbd_requ_t *smbd_requ,
-		x_smbd_lease_t *smbd_lease,
-		std::unique_ptr<x_smb2_state_lease_break_t> &state)
+		x_smbd_stream_t *smbd_stream)
 {
-	/* downgrade_lease() */
-	posixfs_open_t *posixfs_open = posixfs_open_from_base_t::container(smbd_requ->smbd_open);
-	bool modified = false;
-	NTSTATUS status = posixfs_lease_break(smbd_lease, *state, modified);
-	if (modified) {
-		posixfs_object_t *posixfs_object = posixfs_object_from_base_t::container(smbd_object);
-
-		std::unique_lock<std::mutex> lock(posixfs_object->base.mutex);
-		share_mode_modified(posixfs_object, posixfs_open->stream);
-	}
-
-	if (NT_STATUS_EQUAL(status, NT_STATUS_OPLOCK_BREAK_IN_PROGRESS)) {
-		X_TODO;
-	}
-	// state->out_state = state->in_state;
-	return status;
+	posixfs_object_t *posixfs_object = posixfs_object_from_base_t::container(smbd_object);
+	std::unique_lock<std::mutex> lock(posixfs_object->base.mutex);
+	share_mode_modified(posixfs_object, (posixfs_stream_t *)smbd_stream);
 }
 
 NTSTATUS posixfs_object_op_oplock_break(
