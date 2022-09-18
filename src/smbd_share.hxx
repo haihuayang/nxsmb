@@ -69,12 +69,9 @@ struct x_smbd_share_t
 			const char16_t *in_path_end,
 			const std::string &volume) = 0;
 	virtual NTSTATUS create_open(x_smbd_open_t **psmbd_open,
-			x_smbd_object_t *smbd_object,
 			x_smbd_requ_t *smbd_requ,
-			x_smbd_lease_t *smbd_lease,
 			const std::string &volume,
 			std::unique_ptr<x_smb2_state_create_t> &state,
-			long open_priv_data,
 			std::vector<x_smb2_change_t>& changes) = 0;
 	std::string name;
 	bool read_only = false;

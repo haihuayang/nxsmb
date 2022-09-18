@@ -185,7 +185,7 @@ enum {
 	X_SMB2_CONTEXT_FLAG_MXAC = 1,
 	X_SMB2_CONTEXT_FLAG_QFID = 2,
 };
-
+#if 0
 struct x_smb2_state_create_t
 {
 	uint8_t in_oplock_level;
@@ -217,8 +217,11 @@ struct x_smb2_state_create_t
 	x_smb2_create_close_info_t out_info;
 
 	uint32_t granted_access{0}; // internally used
-};
 
+	x_smbd_object_t *smbd_object{};
+	x_smbd_lease_t *smbd_lease{};
+};
+#endif
 
 #endif /* __smb2_state__hxx__ */
 

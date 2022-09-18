@@ -14,3 +14,11 @@ x_smbd_object_t::~x_smbd_object_t()
 	X_SMBD_COUNTER_INC(object_delete, 1);
 }
 
+x_smb2_state_create_t::~x_smb2_state_create_t()
+{
+	if (smbd_object) {
+		x_smbd_object_release(smbd_object, nullptr);
+	}
+	x_smbd_ref_dec_if(smbd_lease);
+}
+

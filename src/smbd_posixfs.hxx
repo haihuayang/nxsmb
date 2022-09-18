@@ -143,11 +143,8 @@ NTSTATUS x_smbd_posixfs_open_object(x_smbd_object_t **psmbd_object,
 		const std::u16string &path, uint64_t path_data);
 
 NTSTATUS x_smbd_posixfs_create_open(x_smbd_open_t **psmbd_open,
-		x_smbd_object_t *smbd_object,
 		x_smbd_requ_t *smbd_requ,
-		x_smbd_lease_t *smbd_lease,
 		std::unique_ptr<x_smb2_state_create_t> &state,
-		long priv_data,
 		std::vector<x_smb2_change_t> &changes);
 std::unique_lock<std::mutex> x_smbd_posixfs_lock_object(x_smbd_object_t *smbd_object);
 

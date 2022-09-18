@@ -88,6 +88,45 @@ inline void x_smbd_ref_dec_if(T *t)
 
 #define X_SMBD_REF_DEC(t) do { x_smbd_ref_dec(t); (t) = nullptr; } while (0)
 
+struct x_smb2_state_create_t
+{
+	~x_smb2_state_create_t();
+
+	uint8_t in_oplock_level;
+	uint8_t out_oplock_level;
+	uint32_t contexts{0};
+
+	uint32_t in_impersonation_level;
+	uint32_t in_desired_access;
+	uint32_t in_file_attributes;
+	uint32_t in_share_access;
+	uint32_t in_create_disposition;
+	uint32_t in_create_options;
+	std::shared_ptr<idl::security_descriptor> in_security_descriptor;
+
+	x_smb2_lease_t lease;
+	uint64_t in_allocation_size{0};
+	uint64_t in_timestamp{0};
+
+	bool is_dollar_data = false;
+	bool end_with_sep = false;
+	std::u16string in_path;
+	std::u16string in_ads_name;
+
+	uint8_t out_create_flags;
+	bool base_created = false;
+	uint32_t out_create_action;
+	uint32_t out_maximal_access{0};
+	uint8_t out_qfid_info[32];
+	x_smb2_create_close_info_t out_info;
+
+	uint32_t granted_access{0}; // internally used
+
+	x_smbd_object_t *smbd_object{};
+	x_smbd_lease_t *smbd_lease{};
+	long open_priv_data;
+};
+
 template <class T>
 struct x_smbd_ptr_t
 {
@@ -217,9 +256,7 @@ bool x_smbd_chan_post_user(x_smbd_chan_t *smbd_chan, x_fdevt_user_t *fdevt_user)
 
 
 int x_smbd_tcon_table_init(uint32_t count);
-NTSTATUS x_smbd_tcon_op_create(x_smbd_tcon_t *smbd_tcon,
-		x_smbd_requ_t *smbd_requ,
-		x_smbd_lease_t *smbd_lease,
+NTSTATUS x_smbd_tcon_op_create(x_smbd_requ_t *smbd_requ,
 		std::unique_ptr<x_smb2_state_create_t> &state);
 x_smbd_tcon_t *x_smbd_tcon_create(x_smbd_sess_t *smbd_sess, 
 		const std::shared_ptr<x_smbd_share_t> &smbshare,

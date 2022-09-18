@@ -374,5 +374,6 @@ static inline uint32_t x_smbd_object_get_attributes(const x_smbd_object_t *smbd_
 	return smbd_object->topdir->ops->get_attributes(smbd_object);
 }
 #endif
+
 #endif /* __smbd_open__hxx__ */
 

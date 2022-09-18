@@ -577,13 +577,11 @@ static x_smbd_object_t *ipc_open_object(NTSTATUS *pstatus,
 }
 
 static NTSTATUS ipc_create_open(x_smbd_open_t **psmbd_open,
-			x_smbd_object_t *smbd_object,
 			x_smbd_requ_t *smbd_requ,
 			const std::string &volume,
-			std::unique_ptr<x_smb2_state_create_t> &state,
-			long open_priv_data)
+			std::unique_ptr<x_smb2_state_create_t> &state)
 {
-	X_ASSERT(open_priv_data == 0);
+	X_ASSERT(state->open_priv_data == 0);
 	if (state->end_with_sep) {
 		return NT_STATUS_OBJECT_NAME_INVALID;
 	}
@@ -597,7 +595,7 @@ static NTSTATUS ipc_create_open(x_smbd_open_t **psmbd_open,
 		return NT_STATUS_ACCESS_DENIED;
 	}
 
-	x_smbd_ipc_object_t *ipc_object = from_smbd_object(smbd_object);
+	x_smbd_ipc_object_t *ipc_object = from_smbd_object(state->smbd_object);
 	named_pipe_t *named_pipe = new named_pipe_t(&ipc_object->base,
 			smbd_requ->smbd_tcon,
 			state->in_desired_access,
@@ -717,15 +715,12 @@ struct ipc_share_t : x_smbd_share_t
 	}
 
 	NTSTATUS create_open(x_smbd_open_t **psmbd_open,
-			x_smbd_object_t *smbd_object,
 			x_smbd_requ_t *smbd_requ,
-			x_smbd_lease_t *smbd_lease,
 			const std::string &volume,
 			std::unique_ptr<x_smb2_state_create_t> &state,
-			long open_priv_data,
 			std::vector<x_smb2_change_t> &changes) override {
-		return ipc_create_open(psmbd_open, smbd_object, smbd_requ,
-				volume, state, open_priv_data);
+		return ipc_create_open(psmbd_open, smbd_requ,
+				volume, state);
 	}
 	const std::shared_ptr<x_smbd_topdir_t> topdir;
 };

@@ -419,7 +419,7 @@ static void x_smb2_create_async_done(x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ,
 		NTSTATUS status)
 {
-	std::unique_ptr<x_smb2_state_create_t> state{(x_smb2_state_create_t *)smbd_requ->requ_state};
+	x_smb2_state_create_t *state{(x_smb2_state_create_t *)smbd_requ->requ_state};
 	X_LOG_DBG("status=0x%x", status.v);
 	smbd_requ->requ_state = nullptr;
 	if (NT_STATUS_IS_OK(status)) {
@@ -472,18 +472,16 @@ NTSTATUS x_smb2_process_create(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_req
 	}
 
 	/* TODO log stream too */
-	X_LOG_OP("%ld CREATE '%s'", smbd_requ->in_mid, x_convert_utf16_to_utf8(state->in_path).c_str());
+	X_LOG_OP("%ld CREATE '%s'", smbd_requ->in_mid,
+			x_convert_utf16_to_utf8(state->in_path).c_str());
+
 	smbd_requ->async_done_fn = x_smb2_create_async_done;
-	x_smbd_lease_t *smbd_lease = nullptr;
 	if (state->in_oplock_level == X_SMB2_OPLOCK_LEVEL_LEASE) {
-		smbd_lease = x_smbd_lease_find(x_smbd_conn_curr_client_guid(),
+		state->smbd_lease = x_smbd_lease_find(x_smbd_conn_curr_client_guid(),
 				state->lease.key, true);
 	}
-	status = x_smbd_tcon_op_create(smbd_requ->smbd_tcon, smbd_requ,
-			smbd_lease, state);
-	if (smbd_lease) {
-		x_smbd_ref_dec(smbd_lease);
-	}
+
+	status = x_smbd_tcon_op_create(smbd_requ, state);
 	if (NT_STATUS_IS_OK(status)) {
 		x_smb2_reply_create(smbd_conn, smbd_requ, *state);
 		return status;

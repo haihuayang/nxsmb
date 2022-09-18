@@ -118,45 +118,49 @@ x_smbd_tcon_t *x_smbd_tcon_lookup(uint32_t id, const x_smbd_sess_t *smbd_sess)
 	return nullptr;
 }
 
-NTSTATUS x_smbd_tcon_op_create(x_smbd_tcon_t *smbd_tcon,
-		x_smbd_requ_t *smbd_requ,
-		x_smbd_lease_t *smbd_lease,
+NTSTATUS x_smbd_tcon_op_create(x_smbd_requ_t *smbd_requ,
 		std::unique_ptr<x_smb2_state_create_t> &state)
 {
 	X_ASSERT(!smbd_requ->smbd_open);
+
 	if (!x_smbd_open_has_space()) {
 		return NT_STATUS_INSUFFICIENT_RESOURCES;
 	}
 
-	std::shared_ptr<x_smbd_topdir_t> topdir;
-	std::u16string path;
-	long path_priv_data{};
-	long open_priv_data{};
-	NTSTATUS status = smbd_tcon->smbd_share->resolve_path(
-			topdir, path, path_priv_data, open_priv_data,
-			smbd_requ->in_hdr_flags & SMB2_HDR_FLAG_DFS,
-			state->in_path.data(),
-			state->in_path.data() + state->in_path.length(),
-			smbd_tcon->volume);
-	if (!NT_STATUS_IS_OK(status)) {
-		return status;
-	}
+	NTSTATUS status;
+	x_smbd_tcon_t *smbd_tcon = smbd_requ->smbd_tcon;
 
-	x_smbd_object_t *smbd_object = topdir->ops->open_object(&status,
-			topdir, path, path_priv_data, true);
-	if (!smbd_object) {
-		return status;
+	if (!state->smbd_object) {
+		std::shared_ptr<x_smbd_topdir_t> topdir;
+		std::u16string path;
+		long path_priv_data{};
+		long open_priv_data{};
+		status = smbd_tcon->smbd_share->resolve_path(
+				topdir, path, path_priv_data, open_priv_data,
+				smbd_requ->in_hdr_flags & SMB2_HDR_FLAG_DFS,
+				state->in_path.data(),
+				state->in_path.data() + state->in_path.length(),
+				smbd_tcon->volume);
+		if (!NT_STATUS_IS_OK(status)) {
+			return status;
+		}
+
+		state->smbd_object = topdir->ops->open_object(&status,
+				topdir, path, path_priv_data, true);
+		if (!state->smbd_object) {
+			return status;
+		}
+
+		state->open_priv_data = open_priv_data;
 	}
 
 	/* changes may include many stream deletion */
 	std::vector<x_smb2_change_t> changes;
        	x_smbd_open_t *smbd_open = nullptr;
 	/* TODO should we check the open limit before create the open */
-	status = smbd_tcon->smbd_share->create_open(&smbd_open, smbd_object, 
-			smbd_requ, smbd_lease, smbd_tcon->volume, state,
-			open_priv_data, changes);
-
-	x_smbd_object_release(smbd_object, nullptr);
+	status = smbd_tcon->smbd_share->create_open(&smbd_open,
+			smbd_requ, smbd_tcon->volume, state,
+			changes);
 
 	if (smbd_open) {
 		X_ASSERT(NT_STATUS_IS_OK(status));
@@ -177,9 +181,9 @@ NTSTATUS x_smbd_tcon_op_create(x_smbd_tcon_t *smbd_tcon,
 			x_smbd_ref_inc(smbd_open); // ref by smbd_tcon open_list
 			smbd_requ->smbd_open = x_smbd_ref_inc(smbd_open);
 		}
-	}
 
-	x_smbd_notify_change(topdir, changes);
+		x_smbd_notify_change(state->smbd_object->topdir, changes);
+	}
 
 	return status;
 }

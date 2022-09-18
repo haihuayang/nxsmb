@@ -96,12 +96,9 @@ struct simplefs_share_t : x_smbd_share_t
 	bool abe_enabled() const override { return false; }
 
 	NTSTATUS create_open(x_smbd_open_t **psmbd_open,
-			x_smbd_object_t *smbd_object,
 			x_smbd_requ_t *smbd_requ,
-			x_smbd_lease_t *smbd_lease,
 			const std::string &volume,
 			std::unique_ptr<x_smb2_state_create_t> &state,
-			long open_priv_data,
 			std::vector<x_smb2_change_t> &changes) override;
 
 	NTSTATUS resolve_path(std::shared_ptr<x_smbd_topdir_t> &topdir,
@@ -157,17 +154,14 @@ NTSTATUS simplefs_share_t::resolve_path(
 }
 
 NTSTATUS simplefs_share_t::create_open(x_smbd_open_t **psmbd_open,
-		x_smbd_object_t *smbd_object,
 		x_smbd_requ_t *smbd_requ,
-		x_smbd_lease_t *smbd_lease,
 		const std::string &volume,
 		std::unique_ptr<x_smb2_state_create_t> &state,
-		long open_priv_data,
 		std::vector<x_smb2_change_t> &changes)
 {
-	std::lock_guard<std::mutex> lock(smbd_object->mutex);
-	return x_smbd_posixfs_create_open(psmbd_open, smbd_object, smbd_requ,
-			smbd_lease, state, open_priv_data, changes);
+	std::lock_guard<std::mutex> lock(state->smbd_object->mutex);
+	return x_smbd_posixfs_create_open(psmbd_open, smbd_requ,
+			state, changes);
 }
 
 std::shared_ptr<x_smbd_share_t> x_smbd_simplefs_share_create(
