@@ -2,6 +2,7 @@
 #include "smbd_lease.hxx"
 #include "smbd_stats.hxx"
 #include "smbd_open.hxx"
+#include "smbd_ctrl.hxx"
 #include "include/hashtable.hxx"
 #include <mutex>
 
@@ -23,6 +24,23 @@ struct x_smbd_lease_t
 	bool breaking{false};
 	uint8_t breaking_to_requested{0}, breaking_to_required{0};
 };
+
+std::ostream &operator<<(std::ostream &os, const x_smb2_lease_key_t &lease_key);
+std::ostream &operator<<(std::ostream &os, const x_smb2_uuid_t &val);
+
+std::ostream &operator<<(std::ostream &os, const x_smb2_lease_key_t &lease_key)
+{
+	char buf[80];
+	snprintf(buf, sizeof buf, "%016lx-%016lx", lease_key.data[0], lease_key.data[1]);
+	return os << buf;
+}
+
+std::ostream &operator<<(std::ostream &os, const x_smb2_uuid_t &val)
+{
+	char buf[80];
+	snprintf(buf, sizeof buf, "%016lx-%016lx", val[0], val[1]);
+	return os << buf;
+}
 
 X_DECLARE_MEMBER_TRAITS(smbd_lease_hash_traits, x_smbd_lease_t, hash_link)
 
@@ -355,4 +373,41 @@ int x_smbd_lease_pool_init(uint32_t count, uint32_t mutex_count)
 	return 0;
 }
 
+struct x_smbd_lease_list_t : x_smbd_ctrl_handler_t
+{
+	bool output(std::string &data) override;
+	size_t next_bucket_idx = 0;
+};
 
+bool x_smbd_lease_list_t::output(std::string &data)
+{
+	std::ostringstream os;
+
+	size_t count = 0;
+	while (next_bucket_idx < g_smbd_lease_pool.hashtable.buckets.size() && count == 0) {
+		auto &bucket = g_smbd_lease_pool.hashtable.buckets[next_bucket_idx];
+		auto lock = std::lock_guard(g_smbd_lease_pool.mutex[next_bucket_idx]);
+		for (x_dqlink_t *link = bucket.get_front();
+				link; link = link->get_next()) {
+			auto item = smbd_lease_hash_traits::container(link);
+			os << next_bucket_idx << ' ' << item->lease_key << ' '
+				<< item->client_guid << ' ' << int(item->version) << ' '
+				<< int(item->lease_state) << ' ' << int(item->epoch) << ' '
+				<< (item->breaking ? 'B' : '-') << ' ' << int(item->breaking_to_requested) << ' '
+				<< int(item->breaking_to_required) << std::endl;
+			++count;
+		}
+		++next_bucket_idx;
+	}
+	if (count > 0) {
+		data = os.str();
+		return true;
+	} else {
+		return false;
+	}
+}
+
+x_smbd_ctrl_handler_t *x_smbd_lease_list_create()
+{
+	return new x_smbd_lease_list_t;
+}

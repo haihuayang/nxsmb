@@ -62,6 +62,8 @@ static void x_smbd_ctrl_command(x_smbd_ctrl_conn_t *smbd_ctrl_conn)
 		smbd_ctrl_conn->handler.reset(x_smbd_tcon_list_create());
 	} else if (strcmp(smbd_ctrl_conn->recv_buf, "list-open") == 0) {
 		smbd_ctrl_conn->handler.reset(x_smbd_open_list_create());
+	} else if (strcmp(smbd_ctrl_conn->recv_buf, "list-lease") == 0) {
+		smbd_ctrl_conn->handler.reset(x_smbd_lease_list_create());
 	} else {
 		smbd_ctrl_conn->output = "Invalid command" END_OF_MSG;
 		return;
