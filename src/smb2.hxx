@@ -234,7 +234,8 @@ struct x_smb2_lease_t
 	uint64_t duration;
 	x_smb2_lease_key_t parent_key;
 	uint16_t epoch;
-	uint16_t version;
+	uint8_t version;
+	uint8_t unused;
 };
 
 struct x_buf_t

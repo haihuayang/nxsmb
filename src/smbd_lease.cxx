@@ -9,7 +9,7 @@ struct x_smbd_lease_t
 {
 	x_smbd_lease_t(const x_smb2_uuid_t &client_guid,
 			const x_smb2_lease_key_t &lease_key,
-			uint32_t hash);
+			uint32_t hash, uint8_t version);
 	x_dqlink_t hash_link;
 	const x_smb2_uuid_t client_guid;
 	const x_smb2_lease_key_t lease_key;
@@ -17,12 +17,11 @@ struct x_smbd_lease_t
 	x_smbd_stream_t * smbd_stream{}; // protected by bucket mutex
 	const uint32_t hash;
 	uint32_t refcnt{1}; // protected by bucket mutex
-	uint8_t version{0}; // follwing protected by object's mutex
+	const uint8_t version;
 	uint8_t lease_state{0};
 	uint16_t epoch{0};
 	bool breaking{false};
 	uint8_t breaking_to_requested{0}, breaking_to_required{0};
-	// std::atomic<uint32_t> open_cnt{0};
 };
 
 X_DECLARE_MEMBER_TRAITS(smbd_lease_hash_traits, x_smbd_lease_t, hash_link)
@@ -64,9 +63,9 @@ static smbd_lease_pool_t g_smbd_lease_pool;
 
 x_smbd_lease_t::x_smbd_lease_t(const x_smb2_uuid_t &client_guid,
 		const x_smb2_lease_key_t &lease_key,
-		uint32_t hash)
+		uint32_t hash, uint8_t version)
 	: client_guid(client_guid), lease_key(lease_key)
-	, hash(hash)
+	, hash(hash), version(version)
 {
 	X_SMBD_COUNTER_INC(lease_create, 1);
 }
@@ -146,6 +145,7 @@ void x_smbd_ref_dec(x_smbd_lease_t *smbd_lease)
 x_smbd_lease_t *x_smbd_lease_find(
 		const x_smb2_uuid_t &client_guid,
 		const x_smb2_lease_key_t &lease_key,
+		uint8_t version,
 		bool create_if)
 {
 	uint32_t hash = lease_hash(client_guid, lease_key);
@@ -159,7 +159,7 @@ x_smbd_lease_t *x_smbd_lease_find(
 		++smbd_lease->refcnt;
 	} else if (create_if) {
 		smbd_lease = new x_smbd_lease_t(client_guid, lease_key,
-				hash);
+				hash, version);
 		g_smbd_lease_pool.hashtable.insert(smbd_lease, hash);
 	}
 	return smbd_lease;
@@ -287,20 +287,7 @@ bool x_smbd_lease_require_break(x_smbd_lease_t *smbd_lease,
 	flags = (break_from != X_SMB2_LEASE_READ) ? SMB2_NOTIFY_BREAK_LEASE_FLAG_ACK_REQUIRED : 0;
 	return true;
 }
-#if 0
-NTSTATUS x_smbd_lease_process_break(x_smbd_lease_t *smbd_lease,
-		x_smbd_conn_t *smbd_conn,
-		x_smbd_requ_t *smbd_requ,
-		const x_smb2_state_lease_break_t &state)
-{
-	x_smbd_object_t *smbd_object = smbd_lease->smbd_object;
-	auto op_fn = smbd_object->topdir->ops->lease_break;
-	if (!op_fn) {
-		return NT_STATUS_INVALID_DEVICE_REQUEST;
-	}
-	return op_fn(smbd_object, smbd_conn, smbd_requ, smbd_lease, state);
-}
-#endif
+
 /* downgrade_lease() */
 static NTSTATUS smbd_lease_process_break(x_smbd_lease_t *smbd_lease,
 		const x_smb2_state_lease_break_t &state,

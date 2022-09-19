@@ -1360,7 +1360,7 @@ static NTSTATUS grant_oplock(posixfs_object_t *posixfs_object,
 			continue;
 		}
 		if (curr_open->oplock_level == X_SMB2_OPLOCK_LEVEL_LEASE &&
-				lease && curr_open->smbd_lease == state.smbd_lease) {
+				lease && curr_open->smbd_lease != state.smbd_lease) {
 			if (e_lease_type & X_SMB2_LEASE_WRITE) {
 				granted = X_SMB2_LEASE_NONE;
 				break;

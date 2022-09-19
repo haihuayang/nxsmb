@@ -143,7 +143,7 @@ static NTSTATUS x_smb2_process_lease_break(x_smbd_conn_t *smbd_conn,
 	x_smb2_state_lease_break_t state;
 	decode_in_lease_break(state, in_lease_break);
 	x_smbd_lease_t *smbd_lease = x_smbd_lease_find(x_smbd_conn_curr_client_guid(),
-			state.in_key, false);
+			state.in_key, 0, false);
 	if (!smbd_lease) {
 		return NT_STATUS_INVALID_PARAMETER;
 	}

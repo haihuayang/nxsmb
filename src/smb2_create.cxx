@@ -478,7 +478,7 @@ NTSTATUS x_smb2_process_create(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_req
 	smbd_requ->async_done_fn = x_smb2_create_async_done;
 	if (state->in_oplock_level == X_SMB2_OPLOCK_LEVEL_LEASE) {
 		state->smbd_lease = x_smbd_lease_find(x_smbd_conn_curr_client_guid(),
-				state->lease.key, true);
+				state->lease.key, state->lease.version, true);
 	}
 
 	status = x_smbd_tcon_op_create(smbd_requ, state);
