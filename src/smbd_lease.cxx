@@ -12,6 +12,7 @@ struct x_smbd_lease_t
 			const x_smb2_lease_key_t &lease_key,
 			uint32_t hash, uint8_t version);
 	x_dqlink_t hash_link;
+	x_timerq_entry_t timer;
 	const x_smb2_uuid_t client_guid;
 	const x_smb2_lease_key_t lease_key;
 	x_smbd_object_t * smbd_object{}; // protected by bucket mutex
@@ -46,14 +47,10 @@ X_DECLARE_MEMBER_TRAITS(smbd_lease_hash_traits, x_smbd_lease_t, hash_link)
 
 static uint32_t lease_hash(const x_smb2_uuid_t &client_guid, const x_smb2_lease_key_t &lease_key)
 {
-	/* TODO better hash algorithm */
-	uint64_t hash = 0;
-	const uint64_t *p = reinterpret_cast<const uint64_t *>(&client_guid);
-	hash ^= p[0];
-	hash ^= p[1];
-	p = lease_key.data.data();
-	hash ^= p[0];
-	hash ^= p[1];
+	uint64_t hash = client_guid[0];
+	hash = hash * 31 + client_guid[1];
+	hash = hash * 31 + lease_key.data[0];
+	hash = hash * 31 + lease_key.data[1];
 	return uint32_t((hash >> 32) ^ hash);
 }
 
@@ -78,15 +75,6 @@ struct smbd_npool_t
 using smbd_lease_pool_t = smbd_npool_t<smbd_lease_hash_traits>;
 
 static smbd_lease_pool_t g_smbd_lease_pool;
-
-x_smbd_lease_t::x_smbd_lease_t(const x_smb2_uuid_t &client_guid,
-		const x_smb2_lease_key_t &lease_key,
-		uint32_t hash, uint8_t version)
-	: client_guid(client_guid), lease_key(lease_key)
-	, hash(hash), version(version)
-{
-	X_SMBD_COUNTER_INC(lease_create, 1);
-}
 
 uint8_t x_smbd_lease_get_state(const x_smbd_lease_t *smbd_lease)
 {
@@ -296,7 +284,8 @@ bool x_smbd_lease_require_break(x_smbd_lease_t *smbd_lease,
 	}
 
 	if (break_from != X_SMB2_LEASE_READ || break_to == X_SMB2_LEASE_NONE) {
-		/* TODO set timer */
+		x_smbd_ref_inc(smbd_lease);
+		x_smbd_add_timer(x_smbd_timer_t::BREAK, &smbd_lease->timer);
 	}
 	lease_key = smbd_lease->lease_key;
 	new_state = break_to;
@@ -312,6 +301,13 @@ static NTSTATUS smbd_lease_process_break(x_smbd_lease_t *smbd_lease,
 		bool &modified)
 {
 	auto lock = smbd_lease_lock(smbd_lease);
+	if (x_smbd_cancel_timer(x_smbd_timer_t::BREAK, &smbd_lease->timer)) {
+		X_ASSERT(--smbd_lease->refcnt > 0);
+	}
+
+	if (!smbd_lease->breaking) {
+		return NT_STATUS_UNSUCCESSFUL;
+	}
 
 	if ((state.in_state & smbd_lease->breaking_to_requested) != state.in_state) {
 		X_LOG_DBG("Attempt to upgrade from %d to %d - expected %d\n",
@@ -365,6 +361,39 @@ NTSTATUS x_smbd_lease_process_break(x_smbd_lease_t *smbd_lease,
 		X_TODO;
 	}
 	return status;
+}
+
+static void smbd_lease_break_timeout(x_timerq_entry_t *timerq_entry)
+{
+	/* we already have a ref on smbd_chan when adding timer */
+	x_smbd_lease_t *smbd_lease = X_CONTAINER_OF(timerq_entry, x_smbd_lease_t, timer);
+	bool modified = false;
+	{
+		auto lock = smbd_lease_lock(smbd_lease);
+		/* down grade lease  TODO */
+		smbd_lease->breaking_to_requested = 0;
+		smbd_lease->breaking_to_required = 0;
+		smbd_lease->breaking = false;
+		if (smbd_lease->lease_state != X_SMB2_LEASE_NONE) {
+			smbd_lease->lease_state = X_SMB2_LEASE_NONE;
+			modified = true;
+		}
+	}
+	if (modified) {
+		x_smbd_object_op_break_lease(smbd_lease->smbd_object,
+				smbd_lease->smbd_stream);
+	}
+	x_smbd_ref_dec(smbd_lease);
+}
+
+inline x_smbd_lease_t::x_smbd_lease_t(const x_smb2_uuid_t &client_guid,
+		const x_smb2_lease_key_t &lease_key,
+		uint32_t hash, uint8_t version)
+	: client_guid(client_guid), lease_key(lease_key)
+	, hash(hash), version(version)
+{
+	timer.func = smbd_lease_break_timeout;
+	X_SMBD_COUNTER_INC(lease_create, 1);
 }
 
 int x_smbd_lease_pool_init(uint32_t count, uint32_t mutex_count)

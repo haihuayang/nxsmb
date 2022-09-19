@@ -289,6 +289,13 @@ static posixfs_object_pool_t posixfs_object_pool;
 	} \
 } while (0)
 
+#define CHECK_OBJECT_LEASE(l, pobj) \
+	CHECK_LEASE((l), &(pobj)->base, &(pobj)->default_stream)
+
+#define CHECK_STREAM_LEASE(l, pobj, pads) \
+	CHECK_LEASE((l), &(pobj)->base, \
+			(pads) ? &(pads)->base : &(pobj)->default_stream)
+
 
 static std::string convert_to_unix(const std::u16string &req_path)
 {
@@ -1944,7 +1951,7 @@ static NTSTATUS posixfs_create_open_overwrite_object(
 		x_smbd_requ_t *smbd_requ,
 		std::unique_ptr<x_smb2_state_create_t> &state)
 {
-	CHECK_LEASE(state->smbd_lease, &posixfs_object->base, nullptr);
+	CHECK_OBJECT_LEASE(state->smbd_lease, posixfs_object);
 
 	// TODO DELETE_ALL_STREAM;
 	int err = ftruncate(posixfs_object->fd, 0);
@@ -2184,8 +2191,7 @@ static NTSTATUS posixfs_create_open_overwrite_ads(
 			posixfs_object,
 			state->in_ads_name,
 			true);
-	CHECK_LEASE(state->smbd_lease, &posixfs_object->base,
-			posixfs_ads ? &posixfs_ads->base : nullptr);
+	CHECK_STREAM_LEASE(state->smbd_lease, posixfs_object, posixfs_ads);
 
 	if (!posixfs_ads) {
 		return NT_STATUS_OBJECT_NAME_NOT_FOUND;
@@ -2211,8 +2217,7 @@ static NTSTATUS posixfs_create_open_overwrite_ads_if(
 			posixfs_object,
 			state->in_ads_name,
 			false);
-	CHECK_LEASE(state->smbd_lease, &posixfs_object->base,
-			posixfs_ads ? &posixfs_ads->base : nullptr);
+	CHECK_STREAM_LEASE(state->smbd_lease, posixfs_object, posixfs_ads);
 
 	NTSTATUS status = NT_STATUS_OK;
 	if (posixfs_ads && posixfs_ads->exists) {
@@ -2244,8 +2249,7 @@ static NTSTATUS posix_create_open_exist_ads(
 			state->in_ads_name,
 			true);
 
-	CHECK_LEASE(state->smbd_lease, &posixfs_object->base,
-			posixfs_ads ? &posixfs_ads->base : nullptr);
+	CHECK_STREAM_LEASE(state->smbd_lease, posixfs_object, posixfs_ads);
 
 	if (!posixfs_ads) {
 		return NT_STATUS_OBJECT_NAME_NOT_FOUND;
@@ -2301,8 +2305,7 @@ static NTSTATUS posixfs_create_open_new_ads_if(
 			state->in_ads_name,
 			false);
 
-	CHECK_LEASE(state->smbd_lease, &posixfs_object->base,
-			posixfs_ads ? &posixfs_ads->base : nullptr);
+	CHECK_STREAM_LEASE(state->smbd_lease, posixfs_object, posixfs_ads);
 
 	NTSTATUS status = NT_STATUS_OK;
 	if (posixfs_ads && posixfs_ads->exists) {
@@ -2359,7 +2362,7 @@ static NTSTATUS posixfs_create_open(
 		std::unique_ptr<x_smb2_state_create_t> &state)
 {
 	if (state->in_create_disposition == FILE_CREATE) {
-		CHECK_LEASE(state->smbd_lease, &posixfs_object->base, nullptr);
+		CHECK_OBJECT_LEASE(state->smbd_lease, posixfs_object);
 
 		if (!posixfs_object->exists()) {
 			if (state->end_with_sep) {
@@ -2397,16 +2400,16 @@ static NTSTATUS posixfs_create_open(
 		}
 		if (!posixfs_object->exists()) {
 			/* check lease first */
-			CHECK_LEASE(state->smbd_lease, &posixfs_object->base, nullptr);
+			CHECK_OBJECT_LEASE(state->smbd_lease, posixfs_object);
 
 			return NT_STATUS_OBJECT_NAME_NOT_FOUND;
 		} else if (posixfs_object_is_dir(posixfs_object)) {
 			if (state->is_dollar_data) {
-				CHECK_LEASE(state->smbd_lease, &posixfs_object->base, nullptr);
+				CHECK_OBJECT_LEASE(state->smbd_lease, posixfs_object);
 
 				return NT_STATUS_FILE_IS_A_DIRECTORY;
 			} else if (state->in_ads_name.size() == 0) {
-				CHECK_LEASE(state->smbd_lease, &posixfs_object->base, nullptr);
+				CHECK_OBJECT_LEASE(state->smbd_lease, posixfs_object);
 
 				return posixfs_create_open_exist_object(
 						posixfs_open,
@@ -2423,11 +2426,11 @@ static NTSTATUS posixfs_create_open(
 			}
 		} else {
 			if (state->end_with_sep) {
-				CHECK_LEASE(state->smbd_lease, &posixfs_object->base, nullptr);
+				CHECK_OBJECT_LEASE(state->smbd_lease, posixfs_object);
 
 				return NT_STATUS_OBJECT_NAME_INVALID;
 			} else if (state->in_ads_name.size() == 0) {
-				CHECK_LEASE(state->smbd_lease, &posixfs_object->base, nullptr);
+				CHECK_OBJECT_LEASE(state->smbd_lease, posixfs_object);
 
 				return posixfs_create_open_exist_object(
 						posixfs_open,
@@ -2449,7 +2452,7 @@ static NTSTATUS posixfs_create_open(
 			/* TODO snapshot */
 			return NT_STATUS_OBJECT_NAME_NOT_FOUND;
 		} else if (!posixfs_object->exists()) {
-			CHECK_LEASE(state->smbd_lease, &posixfs_object->base, nullptr);
+			CHECK_OBJECT_LEASE(state->smbd_lease, posixfs_object);
 
 			if (state->end_with_sep) {
 				return NT_STATUS_OBJECT_NAME_INVALID;
@@ -2468,11 +2471,11 @@ static NTSTATUS posixfs_create_open(
 			}
 		} else if (posixfs_object_is_dir(posixfs_object)) {
 			if (state->is_dollar_data) {
-				CHECK_LEASE(state->smbd_lease, &posixfs_object->base, nullptr);
+				CHECK_OBJECT_LEASE(state->smbd_lease, posixfs_object);
 
 				return NT_STATUS_FILE_IS_A_DIRECTORY;
 			} else if (state->in_ads_name.size() == 0) {
-				CHECK_LEASE(state->smbd_lease, &posixfs_object->base, nullptr);
+				CHECK_OBJECT_LEASE(state->smbd_lease, posixfs_object);
 
 				return posixfs_create_open_exist_object(
 						posixfs_open,
@@ -2488,7 +2491,7 @@ static NTSTATUS posixfs_create_open(
 			}
 		} else {
 			if (state->in_ads_name.size() == 0) {
-				CHECK_LEASE(state->smbd_lease, &posixfs_object->base, nullptr);
+				CHECK_OBJECT_LEASE(state->smbd_lease, posixfs_object);
 
 				return posixfs_create_open_exist_object(
 						posixfs_open,
@@ -2506,12 +2509,12 @@ static NTSTATUS posixfs_create_open(
 
 	} else if (state->in_create_disposition == FILE_OVERWRITE) {
 		if (!posixfs_object->exists()) {
-			CHECK_LEASE(state->smbd_lease, &posixfs_object->base, nullptr);
+			CHECK_OBJECT_LEASE(state->smbd_lease, posixfs_object);
 
 			return NT_STATUS_OBJECT_NAME_NOT_FOUND;
 		} else if (posixfs_object_is_dir(posixfs_object)) {
 			if (state->in_ads_name.size() == 0) {
-				CHECK_LEASE(state->smbd_lease, &posixfs_object->base, nullptr);
+				CHECK_OBJECT_LEASE(state->smbd_lease, posixfs_object);
 
 				if (state->is_dollar_data) {
 					return NT_STATUS_FILE_IS_A_DIRECTORY;
@@ -2553,7 +2556,7 @@ static NTSTATUS posixfs_create_open(
 			/* TODO */
 			return NT_STATUS_OBJECT_NAME_NOT_FOUND;
 		} else if (!posixfs_object->exists()) {
-			CHECK_LEASE(state->smbd_lease, &posixfs_object->base, nullptr);
+			CHECK_OBJECT_LEASE(state->smbd_lease, posixfs_object);
 
 			if (state->end_with_sep) {
 				return NT_STATUS_OBJECT_NAME_INVALID;
@@ -2572,7 +2575,7 @@ static NTSTATUS posixfs_create_open(
 			}
 		} else if (posixfs_object_is_dir(posixfs_object)) {
 			if (state->in_ads_name.size() == 0) {
-				CHECK_LEASE(state->smbd_lease, &posixfs_object->base, nullptr);
+				CHECK_OBJECT_LEASE(state->smbd_lease, posixfs_object);
 
 				if (state->is_dollar_data) {
 					return NT_STATUS_FILE_IS_A_DIRECTORY;
