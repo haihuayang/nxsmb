@@ -588,7 +588,6 @@ static bool check_io_brl_conflict(posixfs_object_t *posixfs_object,
 	le.offset = offset;
 	le.length = length;
 	le.flags = is_write ? SMB2_LOCK_FLAG_EXCLUSIVE : SMB2_LOCK_FLAG_SHARED;
-	std::lock_guard<std::mutex> lock(posixfs_object->base.mutex);
 	return brl_conflict_other(posixfs_open->stream, posixfs_open, le);
 }
 
@@ -2938,13 +2937,17 @@ NTSTATUS posixfs_object_op_read(
 {
 	posixfs_object_t *posixfs_object = posixfs_object_from_base_t::container(smbd_object);
 	posixfs_open_t *posixfs_open = posixfs_open_from_base_t::container(smbd_requ->smbd_open);
-	if (check_io_brl_conflict(posixfs_object, posixfs_open, state->in_offset, state->in_length, false)) {
-		return NT_STATUS_FILE_LOCK_CONFLICT;
-	}
 
-	if (!is_default_stream(posixfs_object, posixfs_open->stream)) {
-		posixfs_ads_t *ads = X_CONTAINER_OF(posixfs_open->stream, posixfs_ads_t, base);
-		return posixfs_ads_read(posixfs_object, ads, *state);
+	{
+		std::lock_guard<std::mutex> lock(posixfs_object->base.mutex);
+		if (check_io_brl_conflict(posixfs_object, posixfs_open, state->in_offset, state->in_length, false)) {
+			return NT_STATUS_FILE_LOCK_CONFLICT;
+		}
+
+		if (!is_default_stream(posixfs_object, posixfs_open->stream)) {
+			posixfs_ads_t *ads = X_CONTAINER_OF(posixfs_open->stream, posixfs_ads_t, base);
+			return posixfs_ads_read(posixfs_object, ads, *state);
+		}
 	}
 
 	if (posixfs_object_is_dir(posixfs_object)) {
@@ -3065,6 +3068,48 @@ static void posixfs_write_cancel(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_r
 	x_smbd_conn_post_cancel(smbd_conn, smbd_requ);
 }
 
+static bool lease_type_is_exclusive(posixfs_open_t *posixfs_open)
+{
+	if (posixfs_open->smbd_lease) {
+		uint8_t state = x_smbd_lease_get_state(posixfs_open->smbd_lease);
+		return (state & (X_SMB2_LEASE_READ | X_SMB2_LEASE_WRITE)) == 
+			(X_SMB2_LEASE_READ | X_SMB2_LEASE_WRITE);
+	} else {
+		return posixfs_open->oplock_level == X_SMB2_OPLOCK_LEVEL_EXCLUSIVE ||
+			posixfs_open->oplock_level == X_SMB2_OPLOCK_LEVEL_BATCH;
+	}
+}
+
+static void break_others_to_none(posixfs_open_t *posixfs_open)
+{
+	if (lease_type_is_exclusive(posixfs_open)) {
+		return;
+	}
+
+	x_smbd_lease_t *smbd_lease = posixfs_open->smbd_lease;
+	/* break other to none */
+	auto &open_list = posixfs_open->stream->open_list;
+	for (posixfs_open_t *other_open = open_list.get_front(); other_open;
+			other_open = open_list.next(other_open)) {
+		if (smbd_lease && other_open->smbd_lease == smbd_lease) {
+			continue;
+		}
+		if (other_open->smbd_lease) {
+			do_break_lease(other_open, X_SMB2_LEASE_NONE);
+		} else {
+			/* This can break the open's self oplock II, but 
+			 * Windows behave same
+			 */
+			X_ASSERT(other_open->oplock_level != X_SMB2_OPLOCK_LEVEL_BATCH);
+			X_ASSERT(other_open->oplock_level != X_SMB2_OPLOCK_LEVEL_EXCLUSIVE);
+			if (other_open->oplock_level == X_SMB2_OPLOCK_LEVEL_II) {
+				do_break_oplock(other_open, X_SMB2_LEASE_NONE);
+			}
+		}
+	}
+}
+
+
 NTSTATUS posixfs_object_op_write(
 		x_smbd_object_t *smbd_object,
 		x_smbd_open_t *smbd_open,
@@ -3075,13 +3120,18 @@ NTSTATUS posixfs_object_op_write(
 	posixfs_object_t *posixfs_object = posixfs_object_from_base_t::container(smbd_object);
 	posixfs_open_t *posixfs_open = posixfs_open_from_base_t::container(smbd_requ->smbd_open);
 
-	if (check_io_brl_conflict(posixfs_object, posixfs_open, state->in_offset, state->in_buf_length, true)) {
-		return NT_STATUS_FILE_LOCK_CONFLICT;
-	}
+	{
+		std::lock_guard<std::mutex> lock(posixfs_object->base.mutex);
+		if (check_io_brl_conflict(posixfs_object, posixfs_open, state->in_offset, state->in_buf_length, true)) {
+			return NT_STATUS_FILE_LOCK_CONFLICT;
+		}
 
-	if (!is_default_stream(posixfs_object, posixfs_open->stream)) {
-		posixfs_ads_t *ads = X_CONTAINER_OF(posixfs_open->stream, posixfs_ads_t, base);
-		return posixfs_ads_write(posixfs_object, ads, *state);
+		break_others_to_none(posixfs_open);
+
+		if (!is_default_stream(posixfs_object, posixfs_open->stream)) {
+			posixfs_ads_t *ads = X_CONTAINER_OF(posixfs_open->stream, posixfs_ads_t, base);
+			return posixfs_ads_write(posixfs_object, ads, *state);
+		}
 	}
 
 	if (posixfs_object_is_dir(posixfs_object)) {
