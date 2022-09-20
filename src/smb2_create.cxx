@@ -308,6 +308,7 @@ static NTSTATUS decode_in_create(x_smb2_state_create_t &state,
 	state.in_create_disposition   = X_LE2H32(in_create->create_disposition);
 	state.in_create_options       = X_LE2H32(in_create->create_options);
 
+	/* TODO check_path_syntax_internal() */
 	const char16_t *in_name_begin = (const char16_t *)(in_hdr + in_name_offset);
 	const char16_t *in_name_end = (const char16_t *)(in_hdr + in_name_offset + in_name_length);
 	const char16_t *in_path_end = x_next_sep(in_name_begin, in_name_end, u':');

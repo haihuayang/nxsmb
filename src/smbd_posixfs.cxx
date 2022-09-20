@@ -2221,6 +2221,10 @@ static NTSTATUS posixfs_create_open_overwrite_ads_if(
 	NTSTATUS status = NT_STATUS_OK;
 	if (posixfs_ads && posixfs_ads->exists) {
 		posixfs_ads_reset(posixfs_object, posixfs_ads, 0);
+		posixfs_open = open_object_exist_ads(posixfs_object,
+				posixfs_ads,
+				smbd_requ,
+				state, status);
 	} else {
 		if (!posixfs_ads) {
 			posixfs_ads = posixfs_ads_add(posixfs_object, state->in_ads_name);
@@ -3802,7 +3806,7 @@ NTSTATUS posixfs_object_op_oplock_break(
 		std::unique_ptr<x_smb2_state_oplock_break_t> &state)
 {
 	posixfs_open_t *posixfs_open = posixfs_open_from_base_t::container(smbd_requ->smbd_open);
-	posixfs_object_t *posixfs_object = posixfs_object_from_base_t::container(smbd_requ->smbd_object);
+	posixfs_object_t *posixfs_object = posixfs_object_from_base_t::container(smbd_object);
 	uint8_t out_oplock_level;
 	if (posixfs_open->oplock_break_sent == oplock_break_sent_t::OPLOCK_BREAK_TO_NONE_SENT || state->in_oplock_level == X_SMB2_OPLOCK_LEVEL_NONE) {
 		out_oplock_level = X_SMB2_OPLOCK_LEVEL_NONE;
@@ -3818,7 +3822,7 @@ NTSTATUS posixfs_object_op_oplock_break(
 	state->out_oplock_level = out_oplock_level;
 	if (modified) {
 		// TODO downgrade_file_oplock
-		std::unique_lock<std::mutex> lock(posixfs_object->base.mutex);
+		std::lock_guard<std::mutex> lock(posixfs_object->base.mutex);
 		share_mode_modified(posixfs_object, posixfs_open->stream);
 	}
 
