@@ -88,23 +88,21 @@ static void encode_out_ioctl(const x_smb2_state_ioctl_t &state,
 
 static void x_smb2_reply_ioctl(x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ,
-		const x_smb2_state_ioctl_t &state)
+		x_smb2_state_ioctl_t &state)
 {
 	X_LOG_OP("%ld IOCTL SUCCESS", smbd_requ->in_mid);
 
 	x_bufref_t *bufref = x_bufref_alloc(sizeof(x_smb2_out_ioctl_t));
-	x_bufref_t *out_data;
 	if (state.out_buf_length) {
-		out_data = new x_bufref_t(x_buf_get(state.out_buf), 0, state.out_buf_length);
-		bufref->next = out_data;
-	} else {
-		out_data = bufref;
+		bufref->next = new x_bufref_t(state.out_buf, 0, state.out_buf_length);
+		state.out_buf = nullptr;
 	}
 
 	uint8_t *out_hdr = bufref->get_data();
 	encode_out_ioctl(state, out_hdr);
 
-	x_smb2_reply(smbd_conn, smbd_requ, bufref, out_data, NT_STATUS_OK, 
+	x_smb2_reply(smbd_conn, smbd_requ, bufref,
+			bufref->next ? bufref->next : bufref, NT_STATUS_OK, 
 			SMB2_HDR_BODY + sizeof(x_smb2_out_ioctl_t) + state.out_buf_length);
 }
 

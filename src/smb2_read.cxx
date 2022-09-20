@@ -54,12 +54,9 @@ static void x_smb2_reply_read(x_smbd_conn_t *smbd_conn,
 	X_LOG_OP("%ld RESP SUCCESS", smbd_requ->in_mid);
 
 	x_bufref_t *bufref = x_bufref_alloc(sizeof(x_smb2_out_read_t));
-	x_bufref_t *out_data;
 	if (state.out_buf) {
-		out_data = new x_bufref_t(state.out_buf, 0, state.out_buf_length);
+		bufref->next = new x_bufref_t(state.out_buf, 0, state.out_buf_length);
 		state.out_buf = nullptr;
-	} else {
-		out_data = bufref;
 	}
 
 	uint8_t *out_hdr = bufref->get_data();
@@ -72,10 +69,9 @@ static void x_smb2_reply_read(x_smbd_conn_t *smbd_conn,
 	out_read->data_remaining = 0;
 	out_read->reserved1 = 0;
 
-	bufref->next = out_data;
-
-	x_smb2_reply(smbd_conn, smbd_requ, bufref, out_data, NT_STATUS_OK, 
-			SMB2_HDR_BODY + sizeof(x_smb2_out_read_t) + out_data->length);
+	x_smb2_reply(smbd_conn, smbd_requ, bufref,
+			bufref->next ? bufref->next : bufref, NT_STATUS_OK, 
+			SMB2_HDR_BODY + sizeof(x_smb2_out_read_t) + state.out_buf_length);
 }
 
 static void x_smb2_read_async_done(x_smbd_conn_t *smbd_conn,
