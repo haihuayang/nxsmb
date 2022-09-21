@@ -1402,16 +1402,22 @@ static NTSTATUS grant_oplock(posixfs_object_t *posixfs_object,
 			granted &= uint8_t(~X_SMB2_LEASE_HANDLE);
 		}
 		state.out_oplock_level = X_SMB2_OPLOCK_LEVEL_LEASE;
+		bool new_lease = false;
 		if (!x_smbd_lease_grant(state.smbd_lease,
 					state.lease,
 					granted,
 					&posixfs_object->base,
-					(x_smbd_stream_t *)posixfs_stream)) {
+					(x_smbd_stream_t *)posixfs_stream,
+					new_lease)) {
 			return NT_STATUS_INVALID_PARAMETER;
 		}
-		/* it hold the ref of object, so it is ok the incref after lease */
-		posixfs_object_incref(posixfs_object);
-		posixfs_stream_incref(posixfs_stream);
+		if (new_lease) {
+			/* it hold the ref of object, so it is ok the incref after lease
+			 * TODO eventually it should incref inside x_smbd_lease_grant
+			 */
+			posixfs_object_incref(posixfs_object);
+			posixfs_stream_incref(posixfs_stream);
+		}
 	} else {
 		if (got_handle_lease) {
 			granted = X_SMB2_LEASE_NONE;

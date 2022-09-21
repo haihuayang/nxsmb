@@ -175,7 +175,8 @@ bool x_smbd_lease_grant(x_smbd_lease_t *smbd_lease,
 		x_smb2_lease_t &lease,
 		uint8_t granted,
 		x_smbd_object_t *smbd_object,
-		x_smbd_stream_t *smbd_stream)
+		x_smbd_stream_t *smbd_stream,
+		bool &new_lease)
 {
 	auto lock = smbd_lease_lock(smbd_lease);
 
@@ -184,6 +185,7 @@ bool x_smbd_lease_grant(x_smbd_lease_t *smbd_lease,
 		smbd_lease->smbd_stream = smbd_stream;
 		lease.state = smbd_lease->lease_state = granted;
 		smbd_lease->epoch = ++lease.epoch;
+		new_lease = true;
 		return true;
 	}
 
@@ -222,6 +224,7 @@ bool x_smbd_lease_grant(x_smbd_lease_t *smbd_lease,
 		smbd_lease->epoch++;
 	}
 
+	lease.state = smbd_lease->lease_state;
 	lease.epoch = smbd_lease->epoch;
 
 	if (smbd_lease->breaking) {
@@ -229,6 +232,7 @@ bool x_smbd_lease_grant(x_smbd_lease_t *smbd_lease,
 	} else {
 		lease.flags &= ~SMB2_LEASE_FLAG_BREAK_IN_PROGRESS;
 	}
+
 	++smbd_lease->refcnt;
 	return true;
 }
