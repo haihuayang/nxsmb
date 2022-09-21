@@ -1,6 +1,7 @@
 
 #include "smbd.hxx"
 #include "smbd_open.hxx"
+#include "util_io.hxx"
 
 namespace {
 enum {
@@ -64,6 +65,31 @@ struct x_smb2_out_write_t
 	uint16_t write_channel_info_length;
 };
 
+/* vfs_valid_pwrite_range */
+static bool valid_write_range(uint64_t offset, uint64_t length)
+{
+	/*
+	 * See MAXFILESIZE in [MS-FSA] 2.1.5.3 Server Requests a Write
+	 */
+	static const uint64_t maxfilesize = 0xfffffff0000;
+
+	if (!valid_io_range(offset, length)) {
+		return false;
+	}
+
+	if (length == 0) {
+		return true;
+	}
+
+	uint64_t last_byte_ofs = offset + length;
+	if (last_byte_ofs > maxfilesize) {
+		return false;
+	}
+
+	return true;
+}
+
+
 static void encode_out_write(const x_smb2_state_write_t &state,
 		uint8_t *out_hdr)
 {
@@ -117,6 +143,10 @@ NTSTATUS x_smb2_process_write(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ
 
 	X_LOG_OP("%ld WRITE 0x%lx, 0x%lx", smbd_requ->in_mid,
 			state->in_file_id_persistent, state->in_file_id_volatile);
+
+	if (!valid_write_range(state->in_offset, state->in_buf_length)) {
+		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
+	}
 
 	if (!smbd_requ->smbd_open) {
 		smbd_requ->smbd_open = x_smbd_open_lookup(state->in_file_id_persistent,

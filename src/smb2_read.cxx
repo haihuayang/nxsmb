@@ -1,6 +1,7 @@
 
 #include "smbd.hxx"
 #include "smbd_open.hxx"
+#include "util_io.hxx"
 
 namespace {
 enum {
@@ -82,7 +83,11 @@ static void x_smb2_read_async_done(x_smbd_conn_t *smbd_conn,
 	std::unique_ptr<x_smb2_state_read_t> state{(x_smb2_state_read_t *)smbd_requ->requ_state};
 	smbd_requ->requ_state = nullptr;
 	if (NT_STATUS_IS_OK(status)) {
-		x_smb2_reply_read(smbd_conn, smbd_requ, *state);
+		if (state->out_buf_length < state->in_minimum_count) {
+			status = NT_STATUS_END_OF_FILE;
+		} else {
+			x_smb2_reply_read(smbd_conn, smbd_requ, *state);
+		}
 	}
 	x_smbd_conn_requ_done(smbd_conn, smbd_requ, status);
 }
@@ -104,7 +109,7 @@ NTSTATUS x_smb2_process_read(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 	X_LOG_OP("%ld READ 0x%lx, 0x%lx", smbd_requ->in_mid,
 			state->in_file_id_persistent, state->in_file_id_volatile);
 
-	if (state->in_offset + state->in_length < state->in_offset) {
+	if (!valid_io_range(state->in_offset, state->in_length)) {
 		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
 
@@ -117,9 +122,12 @@ NTSTATUS x_smb2_process_read(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 		}
 	}
 
-	if (!smbd_requ->smbd_open->check_access(idl::SEC_FILE_READ_DATA)) {
+	if (!smbd_requ->smbd_open->check_access(idl::SEC_FILE_READ_DATA) &&
+			!smbd_requ->smbd_open->check_access(idl::SEC_FILE_EXECUTE)) {
 		RETURN_OP_STATUS(smbd_requ, NT_STATUS_ACCESS_DENIED);
 	}
+
+	/* TODO check is dir before read */
 
 	NTSTATUS status;
 	if (state->in_length == 0) {
@@ -132,6 +140,10 @@ NTSTATUS x_smb2_process_read(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 	}
 
 	if (NT_STATUS_IS_OK(status)) {
+		if (state->out_buf_length < state->in_minimum_count) {
+			return NT_STATUS_END_OF_FILE;
+		}
+
 		x_smb2_reply_read(smbd_conn, smbd_requ, *state);
 		return status;
 	}

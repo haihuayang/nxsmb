@@ -153,6 +153,7 @@ SET_src_nxsmbd := \
 	auth_ntlmssp auth_krb5 auth_spnego auth \
 	network misc fnmatch \
 	smbd_ntacl \
+	util_io \
 
 SET_src_nxutils := \
 	nxutils \

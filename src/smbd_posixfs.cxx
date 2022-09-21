@@ -2941,6 +2941,12 @@ NTSTATUS posixfs_object_op_read(
 	posixfs_object_t *posixfs_object = posixfs_object_from_base_t::container(smbd_object);
 	posixfs_open_t *posixfs_open = posixfs_open_from_base_t::container(smbd_requ->smbd_open);
 
+	/* TODO move this check into smb2_read */
+	if (posixfs_object_is_dir(posixfs_object) && is_default_stream(posixfs_object,
+				posixfs_open->stream)) {
+		return NT_STATUS_INVALID_DEVICE_REQUEST;
+	}
+
 	{
 		std::lock_guard<std::mutex> lock(posixfs_object->base.mutex);
 		if (check_io_brl_conflict(posixfs_object, posixfs_open, state->in_offset, state->in_length, false)) {
@@ -2953,9 +2959,18 @@ NTSTATUS posixfs_object_op_read(
 		}
 	}
 
-	if (posixfs_object_is_dir(posixfs_object)) {
-		return NT_STATUS_INVALID_DEVICE_REQUEST;
+	if (state->in_offset > posixfs_open->stream->meta.end_of_file) {
+		return NT_STATUS_END_OF_FILE;
 	}
+
+	if (state->in_length == 0) {
+		return NT_STATUS_OK;
+	}
+
+	if (state->in_offset == posixfs_open->stream->meta.end_of_file) {
+		return NT_STATUS_END_OF_FILE;
+	}
+
 
 	++posixfs_object->use_count;
 	x_smbd_ref_inc(smbd_requ);
@@ -3034,7 +3049,13 @@ static x_job_t::retval_t posixfs_write_job_run(x_job_t *job)
 	if (ret <= 0) {
 		status = NT_STATUS_INTERNAL_ERROR;
 	} else {
-		posixfs_object->statex_modified = true; // TODO atomic
+		/* TODO atomic */
+		posixfs_object->statex_modified = true;
+		uint64_t end_of_write = state->in_offset + ret;
+		if (posixfs_object->default_stream.meta.end_of_file < end_of_write) {
+			posixfs_object->default_stream.meta.end_of_file = end_of_write;
+		}
+
 		state->out_count = x_convert_assert<uint32_t>(ret);
 		state->out_remaining = 0;
 		status = NT_STATUS_OK;
