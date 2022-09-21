@@ -97,9 +97,14 @@ bool x_smbd_lease_set_breaking_if(const x_smbd_lease_t *smbd_lease)
 	}
 }
 #endif
+static inline auto smbd_lease_lock(uint32_t hash)
+{
+	return std::lock_guard<std::mutex>(g_smbd_lease_pool.mutex[hash % g_smbd_lease_pool.mutex.size()]);
+}
+
 static inline auto smbd_lease_lock(const x_smbd_lease_t *smbd_lease)
 {
-	return std::lock_guard<std::mutex>(g_smbd_lease_pool.mutex[smbd_lease->hash % g_smbd_lease_pool.mutex.size()]);
+	return smbd_lease_lock(smbd_lease->hash);
 }
 
 bool x_smbd_lease_match(const x_smbd_lease_t *smbd_lease,
@@ -156,7 +161,7 @@ x_smbd_lease_t *x_smbd_lease_find(
 {
 	uint32_t hash = lease_hash(client_guid, lease_key);
 
-	std::lock_guard<std::mutex> lock(g_smbd_lease_pool.mutex[hash % g_smbd_lease_pool.mutex.size()]);
+	auto lock = smbd_lease_lock(hash);
 	x_smbd_lease_t *smbd_lease = g_smbd_lease_pool.hashtable.find(hash,
 			[client_guid, lease_key](const x_smbd_lease_t &smbd_lease) {
 				return x_smbd_lease_match(&smbd_lease, client_guid, lease_key);
@@ -409,7 +414,7 @@ int x_smbd_lease_pool_init(uint32_t count, uint32_t mutex_count)
 struct x_smbd_lease_list_t : x_smbd_ctrl_handler_t
 {
 	bool output(std::string &data) override;
-	size_t next_bucket_idx = 0;
+	uint32_t next_bucket_idx = 0;
 };
 
 bool x_smbd_lease_list_t::output(std::string &data)
@@ -419,11 +424,13 @@ bool x_smbd_lease_list_t::output(std::string &data)
 	size_t count = 0;
 	while (next_bucket_idx < g_smbd_lease_pool.hashtable.buckets.size() && count == 0) {
 		auto &bucket = g_smbd_lease_pool.hashtable.buckets[next_bucket_idx];
-		auto lock = std::lock_guard(g_smbd_lease_pool.mutex[next_bucket_idx]);
+		auto lock = smbd_lease_lock(next_bucket_idx);
+
 		for (x_dqlink_t *link = bucket.get_front();
 				link; link = link->get_next()) {
 			auto item = smbd_lease_hash_traits::container(link);
-			os << next_bucket_idx << ' ' << item->lease_key << ' '
+			os << next_bucket_idx << ' ' << item->refcnt << ' '
+				<< item->lease_key << ' '
 				<< item->client_guid << ' ' << int(item->version) << ' '
 				<< int(item->lease_state) << ' ' << int(item->epoch) << ' '
 				<< (item->breaking ? 'B' : '-') << ' ' << int(item->breaking_to_requested) << ' '
