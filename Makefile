@@ -39,7 +39,7 @@ TARGET_SET_samba_dir := \
 TARGET_SET_dir := bin lib lib/librpc librpc/idl src tests \
 	$(TARGET_SET_samba_dir)
 
-.PHONY: all target_mkdir host_mkdir target_samba_gen
+.PHONY: all target_mkdir host_mkdir target_samba_gen tags
 TARGET_SET_tests := \
 	test-srvsvc \
 	test-timer \
@@ -561,6 +561,9 @@ clean_target:
 
 clean:
 	rm -rf $(HOST_DIR_out) $(TARGET_DIR_out)
+
+tags:
+	ctags -R include lib src
 
 test: $(TARGET_SET_tests:%=$(TARGET_DIR_out)/tests/%)
 	$(TARGET_DIR_out)/tests/test-srvsvc
