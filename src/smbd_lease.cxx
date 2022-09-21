@@ -26,20 +26,12 @@ struct x_smbd_lease_t
 	uint8_t breaking_to_requested{0}, breaking_to_required{0};
 };
 
-std::ostream &operator<<(std::ostream &os, const x_smb2_lease_key_t &lease_key);
 std::ostream &operator<<(std::ostream &os, const x_smb2_uuid_t &val);
-
-std::ostream &operator<<(std::ostream &os, const x_smb2_lease_key_t &lease_key)
-{
-	char buf[80];
-	snprintf(buf, sizeof buf, "%016lx-%016lx", lease_key.data[0], lease_key.data[1]);
-	return os << buf;
-}
 
 std::ostream &operator<<(std::ostream &os, const x_smb2_uuid_t &val)
 {
 	char buf[80];
-	snprintf(buf, sizeof buf, "%016lx-%016lx", val[0], val[1]);
+	snprintf(buf, sizeof buf, "%016lx-%016lx", val.data[0], val.data[1]);
 	return os << buf;
 }
 
@@ -47,8 +39,8 @@ X_DECLARE_MEMBER_TRAITS(smbd_lease_hash_traits, x_smbd_lease_t, hash_link)
 
 static uint32_t lease_hash(const x_smb2_uuid_t &client_guid, const x_smb2_lease_key_t &lease_key)
 {
-	uint64_t hash = client_guid[0];
-	hash = hash * 31 + client_guid[1];
+	uint64_t hash = client_guid.data[0];
+	hash = hash * 31 + client_guid.data[1];
 	hash = hash * 31 + lease_key.data[0];
 	hash = hash * 31 + lease_key.data[1];
 	return uint32_t((hash >> 32) ^ hash);

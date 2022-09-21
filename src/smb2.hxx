@@ -202,7 +202,14 @@ enum {
 	X_SMB2_CREATE_TAG_AAPL = 'AAPL',
 };
 
-using x_smb2_uuid_t = std::array<uint64_t, 2>;
+struct x_smb2_uuid_t
+{
+	bool operator==(const x_smb2_uuid_t &other) const {
+		return data[0] == other.data[0] && data[1] == other.data[1];
+	}
+	uint64_t data[2];
+};
+
 using x_smb2_uuid_bytes_t = std::array<uint8_t, 16>;
 
 struct x_smb2_preauth_t
@@ -218,14 +225,7 @@ void x_smb2_key_derivation(const uint8_t *KI, size_t KI_len,
 		const x_array_const_t<char> &context,
 		x_smb2_key_t &key);
 
-struct x_smb2_lease_key_t
-{
-	bool operator==(const x_smb2_lease_key_t &other) const {
-		return data == other.data;
-	}
-	std::array<uint64_t, 2> data;
-};
-
+using x_smb2_lease_key_t = x_smb2_uuid_t;
 struct x_smb2_lease_t
 {
 	x_smb2_lease_key_t key;

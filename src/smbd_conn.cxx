@@ -1176,7 +1176,7 @@ NTSTATUS x_smbd_conn_validate_negotiate_info(const x_smbd_conn_t *smbd_conn,
 		return X_NT_STATUS_INTERNAL_TERMINATE;
 	}
 
-	if (fsctl_state.in_guid != smbd_conn->client_guid) {
+	if (!(fsctl_state.in_guid == smbd_conn->client_guid)) {
 		return X_NT_STATUS_INTERNAL_TERMINATE;
 	}
 
