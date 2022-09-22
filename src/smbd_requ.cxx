@@ -29,9 +29,6 @@ x_smbd_requ_t::~x_smbd_requ_t()
 	x_smbd_ref_dec_if(smbd_tcon);
 	x_smbd_ref_dec_if(smbd_chan);
 	x_smbd_ref_dec_if(smbd_sess);
-	/* TODO free them
-	x_smbd_object_t *smbd_object{};
-	*/
 	X_SMBD_COUNTER_INC(requ_delete, 1);
 }
 

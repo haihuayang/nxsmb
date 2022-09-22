@@ -21,7 +21,7 @@ static long timerq_timer_func(x_timer_t *timer)
 		lock.lock();
 	}
 
-	return wait_ns;
+	return std::max(wait_ns, 1l);
 };
 
 static void timerq_timer_done(x_timer_t *timer)

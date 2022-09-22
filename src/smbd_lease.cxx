@@ -125,6 +125,9 @@ x_smbd_lease_t *x_smbd_ref_inc(x_smbd_lease_t *smbd_lease)
 	return smbd_lease;
 }
 
+/* TODO when close open dec ref, if there is no more open it should cancel break timer if
+   it exists
+ */
 template <>
 void x_smbd_ref_dec(x_smbd_lease_t *smbd_lease)
 {
@@ -230,7 +233,6 @@ bool x_smbd_lease_grant(x_smbd_lease_t *smbd_lease,
 		lease.flags &= ~SMB2_LEASE_FLAG_BREAK_IN_PROGRESS;
 	}
 
-	++smbd_lease->refcnt;
 	return true;
 }
 

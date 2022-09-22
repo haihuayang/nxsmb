@@ -68,6 +68,7 @@ struct x_smbd_tcon_t;
 struct x_smbd_open_t;
 struct x_smbd_lease_t;
 struct x_smbd_object_t;
+struct x_smbd_stream_t;
 struct x_smbd_requ_t;
 struct x_smbd_share_t;
 struct x_smbd_topdir_t;
@@ -123,6 +124,7 @@ struct x_smb2_state_create_t
 	uint32_t granted_access{0}; // internally used
 
 	x_smbd_object_t *smbd_object{};
+	x_smbd_stream_t *smbd_stream{};
 	x_smbd_lease_t *smbd_lease{};
 	long open_priv_data;
 };
@@ -335,7 +337,6 @@ struct x_smbd_requ_t
 	x_smbd_chan_t *smbd_chan{};
 	x_smbd_tcon_t *smbd_tcon{};
 	x_smbd_open_t *smbd_open{};
-	x_smbd_object_t *smbd_object{};
 	void (*cancel_fn)(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ);
 	void (*async_done_fn)(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ, NTSTATUS status);
 };

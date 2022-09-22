@@ -335,6 +335,26 @@ static uint64_t hash_object(const std::shared_ptr<x_smbd_topdir_t> &topdir,
 	//return (hash >> 32) ^ hash;
 }
 
+static inline void posixfs_object_incref(posixfs_object_t *posixfs_object)
+{
+	X_ASSERT(++posixfs_object->use_count > 1);
+}
+
+static inline void posixfs_object_decref(posixfs_object_t *posixfs_object)
+{
+	X_ASSERT(--posixfs_object->use_count > 0);
+}
+
+static inline void posixfs_stream_incref(posixfs_stream_t *posixfs_stream)
+{
+	X_ASSERT(++posixfs_stream->ref_count > 1);
+}
+
+static inline void posixfs_stream_decref(posixfs_stream_t *posixfs_stream)
+{
+	X_ASSERT(--posixfs_stream->ref_count > 0);
+}
+
 /**
  * open, find object in pool, 
  	if exist and open count == 0 then
@@ -385,7 +405,7 @@ static posixfs_object_t *posixfs_object_lookup(
 		}
 		assert(matched_object->use_count == 1);
 	} else {
-		++matched_object->use_count;
+		posixfs_object_incref(matched_object);
 	}
 	/* move it to head of the bucket to make latest used elem */
 	if (&matched_object->hash_link != bucket.head.get_front()) {
@@ -393,26 +413,6 @@ static posixfs_object_t *posixfs_object_lookup(
 		bucket.head.push_front(&matched_object->hash_link);
 	}
 	return matched_object;
-}
-
-static inline void posixfs_object_incref(posixfs_object_t *posixfs_object)
-{
-	X_ASSERT(++posixfs_object->use_count > 1);
-}
-
-static inline void posixfs_object_decref(posixfs_object_t *posixfs_object)
-{
-	X_ASSERT(--posixfs_object->use_count > 0);
-}
-
-static inline void posixfs_stream_incref(posixfs_stream_t *posixfs_stream)
-{
-	X_ASSERT(++posixfs_stream->ref_count > 1);
-}
-
-static inline void posixfs_stream_decref(posixfs_stream_t *posixfs_stream)
-{
-	X_ASSERT(--posixfs_stream->ref_count > 0);
 }
 
 static inline void posixfs_object_add_ads(posixfs_object_t *posixfs_object,
@@ -616,6 +616,8 @@ static void posixfs_defer_open_func(x_smbd_conn_t *smbd_conn, x_fdevt_user_t *fd
 
 	if (!terminated) {
 		x_smbd_requ_t *smbd_requ = evt->smbd_requ;
+		/* TODO check if it already cancelled */
+		x_smbd_requ_async_remove(smbd_requ);
 		std::unique_ptr<x_smb2_state_create_t> state{(x_smb2_state_create_t *)smbd_requ->requ_state};
 		NTSTATUS status = x_smbd_tcon_op_create(smbd_requ, state);
 		smbd_requ->async_done_fn(smbd_conn, smbd_requ, status);
@@ -626,13 +628,15 @@ static void posixfs_defer_open_func(x_smbd_conn_t *smbd_conn, x_fdevt_user_t *fd
 
 static void posixfs_create_cancel(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 {
+	X_TODO;
+#if 0
 	posixfs_object_t *posixfs_object = posixfs_object_from_base_t::container(smbd_requ->smbd_object);
 	{
 		std::unique_lock<std::mutex> lock(posixfs_object->base.mutex);
-		X_TODO;
 	//	posixfs_object->defer_open_list.remove(smbd_requ);
 	}
 	x_smbd_conn_post_cancel(smbd_conn, smbd_requ);
+#endif
 }
 
 static void share_mode_modified(posixfs_object_t *posixfs_object,
@@ -1803,13 +1807,17 @@ static void defer_open(
 		x_smbd_requ_t *smbd_requ,
 		std::unique_ptr<x_smb2_state_create_t> &state)
 {
+	if (!state->smbd_stream) {
+		posixfs_stream_incref(posixfs_stream);
+		state->smbd_stream = (x_smbd_stream_t *)posixfs_stream;
+	} else {
+		X_ASSERT(state->smbd_stream == (x_smbd_stream_t *)posixfs_stream);
+	}
+
 	smbd_requ->requ_state = state.release();
-	/* TODO add timer */
+	/* TODO does it need a timer? can break timer always wake up it? */
 	x_smbd_ref_inc(smbd_requ);
-	posixfs_stream_incref(posixfs_stream);
-	posixfs_object_incref(posixfs_object);
 	posixfs_stream->defer_open_list.push_back(smbd_requ);
-	smbd_requ->smbd_object = &posixfs_object->base;
 	x_smbd_conn_set_async(g_smbd_conn_curr, smbd_requ, posixfs_create_cancel);
 }
 
@@ -2978,7 +2986,7 @@ NTSTATUS posixfs_object_op_read(
 	}
 
 
-	++posixfs_object->use_count;
+	posixfs_object_incref(posixfs_object);
 	x_smbd_ref_inc(smbd_requ);
 	posixfs_read_job_t *read_job = new posixfs_read_job_t(posixfs_object, smbd_requ);
 	smbd_requ->requ_state = state.release();
@@ -3168,7 +3176,7 @@ NTSTATUS posixfs_object_op_write(
 		return NT_STATUS_INVALID_DEVICE_REQUEST;
 	}
 
-	++posixfs_object->use_count;
+	posixfs_object_incref(posixfs_object);
 	x_smbd_ref_inc(smbd_requ);
 	posixfs_write_job_t *write_job = new posixfs_write_job_t(posixfs_object, smbd_requ);
 	smbd_requ->requ_state = state.release();
