@@ -19,6 +19,8 @@ x_smb2_state_create_t::~x_smb2_state_create_t()
 	if (smbd_object) {
 		x_smbd_object_release(smbd_object, smbd_stream);
 	}
-	x_smbd_ref_dec_if(smbd_lease);
+	if (smbd_lease) {
+		x_smbd_lease_release(smbd_lease);
+	}
 }
 

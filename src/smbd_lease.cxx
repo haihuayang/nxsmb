@@ -19,6 +19,7 @@ struct x_smbd_lease_t
 	x_smbd_stream_t * smbd_stream{}; // protected by bucket mutex
 	const uint32_t hash;
 	uint32_t refcnt{1}; // protected by bucket mutex
+	uint32_t open_cnt{0};
 	const uint8_t version;
 	uint8_t lease_state{0};
 	uint16_t epoch{0};
@@ -111,25 +112,20 @@ bool x_smbd_lease_match(const x_smbd_lease_t *smbd_lease,
 	return true;
 }
 
-static bool x_smbd_lease_match(const x_smbd_lease_t *smbd_lease,
+static bool smbd_lease_match(const x_smbd_lease_t *smbd_lease,
 		const x_smb2_uuid_t &client_guid,
 		const x_smb2_lease_key_t &lkey)
 {
 	return smbd_lease->client_guid == client_guid && smbd_lease->lease_key == lkey;
 }
 
-template <>
-x_smbd_lease_t *x_smbd_ref_inc(x_smbd_lease_t *smbd_lease)
+static inline void smbd_lease_incref(x_smbd_lease_t *smbd_lease)
 {
+	X_ASSERT(smbd_lease->refcnt > 0);
 	++smbd_lease->refcnt;
-	return smbd_lease;
 }
 
-/* TODO when close open dec ref, if there is no more open it should cancel break timer if
-   it exists
- */
-template <>
-void x_smbd_ref_dec(x_smbd_lease_t *smbd_lease)
+static void smbd_lease_decref(x_smbd_lease_t *smbd_lease)
 {
 	{
 		auto lock = smbd_lease_lock(smbd_lease);
@@ -139,12 +135,52 @@ void x_smbd_ref_dec(x_smbd_lease_t *smbd_lease)
 	}
 
 	if (smbd_lease->refcnt == 0) {
+		X_ASSERT(smbd_lease->open_cnt == 0);
+		X_ASSERT(!smbd_lease->breaking);
 		if (smbd_lease->smbd_object) {
 			x_smbd_object_release(smbd_lease->smbd_object, smbd_lease->smbd_stream);
 		}
 		X_SMBD_COUNTER_INC(lease_delete, 1);
 		delete smbd_lease;
 	}
+}
+
+void x_smbd_lease_release(x_smbd_lease_t *smbd_lease)
+{
+	smbd_lease_decref(smbd_lease);
+}
+
+static inline void smbd_lease_cancel_timer(x_smbd_lease_t *smbd_lease)
+{
+	if (x_smbd_cancel_timer(x_smbd_timer_t::BREAK, &smbd_lease->timer)) {
+		X_ASSERT(--smbd_lease->refcnt > 0);
+	}
+}
+
+void x_smbd_lease_close(x_smbd_lease_t *smbd_lease)
+{
+	{
+		auto lock = smbd_lease_lock(smbd_lease);
+		X_ASSERT(smbd_lease->open_cnt > 0);
+		if (--smbd_lease->open_cnt == 0) {
+			if (smbd_lease->breaking) {
+				smbd_lease_cancel_timer(smbd_lease);
+				smbd_lease->breaking = false;
+				smbd_lease->lease_state = 0;
+			}
+		}
+	}
+	smbd_lease_decref(smbd_lease);
+}
+
+static x_smbd_lease_t *smbd_lease_find(uint32_t hash,
+		const x_smb2_uuid_t &client_guid,
+		const x_smb2_lease_key_t &lease_key)
+{
+	return g_smbd_lease_pool.hashtable.find(hash,
+			[client_guid, lease_key](const x_smbd_lease_t &smbd_lease) {
+				return smbd_lease_match(&smbd_lease, client_guid, lease_key);
+			});
 }
 
 /* TODO lease should ref smbd_object */
@@ -157,10 +193,7 @@ x_smbd_lease_t *x_smbd_lease_find(
 	uint32_t hash = lease_hash(client_guid, lease_key);
 
 	auto lock = smbd_lease_lock(hash);
-	x_smbd_lease_t *smbd_lease = g_smbd_lease_pool.hashtable.find(hash,
-			[client_guid, lease_key](const x_smbd_lease_t &smbd_lease) {
-				return x_smbd_lease_match(&smbd_lease, client_guid, lease_key);
-			});
+	x_smbd_lease_t *smbd_lease = smbd_lease_find(hash, client_guid, lease_key);
 	if (smbd_lease) {
 		++smbd_lease->refcnt;
 	} else if (create_if) {
@@ -186,6 +219,8 @@ bool x_smbd_lease_grant(x_smbd_lease_t *smbd_lease,
 		lease.state = smbd_lease->lease_state = granted;
 		smbd_lease->epoch = ++lease.epoch;
 		new_lease = true;
+		++smbd_lease->open_cnt;
+		++smbd_lease->refcnt;
 		return true;
 	}
 
@@ -233,6 +268,8 @@ bool x_smbd_lease_grant(x_smbd_lease_t *smbd_lease,
 		lease.flags &= ~SMB2_LEASE_FLAG_BREAK_IN_PROGRESS;
 	}
 
+	++smbd_lease->open_cnt;
+	++smbd_lease->refcnt;
 	return true;
 }
 
@@ -287,7 +324,7 @@ bool x_smbd_lease_require_break(x_smbd_lease_t *smbd_lease,
 	}
 
 	if (break_from != X_SMB2_LEASE_READ || break_to == X_SMB2_LEASE_NONE) {
-		x_smbd_ref_inc(smbd_lease);
+		smbd_lease_incref(smbd_lease);
 		x_smbd_add_timer(x_smbd_timer_t::BREAK, &smbd_lease->timer);
 	}
 	lease_key = smbd_lease->lease_key;
@@ -304,13 +341,11 @@ static NTSTATUS smbd_lease_process_break(x_smbd_lease_t *smbd_lease,
 		bool &modified)
 {
 	auto lock = smbd_lease_lock(smbd_lease);
-	if (x_smbd_cancel_timer(x_smbd_timer_t::BREAK, &smbd_lease->timer)) {
-		X_ASSERT(--smbd_lease->refcnt > 0);
-	}
-
 	if (!smbd_lease->breaking) {
 		return NT_STATUS_UNSUCCESSFUL;
 	}
+
+	smbd_lease_cancel_timer(smbd_lease);
 
 	if ((state.in_state & smbd_lease->breaking_to_requested) != state.in_state) {
 		X_LOG_DBG("Attempt to upgrade from %d to %d - expected %d\n",
@@ -352,17 +387,40 @@ static NTSTATUS smbd_lease_process_break(x_smbd_lease_t *smbd_lease,
 	return NT_STATUS_OK;
 }
 
-NTSTATUS x_smbd_lease_process_break(x_smbd_lease_t *smbd_lease,
-		const x_smb2_state_lease_break_t &state)
+NTSTATUS x_smbd_lease_process_break(const x_smb2_state_lease_break_t &state)
 {
 	bool modified = false;
-	NTSTATUS status = smbd_lease_process_break(smbd_lease, state, modified);
+	auto &client_guid = x_smbd_conn_curr_client_guid();
+	auto &lease_key = state.in_key;
+
+	x_smbd_lease_t *smbd_lease;
+	NTSTATUS status;
+	uint32_t hash = lease_hash(client_guid, lease_key);
+
+	{
+		auto lock = smbd_lease_lock(hash);
+
+		smbd_lease = smbd_lease_find(hash, client_guid, lease_key);
+		if (!smbd_lease) {
+			return NT_STATUS_INVALID_PARAMETER;
+		}
+		
+		if (!smbd_lease->smbd_object) {
+			/* not yet granted */
+			return NT_STATUS_INVALID_PARAMETER;
+		}
+
+		++smbd_lease->refcnt;
+	}
+
+	status = smbd_lease_process_break(smbd_lease, state, modified);
 	if (modified) {
 		x_smbd_object_op_break_lease(smbd_lease->smbd_object, smbd_lease->smbd_stream);
 	}
 	if (NT_STATUS_EQUAL(status, NT_STATUS_OPLOCK_BREAK_IN_PROGRESS)) {
 		X_TODO;
 	}
+	smbd_lease_decref(smbd_lease);
 	return status;
 }
 
@@ -386,7 +444,7 @@ static void smbd_lease_break_timeout(x_timerq_entry_t *timerq_entry)
 		x_smbd_object_op_break_lease(smbd_lease->smbd_object,
 				smbd_lease->smbd_stream);
 	}
-	x_smbd_ref_dec(smbd_lease);
+	smbd_lease_decref(smbd_lease);
 }
 
 inline x_smbd_lease_t::x_smbd_lease_t(const x_smb2_uuid_t &client_guid,

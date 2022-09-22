@@ -1482,11 +1482,14 @@ static posixfs_open_t *posixfs_open_create(
 			state.open_priv_data,
 			posixfs_stream);
 	posixfs_open->oplock_level = state.out_oplock_level;
-	if (state.smbd_lease) {
-		posixfs_open->smbd_lease = x_smbd_ref_inc(state.smbd_lease);
-	}
+	/* not need incref because it already do in lease_grant */
+	posixfs_open->smbd_lease = state.smbd_lease;
 
 	if (!x_smbd_open_store(&posixfs_open->base)) {
+		if (posixfs_open->smbd_lease) {
+			x_smbd_lease_close(posixfs_open->smbd_lease);
+			posixfs_open->smbd_lease = nullptr;
+		}
 		delete posixfs_open;
 		*pstatus = NT_STATUS_INSUFFICIENT_RESOURCES;
 		return nullptr;
@@ -2783,7 +2786,7 @@ NTSTATUS posixfs_object_op_close(
 	lock.unlock();
 
 	if (smbd_lease) {
-		x_smbd_ref_dec(smbd_lease);
+		x_smbd_lease_close(smbd_lease);
 	}
 
 	return NT_STATUS_OK;

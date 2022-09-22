@@ -142,18 +142,11 @@ static NTSTATUS x_smb2_process_lease_break(x_smbd_conn_t *smbd_conn,
 {
 	x_smb2_state_lease_break_t state;
 	decode_in_lease_break(state, in_lease_break);
-	x_smbd_lease_t *smbd_lease = x_smbd_lease_find(x_smbd_conn_curr_client_guid(),
-			state.in_key, 0, false);
-	if (!smbd_lease) {
-		return NT_STATUS_INVALID_PARAMETER;
-	}
 
-	NTSTATUS status = x_smbd_lease_process_break(smbd_lease, state);
+	NTSTATUS status = x_smbd_lease_process_break(state);
 	if (NT_STATUS_IS_OK(status)) {
 		x_smb2_reply_lease_break(smbd_conn, smbd_requ, state);
 	}
-
-	x_smbd_ref_dec(smbd_lease);
 
 	return status;
 }
