@@ -274,6 +274,25 @@ NTSTATUS x_smbd_sess_logoff(x_smbd_sess_t *smbd_sess)
 	return NT_STATUS_OK;
 }
 
+bool x_smbd_sess_post_user(x_smbd_sess_t *smbd_sess, x_fdevt_user_t *evt)
+{
+	x_dlink_t *link;
+	bool posted = false;
+	auto lock = std::lock_guard(smbd_sess->mutex);
+	for (link = smbd_sess->chan_list.get_front(); link; link = link->get_next()) {
+		x_smbd_chan_t *smbd_chan = x_smbd_chan_get_active(link);
+		if (!smbd_chan) {
+			continue;
+		}
+		posted = x_smbd_chan_post_user(smbd_chan, evt);
+		x_smbd_ref_dec(smbd_chan);
+		if (posted) {
+			return true;
+		}
+	}
+	return false;
+}
+
 int x_smbd_sess_table_init(uint32_t count)
 {
 	g_smbd_sess_table = new smbd_sess_table_t(count);

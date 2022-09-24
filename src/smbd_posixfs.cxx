@@ -1152,14 +1152,17 @@ static void do_break_lease(posixfs_open_t *posixfs_open,
 	x_smbd_sess_t *smbd_sess = x_smbd_tcon_get_sess(posixfs_open->base.smbd_tcon);
 	posixfs_send_lease_break_evt_t *evt = new posixfs_send_lease_break_evt_t(
 			smbd_sess, lease_key, curr_state, break_to, new_epoch, flags);
-	x_smbd_chan_t *smbd_chan = x_smbd_sess_get_active_chan(smbd_sess);
-	if (smbd_chan) {
-		if (x_smbd_chan_post_user(smbd_chan, &evt->base)) {
-			return;
-		}
-		x_smbd_ref_dec(smbd_chan);
+
+	bool posted = x_smbd_sess_post_user(smbd_sess, &evt->base);
+	if (posted) {
+		return;
 	}
-	X_LOG_ERR("failed to post send_lease_break %p", smbd_chan);
+
+	/* if posted fails, the connection is in shutdown,
+	 * and it eventually close the open and wakeup the
+	 * defer opens
+	 */
+	X_LOG_ERR("failed to post send_lease_break %p", smbd_sess);
 	delete evt;
 }
 
@@ -1219,14 +1222,16 @@ static void do_break_oplock(posixfs_open_t *posixfs_open,
 			break_to == X_SMB2_LEASE_READ ? X_SMB2_OPLOCK_LEVEL_II :
 				X_SMB2_OPLOCK_LEVEL_NONE);
 
-	x_smbd_chan_t *smbd_chan = x_smbd_sess_get_active_chan(evt->smbd_sess);
-	if (smbd_chan) {
-		if (x_smbd_chan_post_user(smbd_chan, &evt->base)) {
-			return;
-		}
-		x_smbd_ref_dec(smbd_chan);
+	bool posted = x_smbd_sess_post_user(smbd_sess, &evt->base);
+	if (posted) {
+		return;
 	}
-	X_LOG_ERR("failed to post send_break %p", smbd_chan);
+
+	/* if posted fails, the connection is in shutdown,
+	 * and it eventually close the open and wakeup the
+	 * defer opens
+	 */
+	X_LOG_ERR("failed to post send_oplock_break %p", smbd_sess);
 	delete evt;
 }
 
@@ -2238,6 +2243,7 @@ static NTSTATUS posixfs_create_open_overwrite_ads_if(
 
 	NTSTATUS status = NT_STATUS_OK;
 	if (posixfs_ads && posixfs_ads->exists) {
+		/* TODO it is not right reset before open it */
 		posixfs_ads_reset(posixfs_object, posixfs_ads, 0);
 		posixfs_open = open_object_exist_ads(posixfs_object,
 				posixfs_ads,
