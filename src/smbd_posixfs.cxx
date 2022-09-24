@@ -591,6 +591,19 @@ static bool check_io_brl_conflict(posixfs_object_t *posixfs_object,
 	return brl_conflict_other(posixfs_open->stream, posixfs_open, le);
 }
 
+static void posixfs_create_cancel(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
+{
+	X_TODO;
+#if 0
+	posixfs_object_t *posixfs_object = posixfs_object_from_base_t::container(smbd_requ->smbd_object);
+	{
+		std::unique_lock<std::mutex> lock(posixfs_object->base.mutex);
+	//	posixfs_object->defer_open_list.remove(smbd_requ);
+	}
+	x_smbd_conn_post_cancel(smbd_conn, smbd_requ);
+#endif
+}
+
 static void posixfs_defer_open_func(x_smbd_conn_t *smbd_conn, x_fdevt_user_t *fdevt_user, bool cancelled);
 struct posixfs_defer_open_evt_t
 {
@@ -617,26 +630,15 @@ static void posixfs_defer_open_func(x_smbd_conn_t *smbd_conn, x_fdevt_user_t *fd
 	if (!terminated) {
 		x_smbd_requ_t *smbd_requ = evt->smbd_requ;
 		/* TODO check if it already cancelled */
-		x_smbd_requ_async_remove(smbd_requ);
+		x_smbd_conn_unset_async(smbd_conn, smbd_requ);
 		std::unique_ptr<x_smb2_state_create_t> state{(x_smb2_state_create_t *)smbd_requ->requ_state};
 		NTSTATUS status = x_smbd_tcon_op_create(smbd_requ, state);
-		smbd_requ->async_done_fn(smbd_conn, smbd_requ, status);
+		if (!NT_STATUS_EQUAL(status, NT_STATUS_PENDING)) {
+			smbd_requ->async_done_fn(smbd_conn, smbd_requ, status);
+		}
 	}
 
 	delete evt;
-}
-
-static void posixfs_create_cancel(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
-{
-	X_TODO;
-#if 0
-	posixfs_object_t *posixfs_object = posixfs_object_from_base_t::container(smbd_requ->smbd_object);
-	{
-		std::unique_lock<std::mutex> lock(posixfs_object->base.mutex);
-	//	posixfs_object->defer_open_list.remove(smbd_requ);
-	}
-	x_smbd_conn_post_cancel(smbd_conn, smbd_requ);
-#endif
 }
 
 static void share_mode_modified(posixfs_object_t *posixfs_object,
@@ -2763,7 +2765,7 @@ NTSTATUS posixfs_object_op_close(
 		// TODO multi-thread safe
 		std::unique_ptr<x_smb2_state_notify_t> notify_state{(x_smb2_state_notify_t *)requ_notify->requ_state};
 		requ_notify->requ_state = nullptr;
-		x_smbd_requ_async_remove(requ_notify);
+		x_smbd_conn_unset_async(g_smbd_conn_curr, requ_notify);
 		// TODO notify_state->done(smbd_conn, requ_notify, NT_STATUS_NOTIFY_CLEANUP);
 		x_smbd_ref_dec(requ_notify);
 
@@ -2811,7 +2813,7 @@ static void posixfs_read_evt_func(x_smbd_conn_t *smbd_conn, x_fdevt_user_t *fdev
 
 	if (!cancelled) {
 		x_smbd_requ_t *smbd_requ = evt->smbd_requ;
-		x_smbd_requ_async_remove(smbd_requ);
+		x_smbd_conn_unset_async(smbd_conn, smbd_requ);
 		smbd_requ->async_done_fn(smbd_conn, smbd_requ, evt->status);
 	}
 
@@ -3033,7 +3035,7 @@ static void posixfs_write_evt_func(x_smbd_conn_t *smbd_conn, x_fdevt_user_t *fde
 
 	if (!cancelled) {
 		x_smbd_requ_t *smbd_requ = evt->smbd_requ;
-		x_smbd_requ_async_remove(smbd_requ);
+		x_smbd_conn_unset_async(smbd_conn, smbd_requ);
 		smbd_requ->async_done_fn(smbd_conn, smbd_requ, evt->status);
 	}
 

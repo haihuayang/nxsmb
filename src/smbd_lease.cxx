@@ -323,7 +323,7 @@ bool x_smbd_lease_require_break(x_smbd_lease_t *smbd_lease,
 		return false;
 	}
 
-	if (break_from != X_SMB2_LEASE_READ || break_to == X_SMB2_LEASE_NONE) {
+	if (break_from != X_SMB2_LEASE_READ || break_to != X_SMB2_LEASE_NONE) {
 		smbd_lease_incref(smbd_lease);
 		x_smbd_add_timer(x_smbd_timer_t::BREAK, &smbd_lease->timer);
 	}

@@ -1169,6 +1169,13 @@ void x_smbd_conn_set_async(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ,
 	x_smbd_requ_async_insert(smbd_requ);
 }
 
+void x_smbd_conn_unset_async(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
+{
+	X_ASSERT(smbd_requ->cancel_fn);
+	x_smbd_requ_async_remove(smbd_requ);
+	smbd_requ->cancel_fn = nullptr;
+}
+
 NTSTATUS x_smbd_conn_validate_negotiate_info(const x_smbd_conn_t *smbd_conn,
 		x_smb2_fsctl_validate_negotiate_info_state_t &fsctl_state)
 {

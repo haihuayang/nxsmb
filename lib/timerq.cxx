@@ -1,4 +1,5 @@
 
+#include "include/xdefines.h"
 #include "include/timerq.hxx"
 
 static long timerq_timer_func(x_timer_t *timer)
@@ -13,6 +14,7 @@ static long timerq_timer_func(x_timer_t *timer)
 		if (wait_ns > 0) {
 			break;
 		}
+		X_LOG_DBG("entry %p at %f", entry, double(tick_now) / 1000000000.0);
 		X_ASSERT(entry->state == x_timerq_entry_t::S_QUEUED);
 		entry->state = x_timerq_entry_t::S_FIRED;
 		timerq->entry_list.remove(entry);
@@ -27,7 +29,8 @@ static long timerq_timer_func(x_timer_t *timer)
 static void timerq_timer_done(x_timer_t *timer)
 {
 	x_timerq_t *timerq = X_CONTAINER_OF(timer, x_timerq_t, timer);
-	X_DBG("%p", timerq); // what should we do to the remain entries?
+	X_LOG_DBG("timerq %p at %f", timerq, double(tick_now) / 1000000000.0);
+	// what should we do to the remain entries?
 }
 
 static const x_timer_upcall_cbs_t timerq_timer_cbs = {
@@ -45,6 +48,7 @@ void x_timerq_init(x_timerq_t &timerq, x_evtmgmt_t *evtmgmt, uint64_t timeout_ns
 void x_timerq_add(x_timerq_t &timerq, x_timerq_entry_t *entry)
 {
 	entry->queue_time = tick_now;
+	X_LOG_DBG("entry %p at %f", entry, double(tick_now) / 1000000000.0);
 	std::lock_guard<std::mutex> lock(timerq.mutex);
 	timerq.entry_list.push_back(entry);
 	entry->state = x_timerq_entry_t::S_QUEUED;
@@ -52,6 +56,7 @@ void x_timerq_add(x_timerq_t &timerq, x_timerq_entry_t *entry)
 
 bool x_timerq_cancel(x_timerq_t &timerq, x_timerq_entry_t *entry)
 {
+	X_LOG_DBG("entry %p at %f", entry, double(tick_now) / 1000000000.0);
 	std::lock_guard<std::mutex> lock(timerq.mutex);
 	if (entry->state != x_timerq_entry_t::S_QUEUED) {
 		return false;

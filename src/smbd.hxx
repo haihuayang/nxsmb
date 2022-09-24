@@ -204,6 +204,7 @@ void x_smbd_conn_send_unsolicited(x_smbd_conn_t *smbd_conn, x_smbd_sess_t *smbd_
 void x_smbd_conn_send_remove_chan(x_smbd_conn_t *smbd_conn, x_smbd_chan_t *smbd_chan);
 void x_smbd_conn_set_async(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ,
 		void (*cancel_fn)(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ));
+void x_smbd_conn_unset_async(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ);
 void x_smb2_sesssetup_done(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ, NTSTATUS status,
 		std::vector<uint8_t> &out_security);
 void x_smb2_reply(x_smbd_conn_t *smbd_conn,
