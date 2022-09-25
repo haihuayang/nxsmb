@@ -3414,6 +3414,15 @@ static NTSTATUS getinfo_file(posixfs_object_t *posixfs_object,
 		
 		x_smbd_get_file_info(*info, posixfs_object->meta,
 				posixfs_open->stream->meta);
+	} else if (state.in_info_level == SMB2_FILE_INFO_FILE_ACCESS_INFORMATION) {
+		if (state.in_output_buffer_length < sizeof(uint32_t)) {
+			return STATUS_BUFFER_OVERFLOW;
+		}
+		state.out_data.resize(sizeof(uint32_t));
+		uint32_t *info =
+			(uint32_t *)state.out_data.data();
+		*info = X_H2LE32(smbd_open->access_mask);
+
 	} else if (state.in_info_level == SMB2_FILE_INFO_FILE_STREAM_INFORMATION) {
 		return getinfo_stream_info(posixfs_object, state);
 	} else {
