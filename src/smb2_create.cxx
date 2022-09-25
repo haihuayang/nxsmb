@@ -1,6 +1,7 @@
 
 #include "smbd.hxx"
 #include "smbd_open.hxx"
+#include "smbd_ntacl.hxx"
 #include "include/charset.hxx"
 
 enum {
@@ -462,6 +463,10 @@ NTSTATUS x_smb2_process_create(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_req
 	if (state->in_file_attributes & (FILE_ATTRIBUTE_DEVICE | FILE_ATTRIBUTE_VOLUME)) {
 		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
+
+	uint32_t orig_access = state->in_desired_access;
+	state->in_desired_access = se_file_map_generic(orig_access);
+	X_LOG_DBG("map access 0x%x to 0x%x", orig_access, state->in_desired_access);
 
 	if ((state->in_create_options & FILE_DELETE_ON_CLOSE) &&
 			!(state->in_desired_access & idl::SEC_STD_DELETE)) {

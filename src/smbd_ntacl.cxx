@@ -120,6 +120,11 @@ static uint32_t se_map_generic(uint32_t access_mask, const generic_mapping_t &ma
 	return access_mask;
 }
 
+uint32_t se_file_map_generic(uint32_t access_mask)
+{
+	return se_map_generic(access_mask, file_generic_mapping);
+}
+
 static void security_acl_map_generic(idl::security_acl &sa,
 		const generic_mapping_t &mapping)
 {
