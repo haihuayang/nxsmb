@@ -200,12 +200,12 @@ NTSTATUS parse_setinfo_sd_blob(idl::security_descriptor &sd,
 		security_info_sent &= ~idl::SECINFO_GROUP;
 	}
 
-	if ((security_info_sent & idl::SECINFO_OWNER) && 
+	if ((security_info_sent & idl::SECINFO_OWNER) &&
 			!(access_mask & idl::SEC_STD_WRITE_OWNER)) {
 		return NT_STATUS_ACCESS_DENIED;
 	}
 
-	if ((security_info_sent & idl::SECINFO_GROUP) && 
+	if ((security_info_sent & idl::SECINFO_GROUP) &&
 			!(access_mask & idl::SEC_STD_WRITE_OWNER)) {
 		return NT_STATUS_ACCESS_DENIED;
 	}
@@ -218,6 +218,39 @@ NTSTATUS parse_setinfo_sd_blob(idl::security_descriptor &sd,
 		return NT_STATUS_ACCESS_DENIED;
 	}
 	return NT_STATUS_OK;
+}
+
+static auto make_default_dacl(const idl::dom_sid &owner_sid,
+		const idl::dom_sid &group_sid)
+{
+	auto new_dacl = std::make_shared<idl::security_acl>();
+	new_dacl->revision = idl::security_acl_revision(idl::NT4_ACL_REVISION);
+	append_ace(new_dacl->aces,
+			idl::SEC_ACE_TYPE_ACCESS_ALLOWED,
+			idl::security_ace_flags(0),
+			0x1f01ff, // TODO
+			owner_sid);
+
+	if (!(owner_sid == group_sid)) {
+		append_ace(new_dacl->aces,
+				idl::SEC_ACE_TYPE_ACCESS_ALLOWED,
+				idl::security_ace_flags(0),
+				0x1f01ff, // TODO
+				group_sid);
+	}
+	return new_dacl;
+}
+
+static inline auto make_dummy_dacl()
+{
+	auto new_dacl = std::make_shared<idl::security_acl>();
+	new_dacl->revision = idl::security_acl_revision(idl::NT4_ACL_REVISION);
+	append_ace(new_dacl->aces,
+			idl::SEC_ACE_TYPE_ACCESS_ALLOWED,
+			idl::security_ace_flags(0),
+			0x1f01ff, // TODO
+			global_sid_World_Domain);
+	return new_dacl;
 }
 
 NTSTATUS create_acl_blob_from_old(std::vector<uint8_t> &new_blob,
@@ -238,7 +271,7 @@ NTSTATUS create_acl_blob_from_old(std::vector<uint8_t> &new_blob,
 	uint16_t old_hash_type, old_version;
 	std::array<uint8_t, idl::XATTR_SD_HASH_SIZE> old_hash;
 
-	NTSTATUS status = parse_acl_blob(old_blob, 
+	NTSTATUS status = parse_acl_blob(old_blob,
 		psd, &old_hash_type, &old_version,
 		old_hash);
 
@@ -541,23 +574,69 @@ static NTSTATUS make_dummy_sec_desc(
 	new_psd->type = idl::security_descriptor_type(idl::SEC_DESC_SELF_RELATIVE|idl::SEC_DESC_DACL_PRESENT|idl::SEC_DESC_DACL_AUTO_INHERITED);
 	new_psd->owner_sid = std::make_shared<idl::dom_sid>(*owner_sid);
 	new_psd->group_sid = std::make_shared<idl::dom_sid>(*group_sid);
-	auto new_dacl = std::make_shared<idl::security_acl>();
-	new_dacl->revision = idl::security_acl_revision(idl::NT4_ACL_REVISION);
-	append_ace(new_dacl->aces, 
-			idl::SEC_ACE_TYPE_ACCESS_ALLOWED,
-			idl::security_ace_flags(0),
-			0x1f01ff, // TODO
-			*owner_sid);
+	new_psd->dacl = make_default_dacl(*owner_sid, *group_sid);
 
-	if (!(*owner_sid == *group_sid)) {
-		append_ace(new_dacl->aces, 
-				idl::SEC_ACE_TYPE_ACCESS_ALLOWED,
-				idl::security_ace_flags(0),
-				0x1f01ff, // TODO
-				*group_sid);
-	}
-	std::swap(new_psd->dacl, new_dacl);
 	psd = new_psd;
+	return NT_STATUS_OK;
+}
+
+NTSTATUS normalize_sec_desc(
+		idl::security_descriptor &sd,
+		const x_smbd_user_t &smbd_user,
+		uint32_t access_mask,
+		bool container)
+{
+	/* TODO parse_setinfo_sd_blob do the similar access_mask check,
+	 * reduce the code duplicate
+	 */
+	if (sd.owner_sid) {
+		if (!(access_mask & idl::SEC_STD_WRITE_OWNER)) {
+			return NT_STATUS_ACCESS_DENIED;
+		}
+	} else {
+		sd.owner_sid = std::make_shared<idl::dom_sid>(
+				dom_sid_from_domain_and_rid(smbd_user.domain_sid,
+					smbd_user.uid));
+	}
+
+	if (sd.group_sid) {
+		if (!(access_mask & idl::SEC_STD_WRITE_OWNER)) {
+			return NT_STATUS_ACCESS_DENIED;
+		}
+	} else {
+		sd.group_sid = std::make_shared<idl::dom_sid>(
+				dom_sid_from_domain_and_rid(smbd_user.domain_sid,
+					smbd_user.gid));
+	}
+
+	if (sd.dacl) {
+		if (!(access_mask & idl::SEC_STD_WRITE_DAC)) {
+			return NT_STATUS_ACCESS_DENIED;
+		}
+		security_acl_map_generic(*sd.dacl, file_generic_mapping);
+	} else {
+		sd.dacl = make_default_dacl(*sd.owner_sid, *sd.group_sid);
+	}
+	sd.type = idl::security_descriptor_type(sd.type | idl::SEC_DESC_DACL_PRESENT);
+
+	if (sd.sacl) {
+		if (!(access_mask & idl::SEC_FLAG_SYSTEM_SECURITY)) {
+			return NT_STATUS_ACCESS_DENIED;
+		}
+		/*
+		 * Setting a SACL also requires WRITE_DAC.
+		 * See the smbtorture3 SMB2-SACL test.
+		 */
+		if (!(access_mask & idl::SEC_STD_WRITE_DAC)) {
+			return NT_STATUS_ACCESS_DENIED;
+		}
+		/* Convert all the generic bits. */
+		security_acl_map_generic(*sd.sacl, file_generic_mapping);
+		sd.type = idl::security_descriptor_type(sd.type | idl::SEC_DESC_SACL_PRESENT);
+	}
+
+	canonicalize_inheritance_bits(sd);
+	sd.revision = idl::SECURITY_DESCRIPTOR_REVISION_1;
 	return NT_STATUS_OK;
 }
 
@@ -590,7 +669,7 @@ static std::shared_ptr<idl::security_descriptor> get_share_security_default(uint
 	dacl->revision = idl::security_acl_revision(idl::NT4_ACL_REVISION);
 	uint32_t spec_access = se_map_generic(def_access, file_generic_mapping);
 	spec_access |= def_access;
-	append_ace(dacl->aces, 
+	append_ace(dacl->aces,
 			idl::SEC_ACE_TYPE_ACCESS_ALLOWED,
 			idl::security_ace_flags(0),
 			spec_access, // TODO
@@ -673,6 +752,7 @@ uint32_t se_calculate_maximal_access(const idl::security_descriptor &sd,
 	bool am_owner = user_token_has_sid(smbd_user, *sd.owner_sid);
 
 	if (!sd.dacl) {
+		return 0x1f01ff;
 		if (am_owner) {
 			granted |= idl::SEC_STD_WRITE_DAC | idl::SEC_STD_READ_CONTROL;
 		}

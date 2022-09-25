@@ -1603,16 +1603,18 @@ static NTSTATUS posixfs_new_object(
 	}
 
 	if (state.in_security_descriptor) {
-		if (!is_sd_empty(*state.in_security_descriptor)) {
-			psd = state.in_security_descriptor;
-		}
+		status = normalize_sec_desc(*state.in_security_descriptor,
+				*smbd_user,
+				state.in_desired_access,
+				state.in_create_options & FILE_DIRECTORY_FILE);
+		psd = state.in_security_descriptor;
 	} else {
 		status = make_child_sec_desc(psd, parent_psd,
 				*smbd_user,
 				state.in_create_options & FILE_DIRECTORY_FILE);
-		if (!NT_STATUS_IS_OK(status)) {
-			return status;
-		}
+	}
+	if (!NT_STATUS_IS_OK(status)) {
+		return status;
 	}
 
 	std::vector<uint8_t> ntacl_blob;
@@ -3376,10 +3378,10 @@ static NTSTATUS getinfo_file(posixfs_object_t *posixfs_object,
 {
 	/* TODO should move it into smb2_getinfo??  does other class request
 	   the same access??
-	 */
 	if (!smbd_open->check_access(idl::SEC_FILE_READ_ATTRIBUTE)) {
 		return NT_STATUS_ACCESS_DENIED;
 	}
+	 */
 
 	posixfs_open_t *posixfs_open = posixfs_open_from_base_t::container(smbd_open);
 	if (state.in_info_level == SMB2_FILE_INFO_FILE_BASIC_INFORMATION) {
