@@ -460,6 +460,10 @@ NTSTATUS x_smb2_process_create(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_req
 		RETURN_OP_STATUS(smbd_requ, NT_STATUS_NOT_A_DIRECTORY);
 	}
 
+	if (state->in_desired_access & idl::SEC_MASK_INVALID) {
+		RETURN_OP_STATUS(smbd_requ, NT_STATUS_ACCESS_DENIED);
+	}
+
 	if (state->in_file_attributes & (FILE_ATTRIBUTE_DEVICE | FILE_ATTRIBUTE_VOLUME)) {
 		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
