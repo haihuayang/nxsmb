@@ -478,6 +478,13 @@ NTSTATUS x_smb2_process_create(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_req
 		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
 
+	if (!state->in_path.empty()) {
+		auto ch = state->in_path[0];
+		if (ch == u'\\') {
+			RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
+		}
+	}
+
 	if (!x_smbd_tcon_access_check(smbd_requ->smbd_tcon, state->in_desired_access & ~idl::SEC_FLAG_MAXIMUM_ALLOWED)) {
 		RETURN_OP_STATUS(smbd_requ, NT_STATUS_ACCESS_DENIED);
 	}
