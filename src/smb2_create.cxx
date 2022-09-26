@@ -132,6 +132,7 @@ static bool decode_contexts(x_smb2_state_create_t &state,
 				}
 				const uint64_t *pdata = (uint64_t *)(data + data_off);
 				state.in_allocation_size = X_LE2H64(*pdata);
+				state.contexts |= X_SMB2_CONTEXT_FLAG_ALSI;
 			} else if (tag == X_SMB2_CREATE_TAG_TWRP) {
 				if (data_len != sizeof(uint64_t)) {
 					return false;

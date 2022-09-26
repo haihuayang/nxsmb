@@ -184,6 +184,7 @@ struct x_smb2_state_close_t
 enum {
 	X_SMB2_CONTEXT_FLAG_MXAC = 1,
 	X_SMB2_CONTEXT_FLAG_QFID = 2,
+	X_SMB2_CONTEXT_FLAG_ALSI = 4,
 };
 #if 0
 struct x_smb2_state_create_t

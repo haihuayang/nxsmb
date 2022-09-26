@@ -170,7 +170,9 @@ int posixfs_create(int dirfd, bool is_dir, const char *path,
 			return -errno;
 		}
 	}
-	if (allocation_size && !is_dir) {
+
+	/* it is incorrect to use ftruncate to set AlSi */
+	if (false && allocation_size && !is_dir) {
 		int err = ftruncate(fd, allocation_size);
 		if (err < 0) {
 			int save_errno = errno;

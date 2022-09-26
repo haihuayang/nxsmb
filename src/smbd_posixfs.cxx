@@ -1847,8 +1847,11 @@ static NTSTATUS posixfs_create_open_exist_object(
 		posixfs_open_t *&posixfs_open,
 		posixfs_object_t *posixfs_object,
 		x_smbd_requ_t *smbd_requ,
-		std::unique_ptr<x_smb2_state_create_t> &state)
+		std::unique_ptr<x_smb2_state_create_t> &state,
+		bool overwrite)
 {
+	CHECK_OBJECT_LEASE(state->smbd_lease, posixfs_object);
+
 	if (posixfs_object->default_stream.meta.delete_on_close) {
 		return NT_STATUS_DELETE_PENDING;
 	}
@@ -1939,6 +1942,33 @@ static NTSTATUS posixfs_create_open_exist_object(
 		return status;
 	}
 
+	bool reload_meta = false;
+	if (overwrite) {
+		// TODO DELETE_ALL_STREAM;
+		/* TODO set AlSi */
+		int err = ftruncate(posixfs_object->fd, 0);
+		X_TODO_ASSERT(err == 0);
+		reload_meta = true;
+	} else if ((state->contexts & X_SMB2_CONTEXT_FLAG_ALSI) &&
+			(posixfs_object->default_stream.meta.end_of_file >
+			 state->in_allocation_size)) {
+		int err = ftruncate(posixfs_object->fd, state->in_allocation_size);
+		X_TODO_ASSERT(err == 0);
+		reload_meta = true;
+	}
+
+	if (reload_meta) {
+		int err = posixfs_statex_get(posixfs_object->fd,
+				&posixfs_object->meta,
+				&posixfs_object->default_stream.meta);
+		X_TODO_ASSERT(err == 0);
+		if (state->contexts & X_SMB2_CONTEXT_FLAG_ALSI) {
+			posixfs_object->default_stream.meta.allocation_size =
+				state->in_allocation_size;
+		}
+		posixfs_object->statex_modified = false;
+	}
+
 	reply_requ_create(*state, posixfs_object, &posixfs_object->default_stream,
 			FILE_WAS_OPENED);
 	posixfs_open = posixfs_open_create(&status, smbd_requ->smbd_tcon, posixfs_object,
@@ -1977,23 +2007,6 @@ static NTSTATUS posixfs_create_open_new_object(
 	posixfs_open = posixfs_open_create(&status, smbd_requ->smbd_tcon, posixfs_object,
 			&posixfs_object->default_stream, state);
 	return status;
-}
-
-static NTSTATUS posixfs_create_open_overwrite_object(
-		posixfs_open_t *&posixfs_open,
-		posixfs_object_t *posixfs_object,
-		x_smbd_requ_t *smbd_requ,
-		std::unique_ptr<x_smb2_state_create_t> &state)
-{
-	CHECK_OBJECT_LEASE(state->smbd_lease, posixfs_object);
-
-	// TODO DELETE_ALL_STREAM;
-	int err = ftruncate(posixfs_object->fd, 0);
-	X_TODO_ASSERT(err == 0);
-	return posixfs_create_open_exist_object(posixfs_open,
-			posixfs_object,
-			smbd_requ,
-			state);
 }
 
 static posixfs_ads_t *posixfs_ads_add(
@@ -2448,13 +2461,12 @@ static NTSTATUS posixfs_create_open(
 
 				return NT_STATUS_FILE_IS_A_DIRECTORY;
 			} else if (state->in_ads_name.size() == 0) {
-				CHECK_OBJECT_LEASE(state->smbd_lease, posixfs_object);
-
 				return posixfs_create_open_exist_object(
 						posixfs_open,
 						posixfs_object,
 						smbd_requ,
-						state);
+						state,
+						false);
 			} else {
 				/* lease check inside posix_create_open_exist_ads */
 				return posix_create_open_exist_ads(
@@ -2469,13 +2481,12 @@ static NTSTATUS posixfs_create_open(
 
 				return NT_STATUS_OBJECT_NAME_INVALID;
 			} else if (state->in_ads_name.size() == 0) {
-				CHECK_OBJECT_LEASE(state->smbd_lease, posixfs_object);
-
 				return posixfs_create_open_exist_object(
 						posixfs_open,
 						posixfs_object,
 						smbd_requ,
-						state);
+						state,
+						false);
 			} else {
 				/* lease check inside posix_create_open_exist_ads */
 				return posix_create_open_exist_ads(
@@ -2514,13 +2525,12 @@ static NTSTATUS posixfs_create_open(
 
 				return NT_STATUS_FILE_IS_A_DIRECTORY;
 			} else if (state->in_ads_name.size() == 0) {
-				CHECK_OBJECT_LEASE(state->smbd_lease, posixfs_object);
-
 				return posixfs_create_open_exist_object(
 						posixfs_open,
 						posixfs_object,
 						smbd_requ,
-						state);
+						state,
+						false);
 			} else {
 				return posixfs_create_open_new_ads_if(
 						posixfs_open,
@@ -2530,13 +2540,12 @@ static NTSTATUS posixfs_create_open(
 			}
 		} else {
 			if (state->in_ads_name.size() == 0) {
-				CHECK_OBJECT_LEASE(state->smbd_lease, posixfs_object);
-
 				return posixfs_create_open_exist_object(
 						posixfs_open,
 						posixfs_object,
 						smbd_requ,
-						state);
+						state,
+						false);
 			} else {
 				return posixfs_create_open_new_ads_if(
 						posixfs_open,
@@ -2569,11 +2578,12 @@ static NTSTATUS posixfs_create_open(
 			}
 		} else {
 			if (state->in_ads_name.size() == 0) {
-				return posixfs_create_open_overwrite_object(
+				return posixfs_create_open_exist_object(
 						posixfs_open,
 						posixfs_object,
 						smbd_requ,
-						state);
+						state,
+						true);
 			} else {
 				return posixfs_create_open_overwrite_ads(
 						posixfs_open,
@@ -2630,11 +2640,12 @@ static NTSTATUS posixfs_create_open(
 			}
 		} else {
 			if (state->in_ads_name.size() == 0) {
-				return posixfs_create_open_overwrite_object(
+				return posixfs_create_open_exist_object(
 						posixfs_open,
 						posixfs_object,
 						smbd_requ,
-						state);
+						state,
+						true);
 			} else {
 				return posixfs_create_open_overwrite_ads_if(
 						posixfs_open,
