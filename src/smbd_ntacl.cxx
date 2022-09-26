@@ -233,14 +233,14 @@ static auto make_default_dacl(const idl::dom_sid &owner_sid,
 	append_ace(new_dacl->aces,
 			idl::SEC_ACE_TYPE_ACCESS_ALLOWED,
 			idl::security_ace_flags(0),
-			0x1f01ff, // TODO
+			FILE_GENERIC_ALL, // TODO
 			owner_sid);
 
 	if (!(owner_sid == group_sid)) {
 		append_ace(new_dacl->aces,
 				idl::SEC_ACE_TYPE_ACCESS_ALLOWED,
 				idl::security_ace_flags(0),
-				0x1f01ff, // TODO
+				FILE_GENERIC_ALL, // TODO
 				group_sid);
 	}
 	return new_dacl;
@@ -253,7 +253,7 @@ static inline auto make_dummy_dacl()
 	append_ace(new_dacl->aces,
 			idl::SEC_ACE_TYPE_ACCESS_ALLOWED,
 			idl::security_ace_flags(0),
-			0x1f01ff, // TODO
+			FILE_GENERIC_ALL, // TODO
 			global_sid_World_Domain);
 	return new_dacl;
 }
@@ -757,7 +757,7 @@ uint32_t se_calculate_maximal_access(const idl::security_descriptor &sd,
 	bool am_owner = user_token_has_sid(smbd_user, *sd.owner_sid);
 
 	if (!sd.dacl) {
-		return 0x1f01ff;
+		return FILE_GENERIC_ALL;
 		if (am_owner) {
 			granted |= idl::SEC_STD_WRITE_DAC | idl::SEC_STD_READ_CONTROL;
 		}

@@ -1603,9 +1603,19 @@ static NTSTATUS posixfs_new_object(
 	}
 
 	if (state.in_security_descriptor) {
+		/* From samba create_file_unixpath
+		 * According to the MS documentation, the only time the security
+		 * descriptor is applied to the opened file is iff we *created* the
+		 * file; an existing file stays the same.
+		 *
+		 * Also, it seems (from observation) that you can open the file with
+		 * any access mask but you can still write the sd. We need to override
+		 * the granted access before we call set_sd
+		 * Patch for bug #2242 from Tom Lackemann <cessnatomny@yahoo.com>.
+		 */
 		status = normalize_sec_desc(*state.in_security_descriptor,
 				*smbd_user,
-				state.in_desired_access,
+				FILE_GENERIC_ALL,
 				state.in_create_options & FILE_DIRECTORY_FILE);
 		psd = state.in_security_descriptor;
 	} else {
