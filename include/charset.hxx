@@ -167,5 +167,17 @@ static inline bool x_strcase_equal(const std::u16string &s1, const std::u16strin
 	return s1 == s2;
 }
 
+static inline std::string x_str_toupper(const std::string &s)
+{
+	/* TODO utf8 */
+	std::string ret = s;
+	for (auto &c: ret) {
+		c = x_convert_assert<char>(std::toupper(c));
+	}
+
+	return ret;
+}
+
+
 #endif /* __charset__hxx__ */
 

@@ -451,10 +451,7 @@ static int parse_smbconf(x_smbd_conf_t &smbd_conf, const char *path,
 		smbd_conf.dns_domain = smbd_conf.realm;
 	}
 
-	/* TODO utf8 */
-	for (auto &c: smbd_conf.realm) {
-		c = x_convert_assert<char>(std::toupper(c));
-	}
+	smbd_conf.realm = x_str_toupper(smbd_conf.realm);
 
 	load_ifaces(smbd_conf);
 

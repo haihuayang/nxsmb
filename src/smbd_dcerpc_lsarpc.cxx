@@ -2,6 +2,7 @@
 #include "smbd_dcerpc.hxx"
 #include "include/librpc/lsa.hxx"
 #include "smbd_conf.hxx"
+#include "smbd_secrets.hxx"
 
 enum lsa_handle_type_t {
 	LSA_HANDLE_POLICY_TYPE = 1,
@@ -59,6 +60,7 @@ X_SMBD_DCERPC_IMPL_TODO(lsa_SetSecObj)
 X_SMBD_DCERPC_IMPL_TODO(lsa_ChangePassword)
 X_SMBD_DCERPC_IMPL_TODO(lsa_OpenPolicy)
 
+/* _lsa_QueryInfoPolicy */
 static bool x_smbd_dcerpc_impl_lsa_QueryInfoPolicy(
 		x_dcerpc_pipe_t &rpc_pipe,
 		x_smbd_sess_t *smbd_sess,
@@ -75,32 +77,43 @@ static bool x_smbd_dcerpc_impl_lsa_QueryInfoPolicy(
 
 	//uint32_t acc_required = 0;
 	switch (arg.level) {
-	case idl::LSA_POLICY_INFO_ACCOUNT_DOMAIN: {
-		// check access has idl::LSA_POLICY_VIEW_LOCAL_INFORMATION
-		auto info = std::make_shared<idl::lsa_PolicyInformation>();
-		info->__init(arg.level);
-		info->account_domain.name.string = std::make_shared<std::u16string>(x_convert_utf8_to_utf16(smbd_conf->netbios_name));
-		X_TODO;
-		// info->account_domain.sid = std::make_shared<idl::dom_sid>(smbd_sess->smbd_user->domain_sid); // TODO we use user's domain_sid for now
-		arg.info = info;
-		arg.__result = NT_STATUS_OK;
-						  }
-		break;
-
 #if 0
 		case idl::LSA_POLICY_INFO_AUDIT_LOG:
 		case idl::LSA_POLICY_INFO_AUDIT_EVENTS:
 			acc_required = idl::LSA_POLICY_VIEW_AUDIT_INFORMATION;
 			break;
-		case idl::LSA_POLICY_INFO_DOMAIN:
-			acc_required = idl::LSA_POLICY_VIEW_LOCAL_INFORMATION;
-			break;
+#endif
+	case idl::LSA_POLICY_INFO_DOMAIN: {
+		// check access, acc_required = idl::LSA_POLICY_VIEW_LOCAL_INFORMATION;
+		auto info = std::make_shared<idl::lsa_PolicyInformation>();
+		info->__init(arg.level);
+		info->domain.name.string = std::make_shared<std::u16string>(x_convert_utf8_to_utf16(smbd_conf->workgroup));
+		idl::dom_sid sid;
+		X_ASSERT(x_smbd_secrets_fetch_domain_sid(smbd_conf->workgroup, sid));
+		info->domain.sid = std::make_shared<idl::dom_sid>(sid);
+		arg.info = info;
+		arg.__result = NT_STATUS_OK;
+						  }
+		break;
+#if 0
 		case idl::LSA_POLICY_INFO_PD:
 			acc_required = idl::LSA_POLICY_GET_PRIVATE_INFORMATION;
 			break;
-		case idl::LSA_POLICY_INFO_ACCOUNT_DOMAIN:
-			acc_required = idl::LSA_POLICY_VIEW_LOCAL_INFORMATION;
-			break;
+#endif
+	case idl::LSA_POLICY_INFO_ACCOUNT_DOMAIN: {
+		// check access has idl::LSA_POLICY_VIEW_LOCAL_INFORMATION
+		auto info = std::make_shared<idl::lsa_PolicyInformation>();
+		info->__init(arg.level);
+		std::string name = x_str_toupper(smbd_conf->netbios_name);
+		info->account_domain.name.string = std::make_shared<std::u16string>(x_convert_utf8_to_utf16(name));
+		idl::dom_sid sid;
+		X_ASSERT(x_smbd_secrets_fetch_domain_sid(name, sid));
+		info->account_domain.sid = std::make_shared<idl::dom_sid>(sid);
+		arg.info = info;
+		arg.__result = NT_STATUS_OK;
+						  }
+		break;
+#if 0
 		case idl::LSA_POLICY_INFO_ROLE:
 		case idl::LSA_POLICY_INFO_REPLICA:
 			acc_required = idl::LSA_POLICY_VIEW_LOCAL_INFORMATION;

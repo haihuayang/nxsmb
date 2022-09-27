@@ -174,6 +174,16 @@ bool x_smbd_secrets_fetch_domain_guid(const std::string &domain, idl::GUID &guid
 	return true;
 }
 
+bool x_smbd_secrets_fetch_domain_sid(const std::string &domain, idl::dom_sid &sid)
+{
+	std::vector<uint8_t> data;
+	int ret = secrets_fetch(SECRETS_DOMAIN_SID "/" + domain, data);
+	X_ASSERT(ret == 0);
+	X_ASSERT(data.size() == sizeof sid);
+	memcpy(&sid, data.data(), sizeof sid);
+	return true;
+}
+
 int x_smbd_secrets_init()
 {
 	const auto smbd_conf = x_smbd_conf_get();
