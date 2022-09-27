@@ -563,7 +563,7 @@ clean:
 	rm -rf $(HOST_DIR_out) $(TARGET_DIR_out)
 
 tags:
-	ctags -R include lib src
+	ctags -R include lib src $(TARGET_DIR_out)/librpc/idl
 
 test: $(TARGET_SET_tests:%=$(TARGET_DIR_out)/tests/%)
 	$(TARGET_DIR_out)/tests/test-srvsvc
