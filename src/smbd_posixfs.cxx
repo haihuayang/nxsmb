@@ -1488,7 +1488,7 @@ static NTSTATUS grant_oplock(posixfs_object_t *posixfs_object,
 	}
 
 	if (posixfs_object->base.type == x_smbd_object_t::type_dir &&
-			posixfs_stream != &posixfs_object->default_stream) {
+			posixfs_stream == &posixfs_object->default_stream) {
 		if (lease) {
 			granted = lease->state & (X_SMB2_LEASE_READ|X_SMB2_LEASE_HANDLE);
 			if (!(granted & X_SMB2_LEASE_READ)) {
