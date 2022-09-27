@@ -364,8 +364,7 @@ static NTSTATUS x_smb2_fsctl_pipe_wait(
 	if (!file_id_is_nul(state)) {
 		return NT_STATUS_INVALID_PARAMETER;
 	}
-	X_TODO;
-	return NT_STATUS_INTERNAL_ERROR;
+	return NT_STATUS_FS_DRIVER_REQUIRED; // TODO
 }
 
 static NTSTATUS x_smb2_fsctl_validate_negotiate_info_224(
