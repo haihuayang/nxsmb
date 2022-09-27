@@ -750,7 +750,7 @@ static int x_smbd_conn_check_nbt_hdr(x_smbd_conn_t *smbd_conn)
 			}
 		} else {
 			/* un recognize smbd_requ, shutdown it */
-			return true;
+			return -EBADMSG;
 		}
 	}
 	return 0;
@@ -768,18 +768,24 @@ static bool x_smbd_conn_do_recv(x_smbd_conn_t *smbd_conn, x_fdevents_t &fdevents
 			smbd_conn->recv_len = x_convert_assert<uint32_t>(smbd_conn->recv_len + err);
 			err = x_smbd_conn_check_nbt_hdr(smbd_conn);
 			if (err < 0) {
+				X_LOG_ERR("%s %p x%lx x_smbd_conn_check_nbt_hdr %d", task_name, smbd_conn, smbd_conn->ep_id, err);
 				return true;
 			} else if (err == 0) {
 				return false;
 			}
 			smbd_conn->recv_msgsize = x_convert_assert<uint32_t>(err);
 		} else if (err == 0) {
+			X_LOG_CONN("%s %p x%lx recv nbt_hdr EOF", task_name, smbd_conn, smbd_conn->ep_id);
 			return true;
 		} else if (errno == EAGAIN) {
 			fdevents = x_fdevents_consume(fdevents, FDEVT_IN);
 			return false;
+		} else if (errno == EINTR) {
+			return false;
 		} else {
-			return errno != EINTR;
+			X_LOG_ERR("%s %p x%lx do_recv errno=%d", task_name,
+					smbd_conn, smbd_conn->ep_id, errno);
+			return true;
 		}
 	}
 
@@ -794,8 +800,10 @@ static bool x_smbd_conn_do_recv(x_smbd_conn_t *smbd_conn, x_fdevents_t &fdevents
 		smbd_conn->recv_len = x_convert_assert<uint32_t>(smbd_conn->recv_len + err);
 		if (smbd_conn->recv_len >= smbd_conn->recv_msgsize) {
 			smbd_conn->recv_len -= smbd_conn->recv_msgsize;
-			bool ret = x_smbd_conn_process_nbt(smbd_conn);
+			int ret = x_smbd_conn_process_nbt(smbd_conn);
 			if (ret) {
+				X_LOG_ERR("%s %p x%lx x_smbd_conn_process_nbt %d",
+						task_name, smbd_conn, smbd_conn->ep_id, ret);
 				return true;
 			}
 
@@ -804,17 +812,24 @@ static bool x_smbd_conn_do_recv(x_smbd_conn_t *smbd_conn, x_fdevents_t &fdevents
 
 			err = x_smbd_conn_check_nbt_hdr(smbd_conn);
 			if (err < 0) {
+				X_LOG_ERR("%s %p x%lx x_smbd_conn_check_nbt_hdr piggyback %d",
+						task_name, smbd_conn, smbd_conn->ep_id, err);
 				return true;
-			} else {
+			} else if (err == 0) {
 				return false;
 			}
+			smbd_conn->recv_msgsize = x_convert_assert<uint32_t>(err);
 		}
 	} else if (err == 0) {
+		X_LOG_CONN("%s %p x%lx recv nbt_body EOF", task_name, smbd_conn, smbd_conn->ep_id);
 		return true;
 	} else if (errno == EAGAIN) {
 		fdevents = x_fdevents_consume(fdevents, FDEVT_IN);
+	} else if (errno == EINTR) {
 	} else {
-		return errno != EINTR;
+		X_LOG_ERR("%s %p x%lx do_recv errno=%d", task_name,
+				smbd_conn, smbd_conn->ep_id, errno);
+		return true;
 	}
 	return false;
 }
