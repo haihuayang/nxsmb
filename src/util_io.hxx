@@ -9,6 +9,7 @@
 #include <stdint.h>
 
 bool valid_io_range(uint64_t offset, uint64_t length);
+bool valid_write_range(uint64_t offset, uint64_t length);
 
 
 #endif /* __util_io__hxx__ */

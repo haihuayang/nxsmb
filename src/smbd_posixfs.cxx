@@ -6,9 +6,10 @@
 #include <sys/statvfs.h>
 #include "smbd_ntacl.hxx"
 #include "smbd_lease.hxx"
+#include "smbd_share.hxx"
+#include "util_io.hxx"
 #include <dirent.h>
 #include <sys/syscall.h>
-#include "smbd_share.hxx"
 #include <sys/xattr.h>
 
 #define POSIXFS_ADS_PREFIX      "user.ads:"
@@ -42,22 +43,30 @@ static bool is_null_ntime(idl::NTTIME nt)
 	return nt.val == 0 || nt.val == (uint64_t)-1;
 }
 
-static int posixfs_set_basic_info(int fd,
+static NTSTATUS posixfs_set_basic_info(int fd,
 		uint32_t &notify_actions,
 		const x_smb2_file_basic_info_t &basic_info,
 		x_smbd_object_meta_t *object_meta)
 {
 	dos_attr_t dos_attr = { 0 };
 	if (basic_info.file_attributes != 0) {
+		if ((object_meta->file_attributes & FILE_ATTRIBUTE_DIRECTORY) !=
+				(basic_info.file_attributes & FILE_ATTRIBUTE_DIRECTORY)) {
+			return NT_STATUS_INVALID_PARAMETER;
+		}
 		dos_attr.attr_mask |= DOS_SET_FILE_ATTR;
 		dos_attr.file_attrs = basic_info.file_attributes;
 		notify_actions |= FILE_NOTIFY_CHANGE_ATTRIBUTES;
+	} else {
+		dos_attr.file_attrs = object_meta->file_attributes;
 	}
 
 	if (!is_null_ntime(basic_info.creation)) {
 		dos_attr.attr_mask |= DOS_SET_CREATE_TIME;
 		dos_attr.create_time = x_nttime_to_timespec(basic_info.creation);
 		notify_actions |= FILE_NOTIFY_CHANGE_CREATION;
+	} else {
+		dos_attr.create_time = x_nttime_to_timespec(object_meta->creation);
 	}
 
 	if (dos_attr.attr_mask != 0) {
@@ -89,7 +98,7 @@ static int posixfs_set_basic_info(int fd,
 	
 	x_smbd_stream_meta_t stream_meta;
 	posixfs_statex_get(fd, object_meta, &stream_meta);
-	return 0;
+	return NT_STATUS_OK;
 }
 
 static int posixfs_open(int dirfd, const char *path,
@@ -140,6 +149,7 @@ struct posixfs_open_t
 	x_smb2_lease_key_t parent_lease_key;
 	x_smbd_lease_t *smbd_lease{};
 	uint8_t lock_sequency_array[64];
+	uint64_t current_offset = 0;
 	/* notify_requ_list and notify_changes protected by posixfs_object->mutex */
 	x_tp_ddlist_t<requ_async_traits> notify_requ_list;
 	x_tp_ddlist_t<requ_async_traits> lock_requ_list;
@@ -426,6 +436,151 @@ static inline void posixfs_object_remove_ads(posixfs_object_t *posixfs_object,
 {
 	posixfs_object->ads_list.remove(posixfs_ads);
 }
+
+static NTSTATUS posixfs_ads_set_eof(posixfs_object_t *posixfs_object,
+		posixfs_ads_t *posixfs_ads, uint64_t new_size)
+{
+	std::vector<uint8_t> content(0x10000);
+	ssize_t ret = fgetxattr(posixfs_object->fd, posixfs_ads->xattr_name.c_str(), content.data(), content.size());
+	X_TODO_ASSERT(ret >= ssize_t(sizeof(posixfs_ads_header_t)));
+	posixfs_ads_header_t *ads_hdr = (posixfs_ads_header_t *)content.data();
+	uint32_t version = X_LE2H32(ads_hdr->version);
+	uint32_t orig_alloc = X_LE2H32(ads_hdr->allocation_size);
+	X_TODO_ASSERT(version == 0);
+
+	content.resize(sizeof(posixfs_ads_header_t) + new_size);
+	posixfs_ads->base.meta.end_of_file = new_size;
+	if (new_size > orig_alloc) {
+		ads_hdr->allocation_size = X_LE2H32(x_convert<uint32_t>(new_size));
+		posixfs_ads->base.meta.allocation_size = new_size;
+	}
+
+	ret = fsetxattr(posixfs_object->fd, posixfs_ads->xattr_name.c_str(), content.data(), content.size(), 0);
+	X_TODO_ASSERT(ret == 0);
+	return NT_STATUS_OK;
+}
+
+static NTSTATUS posixfs_ads_set_alloc(posixfs_object_t *posixfs_object,
+		posixfs_ads_t *posixfs_ads, uint64_t new_size)
+{
+	std::vector<uint8_t> content(0x10000);
+	ssize_t ret = fgetxattr(posixfs_object->fd, posixfs_ads->xattr_name.c_str(), content.data(), content.size());
+	X_TODO_ASSERT(ret >= ssize_t(sizeof(posixfs_ads_header_t)));
+	posixfs_ads_header_t *ads_hdr = (posixfs_ads_header_t *)content.data();
+	uint32_t version = X_LE2H32(ads_hdr->version);
+	X_TODO_ASSERT(version == 0);
+	uint64_t orig_size = ret - sizeof(posixfs_ads_header_t);
+
+	ads_hdr->allocation_size = X_H2LE32(uint32_t(new_size));
+	if (new_size < orig_size) {
+		content.resize(sizeof(posixfs_ads_header_t) + new_size);
+		posixfs_ads->base.meta.end_of_file = x_convert<uint32_t>(new_size);
+	}
+
+	posixfs_ads->base.meta.allocation_size = x_convert<uint32_t>(new_size);
+
+	ret = fsetxattr(posixfs_object->fd, posixfs_ads->xattr_name.c_str(), content.data(), content.size(), 0);
+	X_TODO_ASSERT(ret == 0);
+	return NT_STATUS_OK;
+}
+
+
+/* samba vfs_set_filelen */
+static NTSTATUS posixfs_set_end_of_file(
+		posixfs_object_t *posixfs_object,
+		posixfs_ads_t *posixfs_ads,
+		uint64_t new_size)
+{
+	posixfs_stream_t *posixfs_stream = posixfs_ads ?
+		&posixfs_ads->base : &posixfs_object->default_stream;
+
+	if (posixfs_stream->meta.end_of_file == new_size) {
+		return NT_STATUS_OK;
+	}
+
+	NTSTATUS status = NT_STATUS_OK;
+
+	// TODO contend_level2_oplocks_begin(fsp, LEVEL2_CONTEND_SET_FILE_LEN);
+	if (posixfs_ads) {
+		status = posixfs_ads_set_eof(posixfs_object, posixfs_ads,
+				new_size);
+	} else {
+		int err = ftruncate(posixfs_object->fd, new_size);
+		X_TODO_ASSERT(err == 0);
+	}
+	// TODO contend_level2_oplocks_end(fsp, LEVEL2_CONTEND_SET_FILE_LEN);
+
+	int err = posixfs_statex_get(posixfs_object->fd,
+			&posixfs_object->meta,
+			&posixfs_object->default_stream.meta);
+	X_TODO_ASSERT(err == 0);
+	if (!posixfs_ads) {
+		posixfs_object->default_stream.meta.allocation_size =
+			std::max(new_size, posixfs_object->default_stream.meta.allocation_size);
+	}
+	posixfs_object->statex_modified = false;
+
+	return status;
+}
+
+
+/* samba vfs_allocate_file_space */
+static NTSTATUS posixfs_set_allocation_size(
+		posixfs_object_t *posixfs_object,
+		posixfs_ads_t *posixfs_ads,
+		uint64_t allocation_size)
+{
+	posixfs_stream_t *posixfs_stream = posixfs_ads ?
+		&posixfs_ads->base : &posixfs_object->default_stream;
+
+	if (!posixfs_ads) {
+		/* only round up for base file */
+		allocation_size = (allocation_size + 4095ul) & ~4095ul;
+	}
+
+	bool modified = false;
+	NTSTATUS status = NT_STATUS_OK;
+	if (posixfs_stream->meta.end_of_file == allocation_size) {
+		return NT_STATUS_OK;
+
+	} else if (posixfs_stream->meta.end_of_file <= allocation_size) {
+		// TODO contend_level2_oplocks_begin(fsp, LEVEL2_CONTEND_ALLOC_GROW);
+		/* we do not support set allocation size for base file */
+		if (posixfs_ads) {
+			 status = posixfs_ads_set_alloc(posixfs_object, posixfs_ads,
+					 allocation_size);
+		}
+		posixfs_stream->meta.allocation_size = allocation_size;
+		// TODO contend_level2_oplocks_end(fsp, LEVEL2_CONTEND_ALLOC_GROW);
+
+	 } else {
+		 // TODO contend_level2_oplocks_begin(fsp, LEVEL2_CONTEND_ALLOC_SHRINK);
+		 if (posixfs_ads) {
+			 status = posixfs_ads_set_alloc(posixfs_object, posixfs_ads,
+					 allocation_size);
+		 } else {
+			 int err = ftruncate(posixfs_object->fd, allocation_size);
+			 X_TODO_ASSERT(err == 0);
+		 }
+		 // TODO contend_level2_oplocks_end(fsp, LEVEL2_CONTEND_ALLOC_SHRINK);
+		 modified = true;
+	 }
+
+	if (modified) {
+		int err = posixfs_statex_get(posixfs_object->fd,
+				&posixfs_object->meta,
+				&posixfs_object->default_stream.meta);
+		X_TODO_ASSERT(err == 0);
+		if (!posixfs_ads) {
+			posixfs_object->default_stream.meta.allocation_size =
+				allocation_size;
+		}
+		posixfs_object->statex_modified = false;
+	}
+
+	return status;
+}
+
 
 static void posixfs_object_release(posixfs_object_t *posixfs_object)
 {
@@ -1949,12 +2104,10 @@ static NTSTATUS posixfs_create_open_exist_object(
 		int err = ftruncate(posixfs_object->fd, 0);
 		X_TODO_ASSERT(err == 0);
 		reload_meta = true;
-	} else if ((state->contexts & X_SMB2_CONTEXT_FLAG_ALSI) &&
-			(posixfs_object->default_stream.meta.end_of_file >
-			 state->in_allocation_size)) {
-		int err = ftruncate(posixfs_object->fd, state->in_allocation_size);
-		X_TODO_ASSERT(err == 0);
-		reload_meta = true;
+	} else if ((state->contexts & X_SMB2_CONTEXT_FLAG_ALSI)) {
+		status = posixfs_set_allocation_size(posixfs_object, nullptr,
+			state->in_allocation_size);
+		X_TODO_ASSERT(NT_STATUS_IS_OK(status));
 	}
 
 	if (reload_meta) {
@@ -1962,10 +2115,6 @@ static NTSTATUS posixfs_create_open_exist_object(
 				&posixfs_object->meta,
 				&posixfs_object->default_stream.meta);
 		X_TODO_ASSERT(err == 0);
-		if (state->contexts & X_SMB2_CONTEXT_FLAG_ALSI) {
-			posixfs_object->default_stream.meta.allocation_size =
-				state->in_allocation_size;
-		}
 		posixfs_object->statex_modified = false;
 	}
 
@@ -2223,11 +2372,10 @@ static NTSTATUS open_object_exist_ads(
 				std::min(state->in_allocation_size, posixfs_ads_max_length));
 		posixfs_ads_reset(posixfs_object, posixfs_ads,
 				allocation_size);
-	} else if ((state->contexts & X_SMB2_CONTEXT_FLAG_ALSI) &&
-			(posixfs_ads->base.meta.end_of_file >
-			 state->in_allocation_size)) {
-		X_TODO; // truncate ads
-		reload_meta = true;
+	} else if ((state->contexts & X_SMB2_CONTEXT_FLAG_ALSI)) {
+		posixfs_set_allocation_size(posixfs_object,
+				posixfs_ads,
+				state->in_allocation_size);
 	}
 
 	if (reload_meta) {
@@ -3439,6 +3587,7 @@ static NTSTATUS getinfo_file(posixfs_object_t *posixfs_object,
 			(x_smb2_file_basic_info_t *)state.out_data.data();
 
 		x_smbd_get_file_info(*info, posixfs_object->meta);
+
 	} else if (state.in_info_level == SMB2_FILE_INFO_FILE_ALL_INFORMATION) {
 		if (state.in_output_buffer_length < sizeof(x_smb2_file_all_info_t)) {
 			return STATUS_BUFFER_OVERFLOW;
@@ -3447,9 +3596,12 @@ static NTSTATUS getinfo_file(posixfs_object_t *posixfs_object,
 		x_smb2_file_all_info_t *info =
 			(x_smb2_file_all_info_t *)state.out_data.data();
 
+		posixfs_open_t *posixfs_open = posixfs_open_from_base_t::container(smbd_open);
 		x_smbd_get_file_info(*info, posixfs_object->meta,
 				posixfs_open->stream->meta,
-				smbd_open->access_mask);
+				smbd_open->access_mask,
+				posixfs_open->current_offset);
+
 	} else if (state.in_info_level == SMB2_FILE_INFO_FILE_NETWORK_OPEN_INFORMATION) {
 		if (state.in_output_buffer_length < sizeof(x_smb2_file_network_open_info_t)) {
 			return STATUS_BUFFER_OVERFLOW;
@@ -3460,6 +3612,7 @@ static NTSTATUS getinfo_file(posixfs_object_t *posixfs_object,
 		
 		x_smbd_get_file_info(*info, posixfs_object->meta,
 				posixfs_open->stream->meta);
+
 	} else if (state.in_info_level == SMB2_FILE_INFO_FILE_ACCESS_INFORMATION) {
 		if (state.in_output_buffer_length < sizeof(uint32_t)) {
 			return STATUS_BUFFER_OVERFLOW;
@@ -3469,12 +3622,35 @@ static NTSTATUS getinfo_file(posixfs_object_t *posixfs_object,
 			(uint32_t *)state.out_data.data();
 		*info = X_H2LE32(smbd_open->access_mask);
 
+	} else if (state.in_info_level == SMB2_FILE_INFO_FILE_POSITION_INFORMATION) {
+		if (state.in_output_buffer_length < sizeof(uint64_t)) {
+			return STATUS_BUFFER_OVERFLOW;
+		}
+		state.out_data.resize(sizeof(uint64_t));
+		posixfs_open_t *posixfs_open = posixfs_open_from_base_t::container(smbd_open);
+		uint64_t *info =
+			(uint64_t *)state.out_data.data();
+		*info = X_H2LE64(posixfs_open->current_offset);
+
 	} else if (state.in_info_level == SMB2_FILE_INFO_FILE_STREAM_INFORMATION) {
 		return getinfo_stream_info(posixfs_object, state);
+
 	} else {
 		return NT_STATUS_INVALID_LEVEL;
 	}
 	return NT_STATUS_OK;
+}
+
+static bool decode_uint64(uint64_t &size,
+		const std::vector<uint8_t> &in_data)
+{
+	if (in_data.size() < sizeof(size)) {
+		return false;
+	}
+
+	uint64_t *p = (uint64_t *)in_data.data();
+	size = X_LE2H64(*p);
+	return true;
 }
 
 static NTSTATUS setinfo_file(posixfs_object_t *posixfs_object,
@@ -3493,19 +3669,80 @@ static NTSTATUS setinfo_file(posixfs_object_t *posixfs_object,
 		}
 
 		uint32_t notify_actions = 0;
-		int err = posixfs_set_basic_info(posixfs_object->fd,
+		NTSTATUS status = posixfs_set_basic_info(posixfs_object->fd,
 				notify_actions, basic_info,
 				&posixfs_object->meta);
-		if (err == 0) {
+		if (NT_STATUS_IS_OK(status)) {
 			if (notify_actions) {
 				changes.push_back(x_smb2_change_t{NOTIFY_ACTION_MODIFIED,
 						notify_actions, posixfs_object->base.path, {}});
 			}
 			return NT_STATUS_OK;
 		} else {
-			X_TODO;
-			return NT_STATUS_INTERNAL_ERROR;
+			return status;
 		}
+	} else if (state.in_info_level == SMB2_FILE_INFO_FILE_ALLOCATION_INFORMATION) {
+		if (!smbd_requ->smbd_open->check_access(idl::SEC_FILE_WRITE_DATA)) {
+			return NT_STATUS_ACCESS_DENIED;
+		}
+
+		uint64_t new_size;
+		if (!decode_uint64(new_size, state.in_data)) {
+			return NT_STATUS_INVALID_PARAMETER;
+		}
+
+		if (!valid_write_range(new_size, 0)) {
+			return NT_STATUS_INVALID_PARAMETER;
+		}
+
+		posixfs_open_t *posixfs_open = posixfs_open_from_base_t::container(smbd_requ->smbd_open);
+		posixfs_stream_t *posixfs_stream = posixfs_open->stream;
+		posixfs_ads_t *posixfs_ads;
+		if (is_default_stream(posixfs_object, posixfs_stream)) {
+			posixfs_ads = nullptr;
+		} else {
+			posixfs_ads = X_CONTAINER_OF(posixfs_stream,
+					posixfs_ads_t, base);
+		}
+		return posixfs_set_allocation_size(posixfs_object,
+				posixfs_ads, new_size);
+
+	} else if (state.in_info_level == SMB2_FILE_INFO_FILE_END_OF_FILE_INFORMATION) {
+		if (!smbd_requ->smbd_open->check_access(idl::SEC_FILE_WRITE_DATA)) {
+			return NT_STATUS_ACCESS_DENIED;
+		}
+
+		uint64_t new_size;
+		if (!decode_uint64(new_size, state.in_data)) {
+			return NT_STATUS_INVALID_PARAMETER;
+		}
+
+		if (!valid_write_range(new_size, 0)) {
+			return NT_STATUS_INVALID_PARAMETER;
+		}
+
+		posixfs_open_t *posixfs_open = posixfs_open_from_base_t::container(smbd_requ->smbd_open);
+		posixfs_stream_t *posixfs_stream = posixfs_open->stream;
+		posixfs_ads_t *posixfs_ads;
+		if (is_default_stream(posixfs_object, posixfs_stream)) {
+			posixfs_ads = nullptr;
+		} else {
+			posixfs_ads = X_CONTAINER_OF(posixfs_stream,
+					posixfs_ads_t, base);
+		}
+		return posixfs_set_end_of_file(posixfs_object,
+				posixfs_ads, new_size);
+
+	} else if (state.in_info_level == SMB2_FILE_INFO_FILE_POSITION_INFORMATION) {
+		uint64_t new_size;
+		if (!decode_uint64(new_size, state.in_data)) {
+			return NT_STATUS_INVALID_PARAMETER;
+		}
+
+		posixfs_open_t *posixfs_open = posixfs_open_from_base_t::container(smbd_requ->smbd_open);
+		posixfs_open->current_offset = new_size;
+		return NT_STATUS_OK;
+
 	} else {
 		return NT_STATUS_INVALID_LEVEL;
 	}
