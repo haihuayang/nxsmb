@@ -13,9 +13,17 @@ static void notify_one_level(std::shared_ptr<x_smbd_topdir_t> &topdir,
 	x_smbd_object_t *smbd_object = topdir->ops->open_object(&status,
 			topdir, path, 0, false);
 	if (!smbd_object) {
+		X_LOG_DBG("skip notify %d,x%x '%s', '%s'", notify_action,
+				notify_filter,
+				x_convert_utf16_to_utf8(path).c_str(),
+				x_convert_utf16_to_utf8(fullpath).c_str());
 		return;
 	}
 
+	X_LOG_DBG("notify object %d,x%x '%s', '%s'", notify_action,
+			notify_filter,
+			x_convert_utf16_to_utf8(path).c_str(),
+			x_convert_utf16_to_utf8(fullpath).c_str());
 	x_smbd_object_notify_change(smbd_object, notify_action, notify_filter,
 			fullpath, new_fullpath, last_level);
 

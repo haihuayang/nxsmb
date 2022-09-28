@@ -1,6 +1,7 @@
 
 #include "smbd.hxx"
 #include "smbd_open.hxx"
+#include "smbd_conf.hxx"
 
 namespace {
 enum {
@@ -92,6 +93,11 @@ NTSTATUS x_smb2_process_notify(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_req
 
 	auto state = std::make_unique<x_smb2_state_notify_t>();
 	if (!decode_in_notify(*state, in_hdr, smbd_requ->in_requ_len)) {
+		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
+	}
+
+	// TODO smbd_smb2_request_verify_creditcharge
+	if (state->in_output_buffer_length > x_smbd_conf_get()->max_trans_size) {
 		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
 

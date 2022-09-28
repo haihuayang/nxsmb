@@ -150,6 +150,7 @@ struct posixfs_open_t
 	x_smbd_lease_t *smbd_lease{};
 	uint8_t lock_sequency_array[64];
 	uint64_t current_offset = 0;
+	bool update_write_time = false;
 	/* notify_requ_list and notify_changes protected by posixfs_object->mutex */
 	x_tp_ddlist_t<requ_async_traits> notify_requ_list;
 	x_tp_ddlist_t<requ_async_traits> lock_requ_list;
@@ -2974,6 +2975,13 @@ NTSTATUS posixfs_object_op_close(
 		lock.lock();
 	}
 
+	if (posixfs_open->update_write_time) {
+		changes.push_back(x_smb2_change_t{NOTIFY_ACTION_MODIFIED,
+				FILE_NOTIFY_CHANGE_LAST_WRITE,
+				posixfs_object->base.path, {}});
+		posixfs_open->update_write_time = false;
+	}
+
 	posixfs_object_remove(posixfs_object, posixfs_open, changes);
 
 	share_mode_modified(posixfs_object, posixfs_open->stream);
@@ -3258,6 +3266,7 @@ static x_job_t::retval_t posixfs_write_job_run(x_job_t *job)
 
 	x_smbd_requ_t *smbd_requ = posixfs_write_job->smbd_requ;
 	posixfs_object_t *posixfs_object = posixfs_write_job->posixfs_object;
+	posixfs_open_t *posixfs_open = posixfs_open_from_base_t::container(smbd_requ->smbd_open);
 	posixfs_write_job->smbd_requ = nullptr;
 	posixfs_write_job->posixfs_object = nullptr;
 
@@ -3272,6 +3281,7 @@ static x_job_t::retval_t posixfs_write_job_run(x_job_t *job)
 	} else {
 		/* TODO atomic */
 		posixfs_object->statex_modified = true;
+		posixfs_open->update_write_time = true;
 		uint64_t end_of_write = state->in_offset + ret;
 		if (posixfs_object->default_stream.meta.end_of_file < end_of_write) {
 			posixfs_object->default_stream.meta.end_of_file = end_of_write;
