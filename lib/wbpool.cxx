@@ -145,7 +145,7 @@ static int winbindd_open_pipe(const std::string &wbpipe)
 	if (err == 0) {
 		return fd;
 	} else if (errno == EINPROGRESS) {
-		X_DBG("connect inprogress");
+		X_LOG_DBG("connect inprogress");
 		return fd;
 	} else {
 		X_LOG_ERR("connect error %d", errno);
@@ -233,7 +233,6 @@ static void handshake_wbcli_cb_reply(x_wbcli_t *wbcli, int err)
 
 static long wbpool_timer_func(x_timer_t *timer)
 {
-	X_DBG("");
 	x_wbpool_t *wbpool = X_CONTAINER_OF(timer, x_wbpool_t, timer);
 	wbconn_t *wbconn_disconnected = nullptr, *wbconn_ready = nullptr;
 	{
@@ -274,7 +273,7 @@ static long wbpool_timer_func(x_timer_t *timer)
 static void wbpool_timer_done(x_timer_t *timer)
 {
 	x_wbpool_t *wbpool = X_CONTAINER_OF(timer, x_wbpool_t, timer);
-	X_DBG("%p", wbpool);
+	X_LOG_DBG("%p", wbpool);
 }
 
 static const x_timer_upcall_cbs_t wbpool_timer_cbs = {
@@ -298,6 +297,9 @@ static int wbconn_dosend(wbconn_t &wbconn)
 	if (wbconn.requ_off < sizeof(struct winbindd_request)) {
 		err = write(wbconn.fd, (uint8_t *)&requ->header + wbconn.requ_off,
 				sizeof(struct winbindd_request) - wbconn.requ_off);
+		X_LOG_DBG("requ_off=%u %u,%u err=%d errno=%d",
+				wbconn.requ_off, requ->header.cmd,
+				requ->header.length, err, errno);
 		if (err > 0) {
 			wbconn.requ_off = x_convert_assert<uint32_t>(wbconn.requ_off + err);
 			if (wbconn.requ_off < sizeof(struct winbindd_request)) {
@@ -313,7 +315,10 @@ static int wbconn_dosend(wbconn_t &wbconn)
 
 	err = write(wbconn.fd, requ->extra.data() +
 			(wbconn.requ_off - sizeof(struct winbindd_request)),
-			requ->header.length - wbconn.requ_off);
+			requ->extra.size() + requ->header.length - wbconn.requ_off);
+	X_LOG_DBG("requ_off=%u %u,%u err=%d errno=%d",
+			wbconn.requ_off, requ->header.cmd,
+			requ->header.length, err, errno);
 	if (err < 0) {
 		return -errno;
 	}
@@ -346,6 +351,7 @@ static int wbconn_dorecv(wbconn_t &wbconn)
 				resp->extra.clear();
 				return 0;
 			}
+			X_ASSERT(resp->header.length > sizeof(struct winbindd_response));
 			resp->extra.resize(resp->header.length - sizeof(struct winbindd_response));
 		}
 	}
@@ -510,10 +516,10 @@ int x_wbpool_request(x_wbpool_t *wbpool, x_wbcli_t *wbcli)
 		}
 	}
 	if (!wbconn) {
-		X_DBG("no ready wbconn, queued %p", wbcli);
+		X_LOG_DBG("no ready wbconn, queued %p", wbcli);
 	} else {
 		X_ASSERT(wbconn->state == wbconn_t::S_READY);
-		X_DBG("wbconn %p send %p", wbconn, wbcli);
+		X_LOG_DBG("wbconn %p send %p", wbconn, wbcli);
 		wbconn_send(wbconn, wbcli);
 	}
 	return 0;
