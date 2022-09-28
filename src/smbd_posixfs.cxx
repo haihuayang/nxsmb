@@ -4373,3 +4373,23 @@ NTSTATUS x_smbd_posixfs_create_open(x_smbd_open_t **psmbd_open,
 	return NT_STATUS_OK;
 }
 
+/* caller lock smbd_object->mutex */
+NTSTATUS x_smbd_posixfs_object_init(x_smbd_object_t *smbd_object,
+		int fd, uint32_t file_attributes,
+		const std::string &unix_path,
+		const std::vector<uint8_t> &ntacl_blob)
+{
+	posixfs_object_t *posixfs_object = posixfs_object_from_base_t::container(smbd_object);
+
+	posixfs_post_create(fd, file_attributes,
+			&posixfs_object->meta,
+			&posixfs_object->default_stream.meta,
+			ntacl_blob);
+	
+	posixfs_object->fd = fd;
+	posixfs_object_update_type(posixfs_object);
+	posixfs_object->base.flags = x_smbd_object_t::flag_initialized;
+	posixfs_object->unix_path = unix_path;
+	return NT_STATUS_OK;
+}
+

@@ -104,7 +104,13 @@ static NTSTATUS dfs_root_resolve_path(
 	if (dfs) {
 		/* TODO we just skip the first 2 components for now */
 		auto sep = x_next_sep(in_path_begin, in_path_end, u'\\');
-		X_ASSERT(sep != in_path_end);
+		if (sep == in_path_end) {
+			X_LOG_ERR("Invalid dfs_root path '%s'",
+					x_convert_utf16_to_utf8(in_path_begin,
+						in_path_end).c_str());
+			return NT_STATUS_OBJECT_NAME_NOT_FOUND;
+		}
+
 		sep = x_next_sep(sep + 1, in_path_end, u'\\');
 		if (sep == in_path_end) {
 			path_start = in_path_end;
@@ -308,10 +314,11 @@ static bool dfs_tld_manager_process_entry(
 
 static inline void create_new_tld(dfs_share_t &dfs_share,
 		x_smbd_requ_t *smbd_requ,
-		const std::u16string &u16name)
+		x_smbd_object_t *smbd_object)
 {
 	// tld creation is started from the node host the share root
 	X_ASSERT(dfs_share.root_dir);
+	const std::u16string &u16name = smbd_object->path;
 	auto name = x_convert_utf16_to_utf8(u16name);
 
 	uint8_t uuid[16];
@@ -348,13 +355,16 @@ static inline void create_new_tld(dfs_share_t &dfs_share,
 	} else {
 		X_TODO;
 	}
+	x_smbd_posixfs_object_init(smbd_object, fd, FILE_ATTRIBUTE_DIRECTORY,
+			name, ntacl_blob);
+#if 0
 	x_smbd_object_meta_t object_meta;
 	x_smbd_stream_meta_t stream_meta;
 	posixfs_post_create(fd, FILE_ATTRIBUTE_DIRECTORY,
 			&object_meta, &stream_meta, ntacl_blob);
-
-	set_tld_target(fd, volume, uuid_str);
 	close(fd);
+#endif
+	set_tld_target(fd, volume, uuid_str);
 }
 
 static NTSTATUS dfs_root_object_op_rename(x_smbd_object_t *smbd_object,
@@ -574,8 +584,27 @@ static void dfs_root_notify_change(x_smbd_object_t *smbd_object,
 		const std::u16string *new_path,
 		bool last_level)
 {
+	if (smbd_object->priv_data == dfs_object_type_dfs_root) {
+		posixfs_object_notify_change(smbd_object,
+				notify_action, notify_filter,
+				path, new_path, last_level);
+	} else if (smbd_object->priv_data == dfs_object_type_tld_manager) {
+		posixfs_object_notify_change(smbd_object,
+				notify_action, notify_filter,
+				path, new_path, last_level);
+		// TODO
+	} else {
+		X_TODO;
+	}
+}
+
+static void dfs_root_op_lease_break(
+		x_smbd_object_t *smbd_object,
+		x_smbd_stream_t *smbd_stream)
+{
 	X_TODO;
 }
+
 
 static x_smbd_object_t *dfs_root_op_open_object(NTSTATUS *pstatus,
 		std::shared_ptr<x_smbd_topdir_t> &topdir,
@@ -591,7 +620,7 @@ static x_smbd_object_t *dfs_root_op_open_object(NTSTATUS *pstatus,
 		return posixfs_open_object(pstatus, topdir, path, path_priv_data, create_if);
 	}
 
-	X_ASSERT(path_priv_data == dfs_object_type_root_top_level);
+	X_ASSERT(path_priv_data == dfs_object_type_root_top_level || !create_if);
 	return posixfs_open_object(pstatus, topdir, path, path_priv_data, create_if);
 #if 0
 	std::string first_level;
@@ -701,11 +730,24 @@ static NTSTATUS dfs_root_create_open(dfs_share_t &dfs_share,
 				return NT_STATUS_ACCESS_DENIED;
 			} else {
 				// TODO create new tld
-				create_new_tld(dfs_share, smbd_requ, smbd_object->path);
+				// not support SecD
+				create_new_tld(dfs_share, smbd_requ, smbd_object);
 				state->in_create_disposition = FILE_OPEN_IF;
-				return x_smbd_posixfs_create_open(psmbd_open,
+				NTSTATUS status = x_smbd_posixfs_create_open(psmbd_open,
 						smbd_requ,
 						state, changes);
+				if (NT_STATUS_IS_OK(status)) {
+					state->out_create_action = FILE_WAS_CREATED;
+				}
+				changes.push_back(x_smb2_change_t{NOTIFY_ACTION_ADDED, 
+						FILE_NOTIFY_CHANGE_DIR_NAME,
+						smbd_object->path,
+						{}});
+				changes.push_back(x_smb2_change_t{NOTIFY_ACTION_ADDED, 
+						FILE_NOTIFY_CHANGE_DIR_NAME,
+						u".tlds\\" + smbd_object->path,
+						{}});
+				return status;
 			}
 		}
 	} else {
@@ -746,8 +788,8 @@ static const x_smbd_object_ops_t dfs_root_object_ops = {
 	posixfs_object_op_ioctl,
 	dfs_root_object_op_qdir,
 	posixfs_object_op_notify,
-	nullptr, // TODO posixfs_object_op_lease_break,
-	nullptr, // posixfs_object_op_oplock_break,
+	dfs_root_op_lease_break,
+	posixfs_object_op_oplock_break,
 	dfs_root_object_op_rename,
 	dfs_root_object_op_set_delete_on_close,
 	dfs_root_object_op_unlink,
