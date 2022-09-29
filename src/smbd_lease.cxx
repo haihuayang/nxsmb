@@ -275,12 +275,18 @@ bool x_smbd_lease_grant(x_smbd_lease_t *smbd_lease,
 
 /* samba process_oplock_break_message */
 bool x_smbd_lease_require_break(x_smbd_lease_t *smbd_lease,
+		const x_smb2_lease_key_t *ignore_lease_key,
 		x_smb2_lease_key_t &lease_key,
 		uint8_t &new_state, /* in out */
 		uint8_t &curr_state,
 		uint16_t &epoch,
 		uint32_t &flags)
 {
+	if (ignore_lease_key && smbd_lease_match(smbd_lease, x_smbd_conn_curr_client_guid(),
+				*ignore_lease_key)) {
+		return false;
+	}
+
 	auto lock = smbd_lease_lock(smbd_lease);
 
 	uint8_t break_from = smbd_lease->lease_state;
@@ -334,6 +340,24 @@ bool x_smbd_lease_require_break(x_smbd_lease_t *smbd_lease,
 	flags = (break_from != X_SMB2_LEASE_READ) ? SMB2_NOTIFY_BREAK_LEASE_FLAG_ACK_REQUIRED : 0;
 	return true;
 }
+#if 0
+bool x_smbd_lease_break_dir(const x_smbd_lease_t *smbd_lease,
+		const x_smb2_lease_key_t &ignore_lease_key,
+		x_smb2_lease_key_t &lease_key,
+		uint8_t &curr_state,
+		uint16_t &epoch,
+		uint32_t &flags)
+{
+	if (smbd_lease_match(smbd_lease, x_smbd_conn_curr_client_guid(),
+				ignore_lease_key)) {
+		return false;
+	}
+	uint8_t new_state = 0;
+	return x_smbd_lease_require_break(smbd_lease, lease_key,
+			new_state, /* in out */
+			curr_state, epoch, flags);
+}
+#endif
 
 /* downgrade_lease() */
 static NTSTATUS smbd_lease_process_break(x_smbd_lease_t *smbd_lease,

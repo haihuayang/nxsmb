@@ -146,7 +146,7 @@ struct posixfs_open_t
 	uint8_t oplock_level{X_SMB2_OPLOCK_LEVEL_NONE};
 	oplock_break_sent_t oplock_break_sent{oplock_break_sent_t::OPLOCK_BREAK_NOT_SENT};
 	/* open's on the same file sharing the same lease can have different parent key */
-	x_smb2_lease_key_t parent_lease_key;
+	x_smb2_lease_key_t parent_lease_key{};
 	x_smbd_lease_t *smbd_lease{};
 	uint8_t lock_sequency_array[64];
 	uint64_t current_offset = 0;
@@ -229,6 +229,10 @@ struct posixfs_object_t
 	x_tp_ddlist_t<posixfs_ads_object_traits> ads_list;
 };
 X_DECLARE_MEMBER_TRAITS(posixfs_object_from_base_t, posixfs_object_t, base)
+
+static void do_break_lease(posixfs_open_t *posixfs_open,
+		const x_smb2_lease_key_t *ignore_lease_key,
+		uint8_t break_to);
 
 static inline bool is_default_stream(const posixfs_object_t *object,
 		const posixfs_stream_t *stream)
@@ -843,6 +847,7 @@ void posixfs_object_notify_change(x_smbd_object_t *smbd_object,
 		uint32_t notify_filter,
 		const std::u16string &fullpath,
 		const std::u16string *new_name_path,
+		const x_smb2_lease_key_t &ignore_lease_key,
 		bool last_level)
 {
 	posixfs_object_t *posixfs_object = posixfs_object_from_base_t::container(smbd_object);
@@ -854,6 +859,10 @@ void posixfs_object_notify_change(x_smbd_object_t *smbd_object,
 	auto &open_list = posixfs_object->default_stream.open_list;
 	posixfs_open_t *curr_open;
 	for (curr_open = open_list.get_front(); curr_open; curr_open = open_list.next(curr_open)) {
+		if (last_level && curr_open->smbd_lease) {
+			do_break_lease(curr_open, &ignore_lease_key, 0);
+		}
+
 		if (!(curr_open->base.notify_filter & notify_filter)) {
 			continue;
 		}
@@ -1066,6 +1075,7 @@ NTSTATUS posixfs_object_rename(x_smbd_object_t *smbd_object,
 				posixfs_object->base.type == x_smbd_object_t::type_dir ?
 					FILE_NOTIFY_CHANGE_DIR_NAME :
 					FILE_NOTIFY_CHANGE_FILE_NAME,
+				posixfs_open->parent_lease_key,
 				old_path, new_path});
 	}
 
@@ -1291,6 +1301,7 @@ static void posixfs_send_lease_break_func(x_smbd_conn_t *smbd_conn, x_fdevt_user
 }
 
 static void do_break_lease(posixfs_open_t *posixfs_open,
+		const x_smb2_lease_key_t *ignore_lease_key,
 		uint8_t break_to)
 {
 	x_smb2_lease_key_t lease_key;
@@ -1299,6 +1310,7 @@ static void do_break_lease(posixfs_open_t *posixfs_open,
 	uint32_t flags;
 
 	bool send_break = x_smbd_lease_require_break(posixfs_open->smbd_lease,
+			ignore_lease_key,
 			lease_key, break_to, curr_state,
 			new_epoch, flags);
 	if (!send_break) {
@@ -1462,7 +1474,7 @@ static bool delay_for_oplock(posixfs_object_t *posixfs_object,
 		}
 		++break_count;
 		if (curr_open->smbd_lease) {
-			do_break_lease(curr_open, break_to);
+			do_break_lease(curr_open, nullptr, break_to);
 		} else {
 			do_break_oplock(curr_open, break_to);
 		}
@@ -1647,6 +1659,7 @@ static posixfs_open_t *posixfs_open_create(
 	posixfs_open->oplock_level = state.out_oplock_level;
 	/* not need incref because it already do in lease_grant */
 	posixfs_open->smbd_lease = state.smbd_lease;
+	posixfs_open->parent_lease_key = state.lease.parent_key;
 
 	if (!x_smbd_open_store(&posixfs_open->base)) {
 		if (posixfs_open->smbd_lease) {
@@ -2890,12 +2903,13 @@ static NTSTATUS posixfs_object_remove(posixfs_object_t *posixfs_object,
 	auto orig_changes_size = changes.size();
 	if (posixfs_object->default_stream.meta.delete_on_close &&
 			!have_active_open(posixfs_object)) {
-		posixfs_ads_foreach_1(posixfs_object, [posixfs_object, &changes] (
+		posixfs_ads_foreach_1(posixfs_object, [posixfs_object, posixfs_open, &changes] (
 					const char *xattr_name,
 					const char *stream_name) {
 				changes.push_back(x_smb2_change_t{
 						NOTIFY_ACTION_REMOVED_STREAM,
 						FILE_NOTIFY_CHANGE_STREAM_NAME,
+						posixfs_open->parent_lease_key,
 						posixfs_object->base.path + u':' + x_convert_utf8_to_utf16(stream_name),
 						{}});
 				return true;
@@ -2917,6 +2931,7 @@ static NTSTATUS posixfs_object_remove(posixfs_object_t *posixfs_object,
 			posixfs_ads->exists = false;
 		}
 		changes.push_back(x_smb2_change_t{NOTIFY_ACTION_REMOVED, notify_filter,
+				posixfs_open->parent_lease_key,
 				posixfs_object->base.path, {}});
 	} else if (!is_default_stream(posixfs_object, posixfs_stream) &&
 			posixfs_stream->meta.delete_on_close) {
@@ -2928,6 +2943,7 @@ static NTSTATUS posixfs_object_remove(posixfs_object_t *posixfs_object,
 		// TODO should it also notify object MODIFIED
 		changes.push_back(x_smb2_change_t{NOTIFY_ACTION_REMOVED_STREAM,
 				FILE_NOTIFY_CHANGE_STREAM_NAME,
+				posixfs_open->parent_lease_key,
 				posixfs_object->base.path + u':' + ads->name,
 				{}});
 	}
@@ -2978,6 +2994,7 @@ NTSTATUS posixfs_object_op_close(
 	if (posixfs_open->update_write_time) {
 		changes.push_back(x_smb2_change_t{NOTIFY_ACTION_MODIFIED,
 				FILE_NOTIFY_CHANGE_LAST_WRITE,
+				posixfs_open->parent_lease_key,
 				posixfs_object->base.path, {}});
 		posixfs_open->update_write_time = false;
 	}
@@ -3350,7 +3367,7 @@ static void break_others_to_none(posixfs_open_t *posixfs_open)
 			continue;
 		}
 		if (other_open->smbd_lease) {
-			do_break_lease(other_open, X_SMB2_LEASE_NONE);
+			do_break_lease(other_open, nullptr, X_SMB2_LEASE_NONE);
 		} else {
 			/* This can break the open's self oplock II, but 
 			 * Windows behave same
@@ -3684,8 +3701,11 @@ static NTSTATUS setinfo_file(posixfs_object_t *posixfs_object,
 				&posixfs_object->meta);
 		if (NT_STATUS_IS_OK(status)) {
 			if (notify_actions) {
+				posixfs_open_t *posixfs_open = posixfs_open_from_base_t::container(smbd_requ->smbd_open);
 				changes.push_back(x_smb2_change_t{NOTIFY_ACTION_MODIFIED,
-						notify_actions, posixfs_object->base.path, {}});
+						notify_actions,
+						posixfs_open->parent_lease_key,
+						posixfs_object->base.path, {}});
 			}
 			return NT_STATUS_OK;
 		} else {
@@ -3865,7 +3885,9 @@ static NTSTATUS setinfo_security(posixfs_object_t *posixfs_object,
 		return x_map_nt_error_from_unix(-err);
 	}
 
+	posixfs_open_t *posixfs_open = posixfs_open_from_base_t::container(smbd_requ->smbd_open);
 	changes.push_back(x_smb2_change_t{NOTIFY_ACTION_MODIFIED, FILE_NOTIFY_CHANGE_SECURITY,
+			posixfs_open->parent_lease_key,
 			posixfs_object->base.path, {}});
 	return NT_STATUS_OK;
 }
@@ -4350,6 +4372,7 @@ NTSTATUS x_smbd_posixfs_create_open(x_smbd_open_t **psmbd_open,
 	if (state->out_create_action == FILE_WAS_CREATED) {
 		changes.push_back(x_smb2_change_t{NOTIFY_ACTION_ADDED, 
 				uint16_t((state->in_create_options & FILE_DIRECTORY_FILE) ? FILE_NOTIFY_CHANGE_DIR_NAME : FILE_NOTIFY_CHANGE_FILE_NAME),
+				posixfs_open->parent_lease_key,
 				posixfs_object->base.path,
 				{}});
 	}

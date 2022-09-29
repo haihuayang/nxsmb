@@ -44,6 +44,7 @@ void x_smbd_lease_close(x_smbd_lease_t *smbd_lease);
 uint8_t x_smbd_lease_get_state(const x_smbd_lease_t *smbd_lease);
 
 bool x_smbd_lease_require_break(x_smbd_lease_t *smbd_lease,
+		const x_smb2_lease_key_t *ignore_lease_key,
 		x_smb2_lease_key_t &lease_key,
 		uint8_t &new_state, /* in out */
 		uint8_t &curr_state,

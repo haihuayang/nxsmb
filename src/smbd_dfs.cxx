@@ -582,16 +582,19 @@ static void dfs_root_notify_change(x_smbd_object_t *smbd_object,
 		uint32_t notify_filter,
 		const std::u16string &path,
 		const std::u16string *new_path,
+		const x_smb2_lease_key_t &ignore_lease_key,
 		bool last_level)
 {
 	if (smbd_object->priv_data == dfs_object_type_dfs_root) {
 		posixfs_object_notify_change(smbd_object,
 				notify_action, notify_filter,
-				path, new_path, last_level);
+				path, new_path,
+				ignore_lease_key, last_level);
 	} else if (smbd_object->priv_data == dfs_object_type_tld_manager) {
 		posixfs_object_notify_change(smbd_object,
 				notify_action, notify_filter,
-				path, new_path, last_level);
+				path, new_path,
+				ignore_lease_key, last_level);
 		// TODO
 	} else {
 		X_TODO;
@@ -741,10 +744,12 @@ static NTSTATUS dfs_root_create_open(dfs_share_t &dfs_share,
 				}
 				changes.push_back(x_smb2_change_t{NOTIFY_ACTION_ADDED, 
 						FILE_NOTIFY_CHANGE_DIR_NAME,
+						x_smb2_lease_key_t{0, 0},
 						smbd_object->path,
 						{}});
 				changes.push_back(x_smb2_change_t{NOTIFY_ACTION_ADDED, 
 						FILE_NOTIFY_CHANGE_DIR_NAME,
+						state->lease.parent_key,
 						u".tlds\\" + smbd_object->path,
 						{}});
 				return status;

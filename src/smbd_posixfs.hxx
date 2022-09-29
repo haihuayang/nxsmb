@@ -136,6 +136,7 @@ void posixfs_object_notify_change(x_smbd_object_t *smbd_object,
 		uint32_t notify_filter,
 		const std::u16string &fullpath,
 		const std::u16string *new_name_path,
+		const x_smb2_lease_key_t &ignore_lease_key,
 		bool last_level);
 
 NTSTATUS x_smbd_posixfs_open_object(x_smbd_object_t **psmbd_object,
