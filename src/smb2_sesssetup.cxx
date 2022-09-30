@@ -63,7 +63,7 @@ static void x_smb2_reply_sesssetup(x_smbd_conn_t *smbd_conn,
 }
 
 void x_smb2_sesssetup_done(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ, NTSTATUS status,
-		std::vector<uint8_t> &out_security)
+		const std::vector<uint8_t> &out_security)
 {
 	/* async done */
 	X_LOG_DBG("smbd_requ=%p, status=0x%x", smbd_requ, NT_STATUS_V(status));

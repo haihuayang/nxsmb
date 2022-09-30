@@ -1148,32 +1148,36 @@ void x_smbd_conn_requ_done(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ,
 
 struct x_smbd_cancel_evt_t
 {
+	static void func(x_smbd_conn_t *smbd_conn, x_fdevt_user_t *fdevt_user, bool cancelled)
+	{
+		x_smbd_cancel_evt_t *evt = X_CONTAINER_OF(fdevt_user, x_smbd_cancel_evt_t, base);
+
+		x_smbd_requ_t *smbd_requ = evt->smbd_requ;
+		if (!cancelled) {
+			smbd_requ->async_done_fn(smbd_conn, smbd_requ, NT_STATUS_CANCELLED);
+		}
+
+		delete evt;
+	}
+
 	explicit x_smbd_cancel_evt_t(x_smbd_requ_t *smbd_requ)
-		: smbd_requ(smbd_requ) { }
-	~x_smbd_cancel_evt_t() {
+		: base(func), smbd_requ(smbd_requ)
+	{
+	}
+	~x_smbd_cancel_evt_t()
+	{
 		x_smbd_ref_dec(smbd_requ);
 	}
 	x_fdevt_user_t base;
 	x_smbd_requ_t * const smbd_requ;
 };
 
-static void x_smbd_cancel_func(x_smbd_conn_t *smbd_conn, x_fdevt_user_t *fdevt_user, bool cancelled)
-{
-	x_smbd_cancel_evt_t *evt = X_CONTAINER_OF(fdevt_user, x_smbd_cancel_evt_t, base);
-
-	x_smbd_requ_t *smbd_requ = evt->smbd_requ;
-	if (!cancelled) {
-		smbd_requ->async_done_fn(smbd_conn, smbd_requ, NT_STATUS_CANCELLED);
-	}
-
-	delete evt;
-}
-
 void x_smbd_conn_post_cancel(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 {
 	x_smbd_cancel_evt_t *evt = new x_smbd_cancel_evt_t(smbd_requ);
-	evt->base.func = x_smbd_cancel_func;
-	x_smbd_conn_post_user(smbd_conn, &evt->base);
+	if (!x_smbd_conn_post_user(smbd_conn, &evt->base)) {
+		delete evt;
+	}
 }
 
 void x_smbd_conn_set_async(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ,

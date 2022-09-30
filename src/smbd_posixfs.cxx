@@ -764,13 +764,31 @@ static void posixfs_create_cancel(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_
 #endif
 }
 
-static void posixfs_defer_open_func(x_smbd_conn_t *smbd_conn, x_fdevt_user_t *fdevt_user, bool cancelled);
 struct posixfs_defer_open_evt_t
 {
-	posixfs_defer_open_evt_t(x_smbd_requ_t *smbd_requ)
-		: smbd_requ(smbd_requ)
+	static void func(x_smbd_conn_t *smbd_conn, x_fdevt_user_t *fdevt_user, bool terminated)
 	{
-		base.func = posixfs_defer_open_func;
+		posixfs_defer_open_evt_t *evt = X_CONTAINER_OF(fdevt_user,
+				posixfs_defer_open_evt_t, base);
+		X_LOG_DBG("evt=%p", evt);
+
+		if (!terminated) {
+			x_smbd_requ_t *smbd_requ = evt->smbd_requ;
+			/* TODO check if it already cancelled */
+			x_smbd_conn_unset_async(smbd_conn, smbd_requ);
+			std::unique_ptr<x_smb2_state_create_t> state{(x_smb2_state_create_t *)smbd_requ->requ_state};
+			NTSTATUS status = x_smbd_tcon_op_create(smbd_requ, state);
+			if (!NT_STATUS_EQUAL(status, NT_STATUS_PENDING)) {
+				smbd_requ->async_done_fn(smbd_conn, smbd_requ, status);
+			}
+		}
+
+		delete evt;
+	}
+
+	explicit posixfs_defer_open_evt_t(x_smbd_requ_t *smbd_requ)
+		: base(func), smbd_requ(smbd_requ)
+	{
 	}
 
 	~posixfs_defer_open_evt_t()
@@ -781,26 +799,6 @@ struct posixfs_defer_open_evt_t
 	x_smbd_requ_t * const smbd_requ;
 };
 
-static void posixfs_defer_open_func(x_smbd_conn_t *smbd_conn, x_fdevt_user_t *fdevt_user, bool terminated)
-{
-	posixfs_defer_open_evt_t *evt = X_CONTAINER_OF(fdevt_user,
-			posixfs_defer_open_evt_t, base);
-	X_LOG_DBG("evt=%p", evt);
-
-	if (!terminated) {
-		x_smbd_requ_t *smbd_requ = evt->smbd_requ;
-		/* TODO check if it already cancelled */
-		x_smbd_conn_unset_async(smbd_conn, smbd_requ);
-		std::unique_ptr<x_smb2_state_create_t> state{(x_smb2_state_create_t *)smbd_requ->requ_state};
-		NTSTATUS status = x_smbd_tcon_op_create(smbd_requ, state);
-		if (!NT_STATUS_EQUAL(status, NT_STATUS_PENDING)) {
-			smbd_requ->async_done_fn(smbd_conn, smbd_requ, status);
-		}
-	}
-
-	delete evt;
-}
-
 static void share_mode_modified(posixfs_object_t *posixfs_object,
 		posixfs_stream_t *posixfs_stream)
 {
@@ -808,39 +806,41 @@ static void share_mode_modified(posixfs_object_t *posixfs_object,
 	while (x_smbd_requ_t *smbd_requ = posixfs_stream->defer_open_list.get_front()) {
 		posixfs_stream->defer_open_list.remove(smbd_requ);
 		posixfs_defer_open_evt_t *evt = new posixfs_defer_open_evt_t(smbd_requ);
-		x_smbd_chan_post_user(smbd_requ->smbd_chan, &evt->base);
+		X_SMBD_CHAN_POST_USER(smbd_requ->smbd_chan, evt);
 	}
 }
 
 struct posixfs_notify_evt_t
 {
+	static void func(x_smbd_conn_t *smbd_conn, x_fdevt_user_t *fdevt_user, bool terminated)
+	{
+		posixfs_notify_evt_t *evt = X_CONTAINER_OF(fdevt_user, posixfs_notify_evt_t, base);
+		X_LOG_DBG("evt=%p", evt);
+
+		if (!terminated) {
+			x_smbd_requ_t *smbd_requ = evt->smbd_requ;
+			x_smb2_state_notify_t *state{(x_smb2_state_notify_t *)smbd_requ->requ_state};
+			NTSTATUS status = x_smb2_notify_marshall(evt->notify_changes,
+					state->in_output_buffer_length, state->out_data);
+			smbd_requ->async_done_fn(smbd_conn, smbd_requ, status);
+		}
+
+		delete evt;
+	}
+
 	posixfs_notify_evt_t(x_smbd_requ_t *requ,
 			std::vector<std::pair<uint32_t, std::u16string>> &&changes)
-		: smbd_requ(requ), notify_changes(changes)
-	{ }
-	~posixfs_notify_evt_t() {
+		: base(func), smbd_requ(requ), notify_changes(changes)
+	{
+	}
+	~posixfs_notify_evt_t()
+	{
 		x_smbd_ref_dec(smbd_requ);
 	}
 	x_fdevt_user_t base;
-	x_smbd_requ_t *smbd_requ;
-	std::vector<std::pair<uint32_t, std::u16string>> notify_changes;
+	x_smbd_requ_t * const smbd_requ;
+	std::vector<std::pair<uint32_t, std::u16string>> const notify_changes;
 };
-
-static void posixfs_notify_func(x_smbd_conn_t *smbd_conn, x_fdevt_user_t *fdevt_user, bool terminated)
-{
-	posixfs_notify_evt_t *evt = X_CONTAINER_OF(fdevt_user, posixfs_notify_evt_t, base);
-	X_LOG_DBG("evt=%p", evt);
-
-	if (!terminated) {
-		x_smbd_requ_t *smbd_requ = evt->smbd_requ;
-		x_smb2_state_notify_t *state{(x_smb2_state_notify_t *)smbd_requ->requ_state};
-		NTSTATUS status = x_smb2_notify_marshall(evt->notify_changes,
-				state->in_output_buffer_length, state->out_data);
-		smbd_requ->async_done_fn(smbd_conn, smbd_requ, status);
-	}
-
-	delete evt;
-}
 
 void posixfs_object_notify_change(x_smbd_object_t *smbd_object,
 		uint32_t notify_action,
@@ -904,12 +904,9 @@ void posixfs_object_notify_change(x_smbd_object_t *smbd_object,
 
 		/* TODO should be in context of conn */
 		x_smbd_requ_async_remove(smbd_requ); // remove from async
-		posixfs_notify_evt_t *evt = new posixfs_notify_evt_t(smbd_requ,
-				std::move(notify_changes));
-		evt->base.func = posixfs_notify_func;
-		if (!x_smbd_chan_post_user(smbd_requ->smbd_chan, &evt->base)) {
-			delete evt;
-		}
+		X_SMBD_CHAN_POST_USER(smbd_requ->smbd_chan, 
+				new posixfs_notify_evt_t(smbd_requ,
+					std::move(notify_changes)));
 		lock.lock();
 	}
 }
@@ -1248,30 +1245,44 @@ static inline uint8_t get_lease_type(const posixfs_open_t *posixfs_open)
 	}
 }
 
-static void posixfs_send_lease_break_func(x_smbd_conn_t *smbd_conn, x_fdevt_user_t *fdevt_user, bool terminated);
 struct posixfs_send_lease_break_evt_t
 {
+	static void func(x_smbd_conn_t *smbd_conn, x_fdevt_user_t *fdevt_user, bool terminated)
+	{
+		posixfs_send_lease_break_evt_t *evt = X_CONTAINER_OF(fdevt_user,
+				posixfs_send_lease_break_evt_t, base);
+		X_LOG_DBG("evt=%p", evt);
+
+		if (!terminated) {
+			x_smb2_send_lease_break(smbd_conn,
+					evt->smbd_sess,
+					&evt->lease_key,
+					evt->curr_state,
+					evt->new_state,
+					evt->new_epoch,
+					evt->flags);
+		}
+		delete evt;
+	}
+
 	posixfs_send_lease_break_evt_t(x_smbd_sess_t *smbd_sess,
 			const x_smb2_lease_key_t &lease_key,
 			uint8_t curr_state,
 			uint8_t new_state,
 			uint16_t new_epoch,
 			uint32_t flags)
-		: smbd_sess(smbd_sess)
+		: base(func), smbd_sess(smbd_sess)
 		, lease_key(lease_key)
 		, curr_state(curr_state)
 		, new_state(new_state)
 		, new_epoch(new_epoch)
 		, flags(flags)
 	{
-		base.func = posixfs_send_lease_break_func;
 	}
 
 	~posixfs_send_lease_break_evt_t()
 	{
-		if (smbd_sess) {
-			x_smbd_ref_dec(smbd_sess);
-		}
+		x_smbd_ref_dec(smbd_sess);
 	}
 
 	x_fdevt_user_t base;
@@ -1281,24 +1292,6 @@ struct posixfs_send_lease_break_evt_t
 	const uint16_t new_epoch;
 	const uint32_t flags;
 };
-
-static void posixfs_send_lease_break_func(x_smbd_conn_t *smbd_conn, x_fdevt_user_t *fdevt_user, bool terminated)
-{
-	posixfs_send_lease_break_evt_t *evt = X_CONTAINER_OF(fdevt_user,
-			posixfs_send_lease_break_evt_t, base);
-	X_LOG_DBG("evt=%p", evt);
-
-	if (!terminated) {
-		x_smb2_send_lease_break(smbd_conn,
-				evt->smbd_sess,
-				&evt->lease_key,
-				evt->curr_state,
-				evt->new_state,
-				evt->new_epoch,
-				evt->flags);
-	}
-	delete evt;
-}
 
 static void do_break_lease(posixfs_open_t *posixfs_open,
 		const x_smb2_lease_key_t *ignore_lease_key,
@@ -1318,65 +1311,54 @@ static void do_break_lease(posixfs_open_t *posixfs_open,
 	}
 
 	x_smbd_sess_t *smbd_sess = x_smbd_tcon_get_sess(posixfs_open->base.smbd_tcon);
-	posixfs_send_lease_break_evt_t *evt = new posixfs_send_lease_break_evt_t(
-			smbd_sess, lease_key, curr_state, break_to, new_epoch, flags);
-
-	bool posted = x_smbd_sess_post_user(smbd_sess, &evt->base);
-	if (posted) {
-		return;
-	}
-
+	X_SMBD_SESS_POST_USER(smbd_sess, new posixfs_send_lease_break_evt_t(
+				smbd_sess, lease_key, curr_state, break_to,
+				new_epoch, flags));
 	/* if posted fails, the connection is in shutdown,
 	 * and it eventually close the open and wakeup the
 	 * defer opens
 	 */
-	X_LOG_ERR("failed to post send_lease_break %p", smbd_sess);
-	delete evt;
 }
 
-static void posixfs_send_oplock_break_func(x_smbd_conn_t *smbd_conn, x_fdevt_user_t *fdevt_user, bool terminated);
 struct posixfs_send_oplock_break_evt_t
 {
+	static void func(x_smbd_conn_t *smbd_conn, x_fdevt_user_t *fdevt_user, bool terminated)
+	{
+		posixfs_send_oplock_break_evt_t *evt = X_CONTAINER_OF(fdevt_user,
+				posixfs_send_oplock_break_evt_t, base);
+		X_LOG_DBG("evt=%p", evt);
+
+		if (!terminated) {
+			x_smb2_send_oplock_break(smbd_conn,
+					evt->smbd_sess,
+					evt->open_persistent_id,
+					evt->open_volatile_id,
+					evt->oplock_level);
+		}
+		delete evt;
+	}
+
 	posixfs_send_oplock_break_evt_t(x_smbd_sess_t *smbd_sess,
 			uint64_t open_persistent_id,
 			uint64_t open_volatile_id,
 			uint8_t oplock_level)
-		: smbd_sess(smbd_sess)
+		: base(func), smbd_sess(smbd_sess)
 		, open_persistent_id(open_persistent_id)
 		, open_volatile_id(open_volatile_id)
 		, oplock_level(oplock_level)
 	{
-		base.func = posixfs_send_oplock_break_func;
 	}
 
 	~posixfs_send_oplock_break_evt_t()
 	{
-		if (smbd_sess) {
-			x_smbd_ref_dec(smbd_sess);
-		}
+		x_smbd_ref_dec(smbd_sess);
 	}
 
 	x_fdevt_user_t base;
-	x_smbd_sess_t *smbd_sess = nullptr;
-	uint64_t open_persistent_id, open_volatile_id;
-	uint8_t oplock_level;
+	x_smbd_sess_t * const smbd_sess;
+	uint64_t const open_persistent_id, open_volatile_id;
+	uint8_t const oplock_level;
 };
-
-static void posixfs_send_oplock_break_func(x_smbd_conn_t *smbd_conn, x_fdevt_user_t *fdevt_user, bool terminated)
-{
-	posixfs_send_oplock_break_evt_t *evt = X_CONTAINER_OF(fdevt_user,
-			posixfs_send_oplock_break_evt_t, base);
-	X_LOG_DBG("evt=%p", evt);
-
-	if (!terminated) {
-		x_smb2_send_oplock_break(smbd_conn,
-				evt->smbd_sess,
-				evt->open_persistent_id,
-				evt->open_volatile_id,
-				evt->oplock_level);
-	}
-	delete evt;
-}
 
 static void do_break_oplock(posixfs_open_t *posixfs_open,
 		uint8_t break_to)
@@ -1385,22 +1367,14 @@ static void do_break_oplock(posixfs_open_t *posixfs_open,
 	/* already hold posixfs_object mutex */
 	auto [ persistent_id, volatile_id ] = x_smbd_open_get_id(&posixfs_open->base); 
 	x_smbd_sess_t *smbd_sess = x_smbd_tcon_get_sess(posixfs_open->base.smbd_tcon);
-	posixfs_send_oplock_break_evt_t *evt = new posixfs_send_oplock_break_evt_t(
-			smbd_sess, persistent_id, volatile_id,
-			break_to == X_SMB2_LEASE_READ ? X_SMB2_OPLOCK_LEVEL_II :
-				X_SMB2_OPLOCK_LEVEL_NONE);
-
-	bool posted = x_smbd_sess_post_user(smbd_sess, &evt->base);
-	if (posted) {
-		return;
-	}
-
+	X_SMBD_SESS_POST_USER(smbd_sess, new posixfs_send_oplock_break_evt_t(
+				smbd_sess, persistent_id, volatile_id,
+				break_to == X_SMB2_LEASE_READ ? X_SMB2_OPLOCK_LEVEL_II :
+					X_SMB2_OPLOCK_LEVEL_NONE));
 	/* if posted fails, the connection is in shutdown,
 	 * and it eventually close the open and wakeup the
 	 * defer opens
 	 */
-	X_LOG_ERR("failed to post send_oplock_break %p", smbd_sess);
-	delete evt;
 }
 
 /* caller locked posixfs_object */
@@ -3023,29 +2997,32 @@ NTSTATUS posixfs_object_op_close(
 
 struct posixfs_read_evt_t
 {
+	static void func(x_smbd_conn_t *smbd_conn, x_fdevt_user_t *fdevt_user, bool cancelled)
+	{
+		posixfs_read_evt_t *evt = X_CONTAINER_OF(fdevt_user, posixfs_read_evt_t, base);
+		X_LOG_DBG("evt=%p", evt);
+
+		if (!cancelled) {
+			x_smbd_requ_t *smbd_requ = evt->smbd_requ;
+			x_smbd_conn_unset_async(smbd_conn, smbd_requ);
+			smbd_requ->async_done_fn(smbd_conn, smbd_requ, evt->status);
+		}
+
+		delete evt;
+	}
+
 	posixfs_read_evt_t(x_smbd_requ_t *r, NTSTATUS s)
-		: smbd_requ(r), status(s) { }
-	~posixfs_read_evt_t() {
+		: base(func), smbd_requ(r), status(s)
+	{
+	}
+	~posixfs_read_evt_t()
+	{
 		x_smbd_ref_dec(smbd_requ);
 	}
 	x_fdevt_user_t base;
-	x_smbd_requ_t *smbd_requ;
+	x_smbd_requ_t * const smbd_requ;
 	NTSTATUS const status;
 };
-
-static void posixfs_read_evt_func(x_smbd_conn_t *smbd_conn, x_fdevt_user_t *fdevt_user, bool cancelled)
-{
-	posixfs_read_evt_t *evt = X_CONTAINER_OF(fdevt_user, posixfs_read_evt_t, base);
-	X_LOG_DBG("evt=%p", evt);
-
-	if (!cancelled) {
-		x_smbd_requ_t *smbd_requ = evt->smbd_requ;
-		x_smbd_conn_unset_async(smbd_conn, smbd_requ);
-		smbd_requ->async_done_fn(smbd_conn, smbd_requ, evt->status);
-	}
-
-	delete evt;
-}
 
 struct posixfs_read_job_t
 {
@@ -3083,9 +3060,8 @@ static x_job_t::retval_t posixfs_read_job_run(x_job_t *job)
 	}
 
 	posixfs_object_release(posixfs_object);
-	posixfs_read_evt_t *evt = new posixfs_read_evt_t(smbd_requ, status);
-	evt->base.func = posixfs_read_evt_func;
-	x_smbd_chan_post_user(smbd_requ->smbd_chan, &evt->base);
+	X_SMBD_CHAN_POST_USER(smbd_requ->smbd_chan,
+			new posixfs_read_evt_t(smbd_requ, status));
 	return x_job_t::JOB_DONE;
 }
 
@@ -3245,29 +3221,32 @@ NTSTATUS posixfs_object_op_read(
 
 struct posixfs_write_evt_t
 {
+	static void func(x_smbd_conn_t *smbd_conn, x_fdevt_user_t *fdevt_user, bool cancelled)
+	{
+		posixfs_write_evt_t *evt = X_CONTAINER_OF(fdevt_user, posixfs_write_evt_t, base);
+		X_LOG_DBG("evt=%p", evt);
+
+		if (!cancelled) {
+			x_smbd_requ_t *smbd_requ = evt->smbd_requ;
+			x_smbd_conn_unset_async(smbd_conn, smbd_requ);
+			smbd_requ->async_done_fn(smbd_conn, smbd_requ, evt->status);
+		}
+
+		delete evt;
+	}
+
 	posixfs_write_evt_t(x_smbd_requ_t *r, NTSTATUS s)
-		: smbd_requ(r), status(s) { }
-	~posixfs_write_evt_t() {
+		: base(func), smbd_requ(r), status(s)
+	{
+	}
+	~posixfs_write_evt_t()
+	{
 		x_smbd_ref_dec(smbd_requ);
 	}
 	x_fdevt_user_t base;
-	x_smbd_requ_t *smbd_requ;
+	x_smbd_requ_t * const smbd_requ;
 	NTSTATUS const status;
 };
-
-static void posixfs_write_evt_func(x_smbd_conn_t *smbd_conn, x_fdevt_user_t *fdevt_user, bool cancelled)
-{
-	posixfs_write_evt_t *evt = X_CONTAINER_OF(fdevt_user, posixfs_write_evt_t, base);
-	X_LOG_DBG("evt=%p", evt);
-
-	if (!cancelled) {
-		x_smbd_requ_t *smbd_requ = evt->smbd_requ;
-		x_smbd_conn_unset_async(smbd_conn, smbd_requ);
-		smbd_requ->async_done_fn(smbd_conn, smbd_requ, evt->status);
-	}
-
-	delete evt;
-}
 
 struct posixfs_write_job_t
 {
@@ -3310,9 +3289,8 @@ static x_job_t::retval_t posixfs_write_job_run(x_job_t *job)
 	}
 
 	posixfs_object_release(posixfs_object);
-	posixfs_write_evt_t *evt = new posixfs_write_evt_t(smbd_requ, status);
-	evt->base.func = posixfs_write_evt_func;
-	x_smbd_chan_post_user(smbd_requ->smbd_chan, &evt->base);
+	X_SMBD_CHAN_POST_USER(smbd_requ->smbd_chan,
+			new posixfs_write_evt_t(smbd_requ, status));
 	return x_job_t::JOB_DONE;
 }
 
@@ -3444,28 +3422,30 @@ static void posixfs_lock_cancel(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_re
 
 struct posixfs_lock_evt_t
 {
+	static void func(x_smbd_conn_t *smbd_conn, x_fdevt_user_t *fdevt_user, bool terminated)
+	{
+		posixfs_lock_evt_t *evt = X_CONTAINER_OF(fdevt_user, posixfs_lock_evt_t, base);
+		X_LOG_DBG("evt=%p", evt);
+
+		if (!terminated) {
+			x_smbd_requ_t *smbd_requ = evt->smbd_requ;
+			smbd_requ->async_done_fn(smbd_conn, smbd_requ, NT_STATUS_OK);
+		}
+
+		delete evt;
+	}
+
 	explicit posixfs_lock_evt_t(x_smbd_requ_t *requ)
-		: smbd_requ(requ)
-	{ }
-	~posixfs_lock_evt_t() {
+		: base(func), smbd_requ(requ)
+	{
+	}
+	~posixfs_lock_evt_t()
+	{
 		x_smbd_ref_dec(smbd_requ);
 	}
 	x_fdevt_user_t base;
-	x_smbd_requ_t *smbd_requ;
+	x_smbd_requ_t * const smbd_requ;
 };
-
-static void posixfs_lock_func(x_smbd_conn_t *smbd_conn, x_fdevt_user_t *fdevt_user, bool terminated)
-{
-	posixfs_lock_evt_t *evt = X_CONTAINER_OF(fdevt_user, posixfs_lock_evt_t, base);
-	X_LOG_DBG("evt=%p", evt);
-
-	if (!terminated) {
-		x_smbd_requ_t *smbd_requ = evt->smbd_requ;
-		smbd_requ->async_done_fn(smbd_conn, smbd_requ, NT_STATUS_OK);
-	}
-
-	delete evt;
-}
 
 static void posixfs_re_lock(posixfs_stream_t *posixfs_stream)
 {
@@ -3482,10 +3462,7 @@ static void posixfs_re_lock(posixfs_stream_t *posixfs_stream)
 				// TODO should be in context of conn
 				x_smbd_requ_async_remove(smbd_requ); // remove from async
 				posixfs_lock_evt_t *evt = new posixfs_lock_evt_t(smbd_requ);
-				evt->base.func = posixfs_lock_func;
-				if (!x_smbd_chan_post_user(smbd_requ->smbd_chan, &evt->base)) {
-					delete evt;
-				}
+				X_SMBD_CHAN_POST_USER(smbd_requ->smbd_chan, evt);
 			}
 			smbd_requ = next_requ;
 		}

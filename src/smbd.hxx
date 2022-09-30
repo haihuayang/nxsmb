@@ -168,8 +168,13 @@ struct x_smbd_key_set_t
 
 struct x_fdevt_user_t
 {
+	typedef void func_t(x_smbd_conn_t *smbd_conn, x_fdevt_user_t *, bool terminated);
+	x_fdevt_user_t(func_t f) : func(f) {}
+	x_fdevt_user_t(const x_fdevt_user_t &) = delete;
+	x_fdevt_user_t &operator=(const x_fdevt_user_t &) = delete;
 	x_dlink_t link;
-	void (*func)(x_smbd_conn_t *smbd_conn, x_fdevt_user_t *, bool terminated);
+	func_t *const func;
+	// void (* cbfunc)(x_smbd_conn_t *smbd_conn, x_fdevt_user_t *, bool terminated);
 };
 X_DECLARE_MEMBER_TRAITS(fdevt_user_conn_traits, x_fdevt_user_t, link)
 
@@ -198,6 +203,14 @@ const x_smb2_preauth_t *x_smbd_conn_get_preauth(x_smbd_conn_t *smbd_conn);
 void x_smbd_conn_link_chan(x_smbd_conn_t *smbd_conn, x_dlink_t *link);
 void x_smbd_conn_unlink_chan(x_smbd_conn_t *smbd_conn, x_dlink_t *link);
 bool x_smbd_conn_post_user(x_smbd_conn_t *smbd_conn, x_fdevt_user_t *fdevt_user);
+#define X_SMBD_CHAN_POST_USER(smbd_chan, evt) do { \
+	auto __evt = (evt); \
+	if (!x_smbd_chan_post_user((smbd_chan), &__evt->base)) { \
+		X_LOG_WARN("x_smbd_chan_post_user failed post evt"); \
+		delete __evt; \
+	} \
+} while (0)
+
 void x_smbd_conn_post_cancel(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ);
 void x_smbd_conn_send_unsolicited(x_smbd_conn_t *smbd_conn, x_smbd_sess_t *smbd_sess,
 		x_bufref_t *buf, uint16_t opcode);
@@ -206,7 +219,7 @@ void x_smbd_conn_set_async(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ,
 		void (*cancel_fn)(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ));
 void x_smbd_conn_unset_async(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ);
 void x_smb2_sesssetup_done(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ, NTSTATUS status,
-		std::vector<uint8_t> &out_security);
+		const std::vector<uint8_t> &out_security);
 void x_smb2_reply(x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ,
 		x_bufref_t *buf_head,
@@ -234,6 +247,14 @@ bool x_smbd_sess_link_tcon(x_smbd_sess_t *smbd_sess, x_dlink_t *link);
 bool x_smbd_sess_unlink_tcon(x_smbd_sess_t *smbd_sess, x_dlink_t *link);
 const x_smb2_key_t *x_smbd_sess_get_signing_key(const x_smbd_sess_t *smbd_sess);
 bool x_smbd_sess_post_user(x_smbd_sess_t *smbd_sess, x_fdevt_user_t *evt);
+#define X_SMBD_SESS_POST_USER(smbd_sess, evt) do { \
+	auto __evt = (evt); \
+	if (!x_smbd_sess_post_user((smbd_sess), &__evt->base)) { \
+		X_LOG_WARN("x_smbd_sess_post_user failed"); \
+		delete __evt; \
+	} \
+} while (0)
+
 
 
 

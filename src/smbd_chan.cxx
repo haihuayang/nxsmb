@@ -284,10 +284,28 @@ static bool smbd_chan_cancel_timer(x_smbd_chan_t *smbd_chan)
 
 struct smbd_chan_auth_timeout_evt_t
 {
-	explicit smbd_chan_auth_timeout_evt_t(x_smbd_chan_t *smbd_chan)
-		: smbd_chan(smbd_chan) { }
+	static void func(x_smbd_conn_t *smbd_conn, x_fdevt_user_t *fdevt_user, bool terminated)
+	{
+		smbd_chan_auth_timeout_evt_t *evt = X_CONTAINER_OF(fdevt_user, smbd_chan_auth_timeout_evt_t, base);
 
-	~smbd_chan_auth_timeout_evt_t() {
+		if (!terminated) {
+			x_smbd_chan_t *smbd_chan = evt->smbd_chan;
+			if (smbd_chan->state == x_smbd_chan_t::S_WAIT_INPUT) {
+				smbd_chan->state = x_smbd_chan_t::S_FAILED;
+				smbd_chan_unlink_conn(smbd_chan, smbd_conn);
+				smbd_chan_unlink_sess(smbd_chan, smbd_chan->smbd_sess);
+			}
+		}
+		delete evt;
+	}
+
+	explicit smbd_chan_auth_timeout_evt_t(x_smbd_chan_t *smbd_chan)
+		: base(func), smbd_chan(smbd_chan)
+	{
+	}
+
+	~smbd_chan_auth_timeout_evt_t()
+	{
 		if (smbd_chan) {
 			x_smbd_ref_dec(smbd_chan);
 		}
@@ -297,42 +315,23 @@ struct smbd_chan_auth_timeout_evt_t
 	x_smbd_chan_t *smbd_chan;
 };
 
-static void smbd_chan_auth_timeout_evt_func(x_smbd_conn_t *smbd_conn, x_fdevt_user_t *fdevt_user, bool terminated)
-{
-	smbd_chan_auth_timeout_evt_t *evt = X_CONTAINER_OF(fdevt_user, smbd_chan_auth_timeout_evt_t, base);
-
-	if (!terminated) {
-		x_smbd_chan_t *smbd_chan = evt->smbd_chan;
-		if (smbd_chan->state == x_smbd_chan_t::S_WAIT_INPUT) {
-			smbd_chan->state = x_smbd_chan_t::S_FAILED;
-			smbd_chan_unlink_conn(smbd_chan, smbd_conn);
-			smbd_chan_unlink_sess(smbd_chan, smbd_chan->smbd_sess);
-		}
-	}
-	delete evt;
-}
-
 static void smbd_chan_auth_input_timeout(x_timerq_entry_t *timerq_entry)
 {
 	/* we already have a ref on smbd_chan when adding timer */
 	x_smbd_chan_t *smbd_chan = X_CONTAINER_OF(timerq_entry, x_smbd_chan_t, timer);
-	smbd_chan_auth_timeout_evt_t *evt = new smbd_chan_auth_timeout_evt_t(smbd_chan);
-	evt->base.func = smbd_chan_auth_timeout_evt_func;
-	if (!x_smbd_conn_post_user(smbd_chan->smbd_conn, &evt->base)) {
-		/* smbd_conn is done, smbd_chan is decref by deleting evt */
-		delete evt;
-	}
+	X_SMBD_CHAN_POST_USER(smbd_chan, 
+			new smbd_chan_auth_timeout_evt_t(smbd_chan));
 }
 
 /* this function is in context of smbd_conn */
 static NTSTATUS smbd_chan_auth_updated(x_smbd_chan_t *smbd_chan, x_smbd_requ_t *smbd_requ,
 		NTSTATUS status,
-		std::shared_ptr<x_auth_info_t> &auth_info)
+		const x_auth_info_t &auth_info)
 {
 	X_LOG_OP("%ld RESP 0x%x", smbd_requ->in_mid, status.v);
 
 	if (NT_STATUS_IS_OK(status)) {
-		status = smbd_chan_auth_succeeded(smbd_chan, *auth_info);
+		status = smbd_chan_auth_succeeded(smbd_chan, auth_info);
 		if (NT_STATUS_IS_OK(status)) {
 			smbd_requ->out_hdr_flags |= SMB2_HDR_FLAG_SIGNED;
 		}
@@ -348,43 +347,45 @@ static NTSTATUS smbd_chan_auth_updated(x_smbd_chan_t *smbd_chan, x_smbd_requ_t *
 
 struct smbd_chan_auth_upcall_evt_t
 {
+	static void func(x_smbd_conn_t *smbd_conn, x_fdevt_user_t *fdevt_user, bool terminated)
+	{
+		smbd_chan_auth_upcall_evt_t *evt = X_CONTAINER_OF(fdevt_user, smbd_chan_auth_upcall_evt_t, base);
+
+		if (!terminated) {
+			x_smbd_chan_t *smbd_chan = evt->smbd_chan;
+			X_ASSERT(smbd_chan->auth_requ);
+			x_smbd_ptr_t<x_smbd_requ_t> smbd_requ{std::exchange(smbd_chan->auth_requ, nullptr)};
+
+			if (smbd_chan_set_state(smbd_chan, x_smbd_chan_t::S_PROCESSING,
+						x_smbd_chan_t::S_BLOCKED)) {
+				NTSTATUS status = smbd_chan_auth_updated(smbd_chan, smbd_requ, evt->status,
+						*evt->auth_info);
+				x_smb2_sesssetup_done(smbd_chan->smbd_conn, smbd_requ, status, evt->out_security);
+			}
+		}
+		delete evt;
+	}
+
 	smbd_chan_auth_upcall_evt_t(x_smbd_chan_t *smbd_chan,
 			NTSTATUS status, std::vector<uint8_t> &out_security,
 			std::shared_ptr<x_auth_info_t> &auth_info)
-		: smbd_chan(smbd_chan), status(status)
+		: base(func)
+		, smbd_chan(smbd_chan), status(status)
 		, out_security(std::move(out_security)), auth_info(auth_info)
-	{ }
-	~smbd_chan_auth_upcall_evt_t() {
-		if (smbd_chan) {
-			x_smbd_ref_dec(smbd_chan);
-		}
+	{
+	}
+
+	~smbd_chan_auth_upcall_evt_t()
+	{
+		x_smbd_ref_dec(smbd_chan);
 	}
 
 	x_fdevt_user_t base;
-	x_smbd_chan_t *smbd_chan;
-	NTSTATUS status;
-	std::vector<uint8_t> out_security;
-	std::shared_ptr<x_auth_info_t> auth_info;
+	x_smbd_chan_t *const smbd_chan;
+	NTSTATUS const status;
+	std::vector<uint8_t> const out_security;
+	std::shared_ptr<x_auth_info_t> const auth_info;
 };
-
-static void smbd_chan_auth_upcall_evt_func(x_smbd_conn_t *smbd_conn, x_fdevt_user_t *fdevt_user, bool terminated)
-{
-	smbd_chan_auth_upcall_evt_t *evt = X_CONTAINER_OF(fdevt_user, smbd_chan_auth_upcall_evt_t, base);
-
-	if (!terminated) {
-		x_smbd_chan_t *smbd_chan = evt->smbd_chan;
-		X_ASSERT(smbd_chan->auth_requ);
-		x_smbd_ptr_t<x_smbd_requ_t> smbd_requ{std::exchange(smbd_chan->auth_requ, nullptr)};
-
-		if (smbd_chan_set_state(smbd_chan, x_smbd_chan_t::S_PROCESSING,
-					x_smbd_chan_t::S_BLOCKED)) {
-			NTSTATUS status = smbd_chan_auth_updated(smbd_chan, smbd_requ, evt->status,
-					evt->auth_info);
-			x_smb2_sesssetup_done(smbd_chan->smbd_conn, smbd_requ, status, evt->out_security);
-		}
-	}
-	delete evt;
-}
 
 static void smbd_chan_auth_upcall_func(x_auth_upcall_t *auth_upcall, NTSTATUS status,
 		std::vector<uint8_t> &out_security, std::shared_ptr<x_auth_info_t> &auth_info)
@@ -392,12 +393,8 @@ static void smbd_chan_auth_upcall_func(x_auth_upcall_t *auth_upcall, NTSTATUS st
 	X_ASSERT(!NT_STATUS_EQUAL(status, X_NT_STATUS_INTERNAL_BLOCKED));
 	x_smbd_chan_t *smbd_chan = X_CONTAINER_OF(auth_upcall, x_smbd_chan_t, auth_upcall);
 	X_LOG_DBG("smbd_chan=%p, status=0x%x", smbd_chan, NT_STATUS_V(status));
-	smbd_chan_auth_upcall_evt_t *evt = new smbd_chan_auth_upcall_evt_t(
-			smbd_chan, status, out_security, auth_info);
-	evt->base.func = smbd_chan_auth_upcall_evt_func;
-	if (!x_smbd_conn_post_user(smbd_chan->smbd_conn, &evt->base)) {
-		delete evt;
-	}
+	X_SMBD_CHAN_POST_USER(smbd_chan, new smbd_chan_auth_upcall_evt_t(
+				smbd_chan, status, out_security, auth_info));
 }
 
 static const struct x_auth_cbs_t smbd_chan_auth_upcall_cbs = {
@@ -434,7 +431,7 @@ NTSTATUS x_smbd_chan_update_auth(x_smbd_chan_t *smbd_chan,
 		x_smbd_ref_inc(smbd_chan);
 		smbd_chan->auth_requ = x_smbd_ref_inc(smbd_requ);
 	} else {
-		status = smbd_chan_auth_updated(smbd_chan, smbd_requ, status, auth_info);
+		status = smbd_chan_auth_updated(smbd_chan, smbd_requ, status, *auth_info);
 	}
 	return status;
 }
@@ -501,20 +498,6 @@ x_smbd_chan_t *x_smbd_chan_get_active(x_dlink_t *sess_link)
 	return nullptr;
 }
 
-struct smbd_chan_logoff_evt_t
-{
-	smbd_chan_logoff_evt_t(x_smbd_chan_t *smbd_chan)
-		: smbd_chan(smbd_chan)
-	{ }
-	~smbd_chan_logoff_evt_t() {
-		if (smbd_chan) {
-			x_smbd_ref_dec(smbd_chan);
-		}
-	}
-	x_fdevt_user_t base;
-	x_smbd_chan_t *smbd_chan;
-};
-
 static void smbd_chan_logoff(x_smbd_conn_t *smbd_conn, x_smbd_chan_t *smbd_chan)
 {
 	smbd_chan_unlink_conn(smbd_chan, smbd_conn);
@@ -525,14 +508,30 @@ static void smbd_chan_logoff(x_smbd_conn_t *smbd_conn, x_smbd_chan_t *smbd_chan)
 	smbd_chan->state = x_smbd_chan_t::S_DONE;
 }
 
-static void smbd_chan_logoff_evt_func(x_smbd_conn_t *smbd_conn, x_fdevt_user_t *fdevt_user, bool terminated)
+struct smbd_chan_logoff_evt_t
 {
-	smbd_chan_logoff_evt_t *evt = X_CONTAINER_OF(fdevt_user, smbd_chan_logoff_evt_t, base);
-	if (!terminated) {
-		smbd_chan_logoff(smbd_conn, evt->smbd_chan);
+	static void func(x_smbd_conn_t *smbd_conn, x_fdevt_user_t *fdevt_user, bool terminated)
+	{
+		smbd_chan_logoff_evt_t *evt = X_CONTAINER_OF(fdevt_user, smbd_chan_logoff_evt_t, base);
+		if (!terminated) {
+			smbd_chan_logoff(smbd_conn, evt->smbd_chan);
+		}
+		delete evt;
 	}
-	delete evt;
-}
+
+	explicit smbd_chan_logoff_evt_t(x_smbd_chan_t *smbd_chan)
+		: base(func), smbd_chan(smbd_chan)
+	{
+	}
+
+	~smbd_chan_logoff_evt_t()
+	{
+		x_smbd_ref_dec(smbd_chan);
+	}
+
+	x_fdevt_user_t base;
+	x_smbd_chan_t * const smbd_chan;
+};
 
 /* triggered by session logoff, may not in context of smbd_conn */
 void x_smbd_chan_logoff(x_dlink_t *sess_link, x_smbd_sess_t *smbd_sess)
@@ -542,11 +541,7 @@ void x_smbd_chan_logoff(x_dlink_t *sess_link, x_smbd_sess_t *smbd_sess)
 		smbd_chan_logoff(g_smbd_conn_curr, smbd_chan);
 		x_smbd_ref_dec(smbd_chan);
 	} else {
-		smbd_chan_logoff_evt_t *evt = new smbd_chan_logoff_evt_t(smbd_chan);
-		evt->base.func = smbd_chan_logoff_evt_func;
-		if (!x_smbd_conn_post_user(smbd_chan->smbd_conn, &evt->base)) {
-			delete evt;
-		}
+		X_SMBD_CHAN_POST_USER(smbd_chan, new smbd_chan_logoff_evt_t(smbd_chan));
 	}
 }
 
