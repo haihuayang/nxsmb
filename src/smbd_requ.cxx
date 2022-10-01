@@ -17,6 +17,7 @@ x_smbd_requ_t::x_smbd_requ_t(x_buf_t *in_buf, uint32_t in_msgsize)
 x_smbd_requ_t::~x_smbd_requ_t()
 {
 	X_LOG_DBG("free %p", this);
+	X_ASSERT(!requ_state);
 	x_buf_release(in_buf);
 
 	while (out_buf_head) {
@@ -75,29 +76,37 @@ x_smbd_requ_t *x_smbd_requ_async_lookup(uint64_t id, const x_smbd_conn_t *smbd_c
 	}
 
 	x_smbd_requ_t *smbd_requ = ret.second;
-	if (!smbd_requ->async || x_smbd_chan_get_conn(smbd_requ->smbd_chan) != smbd_conn) {
+	if (x_smbd_chan_get_conn(smbd_requ->smbd_chan) != smbd_conn) {
 		x_smbd_ref_dec(smbd_requ);
 		return nullptr;
 	}
 
 	if (remove) {
-		smbd_requ->async = false;
 		x_smbd_ref_dec(smbd_requ);
 	}
 	return smbd_requ;
 }
 
-void x_smbd_requ_async_insert(x_smbd_requ_t *smbd_requ)
+/* must be in context of smbd_conn */
+void x_smbd_requ_async_insert(x_smbd_requ_t *smbd_requ,
+		void (*cancel_fn)(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ))
 {
+	X_ASSERT(!smbd_requ->cancel_fn);
+	smbd_requ->cancel_fn = cancel_fn;
 	smbd_requ->async = true;
 	x_smbd_ref_inc(smbd_requ);
 }
 
-void x_smbd_requ_async_remove(x_smbd_requ_t *smbd_requ)
+/* must be in context of smbd_conn */
+bool x_smbd_requ_async_remove(x_smbd_requ_t *smbd_requ)
 {
 	X_ASSERT(smbd_requ->async);
-	smbd_requ->async = false;
+	if (!smbd_requ->cancel_fn) {
+		return false;
+	}
+	smbd_requ->cancel_fn = nullptr;
 	x_smbd_ref_dec(smbd_requ);
+	return true;
 }
 
 int x_smbd_requ_pool_init(uint32_t count)

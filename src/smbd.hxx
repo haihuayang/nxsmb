@@ -215,9 +215,6 @@ void x_smbd_conn_post_cancel(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 void x_smbd_conn_send_unsolicited(x_smbd_conn_t *smbd_conn, x_smbd_sess_t *smbd_sess,
 		x_bufref_t *buf, uint16_t opcode);
 void x_smbd_conn_send_remove_chan(x_smbd_conn_t *smbd_conn, x_smbd_chan_t *smbd_chan);
-void x_smbd_conn_set_async(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ,
-		void (*cancel_fn)(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ));
-void x_smbd_conn_unset_async(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ);
 void x_smb2_sesssetup_done(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ, NTSTATUS status,
 		const std::vector<uint8_t> &out_security);
 void x_smb2_reply(x_smbd_conn_t *smbd_conn,
@@ -370,8 +367,9 @@ int x_smbd_requ_pool_init(uint32_t count);
 x_smbd_requ_t *x_smbd_requ_create(x_buf_t *in_buf, uint32_t in_msgsize);
 uint64_t x_smbd_requ_get_async_id(const x_smbd_requ_t *smbd_requ);
 x_smbd_requ_t *x_smbd_requ_async_lookup(uint64_t id, const x_smbd_conn_t *smbd_conn, bool remove);
-void x_smbd_requ_async_insert(x_smbd_requ_t *smbd_requ);
-void x_smbd_requ_async_remove(x_smbd_requ_t *smbd_requ);
+void x_smbd_requ_async_insert(x_smbd_requ_t *smbd_requ,
+		void (*cancel_fn)(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ));
+bool x_smbd_requ_async_remove(x_smbd_requ_t *smbd_requ);
 
 
 NTSTATUS x_smbd_dfs_resolve_path(

@@ -395,7 +395,13 @@ static void x_smbd_conn_cancel(x_smbd_conn_t *smbd_conn, uint64_t async_id)
 		return;
 	}
 
-	smbd_requ->cancel_fn(smbd_conn, smbd_requ);
+	auto cancel_fn = smbd_requ->cancel_fn;
+	if (!cancel_fn) {
+		X_LOG_NOTICE("requ %ld, %p not cancellable", async_id, smbd_requ);
+	} else {
+		smbd_requ->cancel_fn = nullptr;
+		cancel_fn(smbd_conn, smbd_requ);
+	}
 	x_smbd_ref_dec(smbd_requ);
 }
 
@@ -442,7 +448,7 @@ static const struct {
 	{ x_smb2_process_write, true, true, },
 	{ x_smb2_process_lock, true, true, },
 	{ x_smb2_process_ioctl, true, true, },
-	{ x_smb2_process_cancel, false, false, },
+	{ nullptr, false, false, }, // OP_CANCEL
 	{ x_smb2_process_keepalive, false, false, },
 	{ x_smb2_process_query_directory, true, true, },
 	{ x_smb2_process_notify, true, true, },
@@ -1148,12 +1154,13 @@ void x_smbd_conn_requ_done(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ,
 
 struct x_smbd_cancel_evt_t
 {
-	static void func(x_smbd_conn_t *smbd_conn, x_fdevt_user_t *fdevt_user, bool cancelled)
+	static void func(x_smbd_conn_t *smbd_conn, x_fdevt_user_t *fdevt_user, bool terminated)
 	{
 		x_smbd_cancel_evt_t *evt = X_CONTAINER_OF(fdevt_user, x_smbd_cancel_evt_t, base);
-
 		x_smbd_requ_t *smbd_requ = evt->smbd_requ;
-		if (!cancelled) {
+		X_LOG_DBG("evt=%p, requ=%p, terminated=%d", evt, smbd_requ, terminated);
+
+		if (!terminated) {
 			smbd_requ->async_done_fn(smbd_conn, smbd_requ, NT_STATUS_CANCELLED);
 		}
 
@@ -1178,21 +1185,6 @@ void x_smbd_conn_post_cancel(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 	if (!x_smbd_conn_post_user(smbd_conn, &evt->base)) {
 		delete evt;
 	}
-}
-
-void x_smbd_conn_set_async(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ,
-		void (*cancel_fn)(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ))
-{
-	X_ASSERT(!smbd_requ->cancel_fn);
-	smbd_requ->cancel_fn = cancel_fn;
-	x_smbd_requ_async_insert(smbd_requ);
-}
-
-void x_smbd_conn_unset_async(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
-{
-	X_ASSERT(smbd_requ->cancel_fn);
-	x_smbd_requ_async_remove(smbd_requ);
-	smbd_requ->cancel_fn = nullptr;
 }
 
 NTSTATUS x_smbd_conn_validate_negotiate_info(const x_smbd_conn_t *smbd_conn,
