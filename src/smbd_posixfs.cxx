@@ -1379,9 +1379,14 @@ static bool delay_for_oplock(posixfs_object_t *posixfs_object,
 		posixfs_stream_t *posixfs_stream,
 		x_smbd_lease_t *smbd_lease,
 		uint32_t create_disposition,
+		uint32_t desired_access,
 		bool have_sharing_violation,
 		bool first_open_attempt)
 {
+	if (is_stat_open(desired_access)) {
+		return false;
+	}
+
 	bool will_overwrite;
 
 	switch (create_disposition) {
@@ -2065,6 +2070,7 @@ static NTSTATUS posixfs_create_open_exist_object(
 				&posixfs_object->default_stream,
 				state->smbd_lease,
 				state->in_create_disposition,
+				state->in_desired_access,
 				conflict, true)) {
 		defer_open(posixfs_object, &posixfs_object->default_stream,
 				smbd_requ, state);
@@ -2337,6 +2343,7 @@ static NTSTATUS open_object_exist_ads(
 				&posixfs_ads->base,
 				state->smbd_lease,
 				state->in_create_disposition,
+				state->in_desired_access,
 				conflict, true)) {
 		defer_open(posixfs_object, &posixfs_ads->base,
 				smbd_requ, state);
