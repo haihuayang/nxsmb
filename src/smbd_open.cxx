@@ -69,9 +69,8 @@ bool x_smbd_open_store(x_smbd_open_t *smbd_open)
 x_smbd_open_t *x_smbd_open_lookup(uint64_t id_presistent, uint64_t id_volatile,
 		const x_smbd_tcon_t *smbd_tcon)
 {
-	auto ret = g_smbd_open_table->lookup(id_volatile);
-	if (ret.first) {
-		x_smbd_open_t *smbd_open = ret.second;
+	auto [found, smbd_open] = g_smbd_open_table->lookup(id_volatile);
+	if (found) {
 		if (smbd_open->smbd_tcon == smbd_tcon) {
 			return smbd_open;
 		}

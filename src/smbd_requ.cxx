@@ -70,12 +70,11 @@ x_smbd_requ_t *x_smbd_requ_async_lookup(uint64_t id, const x_smbd_conn_t *smbd_c
 	/* skip client_guid checking, since session bind is signed,
 	 * the check does not improve security
 	 */
-	auto ret = g_smbd_requ_table->lookup(id);
-	if (!ret.first) {
+	auto [found, smbd_requ] = g_smbd_requ_table->lookup(id);
+	if (!found) {
 		return nullptr;
 	}
 
-	x_smbd_requ_t *smbd_requ = ret.second;
 	if (x_smbd_chan_get_conn(smbd_requ->smbd_chan) != smbd_conn) {
 		x_smbd_ref_dec(smbd_requ);
 		return nullptr;

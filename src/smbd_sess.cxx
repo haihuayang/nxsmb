@@ -64,11 +64,12 @@ x_smbd_sess_t *x_smbd_sess_lookup(uint64_t id, const x_smb2_uuid_t &client_guid)
 	/* skip client_guid checking, since session bind is signed,
 	 * the check does not improve security
 	 */
-	auto ret = g_smbd_sess_table->lookup(id);
-	if (!ret.first) {
+	auto [found, smbd_sess] = g_smbd_sess_table->lookup(id);
+	if (!found) {
 		return nullptr;
 	}
-	return ret.second;
+
+	return smbd_sess;
 }
 
 uint64_t x_smbd_sess_get_id(const x_smbd_sess_t *smbd_sess)

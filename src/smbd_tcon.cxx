@@ -106,16 +106,16 @@ std::shared_ptr<x_smbd_share_t> x_smbd_tcon_get_share(const x_smbd_tcon_t *smbd_
 
 x_smbd_tcon_t *x_smbd_tcon_lookup(uint32_t id, const x_smbd_sess_t *smbd_sess)
 {
-	auto ret = g_smbd_tcon_table->lookup(id);
-	if (!ret.first) {
+	auto [found, smbd_tcon] = g_smbd_tcon_table->lookup(id);
+	if (!found) {
 		return nullptr;
 	}
-	if (ret.second->smbd_sess == smbd_sess) {
-		return ret.second;
+	if (smbd_tcon->smbd_sess == smbd_sess) {
+		return smbd_tcon;
 	} else {
 		g_smbd_tcon_table->decref(id);
+		return nullptr;
 	}
-	return nullptr;
 }
 
 NTSTATUS x_smbd_tcon_op_create(x_smbd_requ_t *smbd_requ,
