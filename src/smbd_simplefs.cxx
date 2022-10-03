@@ -120,6 +120,12 @@ struct simplefs_share_t : x_smbd_share_t
 		return NT_STATUS_FS_DRIVER_REQUIRED;
 	}
 
+	virtual NTSTATUS delete_object(x_smbd_object_t *smbd_object,
+			x_smbd_open_t *smbd_open, int fd,
+			std::vector<x_smb2_change_t> &changes) override
+	{
+		return posixfs_object_op_unlink(smbd_object, fd);
+	}
 	std::shared_ptr<x_smbd_topdir_t> root_dir;
 };
 

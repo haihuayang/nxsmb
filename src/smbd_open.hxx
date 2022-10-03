@@ -42,6 +42,7 @@ struct x_smbd_open_t
 	const uint32_t access_mask, share_access;
 	uint32_t notify_filter = 0;
 	const long priv_data;
+	x_smb2_lease_key_t parent_lease_key{};
 };
 
 struct x_smbd_object_t;

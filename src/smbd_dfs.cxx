@@ -84,6 +84,10 @@ struct dfs_share_t : x_smbd_share_t
 			const char16_t *in_server_end,
 			const char16_t *in_share_begin,
 			const char16_t *in_share_end) const override;
+	virtual NTSTATUS delete_object(x_smbd_object_t *smbd_object,
+			x_smbd_open_t *smbd_open, int fd,
+			std::vector<x_smb2_change_t> &changes) override;
+
 	const std::vector<std::string> volumes;
 	uint32_t referral_ttl = default_referral_ttl;
 	std::shared_ptr<x_smbd_topdir_t> root_dir;
@@ -401,8 +405,17 @@ static NTSTATUS dfs_root_object_op_rename(x_smbd_object_t *smbd_object,
 			return NT_STATUS_ACCESS_DENIED;
 		}
 
-		return posixfs_object_rename(smbd_object, smbd_requ,
+		auto old_path = new_path.substr(0, sep + 1) + smbd_object->path;
+		NTSTATUS status =  posixfs_object_rename(smbd_object, smbd_requ,
 				new_path.substr(sep + 1), new_stream_name, replace_if_exists, changes);
+		if (NT_STATUS_IS_OK(status)) {
+			changes.push_back(x_smb2_change_t{NOTIFY_ACTION_OLD_NAME, 
+					FILE_NOTIFY_CHANGE_DIR_NAME,
+					smbd_open->parent_lease_key,
+					old_path,
+					new_path});
+		}
+		return status;
 	} else {
 		X_ASSERT(smbd_open->priv_data == 0);
 		auto sep = new_path.find(u'\\');
@@ -415,7 +428,10 @@ static NTSTATUS dfs_root_object_op_rename(x_smbd_object_t *smbd_object,
 }
 
 
-static NTSTATUS dfs_root_object_op_unlink(x_smbd_object_t *smbd_object, int fd)
+/* smbd_object->mutex is already locked */
+NTSTATUS dfs_share_t::delete_object(x_smbd_object_t *smbd_object,
+		x_smbd_open_t *smbd_open, int fd,
+		std::vector<x_smb2_change_t> &changes)
 {
 	if (smbd_object->priv_data == dfs_object_type_dfs_root) {
 		X_ASSERT(false);
@@ -427,7 +443,6 @@ static NTSTATUS dfs_root_object_op_unlink(x_smbd_object_t *smbd_object, int fd)
 	
 	X_ASSERT(smbd_object->priv_data == dfs_object_type_root_top_level);
 
-	std::lock_guard lock(smbd_object->mutex);
 	X_ASSERT(smbd_object->type != x_smbd_object_t::type_not_exist);
 	if (smbd_object->type == x_smbd_object_t::type_dir) {
 		std::string volume, uuid;
@@ -436,22 +451,37 @@ static NTSTATUS dfs_root_object_op_unlink(x_smbd_object_t *smbd_object, int fd)
 			return NT_STATUS_UNSUCCESSFUL;
 		}
 
-		// TODO find the node host the volume,
-		// if it is remote, send message to it
-		std::string dir = x_smbd_conf_get()->volume_dir;
-		dir += '/';
-		dir += volume;
-		dir += '/';
-		dir += uuid;
+		auto smbd_conf = x_smbd_conf_get();
+		std::string host_node;
+		X_ASSERT(find_node_by_volume(*smbd_conf, host_node, volume));
 
-		err = rmdir(dir.c_str());
-		if (err != 0) {
-			if (errno == ENOTEMPTY) {
-				return NT_STATUS_DIRECTORY_NOT_EMPTY;
-			} else {
-				return NT_STATUS_INTERNAL_ERROR;
+		/* TODO first mark dir fd in deleting */
+		/* TODO single node from now, for multi node, it should send msg to
+		   the node hosting tld to delete it
+		 */
+		if (host_node == smbd_conf->node) {
+			auto data_dir = local_volume_data_dir[volume];
+			X_ASSERT(data_dir);
+			err = unlinkat(data_dir->fd, uuid.c_str(), AT_REMOVEDIR);
+			if (err != 0) {
+				if (errno == ENOTEMPTY) {
+					return NT_STATUS_DIRECTORY_NOT_EMPTY;
+				} else {
+					return NT_STATUS_INTERNAL_ERROR;
+				}
 			}
+			std::u16string path = x_convert_utf8_to_utf16(pesudo_tld_dir);
+			path += u'\\';
+			path += smbd_object->path;
+			changes.push_back(x_smb2_change_t{NOTIFY_ACTION_REMOVED, 
+					FILE_NOTIFY_CHANGE_DIR_NAME,
+					smbd_open->parent_lease_key,
+					path,
+					{}});
+		} else {
+			X_TODO;
 		}
+
 		return posixfs_object_op_unlink(smbd_object, fd);
 	} else {
 		return posixfs_object_op_unlink(smbd_object, fd);
@@ -601,7 +631,7 @@ static void dfs_root_notify_change(x_smbd_object_t *smbd_object,
 	}
 }
 
-static void dfs_root_op_lease_break(
+static inline void dfs_root_op_lease_break(
 		x_smbd_object_t *smbd_object,
 		x_smbd_stream_t *smbd_stream)
 {
@@ -625,76 +655,6 @@ static x_smbd_object_t *dfs_root_op_open_object(NTSTATUS *pstatus,
 
 	X_ASSERT(path_priv_data == dfs_object_type_root_top_level || !create_if);
 	return posixfs_open_object(pstatus, topdir, path, path_priv_data, create_if);
-#if 0
-	std::string first_level;
-	auto sep = utf8_path.find('\\');
-	if (sep != std::string::npos) {
-		first_level = utf8_path.substr(0, sep);
-	} else {
-		first_level = utf8_path;
-	}
-
-	if (first_level == pesudo_tld_dir) {
-		/* since we check utf8_path == pesudo_tld_dir, there is must a sep */
-		auto sep2 = utf8_path.find('\\', sep + 1);
-		if (sep2 != std::string::npos) {
-			return NT_STATUS_OBJECT_NAME_NOT_FOUND;
-		}
-
-
-		std::string tld = utf8_path.substr(sep + 1);
-
-		auto tlo_state = get_tlo_state(topdir, tld);
-		if (tlo_state == top_level_object_state_t::is_file) {
-			return NT_STATUS_OBJECT_NAME_NOT_FOUND;
-		}
-
-		if (tlo_state == top_level_object_state_t::is_dir) {
-			*psmbd_object = posixfs_open_object(topdir,
-					x_convert_utf8_to_utf16(tld),
-					dfs_object_type_tld_object);
-			return NT_STATUS_OK;
-		}
-
-		if (state->in_create_disposition != FILE_OPEN_IF && state->in_create_disposition != FILE_CREATE) {
-			return NT_STATUS_OBJECT_NAME_NOT_FOUND;
-		}
-
-		if (!(state->in_create_options & FILE_DIRECTORY_FILE)) {
-			return NT_STATUS_ACCESS_DENIED;
-		}
-
-		create_new_tld(dfs_share, smbd_requ, tld);
-		state->in_create_disposition = FILE_OPEN_IF;
-		return posixfs_create_open(/* &dfs_tld_object_ops,*/ psmbd_open,
-				topdir, x_convert_utf8_to_utf16(tld),
-				dfs_path_type_tld_object,
-				smbd_requ, state);
-	}
-
-	if (get_tlo_state(topdir, first_level) == top_level_object_state_t::is_dir) {
-		return NT_STATUS_PATH_NOT_COVERED;
-	}
-
-	if (sep != std::string::npos) {
-		return NT_STATUS_OBJECT_NAME_NOT_FOUND;
-	}
-
-	if (!(state->in_create_options & FILE_DIRECTORY_FILE)) {
-		return posixfs_create_open(/*&dfs_file_object_ops,*/ psmbd_open,
-				topdir, path, dfs_path_type_file,
-				smbd_requ, state);
-	}
-
-	return NT_STATUS_ACCESS_DENIED;
-#if 0
-	if (state->in_create_disposition == FILE_OPEN_IF || state->in_create_disposition == FILE_CREATE) {
-		create_new_tld(*this, first_level);
-		return NT_STATUS_PATH_NOT_COVERED;
-	}
-	return NT_STATUS_INTERNAL_ERROR;
-#endif
-#endif
 }
 
 static NTSTATUS dfs_root_create_open(dfs_share_t &dfs_share,
@@ -793,11 +753,11 @@ static const x_smbd_object_ops_t dfs_root_object_ops = {
 	posixfs_object_op_ioctl,
 	dfs_root_object_op_qdir,
 	posixfs_object_op_notify,
-	dfs_root_op_lease_break,
+	posixfs_object_op_lease_break,
 	posixfs_object_op_oplock_break,
 	dfs_root_object_op_rename,
 	dfs_root_object_op_set_delete_on_close,
-	dfs_root_object_op_unlink,
+	nullptr,
 	dfs_root_notify_change,
 	posixfs_object_op_destroy,
 	posixfs_op_release_object,

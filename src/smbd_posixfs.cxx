@@ -146,7 +146,6 @@ struct posixfs_open_t
 	uint8_t oplock_level{X_SMB2_OPLOCK_LEVEL_NONE};
 	oplock_break_sent_t oplock_break_sent{oplock_break_sent_t::OPLOCK_BREAK_NOT_SENT};
 	/* open's on the same file sharing the same lease can have different parent key */
-	x_smb2_lease_key_t parent_lease_key{};
 	x_smbd_lease_t *smbd_lease{};
 	uint8_t lock_sequency_array[64];
 	uint64_t current_offset = 0;
@@ -1069,7 +1068,7 @@ NTSTATUS posixfs_object_rename(x_smbd_object_t *smbd_object,
 				posixfs_object->base.type == x_smbd_object_t::type_dir ?
 					FILE_NOTIFY_CHANGE_DIR_NAME :
 					FILE_NOTIFY_CHANGE_FILE_NAME,
-				posixfs_open->parent_lease_key,
+				posixfs_open->base.parent_lease_key,
 				old_path, new_path});
 	}
 
@@ -1635,7 +1634,7 @@ static posixfs_open_t *posixfs_open_create(
 	posixfs_open->oplock_level = state.out_oplock_level;
 	/* not need incref because it already do in lease_grant */
 	posixfs_open->smbd_lease = state.smbd_lease;
-	posixfs_open->parent_lease_key = state.lease.parent_key;
+	posixfs_open->base.parent_lease_key = state.lease.parent_key;
 
 	if (!x_smbd_open_store(&posixfs_open->base)) {
 		if (posixfs_open->smbd_lease) {
@@ -2887,7 +2886,7 @@ static NTSTATUS posixfs_object_remove(posixfs_object_t *posixfs_object,
 				changes.push_back(x_smb2_change_t{
 						NOTIFY_ACTION_REMOVED_STREAM,
 						FILE_NOTIFY_CHANGE_STREAM_NAME,
-						posixfs_open->parent_lease_key,
+						posixfs_open->base.parent_lease_key,
 						posixfs_object->base.path + u':' + x_convert_utf8_to_utf16(stream_name),
 						{}});
 				return true;
@@ -2896,7 +2895,13 @@ static NTSTATUS posixfs_object_remove(posixfs_object_t *posixfs_object,
 		uint32_t notify_filter = posixfs_object_is_dir(posixfs_object) ?
 			FILE_NOTIFY_CHANGE_DIR_NAME : FILE_NOTIFY_CHANGE_FILE_NAME;
 
-		NTSTATUS status = x_smbd_object_unlink(&posixfs_object->base, posixfs_object->fd);
+		// NTSTATUS status = x_smbd_object_unlink(&posixfs_object->base, posixfs_object->fd);
+		NTSTATUS status = x_smbd_tcon_delete_object(
+				posixfs_open->base.smbd_tcon,
+				&posixfs_object->base,
+				&posixfs_open->base,
+				posixfs_object->fd,
+				changes);
 		if (!NT_STATUS_IS_OK(status)) {
 			changes.resize(orig_changes_size);
 			X_LOG_WARN("fail to unlink %s status=%x",
@@ -2909,7 +2914,7 @@ static NTSTATUS posixfs_object_remove(posixfs_object_t *posixfs_object,
 			posixfs_ads->exists = false;
 		}
 		changes.push_back(x_smb2_change_t{NOTIFY_ACTION_REMOVED, notify_filter,
-				posixfs_open->parent_lease_key,
+				posixfs_open->base.parent_lease_key,
 				posixfs_object->base.path, {}});
 	} else if (!is_default_stream(posixfs_object, posixfs_stream) &&
 			posixfs_stream->meta.delete_on_close) {
@@ -2921,7 +2926,7 @@ static NTSTATUS posixfs_object_remove(posixfs_object_t *posixfs_object,
 		// TODO should it also notify object MODIFIED
 		changes.push_back(x_smb2_change_t{NOTIFY_ACTION_REMOVED_STREAM,
 				FILE_NOTIFY_CHANGE_STREAM_NAME,
-				posixfs_open->parent_lease_key,
+				posixfs_open->base.parent_lease_key,
 				posixfs_object->base.path + u':' + ads->name,
 				{}});
 	}
@@ -2976,7 +2981,7 @@ NTSTATUS posixfs_object_op_close(
 	if (posixfs_open->update_write_time) {
 		changes.push_back(x_smb2_change_t{NOTIFY_ACTION_MODIFIED,
 				FILE_NOTIFY_CHANGE_LAST_WRITE,
-				posixfs_open->parent_lease_key,
+				posixfs_open->base.parent_lease_key,
 				posixfs_object->base.path, {}});
 		posixfs_open->update_write_time = false;
 	}
@@ -3688,7 +3693,7 @@ static NTSTATUS setinfo_file(posixfs_object_t *posixfs_object,
 				posixfs_open_t *posixfs_open = posixfs_open_from_base_t::container(smbd_requ->smbd_open);
 				changes.push_back(x_smb2_change_t{NOTIFY_ACTION_MODIFIED,
 						notify_actions,
-						posixfs_open->parent_lease_key,
+						posixfs_open->base.parent_lease_key,
 						posixfs_object->base.path, {}});
 			}
 			return NT_STATUS_OK;
@@ -3871,7 +3876,7 @@ static NTSTATUS setinfo_security(posixfs_object_t *posixfs_object,
 
 	posixfs_open_t *posixfs_open = posixfs_open_from_base_t::container(smbd_requ->smbd_open);
 	changes.push_back(x_smb2_change_t{NOTIFY_ACTION_MODIFIED, FILE_NOTIFY_CHANGE_SECURITY,
-			posixfs_open->parent_lease_key,
+			posixfs_open->base.parent_lease_key,
 			posixfs_object->base.path, {}});
 	return NT_STATUS_OK;
 }
@@ -4356,7 +4361,7 @@ NTSTATUS x_smbd_posixfs_create_open(x_smbd_open_t **psmbd_open,
 	if (state->out_create_action == FILE_WAS_CREATED) {
 		changes.push_back(x_smb2_change_t{NOTIFY_ACTION_ADDED, 
 				uint16_t((state->in_create_options & FILE_DIRECTORY_FILE) ? FILE_NOTIFY_CHANGE_DIR_NAME : FILE_NOTIFY_CHANGE_FILE_NAME),
-				posixfs_open->parent_lease_key,
+				posixfs_open->base.parent_lease_key,
 				posixfs_object->base.path,
 				{}});
 	}

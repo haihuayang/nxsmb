@@ -722,6 +722,14 @@ struct ipc_share_t : x_smbd_share_t
 		return ipc_create_open(psmbd_open, smbd_requ,
 				volume, state);
 	}
+
+	virtual NTSTATUS delete_object(x_smbd_object_t *smbd_object,
+			x_smbd_open_t *smbd_open, int fd,
+			std::vector<x_smb2_change_t> &changes) override
+	{
+		X_ASSERT(false);
+		return NT_STATUS_UNSUCCESSFUL;
+	}
 	const std::shared_ptr<x_smbd_topdir_t> topdir;
 };
 
