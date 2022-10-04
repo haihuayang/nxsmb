@@ -72,7 +72,6 @@ static const x_smbd_object_ops_t simplefs_object_ops = {
 	posixfs_object_op_oplock_break,
 	posixfs_object_op_rename,
 	posixfs_object_op_set_delete_on_close,
-	posixfs_object_op_unlink,
 	posixfs_object_notify_change,
 	posixfs_object_op_destroy,
 	posixfs_op_release_object,

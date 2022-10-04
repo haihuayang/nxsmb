@@ -114,7 +114,6 @@ struct x_smbd_object_ops_t
 			x_smbd_open_t *smbd_open,
 			x_smbd_requ_t *smbd_requ,
 			bool delete_on_close);
-	NTSTATUS (*unlink)(x_smbd_object_t *smbd_object, int fd);
 	void (*notify_change)(x_smbd_object_t *smbd_object,
 			uint32_t notify_action,
 			uint32_t notify_filter,
@@ -336,13 +335,6 @@ static inline void x_smbd_object_notify_change(x_smbd_object_t *smbd_object,
 	return smbd_object->topdir->ops->notify_change(smbd_object,
 			notify_action, notify_filter, path, new_path,
 			ignore_lease_key, last_level);
-}
-
-static inline NTSTATUS x_smbd_object_unlink(
-		x_smbd_object_t *smbd_object,
-		int fd)
-{
-	return smbd_object->topdir->ops->unlink(smbd_object, fd);
 }
 
 static inline std::string x_smbd_open_op_get_path(

@@ -652,7 +652,6 @@ static const x_smbd_object_ops_t x_smbd_ipc_object_ops = {
 	nullptr, // op_oplock_break
 	nullptr, // op_rename
 	nullptr, // op_set_delete_on_close
-	nullptr, // op_unlink
 	nullptr, // notify_fname
 	ipc_object_op_destroy,
 	ipc_op_release_object,
