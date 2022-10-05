@@ -50,7 +50,6 @@ struct x_smbd_conf_t
 	bool allow_trusted_domains = true;
 	bool gensec_require_pac = false; // if (gensec_setting_bool(gensec_security->settings, "gensec", "require_pac", false)) {
 
-	uint32_t max_referral_ttl = 300;
 	uint32_t smb2_max_credits = 8192;
 	bool host_msdfs = true;
 

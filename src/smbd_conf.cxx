@@ -11,6 +11,8 @@
 
 struct share_spec_t
 {
+	static const uint32_t default_dfs_referral_ttl = 300;
+
 	share_spec_t(const std::string &name) : name(name) { }
 	std::string name;
 	std::string my_distribute_root;
@@ -19,7 +21,7 @@ struct share_spec_t
 	bool read_only = false;
 	bool abe = false;
 	bool dfs_test = false;
-	uint32_t max_referral_ttl = 300;
+	uint32_t dfs_referral_ttl = default_dfs_referral_ttl;
 	std::vector<std::string> volumes;
 };
 
@@ -130,28 +132,15 @@ static void add_share(x_smbd_conf_t &smbd_conf,
 {
 	X_LOG_DBG("add share section %s", smbd_share->name.c_str());
 	smbd_conf.shares[smbd_share->name] = smbd_share;
-#if 0
-	if (share_spec->type == TYPE_IPC) {
-
-	} else if (share_spec->my_distribute_root.size() > 0) {
-		/* dfs namespace */
-	} else {
-		/* TODO if the share is hosted by this node */
-		int fd = open(share_spec->path.c_str(), O_RDONLY);
-		X_ASSERT(fd != -1);
-		auto topdir = std::make_shared<x_smbd_topdir_t>(share_spec);
-		topdir->fd = fd;
-		share_spec->root_dir = topdir; /* TODO cycle reference  */
-	}
-#endif
 }
 
 static void add_share(x_smbd_conf_t &smbd_conf,
 		const share_spec_t &share_spec)
 {
+	std::shared_ptr<x_smbd_share_t> share;
 	if (false) {
 	} else if (share_spec.volumes.size() > 0) {
-		auto share = x_smbd_dfs_share_create(smbd_conf, share_spec.name, share_spec.volumes);
+		share = x_smbd_dfs_share_create(smbd_conf, share_spec.name, share_spec.volumes);
 		for (const auto &v: share_spec.volumes) {
 			auto it = smbd_conf.volume_map.find(v);
 			X_ASSERT(it != smbd_conf.volume_map.end());
@@ -159,16 +148,12 @@ static void add_share(x_smbd_conf_t &smbd_conf,
 			it->second.second = share;
 		}
 
-		add_share(smbd_conf, share);
-#if 0
-	} else if (share_spec.my_distribute_vgs.size() > 0) {
-		X_ASSERT(share_spec.path.size() > 0);
-		add_share(smbd_conf, x_smbd_dfs_root_create(share_spec.name, share_spec.path, share_spec.my_distribute_vgs));
-#endif
 	} else {
+		share = x_smbd_simplefs_share_create(share_spec.name, share_spec.path);
 		X_ASSERT(share_spec.path.size() > 0);
-		add_share(smbd_conf, x_smbd_simplefs_share_create(share_spec.name, share_spec.path));
 	}
+	share->dfs_referral_ttl = share_spec.dfs_referral_ttl;
+	add_share(smbd_conf, share);
 }
 
 static void load_ifaces(x_smbd_conf_t &smbd_conf)
@@ -312,6 +297,8 @@ static bool parse_share_param(share_spec_t &share_spec,
 #endif
 	} else if (name == "path") {
 		share_spec.path = value;
+	} else if (name == "dfs referral ttl") {
+		return parse_uint32(value, share_spec.dfs_referral_ttl);
 	} else if (name == "abe") {
 		if (value == "yes") {
 			share_spec.abe = true;

@@ -10,7 +10,6 @@
 #include "smbd_posixfs_utils.hxx"
 #include <sys/file.h>
 
-static const uint32_t default_referral_ttl = 10;
 static const char *pesudo_tld_dir = ".tlds";
 
 enum {
@@ -89,7 +88,6 @@ struct dfs_share_t : x_smbd_share_t
 			std::vector<x_smb2_change_t> &changes) override;
 
 	const std::vector<std::string> volumes;
-	uint32_t referral_ttl = default_referral_ttl;
 	std::shared_ptr<x_smbd_topdir_t> root_dir;
 	std::map<std::string, std::shared_ptr<x_smbd_topdir_t>> local_volume_data_dir;
 };
@@ -926,7 +924,7 @@ static NTSTATUS dfs_root_referral(const dfs_share_t &dfs_share,
 	std::u16string node16 = x_convert_utf8_to_utf16(node);
 	node16.append(in_share_begin, in_share_end);
 	dfs_referral_resp.referrals.push_back(x_referral_t{DFS_SERVER_ROOT, 0,
-			dfs_share.referral_ttl, alt_path, node16});
+			dfs_share.dfs_referral_ttl, alt_path, node16});
 	dfs_referral_resp.header_flags = DFS_HEADER_FLAG_REFERAL_SVR | DFS_HEADER_FLAG_STORAGE_SVR;
 	dfs_referral_resp.path_consumed = x_convert_assert<uint16_t>(alt_path.length() * 2);
 	return NT_STATUS_OK;
@@ -954,7 +952,7 @@ static NTSTATUS dfs_volume_referral(const dfs_share_t &dfs_share,
 	std::string node = "\\" + node_name + "." + smbd_conf.dns_domain + "\\--" + volume + "\\" + uuid;
 	std::u16string node16 = x_convert_utf8_to_utf16(node);
 	dfs_referral_resp.referrals.push_back(x_referral_t{0, 0,
-			dfs_share.referral_ttl, alt_path, node16});
+			dfs_share.dfs_referral_ttl, alt_path, node16});
 	dfs_referral_resp.header_flags = DFS_HEADER_FLAG_STORAGE_SVR;
 	dfs_referral_resp.path_consumed = x_convert_assert<uint16_t>(alt_path.length() * 2);
 	return NT_STATUS_OK;

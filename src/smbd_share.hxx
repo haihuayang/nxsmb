@@ -81,6 +81,7 @@ struct x_smbd_share_t
 	bool read_only = false;
 	bool dfs_test = false;
 	uint32_t max_connections = 0;
+	uint32_t dfs_referral_ttl;
 	std::vector<std::string> vgs;
 };
 
