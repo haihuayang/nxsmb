@@ -422,7 +422,7 @@ static void x_smb2_create_async_done(x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ,
 		NTSTATUS status)
 {
-	x_smb2_state_create_t *state{(x_smb2_state_create_t *)smbd_requ->requ_state};
+	std::unique_ptr<x_smb2_state_create_t> state{(x_smb2_state_create_t *)smbd_requ->requ_state};
 	X_LOG_DBG("status=0x%x", status.v);
 	smbd_requ->requ_state = nullptr;
 	if (NT_STATUS_IS_OK(status)) {

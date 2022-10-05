@@ -752,15 +752,15 @@ static bool check_io_brl_conflict(posixfs_object_t *posixfs_object,
 
 static void posixfs_create_cancel(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 {
-	X_TODO;
-#if 0
-	posixfs_object_t *posixfs_object = posixfs_object_from_base_t::container(smbd_requ->smbd_object);
+	x_smb2_state_create_t *state = (x_smb2_state_create_t *)smbd_requ->requ_state;
+	posixfs_object_t *posixfs_object = posixfs_object_from_base_t::container(state->smbd_object);
+	posixfs_stream_t *posixfs_stream = (posixfs_stream_t *)state->smbd_stream;
+
 	{
-		std::unique_lock<std::mutex> lock(posixfs_object->base.mutex);
-	//	posixfs_object->defer_open_list.remove(smbd_requ);
+		auto lock = std::lock_guard(posixfs_object->base.mutex);
+		posixfs_stream->defer_open_list.remove(smbd_requ);
 	}
 	x_smbd_conn_post_cancel(smbd_conn, smbd_requ);
-#endif
 }
 
 struct posixfs_defer_open_evt_t
