@@ -27,6 +27,7 @@ static struct {
 	x_wbpool_t *wbpool;
 	x_auth_context_t *auth_context;
 	std::vector<uint8_t> negprot_spnego;
+	x_tick_t tick_start_mono, tick_start_real;
 	x_timerq_t timerq[static_cast<int>(x_smbd_timer_t::LAST)];
 } g_smbd;
 
@@ -64,6 +65,14 @@ static void init_smbd()
 	x_log_init(smbd_conf->log_level, smbd_conf->log_name.c_str());
 
 	x_smbd_stats_init();
+
+	struct timespec ts_now;
+	x_tick_t tick_now1 = x_tick_now();
+	clock_gettime(CLOCK_REALTIME, &ts_now);
+	x_tick_t tick_now2 = x_tick_now();
+
+	g_smbd.tick_start_mono = (tick_now1 + tick_now2) / 2;
+	g_smbd.tick_start_real = x_tick_from_timespec(ts_now);
 
 	g_smbd.tpool_async = x_threadpool_create(smbd_conf->async_thread_count);
 	x_threadpool_t *tpool = x_threadpool_create(smbd_conf->client_thread_count);
@@ -192,5 +201,10 @@ void x_smbd_schedule_async(x_job_t *job)
 {
 	bool ret = x_threadpool_schedule(g_smbd.tpool_async, job);
 	X_ASSERT(ret);
+}
+
+std::array<x_tick_t, 2> x_smbd_get_time()
+{
+	return { g_smbd.tick_start_real, tick_now - g_smbd.tick_start_mono + g_smbd.tick_start_real };
 }
 

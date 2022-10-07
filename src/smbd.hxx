@@ -53,6 +53,8 @@ enum class x_smbd_timer_t {
 void x_smbd_add_timer(x_smbd_timer_t timer_id, x_timerq_entry_t *entry);
 bool x_smbd_cancel_timer(x_smbd_timer_t timer_id, x_timerq_entry_t *entry);
 
+std::array<x_tick_t, 2> x_smbd_get_time();
+
 #if 0
 enum class x_smbd_tcon_type_t {
 	DEFAULT,
@@ -228,10 +230,12 @@ void x_smb2_reply(x_smbd_conn_t *smbd_conn,
 
 int x_smbd_sess_table_init(uint32_t count);
 x_smbd_sess_t *x_smbd_sess_create(uint64_t &id);
-x_smbd_sess_t *x_smbd_sess_lookup(uint64_t id, const x_smb2_uuid_t &client_guid);
+x_smbd_sess_t *x_smbd_sess_lookup(NTSTATUS &status,
+		uint64_t id, const x_smb2_uuid_t &client_guid);
 NTSTATUS x_smbd_sess_auth_succeeded(x_smbd_sess_t *smbd_sess,
 		std::shared_ptr<x_smbd_user_t> &smbd_user,
-		const x_smbd_key_set_t &keys);
+		const x_smbd_key_set_t &keys,
+		uint32_t time_rec);
 uint64_t x_smbd_sess_get_id(const x_smbd_sess_t *smbd_sess);
 bool x_smbd_sess_is_signing_required(const x_smbd_sess_t *smbd_sess);
 x_smbd_chan_t *x_smbd_sess_lookup_chan(x_smbd_sess_t *smbd_sess, x_smbd_conn_t *smbd_conn);

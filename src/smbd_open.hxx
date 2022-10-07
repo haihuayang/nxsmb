@@ -29,6 +29,7 @@ struct x_smbd_open_t
 	}
 
 	x_dlink_t tcon_link; // protected by the mutex of smbd_tcon
+	const x_tick_t tick_create;
 	x_smbd_object_t * const smbd_object;
 	// x_smbd_stream_t * const smbd_stream;
 	x_smbd_tcon_t * const smbd_tcon;

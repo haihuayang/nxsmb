@@ -938,7 +938,8 @@ static void auth_info_from_pac_logon_info(x_auth_info_t &auth_info, const idl::P
 // gensec_gse_session_info
 static NTSTATUS auth_krb5_accepted(x_auth_krb5_t &auth, gss_ctx_id_t gss_ctx,
 		gss_name_t client_name, x_auth_upcall_t *auth_upcall,
-		std::shared_ptr<x_auth_info_t> &auth_info)
+		std::shared_ptr<x_auth_info_t> &auth_info,
+		uint32_t time_rec)
 {
 	OM_uint32 gss_maj, gss_min;
 	gss_buffer_set_t pac_buffer_set = GSS_C_NO_BUFFER_SET;
@@ -1021,6 +1022,7 @@ static NTSTATUS auth_krb5_accepted(x_auth_krb5_t &auth, gss_ctx_id_t gss_ctx,
 		auth_info = std::make_shared<x_auth_info_t>();
 		auth_info_from_pac_logon_info(*auth_info, *logon_info);
 		std::swap(auth_info->session_key, session_key);
+		auth_info->time_rec = time_rec;
 	}
 	return status;
 
@@ -1247,27 +1249,15 @@ static NTSTATUS auth_krb5_update(x_auth_t *auth, const uint8_t *in_buf, size_t i
 					 &delegated_cred_handle);
 	switch (gss_maj) {
 	case GSS_S_COMPLETE:
-		status = auth_krb5_accepted(*auth_krb5, gssapi_context, client_name, auth_upcall, auth_info);
+		/* TODO should get end_time directly from gss context, instead the life_time
+		 * see gss_accept_sec_context->_gsskrb5_accept_sec_context->gsskrb5_acceptor_start
+		 */
+		status = auth_krb5_accepted(*auth_krb5, gssapi_context, client_name, auth_upcall, auth_info, time_rec);
 		if (NT_STATUS_IS_OK(status)) {
 			out.assign((uint8_t *)out_data.value, (uint8_t *)out_data.value + out_data.length);
 		}
 		return status;
-#if 0
-	struct timeval tv;
-		/* we are done with it */
-		tv = timeval_current_ofs(time_rec, 0);
-		// TODO gse_ctx->expire_time = timeval_to_nttime(&tv);
-		// gensec_gse_session_info
 
-		gss_maj = gss_display_name(&gss_min,
-				client_name,
-				&name_token,
-				NULL);
-		/* TODO free client_name */
-
-		status = NT_STATUS_OK;
-#endif
-		break;
 	case GSS_S_CONTINUE_NEEDED:
 		/* we will need a third leg */
 		out.assign((uint8_t *)out_data.value, (uint8_t *)out_data.value + out_data.length);

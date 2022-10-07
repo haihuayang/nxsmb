@@ -39,6 +39,7 @@ struct x_smbd_conn_t
 	int fd;
 	unsigned int count_msg = 0;
 	const x_sockaddr_t saddr;
+	const x_tick_t tick_create;
 	uint16_t cipher = 0;
 	uint16_t dialect = SMB2_DIALECT_REVISION_000;
 
@@ -67,7 +68,7 @@ struct x_smbd_conn_t
 
 x_smbd_conn_t::x_smbd_conn_t(int fd, const x_sockaddr_t &saddr,
 		uint32_t max_credits)
-	: fd(fd), saddr(saddr)
+	: fd(fd), saddr(saddr), tick_create(tick_now)
 	, seq_bitmap(max_credits)
 {
 	X_SMBD_COUNTER_INC(conn_create, 1);
@@ -468,6 +469,7 @@ static NTSTATUS x_smbd_conn_process_smb2_intl(x_smbd_conn_t *smbd_conn, x_smbd_r
 	x_buf_t *buf = smbd_requ->in_buf;
 	auto in_smb2_hdr = (const x_smb2_header_t *)(buf->data + smbd_requ->in_offset);
 	uint64_t in_session_id = X_LE2H64(in_smb2_hdr->sess_id);
+	NTSTATUS sess_status = NT_STATUS_OK;
 	if ((smbd_requ->in_hdr_flags & SMB2_HDR_FLAG_CHAINED) == 0) {
 		if (smbd_requ->smbd_chan) {
 			X_SMBD_REF_DEC(smbd_requ->smbd_chan);
@@ -476,7 +478,8 @@ static NTSTATUS x_smbd_conn_process_smb2_intl(x_smbd_conn_t *smbd_conn, x_smbd_r
 			X_SMBD_REF_DEC(smbd_requ->smbd_sess);
 		}
 		if (in_session_id != 0) {
-			smbd_requ->smbd_sess = x_smbd_sess_lookup(in_session_id, smbd_conn->client_guid);
+			smbd_requ->smbd_sess = x_smbd_sess_lookup(sess_status,
+					in_session_id, smbd_conn->client_guid);
 		}
 	}
 	

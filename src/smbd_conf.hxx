@@ -19,6 +19,8 @@ static inline bool lpcfg_param_bool(void *service, const char *type, const char 
 	return default_v;
 }
 
+static constexpr uint32_t X_INFINITE = -1;
+
 struct x_smbd_conf_t
 {
 	x_smbd_conf_t();
@@ -49,6 +51,7 @@ struct x_smbd_conf_t
 	bool lanman_auth = false;
 	bool allow_trusted_domains = true;
 	bool gensec_require_pac = false; // if (gensec_setting_bool(gensec_security->settings, "gensec", "require_pac", false)) {
+	uint32_t max_session_expiration = X_INFINITE; // in seconds
 
 	uint32_t smb2_max_credits = 8192;
 	bool host_msdfs = true;

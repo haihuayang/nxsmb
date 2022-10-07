@@ -22,7 +22,7 @@ struct x_smbd_chan_t
 	 * so smbd_conn is always valid, although it may be terminated
 	 */
 	explicit x_smbd_chan_t(x_smbd_conn_t *smbd_conn, x_smbd_sess_t *smbd_sess)
-		: smbd_conn(x_smbd_ref_inc(smbd_conn))
+		: tick_create(tick_now), smbd_conn(x_smbd_ref_inc(smbd_conn))
 		, smbd_sess(x_smbd_ref_inc(smbd_sess)) {
 		X_SMBD_COUNTER_INC(chan_create, 1);
 	}
@@ -47,6 +47,7 @@ struct x_smbd_chan_t
 	x_dlink_t sess_link;
 	x_auth_upcall_t auth_upcall;
 	x_timerq_entry_t timer;
+	const x_tick_t tick_create;
 
 	std::atomic<int> refcnt{1};
 	std::atomic<uint16_t> state{S_INIT};
@@ -248,7 +249,7 @@ static NTSTATUS smbd_chan_auth_succeeded(x_smbd_chan_t *smbd_chan,
 	} else {
 		smbd_chan->keys.signing_key = session_key;
 	}
-	NTSTATUS status = x_smbd_sess_auth_succeeded(smbd_chan->smbd_sess, smbd_user, smbd_chan->keys);
+	NTSTATUS status = x_smbd_sess_auth_succeeded(smbd_chan->smbd_sess, smbd_user, smbd_chan->keys, auth_info.time_rec);
 	if (NT_STATUS_IS_OK(status)) {
 		// TODO memory order
 		smbd_chan->state = x_smbd_chan_t::S_ACTIVE;

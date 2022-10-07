@@ -3,6 +3,7 @@
 #include "include/idtable.hxx"
 #include "smbd_ctrl.hxx"
 #include "smbd_stats.hxx"
+#include "smbd_conf.hxx"
 
 using smbd_sess_table_t = x_idtable_t<x_smbd_sess_t, x_idtable_64_traits_t>;
 static smbd_sess_table_t *g_smbd_sess_table;
@@ -10,13 +11,14 @@ static smbd_sess_table_t *g_smbd_sess_table;
 struct x_smbd_sess_t
 {
 	enum { MAX_CHAN_COUNT = 32, };
-	x_smbd_sess_t() {
+	x_smbd_sess_t() : tick_create(tick_now) {
 		X_SMBD_COUNTER_INC(sess_create, 1);
 	}
 	~x_smbd_sess_t() {
 		X_SMBD_COUNTER_INC(sess_delete, 1);
 	}
 	// uint64_t id;
+	const uint64_t tick_create;
 	std::mutex mutex;
 	std::shared_ptr<x_smbd_user_t> smbd_user;
 	uint64_t id;
@@ -33,6 +35,7 @@ struct x_smbd_sess_t
 	x_ddlist_t tcon_list;
 
 	x_smbd_key_set_t keys;
+	uint64_t tick_expired;
 };
 
 template <>
@@ -59,7 +62,8 @@ x_smbd_sess_t *x_smbd_sess_create(uint64_t &id)
 	return smbd_sess;
 }
 
-x_smbd_sess_t *x_smbd_sess_lookup(uint64_t id, const x_smb2_uuid_t &client_guid)
+x_smbd_sess_t *x_smbd_sess_lookup(NTSTATUS &status,
+		uint64_t id, const x_smb2_uuid_t &client_guid)
 {
 	/* skip client_guid checking, since session bind is signed,
 	 * the check does not improve security
@@ -69,6 +73,11 @@ x_smbd_sess_t *x_smbd_sess_lookup(uint64_t id, const x_smb2_uuid_t &client_guid)
 		return nullptr;
 	}
 
+	if (tick_now > smbd_sess->tick_expired) {
+		status = NT_STATUS_NETWORK_SESSION_EXPIRED;
+	} else {
+		status = NT_STATUS_OK;
+	}
 	return smbd_sess;
 }
 
@@ -151,55 +160,6 @@ bool x_smbd_sess_unlink_chan(x_smbd_sess_t *smbd_sess, x_dlink_t *link)
 	return true;
 }
 
-#if 0
-	uint32_t chan_count;
-	{
-		std::lock_guard<std::mutex> lock(smbd_sess->mutex);
-		if (smbd_sess->state == x_smbd_sess_t::S_DONE) {
-			X_ASSERT(smbd_sess->chan_count == 0);
-			return;
-		}
-		uint32_t i;
-		for (i = 0; i < smbd_sess->chans.size(); ++i) {
-			if (smbd_sess->chans[i] == smbd_chan) {
-				X_SMBD_REF_DEC(smbd_sess->chans[i]);
-				--smbd_sess->chan_count;
-				break;
-			}
-		}
-		X_ASSERT(i != smbd_sess->chans.size());
-		chan_count = smbd_sess->chan_count;
-	}
-	if (chan_count == 0) {
-		smbd_sess_terminate(smbd_sess);
-	}
-}
-
-void x_smbd_sess_remove_chan(x_smbd_sess_t *smbd_sess, x_smbd_chan_t *smbd_chan)
-{
-	uint32_t chan_count;
-	{
-		std::lock_guard<std::mutex> lock(smbd_sess->mutex);
-		if (smbd_sess->state == x_smbd_sess_t::S_DONE) {
-			X_ASSERT(smbd_sess->chan_count == 0);
-			return;
-		}
-		uint32_t i;
-		for (i = 0; i < smbd_sess->chans.size(); ++i) {
-			if (smbd_sess->chans[i] == smbd_chan) {
-				X_SMBD_REF_DEC(smbd_sess->chans[i]);
-				--smbd_sess->chan_count;
-				break;
-			}
-		}
-		X_ASSERT(i != smbd_sess->chans.size());
-		chan_count = smbd_sess->chan_count;
-	}
-	if (chan_count == 0) {
-		smbd_sess_terminate(smbd_sess);
-	}
-}
-#endif
 x_smbd_chan_t *x_smbd_sess_lookup_chan(x_smbd_sess_t *smbd_sess, x_smbd_conn_t *smbd_conn)
 {
 	x_dlink_t *link;
@@ -249,7 +209,8 @@ bool x_smbd_sess_unlink_tcon(x_smbd_sess_t *smbd_sess, x_dlink_t *link)
 
 NTSTATUS x_smbd_sess_auth_succeeded(x_smbd_sess_t *smbd_sess,
 		std::shared_ptr<x_smbd_user_t> &smbd_user,
-		const x_smbd_key_set_t &keys)
+		const x_smbd_key_set_t &keys,
+		uint32_t time_rec)
 {
 	std::lock_guard<std::mutex> lock(smbd_sess->mutex);
 	if (smbd_sess->state == x_smbd_sess_t::S_ACTIVE) {
@@ -259,6 +220,17 @@ NTSTATUS x_smbd_sess_auth_succeeded(x_smbd_sess_t *smbd_sess,
 		smbd_sess->keys = keys;
 		smbd_sess->state = x_smbd_sess_t::S_ACTIVE;
 		smbd_sess->key_is_valid = true;
+		auto smbd_conf = x_smbd_conf_get();
+		time_rec = std::min(time_rec, smbd_conf->max_session_expiration);
+		if (time_rec == X_INFINITE) {
+			smbd_sess->tick_expired = UINT64_MAX;
+		} else {
+			smbd_sess->tick_expired = smbd_sess->tick_create + 
+				(uint64_t(time_rec) * X_NSEC_PER_SEC);
+			if (smbd_sess->tick_expired < smbd_sess->tick_create) {
+				smbd_sess->tick_expired = UINT64_MAX;
+			}
+		}
 	}
 	return NT_STATUS_OK;
 }

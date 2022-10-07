@@ -15,7 +15,7 @@ struct x_smbd_tcon_t
 			const std::shared_ptr<x_smbd_share_t> &share,
 			const std::string &volume,
 			uint32_t share_access)
-       		: share_access(share_access)
+		: tick_create(tick_now), share_access(share_access)
 		, smbd_sess(x_smbd_ref_inc(smbd_sess)), smbd_share(share)
 		, volume(volume)
        	{
@@ -28,6 +28,7 @@ struct x_smbd_tcon_t
 	}
 
 	x_dlink_t sess_link; // protected by smbd_sess' mutex
+	const x_tick_t tick_create;
 	enum {
 		S_ACTIVE,
 		S_DONE,

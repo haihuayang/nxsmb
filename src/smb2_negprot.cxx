@@ -55,8 +55,6 @@ static NTSTATUS x_smbd_conn_reply_negprot(x_smbd_conn_t *smbd_conn, x_smbd_requ_
 {
 	X_LOG_OP("%ld RESP SUCCESS dialect=%x", smbd_requ->in_mid, negprot.out_dialect);
 
-	idl::NTTIME now = x_tick_to_nttime(tick_now);
-
 	const std::vector<uint8_t> &security_blob = x_smbd_get_negprot_spnego();
 	size_t dyn_len = security_blob.size();
 
@@ -84,6 +82,8 @@ static NTSTATUS x_smbd_conn_reply_negprot(x_smbd_conn_t *smbd_conn, x_smbd_requ_
 	uint8_t *out_hdr = bufref->get_data();
 	x_smb2_negprot_resp_t *out_resp = (x_smb2_negprot_resp_t *)(out_hdr + SMB2_HDR_BODY);
 
+	auto [tick_start, tick_system ] = x_smbd_get_time();
+
 	out_resp->struct_size = X_H2LE16(sizeof(x_smb2_negprot_resp_t) + 1);
 	out_resp->security_mode = X_H2LE16(negprot.out_security_mode);
 	out_resp->dialect = X_H2LE16(negprot.out_dialect);
@@ -93,8 +93,8 @@ static NTSTATUS x_smbd_conn_reply_negprot(x_smbd_conn_t *smbd_conn, x_smbd_requ_
 	out_resp->max_trans_size = X_H2LE32(smbd_conf.max_trans_size);
 	out_resp->max_read_size = X_H2LE32(smbd_conf.max_read_size);
 	out_resp->max_write_size = X_H2LE32(smbd_conf.max_write_size);
-	out_resp->system_time = X_H2LE64(now.val);
-	out_resp->server_start_time = 0;
+	out_resp->system_time = X_H2LE64(x_tick_to_nttime(tick_system).val);
+	out_resp->server_start_time = X_H2LE64(x_tick_to_nttime(tick_start).val);
 
 	size_t offset = SMB2_HDR_BODY + sizeof(x_smb2_negprot_resp_t);
 	out_resp->security_buffer_offset = X_H2LE16(x_convert_assert<uint16_t>(offset));

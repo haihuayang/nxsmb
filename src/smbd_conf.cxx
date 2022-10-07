@@ -244,6 +244,8 @@ static bool parse_global_param(x_smbd_conf_t &smbd_conf,
 		smbd_conf.private_dir = value;
 	} else if (name == "node") {
 		smbd_conf.node = value;
+	} else if (name == "max session expiration") {
+		return parse_uint32(value, smbd_conf.max_session_expiration);
 	} else if (name == "my:samba locks dir") {
 		smbd_conf.samba_locks_dir = value;
 	} else if (name == "my:nodes") {

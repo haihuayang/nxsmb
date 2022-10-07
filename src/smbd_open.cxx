@@ -29,7 +29,8 @@ x_smbd_open_t::x_smbd_open_t(x_smbd_object_t *so,
 		// x_smbd_stream_t *strm,
 		x_smbd_tcon_t *st,
 		uint32_t am, uint32_t sa, long priv_data)
-	: smbd_object(so), /*smbd_stream(strm), */smbd_tcon(x_smbd_ref_inc(st))
+	: tick_create(tick_now), smbd_object(so) /*smbd_stream(strm), */
+	, smbd_tcon(x_smbd_ref_inc(st))
 	, access_mask(am), share_access(sa), priv_data(priv_data)
 {
 	X_SMBD_COUNTER_INC(open_create, 1);
