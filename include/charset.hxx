@@ -161,6 +161,20 @@ static inline char16_t *x_utf16le_encode(const std::u16string &s,
 	return begin;
 }
 
+static inline char16_t *x_utf16le_encode(const std::u16string &s,
+		char16_t *begin, size_t buf_size)
+{
+	/* TODO big endian */
+	for (auto ch: s) {
+		if (buf_size == 0) {
+			return nullptr;
+		}
+		*begin++ = X_H2LE16(ch);
+		buf_size--;
+	}
+	return begin;
+}
+
 static inline bool x_strcase_equal(const std::u16string &s1, const std::u16string &s2)
 {
 	/* TODO case */

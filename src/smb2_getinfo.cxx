@@ -71,7 +71,8 @@ static void encode_out_getinfo(const x_smb2_state_getinfo_t &state,
 
 static void x_smb2_reply_getinfo(x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ,
-		const x_smb2_state_getinfo_t &state)
+		const x_smb2_state_getinfo_t &state,
+		NTSTATUS status)
 {
 	X_LOG_OP("%ld RESP SUCCESS", smbd_requ->in_mid);
 
@@ -80,7 +81,7 @@ static void x_smb2_reply_getinfo(x_smbd_conn_t *smbd_conn,
 
 	uint8_t *out_hdr = bufref->get_data();
 	encode_out_getinfo(state, out_hdr);
-	x_smb2_reply(smbd_conn, smbd_requ, bufref, bufref, NT_STATUS_OK, 
+	x_smb2_reply(smbd_conn, smbd_requ, bufref, bufref, status, 
 			SMB2_HDR_BODY + sizeof(x_smb2_out_getinfo_t) + state.out_data.size());
 }
 
@@ -112,9 +113,9 @@ NTSTATUS x_smb2_process_getinfo(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_re
 	NTSTATUS status = x_smbd_open_op_getinfo(smbd_requ->smbd_open,
 		       	smbd_conn, smbd_requ,
 			state);
-	if (NT_STATUS_IS_OK(status)) {
-		x_smb2_reply_getinfo(smbd_conn, smbd_requ, *state);
-		return status;
+	if (NT_STATUS_IS_OK(status) || NT_STATUS_EQUAL(status, STATUS_BUFFER_OVERFLOW)) {
+		x_smb2_reply_getinfo(smbd_conn, smbd_requ, *state, status);
+		return NT_STATUS_OK;
 	}
 
 	RETURN_OP_STATUS(smbd_requ, status);

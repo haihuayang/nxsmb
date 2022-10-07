@@ -963,6 +963,11 @@ const x_smb2_uuid_t &x_smbd_conn_curr_client_guid()
 	return g_smbd_conn_curr->client_guid;
 }
 
+uint16_t x_smbd_conn_curr_dialect()
+{
+	return g_smbd_conn_curr->dialect;
+}
+
 
 static bool x_smbd_conn_upcall_cb_getevents(x_epoll_upcall_t *upcall, x_fdevents_t &fdevents)
 {

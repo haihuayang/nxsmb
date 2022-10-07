@@ -93,6 +93,7 @@ enum {
         SMB2_FILE_INFO_FILE_ID_BOTH_DIR_INFORMATION = 37,
         SMB2_FILE_INFO_FILE_ID_FULL_DIR_INFORMATION = 38,
         SMB2_FILE_INFO_FILE_VALID_DATA_LENGTH_INFORMATION = 39,
+	SMB2_FILE_INFO_FILE_NORMALIZED_NAME_INFORMATION = 48,
 };
 
 enum {
@@ -438,6 +439,14 @@ struct x_smb2_file_all_info_t
 	uint32_t unused;
 };
 
+struct x_smb2_file_normalized_name_info_t
+{
+	uint32_t name_length;
+	char16_t name[2]; // variable length
+	/* packed is not needed, windows server requires
+	   in_output_buffer_length at lease 8 bytes */
+};
+
 struct x_smb2_rename_info_t
 {
 	uint8_t replace_if_exists;
@@ -553,7 +562,7 @@ struct x_smb2_file_stream_name_info_t
 	uint64_t size;
 	uint64_t allocation_size;
 	char16_t name[]; // variable length
-} __attribute__ ((packed));
+};
 
 bool x_smb2_file_standard_info_decode(x_smb2_file_standard_info_t &standard_info,
 		const std::vector<uint8_t> &in_data);
