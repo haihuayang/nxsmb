@@ -67,8 +67,11 @@ void x_smb2_sesssetup_done(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ, N
 {
 	/* async done */
 	X_LOG_DBG("smbd_requ=%p, status=0x%x", smbd_requ, NT_STATUS_V(status));
-	x_smb2_reply_sesssetup(smbd_conn, smbd_requ->smbd_chan, smbd_requ,
-			x_smbd_conn_get_dialect(smbd_conn), status, out_security);
+	if (NT_STATUS_IS_OK(status) ||
+			NT_STATUS_EQUAL(status, NT_STATUS_MORE_PROCESSING_REQUIRED)) {
+		x_smb2_reply_sesssetup(smbd_conn, smbd_requ->smbd_chan, smbd_requ,
+				x_smbd_conn_get_dialect(smbd_conn), status, out_security);
+	}
 	x_smbd_conn_requ_done(smbd_conn, smbd_requ, status);
 }
 
@@ -176,7 +179,8 @@ NTSTATUS x_smb2_process_sesssetup(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_
 			in_hdr + in_security_offset, in_security_length,
 			out_security, auth_info, new_auth);
 	X_LOG_DBG("smbd_chan=%p, smbd_requ=%p, status=0x%x", smbd_requ->smbd_chan, smbd_requ, NT_STATUS_V(status));
-	if (!NT_STATUS_EQUAL(status, X_NT_STATUS_INTERNAL_BLOCKED)) {
+	if (NT_STATUS_IS_OK(status) ||
+			NT_STATUS_EQUAL(status, NT_STATUS_MORE_PROCESSING_REQUIRED)) {
 		x_smb2_reply_sesssetup(smbd_conn, smbd_requ->smbd_chan, smbd_requ,
 				dialect, status, out_security);
 	}
