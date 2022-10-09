@@ -145,14 +145,13 @@ struct x_smb2_state_ioctl_t
 
 struct x_smb2_state_notify_t
 {
-	// void done(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ, NTSTATUS status);
 	uint16_t in_flags;
 	uint32_t in_output_buffer_length;
 	uint64_t in_file_id_persistent;
 	uint64_t in_file_id_volatile;
 	uint32_t in_filter;
 
-	std::vector<uint8_t> out_data;
+	std::vector<std::pair<uint32_t, std::u16string>> out_notify_changes;
 };
 
 struct x_smb2_state_lease_break_t

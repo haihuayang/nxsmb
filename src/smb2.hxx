@@ -574,10 +574,9 @@ NTSTATUS x_smb2_rename_info_decode(bool &replace_if_exists,
 		std::u16string &path, std::u16string &stream_name,
 		const std::vector<uint8_t> &in_data);
 
-NTSTATUS x_smb2_notify_marshall(
+size_t x_smb2_notify_marshall(
 		const std::vector<std::pair<uint32_t, std::u16string>> &notify_changes,
-		uint32_t max_offset,
-		std::vector<uint8_t> &output);
+		uint8_t *buf, size_t max_offset);
 
 uint16_t x_smb2_dialect_match(const std::vector<uint16_t> &sdialects,
 		const uint16_t *dialects,

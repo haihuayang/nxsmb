@@ -41,29 +41,37 @@ struct x_smb2_out_notify_t
 	uint32_t output_buffer_length;
 };
 
-static void encode_out_notify(const x_smb2_state_notify_t &state,
-		uint8_t *out_hdr)
-{
-	x_smb2_out_notify_t *out_notify = (x_smb2_out_notify_t *)(out_hdr + SMB2_HDR_BODY);
-	out_notify->struct_size = X_H2LE16(sizeof(x_smb2_out_notify_t) + 1);
-	out_notify->output_buffer_offset = X_H2LE16(SMB2_HDR_BODY + sizeof(x_smb2_out_notify_t));
-	out_notify->output_buffer_length = X_H2LE32(x_convert_assert<uint32_t>(state.out_data.size()));
-	memcpy(out_notify + 1, state.out_data.data(), state.out_data.size());
-}
-
-static void x_smb2_reply_notify(x_smbd_conn_t *smbd_conn,
+static NTSTATUS x_smb2_reply_notify(x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ,
 		const x_smb2_state_notify_t &state)
 {
 	X_LOG_OP("%ld RESP SUCCESS", smbd_requ->in_mid);
 
 	x_bufref_t *bufref = x_bufref_alloc(sizeof(x_smb2_out_notify_t) +
-			state.out_data.size());
+			state.in_output_buffer_length);
 
 	uint8_t *out_hdr = bufref->get_data();
-	encode_out_notify(state, out_hdr);
-	x_smb2_reply(smbd_conn, smbd_requ, bufref, bufref, NT_STATUS_OK, 
-			SMB2_HDR_BODY + sizeof(x_smb2_out_notify_t) + state.out_data.size());
+	x_smb2_out_notify_t *out_notify = (x_smb2_out_notify_t *)(out_hdr + SMB2_HDR_BODY);
+	uint8_t *out_body = (uint8_t *)(out_notify + 1);
+
+	size_t body_length = x_smb2_notify_marshall(state.out_notify_changes,
+			out_body, state.in_output_buffer_length);
+	NTSTATUS status;
+	if (body_length == 0) {
+		status = NT_STATUS_NOTIFY_ENUM_DIR;
+	} else {
+		status = NT_STATUS_OK;
+	}
+	bufref->length = x_convert_assert<uint32_t>(SMB2_HDR_BODY +
+			sizeof(x_smb2_out_notify_t) + body_length);
+
+	out_notify->struct_size = X_H2LE16(sizeof(x_smb2_out_notify_t) + 1);
+	out_notify->output_buffer_offset = X_H2LE16(SMB2_HDR_BODY + sizeof(x_smb2_out_notify_t));
+	out_notify->output_buffer_length = X_H2LE32(x_convert_assert<uint32_t>(body_length));
+
+	x_smb2_reply(smbd_conn, smbd_requ, bufref, bufref, status, 
+			bufref->length);
+	return status;
 }
 
 static void x_smb2_notify_async_done(x_smbd_conn_t *smbd_conn,
@@ -121,8 +129,7 @@ NTSTATUS x_smb2_process_notify(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_req
 	NTSTATUS status = x_smbd_open_op_notify(smbd_requ->smbd_open,
 			smbd_conn, smbd_requ, state);
 	if (NT_STATUS_IS_OK(status)) {
-		x_smb2_reply_notify(smbd_conn, smbd_requ, *state);
-		return status;
+		return x_smb2_reply_notify(smbd_conn, smbd_requ, *state);
 	}
 
 	RETURN_OP_STATUS(smbd_requ, status);

@@ -817,14 +817,9 @@ struct posixfs_notify_evt_t
 		x_smbd_requ_t *smbd_requ = evt->smbd_requ;
 		X_LOG_DBG("evt=%p, requ=%p, terminated=%d", evt, smbd_requ, terminated);
 
-		/* TODO move x_smb2_notify_marshall into smb2_notify.cxx */
 		auto state = smbd_requ->get_state<x_smb2_state_notify_t>();
-		if (x_smbd_requ_async_remove(smbd_requ) && !terminated) {
-			NTSTATUS status = x_smb2_notify_marshall(evt->notify_changes,
-					state->in_output_buffer_length, state->out_data);
-			smbd_requ->async_done_fn(smbd_conn, smbd_requ, status, false);
-		}
-
+		state->out_notify_changes = std::move(evt->notify_changes);
+		x_smbd_requ_async_done(smbd_conn, smbd_requ, NT_STATUS_OK, terminated);
 		delete evt;
 	}
 
@@ -841,7 +836,7 @@ struct posixfs_notify_evt_t
 
 	x_fdevt_user_t base;
 	x_smbd_requ_t * const smbd_requ;
-	std::vector<std::pair<uint32_t, std::u16string>> const notify_changes;
+	std::vector<std::pair<uint32_t, std::u16string>> notify_changes;
 };
 
 void posixfs_object_notify_change(x_smbd_object_t *smbd_object,
@@ -4169,17 +4164,16 @@ NTSTATUS posixfs_object_op_notify(
 		}
 	}
 
-	auto notify_changes = std::move(posixfs_open->notify_changes);
-	X_LOG_DBG("changes count %d", notify_changes.size());
-	if (notify_changes.empty()) {
-		// TODO smbd_conn add Cancels
+	X_LOG_DBG("changes count %d", posixfs_open->notify_changes.size());
+	state->out_notify_changes = std::move(posixfs_open->notify_changes);
+	if (state->out_notify_changes.empty()) {
 		smbd_requ->save_state(state);
 		x_smbd_ref_inc(smbd_requ);
 		posixfs_open->notify_requ_list.push_back(smbd_requ);
 		x_smbd_requ_async_insert(smbd_requ, posixfs_notify_cancel);
 		return NT_STATUS_PENDING;
 	} else {
-		return x_smb2_notify_marshall(notify_changes, state->in_output_buffer_length, state->out_data);
+		return NT_STATUS_OK;
 	}
 }
 

@@ -596,6 +596,14 @@ static bool x_smb2_validate_message_id(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *
 	return true;
 }
 
+
+static bool is_success(NTSTATUS status)
+{
+	return NT_STATUS_IS_OK(status) ||
+		NT_STATUS_EQUAL(status, NT_STATUS_MORE_PROCESSING_REQUIRED) ||
+		NT_STATUS_EQUAL(status, NT_STATUS_NOTIFY_ENUM_DIR);
+}
+
 static int x_smbd_conn_process_smb2(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ,
 		uint32_t offset)
 {
@@ -656,7 +664,7 @@ static int x_smbd_conn_process_smb2(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smb
 
 		NTSTATUS status = x_smbd_conn_process_smb2_intl(
 				smbd_conn, smbd_requ);
-		if (NT_STATUS_IS_OK(status) || NT_STATUS_EQUAL(status, NT_STATUS_MORE_PROCESSING_REQUIRED)) {
+		if (is_success(status)) {
 			continue;
 		} else if (NT_STATUS_EQUAL(status, NT_STATUS_PENDING)) {
 			X_SMBD_REPLY_INTERIM(smbd_conn, smbd_requ);
@@ -1124,7 +1132,7 @@ void x_smbd_conn_unlink_chan(x_smbd_conn_t *smbd_conn, x_dlink_t *link)
 void x_smbd_conn_requ_done(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ,
 		NTSTATUS status)
 {
-	if (NT_STATUS_IS_OK(status) || NT_STATUS_EQUAL(status, NT_STATUS_MORE_PROCESSING_REQUIRED)) {
+	if (is_success(status)) {
 	} else if (NT_STATUS_EQUAL(status, NT_STATUS_PENDING)) {
 		X_ASSERT(false); // should not happen, X_SMBD_REPLY_INTERIM(smbd_conn, smbd_requ);
 	} else {

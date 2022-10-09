@@ -110,22 +110,18 @@ struct x_smb2_file_notify_info_t
 	char16_t file_name[];
 };
 
-NTSTATUS x_smb2_notify_marshall(
+size_t x_smb2_notify_marshall(
 		const std::vector<std::pair<uint32_t, std::u16string>> &notify_changes,
-		uint32_t max_offset,
-		std::vector<uint8_t> &output)
+		uint8_t *buf, size_t max_offset)
 {
-	output.resize(std::min(max_offset, 1024u));
-
-	x_smb2_chain_marshall_t marshall{output.data(), output.data() + output.size(), 4};
+	x_smb2_chain_marshall_t marshall{buf, buf + max_offset, 4};
 	uint8_t *pbegin;
 	uint32_t rec_size = 0;
 	for (const auto &change: notify_changes) {
 		rec_size = x_convert_assert<uint32_t>(sizeof(x_smb2_file_notify_info_t) + 2 * change.second.size());
 		pbegin = marshall.get_begin(rec_size);
 		if (!pbegin) {
-			output.clear();
-			return NT_STATUS_NOTIFY_ENUM_DIR;
+			return 0;
 		}
 		
 		x_smb2_file_notify_info_t *info = (x_smb2_file_notify_info_t *)pbegin;
@@ -134,8 +130,7 @@ NTSTATUS x_smb2_notify_marshall(
 		info->file_name_length = X_H2LE32(x_convert_assert<uint32_t>(change.second.size() * 2));
 		x_utf16le_encode(change.second, info->file_name);
 	}
-	output.resize(marshall.get_size());
-	return NT_STATUS_OK;
+	return marshall.get_size();
 }
 
 uint16_t x_smb2_dialect_match(const std::vector<uint16_t> &sdialects,
