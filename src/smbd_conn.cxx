@@ -1168,9 +1168,7 @@ struct x_smbd_cancel_evt_t
 		x_smbd_requ_t *smbd_requ = evt->smbd_requ;
 		X_LOG_DBG("evt=%p, requ=%p, terminated=%d", evt, smbd_requ, terminated);
 
-		if (!terminated) {
-			smbd_requ->async_done_fn(smbd_conn, smbd_requ, NT_STATUS_CANCELLED);
-		}
+		x_smbd_requ_async_done(smbd_conn, smbd_requ, NT_STATUS_CANCELLED, terminated);
 
 		delete evt;
 	}
@@ -1191,6 +1189,11 @@ void x_smbd_conn_post_cancel(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 {
 	x_smbd_cancel_evt_t *evt = new x_smbd_cancel_evt_t(smbd_requ);
 	if (!x_smbd_conn_post_user(smbd_conn, &evt->base)) {
+		X_LOG_DBG("x_smbd_conn_post_user %p failed", smbd_requ);
+		/* failed posting, smbd_conn should already terminated,
+		 * it is OK to run it not in smbd_conn's context
+		 */
+		x_smbd_requ_async_done(smbd_conn, smbd_requ, NT_STATUS_CANCELLED, true);
 		delete evt;
 	}
 }

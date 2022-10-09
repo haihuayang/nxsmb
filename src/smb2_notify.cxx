@@ -68,11 +68,14 @@ static void x_smb2_reply_notify(x_smbd_conn_t *smbd_conn,
 
 static void x_smb2_notify_async_done(x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ,
-		NTSTATUS status)
+		NTSTATUS status,
+		bool terminated)
 {
-	std::unique_ptr<x_smb2_state_notify_t> state{(x_smb2_state_notify_t *)smbd_requ->requ_state};
 	X_LOG_DBG("status=0x%x", status.v);
-	smbd_requ->requ_state = nullptr;
+	auto state = smbd_requ->release_state<x_smb2_state_notify_t>();
+	if (terminated) {
+		return;
+	}
 	if (NT_STATUS_IS_OK(status)) {
 		x_smb2_reply_notify(smbd_conn, smbd_requ, *state);
 	}

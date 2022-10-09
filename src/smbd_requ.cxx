@@ -108,6 +108,16 @@ bool x_smbd_requ_async_remove(x_smbd_requ_t *smbd_requ)
 	return true;
 }
 
+void x_smbd_requ_async_done(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ,
+		NTSTATUS status, bool terminated)
+{
+	if (!x_smbd_requ_async_remove(smbd_requ)) {
+		/* it must be cancelled by x_smbd_conn_cancel */
+		X_ASSERT(NT_STATUS_EQUAL(status, NT_STATUS_CANCELLED));
+	}
+	smbd_requ->async_done_fn(smbd_conn, smbd_requ, status, terminated);
+}
+
 int x_smbd_requ_pool_init(uint32_t count)
 {
 	g_smbd_requ_table = new smbd_requ_table_t(count);

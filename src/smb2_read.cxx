@@ -77,11 +77,14 @@ static void x_smb2_reply_read(x_smbd_conn_t *smbd_conn,
 
 static void x_smb2_read_async_done(x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ,
-		NTSTATUS status)
+		NTSTATUS status,
+		bool terminated)
 {
 	X_LOG_DBG("status=0x%x", status.v);
-	std::unique_ptr<x_smb2_state_read_t> state{(x_smb2_state_read_t *)smbd_requ->requ_state};
-	smbd_requ->requ_state = nullptr;
+	auto state = smbd_requ->release_state<x_smb2_state_read_t>();
+	if (terminated) {
+		return;
+	}
 	if (NT_STATUS_IS_OK(status)) {
 		if (state->out_buf_length < state->in_minimum_count) {
 			status = NT_STATUS_END_OF_FILE;

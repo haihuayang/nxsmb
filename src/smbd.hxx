@@ -337,6 +337,26 @@ struct x_smbd_requ_t
 	       return (in_hdr_flags & SMB2_HDR_FLAG_SIGNED) != 0;
 	}
 
+	template <class T>
+	std::unique_ptr<T> release_state() {
+		X_ASSERT(requ_state);
+		std::unique_ptr<T> state{(T *)requ_state};
+		requ_state = nullptr;
+		return state;
+	}
+
+	template <class T>
+	T *get_state() const {
+		X_ASSERT(requ_state);
+		return (T *)requ_state;
+	}
+
+	template <class T>
+	void save_state(std::unique_ptr<T> &state) {
+		X_ASSERT(!requ_state);
+		requ_state = state.release();
+	}
+
 	x_job_t job;
 	x_dlink_t async_link; // link into open
 	void *requ_state = nullptr;
@@ -367,7 +387,8 @@ struct x_smbd_requ_t
 	x_smbd_tcon_t *smbd_tcon{};
 	x_smbd_open_t *smbd_open{};
 	void (*cancel_fn)(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ);
-	void (*async_done_fn)(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ, NTSTATUS status);
+	void (*async_done_fn)(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ,
+			NTSTATUS status, bool terminated);
 };
 X_DECLARE_MEMBER_TRAITS(requ_async_traits, x_smbd_requ_t, async_link)
 
@@ -379,6 +400,8 @@ x_smbd_requ_t *x_smbd_requ_async_lookup(uint64_t id, const x_smbd_conn_t *smbd_c
 void x_smbd_requ_async_insert(x_smbd_requ_t *smbd_requ,
 		void (*cancel_fn)(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ));
 bool x_smbd_requ_async_remove(x_smbd_requ_t *smbd_requ);
+void x_smbd_requ_async_done(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ,
+		NTSTATUS status, bool terminated);
 
 
 NTSTATUS x_smbd_dfs_resolve_path(
