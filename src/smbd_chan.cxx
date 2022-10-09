@@ -412,6 +412,9 @@ NTSTATUS x_smbd_chan_update_auth(x_smbd_chan_t *smbd_chan,
 		std::shared_ptr<x_auth_info_t> &auth_info,
 		bool new_auth)
 {
+	if (!smbd_chan->auth) {
+		smbd_chan->auth = x_smbd_create_auth(in_security_data, in_security_length);
+	}
 	if (new_auth) {
 		X_ASSERT(smbd_chan->state == x_smbd_chan_t::S_INIT);
 	} else {
@@ -453,7 +456,6 @@ x_smbd_chan_t *x_smbd_chan_create(x_smbd_sess_t *smbd_sess, x_smbd_conn_t *smbd_
 	}
 	x_smbd_ref_inc(smbd_chan); // ref by smbd_sess
 
-	smbd_chan->auth = x_smbd_create_auth();
 	smbd_chan->auth_upcall.cbs = &smbd_chan_auth_upcall_cbs;
 	smbd_chan->timer.func = smbd_chan_auth_input_timeout;
 	const x_smb2_preauth_t *preauth = x_smbd_conn_get_preauth(smbd_conn);

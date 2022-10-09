@@ -46,8 +46,11 @@ static void main_loop()
 	}
 }
 
-x_auth_t *x_smbd_create_auth()
+x_auth_t *x_smbd_create_auth(const void *sec_buf, size_t sec_len)
 {
+	if (sec_len >= 8 && memcmp(sec_buf, "NTLMSSP", 8) == 0) {
+		return x_auth_create_ntlmssp(g_smbd.auth_context);
+	}
 	return x_auth_create_by_oid(g_smbd.auth_context, GSS_SPNEGO_MECHANISM);
 }
 
@@ -100,7 +103,7 @@ static void init_smbd()
 	x_auth_ntlmssp_init(g_smbd.auth_context);
 	x_auth_spnego_init(g_smbd.auth_context);
 
-	x_auth_t *spnego(x_smbd_create_auth());
+	x_auth_t *spnego(x_smbd_create_auth(nullptr, 0));
 
 	if (spnego) {
 		std::vector<uint8_t> negprot_spnego;

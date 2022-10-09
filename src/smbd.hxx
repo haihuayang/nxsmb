@@ -42,7 +42,7 @@ extern "C" {
 #define X_NT_STATUS_INTERNAL_BLOCKED	NT_STATUS(1)
 #define X_NT_STATUS_INTERNAL_TERMINATE	NT_STATUS(2)
 
-x_auth_t *x_smbd_create_auth();
+x_auth_t *x_smbd_create_auth(const void *sec_buf, size_t sec_len);
 const std::vector<uint8_t> &x_smbd_get_negprot_spnego();
 
 enum class x_smbd_timer_t {
@@ -256,7 +256,6 @@ bool x_smbd_sess_post_user(x_smbd_sess_t *smbd_sess, x_fdevt_user_t *evt);
 		delete __evt; \
 	} \
 } while (0)
-
 
 
 
