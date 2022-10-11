@@ -303,6 +303,7 @@ NTSTATUS x_smbd_tcon_delete_object(x_smbd_tcon_t *smbd_tcon,
 		x_smbd_object_t *smbd_object,
 		x_smbd_open_t *smbd_open, int fd,
 		std::vector<x_smb2_change_t> &changes);
+std::string x_smbd_tcon_get_volume_label(const x_smbd_tcon_t *smbd_tcon);
 
 
 

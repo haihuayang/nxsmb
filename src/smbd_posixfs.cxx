@@ -7,6 +7,7 @@
 #include "smbd_ntacl.hxx"
 #include "smbd_lease.hxx"
 #include "smbd_share.hxx"
+#include "smbd_conf.hxx"
 #include "util_io.hxx"
 #include <dirent.h>
 #include <sys/syscall.h>
@@ -3585,6 +3586,35 @@ static NTSTATUS getinfo_file(posixfs_object_t *posixfs_object,
 
 		x_smbd_get_file_info(*info, posixfs_object->meta);
 
+	} else if (state.in_info_level == SMB2_FILE_INFO_FILE_EA_INFORMATION) {
+		if (state.in_output_buffer_length < sizeof(uint32_t)) {
+			return NT_STATUS_INFO_LENGTH_MISMATCH;
+		}
+		state.out_data.resize(sizeof(uint32_t));
+		uint32_t *info =
+			(uint32_t *)state.out_data.data();
+
+		/* TODO we do not support EA for now */
+		*info = 0;
+
+	} else if (state.in_info_level == SMB2_FILE_INFO_FILE_ACCESS_INFORMATION) {
+		if (state.in_output_buffer_length < sizeof(uint32_t)) {
+			return NT_STATUS_INFO_LENGTH_MISMATCH;
+		}
+		state.out_data.resize(sizeof(uint32_t));
+		uint32_t *info =
+			(uint32_t *)state.out_data.data();
+		*info = X_H2LE32(smbd_open->access_mask);
+
+	} else if (state.in_info_level == SMB2_FILE_INFO_FILE_POSITION_INFORMATION) {
+		if (state.in_output_buffer_length < sizeof(uint64_t)) {
+			return NT_STATUS_INFO_LENGTH_MISMATCH;
+		}
+		state.out_data.resize(sizeof(uint64_t));
+		uint64_t *info =
+			(uint64_t *)state.out_data.data();
+		*info = X_H2LE64(posixfs_open->current_offset);
+
 	} else if (state.in_info_level == SMB2_FILE_INFO_FILE_ALL_INFORMATION) {
 		if (state.in_output_buffer_length < sizeof(x_smb2_file_all_info_t)) {
 			return NT_STATUS_INFO_LENGTH_MISMATCH;
@@ -3609,12 +3639,17 @@ static NTSTATUS getinfo_file(posixfs_object_t *posixfs_object,
 		x_smbd_get_file_info(*info, posixfs_object->meta,
 				posixfs_open->stream->meta);
 
+	} else if (state.in_info_level == SMB2_FILE_INFO_FILE_STREAM_INFORMATION) {
+		if (state.in_output_buffer_length < sizeof(x_smb2_file_stream_name_info_t) + 8) {
+			return NT_STATUS_INFO_LENGTH_MISMATCH;
+		}
+		return getinfo_stream_info(posixfs_object, state);
+
 	} else if (state.in_info_level == SMB2_FILE_INFO_FILE_NORMALIZED_NAME_INFORMATION) {
 		if (x_smbd_conn_curr_dialect() < 0x311) {
 			return NT_STATUS_NOT_SUPPORTED;
 		}
-		uint32_t output_buffer_length = state.in_output_buffer_length & ~1;
-		if (output_buffer_length < sizeof(x_smb2_file_normalized_name_info_t)) {
+		if (state.in_output_buffer_length < sizeof(x_smb2_file_normalized_name_info_t)) {
 			return NT_STATUS_INFO_LENGTH_MISMATCH;
 		}
 		
@@ -3627,59 +3662,35 @@ static NTSTATUS getinfo_file(posixfs_object_t *posixfs_object,
 		}
 		name_length <<= 1;
 
+		uint32_t output_buffer_length = state.in_output_buffer_length & ~1;
 		size_t buf_size = std::min(size_t(output_buffer_length),
-				name_length + sizeof(uint32_t));
+				offsetof(x_smb2_file_normalized_name_info_t, name) +
+				name_length);
 		state.out_data.resize(buf_size);
 		x_smb2_file_normalized_name_info_t *info =
 			(x_smb2_file_normalized_name_info_t *)state.out_data.data();
 		info->name_length = X_H2LE32(x_convert_assert<uint32_t>(name_length));
-		buf_size -= sizeof(uint32_t);
-		buf_size >>= 1;
 
 		char16_t *buf = info->name;
-		buf = x_utf16le_encode(posixfs_object->base.path, buf, buf_size);
+		char16_t *buf_end = (char16_t *)((char *)info + buf_size);
+		buf = x_utf16le_encode(posixfs_object->base.path, buf, buf_end);
 		if (!buf) {
 			return STATUS_BUFFER_OVERFLOW;
 		}
-		buf_size -= posixfs_object->base.path.length();
 
 		if (posixfs_ads) {
-			if (buf_size == 0) {
+			if (buf == buf_end) {
 				return STATUS_BUFFER_OVERFLOW;
 			}
 			*buf++ = X_H2LE16(u':');
-			buf_size--;
-			buf = x_utf16le_encode(posixfs_ads->name, buf, buf_size);
+			buf = x_utf16le_encode(posixfs_ads->name, buf, buf_end);
 			if (!buf) {
 				return STATUS_BUFFER_OVERFLOW;
 			}
 		}
 
-	} else if (state.in_info_level == SMB2_FILE_INFO_FILE_ACCESS_INFORMATION) {
-		if (state.in_output_buffer_length < sizeof(uint32_t)) {
-			return NT_STATUS_INFO_LENGTH_MISMATCH;
-		}
-		state.out_data.resize(sizeof(uint32_t));
-		uint32_t *info =
-			(uint32_t *)state.out_data.data();
-		*info = X_H2LE32(smbd_open->access_mask);
-
-	} else if (state.in_info_level == SMB2_FILE_INFO_FILE_POSITION_INFORMATION) {
-		if (state.in_output_buffer_length < sizeof(uint64_t)) {
-			return NT_STATUS_INFO_LENGTH_MISMATCH;
-		}
-		state.out_data.resize(sizeof(uint64_t));
-		uint64_t *info =
-			(uint64_t *)state.out_data.data();
-		*info = X_H2LE64(posixfs_open->current_offset);
-
-	} else if (state.in_info_level == SMB2_FILE_INFO_FILE_STREAM_INFORMATION) {
-		if (state.in_output_buffer_length < sizeof(x_smb2_file_stream_name_info_t) + 8) {
-			return NT_STATUS_INFO_LENGTH_MISMATCH;
-		}
-		return getinfo_stream_info(posixfs_object, state);
-
 	} else {
+		X_TODO;
 		return NT_STATUS_INVALID_LEVEL;
 	}
 	return NT_STATUS_OK;
@@ -3791,33 +3802,66 @@ static NTSTATUS setinfo_file(posixfs_object_t *posixfs_object,
 		return NT_STATUS_OK;
 
 	} else {
+		X_TODO;
 		return NT_STATUS_INVALID_LEVEL;
 	}
 }
 
-static NTSTATUS getinfo_fs(posixfs_object_t *posixfs_object,
+static NTSTATUS getinfo_fs(x_smbd_requ_t *smbd_requ,
+		posixfs_object_t *posixfs_object,
 		x_smb2_state_getinfo_t &state)
 {
-	if (state.in_info_level == SMB2_FILE_INFO_FS_SIZE_INFORMATION) {
-		if (state.in_output_buffer_length < 24) {
+	if (state.in_info_level == SMB2_FILE_INFO_FS_VOLUME_INFORMATION) {
+		if (state.in_output_buffer_length < sizeof(x_smb2_fs_volume_info_t)) {
+			return NT_STATUS_INFO_LENGTH_MISMATCH;
+		}
+
+		std::string netbios_name = x_smbd_conf_get()->netbios_name;
+		std::string volume = x_smbd_tcon_get_volume_label(smbd_requ->smbd_tcon);
+		size_t hash = std::hash<std::string>{}(netbios_name + ":" + volume);
+		std::u16string u16_volume = x_convert_utf8_to_utf16(volume);
+
+		uint32_t output_buffer_length = state.in_output_buffer_length & ~1;
+		size_t buf_size = std::min(size_t(output_buffer_length),
+				offsetof(x_smb2_fs_volume_info_t, label) +
+				u16_volume.length() * 2);
+
+		state.out_data.resize(buf_size);
+		x_smb2_fs_volume_info_t *info =
+			(x_smb2_fs_volume_info_t *)state.out_data.data();
+		info->creation_time = 0;
+		info->serial_number = X_H2LE32(x_convert<uint32_t>(hash));
+		info->unused = 0;
+		info->label_length = X_H2LE32(8);
+		char16_t *buf = info->label;
+		char16_t *buf_end = (char16_t *)((char *)info + buf_size);
+		buf = x_utf16le_encode(u16_volume, buf, buf_end);
+		if (!buf) {
+			return STATUS_BUFFER_OVERFLOW;
+		}
+
+		return NT_STATUS_OK;
+
+	} else if (state.in_info_level == SMB2_FILE_INFO_FS_SIZE_INFORMATION) {
+		if (state.in_output_buffer_length < sizeof(x_smb2_fs_size_info_t)) {
 			return NT_STATUS_INFO_LENGTH_MISMATCH;
 		}
 		struct statvfs fsstat;
 		int err = fstatvfs(posixfs_object->fd, &fsstat);
 		assert(err == 0);
-		state.out_data.resize(24);
-		uint8_t *p = state.out_data.data();
-		x_put_le64(p, fsstat.f_blocks); p += 8;
-		x_put_le64(p, fsstat.f_bfree); p += 8;
-		x_put_le32(p, x_convert_assert<uint32_t>(fsstat.f_bsize / 512)); p += 4;
-		x_put_le32(p, 512); p += 4;
-
+		state.out_data.resize(sizeof(x_smb2_fs_size_info_t));
+		x_smb2_fs_size_info_t *info = (x_smb2_fs_size_info_t *)state.out_data.data();
+		info->allocation_size = X_H2LE64(fsstat.f_blocks);
+		info->free_units = X_H2LE64(fsstat.f_bfree);
+		info->sectors_per_unit = X_H2LE32(x_convert_assert<uint32_t>(fsstat.f_bsize / 512));
+		info->bytes_per_sector = X_H2LE32(512);
 		return NT_STATUS_OK;
+
 	} else if (state.in_info_level == SMB2_FILE_INFO_FS_ATTRIBUTE_INFORMATION) {
-		/* 20 = 4 + 4 + 4 + 'NTFS' */
-		if (state.in_output_buffer_length < 20) {
+		if (state.in_output_buffer_length < sizeof(x_smb2_fs_attr_info_t)) {
 			return NT_STATUS_INFO_LENGTH_MISMATCH;
 		}
+
 		struct statvfs fsstat;
 		int err = fstatvfs(posixfs_object->fd, &fsstat);
 		assert(err == 0);
@@ -3835,17 +3879,29 @@ static NTSTATUS getinfo_fs(posixfs_object_t *posixfs_object,
 		fs_cap |= FILE_SUPPORTS_OBJECT_IDS | FILE_UNICODE_ON_DISK;
 		// fs_cap |= smbshare->fake_fs_caps;
 
-		state.out_data.resize(20);
-		uint8_t *p = state.out_data.data();
-		x_put_le32(p, fs_cap);
-		x_put_le32(p, 255); /* Max filename component length */
-		x_put_le32(p, 8); /* length of NTFS */
-		x_put_le64(p, 0x5300460054004e); /* NTFS char16 le order */
+		uint32_t output_buffer_length = state.in_output_buffer_length & ~1;
+		size_t buf_size = std::min(size_t(output_buffer_length),
+				offsetof(x_smb2_fs_attr_info_t, label) + 8);
+
+		state.out_data.resize(buf_size);
+		x_smb2_fs_attr_info_t *info =
+			(x_smb2_fs_attr_info_t *)state.out_data.data();
+		info->attributes = X_H2LE32(fs_cap);
+		info->max_name_length = X_H2LE32(255);
+		info->label_length = X_H2LE32(8);
+		char16_t *buf = info->label;
+		char16_t *buf_end = (char16_t *)((char *)info + buf_size);
+		buf = x_utf16le_encode(u"NTFS", buf, buf_end);
+		if (!buf) {
+			return STATUS_BUFFER_OVERFLOW;
+		}
 
 		return NT_STATUS_OK;
-	}
 
-	return NT_STATUS_INVALID_LEVEL;
+	} else {
+		X_TODO;
+		return NT_STATUS_INVALID_LEVEL;
+	}
 }
 
 static NTSTATUS getinfo_security(posixfs_object_t *posixfs_object,
@@ -3927,7 +3983,7 @@ NTSTATUS posixfs_object_op_getinfo(
 	if (state->in_info_class == SMB2_GETINFO_FILE) {
 		return getinfo_file(posixfs_object, smbd_open, *state);
 	} else if (state->in_info_class == SMB2_GETINFO_FS) {
-		return getinfo_fs(posixfs_object, *state);
+		return getinfo_fs(smbd_requ, posixfs_object, *state);
 	} else if (state->in_info_class == SMB2_GETINFO_SECURITY) {
 		return getinfo_security(posixfs_object, *state);
 	} else if (state->in_info_class == SMB2_GETINFO_QUOTA) {

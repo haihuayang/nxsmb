@@ -97,6 +97,7 @@ enum {
 };
 
 enum {
+	SMB2_FILE_INFO_FS_VOLUME_INFORMATION = 1,
 	SMB2_FILE_INFO_FS_SIZE_INFORMATION = 3,
 	SMB2_FILE_INFO_FS_ATTRIBUTE_INFORMATION = 5,
 };
@@ -442,10 +443,9 @@ struct x_smb2_file_all_info_t
 struct x_smb2_file_normalized_name_info_t
 {
 	uint32_t name_length;
-	char16_t name[2]; // variable length
-	/* packed is not needed, windows server requires
-	   in_output_buffer_length at lease 8 bytes */
-};
+	char16_t name[];
+} __attribute__ ((aligned (8))); /* windows server requires
+				    in_output_buffer_length at lease 8 bytes */
 
 struct x_smb2_rename_info_t
 {
@@ -458,6 +458,31 @@ struct x_smb2_rename_info_t
 	uint32_t file_name_length;
 	/* following variable length file_name */
 };
+
+struct x_smb2_fs_volume_info_t
+{
+	uint64_t creation_time;
+	uint32_t serial_number;
+	uint32_t label_length;
+	uint16_t unused;  //support_objects;
+	char16_t label[];
+} __attribute__ ((aligned (8)));
+
+struct x_smb2_fs_size_info_t
+{
+	uint64_t allocation_size;
+	uint64_t free_units;
+	uint32_t sectors_per_unit;
+	uint32_t bytes_per_sector;
+};
+
+struct x_smb2_fs_attr_info_t
+{
+	uint32_t attributes;
+	uint32_t max_name_length;
+	uint32_t label_length;
+	char16_t label[];
+} __attribute__ ((aligned (8)));
 
 struct x_smb2_file_dir_info_t
 {

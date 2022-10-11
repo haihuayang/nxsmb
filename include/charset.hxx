@@ -162,15 +162,27 @@ static inline char16_t *x_utf16le_encode(const std::u16string &s,
 }
 
 static inline char16_t *x_utf16le_encode(const std::u16string &s,
-		char16_t *begin, size_t buf_size)
+		char16_t *begin, char16_t *end)
 {
 	/* TODO big endian */
 	for (auto ch: s) {
-		if (buf_size == 0) {
+		if (begin == end) {
 			return nullptr;
 		}
 		*begin++ = X_H2LE16(ch);
-		buf_size--;
+	}
+	return begin;
+}
+
+static inline char16_t *x_utf16le_encode(const char16_t *s,
+		char16_t *begin, char16_t *end)
+{
+	/* TODO big endian */
+	for ( ; *s; ++s) {
+		if (begin == end) {
+			return nullptr;
+		}
+		*begin++ = X_H2LE16(*s);
 	}
 	return begin;
 }

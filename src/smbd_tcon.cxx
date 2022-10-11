@@ -260,6 +260,15 @@ int x_smbd_tcon_table_init(uint32_t count)
 	return 0;
 }
 
+std::string x_smbd_tcon_get_volume_label(const x_smbd_tcon_t *smbd_tcon)
+{
+	if (smbd_tcon->volume.empty()) {
+		return smbd_tcon->smbd_share->name;
+	} else {
+		return smbd_tcon->volume;
+	}
+}
+
 struct x_smbd_tcon_list_t : x_smbd_ctrl_handler_t
 {
 	x_smbd_tcon_list_t() : iter(g_smbd_tcon_table->iter_start()) {
