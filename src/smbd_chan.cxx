@@ -197,6 +197,8 @@ static NTSTATUS smbd_chan_auth_succeeded(x_smbd_chan_t *smbd_chan,
 	smbd_user->gid = auth_info.primary_gid;
 	smbd_user->group_rids = auth_info.group_rids;
 	smbd_user->other_sids = auth_info.other_sids;
+	smbd_user->account_name = auth_info.account_name;
+	smbd_user->logon_domain = auth_info.logon_domain;
 
 	const x_array_const_t<char> *derivation_sign_label, *derivation_sign_context,
 	      *derivation_encryption_label, *derivation_encryption_context,
