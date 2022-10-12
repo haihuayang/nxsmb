@@ -118,6 +118,11 @@ void x_smbd_requ_async_done(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ,
 	smbd_requ->async_done_fn(smbd_conn, smbd_requ, status, terminated);
 }
 
+void x_smbd_requ_done(x_smbd_requ_t *smbd_requ)
+{
+	smbd_requ->id = g_smbd_requ_table->remove(smbd_requ->id);
+}
+
 int x_smbd_requ_pool_init(uint32_t count)
 {
 	g_smbd_requ_table = new smbd_requ_table_t(count);

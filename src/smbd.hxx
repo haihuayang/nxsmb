@@ -363,7 +363,7 @@ struct x_smbd_requ_t
 	void *requ_state = nullptr;
 
 	x_buf_t *in_buf;
-	uint64_t id;
+	uint64_t id = 0;
 	uint32_t in_msgsize, in_offset, in_requ_len;
 	bool compound_followed = false;
 	bool async = false;
@@ -403,6 +403,7 @@ void x_smbd_requ_async_insert(x_smbd_requ_t *smbd_requ,
 bool x_smbd_requ_async_remove(x_smbd_requ_t *smbd_requ);
 void x_smbd_requ_async_done(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ,
 		NTSTATUS status, bool terminated);
+void x_smbd_requ_done(x_smbd_requ_t *smbd_requ);
 
 
 NTSTATUS x_smbd_dfs_resolve_path(

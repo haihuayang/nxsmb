@@ -550,9 +550,7 @@ static NTSTATUS x_smbd_conn_process_smb2_intl(x_smbd_conn_t *smbd_conn, x_smbd_r
 
 static bool x_smb2_validate_message_id(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 {
-	if (smbd_requ->opcode == X_SMB2_OP_CANCEL) {
-		return true;
-	}
+	X_ASSERT(smbd_requ->opcode != X_SMB2_OP_CANCEL);
 
 	uint16_t credit_charge = std::max(smbd_requ->in_credit_charge, uint16_t(1u));
 
@@ -664,14 +662,15 @@ static int x_smbd_conn_process_smb2(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smb
 
 		NTSTATUS status = x_smbd_conn_process_smb2_intl(
 				smbd_conn, smbd_requ);
-		if (is_success(status)) {
-			continue;
-		} else if (NT_STATUS_EQUAL(status, NT_STATUS_PENDING)) {
+		if (NT_STATUS_EQUAL(status, NT_STATUS_PENDING)) {
 			X_SMBD_REPLY_INTERIM(smbd_conn, smbd_requ);
 			break;
 		} else if (NT_STATUS_EQUAL(status, X_NT_STATUS_INTERNAL_BLOCKED)) {
 			return 0;
-		} else {
+		}
+		x_smbd_requ_done(smbd_requ);
+
+		if (!is_success(status)) {
 			X_SMBD_REPLY_ERROR(smbd_conn, smbd_requ, status);
 			smbd_requ->status = status;
 		}
@@ -1132,10 +1131,11 @@ void x_smbd_conn_unlink_chan(x_smbd_conn_t *smbd_conn, x_dlink_t *link)
 void x_smbd_conn_requ_done(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ,
 		NTSTATUS status)
 {
-	if (is_success(status)) {
-	} else if (NT_STATUS_EQUAL(status, NT_STATUS_PENDING)) {
-		X_ASSERT(false); // should not happen, X_SMBD_REPLY_INTERIM(smbd_conn, smbd_requ);
-	} else {
+	X_ASSERT(!NT_STATUS_EQUAL(status, NT_STATUS_PENDING));
+
+	x_smbd_requ_done(smbd_requ);
+
+	if (!is_success(status)) {
 		smbd_requ->status = status;
 		X_SMBD_REPLY_ERROR(smbd_conn, smbd_requ, status);
 	}

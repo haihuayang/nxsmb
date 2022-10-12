@@ -16,7 +16,7 @@ static void output_table(T &table)
 	auto iter = table.iter_start();
 	while (true) {
 		if (!table.iter_entry(iter, [](void *data) {
-					std::cout << "iter " << data << std::endl;
+					std::cout << "   iter " << data << std::endl;
 					return true;
 				})) {
 			break;
@@ -38,6 +38,15 @@ static void test()
 {
 	typename Traits::id_type ids[8];
 	x_idtable_t<void, Traits, void_deleter> table{8};
+
+	X_ASSERT(store(table, (void *)(0x2000000ul), ids[0]));
+	table.remove(ids[0]);
+	table.decref(ids[0]);
+	X_ASSERT(store(table, (void *)(0x2000000ul), ids[1]));
+	X_ASSERT(ids[0] != ids[1]);
+	table.remove(ids[1]);
+	table.decref(ids[1]);
+
 	for (int i = 0; i < 8; ++i) {
 		X_ASSERT(store(table, (void *)(0x1000000ul + i), ids[i]));
 	}
@@ -50,7 +59,7 @@ static void test()
 		X_ASSERT(ret.second == (void *)(0x1000000ul + i));
 		table.decref(ids[i]);
 	}
-
+	std::cout << "table contains:" << std::endl;
 	output_table(table);
 
 	table.remove(ids[0]);
@@ -59,15 +68,16 @@ static void test()
 	typename Traits::id_type new_id;
        	X_ASSERT(store(table, (void *)0x100ul, new_id));
 	X_ASSERT(!table.lookup(ids[0]).first);
+	X_ASSERT(ids[0] != new_id); // verify id is diffent because gen is bumped
 	ids[0] = new_id;
 
-	table.incref(ids[1]);
+	table.incref(ids[1]); // ref is 2
 	table.remove(ids[1]);
 	X_ASSERT(!store(table, (void *)0x100ul, tmp_id));
-	table.decref(ids[1]);
+	table.decref(ids[1]); // ref is 1
 	X_ASSERT(!store(table, (void *)0x100ul, tmp_id));
-	table.decref(ids[1]);
-	X_ASSERT(!store(table, (void *)0x100ul, tmp_id));
+	table.decref(ids[1]); // ref is 0, is able to store
+	X_ASSERT(store(table, (void *)0x100ul, tmp_id));
 }
 
 

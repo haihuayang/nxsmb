@@ -223,11 +223,12 @@ struct x_idtable_t
 		return std::make_pair(true, entry->data);
 	}
 
-	void remove(id_type id) noexcept {
+	id_type remove(id_type id) noexcept {
 		entry_t *entry = find_entry(id);
 		X_ASSERT(entry);
 
 		gen_type gen = Traits::id_to_gen(id);
+		gen_type new_gen = Traits::inc_gen(gen);
 
 		uint64_t oval = entry->header.load(std::memory_order_relaxed);
 		for (;;) {
@@ -241,14 +242,14 @@ struct x_idtable_t
 			/* increase the generation to mark it is removed, it does not free
 			 * entry.
 			 */
-			uint64_t nval = (oval & 0xffffffff00000000ul) | Traits::inc_gen(gen);
+			uint64_t nval = (oval & 0xffffffff00000000ul) | new_gen;
 			if (std::atomic_compare_exchange_weak_explicit(
 						&entry->header,
 						&oval,
 						nval,
 						std::memory_order_release,
 						std::memory_order_relaxed)) {
-				break;
+				return Traits::build_id(new_gen, Traits::id_to_index(id));
 			}
 		}
 	}

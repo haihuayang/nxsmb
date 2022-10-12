@@ -17,7 +17,7 @@ struct x_smbd_sess_t
 	~x_smbd_sess_t() {
 		X_SMBD_COUNTER_INC(sess_delete, 1);
 	}
-	// uint64_t id;
+
 	const uint64_t tick_create;
 	std::mutex mutex;
 	std::shared_ptr<x_smbd_user_t> smbd_user;
@@ -125,6 +125,7 @@ static void smbd_sess_terminate(x_smbd_sess_t *smbd_sess, L &lock)
 {
 	x_dlink_t *link;
 	smbd_sess->smbd_user = nullptr;
+	g_smbd_sess_table->remove(smbd_sess->id);
 
 	while ((link = smbd_sess->chan_list.get_front()) != nullptr) {
 		smbd_sess->chan_list.remove(link);
