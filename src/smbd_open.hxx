@@ -15,7 +15,8 @@
 
 struct x_smbd_open_t
 {
-	x_smbd_open_t(x_smbd_object_t *so, x_smbd_tcon_t *st,
+	x_smbd_open_t(x_smbd_object_t *so, x_smbd_stream_t *ss,
+			x_smbd_tcon_t *st,
 			uint32_t am, uint32_t sa,
 			long priv_data);
 	~x_smbd_open_t();
@@ -31,7 +32,7 @@ struct x_smbd_open_t
 	x_dlink_t tcon_link; // protected by the mutex of smbd_tcon
 	const x_tick_t tick_create;
 	x_smbd_object_t * const smbd_object;
-	// x_smbd_stream_t * const smbd_stream;
+	x_smbd_stream_t * const smbd_stream; // not null if it is ADS
 	x_smbd_tcon_t * const smbd_tcon;
 	uint64_t id; // TODO we use it for both volatile and persisten id
 	enum {
@@ -149,6 +150,10 @@ struct x_smbd_object_t
 	};
 	uint16_t type = type_not_exist;
 	std::u16string path;
+};
+
+struct x_smbd_stream_t
+{
 };
 
 NTSTATUS x_smbd_open_op_close(

@@ -26,10 +26,10 @@ bool x_smbd_open_has_space()
 }
 
 x_smbd_open_t::x_smbd_open_t(x_smbd_object_t *so,
-		// x_smbd_stream_t *strm,
+		x_smbd_stream_t *strm,
 		x_smbd_tcon_t *st,
 		uint32_t am, uint32_t sa, long priv_data)
-	: tick_create(tick_now), smbd_object(so) /*smbd_stream(strm), */
+	: tick_create(tick_now), smbd_object(so), smbd_stream(strm)
 	, smbd_tcon(x_smbd_ref_inc(st))
 	, access_mask(am), share_access(sa), priv_data(priv_data)
 {

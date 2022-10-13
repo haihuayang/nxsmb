@@ -47,7 +47,7 @@ struct named_pipe_t
 {
 	named_pipe_t(x_smbd_object_t *so, x_smbd_tcon_t *st,
 			uint32_t am, uint32_t sa)
-		: base(so, st, am, sa, 0) { }
+		: base(so, nullptr, st, am, sa, 0) { }
 	x_smbd_open_t base;
 	// const x_dcerpc_iface_t *iface;
 	std::vector<x_bind_context_t> bind_contexts;
