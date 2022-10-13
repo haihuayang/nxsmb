@@ -102,12 +102,12 @@ static inline auto smbd_lease_lock(const x_smbd_lease_t *smbd_lease)
 
 bool x_smbd_lease_match(const x_smbd_lease_t *smbd_lease,
 		x_smbd_object_t *smbd_object,
-		void *smbd_stream)
+		x_smbd_stream_t *smbd_stream)
 {
 	auto lock = smbd_lease_lock(smbd_lease);
 	if (smbd_lease->smbd_object) {
 		return smbd_lease->smbd_object == smbd_object &&
-			(void *)smbd_lease->smbd_stream == smbd_stream;
+			smbd_lease->smbd_stream == smbd_stream;
 	}
 	return true;
 }

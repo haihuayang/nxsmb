@@ -57,7 +57,7 @@ bool x_smbd_lease_set_breaking_if(x_smbd_lease_t *smbd_lease);
 
 bool x_smbd_lease_match(const x_smbd_lease_t *smbd_lease,
 		x_smbd_object_t *smbd_object,
-		void *smbd_stream);
+		x_smbd_stream_t *smbd_stream);
 
 #endif /* __smbd_lease__hxx__ */
 

@@ -361,11 +361,11 @@ static posixfs_object_pool_t posixfs_object_pool;
 } while (0)
 
 #define CHECK_OBJECT_LEASE(l, pobj) \
-	CHECK_LEASE((l), &(pobj)->base, &(pobj)->default_stream)
+	CHECK_LEASE((l), &(pobj)->base, &(pobj)->default_stream.base)
 
 #define CHECK_STREAM_LEASE(l, pobj, pads) \
 	CHECK_LEASE((l), &(pobj)->base, \
-			(pads) ? &(pads)->base : &(pobj)->default_stream)
+			(pads) ? &(pads)->base.base : &(pobj)->default_stream.base)
 
 
 static std::string convert_to_unix(const std::u16string &req_path)
@@ -812,7 +812,8 @@ static void posixfs_create_cancel(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_
 {
 	auto state = smbd_requ->get_state<x_smb2_state_create_t>();
 	posixfs_object_t *posixfs_object = posixfs_object_from_base_t::container(state->smbd_object);
-	posixfs_stream_t *posixfs_stream = (posixfs_stream_t *)state->smbd_stream;
+	posixfs_stream_t *posixfs_stream = posixfs_get_stream(posixfs_object,
+			state->smbd_stream);
 
 	{
 		auto lock = std::lock_guard(posixfs_object->base.mutex);
@@ -2034,9 +2035,9 @@ static void defer_open(
 {
 	if (!state->smbd_stream) {
 		posixfs_stream_incref(posixfs_stream);
-		state->smbd_stream = (x_smbd_stream_t *)posixfs_stream;
+		state->smbd_stream = &posixfs_stream->base;
 	} else {
-		X_ASSERT(state->smbd_stream == (x_smbd_stream_t *)posixfs_stream);
+		X_ASSERT(state->smbd_stream == &posixfs_stream->base);
 	}
 
 	smbd_requ->save_state(state);
