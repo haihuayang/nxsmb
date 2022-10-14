@@ -88,7 +88,6 @@ static inline named_pipe_t *from_smbd_open(x_smbd_open_t *smbd_open)
 static NTSTATUS named_pipe_read(
 		x_smbd_ipc_object_t *ipc_object,
 		named_pipe_t *named_pipe,
-		x_smbd_conn_t *smbd_conn,
 		uint32_t requ_length,
 		x_buf_t *&out_buf,
 		uint32_t &out_buf_length)
@@ -393,13 +392,11 @@ static int named_pipe_write(
 static NTSTATUS ipc_object_op_read(
 		x_smbd_object_t *smbd_object,
 		x_smbd_open_t *smbd_open,
-		x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ,
 		std::unique_ptr<x_smb2_state_read_t> &state)
 {
 	return named_pipe_read(from_smbd_object(smbd_object),
 			from_smbd_open(smbd_requ->smbd_open),
-			smbd_conn,
 			state->in_length, state->out_buf,
 			state->out_buf_length);
 }
@@ -407,7 +404,6 @@ static NTSTATUS ipc_object_op_read(
 static NTSTATUS ipc_object_op_write(
 		x_smbd_object_t *smbd_object,
 		x_smbd_open_t *smbd_open,
-		x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ,
 		std::unique_ptr<x_smb2_state_write_t> &state)
 {
@@ -478,7 +474,6 @@ static NTSTATUS ipc_object_op_ioctl(
 				state->in_buf->data + state->in_buf_offset,
 				state->in_buf_length);
 		return named_pipe_read(ipc_object, named_pipe,
-				smbd_conn,
 				state->in_max_output_length,
 				state->out_buf,
 				state->out_buf_length);

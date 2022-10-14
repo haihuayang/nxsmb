@@ -142,7 +142,7 @@ NTSTATUS x_smb2_process_write(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ
 	NTSTATUS status;
 	if (state->in_buf) {
 		smbd_requ->async_done_fn = x_smb2_write_async_done;
-		status = x_smbd_open_op_write(smbd_requ->smbd_open, smbd_conn, smbd_requ,
+		status = x_smbd_open_op_write(smbd_requ->smbd_open, smbd_requ,
 				state);
 	} else {
 		state->out_count = 0;

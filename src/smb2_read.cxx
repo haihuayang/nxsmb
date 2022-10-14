@@ -138,7 +138,7 @@ NTSTATUS x_smb2_process_read(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 		status = NT_STATUS_OK;
 	} else {
 		smbd_requ->async_done_fn = x_smb2_read_async_done;
-		status = x_smbd_open_op_read(smbd_requ->smbd_open, smbd_conn, smbd_requ,
+		status = x_smbd_open_op_read(smbd_requ->smbd_open, smbd_requ,
 				state);
 	}
 

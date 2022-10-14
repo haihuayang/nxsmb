@@ -63,12 +63,10 @@ struct x_smbd_object_ops_t
 			std::vector<x_smb2_change_t> &changes);
 	NTSTATUS (*read)(x_smbd_object_t *smbd_object,
 			x_smbd_open_t *smbd_open,
-			x_smbd_conn_t *smbd_conn,
 			x_smbd_requ_t *smbd_requ,
 			std::unique_ptr<x_smb2_state_read_t> &state);
 	NTSTATUS (*write)(x_smbd_object_t *smbd_object,
 			x_smbd_open_t *smbd_open,
-			x_smbd_conn_t *smbd_conn,
 			x_smbd_requ_t *smbd_requ,
 			std::unique_ptr<x_smb2_state_write_t> &state);
 	NTSTATUS (*lock)(x_smbd_object_t *smbd_object,
@@ -163,7 +161,6 @@ NTSTATUS x_smbd_open_op_close(
 
 static inline NTSTATUS x_smbd_open_op_read(
 		x_smbd_open_t *smbd_open,
-		x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ,
 		std::unique_ptr<x_smb2_state_read_t> &state)
 {
@@ -172,12 +169,11 @@ static inline NTSTATUS x_smbd_open_op_read(
 	if (!op_fn) {
 		return NT_STATUS_INVALID_DEVICE_REQUEST;
 	}
-	return op_fn(smbd_object, smbd_open, smbd_conn, smbd_requ, state);
+	return op_fn(smbd_object, smbd_open, smbd_requ, state);
 }
 
 static inline NTSTATUS x_smbd_open_op_write(
 		x_smbd_open_t *smbd_open,
-		x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ,
 		std::unique_ptr<x_smb2_state_write_t> &state)
 {
@@ -186,7 +182,7 @@ static inline NTSTATUS x_smbd_open_op_write(
 	if (!op_fn) {
 		return NT_STATUS_INVALID_DEVICE_REQUEST;
 	}
-	return op_fn(smbd_object, smbd_open, smbd_conn, smbd_requ, state);
+	return op_fn(smbd_object, smbd_open, smbd_requ, state);
 }
 
 static inline NTSTATUS x_smbd_open_op_lock(
