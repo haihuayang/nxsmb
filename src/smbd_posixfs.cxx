@@ -39,9 +39,15 @@ struct qdir_pos_t
 	uint64_t filepos;
 };
 
+/*
+ * TODO, Disable automatic timestamp updates, as described in MS-FSA.
+ * we do not support it for now
+ */
+#define NTTIME_FREEZE UINT64_MAX
+#define NTTIME_THAW (UINT64_MAX - 1)
 static bool is_null_ntime(idl::NTTIME nt)
 {
-	return nt.val == 0 || nt.val == (uint64_t)-1;
+	return nt.val == 0 || nt.val == NTTIME_FREEZE || nt.val == NTTIME_THAW;
 }
 
 static NTSTATUS posixfs_set_basic_info(int fd,
