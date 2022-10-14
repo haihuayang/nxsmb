@@ -72,7 +72,7 @@ x_smbd_open_t *x_smbd_open_lookup(uint64_t id_presistent, uint64_t id_volatile,
 {
 	auto [found, smbd_open] = g_smbd_open_table->lookup(id_volatile);
 	if (found) {
-		if (smbd_open->smbd_tcon == smbd_tcon) {
+		if (smbd_open->smbd_tcon == smbd_tcon || !smbd_tcon) {
 			return smbd_open;
 		}
 		x_smbd_ref_dec(smbd_open);

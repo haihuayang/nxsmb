@@ -5,6 +5,7 @@
 #include "smb2.hxx"
 #include "smbd_conf.hxx"
 #include "smbd_share.hxx"
+#include "smb2_ioctl.hxx"
 #include <unistd.h>
 #include <fcntl.h>
 #include <sys/types.h>
@@ -88,6 +89,7 @@ static void encode_out_ioctl(const x_smb2_state_ioctl_t &state,
 
 static void x_smb2_reply_ioctl(x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ,
+		NTSTATUS status,
 		x_smb2_state_ioctl_t &state)
 {
 	X_LOG_OP("%ld IOCTL SUCCESS", smbd_requ->in_mid);
@@ -102,7 +104,7 @@ static void x_smb2_reply_ioctl(x_smbd_conn_t *smbd_conn,
 	encode_out_ioctl(state, out_hdr);
 
 	x_smb2_reply(smbd_conn, smbd_requ, bufref,
-			bufref->next ? bufref->next : bufref, NT_STATUS_OK, 
+			bufref->next ? bufref->next : bufref, status, 
 			SMB2_HDR_BODY + sizeof(x_smb2_out_ioctl_t) + state.out_buf_length);
 }
 
@@ -491,6 +493,47 @@ static NTSTATUS x_smb2_fsctl_query_network_interface_info(
 	return NT_STATUS_OK;
 }
 
+static void ioctl_async_done(x_smbd_conn_t *smbd_conn,
+		x_smbd_requ_t *smbd_requ,
+		NTSTATUS status,
+		bool terminated)
+{
+	X_LOG_DBG("status=0x%x", status.v);
+	auto state = smbd_requ->release_state<x_smb2_state_ioctl_t>();
+	if (terminated) {
+		return;
+	}
+	if (state->out_buf_length) {
+		x_smb2_reply_ioctl(smbd_conn, smbd_requ, status, *state);
+		status = NT_STATUS_OK;
+	}
+	x_smbd_conn_requ_done(smbd_conn, smbd_requ, status);
+}
+
+static NTSTATUS x_smbd_open_ioctl(x_smbd_conn_t *smbd_conn,
+		x_smbd_requ_t *smbd_requ,
+		std::unique_ptr<x_smb2_state_ioctl_t> &state)
+{
+	smbd_requ->async_done_fn = ioctl_async_done;
+	switch (state->ctl_code) {
+	/*
+	 * [MS-SMB2] 2.2.31
+	 * FSCTL_SRV_COPYCHUNK is issued when a handle has
+	 * FILE_READ_DATA and FILE_WRITE_DATA access to the file;
+	 * FSCTL_SRV_COPYCHUNK_WRITE is issued when a handle only has
+	 * FILE_WRITE_DATA access.
+	 */
+	case FSCTL_SRV_COPYCHUNK_WRITE: /* FALL THROUGH */
+	case FSCTL_SRV_COPYCHUNK:
+		return x_smb2_ioctl_copychunk(smbd_conn, smbd_requ, state);
+	case FSCTL_SRV_REQUEST_RESUME_KEY:
+		return x_smb2_ioctl_request_resume_key(smbd_requ, *state);
+	default:
+		return x_smbd_open_op_ioctl(smbd_requ->smbd_open,
+				smbd_conn, smbd_requ, state);
+	}
+}
+
 NTSTATUS x_smb2_process_ioctl(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 {
 	if (smbd_requ->in_requ_len < SMB2_HDR_BODY + sizeof(x_smb2_in_ioctl_t)) {
@@ -521,8 +564,7 @@ NTSTATUS x_smb2_process_ioctl(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ
 			}
 		}
 
-		status = x_smbd_open_op_ioctl(smbd_requ->smbd_open,
-				smbd_conn, smbd_requ, state);
+		status = x_smbd_open_ioctl(smbd_conn, smbd_requ, state);
 		break;
 	case FSCTL_DFS_GET_REFERRALS:
 		status = x_smb2_fsctl_dfs_get_referrals(smbd_conn, *state);
@@ -545,8 +587,9 @@ NTSTATUS x_smb2_process_ioctl(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ
 		break;
 	}
 
-	if (NT_STATUS_IS_OK(status)) {
-		x_smb2_reply_ioctl(smbd_conn, smbd_requ, *state);
+	if (state && state->out_buf_length) {
+		x_smb2_reply_ioctl(smbd_conn, smbd_requ, status, *state);
+		return NT_STATUS_OK;
 	}
 	return status;
 }

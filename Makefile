@@ -148,6 +148,7 @@ SET_src_nxsmbd := \
 	smb2_getinfo \
 	smb2_setinfo \
 	smb2_break \
+	smb2_copychunk \
 	smb2_signing smb2_preauth \
 	smb2 \
 	auth_ntlmssp auth_krb5 auth_spnego auth \
