@@ -51,6 +51,8 @@ NTSTATUS normalize_sec_desc(
 		bool container);
 
 std::shared_ptr<idl::security_descriptor> get_share_security(const std::string &sharename);
+std::shared_ptr<idl::security_descriptor> create_null_sec_desc();
+std::shared_ptr<idl::security_descriptor> create_empty_sec_desc();
 
 uint32_t se_calculate_maximal_access(const idl::security_descriptor &sd,
 		const x_smbd_user_t &smbd_user);

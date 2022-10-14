@@ -3961,13 +3961,46 @@ static NTSTATUS getinfo_fs(x_smbd_requ_t *smbd_requ,
 }
 
 static NTSTATUS getinfo_security(posixfs_object_t *posixfs_object,
+		x_smbd_open_t *smbd_open,
 		x_smb2_state_getinfo_t &state)
 {
-	std::shared_ptr<idl::security_descriptor> psd;
-	NTSTATUS status = posixfs_object_get_sd(posixfs_object, psd);
-	if (!NT_STATUS_IS_OK(status)) {
-		return status;
+	if ((state.in_additional & idl::SECINFO_SACL) &&
+			!smbd_open->check_access(idl::SEC_FLAG_SYSTEM_SECURITY)) {
+		return NT_STATUS_ACCESS_DENIED;
 	}
+
+	if ((state.in_additional & (idl::SECINFO_DACL|idl::SECINFO_OWNER|idl::SECINFO_GROUP)) &&
+			!smbd_open->check_access(idl::SEC_STD_READ_CONTROL)) {
+		return NT_STATUS_ACCESS_DENIED;
+	}
+
+	std::shared_ptr<idl::security_descriptor> psd;
+	if (state.in_additional & (idl::SECINFO_DACL|idl::SECINFO_SACL|idl::SECINFO_OWNER|idl::SECINFO_GROUP)) {
+		NTSTATUS status = posixfs_object_get_sd(posixfs_object, psd);
+		if (!NT_STATUS_IS_OK(status)) {
+			return status;
+		}
+		if (!(state.in_additional & idl::SECINFO_OWNER)) {
+			psd->owner_sid = nullptr;
+		}
+
+		if (!(state.in_additional & idl::SECINFO_GROUP)) {
+			psd->group_sid = nullptr;
+		}
+
+		if (!(state.in_additional & idl::SECINFO_DACL)) {
+			psd->dacl = nullptr;
+			psd->type &= ~idl::SEC_DESC_DACL_PRESENT;
+		}
+
+		if (!(state.in_additional & idl::SECINFO_SACL)) {
+			psd->sacl = nullptr;
+			psd->type &= ~idl::SEC_DESC_SACL_PRESENT;
+		}
+	} else {
+		psd = create_empty_sec_desc();
+	}
+
 
 	auto ndr_ret = idl::x_ndr_push(*psd, state.out_data, state.in_output_buffer_length);
 	if (ndr_ret < 0) {
@@ -4041,7 +4074,7 @@ NTSTATUS posixfs_object_op_getinfo(
 	} else if (state->in_info_class == SMB2_GETINFO_FS) {
 		return getinfo_fs(smbd_requ, posixfs_object, *state);
 	} else if (state->in_info_class == SMB2_GETINFO_SECURITY) {
-		return getinfo_security(posixfs_object, *state);
+		return getinfo_security(posixfs_object, smbd_open, *state);
 	} else if (state->in_info_class == SMB2_GETINFO_QUOTA) {
 		return getinfo_quota(posixfs_object, *state);
 	} else {

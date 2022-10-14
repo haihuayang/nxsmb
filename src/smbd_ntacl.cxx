@@ -689,6 +689,25 @@ std::shared_ptr<idl::security_descriptor> get_share_security(const std::string &
 	/* TODO we do not set share_security for now, always use the default one */
 	return get_share_security_default(idl::SEC_RIGHTS_DIR_ALL);
 }
+
+std::shared_ptr<idl::security_descriptor> create_null_sec_desc()
+{
+	auto psd = std::make_shared<idl::security_descriptor>();
+	psd->revision = idl::SECURITY_DESCRIPTOR_REVISION_1;
+	psd->type = idl::security_descriptor_type(idl::SEC_DESC_SELF_RELATIVE);
+	psd->owner_sid = std::make_shared<idl::dom_sid>(global_sid_World);
+	psd->group_sid = std::make_shared<idl::dom_sid>(global_sid_World);
+	return psd;
+}
+
+std::shared_ptr<idl::security_descriptor> create_empty_sec_desc()
+{
+	auto psd = std::make_shared<idl::security_descriptor>();
+	psd->revision = idl::SECURITY_DESCRIPTOR_REVISION_1;
+	psd->type = idl::security_descriptor_type(idl::SEC_DESC_SELF_RELATIVE);
+	return psd;
+}
+
 #if 0
 /* TODO should read from group_map.tdb, find the map and add smbd_user */
 static const idl::dom_sid hhdom2_user =
