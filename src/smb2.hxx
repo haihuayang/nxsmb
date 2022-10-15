@@ -81,11 +81,13 @@ enum {
         SMB2_FILE_INFO_FILE_NAMES_INFORMATION = 12,
         SMB2_FILE_INFO_FILE_DISPOSITION_INFORMATION = 13,
         SMB2_FILE_INFO_FILE_POSITION_INFORMATION = 14,
+        SMB2_FILE_INFO_FILE_FULL_EA_INFORMATION = 15,
         SMB2_FILE_INFO_FILE_MODE_INFORMATION = 16,
         SMB2_FILE_INFO_FILE_ALIGNMENT_INFORMATION = 17,
         SMB2_FILE_INFO_FILE_ALL_INFORMATION = 18,
         SMB2_FILE_INFO_FILE_ALLOCATION_INFORMATION = 19,
         SMB2_FILE_INFO_FILE_END_OF_FILE_INFORMATION = 20,
+        SMB2_FILE_INFO_FILE_ALTERNATE_NAME_INFORMATION = 21,
         SMB2_FILE_INFO_FILE_STREAM_INFORMATION = 22,
         SMB2_FILE_INFO_FILE_COMPRESSION_INFORMATION = 28,
         SMB2_FILE_INFO_FILE_NETWORK_OPEN_INFORMATION = 34,
@@ -458,6 +460,12 @@ struct x_smb2_rename_info_t
 	uint32_t file_name_length;
 	/* following variable length file_name */
 };
+
+struct x_smb2_file_alternate_name_info_t
+{
+	uint32_t name_length;
+	char16_t name[];
+} __attribute__ ((aligned (8)));
 
 struct x_smb2_fs_volume_info_t
 {

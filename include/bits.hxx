@@ -9,6 +9,7 @@
 #include "xdefines.h"
 #include <sys/param.h>
 #include <stdint.h>
+#include <type_traits>
 
 template <typename TO, typename FROM>
 inline TO x_convert(FROM from)
@@ -122,6 +123,59 @@ static inline uint64_t x_get_be64(const uint8_t *buf)
 }
 
 /* below are aligned */
+template <class T>
+static inline typename std::enable_if_t<std::is_unsigned<T>::value, T> x_le2h(T v)
+{
+	return v;
+}
+
+template <class T>
+static inline typename std::enable_if_t<std::is_unsigned<T>::value, T> x_h2le(T v)
+{
+	return v;
+}
+
+static inline uint8_t x_be2h(uint8_t v)
+{
+	return v;
+}
+
+static inline uint8_t x_h2be(uint8_t v)
+{
+	return v;
+}
+
+static inline uint16_t x_be2h(uint16_t v)
+{
+	return __builtin_bswap16(v);
+}
+
+static inline uint16_t x_h2be(uint16_t v)
+{
+	return __builtin_bswap16(v);
+}
+
+static inline uint32_t x_be2h(uint32_t v)
+{
+	return __builtin_bswap32(v);
+}
+
+static inline uint32_t x_h2be(uint32_t v)
+{
+	return __builtin_bswap32(v);
+}
+
+static inline uint64_t x_be2h(uint64_t v)
+{
+	return __builtin_bswap64(v);
+}
+
+static inline uint64_t x_h2be(uint64_t v)
+{
+	return __builtin_bswap64(v);
+}
+
+
 #define X_LE2H8(v) (v)
 #define X_LE2H16(v) (v)
 #define X_LE2H32(v) (v)

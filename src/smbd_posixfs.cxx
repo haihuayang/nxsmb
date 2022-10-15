@@ -159,6 +159,7 @@ struct posixfs_open_t
 	x_smbd_lease_t *smbd_lease{};
 	uint8_t lock_sequency_array[64];
 	uint64_t current_offset = 0;
+	uint32_t mode = 0; // [MS-FSCC] 2.4.26
 	bool update_write_time = false;
 	/* notify_requ_list and notify_changes protected by posixfs_object->mutex */
 	x_tp_ddlist_t<requ_async_traits> notify_requ_list;
@@ -3575,6 +3576,33 @@ NTSTATUS posixfs_object_op_lock(
 	}
 }
 
+template<typename T>
+static bool decode_le(T &val,
+		const std::vector<uint8_t> &in_data)
+{
+	if (in_data.size() < sizeof(val)) {
+		return false;
+	}
+
+	const T *p = (const T *)in_data.data();
+	val = x_le2h(*p);
+	return true;
+}
+
+template<typename T>
+static NTSTATUS getinfo_encode_le(T val,
+		x_smb2_state_getinfo_t &state)
+{
+	if (state.in_output_buffer_length < sizeof(T)) {
+		return NT_STATUS_INFO_LENGTH_MISMATCH;
+	}
+
+	state.out_data.resize(sizeof(T));
+	T *info = (T *)state.out_data.data();
+	*info = x_h2le(val);
+	return NT_STATUS_OK;
+}
+
 static bool marshall_stream_info(x_smb2_chain_marshall_t &marshall,
 		const char *stream_name,
 		uint64_t size, uint64_t allocation_size)
@@ -3647,33 +3675,21 @@ static NTSTATUS getinfo_file(posixfs_object_t *posixfs_object,
 		x_smbd_get_file_info(*info, posixfs_object->meta);
 
 	} else if (state.in_info_level == SMB2_FILE_INFO_FILE_EA_INFORMATION) {
-		if (state.in_output_buffer_length < sizeof(uint32_t)) {
-			return NT_STATUS_INFO_LENGTH_MISMATCH;
-		}
-		state.out_data.resize(sizeof(uint32_t));
-		uint32_t *info =
-			(uint32_t *)state.out_data.data();
-
 		/* TODO we do not support EA for now */
-		*info = 0;
+		return getinfo_encode_le(uint32_t(0), state);
 
 	} else if (state.in_info_level == SMB2_FILE_INFO_FILE_ACCESS_INFORMATION) {
-		if (state.in_output_buffer_length < sizeof(uint32_t)) {
-			return NT_STATUS_INFO_LENGTH_MISMATCH;
-		}
-		state.out_data.resize(sizeof(uint32_t));
-		uint32_t *info =
-			(uint32_t *)state.out_data.data();
-		*info = X_H2LE32(smbd_open->access_mask);
+		return getinfo_encode_le(smbd_open->access_mask, state);
 
 	} else if (state.in_info_level == SMB2_FILE_INFO_FILE_POSITION_INFORMATION) {
-		if (state.in_output_buffer_length < sizeof(uint64_t)) {
-			return NT_STATUS_INFO_LENGTH_MISMATCH;
-		}
-		state.out_data.resize(sizeof(uint64_t));
-		uint64_t *info =
-			(uint64_t *)state.out_data.data();
-		*info = X_H2LE64(posixfs_open->current_offset);
+		return getinfo_encode_le(posixfs_open->current_offset, state);
+
+	} else if (state.in_info_level == SMB2_FILE_INFO_FILE_MODE_INFORMATION) {
+		return getinfo_encode_le(posixfs_open->mode, state);
+
+	} else if (state.in_info_level == SMB2_FILE_INFO_FILE_FULL_EA_INFORMATION) {
+		/* TODO we do not support EA for now */
+		return NT_STATUS_NO_EAS_ON_FILE;
 
 	} else if (state.in_info_level == SMB2_FILE_INFO_FILE_ALL_INFORMATION) {
 		if (state.in_output_buffer_length < sizeof(x_smb2_file_all_info_t)) {
@@ -3686,6 +3702,7 @@ static NTSTATUS getinfo_file(posixfs_object_t *posixfs_object,
 		x_smbd_get_file_info(*info, posixfs_object->meta,
 				posixfs_stream->meta,
 				smbd_open->access_mask,
+				posixfs_open->mode,
 				posixfs_open->current_offset);
 
 	} else if (state.in_info_level == SMB2_FILE_INFO_FILE_NETWORK_OPEN_INFORMATION) {
@@ -3698,6 +3715,13 @@ static NTSTATUS getinfo_file(posixfs_object_t *posixfs_object,
 		
 		x_smbd_get_file_info(*info, posixfs_object->meta,
 				posixfs_stream->meta);
+
+	} else if (state.in_info_level == SMB2_FILE_INFO_FILE_ALTERNATE_NAME_INFORMATION) {
+		if (state.in_output_buffer_length < sizeof(x_smb2_file_alternate_name_info_t)) {
+			return NT_STATUS_INFO_LENGTH_MISMATCH;
+		}
+		/* TODO not support 8.3 name for now */
+		return NT_STATUS_OBJECT_NAME_NOT_FOUND;
 
 	} else if (state.in_info_level == SMB2_FILE_INFO_FILE_STREAM_INFORMATION) {
 		if (state.in_output_buffer_length < sizeof(x_smb2_file_stream_name_info_t) + 8) {
@@ -3756,18 +3780,6 @@ static NTSTATUS getinfo_file(posixfs_object_t *posixfs_object,
 	return NT_STATUS_OK;
 }
 
-static bool decode_uint64(uint64_t &size,
-		const std::vector<uint8_t> &in_data)
-{
-	if (in_data.size() < sizeof(size)) {
-		return false;
-	}
-
-	uint64_t *p = (uint64_t *)in_data.data();
-	size = X_LE2H64(*p);
-	return true;
-}
-
 static NTSTATUS setinfo_file(posixfs_object_t *posixfs_object,
 		x_smbd_open_t *smbd_open,
 		x_smb2_state_setinfo_t &state,
@@ -3806,7 +3818,7 @@ static NTSTATUS setinfo_file(posixfs_object_t *posixfs_object,
 		}
 
 		uint64_t new_size;
-		if (!decode_uint64(new_size, state.in_data)) {
+		if (!decode_le(new_size, state.in_data)) {
 			return NT_STATUS_INVALID_PARAMETER;
 		}
 
@@ -3830,7 +3842,7 @@ static NTSTATUS setinfo_file(posixfs_object_t *posixfs_object,
 		}
 
 		uint64_t new_size;
-		if (!decode_uint64(new_size, state.in_data)) {
+		if (!decode_le(new_size, state.in_data)) {
 			return NT_STATUS_INVALID_PARAMETER;
 		}
 
@@ -3850,11 +3862,24 @@ static NTSTATUS setinfo_file(posixfs_object_t *posixfs_object,
 
 	} else if (state.in_info_level == SMB2_FILE_INFO_FILE_POSITION_INFORMATION) {
 		uint64_t new_size;
-		if (!decode_uint64(new_size, state.in_data)) {
+		if (!decode_le(new_size, state.in_data)) {
 			return NT_STATUS_INVALID_PARAMETER;
 		}
 
 		posixfs_open->current_offset = new_size;
+		return NT_STATUS_OK;
+
+	} else if (state.in_info_level == SMB2_FILE_INFO_FILE_MODE_INFORMATION) {
+		uint32_t mode;
+		if (!decode_le(mode, state.in_data)) {
+			return NT_STATUS_INVALID_PARAMETER;
+		}
+
+		/* TODO [MS-FSCC] 2.4.26 */
+		if (mode != 0 && mode != 2 && mode != 4 && mode != 6) {
+			return NT_STATUS_INVALID_PARAMETER;
+		}
+		posixfs_open->mode = mode;
 		return NT_STATUS_OK;
 
 	} else {

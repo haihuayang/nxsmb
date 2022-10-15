@@ -16,6 +16,7 @@ void x_smbd_get_file_info(x_smb2_file_all_info_t &info,
 		const x_smbd_object_meta_t &object_meta,
 		const x_smbd_stream_meta_t &stream_meta,
 		uint32_t access_mask,
+		uint32_t mode,
 		uint64_t current_offset)
 {
 	info.basic_info.creation.val = X_H2LE64(object_meta.creation.val);
@@ -46,7 +47,7 @@ void x_smbd_get_file_info(x_smb2_file_all_info_t &info,
 	info.ea_size = 0; // not supported
 	info.access_flags = X_H2LE32(access_mask);
 	info.current_offset = X_H2LE64(current_offset);
-	info.mode = 0;
+	info.mode = X_H2LE32(mode);
 	info.alignment_requirement = 0;
 	info.file_name_length = 0;
 	info.unused = 0;
