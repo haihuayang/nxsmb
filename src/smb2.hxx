@@ -597,6 +597,14 @@ struct x_smb2_file_stream_name_info_t
 	char16_t name[]; // variable length
 };
 
+struct x_smb2_file_full_ea_info_t
+{
+	uint32_t next_offset;
+	uint8_t flags;
+	uint8_t name_length;
+	uint16_t value_length;
+};
+
 bool x_smb2_file_standard_info_decode(x_smb2_file_standard_info_t &standard_info,
 		const std::vector<uint8_t> &in_data);
 

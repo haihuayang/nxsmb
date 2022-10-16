@@ -14,6 +14,7 @@
 #include <sys/xattr.h>
 
 #define POSIXFS_ADS_PREFIX      "user.ads:"
+#define POSIXFS_EA_PREFIX      "user.ea:"
 struct posixfs_ads_header_t
 {
 	uint32_t version;
@@ -303,9 +304,23 @@ static inline bool is_default_stream(const posixfs_object_t *object,
 	return stream == &object->default_stream;
 }
 #endif
+
+static const char *skip_prefix(const char *str, const char *prefix)
+{
+	for ( ; ; ++str, ++prefix) {
+		if (!*prefix) {
+			return str;
+		}
+		if (!*str || *str != *prefix) {
+			return nullptr;
+		}
+	}
+}
+
 /* caller should hold posixfs_object's mutex */
 template <class T>
-static int posixfs_ads_foreach_1(const posixfs_object_t *posixfs_object, T &&visitor)
+static int posixfs_foreach_xattr(const posixfs_object_t *posixfs_object,
+		const char *prefix, T &&visitor)
 {
 	std::vector<char> buf(0x10000);
 	ssize_t ret = flistxattr(posixfs_object->fd, buf.data(), buf.size());
@@ -318,15 +333,21 @@ static int posixfs_ads_foreach_1(const posixfs_object_t *posixfs_object, T &&vis
 	const char *data = buf.data();
 	const char *end = data + listxattr_len;
 	for ( ; data < end; data = data + strlen(data) + 1) {
-		if (strncmp(data, POSIXFS_ADS_PREFIX, strlen(POSIXFS_ADS_PREFIX)) != 0) {
-			continue;
-		}
-		const char *stream_name = data + strlen(POSIXFS_ADS_PREFIX);
-		if (!visitor(data, stream_name)) {
-			break;
+		const char *name = skip_prefix(data, prefix);
+		if (name) {
+			if (!visitor(data, name)) {
+				break;
+			}
 		}
 	}
 	return 0;
+}
+
+template <class T>
+static int posixfs_ads_foreach_1(const posixfs_object_t *posixfs_object, T &&visitor)
+{
+	return posixfs_foreach_xattr(posixfs_object, POSIXFS_ADS_PREFIX,
+			std::forward<T>(visitor));
 }
 
 template <class T>
@@ -3780,6 +3801,124 @@ static NTSTATUS getinfo_file(posixfs_object_t *posixfs_object,
 	return NT_STATUS_OK;
 }
 
+static const char bad_ea_name_chars[] = "\"*+,/:;<=>?[\\]|";
+
+static bool is_invalid_windows_ea_name(const char *name)
+{
+	for (; *name; ++name) {
+		int val = *name;
+		if (val < ' ' || strchr(bad_ea_name_chars, val)) {
+			return true;
+		}
+	}
+	return false;
+}
+
+static std::vector<std::string> collect_ea_names(const posixfs_object_t *posixfs_object)
+{
+	std::vector<std::string> names;
+	posixfs_foreach_xattr(posixfs_object, POSIXFS_EA_PREFIX,
+			[&names](const char *xattr_name, const char *name) {
+				names.push_back(name);
+				return true;
+			});
+	return names;
+}
+
+static NTSTATUS posixfs_set_ea(posixfs_object_t *posixfs_object,
+		x_smbd_open_t *smbd_open,
+		x_smb2_state_setinfo_t &state)
+{
+	struct ea_info_t
+	{
+		uint8_t flags;
+		uint8_t name_length;
+		uint16_t value_length;
+		const char *name;
+		const uint8_t *value;
+	};
+	std::vector<ea_info_t> eas;
+
+	const uint8_t *in_data = state.in_data.data();
+	size_t in_length = state.in_data.size();
+	uint32_t next_offset;
+	size_t length;
+	for ( ; ; in_data += next_offset, in_length -= next_offset) {
+		if (in_length < sizeof(x_smb2_file_full_ea_info_t)) {
+			return NT_STATUS_INVALID_PARAMETER;
+		}
+		const x_smb2_file_full_ea_info_t *info = (const x_smb2_file_full_ea_info_t *)in_data;
+		next_offset = X_LE2H32(info->next_offset);
+		if (next_offset == 0) {
+			length = in_length;
+		} else if ((next_offset % 8) != 0) {
+			return NT_STATUS_INVALID_PARAMETER;
+		} else {
+			length = next_offset;
+		}
+		uint8_t flags = X_LE2H8(info->flags);
+		uint8_t name_length = X_LE2H8(info->name_length);
+		uint16_t value_length = X_LE2H16(info->value_length);
+		if (length < sizeof(x_smb2_file_full_ea_info_t) + 1 + name_length + value_length) {
+			return NT_STATUS_INVALID_PARAMETER;
+		}
+		if (name_length == 0) {
+			return NT_STATUS_INVALID_PARAMETER;
+		}
+
+		const char *name = (const char *)in_data + 8;
+		if (name[name_length] != 0) {
+			return NT_STATUS_INVALID_PARAMETER;
+		}
+		if (is_invalid_windows_ea_name(name)) {
+			return STATUS_INVALID_EA_NAME;
+		}
+		eas.push_back({flags, name_length, value_length, name,
+				in_data + 8 + name_length + 1});
+		if (next_offset == 0) {
+			break;
+		}
+	}
+
+	if (!smbd_open->check_access(idl::SEC_FILE_WRITE_EA)) {
+		return NT_STATUS_ACCESS_DENIED;
+	}
+
+	if (smbd_open->smbd_stream) {
+		return NT_STATUS_INVALID_PARAMETER;
+	}
+
+
+	const auto exist_ea_names = collect_ea_names(posixfs_object);
+	int ret;
+	for (const auto &ea: eas) {
+		const char *name = ea.name;
+		for (auto &exist: exist_ea_names) {
+			if (strcasecmp(exist.c_str(), ea.name) == 0) {
+				name = exist.c_str();
+				break;
+			}
+		}
+		std::string xattr_name = POSIXFS_EA_PREFIX;
+		xattr_name += name;
+		if (ea.value_length == 0) {
+			if (name != ea.name) {
+				X_LOG_DBG("remove existed ea '%s'", name);
+				ret = fremovexattr(posixfs_object->fd, xattr_name.c_str());
+			} else {
+				X_LOG_DBG("skip zero ea '%s'", name);
+				ret = 0;
+			}
+		} else {
+			ret = fsetxattr(posixfs_object->fd, xattr_name.c_str(),
+					ea.value, ea.value_length, 0);
+		}
+		X_TODO_ASSERT(ret == 0);
+	}
+
+	return NT_STATUS_OK;
+}
+
 static NTSTATUS setinfo_file(posixfs_object_t *posixfs_object,
 		x_smbd_open_t *smbd_open,
 		x_smb2_state_setinfo_t &state,
@@ -3868,6 +4007,10 @@ static NTSTATUS setinfo_file(posixfs_object_t *posixfs_object,
 
 		posixfs_open->current_offset = new_size;
 		return NT_STATUS_OK;
+
+	} else if (state.in_info_level == SMB2_FILE_INFO_FILE_FULL_EA_INFORMATION) {
+		return NT_STATUS_EAS_NOT_SUPPORTED;
+		return posixfs_set_ea(posixfs_object, smbd_open, state);
 
 	} else if (state.in_info_level == SMB2_FILE_INFO_FILE_MODE_INFORMATION) {
 		uint32_t mode;

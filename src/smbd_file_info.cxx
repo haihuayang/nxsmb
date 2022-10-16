@@ -265,4 +265,3 @@ bool x_smbd_marshall_dir_entry(x_smb2_chain_marshall_t &marshall,
 	return true;
 }
 
-
