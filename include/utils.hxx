@@ -122,6 +122,8 @@ static inline const char16_t *x_next_sep(const char16_t *in, const char16_t *end
 	return in;
 }
 
+std::string x_hex_dump(const void *data, size_t length, const char *prefix);
+
 #define X_DEFINE_ENUM_FLAG_OPERATORS(T) \
 inline T operator~ (T a) { return static_cast<T>( ~static_cast<std::underlying_type<T>::type>(a) ); } \
 inline T operator| (T a, T b) { return static_cast<T>( static_cast<std::underlying_type<T>::type>(a) | static_cast<std::underlying_type<T>::type>(b) ); } \

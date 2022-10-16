@@ -385,6 +385,7 @@ TARGET_SRC_libnxsmb := \
 		lib/kerberos_pac \
 		lib/charset \
 		lib/networking \
+		lib/hexdump \
 
 a=\
 		lib/string \

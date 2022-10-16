@@ -230,6 +230,7 @@ static NTSTATUS smbd_chan_auth_succeeded(x_smbd_chan_t *smbd_chan,
 
 	std::array<uint8_t, 16> session_key;
 	memcpy(session_key.data(), auth_info.session_key.data(), std::min(session_key.size(), auth_info.session_key.size()));
+	X_LOG_DBG("session_key=\n%s", x_hex_dump(session_key.data(), session_key.size(), "    ").c_str());
 	if (dialect >= SMB2_DIALECT_REVISION_224) {
 		x_smb2_key_derivation(session_key.data(), 16,
 				*derivation_sign_label,
@@ -251,6 +252,7 @@ static NTSTATUS smbd_chan_auth_succeeded(x_smbd_chan_t *smbd_chan,
 	} else {
 		smbd_chan->keys.signing_key = session_key;
 	}
+	X_LOG_DBG("signing_key=\n%s", x_hex_dump(smbd_chan->keys.signing_key.data(), smbd_chan->keys.signing_key.size(), "    ").c_str());
 	NTSTATUS status = x_smbd_sess_auth_succeeded(smbd_chan->smbd_sess, smbd_user, smbd_chan->keys, auth_info.time_rec);
 	if (NT_STATUS_IS_OK(status)) {
 		// TODO memory order
