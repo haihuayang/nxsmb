@@ -1065,7 +1065,7 @@ dfs_share_t::dfs_share_t(const x_smbd_conf_t &smbd_conf,
 	if (root_node == smbd_conf.node) {
 		std::string path = smbd_conf.volume_dir;
 		path += "/" + first_volume + "/root";
-		root_dir = x_smbd_topdir_create(path, &dfs_root_object_ops);
+		root_dir = x_smbd_topdir_create(path, &dfs_root_object_ops, name + "/root");
 	}
 	for (const auto &volume: volumes) {
 		std::string node;
@@ -1073,7 +1073,7 @@ dfs_share_t::dfs_share_t(const x_smbd_conf_t &smbd_conf,
 		if (node == smbd_conf.node) {
 			std::string path = smbd_conf.volume_dir;
 			path += "/" + volume + "/data";
-			local_volume_data_dir[volume] = x_smbd_topdir_create(path, &dfs_volume_object_ops);
+			local_volume_data_dir[volume] = x_smbd_topdir_create(path, &dfs_volume_object_ops, name + "/" + volume);
 		}
 	}
 }

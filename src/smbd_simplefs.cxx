@@ -84,7 +84,7 @@ struct simplefs_share_t : x_smbd_share_t
 			const std::string &path)
 		: x_smbd_share_t(name)
 	{
-		root_dir = x_smbd_topdir_create(path, &simplefs_object_ops);
+		root_dir = x_smbd_topdir_create(path, &simplefs_object_ops, name);
 	}
 					
 	uint8_t get_type() const override {

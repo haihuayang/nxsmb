@@ -530,7 +530,7 @@ static NTSTATUS x_smbd_open_ioctl(x_smbd_conn_t *smbd_conn,
 		return x_smb2_ioctl_request_resume_key(smbd_requ, *state);
 	default:
 		return x_smbd_open_op_ioctl(smbd_requ->smbd_open,
-				smbd_conn, smbd_requ, state);
+				smbd_requ, state);
 	}
 }
 

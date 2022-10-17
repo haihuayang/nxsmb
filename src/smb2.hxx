@@ -605,6 +605,14 @@ struct x_smb2_file_full_ea_info_t
 	uint16_t value_length;
 };
 
+struct x_smb2_file_object_id_buffer_t
+{
+	x_smb2_uuid_t object_id;
+	x_smb2_uuid_t birth_volume_id;
+	x_smb2_uuid_t birth_object_id;
+	x_smb2_uuid_t domain_id;
+};
+
 bool x_smb2_file_standard_info_decode(x_smb2_file_standard_info_t &standard_info,
 		const std::vector<uint8_t> &in_data);
 

@@ -4276,10 +4276,29 @@ NTSTATUS posixfs_object_op_setinfo(
 
 NTSTATUS posixfs_object_op_ioctl(
 		x_smbd_object_t *smbd_object,
-		x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ,
 		std::unique_ptr<x_smb2_state_ioctl_t> &state)
 {
+	posixfs_object_t *posixfs_object = posixfs_object_from_base_t::container(smbd_object);
+	switch (state->ctl_code) {
+	case FSCTL_CREATE_OR_GET_OBJECT_ID:
+		if (state->in_max_output_length < sizeof(x_smb2_file_object_id_buffer_t)) {
+			return NT_STATUS_BUFFER_TOO_SMALL;
+		}
+		{
+			state->out_buf = x_buf_alloc(sizeof(x_smb2_file_object_id_buffer_t));
+			state->out_buf_length = sizeof(x_smb2_file_object_id_buffer_t);
+			x_smb2_file_object_id_buffer_t *data = (x_smb2_file_object_id_buffer_t *)state->out_buf->data;
+			data->object_id.data[0] = X_H2LE64(posixfs_object->meta.fsid);
+			data->object_id.data[1] = X_H2LE64(posixfs_object->meta.inode);
+			data->birth_volume_id.data[0] = X_H2LE64(smbd_object->topdir->volume_id.data[0]); 
+			data->birth_volume_id.data[1] = X_H2LE64(smbd_object->topdir->volume_id.data[1]); 
+			data->birth_volume_id = data->object_id;
+			data->domain_id = {0, 0};
+			return NT_STATUS_OK;
+		}
+	}
+
 	return NT_STATUS_INVALID_DEVICE_REQUEST;
 }
 

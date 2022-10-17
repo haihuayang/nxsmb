@@ -461,7 +461,6 @@ static NTSTATUS ipc_object_op_setinfo(
 
 static NTSTATUS ipc_object_op_ioctl(
 		x_smbd_object_t *smbd_object,
-		x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ,
 		std::unique_ptr<x_smb2_state_ioctl_t> &state)
 {
@@ -656,7 +655,7 @@ static const x_smbd_object_ops_t x_smbd_ipc_object_ops = {
 static std::shared_ptr<x_smbd_topdir_t> ipc_get_topdir()
 {
 	static std::shared_ptr<x_smbd_topdir_t> topdir = 
-		x_smbd_topdir_create("", &x_smbd_ipc_object_ops);
+		x_smbd_topdir_create("", &x_smbd_ipc_object_ops, "IPC$");
 	return topdir;
 }
 

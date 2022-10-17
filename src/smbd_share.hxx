@@ -38,12 +38,14 @@ struct x_dfs_referral_resp_t
 struct x_smbd_object_ops_t;
 struct x_smbd_topdir_t
 {
-	x_smbd_topdir_t(const x_smbd_object_ops_t *ops, int fd);
+	x_smbd_topdir_t(const x_smbd_object_ops_t *ops, int fd,
+			const x_smb2_uuid_t &volume_id);
 	~x_smbd_topdir_t();
 	const x_smbd_object_ops_t * const ops;
 	uint64_t const uuid;
 	const int fd;
 	std::atomic<uint32_t> watch_tree_cnt{0};
+	const x_smb2_uuid_t volume_id;
 };
 
 struct x_smbd_share_t
@@ -85,7 +87,7 @@ struct x_smbd_share_t
 	std::vector<std::string> vgs;
 };
 
-std::shared_ptr<x_smbd_topdir_t> x_smbd_topdir_create(const std::string &path, const x_smbd_object_ops_t *ops);
+std::shared_ptr<x_smbd_topdir_t> x_smbd_topdir_create(const std::string &path, const x_smbd_object_ops_t *ops, const std::string &volume_name);
 
 std::shared_ptr<x_smbd_share_t> x_smbd_ipc_share_create();
 std::shared_ptr<x_smbd_share_t> x_smbd_dfs_share_create(const x_smbd_conf_t &smbd_conf,

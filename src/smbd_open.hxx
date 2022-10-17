@@ -85,7 +85,6 @@ struct x_smbd_object_ops_t
 			std::unique_ptr<x_smb2_state_setinfo_t> &state,
 			std::vector<x_smb2_change_t> &changes);
 	NTSTATUS (*ioctl)(x_smbd_object_t *smbd_object,
-			x_smbd_conn_t *smbd_conn,
 			x_smbd_requ_t *smbd_requ,
 			std::unique_ptr<x_smb2_state_ioctl_t> &state);
 	NTSTATUS (*qdir)(x_smbd_object_t *smbd_object,
@@ -222,7 +221,6 @@ static inline NTSTATUS x_smbd_open_op_setinfo(x_smbd_open_t *smbd_open,
 
 static inline NTSTATUS x_smbd_open_op_ioctl(
 		x_smbd_open_t *smbd_open,
-		x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ,
 		std::unique_ptr<x_smb2_state_ioctl_t> &state)
 {
@@ -231,7 +229,7 @@ static inline NTSTATUS x_smbd_open_op_ioctl(
 	if (!op_fn) {
 		return NT_STATUS_INVALID_DEVICE_REQUEST;
 	}
-	return op_fn(smbd_object, smbd_conn, smbd_requ, state);
+	return op_fn(smbd_object, smbd_requ, state);
 }
 
 static inline NTSTATUS x_smbd_open_op_qdir(
