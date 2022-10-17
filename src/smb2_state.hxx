@@ -22,6 +22,13 @@ struct x_smb2_change_t
 	std::u16string new_path;
 };
 
+static inline bool x_smb2_file_id_is_nul(uint64_t file_id_persistent,
+		uint64_t file_id_volatile)
+{
+	return file_id_persistent == UINT64_MAX &&
+		file_id_volatile == UINT64_MAX;
+}
+
 struct x_smb2_state_read_t
 {
 	uint8_t in_flags;
@@ -127,8 +134,8 @@ struct x_smb2_state_ioctl_t
 	}
 	uint32_t ctl_code;
 	uint32_t in_flags;
-	uint64_t file_id_persistent;
-	uint64_t file_id_volatile;
+	uint64_t in_file_id_persistent;
+	uint64_t in_file_id_volatile;
 	uint32_t in_max_input_length;
 	uint32_t in_max_output_length;
 

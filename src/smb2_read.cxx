@@ -116,13 +116,11 @@ NTSTATUS x_smb2_process_read(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
 
-	if (!smbd_requ->smbd_open) {
-		smbd_requ->smbd_open = x_smbd_open_lookup(state->in_file_id_persistent,
-				state->in_file_id_volatile,
-				smbd_requ->smbd_tcon);
-		if (!smbd_requ->smbd_open) {
-			RETURN_OP_STATUS(smbd_requ, NT_STATUS_FILE_CLOSED);
-		}
+	NTSTATUS status = x_smbd_requ_init_open(smbd_requ,
+			state->in_file_id_persistent,
+			state->in_file_id_volatile);
+	if (!NT_STATUS_IS_OK(status)) {
+		RETURN_OP_STATUS(smbd_requ, status);
 	}
 
 	if (!smbd_requ->smbd_open->check_access(idl::SEC_FILE_READ_DATA) &&
@@ -132,7 +130,6 @@ NTSTATUS x_smb2_process_read(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 
 	/* TODO check is dir before read */
 
-	NTSTATUS status;
 	if (state->in_length == 0) {
 		state->out_buf_length = 0;
 		status = NT_STATUS_OK;

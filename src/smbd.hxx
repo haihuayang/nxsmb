@@ -338,6 +338,10 @@ struct x_smbd_requ_t
 	       return (in_hdr_flags & SMB2_HDR_FLAG_SIGNED) != 0;
 	}
 
+	bool is_compound_related() const {
+		return (in_hdr_flags & SMB2_HDR_FLAG_CHAINED) != 0;
+	}
+
 	template <class T>
 	std::unique_ptr<T> release_state() {
 		X_ASSERT(requ_state);
@@ -404,6 +408,8 @@ bool x_smbd_requ_async_remove(x_smbd_requ_t *smbd_requ);
 void x_smbd_requ_async_done(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ,
 		NTSTATUS status, bool terminated);
 void x_smbd_requ_done(x_smbd_requ_t *smbd_requ);
+NTSTATUS x_smbd_requ_init_open(x_smbd_requ_t *smbd_requ,
+		uint64_t id_persistent, uint64_t id_volatile);
 
 
 NTSTATUS x_smbd_dfs_resolve_path(

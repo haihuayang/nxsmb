@@ -103,17 +103,14 @@ static NTSTATUS x_smb2_process_oplock_break(x_smbd_conn_t *smbd_conn,
 	auto state = std::make_unique<x_smb2_state_oplock_break_t>();
 	decode_in_oplock_break(*state, in_oplock_break);
 
-	if (!smbd_requ->smbd_open) {
-		smbd_requ->smbd_open = x_smbd_open_lookup(state->in_file_id_persistent,
-				state->in_file_id_volatile,
-				smbd_requ->smbd_tcon);
-
-		if (!smbd_requ->smbd_open) {
-			RETURN_OP_STATUS(smbd_requ, NT_STATUS_FILE_CLOSED);
-		}
+	NTSTATUS status = x_smbd_requ_init_open(smbd_requ,
+			state->in_file_id_persistent,
+			state->in_file_id_volatile);
+	if (!NT_STATUS_IS_OK(status)) {
+		RETURN_OP_STATUS(smbd_requ, status);
 	}
 
-	NTSTATUS status = x_smbd_open_op_oplock_break(smbd_requ->smbd_open,
+	status = x_smbd_open_op_oplock_break(smbd_requ->smbd_open,
 			smbd_conn, smbd_requ, state);
 	if (NT_STATUS_IS_OK(status)) {
 		x_smb2_reply_oplock_break(smbd_conn, smbd_requ, *state);

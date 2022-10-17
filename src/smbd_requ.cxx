@@ -129,6 +129,30 @@ int x_smbd_requ_pool_init(uint32_t count)
 	return 0;
 }
 
+NTSTATUS x_smbd_requ_init_open(x_smbd_requ_t *smbd_requ,
+		uint64_t id_persistent, uint64_t id_volatile)
+{
+	if (smbd_requ->smbd_open) {
+		return NT_STATUS_OK;
+	}
+
+	if (!x_smb2_file_id_is_nul(id_persistent, id_volatile)) {
+		smbd_requ->smbd_open = x_smbd_open_lookup(
+				id_persistent,
+				id_volatile,
+				smbd_requ->smbd_tcon);
+		if (smbd_requ->smbd_open) {
+			return NT_STATUS_OK;
+		}
+	}
+
+	if (smbd_requ->is_compound_related() && !NT_STATUS_IS_OK(smbd_requ->status)) {
+		RETURN_OP_STATUS(smbd_requ, smbd_requ->status);
+	} else {
+		RETURN_OP_STATUS(smbd_requ, NT_STATUS_FILE_CLOSED);
+	}
+}
+
 struct x_smbd_requ_list_t : x_smbd_ctrl_handler_t
 {
 	x_smbd_requ_list_t() : iter(g_smbd_requ_table->iter_start()) {

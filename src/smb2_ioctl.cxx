@@ -41,8 +41,8 @@ static bool decode_in_ioctl(x_smb2_state_ioctl_t &state,
 	}
 
 	state.ctl_code = X_LE2H32(in_ioctl->ctl_code);
-	state.file_id_persistent = X_LE2H64(in_ioctl->file_id_persistent);
-	state.file_id_volatile = X_LE2H64(in_ioctl->file_id_volatile);
+	state.in_file_id_persistent = X_LE2H64(in_ioctl->file_id_persistent);
+	state.in_file_id_volatile = X_LE2H64(in_ioctl->file_id_volatile);
 	state.in_max_input_length = X_LE2H32(in_ioctl->max_input_length);
 	state.in_max_output_length = X_LE2H32(in_ioctl->max_output_length);
 	state.in_flags = X_LE2H32(in_ioctl->flags);
@@ -78,8 +78,8 @@ static void encode_out_ioctl(const x_smb2_state_ioctl_t &state,
 
 	out_ioctl->reserved0 = 0;
 	out_ioctl->ctl_code = X_H2LE32(state.ctl_code);
-	out_ioctl->file_id_persistent = X_H2LE64(state.file_id_persistent);
-	out_ioctl->file_id_volatile = X_H2LE64(state.file_id_volatile);
+	out_ioctl->file_id_persistent = X_H2LE64(state.in_file_id_persistent);
+	out_ioctl->file_id_volatile = X_H2LE64(state.in_file_id_volatile);
 	out_ioctl->input_offset = X_H2LE32(SMB2_HDR_BODY + sizeof(x_smb2_out_ioctl_t));
 	out_ioctl->input_length = 0;
 	out_ioctl->output_offset = X_H2LE32(SMB2_HDR_BODY + sizeof(x_smb2_out_ioctl_t));
@@ -119,8 +119,8 @@ static inline bool file_id_is_nul(const x_smb2_state_ioctl_t &state)
 	 * 0xFFFFFFFFFFFFFFFF, then the server MUST fail the request
 	 * with STATUS_INVALID_PARAMETER.
 	 */
-	return state.file_id_persistent == UINT64_MAX
-		&& state.file_id_volatile == UINT64_MAX;
+	return x_smb2_file_id_is_nul(state.in_file_id_persistent,
+			state.in_file_id_volatile);
 }
 #if 0
 static int parse_dfs_path(const std::string &in_file_name,
@@ -546,7 +546,7 @@ NTSTATUS x_smb2_process_ioctl(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ
 	}
 
 	X_LOG_OP("%ld IOCTL 0x%lx, 0x%lx", smbd_requ->in_mid,
-			state->file_id_persistent, state->file_id_volatile);
+			state->in_file_id_persistent, state->in_file_id_volatile);
 
 	if (state->in_flags != SMB2_IOCTL_FLAG_IS_FSCTL) {
 		RETURN_OP_STATUS(smbd_requ, NT_STATUS_NOT_SUPPORTED);
@@ -555,13 +555,11 @@ NTSTATUS x_smb2_process_ioctl(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ
 	NTSTATUS status;
 	switch (state->ctl_code) {
 	default:
-		if (!smbd_requ->smbd_open) {
-			smbd_requ->smbd_open = x_smbd_open_lookup(state->file_id_persistent,
-					state->file_id_volatile,
-					smbd_requ->smbd_tcon);
-			if (!smbd_requ->smbd_open) {
-				RETURN_OP_STATUS(smbd_requ, NT_STATUS_FILE_CLOSED);
-			}
+		status = x_smbd_requ_init_open(smbd_requ,
+				state->in_file_id_persistent,
+				state->in_file_id_volatile);
+		if (!NT_STATUS_IS_OK(status)) {
+			RETURN_OP_STATUS(smbd_requ, status);
 		}
 
 		status = x_smbd_open_ioctl(smbd_conn, smbd_requ, state);

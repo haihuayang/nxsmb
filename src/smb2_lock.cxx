@@ -124,17 +124,15 @@ NTSTATUS x_smb2_process_lock(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 		}
 	}
 	
-	if (!smbd_requ->smbd_open) {
-		smbd_requ->smbd_open = x_smbd_open_lookup(state->in_file_id_persistent,
-				state->in_file_id_volatile,
-				smbd_requ->smbd_tcon);
-		if (!smbd_requ->smbd_open) {
-			RETURN_OP_STATUS(smbd_requ, NT_STATUS_FILE_CLOSED);
-		}
+	NTSTATUS status = x_smbd_requ_init_open(smbd_requ,
+			state->in_file_id_persistent,
+			state->in_file_id_volatile);
+	if (!NT_STATUS_IS_OK(status)) {
+		RETURN_OP_STATUS(smbd_requ, status);
 	}
 
 	smbd_requ->async_done_fn = x_smb2_lock_async_done;
-	NTSTATUS status = x_smbd_open_op_lock(smbd_requ->smbd_open,
+	status = x_smbd_open_op_lock(smbd_requ->smbd_open,
 			smbd_conn, smbd_requ, state);
 	if (NT_STATUS_IS_OK(status)) {
 		x_smb2_reply_lock(smbd_conn, smbd_requ, *state);

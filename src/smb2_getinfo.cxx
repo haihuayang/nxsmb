@@ -101,16 +101,14 @@ NTSTATUS x_smb2_process_getinfo(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_re
 	X_LOG_OP("%ld GETINFO 0x%lx, 0x%lx", smbd_requ->in_mid,
 			state->in_file_id_persistent, state->in_file_id_volatile);
 
-	if (!smbd_requ->smbd_open) {
-		smbd_requ->smbd_open = x_smbd_open_lookup(state->in_file_id_persistent,
-				state->in_file_id_volatile,
-				smbd_requ->smbd_tcon);
-		if (!smbd_requ->smbd_open) {
-			RETURN_OP_STATUS(smbd_requ, NT_STATUS_FILE_CLOSED);
-		}
+	NTSTATUS status = x_smbd_requ_init_open(smbd_requ,
+			state->in_file_id_persistent,
+			state->in_file_id_volatile);
+	if (!NT_STATUS_IS_OK(status)) {
+		RETURN_OP_STATUS(smbd_requ, status);
 	}
 
-	NTSTATUS status = x_smbd_open_op_getinfo(smbd_requ->smbd_open,
+	status = x_smbd_open_op_getinfo(smbd_requ->smbd_open,
 		       	smbd_conn, smbd_requ,
 			state);
 	if (NT_STATUS_IS_OK(status) || NT_STATUS_EQUAL(status, STATUS_BUFFER_OVERFLOW)) {
