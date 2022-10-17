@@ -205,10 +205,15 @@ static void x_smbd_requ_sign_if(x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ, x_bufref_t *buf_head)
 {
 	x_smb2_header_t *smb2_hdr = (x_smb2_header_t *)buf_head->get_data();
-	uint32_t last_flags = X_LE2H32(smb2_hdr->flags);
-	if (last_flags & SMB2_HDR_FLAG_SIGNED) {
-		const x_smb2_key_t *signing_key = get_signing_key(smbd_requ);
-		x_smb2_signing_sign(smbd_conn->dialect, signing_key, buf_head);
+	uint32_t flags = X_LE2H32(smb2_hdr->flags);
+	NTSTATUS status = { X_LE2H32(smb2_hdr->status) };
+	if (flags & SMB2_HDR_FLAG_SIGNED) {
+		if (smbd_requ->smbd_sess) {
+			const x_smb2_key_t *signing_key = get_signing_key(smbd_requ);
+			x_smb2_signing_sign(smbd_conn->dialect, signing_key, buf_head);
+		} else {
+			X_ASSERT(!NT_STATUS_IS_OK(status));
+		}
 	}
 }
 
@@ -216,8 +221,6 @@ static void x_smbd_conn_queue(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ
 {
 	X_ASSERT(smbd_requ->out_buf_head);
 	X_ASSERT(smbd_requ->out_length > 0);
-
-	x_smbd_requ_sign_if(smbd_conn, smbd_requ, smbd_requ->last_buf_head);
 
 	x_smbd_conn_queue(smbd_conn, smbd_requ->out_buf_head, smbd_requ->out_buf_tail,
 			smbd_requ->out_length);
@@ -283,20 +286,6 @@ void x_smb2_reply(x_smbd_conn_t *smbd_conn,
 {
 	smbd_requ->out_credit_granted = x_smb2_calculate_credit(smbd_conn, smbd_requ, status);
 	smbd_requ->out_hdr_flags = calculate_out_hdr_flags(smbd_requ->in_hdr_flags, smbd_requ->out_hdr_flags);
-	if (smbd_requ->out_buf_tail) {
-		X_ASSERT(smbd_requ->last_buf_head);
-		uint32_t pad_len = x_convert<uint32_t>(x_pad_len(smbd_requ->last_reply_size, 8) - smbd_requ->last_reply_size);
-		x_smb2_header_t *last_smb2_hdr = (x_smb2_header_t *)smbd_requ->last_buf_head->get_data();
-		if (pad_len) {
-			memset(smbd_requ->out_buf_tail->get_data() + smbd_requ->out_buf_tail->length, 0, pad_len);
-			smbd_requ->out_buf_tail->length += pad_len;
-			smbd_requ->out_length += pad_len;
-		}
-		last_smb2_hdr->next_command = X_H2LE32(smbd_requ->last_reply_size + pad_len);
-		x_smbd_requ_sign_if(smbd_conn, smbd_requ, smbd_requ->last_buf_head);
-		smbd_requ->last_buf_head = nullptr;
-	}
-
 	x_smb2_header_t *smb2_hdr = (x_smb2_header_t *)buf_head->get_data();
 	smb2_hdr->protocol_id = X_H2BE32(X_SMB2_MAGIC);
 	smb2_hdr->length = X_H2LE32(sizeof(x_smb2_header_t));
@@ -327,6 +316,19 @@ void x_smb2_reply(x_smbd_conn_t *smbd_conn,
 
 	memset(smb2_hdr->signature, 0, sizeof(smb2_hdr->signature));
 
+	if (smbd_requ->compound_followed || smbd_requ->out_buf_head) {
+		uint32_t pad_len = x_convert<uint32_t>(x_pad_len(reply_size, 8) - reply_size);
+		if (pad_len) {
+			memset(buf_tail->get_data() + buf_tail->length, 0, pad_len);
+			buf_tail->length += pad_len;
+			reply_size += pad_len;
+		}
+	}
+	if (smbd_requ->compound_followed && !NT_STATUS_EQUAL(status, NT_STATUS_PENDING)) {
+		smb2_hdr->next_command = X_H2LE32(x_convert<uint32_t>(reply_size));
+	}
+	x_smbd_requ_sign_if(smbd_conn, smbd_requ, buf_head);
+
 	if (smbd_requ->out_buf_tail) {
 		smbd_requ->out_buf_tail->next = buf_head;
 		smbd_requ->out_buf_tail = buf_tail;
@@ -335,8 +337,6 @@ void x_smb2_reply(x_smbd_conn_t *smbd_conn,
 		smbd_requ->out_buf_tail = buf_tail;
 	}
 	smbd_requ->out_length += x_convert_assert<uint32_t>(reply_size);
-	smbd_requ->last_buf_head = buf_head;
-	smbd_requ->last_reply_size = x_convert_assert<uint32_t>(reply_size);
 }
 
 static int x_smbd_reply_error(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ,
@@ -468,21 +468,45 @@ static NTSTATUS x_smbd_conn_process_smb2_intl(x_smbd_conn_t *smbd_conn, x_smbd_r
 
 	x_buf_t *buf = smbd_requ->in_buf;
 	auto in_smb2_hdr = (const x_smb2_header_t *)(buf->data + smbd_requ->in_offset);
-	uint64_t in_session_id = X_LE2H64(in_smb2_hdr->sess_id);
-	NTSTATUS sess_status = NT_STATUS_OK;
 	if ((smbd_requ->in_hdr_flags & SMB2_HDR_FLAG_CHAINED) == 0) {
+		if (smbd_requ->smbd_open) {
+			X_SMBD_REF_DEC(smbd_requ->smbd_open);
+		}
+		if (smbd_requ->smbd_tcon) {
+			X_SMBD_REF_DEC(smbd_requ->smbd_tcon);
+		}
 		if (smbd_requ->smbd_chan) {
 			X_SMBD_REF_DEC(smbd_requ->smbd_chan);
 		}
 		if (smbd_requ->smbd_sess) {
 			X_SMBD_REF_DEC(smbd_requ->smbd_sess);
 		}
-		if (in_session_id != 0) {
-			smbd_requ->smbd_sess = x_smbd_sess_lookup(sess_status,
-					in_session_id, smbd_conn->client_guid);
+		smbd_requ->sess_status = NT_STATUS_OK;
+	}
+
+	uint64_t in_session_id = X_LE2H64(in_smb2_hdr->sess_id);
+	NTSTATUS sess_status = NT_STATUS_OK;
+	if (!smbd_requ->smbd_sess && in_session_id != 0 && in_session_id != UINT64_MAX) {
+		smbd_requ->smbd_sess = x_smbd_sess_lookup(sess_status,
+				in_session_id, smbd_conn->client_guid);
+		if ((smbd_requ->in_hdr_flags & SMB2_HDR_FLAG_CHAINED) == 0) {
+			smbd_requ->sess_status = sess_status;
 		}
 	}
 	
+	if (smbd_requ->smbd_sess && smbd_requ->is_signed()) {
+		smbd_requ->out_hdr_flags |= SMB2_HDR_FLAG_SIGNED;
+	}
+
+	if ((smbd_requ->in_hdr_flags & SMB2_HDR_FLAG_CHAINED) != 0) {
+		if (smbd_requ->in_offset == 0) {
+			smbd_requ->sess_status = NT_STATUS_INVALID_PARAMETER;
+			return NT_STATUS_INVALID_PARAMETER;
+		} else if (!smbd_requ->smbd_sess || !NT_STATUS_IS_OK(smbd_requ->sess_status)) {
+			return NT_STATUS_INVALID_PARAMETER;
+		}
+	}
+
 	bool signing_required = false;
 	if (smbd_requ->smbd_sess) {
 		signing_required = x_smbd_sess_is_signing_required(smbd_requ->smbd_sess);
@@ -501,7 +525,6 @@ static NTSTATUS x_smbd_conn_process_smb2_intl(x_smbd_conn_t *smbd_conn, x_smbd_r
 				smbd_conn);
 		}
 		const x_smb2_key_t *signing_key = get_signing_key(smbd_requ);
-		smbd_requ->out_hdr_flags |= SMB2_HDR_FLAG_SIGNED;
 		if (!x_smb2_signing_check(smbd_conn->dialect, signing_key, &bufref)) {
 			return NT_STATUS_ACCESS_DENIED;
 		}
@@ -509,9 +532,7 @@ static NTSTATUS x_smbd_conn_process_smb2_intl(x_smbd_conn_t *smbd_conn, x_smbd_r
 		return NT_STATUS_ACCESS_DENIED;
 	}
 
-	if (smbd_requ->opcode >= std::size(x_smb2_op_table)) {
-		X_TODO; // more ops
-	}
+	X_ASSERT(smbd_requ->opcode < std::size(x_smb2_op_table));
 
 	const auto &op = x_smb2_op_table[smbd_requ->opcode];
 	if (op.need_channel) {
