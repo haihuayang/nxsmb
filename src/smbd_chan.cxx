@@ -258,6 +258,8 @@ static NTSTATUS smbd_chan_auth_succeeded(x_smbd_chan_t *smbd_chan,
 		// TODO memory order
 		smbd_chan->state = x_smbd_chan_t::S_ACTIVE;
 		smbd_chan->key_is_valid = true;
+		x_auth_destroy(smbd_chan->auth);
+		smbd_chan->auth = nullptr;
 	}
 
 	return status;
