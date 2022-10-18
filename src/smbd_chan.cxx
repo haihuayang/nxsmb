@@ -413,7 +413,6 @@ NTSTATUS x_smbd_chan_update_auth(x_smbd_chan_t *smbd_chan,
 		const uint8_t *in_security_data,
 		uint32_t in_security_length,
 		std::vector<uint8_t> &out_security,
-		std::shared_ptr<x_auth_info_t> &auth_info,
 		bool new_auth)
 {
 	if (!smbd_chan->auth) {
@@ -432,6 +431,7 @@ NTSTATUS x_smbd_chan_update_auth(x_smbd_chan_t *smbd_chan,
 	smbd_chan->state = x_smbd_chan_t::S_PROCESSING;
 	X_ASSERT(!smbd_chan->auth_requ);
 
+	std::shared_ptr<x_auth_info_t> auth_info;
 	NTSTATUS status = smbd_chan->auth->update(in_security_data, in_security_length,
 			out_security,
 			&smbd_chan->auth_upcall, auth_info);

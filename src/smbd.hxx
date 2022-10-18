@@ -270,7 +270,6 @@ NTSTATUS x_smbd_chan_update_auth(x_smbd_chan_t *smbd_chan,
 		const uint8_t *in_security_data,
 		uint32_t in_security_length,
 		std::vector<uint8_t> &out_security,
-		std::shared_ptr<x_auth_info_t> &auth_info,
 		bool new_auth);
 void x_smbd_chan_unlinked(x_dlink_t *conn_link, x_smbd_conn_t *smbd_conn);
 x_smbd_chan_t *x_smbd_chan_match(x_dlink_t *conn_link, x_smbd_conn_t *smbd_conn);

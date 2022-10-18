@@ -62,16 +62,25 @@ static void x_smb2_reply_sesssetup(x_smbd_conn_t *smbd_conn,
 	}
 }
 
+static void smb2_sesssetup_done(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ,
+		uint16_t dialect, NTSTATUS status,
+		const std::vector<uint8_t> &out_security)
+{
+	X_LOG_DBG("smbd_chan=%p, smbd_requ=%p, status=0x%x", smbd_requ->smbd_chan, smbd_requ, NT_STATUS_V(status));
+	if (NT_STATUS_IS_OK(status) ||
+			NT_STATUS_EQUAL(status, NT_STATUS_MORE_PROCESSING_REQUIRED)) {
+		x_smb2_reply_sesssetup(smbd_conn, smbd_requ->smbd_chan, smbd_requ,
+				dialect, status, out_security);
+	}
+}
+
 void x_smb2_sesssetup_done(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ, NTSTATUS status,
 		const std::vector<uint8_t> &out_security)
 {
 	/* async done */
-	X_LOG_DBG("smbd_requ=%p, status=0x%x", smbd_requ, NT_STATUS_V(status));
-	if (NT_STATUS_IS_OK(status) ||
-			NT_STATUS_EQUAL(status, NT_STATUS_MORE_PROCESSING_REQUIRED)) {
-		x_smb2_reply_sesssetup(smbd_conn, smbd_requ->smbd_chan, smbd_requ,
-				x_smbd_conn_get_dialect(smbd_conn), status, out_security);
-	}
+	smb2_sesssetup_done(smbd_conn, smbd_requ,
+			x_smbd_conn_get_dialect(smbd_conn),
+			status, out_security);
 	x_smbd_conn_requ_done(smbd_conn, smbd_requ, status);
 }
 
@@ -174,16 +183,10 @@ NTSTATUS x_smb2_process_sesssetup(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_
 	x_smbd_chan_update_preauth(smbd_requ->smbd_chan, in_hdr, smbd_requ->in_requ_len);
 
 	std::vector<uint8_t> out_security;
-	std::shared_ptr<x_auth_info_t> auth_info;
 	NTSTATUS status = x_smbd_chan_update_auth(smbd_requ->smbd_chan, smbd_requ,
 			in_hdr + in_security_offset, in_security_length,
-			out_security, auth_info, new_auth);
-	X_LOG_DBG("smbd_chan=%p, smbd_requ=%p, status=0x%x", smbd_requ->smbd_chan, smbd_requ, NT_STATUS_V(status));
-	if (NT_STATUS_IS_OK(status) ||
-			NT_STATUS_EQUAL(status, NT_STATUS_MORE_PROCESSING_REQUIRED)) {
-		x_smb2_reply_sesssetup(smbd_conn, smbd_requ->smbd_chan, smbd_requ,
-				dialect, status, out_security);
-	}
+			out_security, new_auth);
+	smb2_chan_auth_return(smbd_conn, smbd_requ, dialect, status, out_security);
 	return status;
 }
 
