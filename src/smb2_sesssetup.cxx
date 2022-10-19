@@ -95,7 +95,7 @@ void x_smb2_sesssetup_done(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ, N
 
 NTSTATUS x_smb2_process_sesssetup(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 {
-	X_LOG_OP("%ld SESSSETUP 0x%lx, 0x%lx", smbd_requ->in_mid);
+	X_LOG_OP("%ld SESSSETUP 0x%lx, 0x%lx", smbd_requ->in_smb2_hdr.mid);
 
 	if (smbd_requ->in_requ_len < SMB2_HDR_BODY + sizeof(x_smb2_sesssetup_requ_t) + 1) {
 		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);

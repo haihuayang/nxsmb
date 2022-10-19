@@ -27,7 +27,7 @@ static void x_smb2_reply_tdis(x_smbd_conn_t *smbd_conn,
 
 NTSTATUS x_smb2_process_tdis(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 {
-	X_LOG_OP("%ld TDIS", smbd_requ->in_mid);
+	X_LOG_OP("%ld TDIS", smbd_requ->in_smb2_hdr.mid);
 	X_ASSERT(smbd_requ->smbd_chan && smbd_requ->smbd_sess && smbd_requ->smbd_tcon);
 
 	if (smbd_requ->in_requ_len < SMB2_HDR_BODY + sizeof(x_smb2_tdis_requ_t)) {

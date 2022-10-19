@@ -396,7 +396,7 @@ static void x_smb2_reply_create(x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ,
 		const x_smb2_state_create_t &state)
 {
-	X_LOG_OP("%ld RESP SUCCESS 0x%lx,0x%lx", smbd_requ->in_mid,
+	X_LOG_OP("%ld RESP SUCCESS 0x%lx,0x%lx", smbd_requ->in_smb2_hdr.mid,
 			smbd_requ->smbd_open->id, smbd_requ->smbd_open->id);
 
 #if 1
@@ -493,7 +493,7 @@ NTSTATUS x_smb2_process_create(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_req
 	}
 
 	/* TODO log stream too */
-	X_LOG_OP("%ld CREATE '%s'", smbd_requ->in_mid,
+	X_LOG_OP("%ld CREATE '%s'", smbd_requ->in_smb2_hdr.mid,
 			x_convert_utf16_to_utf8(state->in_path).c_str());
 
 	smbd_requ->async_done_fn = x_smb2_create_async_done;

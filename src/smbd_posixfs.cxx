@@ -3292,7 +3292,7 @@ NTSTATUS posixfs_object_op_read(
 	 * but smbtorture require the response is 8 byte aligned.
 	 * so disable async for now
 	 */
-	if (!smbd_requ || smbd_requ->compound_followed || smbd_requ->out_buf_head) {
+	if (!smbd_requ || smbd_requ->is_compound_followed() || smbd_requ->out_buf_head) {
 		return posixfs_do_read(posixfs_object, *state);
 	}
 	posixfs_object_incref(posixfs_object);
@@ -3475,7 +3475,7 @@ NTSTATUS posixfs_object_op_write(
 		return NT_STATUS_INVALID_DEVICE_REQUEST;
 	}
 
-	if (!smbd_requ || smbd_requ->compound_followed) {
+	if (!smbd_requ || smbd_requ->is_compound_followed()) {
 		return posixfs_do_write(posixfs_object, posixfs_open, *state);
 	}
 	posixfs_object_incref(posixfs_object);
@@ -4502,7 +4502,7 @@ NTSTATUS posixfs_object_op_notify(
 	state->out_notify_changes = std::move(posixfs_open->notify_changes);
 	if (!state->out_notify_changes.empty()) {
 		return NT_STATUS_OK;
-	} else if (!smbd_requ->compound_followed) {
+	} else if (!smbd_requ->is_compound_followed()) {
 		smbd_requ->save_state(state);
 		x_smbd_ref_inc(smbd_requ);
 		posixfs_open->notify_requ_list.push_back(smbd_requ);

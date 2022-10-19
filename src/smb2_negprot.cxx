@@ -53,7 +53,7 @@ static NTSTATUS x_smbd_conn_reply_negprot(x_smbd_conn_t *smbd_conn, x_smbd_requ_
 		const x_smbd_conf_t &smbd_conf,
 		const x_smb2_negprot_t &negprot)
 {
-	X_LOG_OP("%ld RESP SUCCESS dialect=%x", smbd_requ->in_mid, negprot.out_dialect);
+	X_LOG_OP("%ld RESP SUCCESS dialect=%x", smbd_requ->in_smb2_hdr.mid, negprot.out_dialect);
 
 	const std::vector<uint8_t> &security_blob = x_smbd_get_negprot_spnego();
 	size_t dyn_len = security_blob.size();
@@ -277,7 +277,7 @@ static void generate_context(x_smb2_negprot_t &negprot, uint16_t cipher)
  */
 NTSTATUS x_smb2_process_negprot(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 {
-	X_LOG_OP("%ld NEGPROT", smbd_requ->in_mid);
+	X_LOG_OP("%ld NEGPROT", smbd_requ->in_smb2_hdr.mid);
 
 	// x_smb2_verify_size(smbd_requ, X_SMB2_NEGPROT_BODY_LEN);
 	if (smbd_requ->in_requ_len < SMB2_HDR_BODY + sizeof(x_smb2_negprot_requ_t)) {

@@ -92,7 +92,7 @@ static void x_smb2_reply_ioctl(x_smbd_conn_t *smbd_conn,
 		NTSTATUS status,
 		x_smb2_state_ioctl_t &state)
 {
-	X_LOG_OP("%ld IOCTL SUCCESS", smbd_requ->in_mid);
+	X_LOG_OP("%ld IOCTL SUCCESS", smbd_requ->in_smb2_hdr.mid);
 
 	x_bufref_t *bufref = x_bufref_alloc(sizeof(x_smb2_out_ioctl_t));
 	if (state.out_buf_length) {
@@ -545,7 +545,7 @@ NTSTATUS x_smb2_process_ioctl(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ
 		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
 
-	X_LOG_OP("%ld IOCTL 0x%lx, 0x%lx", smbd_requ->in_mid,
+	X_LOG_OP("%ld IOCTL 0x%lx, 0x%lx", smbd_requ->in_smb2_hdr.mid,
 			state->in_file_id_persistent, state->in_file_id_volatile);
 
 	if (state->in_flags != SMB2_IOCTL_FLAG_IS_FSCTL) {

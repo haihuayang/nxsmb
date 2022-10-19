@@ -336,11 +336,15 @@ struct x_smbd_requ_t
 	}
 
 	bool is_signed() const {
-	       return (in_hdr_flags & SMB2_HDR_FLAG_SIGNED) != 0;
+		return (in_smb2_hdr.flags & SMB2_HDR_FLAG_SIGNED) != 0;
 	}
 
 	bool is_compound_related() const {
-		return (in_hdr_flags & SMB2_HDR_FLAG_CHAINED) != 0;
+		return (in_smb2_hdr.flags & SMB2_HDR_FLAG_CHAINED) != 0;
+	}
+
+	bool is_compound_followed() const {
+		return in_smb2_hdr.next_command != 0;
 	}
 
 	template <class T>
@@ -369,20 +373,15 @@ struct x_smbd_requ_t
 
 	x_buf_t *in_buf;
 	uint64_t id = 0;
+
+	x_smb2_header_t in_smb2_hdr;
 	uint32_t in_msgsize, in_offset, in_requ_len;
-	bool compound_followed = false;
 	bool async = false;
-	uint16_t opcode;
 
 	NTSTATUS status{NT_STATUS_OK};
 	NTSTATUS sess_status{NT_STATUS_OK};
-	uint64_t in_mid;
-	uint32_t in_tid;
-	uint32_t in_hdr_flags;
 	uint32_t out_hdr_flags{};
 
-	uint16_t in_credit_charge{};
-	uint16_t in_credit_requested{};
 	uint16_t out_credit_granted;
 
 	uint32_t out_length = 0;
@@ -471,7 +470,8 @@ void x_smbd_conn_requ_done(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ,
 		NTSTATUS status);
 
 #define RETURN_OP_STATUS(smbd_requ, status) do { \
-	X_LOG_OP("mid=%ld op=%d 0x%lx at %s:%d", (smbd_requ)->in_mid, (smbd_requ)->opcode, \
+	X_LOG_OP("mid=%ld op=%d 0x%lx at %s:%d", (smbd_requ)->in_smb2_hdr.mid, \
+			(smbd_requ)->in_smb2_hdr.opcode, \
 			(status).v, __FILE__, __LINE__); \
 	return (status); \
 } while (0)

@@ -60,7 +60,7 @@ static void x_smb2_reply_setinfo(x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ,
 		const x_smb2_state_setinfo_t &state)
 {
-	X_LOG_OP("%ld SETINFO SUCCESS", smbd_requ->in_mid);
+	X_LOG_OP("%ld SETINFO SUCCESS", smbd_requ->in_smb2_hdr.mid);
 
 	x_bufref_t *bufref = x_bufref_alloc(sizeof(x_smb2_out_setinfo_t));
 
@@ -122,7 +122,7 @@ NTSTATUS x_smb2_process_setinfo(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_re
 		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
 
-	X_LOG_OP("%ld SETINFO 0x%lx, 0x%lx", smbd_requ->in_mid,
+	X_LOG_OP("%ld SETINFO 0x%lx, 0x%lx", smbd_requ->in_smb2_hdr.mid,
 			state->in_file_id_persistent, state->in_file_id_volatile);
 
 	NTSTATUS status = x_smbd_requ_init_open(smbd_requ,

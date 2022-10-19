@@ -143,7 +143,7 @@ static void x_smb2_reply_tcon(x_smbd_conn_t *smbd_conn,
 		uint32_t out_share_capabilities,
 		uint32_t out_access_mask)
 {
-	X_LOG_OP("%ld RESP SUCCESS tid=%x", smbd_requ->in_mid, x_smbd_tcon_get_id(smbd_tcon));
+	X_LOG_OP("%ld RESP SUCCESS tid=%x", smbd_requ->in_smb2_hdr.mid, x_smbd_tcon_get_id(smbd_tcon));
 	x_bufref_t *bufref = x_bufref_alloc(sizeof(x_smb2_tcon_resp_t));
 
 	uint8_t *out_hdr = bufref->get_data();
@@ -162,7 +162,7 @@ static void x_smb2_reply_tcon(x_smbd_conn_t *smbd_conn,
 
 NTSTATUS x_smb2_process_tcon(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 {
-	X_LOG_OP("%ld TCON", smbd_requ->in_mid);
+	X_LOG_OP("%ld TCON", smbd_requ->in_smb2_hdr.mid);
 	X_ASSERT(smbd_requ->smbd_chan && smbd_requ->smbd_sess);
 
 	if (smbd_requ->in_requ_len < SMB2_HDR_BODY + sizeof(x_smb2_tcon_requ_t) + 1) {
@@ -204,7 +204,7 @@ NTSTATUS x_smb2_process_tcon(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 
 	std::string share{in_share_s};
 
-	X_LOG_OP("%ld TCON %s", smbd_requ->in_mid, in_path.c_str());
+	X_LOG_OP("%ld TCON %s", smbd_requ->in_smb2_hdr.mid, in_path.c_str());
 
 	std::string volume;
 	auto smbd_share = x_smbd_find_share(share, volume);

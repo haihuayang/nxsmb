@@ -168,7 +168,7 @@ bool x_smbd_requ_list_t::output(std::string &data)
 	bool ret = g_smbd_requ_table->iter_entry(iter, [&os](const x_smbd_requ_t *smbd_requ) {
 			/* TODO list channels */
 			os << idl::x_hex_t<uint64_t>(smbd_requ->id) << ' '
-			<< idl::x_hex_t<uint64_t>(smbd_requ->in_mid);
+			<< idl::x_hex_t<uint64_t>(smbd_requ->in_smb2_hdr.mid);
 			os << std::endl;
 			return true;
 		});

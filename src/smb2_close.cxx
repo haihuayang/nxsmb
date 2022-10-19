@@ -82,7 +82,7 @@ NTSTATUS x_smb2_process_close(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ
 		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
 
-	X_LOG_OP("%ld CLOSE 0x%lx, 0x%lx", smbd_requ->in_mid,
+	X_LOG_OP("%ld CLOSE 0x%lx, 0x%lx", smbd_requ->in_smb2_hdr.mid,
 			state->in_file_id_persistent, state->in_file_id_volatile);
 
 	NTSTATUS status = x_smbd_requ_init_open(smbd_requ,

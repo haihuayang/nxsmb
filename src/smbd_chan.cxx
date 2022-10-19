@@ -338,7 +338,7 @@ static NTSTATUS smbd_chan_auth_updated(x_smbd_chan_t *smbd_chan, x_smbd_requ_t *
 		NTSTATUS status,
 		const x_auth_info_t &auth_info)
 {
-	X_LOG_OP("%ld RESP 0x%x", smbd_requ->in_mid, status.v);
+	X_LOG_OP("%ld RESP 0x%x", smbd_requ->in_smb2_hdr.mid, status.v);
 
 	if (NT_STATUS_IS_OK(status)) {
 		status = smbd_chan_auth_succeeded(smbd_chan, auth_info);
