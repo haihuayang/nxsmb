@@ -51,6 +51,11 @@ void x_smbd_ref_dec(x_smbd_sess_t *smbd_sess)
 	g_smbd_sess_table->decref(smbd_sess->id);
 }
 
+static bool match_user(const x_smbd_user_t &u1, const x_smbd_user_t &u2)
+{
+	return u1.uid == u2.uid && u1.domain_sid == u2.domain_sid;
+}
+
 x_smbd_sess_t *x_smbd_sess_create(uint64_t &id)
 {
 	x_smbd_sess_t *smbd_sess = new x_smbd_sess_t;
@@ -246,6 +251,21 @@ NTSTATUS x_smbd_sess_logoff(x_smbd_sess_t *smbd_sess)
 
 	smbd_sess_terminate(smbd_sess, lock);
 	return NT_STATUS_OK;
+}
+
+// smb2srv_session_close_previous_send
+void x_smbd_sess_close_previous(const x_smbd_sess_t *curr_sess, uint64_t prev_session_id)
+{
+	auto [found, prev_sess] = g_smbd_sess_table->lookup(prev_session_id);
+	if (!found) {
+		return;
+	}
+
+	X_ASSERT(curr_sess->smbd_user);
+	if (prev_sess->smbd_user && match_user(*curr_sess->smbd_user, *prev_sess->smbd_user)) {
+		x_smbd_sess_logoff(prev_sess);
+	}
+	x_smbd_ref_dec(prev_sess);
 }
 
 bool x_smbd_sess_post_user(x_smbd_sess_t *smbd_sess, x_fdevt_user_t *evt)

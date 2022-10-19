@@ -68,8 +68,15 @@ static void smb2_sesssetup_done(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_re
 		const std::vector<uint8_t> &out_security)
 {
 	X_LOG_DBG("smbd_chan=%p, smbd_requ=%p, status=0x%x", smbd_requ->smbd_chan, smbd_requ, NT_STATUS_V(status));
-	if (NT_STATUS_IS_OK(status) ||
-			NT_STATUS_EQUAL(status, NT_STATUS_MORE_PROCESSING_REQUIRED)) {
+	if (NT_STATUS_EQUAL(status, NT_STATUS_MORE_PROCESSING_REQUIRED)) {
+		x_smb2_reply_sesssetup(smbd_conn, smbd_requ->smbd_chan, smbd_requ,
+				dialect, status, out_security);
+	} else if (NT_STATUS_IS_OK(status)) {
+		/* TODO (state->session->global->session_wire_id != state->in_previous_session_id)
+		 */
+		if (in_previous_session_id != 0) {
+			x_smbd_sess_close_previous(smbd_requ->smbd_sess, in_previous_session_id);
+		}
 		x_smb2_reply_sesssetup(smbd_conn, smbd_requ->smbd_chan, smbd_requ,
 				dialect, status, out_security);
 	}

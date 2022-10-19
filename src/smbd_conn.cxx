@@ -507,6 +507,22 @@ static NTSTATUS x_smbd_conn_process_smb2_intl(x_smbd_conn_t *smbd_conn, x_smbd_r
 		}
 	}
 
+	X_ASSERT(smbd_requ->opcode < std::size(x_smb2_op_table));
+
+	const auto &op = x_smb2_op_table[smbd_requ->opcode];
+	if (op.need_channel) {
+		if (!smbd_requ->smbd_sess) {
+			return NT_STATUS_USER_SESSION_DELETED;
+		}
+		if (!smbd_requ->smbd_chan) {
+			smbd_requ->smbd_chan = x_smbd_sess_lookup_chan(smbd_requ->smbd_sess,
+					smbd_conn);
+			if (!smbd_requ->smbd_chan || !x_smbd_chan_is_active(smbd_requ->smbd_chan)) {
+				return NT_STATUS_USER_SESSION_DELETED;
+			}
+		}
+	}
+
 	bool signing_required = false;
 	if (smbd_requ->smbd_sess) {
 		signing_required = x_smbd_sess_is_signing_required(smbd_requ->smbd_sess);
@@ -530,22 +546,6 @@ static NTSTATUS x_smbd_conn_process_smb2_intl(x_smbd_conn_t *smbd_conn, x_smbd_r
 		}
 	} else if (signing_required) {
 		return NT_STATUS_ACCESS_DENIED;
-	}
-
-	X_ASSERT(smbd_requ->opcode < std::size(x_smb2_op_table));
-
-	const auto &op = x_smb2_op_table[smbd_requ->opcode];
-	if (op.need_channel) {
-		if (!smbd_requ->smbd_sess) {
-			return NT_STATUS_USER_SESSION_DELETED;
-		}
-		if (!smbd_requ->smbd_chan) {
-			smbd_requ->smbd_chan = x_smbd_sess_lookup_chan(smbd_requ->smbd_sess,
-					smbd_conn);
-			if (!smbd_requ->smbd_chan || !x_smbd_chan_is_active(smbd_requ->smbd_chan)) {
-				return NT_STATUS_USER_SESSION_DELETED;
-			}
-		}
 	}
 
 	/* TODO signing/encryption */
