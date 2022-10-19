@@ -21,8 +21,10 @@ struct x_smbd_chan_t
 	/* smbd_chan must hold the ref of smbd_conn through its life,
 	 * so smbd_conn is always valid, although it may be terminated
 	 */
-	explicit x_smbd_chan_t(x_smbd_conn_t *smbd_conn, x_smbd_sess_t *smbd_sess)
-		: tick_create(tick_now), smbd_conn(x_smbd_ref_inc(smbd_conn))
+	explicit x_smbd_chan_t(x_smbd_conn_t *smbd_conn, x_smbd_sess_t *smbd_sess,
+			uint64_t previous_session_id)
+		: tick_create(tick_now), previous_session_id(previous_session_id)
+		, smbd_conn(x_smbd_ref_inc(smbd_conn))
 		, smbd_sess(x_smbd_ref_inc(smbd_sess)) {
 		X_SMBD_COUNTER_INC(chan_create, 1);
 	}
@@ -48,6 +50,7 @@ struct x_smbd_chan_t
 	x_auth_upcall_t auth_upcall;
 	x_timerq_entry_t timer;
 	const x_tick_t tick_create;
+	const uint64_t previous_session_id;
 
 	std::atomic<int> refcnt{1};
 	std::atomic<uint16_t> state{S_INIT};
@@ -367,7 +370,9 @@ struct smbd_chan_auth_upcall_evt_t
 						x_smbd_chan_t::S_BLOCKED)) {
 				NTSTATUS status = smbd_chan_auth_updated(smbd_chan, smbd_requ, evt->status,
 						*evt->auth_info);
-				x_smb2_sesssetup_done(smbd_chan->smbd_conn, smbd_requ, status, evt->out_security);
+				x_smb2_sesssetup_done(smbd_chan->smbd_conn, smbd_requ, status,
+						smbd_chan->previous_session_id,
+						evt->out_security);
 			}
 		}
 		delete evt;
@@ -447,9 +452,10 @@ NTSTATUS x_smbd_chan_update_auth(x_smbd_chan_t *smbd_chan,
 }
 
 /* run inside context of smbd_conn */
-x_smbd_chan_t *x_smbd_chan_create(x_smbd_sess_t *smbd_sess, x_smbd_conn_t *smbd_conn)
+x_smbd_chan_t *x_smbd_chan_create(x_smbd_sess_t *smbd_sess, x_smbd_conn_t *smbd_conn,
+		uint64_t previous_session_id)
 {
-	x_smbd_chan_t *smbd_chan = new x_smbd_chan_t(smbd_conn, smbd_sess);
+	x_smbd_chan_t *smbd_chan = new x_smbd_chan_t(smbd_conn, smbd_sess, previous_session_id);
 	if (!smbd_chan) {
 		return nullptr;
 	}

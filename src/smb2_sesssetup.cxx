@@ -64,6 +64,7 @@ static void x_smb2_reply_sesssetup(x_smbd_conn_t *smbd_conn,
 
 static void smb2_sesssetup_done(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ,
 		uint16_t dialect, NTSTATUS status,
+		uint64_t in_previous_session_id,
 		const std::vector<uint8_t> &out_security)
 {
 	X_LOG_DBG("smbd_chan=%p, smbd_requ=%p, status=0x%x", smbd_requ->smbd_chan, smbd_requ, NT_STATUS_V(status));
@@ -75,12 +76,13 @@ static void smb2_sesssetup_done(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_re
 }
 
 void x_smb2_sesssetup_done(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ, NTSTATUS status,
+		uint64_t in_previous_session_id,
 		const std::vector<uint8_t> &out_security)
 {
 	/* async done */
 	smb2_sesssetup_done(smbd_conn, smbd_requ,
 			x_smbd_conn_get_dialect(smbd_conn),
-			status, out_security);
+			status, in_previous_session_id, out_security);
 	x_smbd_conn_requ_done(smbd_conn, smbd_requ, status);
 }
 
@@ -104,6 +106,8 @@ NTSTATUS x_smb2_process_sesssetup(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_
 		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
 	
+	uint64_t in_previous_session_id = X_LE2H64(requ->previous_session);
+
 	bool new_auth = false;
 	/* smbd_sess must be valid if smbd_chan is */
 	X_ASSERT(!smbd_requ->smbd_chan || smbd_requ->smbd_sess);
@@ -130,7 +134,8 @@ NTSTATUS x_smb2_process_sesssetup(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_
 				RETURN_OP_STATUS(smbd_requ, NT_STATUS_REQUEST_NOT_ACCEPTED);
 			}
 		} else {
-			smbd_requ->smbd_chan = x_smbd_chan_create(smbd_requ->smbd_sess, smbd_conn);
+			/* TODO does it allow previous session in session binding */
+			smbd_requ->smbd_chan = x_smbd_chan_create(smbd_requ->smbd_sess, smbd_conn, in_previous_session_id);
 			if (!smbd_requ->smbd_chan) {
 				RETURN_OP_STATUS(smbd_requ, NT_STATUS_INSUFFICIENT_RESOURCES);
 			}
@@ -142,7 +147,7 @@ NTSTATUS x_smb2_process_sesssetup(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_
 		if (!smbd_requ->smbd_sess) {
 			RETURN_OP_STATUS(smbd_requ, NT_STATUS_INSUFFICIENT_RESOURCES);
 		}
-		smbd_requ->smbd_chan = x_smbd_chan_create(smbd_requ->smbd_sess, smbd_conn);
+		smbd_requ->smbd_chan = x_smbd_chan_create(smbd_requ->smbd_sess, smbd_conn, in_previous_session_id);
 		if (!smbd_requ->smbd_chan) {
 			RETURN_OP_STATUS(smbd_requ, NT_STATUS_INSUFFICIENT_RESOURCES);
 		}
@@ -186,7 +191,8 @@ NTSTATUS x_smb2_process_sesssetup(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_
 	NTSTATUS status = x_smbd_chan_update_auth(smbd_requ->smbd_chan, smbd_requ,
 			in_hdr + in_security_offset, in_security_length,
 			out_security, new_auth);
-	smb2_chan_auth_return(smbd_conn, smbd_requ, dialect, status, out_security);
+	smb2_sesssetup_done(smbd_conn, smbd_requ, dialect, status,
+			in_previous_session_id, out_security);
 	return status;
 }
 
