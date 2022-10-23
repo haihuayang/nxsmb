@@ -2216,7 +2216,7 @@ static NTSTATUS posixfs_create_open_exist_object(
 	}
 
 	reply_requ_create(*state, posixfs_object, &posixfs_object->default_stream,
-			FILE_WAS_OPENED);
+			overwrite ? FILE_WAS_OVERWRITTEN : FILE_WAS_OPENED);
 	posixfs_open = posixfs_open_create(&status, smbd_requ->smbd_tcon, posixfs_object,
 			&posixfs_object->default_stream,
 			*state);
@@ -2485,7 +2485,7 @@ static NTSTATUS open_object_exist_ads(
 	}
 
 	reply_requ_create(*state, posixfs_object, &posixfs_ads->base,
-			FILE_WAS_OPENED);
+			overwrite ? FILE_WAS_OVERWRITTEN : FILE_WAS_OPENED);
 	posixfs_open = posixfs_open_create(&status, smbd_requ->smbd_tcon,
 			posixfs_object, &posixfs_ads->base,
 			*state);
