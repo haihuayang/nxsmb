@@ -213,6 +213,8 @@ static void x_smbd_requ_sign_if(x_smbd_conn_t *smbd_conn,
 			x_smb2_signing_sign(smbd_conn->dialect, signing_key, buf_head);
 		} else {
 			X_ASSERT(!NT_STATUS_IS_OK(status));
+			memcpy(smb2_hdr->signature, smbd_requ->in_smb2_hdr.signature,
+					sizeof(smb2_hdr->signature));
 		}
 	}
 }
@@ -304,14 +306,14 @@ void x_smb2_reply(x_smbd_conn_t *smbd_conn,
 		if (smbd_requ->smbd_tcon) {
 			smb2_hdr->tid = X_H2LE32(x_smbd_tcon_get_id(smbd_requ->smbd_tcon));
 		} else {
-			smb2_hdr->tid = 0;
+			smb2_hdr->tid = X_H2LE32(smbd_requ->in_smb2_hdr.tid);
 		}
 	}
 
 	if (smbd_requ->smbd_sess) {
 		smb2_hdr->sess_id = X_H2LE64(x_smbd_sess_get_id(smbd_requ->smbd_sess));
 	} else {
-		smb2_hdr->sess_id = 0;
+		smb2_hdr->sess_id = X_H2LE64(smbd_requ->in_smb2_hdr.sess_id);
 	}
 
 	memset(smb2_hdr->signature, 0, sizeof(smb2_hdr->signature));
@@ -493,7 +495,7 @@ static NTSTATUS x_smbd_conn_process_smb2_intl(x_smbd_conn_t *smbd_conn, x_smbd_r
 		}
 	}
 	
-	if (smbd_requ->smbd_sess && smbd_requ->is_signed()) {
+	if (smbd_requ->is_signed()) {
 		smbd_requ->out_hdr_flags |= SMB2_HDR_FLAG_SIGNED;
 	}
 
