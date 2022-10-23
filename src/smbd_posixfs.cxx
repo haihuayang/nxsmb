@@ -1242,6 +1242,21 @@ static bool is_stat_open(uint32_t access_mask)
 			((access_mask & ~stat_open_bits) == 0));
 }
 
+/**
+ * Allowed access mask for stat opens relevant to leases
+ */
+static bool is_lease_stat_open(uint32_t access_mask)
+{
+	const uint32_t stat_open_bits =
+		(idl::SEC_STD_SYNCHRONIZE|
+		 idl::SEC_FILE_READ_ATTRIBUTE|
+		 idl::SEC_FILE_WRITE_ATTRIBUTE|
+		 idl::SEC_STD_READ_CONTROL);
+
+	return (((access_mask &  stat_open_bits) != 0) &&
+			((access_mask & ~stat_open_bits) == 0));
+}
+
 static bool share_conflict(const x_smbd_open_t *smbd_open,
 		uint32_t access_mask, uint32_t share_access)
 {
@@ -1497,6 +1512,10 @@ static bool delay_for_oplock(posixfs_object_t *posixfs_object,
 		uint8_t delay_mask = 0;
 		if (curr_open->oplock_level == X_SMB2_OPLOCK_LEVEL_LEASE) {
 			if (smbd_lease && curr_open->smbd_lease == smbd_lease) {
+				continue;
+			}
+
+			if (is_lease_stat_open(desired_access)) {
 				continue;
 			}
 		}
