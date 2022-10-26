@@ -1568,7 +1568,8 @@ static bool delay_for_oplock(posixfs_object_t *posixfs_object,
 		break_to = x_convert<uint8_t>(e_lease_type & ~delay_mask);
 
 		if (will_overwrite) {
-			break_to = x_convert<uint8_t>(break_to & ~X_SMB2_LEASE_HANDLE);
+			break_to = x_convert<uint8_t>(break_to &
+					~(X_SMB2_LEASE_HANDLE|X_SMB2_LEASE_READ));
 		}
 
 		if ((e_lease_type & ~break_to) == 0) {
