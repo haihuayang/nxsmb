@@ -141,6 +141,7 @@ enum class oplock_break_sent_t {
 };
 
 struct posixfs_stream_t;
+static void posixfs_oplock_break_timeout(x_timerq_entry_t *timerq_entry);
 struct posixfs_open_t
 {
 	posixfs_open_t(x_smbd_object_t *so, x_smbd_tcon_t *st,
@@ -148,6 +149,7 @@ struct posixfs_open_t
 			x_smbd_stream_t *stream)
 		: base(so, stream, st, am, sa, priv_data)
 	{
+		oplock_break_timer.func = posixfs_oplock_break_timeout;
 	}
 
 	x_smbd_open_t base;
@@ -156,6 +158,7 @@ struct posixfs_open_t
 	qdir_t *qdir = nullptr;
 	uint8_t oplock_level{X_SMB2_OPLOCK_LEVEL_NONE};
 	oplock_break_sent_t oplock_break_sent{oplock_break_sent_t::OPLOCK_BREAK_NOT_SENT};
+	x_timerq_entry_t oplock_break_timer;
 	/* open's on the same file sharing the same lease can have different parent key */
 	x_smbd_lease_t *smbd_lease{};
 	uint8_t lock_sequency_array[64];
@@ -1458,21 +1461,57 @@ struct posixfs_send_oplock_break_evt_t
 	uint8_t const oplock_level;
 };
 
-static void do_break_oplock(posixfs_open_t *posixfs_open,
+static void posixfs_oplock_break_timeout(x_timerq_entry_t *timerq_entry)
+{
+	/* we already have a ref on smbd_chan when adding timer */
+	posixfs_open_t *posixfs_open = X_CONTAINER_OF(timerq_entry,
+			posixfs_open_t, oplock_break_timer);
+	posixfs_object_t *posixfs_object = posixfs_object_from_base_t::container(posixfs_open->base.smbd_object);
+	bool modified = true;
+	auto lock = std::lock_guard(posixfs_object->base.mutex);
+	if (posixfs_open->oplock_break_sent == oplock_break_sent_t::OPLOCK_BREAK_TO_NONE_SENT) {
+		posixfs_open->oplock_break_sent = oplock_break_sent_t::OPLOCK_BREAK_NOT_SENT;
+		posixfs_open->oplock_level = X_SMB2_OPLOCK_LEVEL_NONE;
+	} else if (posixfs_open->oplock_break_sent == oplock_break_sent_t::OPLOCK_BREAK_TO_LEVEL_II_SENT) {
+		posixfs_open->oplock_break_sent = oplock_break_sent_t::OPLOCK_BREAK_NOT_SENT;
+		posixfs_open->oplock_level = X_SMB2_OPLOCK_LEVEL_II;
+	} else {
+		modified = false;
+	}
+	if (modified) {
+		share_mode_modified(posixfs_object, posixfs_open->base.smbd_stream);
+	}
+	x_smbd_ref_dec(&posixfs_open->base);
+}
+
+static void do_break_oplock(posixfs_object_t *posixfs_object,
+		posixfs_open_t *posixfs_open,
 		uint8_t break_to)
 {
-	/* TODO timer */
 	/* already hold posixfs_object mutex */
+	X_ASSERT(break_to == X_SMB2_LEASE_READ || break_to == X_SMB2_OPLOCK_LEVEL_NONE);
+
+	uint8_t oplock_level = break_to == X_SMB2_LEASE_READ ?
+		X_SMB2_OPLOCK_LEVEL_II : X_SMB2_OPLOCK_LEVEL_NONE;
 	auto [ persistent_id, volatile_id ] = x_smbd_open_get_id(&posixfs_open->base); 
 	x_smbd_sess_t *smbd_sess = x_smbd_tcon_get_sess(posixfs_open->base.smbd_tcon);
 	X_SMBD_SESS_POST_USER(smbd_sess, new posixfs_send_oplock_break_evt_t(
 				smbd_sess, persistent_id, volatile_id,
-				break_to == X_SMB2_LEASE_READ ? X_SMB2_OPLOCK_LEVEL_II :
-					X_SMB2_OPLOCK_LEVEL_NONE));
+				oplock_level));
 	/* if posted fails, the connection is in shutdown,
 	 * and it eventually close the open and wakeup the
 	 * defer opens
 	 */
+	if (posixfs_open->oplock_level == X_SMB2_OPLOCK_LEVEL_II && break_to == X_SMB2_OPLOCK_LEVEL_NONE) {
+		posixfs_open->oplock_level = oplock_level;
+		share_mode_modified(posixfs_object, posixfs_open->base.smbd_stream);
+		return;
+	}
+	posixfs_open->oplock_break_sent = (break_to == X_SMB2_LEASE_READ ?
+			oplock_break_sent_t::OPLOCK_BREAK_TO_LEVEL_II_SENT :
+			oplock_break_sent_t::OPLOCK_BREAK_TO_NONE_SENT);
+	x_smbd_ref_inc(&posixfs_open->base);
+	x_smbd_add_timer(x_smbd_timer_t::BREAK, &posixfs_open->oplock_break_timer);
 }
 
 /* caller locked posixfs_object */
@@ -1557,7 +1596,7 @@ static bool delay_for_oplock(posixfs_object_t *posixfs_object,
 		if (curr_open->smbd_lease) {
 			do_break_lease(curr_open, nullptr, break_to);
 		} else {
-			do_break_oplock(curr_open, break_to);
+			do_break_oplock(posixfs_object, curr_open, break_to);
 		}
 		if (e_lease_type & delay_mask) {
 			delay = true;
@@ -3053,6 +3092,13 @@ NTSTATUS posixfs_object_op_close(
 	x_smbd_lease_t *smbd_lease;
 
 	std::unique_lock<std::mutex> lock(posixfs_object->base.mutex);
+	if (posixfs_open->oplock_break_sent != oplock_break_sent_t::OPLOCK_BREAK_NOT_SENT) {
+		if (x_smbd_cancel_timer(x_smbd_timer_t::BREAK, &posixfs_open->oplock_break_timer)) {
+			x_smbd_ref_dec(&posixfs_open->base);
+		}
+		posixfs_open->oplock_break_sent = oplock_break_sent_t::OPLOCK_BREAK_NOT_SENT;
+	}
+
        	smbd_lease = posixfs_open->smbd_lease;
 	posixfs_open->smbd_lease = nullptr;
 
@@ -3460,7 +3506,7 @@ static void break_others_to_none(posixfs_object_t *posixfs_object,
 			X_ASSERT(other_open->oplock_level != X_SMB2_OPLOCK_LEVEL_BATCH);
 			X_ASSERT(other_open->oplock_level != X_SMB2_OPLOCK_LEVEL_EXCLUSIVE);
 			if (other_open->oplock_level == X_SMB2_OPLOCK_LEVEL_II) {
-				do_break_oplock(other_open, X_SMB2_LEASE_NONE);
+				do_break_oplock(posixfs_object, other_open, X_SMB2_LEASE_NONE);
 			}
 		}
 	}
@@ -4550,12 +4596,21 @@ NTSTATUS posixfs_object_op_oplock_break(
 	posixfs_open_t *posixfs_open = posixfs_open_from_base_t::container(smbd_requ->smbd_open);
 	posixfs_object_t *posixfs_object = posixfs_object_from_base_t::container(smbd_object);
 	uint8_t out_oplock_level;
+	bool modified = false;
+	auto lock = std::lock_guard(posixfs_object->base.mutex);
+
+	if (posixfs_open->oplock_break_sent != oplock_break_sent_t::OPLOCK_BREAK_NOT_SENT) {
+		if (x_smbd_cancel_timer(x_smbd_timer_t::BREAK, &posixfs_open->oplock_break_timer)) {
+			x_smbd_ref_dec(&posixfs_open->base);
+		}
+	}
+
 	if (posixfs_open->oplock_break_sent == oplock_break_sent_t::OPLOCK_BREAK_TO_NONE_SENT || state->in_oplock_level == X_SMB2_OPLOCK_LEVEL_NONE) {
 		out_oplock_level = X_SMB2_OPLOCK_LEVEL_NONE;
 	} else {
 		out_oplock_level = X_SMB2_OPLOCK_LEVEL_II;
 	}
-	bool modified = false;
+	posixfs_open->oplock_break_sent = oplock_break_sent_t::OPLOCK_BREAK_NOT_SENT;
 	if (posixfs_open->oplock_level != out_oplock_level) {
 		modified = true;
 		posixfs_open->oplock_level = out_oplock_level;
@@ -4564,7 +4619,6 @@ NTSTATUS posixfs_object_op_oplock_break(
 	state->out_oplock_level = out_oplock_level;
 	if (modified) {
 		// TODO downgrade_file_oplock
-		std::lock_guard<std::mutex> lock(posixfs_object->base.mutex);
 		share_mode_modified(posixfs_object, posixfs_open->base.smbd_stream);
 	}
 
