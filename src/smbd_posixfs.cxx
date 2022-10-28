@@ -1521,7 +1521,7 @@ static bool delay_for_oplock(posixfs_object_t *posixfs_object,
 		uint32_t create_disposition,
 		uint32_t desired_access,
 		bool have_sharing_violation,
-		bool first_open_attempt)
+		uint32_t open_attempt)
 {
 	if (is_stat_open(desired_access)) {
 		return false;
@@ -1602,7 +1602,7 @@ static bool delay_for_oplock(posixfs_object_t *posixfs_object,
 		if (e_lease_type & delay_mask) {
 			delay = true;
 		}
-		if (curr_open->oplock_level == X_SMB2_OPLOCK_LEVEL_LEASE && x_smbd_lease_is_breaking(curr_open->smbd_lease) && !first_open_attempt) {
+		if (curr_open->oplock_level == X_SMB2_OPLOCK_LEVEL_LEASE && x_smbd_lease_is_breaking(curr_open->smbd_lease) && open_attempt != 0) {
 			delay = true;
 		}
 	}
@@ -2217,7 +2217,8 @@ static NTSTATUS posixfs_create_open_exist_object(
 				state->smbd_lease,
 				state->in_create_disposition,
 				state->in_desired_access,
-				conflict, true)) {
+				conflict, state->open_attempt)) {
+		++state->open_attempt;
 		defer_open(posixfs_object, &posixfs_object->default_stream,
 				smbd_requ, state);
 		return NT_STATUS_PENDING;
@@ -2490,7 +2491,8 @@ static NTSTATUS open_object_exist_ads(
 				state->smbd_lease,
 				state->in_create_disposition,
 				state->in_desired_access,
-				conflict, true)) {
+				conflict, state->open_attempt)) {
+		++state->open_attempt;
 		defer_open(posixfs_object, &posixfs_ads->base,
 				smbd_requ, state);
 		return NT_STATUS_PENDING;

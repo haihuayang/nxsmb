@@ -118,6 +118,7 @@ struct x_smb2_state_create_t
 
 	uint8_t out_create_flags;
 	bool base_created = false;
+	uint32_t open_attempt = 0;
 	uint32_t out_create_action;
 	uint32_t out_maximal_access{0};
 	uint8_t out_qfid_info[32];
