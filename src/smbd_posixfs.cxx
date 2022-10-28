@@ -1615,16 +1615,22 @@ static NTSTATUS grant_oplock(posixfs_object_t *posixfs_object,
 		x_smb2_state_create_t &state)
 {
 	uint8_t granted = X_SMB2_LEASE_NONE;
+	uint8_t requested = X_SMB2_LEASE_NONE;
 	uint8_t oplock_level = state.in_oplock_level;
 	x_smb2_lease_t *lease = nullptr;
 	if (oplock_level == X_SMB2_OPLOCK_LEVEL_LEASE) {
 		lease = &state.lease;
+		requested = x_convert<uint8_t>(lease->state);
 	}
 
 	if (posixfs_object->base.type == x_smbd_object_t::type_dir &&
 			posixfs_stream == &posixfs_object->default_stream) {
 		if (lease) {
 			granted = lease->state & (X_SMB2_LEASE_READ|X_SMB2_LEASE_HANDLE);
+			/* TODO workaround directory leasing upgrade issue,
+			 * x_smbd_lease_grant check requested == granted 
+			 */
+			requested = granted;
 			if (!(granted & X_SMB2_LEASE_READ)) {
 				granted = X_SMB2_LEASE_NONE;
 			}
@@ -1705,7 +1711,7 @@ static NTSTATUS grant_oplock(posixfs_object_t *posixfs_object,
 		bool new_lease = false;
 		if (!x_smbd_lease_grant(state.smbd_lease,
 					state.lease,
-					granted,
+					granted, requested,
 					&posixfs_object->base,
 					(x_smbd_stream_t *)posixfs_stream,
 					new_lease)) {

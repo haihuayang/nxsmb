@@ -35,7 +35,7 @@ void x_smbd_lease_release(x_smbd_lease_t *smbd_lease);
 
 bool x_smbd_lease_grant(x_smbd_lease_t *smbd_lease,
 		x_smb2_lease_t &lease,
-		uint8_t granted,
+		uint8_t granted, uint8_t requested,
 		x_smbd_object_t *smbd_object,
 		x_smbd_stream_t *smbd_stream,
 		bool &new_lease);
