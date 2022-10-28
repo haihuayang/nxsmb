@@ -50,7 +50,7 @@ bool x_smbd_lease_require_break(x_smbd_lease_t *smbd_lease,
 		uint8_t &curr_state,
 		uint16_t &epoch,
 		uint32_t &flags);
-NTSTATUS x_smbd_lease_process_break(const x_smb2_state_lease_break_t &state);
+NTSTATUS x_smbd_lease_process_break(x_smb2_state_lease_break_t &state);
 
 bool x_smbd_lease_is_breaking(const x_smbd_lease_t *smbd_lease);
 bool x_smbd_lease_set_breaking_if(x_smbd_lease_t *smbd_lease);

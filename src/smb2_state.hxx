@@ -167,6 +167,13 @@ struct x_smb2_state_lease_break_t
 	uint32_t in_state;
 	x_smb2_lease_key_t in_key;
 	uint64_t in_duration;
+
+	/* NT_STATUS_OPLOCK_BREAK_IN_PROGRESS, send another break noti */
+	bool more_break = false;
+	uint16_t more_epoch;
+	uint32_t more_break_from;
+	uint32_t more_break_to;
+	uint32_t more_flags;
 };
 
 struct x_smb2_state_oplock_break_t

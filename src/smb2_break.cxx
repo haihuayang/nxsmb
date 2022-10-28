@@ -131,6 +131,13 @@ static void x_smb2_reply_lease_break(x_smbd_conn_t *smbd_conn,
 	encode_lease_break_resp(state, out_hdr);
 	x_smb2_reply(smbd_conn, smbd_requ, bufref, bufref, NT_STATUS_OK, 
 			SMB2_HDR_BODY + sizeof(x_smb2_lease_break_t));
+	if (state.more_break) {
+		x_smb2_send_lease_break(smbd_conn, smbd_requ->smbd_sess,
+				&state.in_key,
+				x_convert<uint8_t>(state.more_break_from),
+				x_convert<uint8_t>(state.more_break_to),
+				state.more_epoch, state.more_flags);
+	}
 }
 
 static NTSTATUS x_smb2_process_lease_break(x_smbd_conn_t *smbd_conn,

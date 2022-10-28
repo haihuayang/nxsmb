@@ -273,6 +273,28 @@ bool x_smbd_lease_grant(x_smbd_lease_t *smbd_lease,
 	return true;
 }
 
+static void require_break(x_smbd_lease_t *smbd_lease,
+		uint8_t break_to,
+		uint16_t &epoch,
+		uint32_t &flags)
+{
+	if (smbd_lease->lease_state == X_SMB2_LEASE_READ) {
+		smbd_lease->lease_state = X_SMB2_LEASE_NONE;
+		smbd_lease->breaking = false;
+		smbd_lease->breaking_to_required = 0;
+		smbd_lease->breaking_to_requested = 0;
+		flags = 0;
+	} else {
+		smbd_lease->breaking = true;
+		smbd_lease->breaking_to_required = break_to;
+		smbd_lease->breaking_to_requested = break_to;
+		smbd_lease_incref(smbd_lease);
+		flags = SMB2_NOTIFY_BREAK_LEASE_FLAG_ACK_REQUIRED;
+		x_smbd_add_timer(x_smbd_timer_t::BREAK, &smbd_lease->timer);
+	}
+	epoch = (smbd_lease->version > 1) ? smbd_lease->epoch : 0;
+}
+
 /* samba process_oplock_break_message */
 bool x_smbd_lease_require_break(x_smbd_lease_t *smbd_lease,
 		const x_smb2_lease_key_t *ignore_lease_key,
@@ -304,17 +326,10 @@ bool x_smbd_lease_require_break(x_smbd_lease_t *smbd_lease,
 		return false;
 	} else if (smbd_lease->lease_state == break_to) {
 		return false;
-	} else if (smbd_lease->lease_state == X_SMB2_LEASE_READ) {
-		smbd_lease->lease_state = X_SMB2_LEASE_NONE;
-		/* Need to increment the epoch */
-		smbd_lease->epoch++;
-	} else {
-		smbd_lease->breaking = true;
-		smbd_lease->breaking_to_required = break_to;
-		smbd_lease->breaking_to_requested = break_to;
-		smbd_lease->epoch++;
-		/* set timer */
 	}
+	
+	/* Need to increment the epoch */
+	smbd_lease->epoch++;
 	/* Ensure we're in sync with current lease state. */
 	// fsp_lease_update(lck, fsp);
 
@@ -329,39 +344,16 @@ bool x_smbd_lease_require_break(x_smbd_lease_t *smbd_lease,
 		return false;
 	}
 
-	if (break_from != X_SMB2_LEASE_READ || break_to != X_SMB2_LEASE_NONE) {
-		smbd_lease_incref(smbd_lease);
-		x_smbd_add_timer(x_smbd_timer_t::BREAK, &smbd_lease->timer);
-	}
+	require_break(smbd_lease, break_to, epoch, flags);
 	lease_key = smbd_lease->lease_key;
 	new_state = break_to;
 	curr_state = break_from;
-	epoch = (smbd_lease->version > 1) ? smbd_lease->epoch : 0;
-	flags = (break_from != X_SMB2_LEASE_READ) ? SMB2_NOTIFY_BREAK_LEASE_FLAG_ACK_REQUIRED : 0;
 	return true;
 }
-#if 0
-bool x_smbd_lease_break_dir(const x_smbd_lease_t *smbd_lease,
-		const x_smb2_lease_key_t &ignore_lease_key,
-		x_smb2_lease_key_t &lease_key,
-		uint8_t &curr_state,
-		uint16_t &epoch,
-		uint32_t &flags)
-{
-	if (smbd_lease_match(smbd_lease, x_smbd_conn_curr_client_guid(),
-				ignore_lease_key)) {
-		return false;
-	}
-	uint8_t new_state = 0;
-	return x_smbd_lease_require_break(smbd_lease, lease_key,
-			new_state, /* in out */
-			curr_state, epoch, flags);
-}
-#endif
 
 /* downgrade_lease() */
 static NTSTATUS smbd_lease_process_break(x_smbd_lease_t *smbd_lease,
-		const x_smb2_state_lease_break_t &state,
+		x_smb2_state_lease_break_t &state,
 		bool &modified)
 {
 	auto lock = smbd_lease_lock(smbd_lease);
@@ -389,16 +381,21 @@ static NTSTATUS smbd_lease_process_break(x_smbd_lease_t *smbd_lease,
 				(int)state.in_state,
 				(int)smbd_lease->lease_state,
 				(int)smbd_lease->breaking_to_required);
-		smbd_lease->breaking_to_requested = smbd_lease->breaking_to_required;
+		uint8_t break_to = smbd_lease->breaking_to_required;
 		if (smbd_lease->lease_state & (~X_SMB2_LEASE_READ)) {
 			/*
 			 * Here we break in steps, as windows does
 			 * see the breaking3 and v2_breaking3 tests.
 			 */
-			smbd_lease->breaking_to_requested |= X_SMB2_LEASE_READ;
+			break_to |= X_SMB2_LEASE_READ;
 		}
+		state.more_break_from = smbd_lease->lease_state;
+		state.more_break_to = break_to;
+		require_break(smbd_lease, break_to,
+				state.more_epoch, state.more_flags);
+		state.more_break = true;
 		modified = true;
-		return NT_STATUS_OPLOCK_BREAK_IN_PROGRESS;
+		return NT_STATUS_OK;
 	}
 
 	X_LOG_DBG("breaking from %d to %d - expected %d\n",
@@ -411,7 +408,7 @@ static NTSTATUS smbd_lease_process_break(x_smbd_lease_t *smbd_lease,
 	return NT_STATUS_OK;
 }
 
-NTSTATUS x_smbd_lease_process_break(const x_smb2_state_lease_break_t &state)
+NTSTATUS x_smbd_lease_process_break(x_smb2_state_lease_break_t &state)
 {
 	bool modified = false;
 	auto &client_guid = x_smbd_conn_curr_client_guid();
@@ -440,9 +437,6 @@ NTSTATUS x_smbd_lease_process_break(const x_smb2_state_lease_break_t &state)
 	status = smbd_lease_process_break(smbd_lease, state, modified);
 	if (modified) {
 		x_smbd_object_op_break_lease(smbd_lease->smbd_object, smbd_lease->smbd_stream);
-	}
-	if (NT_STATUS_EQUAL(status, NT_STATUS_OPLOCK_BREAK_IN_PROGRESS)) {
-		X_TODO;
 	}
 	smbd_lease_decref(smbd_lease);
 	return status;
