@@ -258,6 +258,7 @@ bool x_smbd_lease_grant(x_smbd_lease_t *smbd_lease,
 		smbd_lease->epoch++;
 	}
 
+	lease.version = smbd_lease->version;
 	lease.state = smbd_lease->lease_state;
 	lease.epoch = smbd_lease->epoch;
 
