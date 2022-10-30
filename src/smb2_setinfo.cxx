@@ -49,23 +49,21 @@ struct x_smb2_out_setinfo_t
 	uint16_t struct_size;
 };
 
-static void encode_out_setinfo(const x_smb2_state_setinfo_t &state,
-		uint8_t *out_hdr)
+static void encode_out_setinfo(uint8_t *out_hdr)
 {
 	x_smb2_out_setinfo_t *out_setinfo = (x_smb2_out_setinfo_t *)(out_hdr + SMB2_HDR_BODY);
 	out_setinfo->struct_size = X_H2LE16(sizeof(x_smb2_out_setinfo_t));
 }
 
 static void x_smb2_reply_setinfo(x_smbd_conn_t *smbd_conn,
-		x_smbd_requ_t *smbd_requ,
-		const x_smb2_state_setinfo_t &state)
+		x_smbd_requ_t *smbd_requ)
 {
 	X_LOG_OP("%ld SETINFO SUCCESS", smbd_requ->in_smb2_hdr.mid);
 
 	x_bufref_t *bufref = x_bufref_alloc(sizeof(x_smb2_out_setinfo_t));
 
 	uint8_t *out_hdr = bufref->get_data();
-	encode_out_setinfo(state, out_hdr);
+	encode_out_setinfo(out_hdr);
 
 	x_smb2_reply(smbd_conn, smbd_requ, bufref, bufref, NT_STATUS_OK, 
 			SMB2_HDR_BODY + sizeof(x_smb2_out_setinfo_t));
@@ -136,7 +134,7 @@ NTSTATUS x_smb2_process_setinfo(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_re
 	status = smb2_setinfo_dispatch(smbd_conn, smbd_requ, state, changes);
 	if (NT_STATUS_IS_OK(status)) {
 		x_smbd_notify_change(smbd_requ->smbd_open->smbd_object->topdir, changes);
-		x_smb2_reply_setinfo(smbd_conn, smbd_requ, *state);
+		x_smb2_reply_setinfo(smbd_conn, smbd_requ);
 		return status;
 	}
 
