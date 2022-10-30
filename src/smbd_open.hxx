@@ -105,10 +105,8 @@ struct x_smbd_object_ops_t
 	NTSTATUS (*rename)(x_smbd_object_t *smbd_object,
 			x_smbd_open_t *smbd_open,
 			x_smbd_requ_t *smbd_requ,
-			bool replace_if_exists,
 			const std::u16string &new_path,
-			const std::u16string &new_stream_name,
-			std::vector<x_smb2_change_t> &changes);
+			std::unique_ptr<x_smb2_state_rename_t> &state);
 	NTSTATUS (*set_delete_on_close)(x_smbd_object_t *smbd_object,
 			x_smbd_open_t *smbd_open,
 			x_smbd_requ_t *smbd_requ,
@@ -152,6 +150,12 @@ struct x_smbd_object_t
 struct x_smbd_stream_t
 {
 };
+
+static inline bool x_smbd_open_is_data(const x_smbd_open_t *smbd_open)
+{
+	return smbd_open->smbd_stream || smbd_open->smbd_object->type
+		== x_smbd_object_t::type_file;
+}
 
 NTSTATUS x_smbd_open_op_close(
 		x_smbd_open_t *smbd_open,
@@ -302,16 +306,13 @@ static inline NTSTATUS x_smbd_open_op_oplock_break(
 }
 
 static inline NTSTATUS x_smbd_open_op_rename(
-		x_smbd_open_t *smbd_open,
 		x_smbd_requ_t *smbd_requ,
-		bool replace_if_exists,
-		const std::u16string &new_path,
-		const std::u16string &new_stream_name,
-		std::vector<x_smb2_change_t> &changes)
+		std::unique_ptr<x_smb2_state_rename_t> &state)
 {
-	x_smbd_object_t *smbd_object = smbd_open->smbd_object;
-	return smbd_object->topdir->ops->rename(smbd_object, smbd_open,
-			smbd_requ, replace_if_exists, new_path, new_stream_name, changes);
+	auto smbd_open = smbd_requ->smbd_open;
+	auto smbd_object = smbd_open->smbd_object;
+	return smbd_object->topdir->ops->rename(smbd_object, smbd_open, smbd_requ,
+			state->in_path, state);
 }
 
 static inline NTSTATUS x_smbd_open_op_set_delete_on_close(

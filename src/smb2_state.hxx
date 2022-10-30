@@ -109,6 +109,15 @@ struct x_smb2_state_setinfo_t
 	std::vector<uint8_t> in_data;
 };
 
+struct x_smb2_state_rename_t
+{
+	uint64_t in_file_id_persistent;
+	uint64_t in_file_id_volatile;
+	bool in_replace_if_exists;
+	std::u16string in_path, in_stream_name;
+	std::vector<x_smb2_change_t> out_changes;
+};
+
 struct x_smb2_state_qdir_t
 {
 	uint8_t in_info_level;

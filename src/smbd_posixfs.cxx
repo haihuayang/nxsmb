@@ -154,7 +154,6 @@ struct posixfs_open_t
 
 	x_smbd_open_t base;
 	x_dlink_t object_link;
-	// posixfs_stream_t * const stream;
 	qdir_t *qdir = nullptr;
 	uint8_t oplock_level{X_SMB2_OPLOCK_LEVEL_NONE};
 	oplock_break_sent_t oplock_break_sent{oplock_break_sent_t::OPLOCK_BREAK_NOT_SENT};
@@ -179,6 +178,7 @@ struct posixfs_stream_t
 	x_smbd_stream_t base;
 	x_tp_ddlist_t<posixfs_open_object_traits> open_list;
 	x_tp_ddlist_t<requ_async_traits> defer_open_list;
+	x_tp_ddlist_t<requ_async_traits> defer_rename_list;
 	std::atomic<int> ref_count{1};
 	x_smbd_stream_meta_t meta;
 };
@@ -888,11 +888,51 @@ struct posixfs_defer_open_evt_t
 	x_smbd_requ_t * const smbd_requ;
 };
 
+struct posixfs_defer_rename_evt_t
+{
+	static void func(x_smbd_conn_t *smbd_conn, x_fdevt_user_t *fdevt_user, bool terminated)
+	{
+		posixfs_defer_rename_evt_t *evt = X_CONTAINER_OF(fdevt_user,
+				posixfs_defer_rename_evt_t, base);
+		x_smbd_requ_t *smbd_requ = evt->smbd_requ;
+		X_LOG_DBG("evt=%p, requ=%p, terminated=%d", evt, smbd_requ, terminated);
+
+		auto state = smbd_requ->release_state<x_smb2_state_rename_t>();
+		if (x_smbd_requ_async_remove(smbd_requ) && !terminated) {
+			NTSTATUS status = x_smbd_open_op_rename(smbd_requ, state);
+			if (!NT_STATUS_EQUAL(status, NT_STATUS_PENDING)) {
+				smbd_requ->save_state(state);
+				smbd_requ->async_done_fn(smbd_conn, smbd_requ, status, false);
+			}
+		}
+
+		delete evt;
+	}
+
+	explicit posixfs_defer_rename_evt_t(x_smbd_requ_t *smbd_requ)
+		: base(func), smbd_requ(smbd_requ)
+	{
+	}
+
+	~posixfs_defer_rename_evt_t()
+	{
+		x_smbd_ref_dec(smbd_requ);
+	}
+
+	x_fdevt_user_t base;
+	x_smbd_requ_t * const smbd_requ;
+};
+
 static void share_mode_modified(posixfs_object_t *posixfs_object,
 		x_smbd_stream_t *smbd_stream)
 {
 	posixfs_stream_t *posixfs_stream = posixfs_get_stream(posixfs_object, smbd_stream);
 	/* posixfs_object is locked */
+	while (x_smbd_requ_t *smbd_requ = posixfs_stream->defer_rename_list.get_front()) {
+		posixfs_stream->defer_rename_list.remove(smbd_requ);
+		posixfs_defer_rename_evt_t *evt = new posixfs_defer_rename_evt_t(smbd_requ);
+		X_SMBD_CHAN_POST_USER(smbd_requ->smbd_chan, evt);
+	}
 	while (x_smbd_requ_t *smbd_requ = posixfs_stream->defer_open_list.get_front()) {
 		posixfs_stream->defer_open_list.remove(smbd_requ);
 		posixfs_defer_open_evt_t *evt = new posixfs_defer_open_evt_t(smbd_requ);
@@ -1061,7 +1101,6 @@ static NTSTATUS rename_ads_intl(posixfs_object_t *posixfs_object,
                 bool replace_if_exists,
                 const std::u16string &new_stream_name)
 {
-	std::lock_guard<std::mutex> lock(posixfs_object->base.mutex);
 	posixfs_ads_t *other_ads;
 	for (other_ads = posixfs_object->ads_list.get_front(); other_ads;
 			other_ads = posixfs_object->ads_list.next(other_ads)) {
@@ -1108,26 +1147,91 @@ static NTSTATUS rename_ads_intl(posixfs_object_t *posixfs_object,
 	return NT_STATUS_OK;
 }
 
-NTSTATUS posixfs_object_rename(x_smbd_object_t *smbd_object,
+/* caller locked posixfs_object */
+static bool delay_rename_for_lease_break(posixfs_object_t *posixfs_object,
+		posixfs_stream_t *posixfs_stream,
+		posixfs_open_t *posixfs_open)
+{
+	/* this function is called when rename a file or
+	 * rename/delete a dir. for unknown reason, it skips lease break
+	 * for files if the renamer is not granted lease. but for dir,
+	 * it cannot skip.
+	 */
+	if (posixfs_open->oplock_level != X_SMB2_OPLOCK_LEVEL_LEASE &&
+			x_smbd_open_is_data(&posixfs_open->base)) {
+		return false;
+	}
+
+	uint32_t break_count = 0;
+	bool delay = false;
+	auto &open_list = posixfs_stream->open_list;
+	posixfs_open_t *curr_open;
+	for (curr_open = open_list.get_front(); curr_open; curr_open = open_list.next(curr_open)) {
+		if (curr_open->oplock_level != X_SMB2_OPLOCK_LEVEL_LEASE) {
+			continue;
+		}
+
+		if (posixfs_open->oplock_level == X_SMB2_OPLOCK_LEVEL_LEASE &&
+				posixfs_open->smbd_lease == curr_open->smbd_lease) {
+			continue;
+		}
+
+		uint8_t e_lease_type = x_smbd_lease_get_state(curr_open->smbd_lease);
+		if ((e_lease_type & X_SMB2_LEASE_HANDLE) == 0) {
+			continue;
+		}
+
+		delay = true;
+		uint8_t break_to = x_convert<uint8_t>(e_lease_type & ~X_SMB2_LEASE_HANDLE);
+		++break_count;
+		do_break_lease(curr_open, nullptr, break_to);
+	}
+	return delay;
+}
+
+static void posixfs_rename_cancel(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
+{
+	posixfs_object_t *posixfs_object = posixfs_object_from_base_t::container(
+			smbd_requ->smbd_open->smbd_object);
+	posixfs_stream_t *posixfs_stream = posixfs_get_stream(posixfs_object,
+			smbd_requ->smbd_open->smbd_stream);
+
+	{
+		auto lock = std::lock_guard(posixfs_object->base.mutex);
+		posixfs_stream->defer_rename_list.remove(smbd_requ);
+	}
+	x_smbd_conn_post_cancel(smbd_conn, smbd_requ);
+}
+
+NTSTATUS posixfs_object_op_rename(x_smbd_object_t *smbd_object,
+		x_smbd_open_t *smbd_open,
 		x_smbd_requ_t *smbd_requ,
 		const std::u16string &new_path,
-		const std::u16string &new_stream_name,
-		bool replace_if_exists,
-		std::vector<x_smb2_change_t> &changes)
+		std::unique_ptr<x_smb2_state_rename_t> &state)
 {
 	posixfs_object_t *posixfs_object = posixfs_object_from_base_t::container(smbd_object);
-	posixfs_open_t *posixfs_open = posixfs_open_from_base_t::container(smbd_requ->smbd_open);
-	if (!posixfs_is_default_stream(posixfs_open)) {
-		if (new_path.size()) {
-			return NT_STATUS_INVALID_PARAMETER;
-		}
+	posixfs_open_t *posixfs_open = posixfs_open_from_base_t::container(smbd_open);
+	posixfs_stream_t *posixfs_stream = posixfs_get_stream(posixfs_object, posixfs_open);
+
+	auto lock = std::lock_guard(posixfs_object->base.mutex);
+
+	if (delay_rename_for_lease_break(posixfs_object, posixfs_stream, posixfs_open)) {
+		smbd_requ->save_state(state);
+		/* TODO does it need a timer? can break timer always wake up it? */
+		x_smbd_ref_inc(smbd_requ);
+		posixfs_stream->defer_rename_list.push_back(smbd_requ);
+		x_smbd_requ_async_insert(smbd_requ, posixfs_rename_cancel);
+		return NT_STATUS_PENDING;
+	}
+
+	if (smbd_open->smbd_stream) {
 		posixfs_ads_t *posixfs_ads = posixfs_ads_from_smbd_stream(posixfs_open->base.smbd_stream);
 
-		if (posixfs_ads->name == new_stream_name) { // TODO case insensitive
+		if (posixfs_ads->name == state->in_stream_name) { // TODO case insensitive
 			return NT_STATUS_OK;
 		}
 		return rename_ads_intl(posixfs_object, posixfs_ads,
-				replace_if_exists, new_stream_name);
+				state->in_replace_if_exists, state->in_stream_name);
 	}
 
 	auto &topdir = posixfs_object->base.topdir;
@@ -1141,20 +1245,20 @@ NTSTATUS posixfs_object_rename(x_smbd_object_t *smbd_object,
 	NTSTATUS status;
 	std::u16string old_path;
 	if (new_bucket_idx == old_bucket_idx) {
-		std::lock_guard<std::mutex> lock(new_bucket.mutex);
+		auto bucket_lock = std::lock_guard(new_bucket.mutex);
 		status = rename_object_intl(new_bucket, new_bucket, topdir,
 				posixfs_object,
 				new_path, old_path, new_hash);
 	} else {
 		auto &old_bucket = pool.buckets[old_bucket_idx];
-		std::scoped_lock lock(new_bucket.mutex, old_bucket.mutex);
+		std::scoped_lock bucket_lock(new_bucket.mutex, old_bucket.mutex);
 		status = rename_object_intl(new_bucket, old_bucket, topdir,
 				posixfs_object,
 				new_path, old_path, new_hash);
 	}
 
 	if (NT_STATUS_IS_OK(status)) {
-		changes.push_back(x_smb2_change_t{NOTIFY_ACTION_OLD_NAME,
+		state->out_changes.push_back(x_smb2_change_t{NOTIFY_ACTION_OLD_NAME,
 				posixfs_object->base.type == x_smbd_object_t::type_dir ?
 					FILE_NOTIFY_CHANGE_DIR_NAME :
 					FILE_NOTIFY_CHANGE_FILE_NAME,
@@ -1163,18 +1267,6 @@ NTSTATUS posixfs_object_rename(x_smbd_object_t *smbd_object,
 	}
 
 	return status;
-}
-
-NTSTATUS posixfs_object_op_rename(x_smbd_object_t *smbd_object,
-		x_smbd_open_t *smbd_open,
-		x_smbd_requ_t *smbd_requ,
-		bool replace_if_exists,
-		const std::u16string &new_path,
-		const std::u16string &new_stream_name,
-		std::vector<x_smb2_change_t> &changes)
-{
-	return posixfs_object_rename(smbd_object, smbd_requ, 
-			new_path, new_stream_name, replace_if_exists, changes);
 }
 
 static posixfs_object_t *posixfs_object_open(

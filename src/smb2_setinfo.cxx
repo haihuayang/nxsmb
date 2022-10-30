@@ -21,29 +21,6 @@ struct x_smb2_in_setinfo_t
 	uint64_t file_id_volatile;
 };
 
-static bool decode_in_setinfo(x_smb2_state_setinfo_t &state,
-		const uint8_t *in_hdr, uint32_t in_len)
-{
-	const x_smb2_in_setinfo_t *in_setinfo = (const x_smb2_in_setinfo_t *)(in_hdr + SMB2_HDR_BODY);
-	uint16_t in_input_buffer_offset = X_LE2H16(in_setinfo->input_buffer_offset);
-	uint32_t in_input_buffer_length = X_LE2H32(in_setinfo->input_buffer_length);
-
-	if (!x_check_range<uint32_t>(in_input_buffer_offset, in_input_buffer_length,
-				SMB2_HDR_BODY + sizeof(x_smb2_in_setinfo_t), in_len)) {
-		return false;
-	}
-
-	state.in_info_class = X_LE2H8(in_setinfo->info_class);
-	state.in_info_level = X_LE2H8(in_setinfo->info_level);
-	state.in_additional = X_LE2H32(in_setinfo->additional);
-	state.in_file_id_persistent = X_LE2H64(in_setinfo->file_id_persistent);
-	state.in_file_id_volatile = X_LE2H64(in_setinfo->file_id_volatile);
-
-	state.in_data.assign(in_hdr + in_input_buffer_offset,
-			in_hdr + in_input_buffer_offset + in_input_buffer_length);
-	return true;
-}
-
 struct x_smb2_out_setinfo_t
 {
 	uint16_t struct_size;
@@ -74,21 +51,7 @@ static NTSTATUS smb2_setinfo_dispatch(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *s
 		std::vector<x_smb2_change_t> &changes)
 {
 	if (state->in_info_class == SMB2_GETINFO_FILE) {
-		if (state->in_info_level == SMB2_FILE_INFO_FILE_RENAME_INFORMATION) {
-			/* MS-FSA 2.1.5.14.11 */
-			if (!smbd_requ->smbd_open->check_access(idl::SEC_STD_DELETE)) {
-				RETURN_OP_STATUS(smbd_requ, NT_STATUS_ACCESS_DENIED);
-			}
-			bool replace_if_exists;
-			std::u16string path, stream_name;
-			NTSTATUS status = x_smb2_rename_info_decode(replace_if_exists,
-					path, stream_name, state->in_data);
-			if (!NT_STATUS_IS_OK(status)) {
-				RETURN_OP_STATUS(smbd_requ, status);
-			}
-			return x_smbd_open_op_rename(smbd_requ->smbd_open, smbd_requ,
-					replace_if_exists, path, stream_name, changes);
-		} else if (state->in_info_level == SMB2_FILE_INFO_FILE_DISPOSITION_INFORMATION) {
+		if (state->in_info_level == SMB2_FILE_INFO_FILE_DISPOSITION_INFORMATION) {
 			/* MS-FSA 2.1.5.14.3 */
 			if (!smbd_requ->smbd_open->check_access(idl::SEC_STD_DELETE)) {
 				RETURN_OP_STATUS(smbd_requ, NT_STATUS_ACCESS_DENIED);
@@ -107,6 +70,107 @@ static NTSTATUS smb2_setinfo_dispatch(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *s
 			state, changes);
 }
 
+static NTSTATUS decode_in_rename(x_smb2_state_rename_t &state,
+		const uint8_t *in_hdr,
+		uint16_t in_input_buffer_offset,
+		uint32_t in_input_buffer_length)
+{
+	if (in_input_buffer_length < sizeof(x_smb2_rename_info_t)) {
+		return NT_STATUS_INVALID_PARAMETER;
+	}
+	const x_smb2_rename_info_t *in_info = (const x_smb2_rename_info_t *)(in_hdr + in_input_buffer_offset);
+	uint32_t file_name_length = X_LE2H32(in_info->file_name_length);
+	if ((file_name_length % 2) != 0 || file_name_length +
+			sizeof(x_smb2_rename_info_t) > in_input_buffer_length) {
+		return NT_STATUS_INVALID_PARAMETER;
+	}
+	if (file_name_length == 0) {
+		return NT_STATUS_INFO_LENGTH_MISMATCH;
+	}
+
+	const char16_t *in_name_begin = (const char16_t *)(in_info + 1);
+	const char16_t *in_name_end = in_name_begin + file_name_length / 2;
+	const char16_t *sep = x_next_sep(in_name_begin, in_name_end, u':');
+	if (sep == in_name_end) {
+		state.in_path = x_utf16le_decode(in_name_begin, in_name_end);
+		state.in_stream_name.clear();
+	} else if (sep == in_name_begin) {
+		bool is_dollar_data;
+		NTSTATUS status = x_smb2_parse_stream_name(state.in_stream_name,
+				is_dollar_data, sep + 1, in_name_end);
+		if (!NT_STATUS_IS_OK(status)) {
+			return status;
+		}
+		state.in_path.clear();
+	} else {
+		/* rename not allow both path and stream */
+		return NT_STATUS_NOT_SUPPORTED;
+	}
+
+	state.in_replace_if_exists = in_info->replace_if_exists;
+
+	return NT_STATUS_OK;
+}
+
+static void x_smb2_rename_async_done(x_smbd_conn_t *smbd_conn,
+		x_smbd_requ_t *smbd_requ,
+		NTSTATUS status,
+		bool terminated)
+{
+	X_LOG_DBG("status=0x%x", status.v);
+	auto state = smbd_requ->release_state<x_smb2_state_rename_t>();
+	if (terminated) {
+		return;
+	}
+	if (NT_STATUS_IS_OK(status)) {
+		x_smbd_notify_change(smbd_requ->smbd_open->smbd_object->topdir,
+				state->out_changes);
+		x_smb2_reply_setinfo(smbd_conn, smbd_requ);
+	}
+	x_smbd_conn_requ_done(smbd_conn, smbd_requ, status);
+}
+
+static NTSTATUS x_smb2_process_rename(x_smbd_conn_t *smbd_conn,
+		x_smbd_requ_t *smbd_requ,
+		std::unique_ptr<x_smb2_state_rename_t> &state)
+{
+	X_LOG_OP("%ld RENAME 0x%lx, 0x%lx", smbd_requ->in_smb2_hdr.mid,
+			state->in_file_id_persistent, state->in_file_id_volatile);
+
+	NTSTATUS status = x_smbd_requ_init_open(smbd_requ,
+			state->in_file_id_persistent,
+			state->in_file_id_volatile);
+	if (!NT_STATUS_IS_OK(status)) {
+		RETURN_OP_STATUS(smbd_requ, status);
+	}
+
+	/* MS-FSA 2.1.5.14.11 */
+	if (!smbd_requ->smbd_open->check_access(idl::SEC_STD_DELETE)) {
+		RETURN_OP_STATUS(smbd_requ, NT_STATUS_ACCESS_DENIED);
+	}
+
+	if (smbd_requ->smbd_open->smbd_stream) {
+		if (state->in_path.size()) {
+			return NT_STATUS_INVALID_PARAMETER;
+		}
+	} else {
+		if (state->in_stream_name.size()) {
+			return NT_STATUS_INVALID_PARAMETER;
+		}
+	}
+
+	smbd_requ->async_done_fn = x_smb2_rename_async_done;
+	status = x_smbd_open_op_rename(smbd_requ, state);
+	if (NT_STATUS_IS_OK(status)) {
+		x_smbd_notify_change(smbd_requ->smbd_open->smbd_object->topdir,
+				state->out_changes);
+		x_smb2_reply_setinfo(smbd_conn, smbd_requ);
+		return status;
+	}
+
+	RETURN_OP_STATUS(smbd_requ, status);
+}
+
 NTSTATUS x_smb2_process_setinfo(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 {
 	if (smbd_requ->in_requ_len < SMB2_HDR_BODY + sizeof(x_smb2_in_setinfo_t)) {
@@ -114,11 +178,45 @@ NTSTATUS x_smb2_process_setinfo(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_re
 	}
 
 	const uint8_t *in_hdr = smbd_requ->get_in_data();
+	uint32_t in_len = smbd_requ->in_requ_len;
+	const x_smb2_in_setinfo_t *in_setinfo = (const x_smb2_in_setinfo_t *)(in_hdr + SMB2_HDR_BODY);
+	uint16_t in_input_buffer_offset = X_LE2H16(in_setinfo->input_buffer_offset);
+	uint32_t in_input_buffer_length = X_LE2H32(in_setinfo->input_buffer_length);
 
-	auto state = std::make_unique<x_smb2_state_setinfo_t>();
-	if (!decode_in_setinfo(*state, in_hdr, smbd_requ->in_requ_len)) {
+	if (!x_check_range<uint32_t>(in_input_buffer_offset, in_input_buffer_length,
+				SMB2_HDR_BODY + sizeof(x_smb2_in_setinfo_t), in_len)) {
 		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
+
+	uint8_t in_info_class = X_LE2H8(in_setinfo->info_class);
+	uint8_t in_info_level = X_LE2H8(in_setinfo->info_level);
+	uint64_t in_file_id_persistent = X_LE2H64(in_setinfo->file_id_persistent);
+	uint64_t in_file_id_volatile = X_LE2H64(in_setinfo->file_id_volatile);
+
+	if (in_info_class == SMB2_GETINFO_FILE) {
+		if (in_info_level == SMB2_FILE_INFO_FILE_RENAME_INFORMATION) {
+			auto state = std::make_unique<x_smb2_state_rename_t>();
+			NTSTATUS status = decode_in_rename(*state, in_hdr, 
+					in_input_buffer_offset, in_input_buffer_length);
+			if (!NT_STATUS_IS_OK(status)) {
+				RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
+			}
+
+			state->in_file_id_persistent = in_file_id_persistent;
+			state->in_file_id_volatile = in_file_id_volatile;
+
+			return x_smb2_process_rename(smbd_conn, smbd_requ, state);
+		}
+	}
+
+	auto state = std::make_unique<x_smb2_state_setinfo_t>();
+	state->in_info_class = in_info_class;
+	state->in_info_level = in_info_level;
+	state->in_additional = X_LE2H32(in_setinfo->additional);
+	state->in_file_id_persistent = X_LE2H64(in_setinfo->file_id_persistent);
+	state->in_file_id_volatile = X_LE2H64(in_setinfo->file_id_volatile);
+	state->in_data.assign(in_hdr + in_input_buffer_offset,
+			in_hdr + in_input_buffer_offset + in_input_buffer_length);
 
 	X_LOG_OP("%ld SETINFO 0x%lx, 0x%lx", smbd_requ->in_smb2_hdr.mid,
 			state->in_file_id_persistent, state->in_file_id_volatile);
