@@ -63,7 +63,7 @@ static x_ndr_off_t ntlmssp_buffers_relative_ptr(NT &&nt, std::shared_ptr<T> &val
 	X_NDR_SCALARS_DEFAULT(len, ndr, pos_len, epos, flags, X_NDR_SWITCH_NONE);
 	uint32 offset;
 	X_NDR_SCALARS_DEFAULT(offset, ndr, pos_offset, epos, flags, X_NDR_SWITCH_NONE);
-	if (offset) {
+	if (len > 0 && offset > 0) {
 		X_NDR_CHECK_ALIGN(ndr, flags, offset);
 		x_ndr_allocate_ptr(val, level);
 		x_ndr_off_t tmp_bpos = X_NDR_CHECK_POS(ndr.base + offset, 0, epos);
