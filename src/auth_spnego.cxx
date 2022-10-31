@@ -168,6 +168,7 @@ static NTSTATUS x_spnego_auth_targ_return(x_auth_spnego_t *spnego, NTSTATUS stat
 }
 
 static void x_spnego_auth_updated(x_auth_upcall_t *auth_upcall, NTSTATUS status,
+		bool is_bind,
 		std::vector<uint8_t> &sub_out_security,
 		std::shared_ptr<x_auth_info_t> &auth_info)
 {
@@ -183,7 +184,7 @@ static void x_spnego_auth_updated(x_auth_upcall_t *auth_upcall, NTSTATUS status,
 		status = x_spnego_auth_targ_return(spnego, status, sub_out_security, out_security);
 	}
 
-	up_auth_upcall->updated(status, out_security, auth_info);
+	up_auth_upcall->updated(status, is_bind, out_security, auth_info);
 }
 
 static const struct x_auth_cbs_t spnego_auth_upcall_cbs = {
@@ -299,6 +300,7 @@ static x_auth_t *match_mech_type(x_auth_context_t *context, const NegTokenInit &
 }
 
 static NTSTATUS spnego_update_start(x_auth_spnego_t *spnego, const NegotiationToken &nt_requ,
+		bool is_bind,
 		std::vector<uint8_t> &out, x_auth_upcall_t *auth_upcall,
 		std::shared_ptr<x_auth_info_t> &auth_info)
 {
@@ -321,7 +323,7 @@ static NTSTATUS spnego_update_start(x_auth_spnego_t *spnego, const NegotiationTo
 	X_ASSERT(!spnego->up_auth_upcall);
 	spnego->up_auth_upcall = auth_upcall;
 	std::vector<uint8_t> subout;
-	NTSTATUS status = spnego->subauth->update((uint8_t *)ni.mechToken->data, ni.mechToken->length, subout, &spnego->this_auth_upcall, auth_info);
+	NTSTATUS status = spnego->subauth->update((uint8_t *)ni.mechToken->data, ni.mechToken->length, is_bind, subout, &spnego->this_auth_upcall, auth_info);
 
 	if (NT_STATUS_EQUAL(status, X_NT_STATUS_INTERNAL_BLOCKED)) {
 		return status;
@@ -349,6 +351,7 @@ static NTSTATUS spnego_update_start(x_auth_spnego_t *spnego, const NegotiationTo
 }
 
 static NTSTATUS spnego_update_targ(x_auth_spnego_t *spnego, const NegotiationToken &nt_requ,
+		bool is_bind,
 		std::vector<uint8_t> &out, x_auth_upcall_t *auth_upcall,
 		std::shared_ptr<x_auth_info_t> &auth_info)
 {
@@ -367,7 +370,7 @@ static NTSTATUS spnego_update_targ(x_auth_spnego_t *spnego, const NegotiationTok
 	X_ASSERT(!spnego->up_auth_upcall);
 	spnego->up_auth_upcall = auth_upcall;
 	std::vector<uint8_t> subout;
-	NTSTATUS status = spnego->subauth->update((uint8_t *)nt.responseToken->data, nt.responseToken->length, subout,
+	NTSTATUS status = spnego->subauth->update((uint8_t *)nt.responseToken->data, nt.responseToken->length, is_bind, subout,
 			&spnego->this_auth_upcall, auth_info);
 
 	if (NT_STATUS_EQUAL(status, X_NT_STATUS_INTERNAL_BLOCKED)) {
@@ -439,6 +442,7 @@ static NTSTATUS spnego_update_targ(x_auth_spnego_t *spnego, const NegotiationTok
 }
 
 static NTSTATUS spnego_update(x_auth_t *auth, const uint8_t *in_buf, size_t in_len,
+		bool is_bind,
 		std::vector<uint8_t> &out, x_auth_upcall_t *auth_upcall,
 		std::shared_ptr<x_auth_info_t> &auth_info)
 {
@@ -450,7 +454,7 @@ static NTSTATUS spnego_update(x_auth_t *auth, const uint8_t *in_buf, size_t in_l
 			if (err) {
 				return NT_STATUS_INVALID_PARAMETER;
 			}
-			NTSTATUS status = spnego_update_start(spnego, nt, out, auth_upcall, auth_info);
+			NTSTATUS status = spnego_update_start(spnego, nt, is_bind, out, auth_upcall, auth_info);
 			x_asn1_free(nt);
 			return status;
 		} else {
@@ -464,7 +468,7 @@ static NTSTATUS spnego_update(x_auth_t *auth, const uint8_t *in_buf, size_t in_l
 		if (err) {
 			return NT_STATUS_INVALID_PARAMETER;
 		}
-		NTSTATUS status = spnego_update_targ(spnego, nt, out, auth_upcall, auth_info);
+		NTSTATUS status = spnego_update_targ(spnego, nt, is_bind, out, auth_upcall, auth_info);
 		x_asn1_free(nt);
 		return status;
 	}

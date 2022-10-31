@@ -235,6 +235,7 @@ x_smbd_sess_t *x_smbd_sess_create(uint64_t &id);
 x_smbd_sess_t *x_smbd_sess_lookup(NTSTATUS &status,
 		uint64_t id, const x_smb2_uuid_t &client_guid);
 NTSTATUS x_smbd_sess_auth_succeeded(x_smbd_sess_t *smbd_sess,
+		bool is_bind,
 		std::shared_ptr<x_smbd_user_t> &smbd_user,
 		const x_smbd_key_set_t &keys,
 		uint32_t time_rec);
@@ -273,6 +274,7 @@ NTSTATUS x_smbd_chan_update_auth(x_smbd_chan_t *smbd_chan,
 		const uint8_t *in_security_data,
 		uint32_t in_security_length,
 		std::vector<uint8_t> &out_security,
+		bool is_bind,
 		bool new_auth);
 void x_smbd_chan_unlinked(x_dlink_t *conn_link, x_smbd_conn_t *smbd_conn);
 x_smbd_chan_t *x_smbd_chan_match(x_dlink_t *conn_link, x_smbd_conn_t *smbd_conn);

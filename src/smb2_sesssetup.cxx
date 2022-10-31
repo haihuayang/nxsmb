@@ -77,6 +77,7 @@ static void smb2_sesssetup_done(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_re
 		if (in_previous_session_id != 0) {
 			x_smbd_sess_close_previous(smbd_requ->smbd_sess, in_previous_session_id);
 		}
+		// if (!(state->in_flags & SMB2_SESSION_FLAG_BINDING)) {
 		x_smb2_reply_sesssetup(smbd_conn, smbd_requ->smbd_chan, smbd_requ,
 				dialect, status, out_security);
 	}
@@ -197,7 +198,9 @@ NTSTATUS x_smb2_process_sesssetup(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_
 	std::vector<uint8_t> out_security;
 	NTSTATUS status = x_smbd_chan_update_auth(smbd_requ->smbd_chan, smbd_requ,
 			in_hdr + in_security_offset, in_security_length,
-			out_security, new_auth);
+			out_security,
+			in_flags & SMB2_SESSION_FLAG_BINDING,
+			new_auth);
 	smb2_sesssetup_done(smbd_conn, smbd_requ, dialect, status,
 			in_previous_session_id, out_security);
 	return status;

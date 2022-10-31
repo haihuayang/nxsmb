@@ -77,6 +77,7 @@ struct x_auth_ntlmssp_t
 	// smbd_smb2_session_setup_send, should in base class
 	uint32_t want_features = GENSEC_FEATURE_SESSION_KEY | GENSEC_FEATURE_UNIX_TOKEN;
 
+	bool is_sess_bind = false;
 	bool allow_lm_response;
 	bool allow_lm_key;
 	bool force_old_spnego;
@@ -1004,7 +1005,7 @@ static void ntlmssp_check_password_cb_reply(x_wbcli_t *wbcli, int err)
 	ntlmssp->auth_upcall = nullptr;
 	if (err < 0) {
 		std::vector<uint8_t> out_security;
-		auth_upcall->updated(NT_STATUS_INTERNAL_ERROR, out_security, std::shared_ptr<x_auth_info_t>());
+		auth_upcall->updated(NT_STATUS_INTERNAL_ERROR, ntlmssp->is_sess_bind, out_security, std::shared_ptr<x_auth_info_t>());
 		return;
 	}
 
@@ -1012,7 +1013,7 @@ static void ntlmssp_check_password_cb_reply(x_wbcli_t *wbcli, int err)
 	NTSTATUS status = ntlmssp_post_auth(ntlmssp, *auth_info, ntlmssp->wbresp);
 
 	std::vector<uint8_t> out_security;
-	auth_upcall->updated(status, out_security, auth_info);
+	auth_upcall->updated(status, ntlmssp->is_sess_bind, out_security, auth_info);
 }
 
 static const x_wb_cbs_t ntlmssp_check_password_cbs = {
@@ -1097,7 +1098,7 @@ static void ntlmssp_domain_info_cb_reply(x_wbcli_t *wbcli, int err)
 	ntlmssp->auth_upcall = nullptr;
 	if (err < 0) {
 		std::vector<uint8_t> out_security;
-		auth_upcall->updated(NT_STATUS_INTERNAL_ERROR, out_security, std::shared_ptr<x_auth_info_t>());
+		auth_upcall->updated(NT_STATUS_INTERNAL_ERROR, ntlmssp->is_sess_bind, out_security, std::shared_ptr<x_auth_info_t>());
 		return;
 	}
 
@@ -1633,10 +1634,12 @@ static inline NTSTATUS handle_authenticate(x_auth_ntlmssp_t &auth_ntlmssp,
 }
 
 static NTSTATUS auth_ntlmssp_update(x_auth_t *auth, const uint8_t *in_buf, size_t in_len,
+		bool is_bind,
 		std::vector<uint8_t> &out, x_auth_upcall_t *auth_upcall,
 		std::shared_ptr<x_auth_info_t> &auth_info)
 {
 	x_auth_ntlmssp_t *ntlmssp = X_CONTAINER_OF(auth, x_auth_ntlmssp_t, auth);
+	ntlmssp->is_sess_bind = is_bind;
 	if (ntlmssp->state_position == x_auth_ntlmssp_t::S_NEGOTIATE) {
 		return handle_negotiate(*ntlmssp, in_buf, in_len, out, auth_upcall);
 	} else if (ntlmssp->state_position == x_auth_ntlmssp_t::S_AUTHENTICATE) {

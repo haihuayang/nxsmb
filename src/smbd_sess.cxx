@@ -214,18 +214,25 @@ bool x_smbd_sess_unlink_tcon(x_smbd_sess_t *smbd_sess, x_dlink_t *link)
 }
 
 NTSTATUS x_smbd_sess_auth_succeeded(x_smbd_sess_t *smbd_sess,
+		bool is_bind,
 		std::shared_ptr<x_smbd_user_t> &smbd_user,
 		const x_smbd_key_set_t &keys,
 		uint32_t time_rec)
 {
 	std::lock_guard<std::mutex> lock(smbd_sess->mutex);
-	if (smbd_sess->state == x_smbd_sess_t::S_ACTIVE) {
-		// TODO check smbd_user is matched?
+
+	if (is_bind) {
+		X_ASSERT(smbd_sess->smbd_user);
+		if (!match_user(*smbd_user, *smbd_sess->smbd_user)) {
+			return NT_STATUS_ACCESS_DENIED;
+		}
 	} else {
 		smbd_sess->smbd_user = smbd_user;
-		smbd_sess->keys = keys;
+		if (!smbd_sess->key_is_valid) {
+			smbd_sess->keys = keys;
+			smbd_sess->key_is_valid = true;
+		}
 		smbd_sess->state = x_smbd_sess_t::S_ACTIVE;
-		smbd_sess->key_is_valid = true;
 		auto smbd_conf = x_smbd_conf_get();
 		time_rec = std::min(time_rec, smbd_conf->max_session_expiration);
 		if (time_rec == X_INFINITE) {
