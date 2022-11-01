@@ -45,7 +45,6 @@ extern "C" {
 #define X_NDR_VERIFY(ret, call) do { \
 	auto _ret = (call); \
 	if (unlikely(!X_NDR_ERR_CODE_IS_SUCCESS(_ret))) { \
-		X_DEVEL_ASSERT(0); \
 		return _ret; \
 	} \
 	(ret) = _ret; \
