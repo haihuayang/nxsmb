@@ -165,6 +165,52 @@ const idl::dom_sid global_sid_Unix_NFS_Other =		/* Unix other, MS NFS and Apple 
 #define SECURITY_NT_AUTHORITY          5
 #endif
 
+/*****************************************************************
+ Copies a sid
+*****************************************************************/
+
+void sid_copy(idl::dom_sid &dst, const idl::dom_sid &src)
+{
+	dst.sid_rev_num = src.sid_rev_num;
+	dst.num_auths = src.num_auths;
+	dst.id_auth = src.id_auth;
+
+	for (uint8_t i = 0; i < src.num_auths; ++i) {
+		dst.sub_auths[i] = src.sub_auths[i];
+	}
+}
+
+bool sid_append_rid(idl::dom_sid &sid, uint32_t rid)
+{
+	if (sid.num_auths < sid.sub_auths.size()) {
+		sid.sub_auths[sid.num_auths++] = rid;
+		return true;
+	}
+	return false;
+}
+
+bool sid_compose(idl::dom_sid &dst, const idl::dom_sid &domain_sid, uint32_t rid)
+{
+	sid_copy(dst, domain_sid);
+	return sid_append_rid(dst, rid);
+}
+
+/*****************************************************************
+ Removes the last rid from the end of a sid
+*****************************************************************/
+
+bool sid_split_rid(idl::dom_sid &sid, uint32_t *rid)
+{
+	if (sid.num_auths > 0) {
+		sid.num_auths--;
+		if (rid != NULL) {
+			*rid = sid.sub_auths[sid.num_auths];
+		}
+		return true;
+	}
+	return false;
+}
+
 #if HH_COMMENT
 static idl::dom_sid system_sid_array[1] =
 { { 1, 1, {0,0,0,0,0,5}, {18,0,0,0,0,0,0,0,0,0,0,0,0,0,0}} };
@@ -219,28 +265,6 @@ const struct security_token *get_system_token(void)
 	return &system_token;
 }
 
-bool sid_compose(struct dom_sid *dst, const struct dom_sid *domain_sid, uint32_t rid)
-{
-	sid_copy(dst, domain_sid);
-	return sid_append_rid(dst, rid);
-}
-
-/*****************************************************************
- Removes the last rid from the end of a sid
-*****************************************************************/
-
-bool sid_split_rid(struct dom_sid *sid, uint32_t *rid)
-{
-	if (sid->num_auths > 0) {
-		sid->num_auths--;
-		if (rid != NULL) {
-			*rid = sid->sub_auths[sid->num_auths];
-		}
-		return true;
-	}
-	return false;
-}
-
 /*****************************************************************
  Return the last rid from the end of a sid
 *****************************************************************/
@@ -277,25 +301,6 @@ bool sid_peek_check_rid(const struct dom_sid *exp_dom_sid, const struct dom_sid 
 	}
 
 	return sid_peek_rid(sid, rid);
-}
-
-/*****************************************************************
- Copies a sid
-*****************************************************************/
-
-void sid_copy(struct dom_sid *dst, const struct dom_sid *src)
-{
-	int i;
-
-	*dst = (struct dom_sid) {
-		.sid_rev_num = src->sid_rev_num,
-		.num_auths = src->num_auths,
-	};
-
-	memcpy(&dst->id_auth[0], &src->id_auth[0], sizeof(src->id_auth));
-
-	for (i = 0; i < src->num_auths; i++)
-		dst->sub_auths[i] = src->sub_auths[i];
 }
 
 /*****************************************************************

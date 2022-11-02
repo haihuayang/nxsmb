@@ -31,6 +31,7 @@ extern "C" {
 #include "include/asn1_wrap.hxx"
 #include "include/librpc/ntlmssp.hxx"
 #include "include/charset.hxx"
+#include "util_sid.hxx"
 
 #define DEBUG(...) do { } while (0)
 #define dump_data_pw(...) do { } while (0)
@@ -811,6 +812,65 @@ static bool ntlmssp_have_feature(x_auth_ntlmssp_t *ntlmssp, uint32_t feature)
 	return false;
 }
 
+
+static NTSTATUS ntlmssp_post_auth2(x_auth_ntlmssp_t *ntlmssp, x_auth_info_t &auth_info)
+{
+	ntlmssp->session_key = auth_info.session_key;
+
+	if (ntlmssp->new_spnego) {
+		HMACMD5Context ctx;
+		uint8_t mic_buffer[idl::NTLMSSP_MIC_SIZE] = { 0, };
+
+		hmac_md5_init_limK_to_64(auth_info.session_key.data(),
+					 x_convert_assert<uint32_t>(auth_info.session_key.size()),
+					 &ctx);
+
+		hmac_md5_update(ntlmssp->msg_negotiate.data(),
+				x_convert_assert<uint32_t>(ntlmssp->msg_negotiate.size()),
+				&ctx);
+		hmac_md5_update(ntlmssp->msg_challenge.data(),
+				x_convert_assert<uint32_t>(ntlmssp->msg_challenge.size()),
+				&ctx);
+
+		/* checked were we set ntlmssp_state->new_spnego */
+		X_ASSERT(ntlmssp->msg_authenticate.size() >
+			   (idl::NTLMSSP_MIC_OFFSET + idl::NTLMSSP_MIC_SIZE));
+
+		hmac_md5_update(ntlmssp->msg_authenticate.data(), idl::NTLMSSP_MIC_OFFSET, &ctx);
+		hmac_md5_update(mic_buffer, idl::NTLMSSP_MIC_SIZE, &ctx);
+		hmac_md5_update(ntlmssp->msg_authenticate.data() +
+				(idl::NTLMSSP_MIC_OFFSET + idl::NTLMSSP_MIC_SIZE),
+				x_convert_assert<uint32_t>(ntlmssp->msg_authenticate.size() -
+					(idl::NTLMSSP_MIC_OFFSET + idl::NTLMSSP_MIC_SIZE)),
+				&ctx);
+		hmac_md5_final(mic_buffer, &ctx);
+
+		if (memcmp(ntlmssp->msg_authenticate.data() + idl::NTLMSSP_MIC_OFFSET,
+			     mic_buffer, idl::NTLMSSP_MIC_SIZE) != 0) {
+#if 0
+			DEBUG(1,("%s: invalid NTLMSSP_MIC for "
+				 "user=[%s] domain=[%s] workstation=[%s]\n",
+				 __func__,
+				 ntlmssp_state->user,
+				 ntlmssp_state->domain,
+				 ntlmssp_state->client.netbios_name));
+			dump_data(1, request.data + NTLMSSP_MIC_OFFSET,
+				  NTLMSSP_MIC_SIZE);
+			dump_data(1, mic_buffer,
+				  NTLMSSP_MIC_SIZE);
+#endif
+			RETURN_ERR_NT_STATUS(NT_STATUS_INVALID_PARAMETER);
+		}
+	}
+
+	if (ntlmssp_have_feature(ntlmssp, GENSEC_FEATURE_SIGN)) {
+		ntlmssp_sign_init(ntlmssp);
+	}
+
+	ntlmssp->state_position = x_auth_ntlmssp_t::S_DONE;
+	return NT_STATUS_OK;
+}
+
 static NTSTATUS ntlmssp_post_auth(x_auth_ntlmssp_t *ntlmssp, x_auth_info_t &auth_info, const x_wbresp_t &wbresp)
 {
 	if (wbresp.header.result != WINBINDD_OK) {
@@ -939,60 +999,8 @@ static NTSTATUS ntlmssp_post_auth(x_auth_ntlmssp_t *ntlmssp, x_auth_info_t &auth
 	} else {
 		auth_info.session_key.assign(session_key_data, session_key_data + session_key_length);
 	}
-	ntlmssp->session_key = auth_info.session_key;
 
-	if (ntlmssp->new_spnego) {
-		HMACMD5Context ctx;
-		uint8_t mic_buffer[idl::NTLMSSP_MIC_SIZE] = { 0, };
-
-		hmac_md5_init_limK_to_64(auth_info.session_key.data(),
-					 x_convert_assert<uint32_t>(auth_info.session_key.size()),
-					 &ctx);
-
-		hmac_md5_update(ntlmssp->msg_negotiate.data(),
-				x_convert_assert<uint32_t>(ntlmssp->msg_negotiate.size()),
-				&ctx);
-		hmac_md5_update(ntlmssp->msg_challenge.data(),
-				x_convert_assert<uint32_t>(ntlmssp->msg_challenge.size()),
-				&ctx);
-
-		/* checked were we set ntlmssp_state->new_spnego */
-		X_ASSERT(ntlmssp->msg_authenticate.size() >
-			   (idl::NTLMSSP_MIC_OFFSET + idl::NTLMSSP_MIC_SIZE));
-
-		hmac_md5_update(ntlmssp->msg_authenticate.data(), idl::NTLMSSP_MIC_OFFSET, &ctx);
-		hmac_md5_update(mic_buffer, idl::NTLMSSP_MIC_SIZE, &ctx);
-		hmac_md5_update(ntlmssp->msg_authenticate.data() +
-				(idl::NTLMSSP_MIC_OFFSET + idl::NTLMSSP_MIC_SIZE),
-				x_convert_assert<uint32_t>(ntlmssp->msg_authenticate.size() -
-					(idl::NTLMSSP_MIC_OFFSET + idl::NTLMSSP_MIC_SIZE)),
-				&ctx);
-		hmac_md5_final(mic_buffer, &ctx);
-
-		if (memcmp(ntlmssp->msg_authenticate.data() + idl::NTLMSSP_MIC_OFFSET,
-			     mic_buffer, idl::NTLMSSP_MIC_SIZE) != 0) {
-#if 0
-			DEBUG(1,("%s: invalid NTLMSSP_MIC for "
-				 "user=[%s] domain=[%s] workstation=[%s]\n",
-				 __func__,
-				 ntlmssp_state->user,
-				 ntlmssp_state->domain,
-				 ntlmssp_state->client.netbios_name));
-			dump_data(1, request.data + NTLMSSP_MIC_OFFSET,
-				  NTLMSSP_MIC_SIZE);
-			dump_data(1, mic_buffer,
-				  NTLMSSP_MIC_SIZE);
-#endif
-			RETURN_ERR_NT_STATUS(NT_STATUS_INVALID_PARAMETER);
-		}
-	}
-
-	if (ntlmssp_have_feature(ntlmssp, GENSEC_FEATURE_SIGN)) {
-		ntlmssp_sign_init(ntlmssp);
-	}
-
-	ntlmssp->state_position = x_auth_ntlmssp_t::S_DONE;
-	return NT_STATUS_OK;
+	return ntlmssp_post_auth2(ntlmssp, auth_info);
 }
 
 static void ntlmssp_check_password_cb_reply(x_wbcli_t *wbcli, int err)
@@ -1020,16 +1028,94 @@ static const x_wb_cbs_t ntlmssp_check_password_cbs = {
 	ntlmssp_check_password_cb_reply,
 };
 
-static void ntlmssp_check_password(x_auth_ntlmssp_t &ntlmssp, bool trusted, x_auth_upcall_t *auth_upcall)
+static bool check_domain_match(const std::string &user, const std::string &domain)
 {
+	auto smbd_conf = x_smbd_conf_get();
+	if (smbd_conf->allow_trusted_domains) {
+		return true;
+	}
+
+	/* we do not check if domain is local name */
+	if (domain.empty() || x_strcase_equal(domain, smbd_conf->workgroup)) {
+		return true;
+	}
+	return false;
+}
+
+static NTSTATUS check_anonymous_security(x_auth_ntlmssp_t *ntlmssp,
+		std::shared_ptr<x_auth_info_t> &ret)
+{
+	if (!ntlmssp->client_user.empty()) {
+		return NT_STATUS_NOT_IMPLEMENTED;
+	}
+
+	if (ntlmssp->client_lm_resp) {
+		return NT_STATUS_NOT_IMPLEMENTED;
+	}
+
+	if (ntlmssp->client_nt_resp) {
+		return NT_STATUS_NOT_IMPLEMENTED;
+	}
+
+	ret = std::make_shared<x_auth_info_t>();
+	x_auth_info_t &auth_info = *ret;
+	auth_info.user_flags = 0;
+	auth_info.account_name = "ANONYMOUS";
+#if 0
+	auth_info.full_name = auth.info3.full_name;
+	auth_info.logon_domain = auth.info3.logon_dom;
+	auth_info.acct_flags = auth.info3.acct_flags;
+	auth_info.logon_count		= auth.info3.logon_count;
+	auth_info.bad_password_count	= auth.info3.bad_pw_count;
+
+	auth_info.logon_time		= x_unix_to_nttime(auth.info3.logon_time);
+	auth_info.logoff_time		= x_unix_to_nttime(auth.info3.logoff_time);
+	auth_info.kickoff_time		= x_unix_to_nttime(auth.info3.kickoff_time);
+	auth_info.pass_last_set_time	= x_unix_to_nttime(auth.info3.pass_last_set_time);
+	auth_info.pass_can_change_time	= x_unix_to_nttime(auth.info3.pass_can_change_time);
+	auth_info.pass_must_change_time	= x_unix_to_nttime(auth.info3.pass_must_change_time);
+
+	auth_info.logon_server	= auth.info3.logon_srv;
+	auth_info.logon_script	= auth.info3.logon_script;
+	auth_info.profile_path	= auth.info3.profile_path;
+	auth_info.home_directory= auth.info3.home_dir;
+	auth_info.home_drive	= auth.info3.dir_drive;
+#endif
+	auth_info.domain_sid = global_sid_Anonymous;
+	sid_split_rid(auth_info.domain_sid, &auth_info.rid);
+	auth_info.primary_gid = auth_info.rid;
+
+	auth_info.session_key.assign(16, 0);
+
+	return ntlmssp_post_auth2(ntlmssp, auth_info);
+}
+
+
+static NTSTATUS ntlmssp_check_password(x_auth_ntlmssp_t &ntlmssp,
+		bool trusted,
+		x_auth_upcall_t *auth_upcall,
+		std::shared_ptr<x_auth_info_t> &auth_info)
+{
+#if 0
 	std::string domain;
 	if (trusted) {
 		domain = ntlmssp.client_domain;
 	} else {
 		domain = x_convert_utf16_to_utf8(ntlmssp.netbios_name);
 	}
+#endif
+	if (!check_domain_match(ntlmssp.client_user, ntlmssp.client_domain)) {
+		return NT_STATUS_LOGON_FAILURE;
+	}
+
+	NTSTATUS status = check_anonymous_security(&ntlmssp, auth_info);
+	if (NT_STATUS_IS_OK(status)) {
+		return NT_STATUS_OK;
+	}
+
+	auto &domain = ntlmssp.client_domain;
+
 	ntlmssp.state_position = x_auth_ntlmssp_t::S_CHECK_PASSWORD;
-	// ntlmssp->
 
 	/* check_winbind_security */
 	auto &wbrequ = ntlmssp.wbrequ;
@@ -1087,8 +1173,9 @@ static void ntlmssp_check_password(x_auth_ntlmssp_t &ntlmssp, bool trusted, x_au
 	ntlmssp.wbcli.cbs = &ntlmssp_check_password_cbs;
 	ntlmssp.auth_upcall = auth_upcall;
 	x_smbd_wbpool_request(&ntlmssp.wbcli);
+	return X_NT_STATUS_INTERNAL_BLOCKED;
 }
-
+#if 0
 static void ntlmssp_domain_info_cb_reply(x_wbcli_t *wbcli, int err)
 {
 	x_auth_ntlmssp_t *ntlmssp = X_CONTAINER_OF(wbcli, x_auth_ntlmssp_t, wbcli);
@@ -1130,7 +1217,7 @@ static void x_ntlmssp_is_trusted_domain(x_auth_ntlmssp_t &ntlmssp, x_auth_upcall
 	ntlmssp.auth_upcall = auth_upcall;
 	x_smbd_wbpool_request(&ntlmssp.wbcli);
 }
-
+#endif
 
 x_auth_ntlmssp_t::x_auth_ntlmssp_t(x_auth_context_t *context, const x_auth_ops_t *ops)
 	: auth{context, ops}
@@ -1475,7 +1562,8 @@ static const idl::AV_PAIR *av_pair_find(const idl::AV_PAIR_LIST &av_pair_list, i
 
 static inline NTSTATUS handle_authenticate(x_auth_ntlmssp_t &auth_ntlmssp,
 		const uint8_t *in_buf, size_t in_len, std::vector<uint8_t> &out,
-		x_auth_upcall_t *auth_upcall)
+		x_auth_upcall_t *auth_upcall,
+		std::shared_ptr<x_auth_info_t> &auth_info)
 {
 	/* TODO ntlmssp.idl, version & mic may not present,
 	 * samba/auth/ntlmssp/ntlmssp_server.c ntlmssp_server_preauth try
@@ -1616,7 +1704,7 @@ static inline NTSTATUS handle_authenticate(x_auth_ntlmssp_t &auth_ntlmssp,
 	}
 
 	auth_ntlmssp.msg_authenticate.assign(in_buf, in_buf + in_len);
-
+#if 0
 	bool upn_form = auth_ntlmssp.client_domain.empty() &&
 		(auth_ntlmssp.client_user.find('@') != std::string::npos);
 
@@ -1628,9 +1716,8 @@ static inline NTSTATUS handle_authenticate(x_auth_ntlmssp_t &auth_ntlmssp,
 			return NT_STATUS(2); // TODO introduce error
 		}
 	}
-
-	ntlmssp_check_password(auth_ntlmssp, false, auth_upcall);
-	return X_NT_STATUS_INTERNAL_BLOCKED;
+#endif
+	return ntlmssp_check_password(auth_ntlmssp, false, auth_upcall, auth_info);
 }
 
 static NTSTATUS auth_ntlmssp_update(x_auth_t *auth, const uint8_t *in_buf, size_t in_len,
@@ -1643,7 +1730,7 @@ static NTSTATUS auth_ntlmssp_update(x_auth_t *auth, const uint8_t *in_buf, size_
 	if (ntlmssp->state_position == x_auth_ntlmssp_t::S_NEGOTIATE) {
 		return handle_negotiate(*ntlmssp, in_buf, in_len, out, auth_upcall);
 	} else if (ntlmssp->state_position == x_auth_ntlmssp_t::S_AUTHENTICATE) {
-		return handle_authenticate(*ntlmssp, in_buf, in_len, out, auth_upcall);
+		return handle_authenticate(*ntlmssp, in_buf, in_len, out, auth_upcall, auth_info);
 	} else {
 		X_ASSERT(false);
 		RETURN_ERR_NT_STATUS(NT_STATUS_INTERNAL_ERROR);

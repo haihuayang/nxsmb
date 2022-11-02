@@ -62,6 +62,11 @@ extern const idl::dom_sid global_sid_Unix_NFS_Groups;
 extern const idl::dom_sid global_sid_Unix_NFS_Mode;
 extern const idl::dom_sid global_sid_Unix_NFS_Other;
 
+void sid_copy(idl::dom_sid &dst, const idl::dom_sid &src);
+bool sid_append_rid(idl::dom_sid &sid, uint32_t rid);
+bool sid_compose(idl::dom_sid &dst, const idl::dom_sid &domain_sid, uint32_t rid);
+bool sid_split_rid(idl::dom_sid &sid, uint32_t *rid);
+
 #if 0
 enum lsa_SidType;
 
@@ -106,11 +111,8 @@ char *dom_sid_str_buf(const struct dom_sid *sid, struct dom_sid_buf *dst);
 
 const char *sid_type_lookup(uint32_t sid_type);
 const struct security_token *get_system_token(void);
-bool sid_compose(struct dom_sid *dst, const struct dom_sid *domain_sid, uint32_t rid);
-bool sid_split_rid(struct dom_sid *sid, uint32_t *rid);
 bool sid_peek_rid(const struct dom_sid *sid, uint32_t *rid);
 bool sid_peek_check_rid(const struct dom_sid *exp_dom_sid, const struct dom_sid *sid, uint32_t *rid);
-void sid_copy(struct dom_sid *dst, const struct dom_sid *src);
 bool sid_parse(const uint8_t *inbuf, size_t len, struct dom_sid *sid);
 int sid_compare_domain(const struct dom_sid *sid1, const struct dom_sid *sid2);
 NTSTATUS add_sid_to_array(TALLOC_CTX *mem_ctx, const struct dom_sid *sid,
