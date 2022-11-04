@@ -21,9 +21,8 @@ struct x_smbd_chan_t
 	/* smbd_chan must hold the ref of smbd_conn through its life,
 	 * so smbd_conn is always valid, although it may be terminated
 	 */
-	explicit x_smbd_chan_t(x_smbd_conn_t *smbd_conn, x_smbd_sess_t *smbd_sess,
-			uint64_t previous_session_id)
-		: tick_create(tick_now), previous_session_id(previous_session_id)
+	explicit x_smbd_chan_t(x_smbd_conn_t *smbd_conn, x_smbd_sess_t *smbd_sess)
+		: tick_create(tick_now)
 		, smbd_conn(x_smbd_ref_inc(smbd_conn))
 		, smbd_sess(x_smbd_ref_inc(smbd_sess)) {
 		X_SMBD_COUNTER_INC(chan_create, 1);
@@ -50,7 +49,6 @@ struct x_smbd_chan_t
 	x_auth_upcall_t auth_upcall;
 	x_timerq_entry_t timer;
 	const x_tick_t tick_create;
-	const uint64_t previous_session_id;
 
 	std::atomic<int> refcnt{1};
 	std::atomic<uint16_t> state{S_INIT};
@@ -268,13 +266,14 @@ static NTSTATUS smbd_chan_auth_succeeded(x_smbd_chan_t *smbd_chan,
 		smbd_chan_set_keys(smbd_chan, auth_info.session_key);
 	}
 
+	x_auth_destroy(smbd_chan->auth);
+	smbd_chan->auth = nullptr;
+
 	NTSTATUS status = x_smbd_sess_auth_succeeded(smbd_chan->smbd_sess, is_bind, smbd_user, smbd_chan->keys, auth_info.time_rec);
 	if (NT_STATUS_IS_OK(status)) {
 		// TODO memory order
 		smbd_chan->state = x_smbd_chan_t::S_ACTIVE;
 		smbd_chan->key_is_valid = true;
-		x_auth_destroy(smbd_chan->auth);
-		smbd_chan->auth = nullptr;
 	}
 
 	return status;
@@ -353,16 +352,27 @@ static NTSTATUS smbd_chan_auth_updated(x_smbd_chan_t *smbd_chan, x_smbd_requ_t *
 {
 	X_LOG_OP("%ld RESP 0x%x", smbd_requ->in_smb2_hdr.mid, status.v);
 
+	if (NT_STATUS_EQUAL(status, NT_STATUS_MORE_PROCESSING_REQUIRED)) {
+		// hold ref for timer, will be dec in timer func
+		x_smbd_ref_inc(smbd_chan);
+		smbd_chan->state = x_smbd_chan_t::S_WAIT_INPUT;
+		x_smbd_add_timer(x_smbd_timer_t::SESSSETUP, &smbd_chan->timer);
+		return status;
+	} else if (NT_STATUS_EQUAL(status, X_NT_STATUS_INTERNAL_BLOCKED)) {
+		return status;
+	}
+
 	if (NT_STATUS_IS_OK(status)) {
 		status = smbd_chan_auth_succeeded(smbd_chan, is_bind, auth_info);
 		if (NT_STATUS_IS_OK(status)) {
 			smbd_requ->out_hdr_flags |= SMB2_HDR_FLAG_SIGNED;
 		}
-	} else if (NT_STATUS_EQUAL(status, NT_STATUS_MORE_PROCESSING_REQUIRED)) {
-		// hold ref for timer, will be dec in timer func
-		x_smbd_ref_inc(smbd_chan);
-		smbd_chan->state = x_smbd_chan_t::S_WAIT_INPUT;
-		x_smbd_add_timer(x_smbd_timer_t::SESSSETUP, &smbd_chan->timer);
+	}
+
+	if (!NT_STATUS_IS_OK(status)) {
+		smbd_chan->state = x_smbd_chan_t::S_FAILED;
+		smbd_chan_unlink_conn(smbd_chan, g_smbd_conn_curr);
+		smbd_chan_unlink_sess(smbd_chan, smbd_chan->smbd_sess);
 	}
 
 	return status;
@@ -385,7 +395,6 @@ struct smbd_chan_auth_upcall_evt_t
 						evt->status, evt->is_bind,
 						*evt->auth_info);
 				x_smb2_sesssetup_done(smbd_chan->smbd_conn, smbd_requ, status,
-						smbd_chan->previous_session_id,
 						evt->out_security);
 			}
 		}
@@ -475,10 +484,9 @@ NTSTATUS x_smbd_chan_update_auth(x_smbd_chan_t *smbd_chan,
 }
 
 /* run inside context of smbd_conn */
-x_smbd_chan_t *x_smbd_chan_create(x_smbd_sess_t *smbd_sess, x_smbd_conn_t *smbd_conn,
-		uint64_t previous_session_id)
+x_smbd_chan_t *x_smbd_chan_create(x_smbd_sess_t *smbd_sess, x_smbd_conn_t *smbd_conn)
 {
-	x_smbd_chan_t *smbd_chan = new x_smbd_chan_t(smbd_conn, smbd_sess, previous_session_id);
+	x_smbd_chan_t *smbd_chan = new x_smbd_chan_t(smbd_conn, smbd_sess);
 	if (!smbd_chan) {
 		return nullptr;
 	}

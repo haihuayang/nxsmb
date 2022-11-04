@@ -220,7 +220,6 @@ void x_smbd_conn_send_unsolicited(x_smbd_conn_t *smbd_conn, x_smbd_sess_t *smbd_
 		x_bufref_t *buf, uint16_t opcode);
 void x_smbd_conn_send_remove_chan(x_smbd_conn_t *smbd_conn, x_smbd_chan_t *smbd_chan);
 void x_smb2_sesssetup_done(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ, NTSTATUS status,
-		uint64_t in_previous_session_id,
 		const std::vector<uint8_t> &out_security);
 void x_smb2_reply(x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ,
@@ -264,7 +263,7 @@ bool x_smbd_sess_post_user(x_smbd_sess_t *smbd_sess, x_fdevt_user_t *evt);
 
 
 x_smbd_chan_t *x_smbd_chan_create(x_smbd_sess_t *smbd_sess,
-		x_smbd_conn_t *smbd_conn, uint64_t previous_session_id);
+		x_smbd_conn_t *smbd_conn);
 const x_smb2_key_t *x_smbd_chan_get_signing_key(x_smbd_chan_t *smbd_chan);
 void x_smbd_chan_update_preauth(x_smbd_chan_t *smbd_chan,
 		const void *data, size_t length);
