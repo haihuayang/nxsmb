@@ -689,6 +689,8 @@ static int x_smbd_conn_process_smb2(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smb
 		if (NT_STATUS_EQUAL(status, NT_STATUS_PENDING)) {
 			X_SMBD_REPLY_INTERIM(smbd_conn, smbd_requ);
 			break;
+		} else if (NT_STATUS_EQUAL(status, X_NT_STATUS_INTERNAL_TERMINATE)) {
+			return -EBADMSG;
 		} else if (NT_STATUS_EQUAL(status, X_NT_STATUS_INTERNAL_BLOCKED)) {
 			return 0;
 		}
