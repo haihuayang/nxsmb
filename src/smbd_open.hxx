@@ -69,6 +69,9 @@ struct x_smbd_object_ops_t
 			x_smbd_open_t *smbd_open,
 			x_smbd_requ_t *smbd_requ,
 			std::unique_ptr<x_smb2_state_write_t> &state);
+	NTSTATUS (*flush)(x_smbd_object_t *smbd_object,
+			x_smbd_open_t *smbd_open,
+			x_smbd_requ_t *smbd_requ);
 	NTSTATUS (*lock)(x_smbd_object_t *smbd_object,
 			x_smbd_open_t *smbd_open,
 			x_smbd_conn_t *smbd_conn,
@@ -186,6 +189,18 @@ static inline NTSTATUS x_smbd_open_op_write(
 		return NT_STATUS_INVALID_DEVICE_REQUEST;
 	}
 	return op_fn(smbd_object, smbd_open, smbd_requ, state);
+}
+
+static inline NTSTATUS x_smbd_open_op_flush(
+		x_smbd_open_t *smbd_open,
+		x_smbd_requ_t *smbd_requ)
+{
+	x_smbd_object_t *smbd_object = smbd_open->smbd_object;
+	auto op_fn = smbd_object->topdir->ops->flush;
+	if (!op_fn) {
+		return NT_STATUS_INVALID_DEVICE_REQUEST;
+	}
+	return op_fn(smbd_object, smbd_open, smbd_requ);
 }
 
 static inline NTSTATUS x_smbd_open_op_lock(

@@ -62,6 +62,7 @@ static const x_smbd_object_ops_t simplefs_object_ops = {
 	posixfs_object_op_close,
 	posixfs_object_op_read,
 	posixfs_object_op_write,
+	posixfs_object_op_flush,
 	posixfs_object_op_lock,
 	posixfs_object_op_getinfo,
 	posixfs_object_op_setinfo,

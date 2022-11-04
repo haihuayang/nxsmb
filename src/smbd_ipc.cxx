@@ -417,6 +417,14 @@ static NTSTATUS ipc_object_op_write(
 	return NT_STATUS_OK;
 }
 
+static NTSTATUS ipc_object_op_flush(
+		x_smbd_object_t *smbd_object,
+		x_smbd_open_t *smbd_open,
+		x_smbd_requ_t *smbd_requ)
+{
+	return NT_STATUS_NOT_IMPLEMENTED;
+}
+
 static NTSTATUS ipc_object_op_getinfo(
 		x_smbd_object_t *smbd_object,
 		x_smbd_open_t *smbd_open,
@@ -636,6 +644,7 @@ static const x_smbd_object_ops_t x_smbd_ipc_object_ops = {
 	ipc_object_op_close,
 	ipc_object_op_read,
 	ipc_object_op_write,
+	ipc_object_op_flush,
 	nullptr, // op_lock
 	ipc_object_op_getinfo,
 	ipc_object_op_setinfo,

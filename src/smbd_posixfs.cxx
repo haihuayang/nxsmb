@@ -3653,6 +3653,17 @@ NTSTATUS posixfs_object_op_write(
 	return NT_STATUS_PENDING;
 }
 
+NTSTATUS posixfs_object_op_flush(
+		x_smbd_object_t *smbd_object,
+		x_smbd_open_t *smbd_open,
+		x_smbd_requ_t *smbd_requ)
+{
+	posixfs_object_t *posixfs_object = posixfs_object_from_base_t::container(smbd_object);
+	int err = fsync(posixfs_object->fd);
+	X_TODO_ASSERT(err == 0);
+	return NT_STATUS_OK;
+}
+
 static void posixfs_lock_cancel(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 {
 	posixfs_open_t *posixfs_open = posixfs_open_from_base_t::container(smbd_requ->smbd_open);
