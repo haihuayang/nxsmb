@@ -436,9 +436,8 @@ struct x_smb2_fsctl_validate_negotiate_info_state_t
 {
 	uint32_t in_capabilities;
 	uint16_t in_security_mode;
-	uint16_t in_num_dialects;
+	std::vector<uint16_t> in_dialects;
 	x_smb2_uuid_t in_guid;
-	const uint16_t *in_dialects;
 	uint32_t out_capabilities;
 	uint16_t out_security_mode;
 	uint16_t out_dialect;

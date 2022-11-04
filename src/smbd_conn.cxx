@@ -1259,8 +1259,8 @@ NTSTATUS x_smbd_conn_validate_negotiate_info(const x_smbd_conn_t *smbd_conn,
 	 * and free the Connection object.
 	 */
 	uint16_t dialect = x_smb2_dialect_match(smbd_conf->dialects, 
-			fsctl_state.in_dialects,
-			fsctl_state.in_num_dialects);
+			fsctl_state.in_dialects.data(),
+			fsctl_state.in_dialects.size());
 
 	if (dialect != smbd_conn->dialect) {
 		return X_NT_STATUS_INTERNAL_TERMINATE;

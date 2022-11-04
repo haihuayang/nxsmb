@@ -414,16 +414,23 @@ static NTSTATUS x_smb2_fsctl_validate_negotiate_info(
 		return NT_STATUS_BUFFER_TOO_SMALL;
 	}
 
-	struct x_smb2_fsctl_validate_negotiate_info_state_t fsctl_state;
-	const struct x_smb2_fsctl_validate_negotiate_info_in_t *in = (x_smb2_fsctl_validate_negotiate_info_in_t *)(state.in_buf->data + state.in_buf_offset);
+	x_smb2_fsctl_validate_negotiate_info_state_t fsctl_state;
+	const x_smb2_fsctl_validate_negotiate_info_in_t *in = (x_smb2_fsctl_validate_negotiate_info_in_t *)(state.in_buf->data + state.in_buf_offset);
 
 	fsctl_state.in_capabilities = X_LE2H32(in->capabilities);
 	memcpy(&fsctl_state.in_guid, &in->client_guid, sizeof(in->client_guid));
 	fsctl_state.in_security_mode = X_LE2H16(in->security_mode);
-	fsctl_state.in_num_dialects = X_LE2H16(in->num_dialects);
+	uint16_t in_num_dialects = X_LE2H16(in->num_dialects);
 	if (in_input_size < (sizeof(x_smb2_fsctl_validate_negotiate_info_in_t)
-				+ fsctl_state.in_num_dialects * 2)) {
+				+ in_num_dialects * 2)) {
 		return NT_STATUS_INVALID_PARAMETER;
+	}
+
+	const uint16_t *in_dialects = (const uint16_t *)(in + 1);
+
+	fsctl_state.in_dialects.resize(in_num_dialects);
+	for (uint16_t i = 0; i < in_num_dialects; ++i, ++in_dialects) {
+		fsctl_state.in_dialects[i] = X_LE2H16(*in_dialects);
 	}
 
 	NTSTATUS status = x_smbd_conn_validate_negotiate_info(smbd_conn, fsctl_state);
