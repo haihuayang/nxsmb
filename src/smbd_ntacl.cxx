@@ -576,10 +576,10 @@ static NTSTATUS make_dummy_sec_desc(
 	/* Windows seems add SEC_DESC_DACL_AUTO_INHERITED */
 	auto new_psd = std::make_shared<idl::security_descriptor>();
 	new_psd->revision = idl::SECURITY_DESCRIPTOR_REVISION_1;
-	new_psd->type = idl::security_descriptor_type(idl::SEC_DESC_SELF_RELATIVE|idl::SEC_DESC_DACL_PRESENT|idl::SEC_DESC_DACL_AUTO_INHERITED);
+	new_psd->type = idl::security_descriptor_type(idl::SEC_DESC_SELF_RELATIVE|idl::SEC_DESC_DACL_PRESENT);
 	new_psd->owner_sid = std::make_shared<idl::dom_sid>(*owner_sid);
 	new_psd->group_sid = std::make_shared<idl::dom_sid>(*group_sid);
-	new_psd->dacl = make_default_dacl(*owner_sid, *group_sid);
+	new_psd->dacl = make_default_dacl(*owner_sid, global_sid_System);
 
 	psd = new_psd;
 	return NT_STATUS_OK;
