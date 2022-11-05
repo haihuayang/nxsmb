@@ -2148,45 +2148,6 @@ static bool can_delete_file_in_directory(
 	 */
 }
 
-static inline NTSTATUS check_object_access(
-		posixfs_object_t *posixfs_object,
-		x_smbd_tcon_t *smbd_tcon,
-		const x_smbd_user_t &smbd_user,
-		uint32_t access)
-{
-	// No access check needed for attribute opens.
-	if ((access & ~(idl::SEC_FILE_READ_ATTRIBUTE | idl::SEC_STD_SYNCHRONIZE)) == 0) {
-		return NT_STATUS_OK;
-	}
-
-	// TODO smbd_check_access_rights
-	// if (!use_privs && can_skip_access_check(conn)) {
-	// if ((access_mask & DELETE_ACCESS) && !lp_acl_check_permissions(SNUM(conn))) {
-
-	std::shared_ptr<idl::security_descriptor> psd;
-	NTSTATUS status = posixfs_object_get_sd__(posixfs_object, psd);
-	if (!NT_STATUS_IS_OK(status)) {
-		return status;
-	}
-
-	uint32_t rejected_mask = 0;
-	status = se_file_access_check(*psd, smbd_user, false, access, &rejected_mask);
-	X_LOG_DBG("check_object_access 0x%x 0x%x 0x%x, sd=%s", status.v,
-			access, rejected_mask,
-			idl_tostring(*psd).c_str());
-
-	if (!NT_STATUS_EQUAL(status, NT_STATUS_ACCESS_DENIED)) {
-		return status;
-	}
-	
-	if (rejected_mask == idl::SEC_STD_DELETE && can_delete_file_in_directory(posixfs_object,
-				smbd_tcon, smbd_user)) {
-		return NT_STATUS_OK;
-	} else {
-		return NT_STATUS_ACCESS_DENIED;
-	}
-}
-
 static bool check_ads_share_access(posixfs_object_t *posixfs_object,
 		uint32_t granted)
 {
@@ -2232,6 +2193,62 @@ static void defer_open(
 	x_smbd_requ_async_insert(smbd_requ, posixfs_create_cancel);
 }
 
+static std::pair<uint32_t, uint32_t> posixfs_access_check(
+		posixfs_object_t *posixfs_object,
+		const x_smbd_user_t &smbd_user,
+		const idl::security_descriptor &sd,
+		const x_smbd_requ_t *smbd_requ,
+		std::unique_ptr<x_smb2_state_create_t> &state)
+{
+	uint32_t share_access = x_smbd_tcon_get_share_access(smbd_requ->smbd_tcon);
+	state->out_maximal_access = se_calculate_maximal_access(sd, smbd_user);
+	state->out_maximal_access &= share_access;
+
+	// No access check needed for attribute opens.
+	if ((state->in_desired_access & ~(idl::SEC_FILE_READ_ATTRIBUTE | idl::SEC_STD_SYNCHRONIZE)) == 0) {
+		return { state->in_desired_access, 0 };
+	}
+
+	uint32_t desired_access = state->in_desired_access & ~idl::SEC_FLAG_MAXIMUM_ALLOWED;
+
+	uint32_t granted = state->out_maximal_access;
+	if (state->in_desired_access & idl::SEC_FLAG_MAXIMUM_ALLOWED) {
+		if (posixfs_object->meta.file_attributes & FILE_ATTRIBUTE_READONLY) {
+			granted &= ~(idl::SEC_FILE_WRITE_DATA | idl::SEC_FILE_APPEND_DATA);
+		}
+		granted |= idl::SEC_FILE_READ_ATTRIBUTE;
+		if (!(granted & idl::SEC_STD_DELETE)) {
+			if (can_delete_file_in_directory(posixfs_object,
+						smbd_requ->smbd_tcon, smbd_user)) {
+				granted |= idl::SEC_STD_DELETE;
+			}
+		}
+	} else {
+		granted = (desired_access & state->out_maximal_access);
+	}
+
+	uint32_t rejected_mask = desired_access & ~granted;
+	return {granted, rejected_mask};
+}
+
+static void posixfs_access_check_new(
+		const idl::security_descriptor &sd,
+		const x_smbd_requ_t *smbd_requ,
+		x_smb2_state_create_t &state)
+{
+	auto smbd_user = x_smbd_sess_get_user(smbd_requ->smbd_sess);
+	state.out_maximal_access = se_calculate_maximal_access(sd, *smbd_user);
+	/* Windows server seem not do access check for create new object */
+	if (state.in_desired_access & idl::SEC_FLAG_MAXIMUM_ALLOWED) {
+		state.granted_access = state.out_maximal_access;
+	} else {
+		/* seems windows just grant the desired_access
+		 * state.granted_access = state.out_maximal_access & state.in_desired_access;
+		 */
+		state.granted_access = state.in_desired_access;
+	}
+}
+
 static NTSTATUS posixfs_create_open_exist_object(
 		posixfs_open_t *&posixfs_open,
 		posixfs_object_t *posixfs_object,
@@ -2275,21 +2292,8 @@ static NTSTATUS posixfs_create_open_exist_object(
 	}
 
 	auto smbd_user = x_smbd_sess_get_user(smbd_requ->smbd_sess);
-	uint32_t share_access = x_smbd_tcon_get_share_access(smbd_requ->smbd_tcon);
-	state->out_maximal_access = se_calculate_maximal_access(*psd, *smbd_user);
-	state->out_maximal_access &= share_access;
-	uint32_t desired_access = state->in_desired_access & ~idl::SEC_FLAG_MAXIMUM_ALLOWED;
-
-	uint32_t granted = state->out_maximal_access;
-	if (state->in_desired_access & idl::SEC_FLAG_MAXIMUM_ALLOWED) {
-		if (posixfs_object->meta.file_attributes & FILE_ATTRIBUTE_READONLY) {
-			granted &= ~(idl::SEC_FILE_WRITE_DATA | idl::SEC_FILE_APPEND_DATA);
-		}
-	} else {
-		granted = (desired_access & state->out_maximal_access);
-	}
-
-	uint32_t rejected_mask = desired_access & ~granted;
+	auto [granted, rejected_mask] = posixfs_access_check(posixfs_object,
+			*smbd_user, *psd, smbd_requ, state);
 	if (rejected_mask == idl::SEC_STD_DELETE) {
 	       	if (!can_delete_file_in_directory(posixfs_object,
 					smbd_requ->smbd_tcon, *smbd_user)) {
@@ -2297,6 +2301,10 @@ static NTSTATUS posixfs_create_open_exist_object(
 		}
 	} else if (rejected_mask != 0) {
 		return NT_STATUS_ACCESS_DENIED;
+	}
+
+	if (!NT_STATUS_IS_OK(status)) {
+		return status;
 	}
 
 	if (granted & idl::SEC_STD_DELETE) {
@@ -2375,14 +2383,7 @@ static NTSTATUS posixfs_create_open_new_object(
 		return status;
 	}
 
-	auto smbd_user = x_smbd_sess_get_user(smbd_requ->smbd_sess);
-	state.out_maximal_access = se_calculate_maximal_access(*psd, *smbd_user);
-	/* Windows server seem not do access check for create new object */
-	if (state.in_desired_access & idl::SEC_FLAG_MAXIMUM_ALLOWED) {
-		state.granted_access = state.out_maximal_access;
-	} else {
-		state.granted_access = state.out_maximal_access & state.in_desired_access;
-	}
+	posixfs_access_check_new(*psd, smbd_requ, state);
 
        	status = grant_oplock(posixfs_object, &posixfs_object->default_stream,
 			state);
@@ -2494,14 +2495,7 @@ static NTSTATUS open_object_new_ads(
 		return status;
 	}
 
-	auto smbd_user = x_smbd_sess_get_user(smbd_requ->smbd_sess);
-	state.out_maximal_access = se_calculate_maximal_access(*psd, *smbd_user);
-	/* Windows server seem not do access check for create new object */
-	if (state.in_desired_access & idl::SEC_FLAG_MAXIMUM_ALLOWED) {
-		state.granted_access = state.out_maximal_access;
-	} else {
-		state.granted_access = state.out_maximal_access & state.in_desired_access;
-	}
+	posixfs_access_check_new(*psd, smbd_requ, state);
 
        	status = grant_oplock(posixfs_object, &posixfs_ads->base,
 			state);
@@ -2560,21 +2554,8 @@ static NTSTATUS open_object_exist_ads(
 	}
 
 	auto smbd_user = x_smbd_sess_get_user(smbd_requ->smbd_sess);
-	uint32_t share_access = x_smbd_tcon_get_share_access(smbd_requ->smbd_tcon);
-	state->out_maximal_access = se_calculate_maximal_access(*psd, *smbd_user);
-	state->out_maximal_access &= share_access;
-	uint32_t desired_access = state->in_desired_access & ~idl::SEC_FLAG_MAXIMUM_ALLOWED;
-
-	uint32_t granted = state->out_maximal_access;
-	if (state->in_desired_access & idl::SEC_FLAG_MAXIMUM_ALLOWED) {
-		if (posixfs_object->meta.file_attributes & FILE_ATTRIBUTE_READONLY) {
-			granted &= ~(idl::SEC_FILE_WRITE_DATA | idl::SEC_FILE_APPEND_DATA);
-		}
-	} else {
-		granted = (desired_access & state->out_maximal_access);
-	}
-
-	uint32_t rejected_mask = desired_access & ~granted;
+	auto [granted, rejected_mask] = posixfs_access_check(posixfs_object,
+			*smbd_user, *psd, smbd_requ, state);
 	if (rejected_mask != 0) {
 		return NT_STATUS_ACCESS_DENIED;
 	}
