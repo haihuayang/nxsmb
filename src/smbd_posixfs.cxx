@@ -4669,15 +4669,6 @@ NTSTATUS posixfs_object_op_notify(
 	posixfs_open_t *posixfs_open = posixfs_open_from_base_t::container(smbd_requ->smbd_open);
 	std::lock_guard<std::mutex> lock(posixfs_object->base.mutex);
 
-	/* notify filter cannot be overwritten */
-	if (posixfs_open->base.notify_filter == 0) {
-		posixfs_open->base.notify_filter = state->in_filter | X_FILE_NOTIFY_CHANGE_VALID;
-		if (state->in_flags & SMB2_WATCH_TREE) {
-			posixfs_open->base.notify_filter |= X_FILE_NOTIFY_CHANGE_WATCH_TREE;
-			++smbd_object->topdir->watch_tree_cnt;
-		}
-	}
-
 	X_LOG_DBG("changes count %d", posixfs_open->notify_changes.size());
 	state->out_notify_changes = std::move(posixfs_open->notify_changes);
 	if (!state->out_notify_changes.empty()) {
