@@ -4532,6 +4532,11 @@ static void qdir_unget(qdir_t &qdir, qdir_pos_t &pos)
 	qdir.filepos = pos.filepos;
 }
 
+#define DIR_READ_ACCESS_MASK (idl::SEC_FILE_READ_DATA| \
+		idl::SEC_FILE_READ_EA| \
+		idl::SEC_FILE_READ_ATTRIBUTE| \
+		idl::SEC_STD_READ_CONTROL)
+
 NTSTATUS posixfs_object_qdir(
 		x_smbd_object_t *smbd_object,
 		x_smbd_conn_t *smbd_conn,
@@ -4541,6 +4546,7 @@ NTSTATUS posixfs_object_qdir(
 		uint32_t pseudo_entry_count,
 		bool (*process_entry_func)(x_smbd_object_meta_t *object_meta,
 			x_smbd_stream_meta_t *stream_meta,
+			std::shared_ptr<idl::security_descriptor> *psd,
 			posixfs_object_t *dir_obj,
 			const char *ent_name,
 			uint32_t file_number))
@@ -4566,6 +4572,12 @@ NTSTATUS posixfs_object_qdir(
 	if (state->in_flags & SMB2_CONTINUE_FLAG_SINGLE) {
 		max_count = 1;
 	}
+	std::shared_ptr<idl::security_descriptor> psd, *ppsd = nullptr;
+	std::shared_ptr<x_smbd_user_t> smbd_user;
+	if (x_smbd_tcon_get_abe(smbd_requ->smbd_tcon)) {
+		ppsd = &psd;
+		smbd_user = x_smbd_sess_get_user(smbd_requ->smbd_sess);
+	}
 
 	qdir_t *qdir = posixfs_open->qdir;
 	state->out_data.resize(state->in_output_buffer_length);
@@ -4588,11 +4600,21 @@ NTSTATUS posixfs_object_qdir(
 
 		x_smbd_object_meta_t object_meta;
 		x_smbd_stream_meta_t stream_meta;
-		if (!process_entry_func(&object_meta, &stream_meta, posixfs_object, ent_name, qdir_pos.file_number)) {
+		if (!process_entry_func(&object_meta, &stream_meta, ppsd,
+					posixfs_object, ent_name, qdir_pos.file_number)) {
 			X_LOG_WARN("qdir_process_entry %s %d,0x%x %d errno=%d",
 					ent_name, qdir_pos.file_number, qdir_pos.filepos,
 					qdir_pos.data_offset, errno);
 			continue;
+		}
+
+		if (psd) {
+			uint32_t access = se_calculate_maximal_access(*psd, *smbd_user);
+			psd = nullptr;
+			if ((access & DIR_READ_ACCESS_MASK) != DIR_READ_ACCESS_MASK) {
+				X_LOG_DBG("entry '%s' skip by ABE", ent_name);
+				continue;
+			}
 		}
 
 		++matched_count;
@@ -4827,14 +4849,15 @@ int posixfs_object_get_parent_statex(const posixfs_object_t *dir_obj,
 		/* TODO should lock dir_obj */
 		return posixfs_object_get_statex(dir_obj, object_meta, stream_meta);
 	}
-	return posixfs_statex_getat(dir_obj->fd, "..", object_meta, stream_meta);
+	return posixfs_statex_getat(dir_obj->fd, "..", object_meta, stream_meta, nullptr);
 }
 
 int posixfs_object_statex_getat(posixfs_object_t *dir_obj, const char *name,
 		x_smbd_object_meta_t *object_meta,
-		x_smbd_stream_meta_t *stream_meta)
+		x_smbd_stream_meta_t *stream_meta,
+		std::shared_ptr<idl::security_descriptor> *ppsd)
 {
-	return posixfs_statex_getat(dir_obj->fd, name, object_meta, stream_meta);
+	return posixfs_statex_getat(dir_obj->fd, name, object_meta, stream_meta, ppsd);
 }
 
 int posixfs_mktld(const std::shared_ptr<x_smbd_user_t> &smbd_user,

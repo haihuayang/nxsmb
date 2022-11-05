@@ -90,6 +90,11 @@ uint32_t x_smbd_tcon_get_share_access(const x_smbd_tcon_t *smbd_tcon)
 	return smbd_tcon->share_access;
 }
 
+bool x_smbd_tcon_get_abe(const x_smbd_tcon_t *smbd_tcon)
+{
+	return smbd_tcon->smbd_share->abe_enabled();
+}
+
 bool x_smbd_tcon_match(const x_smbd_tcon_t *smbd_tcon, const x_smbd_sess_t *smbd_sess, uint32_t tid)
 {
 	return smbd_tcon->smbd_sess == smbd_sess && smbd_tcon->tid == tid;

@@ -44,7 +44,8 @@ int posixfs_dos_attr_set(int fd, const dos_attr_t *dos_attr);
 int posixfs_statex_get(int fd, x_smbd_object_meta_t *object_meta,
 		x_smbd_stream_meta_t *stream_meta);
 int posixfs_statex_getat(int dirfd, const char *name, x_smbd_object_meta_t *object_meta,
-		x_smbd_stream_meta_t *stream_meta);
+		x_smbd_stream_meta_t *stream_meta,
+		std::shared_ptr<idl::security_descriptor> *ppsd);
 int posixfs_get_ntacl_blob(int fd, std::vector<uint8_t> &blob);
 int posixfs_set_ntacl_blob(int fd, const std::vector<uint8_t> &blob);
 NTSTATUS posixfs_get_sd(int fd, std::shared_ptr<idl::security_descriptor> &psd);

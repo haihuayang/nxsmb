@@ -105,7 +105,8 @@ int posixfs_object_get_parent_statex(const posixfs_object_t *dir_obj,
 		x_smbd_stream_meta_t *stream_meta);
 int posixfs_object_statex_getat(posixfs_object_t *dir_obj, const char *name,
 		x_smbd_object_meta_t *object_meta,
-		x_smbd_stream_meta_t *stream_meta);
+		x_smbd_stream_meta_t *stream_meta,
+		std::shared_ptr<idl::security_descriptor> *ppsd);
 NTSTATUS posixfs_object_qdir(
 		x_smbd_object_t *smbd_object,
 		x_smbd_conn_t *smbd_conn,
@@ -115,6 +116,7 @@ NTSTATUS posixfs_object_qdir(
 		uint32_t pseudo_entry_count,
 		bool (*process_entry_func)(x_smbd_object_meta_t *object_meta,
 			x_smbd_stream_meta_t *stream_meta,
+			std::shared_ptr<idl::security_descriptor> *ppsd,
 			posixfs_object_t *dir_obj,
 			const char *ent_name,
 			uint32_t file_number));

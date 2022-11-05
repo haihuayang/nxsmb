@@ -140,7 +140,9 @@ static void add_share(x_smbd_conf_t &smbd_conf,
 	std::shared_ptr<x_smbd_share_t> share;
 	if (false) {
 	} else if (share_spec.volumes.size() > 0) {
-		share = x_smbd_dfs_share_create(smbd_conf, share_spec.name, share_spec.volumes);
+		share = x_smbd_dfs_share_create(smbd_conf, share_spec.name,
+				share_spec.abe,
+				share_spec.volumes);
 		for (const auto &v: share_spec.volumes) {
 			auto it = smbd_conf.volume_map.find(v);
 			X_ASSERT(it != smbd_conf.volume_map.end());
@@ -149,7 +151,9 @@ static void add_share(x_smbd_conf_t &smbd_conf,
 		}
 
 	} else {
-		share = x_smbd_simplefs_share_create(share_spec.name, share_spec.path);
+		share = x_smbd_simplefs_share_create(share_spec.name,
+				share_spec.abe,
+				share_spec.path);
 		X_ASSERT(share_spec.path.size() > 0);
 	}
 	share->dfs_referral_ttl = share_spec.dfs_referral_ttl;
@@ -301,7 +305,7 @@ static bool parse_share_param(share_spec_t &share_spec,
 		share_spec.path = value;
 	} else if (name == "dfs referral ttl") {
 		return parse_uint32(value, share_spec.dfs_referral_ttl);
-	} else if (name == "abe") {
+	} else if (name == "hide unreadable") {
 		if (value == "yes") {
 			share_spec.abe = true;
 		} else if (value == "no") {

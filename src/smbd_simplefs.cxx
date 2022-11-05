@@ -13,6 +13,7 @@ static const char *pseudo_entries[] = {
 static bool simplefs_process_entry(
 		x_smbd_object_meta_t *object_meta,
 		x_smbd_stream_meta_t *stream_meta,
+		std::shared_ptr<idl::security_descriptor> *ppsd,
 		posixfs_object_t *dir_obj,
 		const char *ent_name,
 		uint32_t file_number)
@@ -21,9 +22,8 @@ static bool simplefs_process_entry(
 
 	int ret = 0;
 	if (file_number >= PSEUDO_ENTRIES_COUNT) {
-		/* TODO check ntacl if ABE is enabled */
 		ret = posixfs_object_statex_getat(dir_obj, ent_name,
-				object_meta, stream_meta);
+				object_meta, stream_meta, ppsd);
 	} else if (file_number == 0) {
 		/* TODO should lock dir_obj */
 		ret = posixfs_object_get_statex(dir_obj, object_meta, stream_meta);
@@ -82,8 +82,9 @@ static const x_smbd_object_ops_t simplefs_object_ops = {
 struct simplefs_share_t : x_smbd_share_t
 {
 	simplefs_share_t(const std::string &name,
+			bool abe,
 			const std::string &path)
-		: x_smbd_share_t(name)
+		: x_smbd_share_t(name), abe(abe)
 	{
 		root_dir = x_smbd_topdir_create(path, &simplefs_object_ops, name);
 	}
@@ -92,8 +93,7 @@ struct simplefs_share_t : x_smbd_share_t
 		return SMB2_SHARE_TYPE_DISK;
 	}
 	bool is_dfs() const override { return false; }
-	/* TODO not support ABE for now */
-	bool abe_enabled() const override { return false; }
+	bool abe_enabled() const override { return abe; }
 
 	NTSTATUS create_open(x_smbd_open_t **psmbd_open,
 			x_smbd_requ_t *smbd_requ,
@@ -127,6 +127,7 @@ struct simplefs_share_t : x_smbd_share_t
 		return posixfs_object_op_unlink(smbd_object, fd);
 	}
 	std::shared_ptr<x_smbd_topdir_t> root_dir;
+	const bool abe;
 };
 
 NTSTATUS simplefs_share_t::resolve_path(
@@ -172,8 +173,9 @@ NTSTATUS simplefs_share_t::create_open(x_smbd_open_t **psmbd_open,
 
 std::shared_ptr<x_smbd_share_t> x_smbd_simplefs_share_create(
 		const std::string &name,
+		bool abe,
 		const std::string &path)
 {
-	return std::make_shared<simplefs_share_t>(name, path);
+	return std::make_shared<simplefs_share_t>(name, abe, path);
 }
 

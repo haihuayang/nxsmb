@@ -71,19 +71,6 @@ int posixfs_statex_get(int fd, x_smbd_object_meta_t *object_meta,
 	return 0;
 }
 
-int posixfs_statex_getat(int dirfd, const char *name,
-		x_smbd_object_meta_t *object_meta,
-		x_smbd_stream_meta_t *stream_meta)
-{
-	int fd = openat(dirfd, name, O_NOFOLLOW);
-	if (fd < 0) {
-		return -errno;
-	}
-	int err = posixfs_statex_get(fd, object_meta, stream_meta);
-	close(fd);
-	return err;
-}
-
 static int ntacl_get(int fd, std::vector<uint8_t> &out_data)
 {
 	ssize_t err = fgetxattr(fd, XATTR_NTACL, out_data.data(), out_data.size());
@@ -124,6 +111,26 @@ NTSTATUS posixfs_get_sd(int fd, std::shared_ptr<idl::security_descriptor> &psd)
 	uint16_t version;
 	std::array<uint8_t, idl::XATTR_SD_HASH_SIZE> hash;
 	return parse_acl_blob(blob, psd, &hash_type, &version, hash);
+}
+
+int posixfs_statex_getat(int dirfd, const char *name,
+		x_smbd_object_meta_t *object_meta,
+		x_smbd_stream_meta_t *stream_meta,
+		std::shared_ptr<idl::security_descriptor> *ppsd)
+{
+	int fd = openat(dirfd, name, O_NOFOLLOW);
+	if (fd < 0) {
+		return -errno;
+	}
+	int err = posixfs_statex_get(fd, object_meta, stream_meta);
+	if (err == 0) {
+		if (ppsd) {
+			posixfs_get_sd(fd, *ppsd);
+			/* TODO check return value */
+		}
+	}
+	close(fd);
+	return err;
 }
 
 void posixfs_post_create(int fd, uint32_t file_attrs,

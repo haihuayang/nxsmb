@@ -57,10 +57,11 @@ struct dfs_share_t : x_smbd_share_t
 {
 	dfs_share_t(const x_smbd_conf_t &smbd_conf,
 			const std::string &name,
+			bool abe_enabled,
 			const std::vector<std::string> &volumes);
 	uint8_t get_type() const override { return SMB2_SHARE_TYPE_DISK; }
 	bool is_dfs() const override { return true; }
-	bool abe_enabled() const override { return false; }
+	bool abe_enabled() const override { return abe; }
 	NTSTATUS resolve_path(std::shared_ptr<x_smbd_topdir_t> &topdir,
 			std::u16string &out_path,
 			long &path_priv_data,
@@ -87,6 +88,7 @@ struct dfs_share_t : x_smbd_share_t
 			x_smbd_open_t *smbd_open, int fd,
 			std::vector<x_smb2_change_t> &changes) override;
 
+	const bool abe;
 	const std::vector<std::string> volumes;
 	std::shared_ptr<x_smbd_topdir_t> root_dir;
 	std::map<std::string, std::shared_ptr<x_smbd_topdir_t>> local_volume_data_dir;
@@ -255,6 +257,7 @@ static inline top_level_object_state_t get_tlo_state(const std::shared_ptr<x_smb
 static bool dfs_root_process_entry(
 		x_smbd_object_meta_t *object_meta,
 		x_smbd_stream_meta_t *stream_meta,
+		std::shared_ptr<idl::security_descriptor> *ppsd,
 		posixfs_object_t *dir_obj,
 		const char *ent_name,
 		uint32_t file_number)
@@ -262,9 +265,8 @@ static bool dfs_root_process_entry(
 	/* TODO match pattern */
 	int ret = 0;
 	if (file_number >= PSEUDO_ENTRIES_COUNT) {
-		/* TODO check ntacl if ABE is enabled */
 		ret = posixfs_object_statex_getat(dir_obj, ent_name,
-				object_meta, stream_meta);
+				object_meta, stream_meta, ppsd);
 		if (ret != 0) {
 			return false;
 		}
@@ -283,6 +285,7 @@ static bool dfs_root_process_entry(
 static bool dfs_tld_manager_process_entry(
 		x_smbd_object_meta_t *object_meta,
 		x_smbd_stream_meta_t *stream_meta,
+		std::shared_ptr<idl::security_descriptor> *ppsd,
 		posixfs_object_t *dir_obj,
 		const char *ent_name,
 		uint32_t file_number)
@@ -291,11 +294,11 @@ static bool dfs_tld_manager_process_entry(
 
 	int ret = 0;
 	if (file_number >= PSEUDO_ENTRIES_COUNT) {
-		/* TODO check ntacl if ABE is enabled */
 		if (strcmp(ent_name, pesudo_tld_dir) == 0) {
 			return false;
 		}
-		ret = posixfs_object_statex_getat(dir_obj, ent_name, object_meta, stream_meta);
+		ret = posixfs_object_statex_getat(dir_obj, ent_name,
+				object_meta, stream_meta, ppsd);
 		if (ret != 0) {
 			return false;
 		}
@@ -531,6 +534,7 @@ static NTSTATUS dfs_root_object_op_lock(
 static bool dfs_tld_process_entry(
 		x_smbd_object_meta_t *object_meta,
 		x_smbd_stream_meta_t *stream_meta,
+		std::shared_ptr<idl::security_descriptor> *ppsd,
 		posixfs_object_t *dir_obj,
 		const char *ent_name,
 		uint32_t file_number)
@@ -764,6 +768,7 @@ static const x_smbd_object_ops_t dfs_root_object_ops = {
 static bool dfs_volume_process_entry(
 		x_smbd_object_meta_t *object_meta,
 		x_smbd_stream_meta_t *stream_meta,
+		std::shared_ptr<idl::security_descriptor> *ppsd,
 		posixfs_object_t *dir_obj,
 		const char *ent_name,
 		uint32_t file_number)
@@ -772,8 +777,8 @@ static bool dfs_volume_process_entry(
 
 	int ret = 0;
 	if (file_number >= ARRAY_SIZE(pseudo_entries)) {
-		/* TODO check ntacl if ABE is enabled */
-		ret = posixfs_object_statex_getat(dir_obj, ent_name, object_meta, stream_meta);
+		ret = posixfs_object_statex_getat(dir_obj, ent_name,
+				object_meta, stream_meta, ppsd);
 	} else if (file_number == 0) {
 		/* TODO should lock dir_obj */
 		ret = posixfs_object_get_statex(dir_obj, object_meta, stream_meta);
@@ -1057,8 +1062,9 @@ NTSTATUS dfs_share_t::create_open(x_smbd_open_t **psmbd_open,
 
 dfs_share_t::dfs_share_t(const x_smbd_conf_t &smbd_conf,
 		const std::string &name,
+		bool abe,
 		const std::vector<std::string> &volumes)
-	: x_smbd_share_t(name), volumes(volumes)
+	: x_smbd_share_t(name), abe(abe), volumes(volumes)
 {
 	auto first_volume = volumes[0];
 	std::string root_node;
@@ -1081,8 +1087,9 @@ dfs_share_t::dfs_share_t(const x_smbd_conf_t &smbd_conf,
 
 std::shared_ptr<x_smbd_share_t> x_smbd_dfs_share_create(const x_smbd_conf_t &smbd_conf,
 		const std::string &name,
+		bool abe,
 		const std::vector<std::string> &volumes)
 {
-	return std::make_shared<dfs_share_t>(smbd_conf, name, volumes);
+	return std::make_shared<dfs_share_t>(smbd_conf, name, abe, volumes);
 }
 
