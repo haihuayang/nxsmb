@@ -850,7 +850,7 @@ static void posixfs_create_cancel(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_
 		auto lock = std::lock_guard(posixfs_object->base.mutex);
 		posixfs_stream->defer_open_list.remove(smbd_requ);
 	}
-	x_smbd_conn_post_cancel(smbd_conn, smbd_requ);
+	x_smbd_conn_post_cancel(smbd_conn, smbd_requ, NT_STATUS_CANCELLED);
 }
 
 struct posixfs_defer_open_evt_t
@@ -1200,7 +1200,7 @@ static void posixfs_rename_cancel(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_
 		auto lock = std::lock_guard(posixfs_object->base.mutex);
 		posixfs_stream->defer_rename_list.remove(smbd_requ);
 	}
-	x_smbd_conn_post_cancel(smbd_conn, smbd_requ);
+	x_smbd_conn_post_cancel(smbd_conn, smbd_requ, NT_STATUS_CANCELLED);
 }
 
 NTSTATUS posixfs_object_op_rename(x_smbd_object_t *smbd_object,
@@ -3199,7 +3199,7 @@ NTSTATUS posixfs_object_op_close(
 		posixfs_open->notify_requ_list.remove(requ_notify);
 		lock.unlock();
 		x_smbd_conn_post_cancel(x_smbd_chan_get_conn(requ_notify->smbd_chan),
-				requ_notify);
+				requ_notify, NT_STATUS_NOTIFY_CLEANUP);
 		lock.lock();
 	}
 
@@ -3329,7 +3329,7 @@ inline posixfs_read_job_t::posixfs_read_job_t(posixfs_object_t *po, x_smbd_requ_
 
 static void posixfs_read_cancel(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 {
-	x_smbd_conn_post_cancel(smbd_conn, smbd_requ);
+	x_smbd_conn_post_cancel(smbd_conn, smbd_requ, NT_STATUS_CANCELLED);
 }
 
 static NTSTATUS posixfs_ads_read(posixfs_object_t *posixfs_object,
@@ -3548,7 +3548,7 @@ inline posixfs_write_job_t::posixfs_write_job_t(posixfs_object_t *po, x_smbd_req
 
 static void posixfs_write_cancel(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 {
-	x_smbd_conn_post_cancel(smbd_conn, smbd_requ);
+	x_smbd_conn_post_cancel(smbd_conn, smbd_requ, NT_STATUS_CANCELLED);
 }
 
 static bool lease_type_is_exclusive(posixfs_open_t *posixfs_open)
@@ -3654,7 +3654,7 @@ static void posixfs_lock_cancel(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_re
 		std::lock_guard<std::mutex> lock(posixfs_object->base.mutex);
 		posixfs_open->lock_requ_list.remove(smbd_requ);
 	}
-	x_smbd_conn_post_cancel(smbd_conn, smbd_requ);
+	x_smbd_conn_post_cancel(smbd_conn, smbd_requ, NT_STATUS_CANCELLED);
 }
 
 struct posixfs_lock_evt_t
@@ -4652,7 +4652,7 @@ static void posixfs_notify_cancel(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_
 		std::lock_guard<std::mutex> lock(posixfs_object->base.mutex);
 		posixfs_open->notify_requ_list.remove(smbd_requ);
 	}
-	x_smbd_conn_post_cancel(smbd_conn, smbd_requ);
+	x_smbd_conn_post_cancel(smbd_conn, smbd_requ, NT_STATUS_CANCELLED);
 }
 
 NTSTATUS posixfs_object_op_notify(
