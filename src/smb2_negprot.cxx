@@ -41,7 +41,8 @@ struct x_smb2_negprot_t
 {
 	uint16_t out_dialect;
 	uint16_t out_security_mode;
-	uint16_t out_cipher = 0;
+	uint16_t out_encryption_algo = X_SMB2_ENCRYPTION_INVALID_ALGO;
+	uint16_t out_signing_algo = X_SMB2_SIGNING_INVALID_ALGO;
 	uint16_t out_context_count = 0;
 	uint32_t out_capabilities;
 	std::vector<uint8_t> out_context;
@@ -164,13 +165,9 @@ int x_smbd_conn_process_smb1negprot(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smb
 	return 0;
 }
 
-enum {
-	AES128_GCM = 1,
-	AES128_CCM = 2,
-};
-
 static NTSTATUS parse_context(const uint8_t *in_context, uint32_t in_context_length,
-		uint32_t in_context_count, uint32_t &ciphers)
+		uint32_t in_context_count, uint32_t &encryption_algos,
+		uint32_t &signing_algos)
 {
 	size_t offset = 0;
 	for (uint32_t ci = 0; ci < in_context_count; ++ci) {
@@ -185,7 +182,7 @@ static NTSTATUS parse_context(const uint8_t *in_context, uint32_t in_context_len
 		}
 		
 		offset += 8;
-		if (type == SMB2_PREAUTH_INTEGRITY_CAPABILITIES) {
+		if (type == X_SMB2_PREAUTH_INTEGRITY_CAPABILITIES) {
 			if (length < 4) {
 				return NT_STATUS_INVALID_PARAMETER;
 			}
@@ -202,7 +199,7 @@ static NTSTATUS parse_context(const uint8_t *in_context, uint32_t in_context_len
 			bool hash_matched = false;
 			for (uint16_t i = 0; i < hash_count; ++i) {
 				uint16_t hash = x_get_le16(in_context + offset + 2 * i);
-				if (hash == SMB2_PREAUTH_INTEGRITY_SHA512) {
+				if (hash == X_SMB2_PREAUTH_INTEGRITY_SHA512) {
 					hash_matched = true;
 					break;
 				}
@@ -211,27 +208,55 @@ static NTSTATUS parse_context(const uint8_t *in_context, uint32_t in_context_len
 				return NT_STATUS_SMB_NO_PREAUTH_INTEGRITY_HASH_OVERLAP;
 			}
 
-		} else if (type == SMB2_ENCRYPTION_CAPABILITIES) {
+		} else if (type == X_SMB2_ENCRYPTION_CAPABILITIES) {
 			if (length < 2) {
 				return NT_STATUS_INVALID_PARAMETER;
 			}
-			uint16_t cipher_count = x_get_le16(in_context + offset);
-			if (cipher_count == 0) {
+			uint16_t algo_count = x_get_le16(in_context + offset);
+			if (algo_count == 0) {
 				return NT_STATUS_INVALID_PARAMETER;
 			}
-			if (2 + cipher_count * 2 > length) {
+			if (2 + algo_count * 2 > length) {
 				return NT_STATUS_INVALID_PARAMETER;
 			}
 			offset += 2;
-			for (uint16_t i = 0; i < cipher_count; ++i) {
-				uint16_t cipher = x_get_le16(in_context + offset);
-				if (cipher == SMB2_ENCRYPTION_AES128_GCM) {
-					ciphers |= AES128_GCM;
-				} else if (cipher == SMB2_ENCRYPTION_AES128_CCM) {
-					ciphers |= AES128_CCM;
+			uint32_t algos = 0;
+			for (uint16_t i = 0; i < algo_count; ++i) {
+				uint16_t algo = x_get_le16(in_context + offset);
+				if (algo == X_SMB2_ENCRYPTION_AES128_GCM) {
+					algos |= (1 << X_SMB2_ENCRYPTION_AES128_GCM);
+				} else if (algo == X_SMB2_ENCRYPTION_AES128_CCM) {
+					algos |= (1 << X_SMB2_ENCRYPTION_AES128_CCM);
 				}
 				offset += 2;
 			}
+			encryption_algos = algos;
+
+		} else if (type == X_SMB2_SIGNING_CAPABILITIES) {
+			if (length < 2) {
+				return NT_STATUS_INVALID_PARAMETER;
+			}
+			uint16_t algo_count = x_get_le16(in_context + offset);
+			if (algo_count == 0) {
+				return NT_STATUS_INVALID_PARAMETER;
+			}
+			if (2 + algo_count * 2 > length) {
+				return NT_STATUS_INVALID_PARAMETER;
+			}
+			offset += 2;
+			uint32_t algos = 0;
+			for (uint16_t i = 0; i < algo_count; ++i) {
+				uint16_t algo = x_get_le16(in_context + offset);
+				if (algo == X_SMB2_SIGNING_AES128_GMAC) {
+					algos |= (1 << X_SMB2_SIGNING_AES128_GMAC);
+				} else if (algo == X_SMB2_SIGNING_AES128_CMAC) {
+					algos |= (1 << X_SMB2_SIGNING_AES128_CMAC);
+				} else if (algo == X_SMB2_SIGNING_HMAC_SHA256) {
+					algos |= (1 << X_SMB2_SIGNING_HMAC_SHA256);
+				}
+				offset += 2;
+			}
+			signing_algos = algos;
 		}
 
 		offset = x_pad_len(end, 8);
@@ -239,12 +264,15 @@ static NTSTATUS parse_context(const uint8_t *in_context, uint32_t in_context_len
 	return NT_STATUS_OK;
 }
 
-static void generate_context(x_smb2_negprot_t &negprot, uint16_t cipher)
+static void generate_context(x_smb2_negprot_t &negprot,
+		uint16_t encryption_algo, uint16_t signing_algo)
 {
 	auto &output = negprot.out_context;
 	output.resize(128); // 128 should be enough
+	uint16_t context_count = 0;
 	uint8_t *data = output.data();
-	x_put_le16(data, SMB2_PREAUTH_INTEGRITY_CAPABILITIES);
+
+	x_put_le16(data, X_SMB2_PREAUTH_INTEGRITY_CAPABILITIES);
 	data += 2;
 	x_put_le16(data, 38);
 	data += 2;
@@ -253,24 +281,44 @@ static void generate_context(x_smb2_negprot_t &negprot, uint16_t cipher)
 	data += 2;
 	x_put_le16(data, 32);
 	data += 2;
-	x_put_le16(data, SMB2_PREAUTH_INTEGRITY_SHA512);
+	x_put_le16(data, X_SMB2_PREAUTH_INTEGRITY_SHA512);
 	data += 2;
 	generate_random_buffer(data, 32);
 	data += 32;
-	size_t ctx_len = x_pad_len(data - output.data(), 8);
-	data = output.data() + ctx_len;
-	x_put_le16(data, SMB2_ENCRYPTION_CAPABILITIES);
-	data += 2;
-	x_put_le16(data, 4);
-	data += 2;
-	data += 4;
-	x_put_le16(data, 1);
-	data += 2;
-	x_put_le16(data, cipher);
-	data += 2;
-	ctx_len = data - output.data();
-	output.resize(ctx_len);
-	negprot.out_context_count = 2;
+	++context_count;
+
+	if (encryption_algo != X_SMB2_ENCRYPTION_INVALID_ALGO) {
+		size_t ctx_len = x_pad_len(data - output.data(), 8);
+		data = output.data() + ctx_len;
+		x_put_le16(data, X_SMB2_ENCRYPTION_CAPABILITIES);
+		data += 2;
+		x_put_le16(data, 4);
+		data += 2;
+		data += 4;
+		x_put_le16(data, 1);
+		data += 2;
+		x_put_le16(data, encryption_algo);
+		data += 2;
+		++context_count;
+	}
+
+	if (signing_algo != X_SMB2_SIGNING_INVALID_ALGO) {
+		size_t ctx_len = x_pad_len(data - output.data(), 8);
+		data = output.data() + ctx_len;
+		x_put_le16(data, X_SMB2_SIGNING_CAPABILITIES);
+		data += 2;
+		x_put_le16(data, 4);
+		data += 2;
+		data += 4;
+		x_put_le16(data, 1);
+		data += 2;
+		x_put_le16(data, signing_algo);
+		data += 2;
+		++context_count;
+	}
+
+	output.resize(data - output.data());
+	negprot.out_context_count = context_count;
 }
 
 /* return < 0, shutdown immediately
@@ -336,23 +384,38 @@ NTSTATUS x_smb2_process_negprot(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_re
 
 		const uint8_t *in_context = in_buf + in_context_offset;
 
-		uint32_t ciphers = 0;
-		NTSTATUS status = parse_context(in_context, smbd_requ->in_requ_len - in_context_offset,
-				in_context_count, ciphers);
+		uint32_t encryption_algos = 0, signing_algos = 0;
+		NTSTATUS status = parse_context(in_context,
+				smbd_requ->in_requ_len - in_context_offset,
+				in_context_count,
+				encryption_algos, signing_algos);
 		if (!NT_STATUS_IS_OK(status)) {
 			RETURN_OP_STATUS(smbd_requ, status);
 		}
 
-		if (ciphers & AES128_GCM) {
-			negprot.out_cipher = SMB2_ENCRYPTION_AES128_GCM;
-		} else if (ciphers & AES128_CCM) {
-			negprot.out_cipher = SMB2_ENCRYPTION_AES128_CCM;
+		if (encryption_algos & (1 << X_SMB2_ENCRYPTION_AES128_GCM)) {
+			negprot.out_encryption_algo = X_SMB2_ENCRYPTION_AES128_GCM;
+		} else if (encryption_algos & (1 << X_SMB2_ENCRYPTION_AES128_CCM)) {
+			negprot.out_encryption_algo = X_SMB2_ENCRYPTION_AES128_CCM;
+		} else {
+			negprot.out_encryption_algo = X_SMB2_ENCRYPTION_INVALID_ALGO;
+		}
+
+		if (signing_algos & (1 << X_SMB2_SIGNING_AES128_GMAC)) {
+			negprot.out_signing_algo = X_SMB2_SIGNING_AES128_GMAC;
+		} else if (signing_algos & (1 << X_SMB2_SIGNING_AES128_CMAC)) {
+			negprot.out_signing_algo = X_SMB2_SIGNING_AES128_CMAC;
+		} else if (signing_algos & (1 << X_SMB2_SIGNING_HMAC_SHA256)) {
+			negprot.out_signing_algo = X_SMB2_SIGNING_HMAC_SHA256;
+		} else {
+			negprot.out_signing_algo = X_SMB2_SIGNING_INVALID_ALGO;
 		}
 
 		x_smbd_conn_update_preauth(smbd_conn, 
 				in_buf, smbd_requ->in_requ_len);
 
-		generate_context(negprot, negprot.out_cipher);
+		generate_context(negprot, negprot.out_encryption_algo,
+				negprot.out_signing_algo);
 	}
 
 	negprot.out_security_mode = smbd_conf->security_mode;
@@ -362,7 +425,9 @@ NTSTATUS x_smb2_process_negprot(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_re
 		negprot.out_capabilities &= ~(SMB2_CAP_DIRECTORY_LEASING |
 				SMB2_CAP_MULTI_CHANNEL);
 	}
-	x_smbd_conn_negprot(smbd_conn, negprot.out_dialect, negprot.out_cipher,
+	x_smbd_conn_negprot(smbd_conn, negprot.out_dialect,
+			negprot.out_encryption_algo,
+			negprot.out_signing_algo,
 			in_security_mode,
 			negprot.out_security_mode,
 			in_capabilities,

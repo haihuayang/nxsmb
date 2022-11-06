@@ -67,6 +67,42 @@ struct x_smb2_header_t
 	uint8_t signature[16];
 };
 
+/* Types of SMB2 Negotiate Contexts - only in dialect >= 0x310 */
+enum {
+	X_SMB2_PREAUTH_INTEGRITY_CAPABILITIES	= 0x0001,
+	X_SMB2_ENCRYPTION_CAPABILITIES		= 0x0002,
+	X_SMB2_COMPRESSION_CAPABILITIES		= 0x0003,
+	X_SMB2_NETNAME_NEGOTIATE_CONTEXT_ID	= 0x0005,
+	X_SMB2_TRANSPORT_CAPABILITIES		= 0x0006,
+	X_SMB2_RDMA_TRANSFORM_CAPABILITIES	= 0x0007,
+	X_SMB2_SIGNING_CAPABILITIES		= 0x0008,
+	X_SMB2_POSIX_EXTENSIONS_AVAILABLE	= 0x0100,
+};
+
+/* Values for the SMB2_PREAUTH_INTEGRITY_CAPABILITIES Context (>= 0x310) */
+enum {
+	X_SMB2_PREAUTH_INTEGRITY_SHA512		= 0x0001,
+};
+
+/* Values for the SMB2_SIGNING_CAPABILITIES Context (>= 0x311) */
+enum {
+	X_SMB2_SIGNING_INVALID_ALGO	= 0xffff, /* only used internally */
+	X_SMB2_SIGNING_MD5_SMB1		= 0xfffe, /* internally for SMB1 */
+	X_SMB2_SIGNING_HMAC_SHA256	= 0x0000, /* default <= 0x210 */
+	X_SMB2_SIGNING_AES128_CMAC	= 0x0001, /* default >= 0x224 */
+	X_SMB2_SIGNING_AES128_GMAC	= 0x0002, /* only in dialect >= 0x311 */
+};
+
+/* Values for the SMB2_ENCRYPTION_CAPABILITIES Context (>= 0x311) */
+enum {
+	X_SMB2_ENCRYPTION_INVALID_ALGO	= 0xffff, /* only used internally */
+	X_SMB2_ENCRYPTION_NONE		= 0x0000, /* only used internally */
+	X_SMB2_ENCRYPTION_AES128_CCM	= 0x0001, /* only in dialect >= 0x224 */
+	X_SMB2_ENCRYPTION_AES128_GCM	= 0x0002, /* only in dialect >= 0x311 */
+	X_SMB2_ENCRYPTION_AES256_CCM	= 0x0003, /* only in dialect >= 0x311 */
+	X_SMB2_ENCRYPTION_AES256_GCM	= 0x0004, /* only in dialect >= 0x311 */
+};
+
 enum {
         SMB2_FILE_INFO_FILE_DIRECTORY_INFORMATION = 1,
         SMB2_FILE_INFO_FILE_FULL_DIRECTORY_INFORMATION = 2,
@@ -327,11 +363,11 @@ struct x_buflist_t
 	x_bufref_t *head{}, *tail{};
 };
 
-bool x_smb2_signing_check(uint16_t dialect,
+bool x_smb2_signing_check(uint16_t algo,
 		const x_smb2_key_t *key,
 		x_bufref_t *buflist);
 
-void x_smb2_signing_sign(uint16_t dialect,
+void x_smb2_signing_sign(uint16_t algo,
 		const x_smb2_key_t *key,
 		x_bufref_t *buflist);
 

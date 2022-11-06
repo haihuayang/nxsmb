@@ -40,7 +40,8 @@ struct x_smbd_conn_t
 	unsigned int count_msg = 0;
 	const x_sockaddr_t saddr;
 	const x_tick_t tick_create;
-	uint16_t cipher = 0;
+	uint16_t encryption_algo = X_SMB2_ENCRYPTION_INVALID_ALGO;
+	uint16_t signing_algo = X_SMB2_SIGNING_INVALID_ALGO;
 	uint16_t dialect = SMB2_DIALECT_REVISION_000;
 
 	uint16_t server_security_mode;
@@ -133,7 +134,8 @@ uint32_t x_smbd_conn_get_capabilities(const x_smbd_conn_t *smbd_conn)
 
 int x_smbd_conn_negprot(x_smbd_conn_t *smbd_conn,
 		uint16_t dialect,
-		uint16_t cipher,
+		uint16_t encryption_algo,
+		uint16_t signing_algo,
 		uint16_t client_security_mode,
 		uint16_t server_security_mode,
 		uint32_t client_capabilities,
@@ -145,7 +147,15 @@ int x_smbd_conn_negprot(x_smbd_conn_t *smbd_conn,
 		return -EBADMSG;
 	}
 	smbd_conn->dialect = dialect;
-	smbd_conn->cipher = cipher;
+	smbd_conn->encryption_algo = encryption_algo;
+	if (signing_algo == X_SMB2_SIGNING_INVALID_ALGO) {
+		if (dialect >= SMB2_DIALECT_REVISION_224) {
+			signing_algo = X_SMB2_SIGNING_AES128_CMAC;
+		} else {
+			signing_algo = X_SMB2_SIGNING_HMAC_SHA256;
+		}
+	}
+	smbd_conn->signing_algo = signing_algo;
 	smbd_conn->client_security_mode = client_security_mode;
 	smbd_conn->server_security_mode = server_security_mode;
 	smbd_conn->client_capabilities = client_capabilities;
@@ -210,7 +220,8 @@ static void x_smbd_requ_sign_if(x_smbd_conn_t *smbd_conn,
 	if (flags & SMB2_HDR_FLAG_SIGNED) {
 		if (smbd_requ->smbd_sess) {
 			const x_smb2_key_t *signing_key = get_signing_key(smbd_requ);
-			x_smb2_signing_sign(smbd_conn->dialect, signing_key, buf_head);
+			x_smb2_signing_sign(smbd_conn->signing_algo,
+					signing_key, buf_head);
 		} else {
 			X_ASSERT(!NT_STATUS_IS_OK(status));
 			memcpy(smb2_hdr->signature, smbd_requ->in_smb2_hdr.signature,
@@ -542,7 +553,7 @@ static NTSTATUS x_smbd_conn_process_smb2_intl(x_smbd_conn_t *smbd_conn, x_smbd_r
 				smbd_conn);
 		}
 		const x_smb2_key_t *signing_key = get_signing_key(smbd_requ);
-		if (!x_smb2_signing_check(smbd_conn->dialect, signing_key, &bufref)) {
+		if (!x_smb2_signing_check(smbd_conn->signing_algo, signing_key, &bufref)) {
 			return NT_STATUS_ACCESS_DENIED;
 		}
 	} else if (signing_required) {

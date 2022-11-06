@@ -4,7 +4,7 @@ extern "C" {
 #include "samba/include/config.h"
 #include "samba/lib/crypto/crypto.h"
 }
-#include <openssl/cmac.h>
+#include <openssl/evp.h>
 
 void x_smb2_key_derivation(const uint8_t *KI, size_t KI_len,
 		const x_array_const_t<char> &label,
@@ -68,21 +68,71 @@ static inline void cmac_digest_by_software(const x_smb2_key_t &key,
 	aes_cmac_128_final(&ctx, tmp_digest);
 	memcpy(digest, tmp_digest, 16);
 }
-#if 0
-static inline void cmac_digest(uint8_t *digest,
-		const void *key_data, size_t key_length,
-		const struct iovec *vector, int count)
+
+static inline void gmac_digest_by_software(const x_smb2_key_t &key,
+		void *digest,
+		const struct iovec *vector, unsigned int count)
 {
-	DEBUG(11,("cmac_digest len1=%d, len2=%d, count=%d\n", len1, len2, count));
-	if (unlikely(!hardware_acceleration_enabled)) {
-		cmac_digest_by_software(res, signing_key.data, signing_key.length,
-				data1, len1, data2, len2, vector, count);
-	} else {
-		cmac_digest_by_ippcp(res, signing_key.data, signing_key.length,
-				data1, len1, data2, len2, vector, count);
+	EVP_CIPHER_CTX *ctx = EVP_CIPHER_CTX_new();
+	X_ASSERT(ctx);
+	int rc, unused;
+	uint64_t iv[2];
+	{
+		const x_smb2_header_t *smb2hdr = (const x_smb2_header_t *)vector[0].iov_base;
+		iv[0] = smb2hdr->mid;
+		uint32_t flags = X_LE2H32(smb2hdr->flags);
+		uint64_t high_bits = flags & SMB2_HDR_FLAG_REDIRECT;
+		uint16_t opcode = X_LE2H16(smb2hdr->opcode);
+		if (opcode == SMB2_OP_CANCEL) {
+			high_bits |= SMB2_HDR_FLAG_ASYNC;
+		}
+		iv[1] = X_H2LE64(high_bits);
 	}
-}
+
+	rc = EVP_EncryptInit_ex(ctx, EVP_aes_128_gcm(), NULL, NULL, NULL);
+	X_ASSERT(rc == 1);
+
+	rc = EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_SET_IVLEN, 12, NULL);
+	X_ASSERT(rc == 1);
+
+	rc = EVP_EncryptInit_ex(ctx, NULL, NULL, key.data(), (uint8_t *)iv);
+	X_ASSERT(rc == 1);
+
+	for (unsigned int i=0; i < count; i++) {
+		rc = EVP_EncryptUpdate(ctx, nullptr, &unused,
+				(const uint8_t *)vector[i].iov_base,
+				(int)vector[i].iov_len);
+	}
+
+	rc = EVP_EncryptFinal_ex(ctx, NULL, &unused);
+	X_ASSERT(rc == 1);
+
+	rc = EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_AEAD_GET_TAG, 16, digest);
+	X_ASSERT(rc == 1);
+#if 0
+	printf("Calculated tag:\n  ");
+	for(i = 0; i < sizeof(tag); i++)
+	{
+		printf("%02x", tag[i]);
+
+		if(i == sizeof(tag) - 1) {
+			printf("\n");
+		}
+	}
+
+	printf("Expected tag:\n  ");
+	for(i = 0; i < sizeof(exp); i++)
+	{
+		printf("%02x", exp[i]);
+
+		if(i == sizeof(exp) - 1) {
+			printf("\n");
+		}
+	}
 #endif
+	EVP_CIPHER_CTX_free(ctx);
+}
+
 static inline void hmac_sha256_digest(const x_smb2_key_t &key,
 		void *digest,
 		const struct iovec *vector, unsigned int count)
@@ -99,7 +149,7 @@ static inline void hmac_sha256_digest(const x_smb2_key_t &key,
 	memcpy(digest, sha256_digest, 16);
 }
 
-static void x_smb2_digest(uint16_t dialect,
+static void x_smb2_digest(uint16_t algo,
 		const x_smb2_key_t &key,
 		x_bufref_t *buflist,
 		uint8_t *digest)
@@ -128,30 +178,32 @@ static void x_smb2_digest(uint16_t dialect,
 		++niov;
 	}
 
-	if (dialect >= SMB2_DIALECT_REVISION_224) {
+	if (algo == X_SMB2_SIGNING_AES128_GMAC) {
+		gmac_digest_by_software(key, digest, iov, niov);
+	} else if (algo == X_SMB2_SIGNING_AES128_CMAC) {
 		cmac_digest_by_software(key, digest, iov, niov);
 	} else {
 		hmac_sha256_digest(key, digest, iov, niov);
 	}
 }
 
-bool x_smb2_signing_check(uint16_t dialect,
+bool x_smb2_signing_check(uint16_t algo,
 		const x_smb2_key_t *key,
 		x_bufref_t *buflist)
 {
 	uint8_t digest[16];
-	x_smb2_digest(dialect, *key, buflist, digest);
+	x_smb2_digest(algo, *key, buflist, digest);
 	
 	uint8_t *signature = buflist->get_data() + SMB2_HDR_SIGNATURE;
 	return memcmp(digest, signature, 16) == 0;
 }
 
-void x_smb2_signing_sign(uint16_t dialect,
+void x_smb2_signing_sign(uint16_t algo,
 		const x_smb2_key_t *key,
 		x_bufref_t *buflist)
 {
 	uint8_t *signature = buflist->get_data() + SMB2_HDR_SIGNATURE;
-	x_smb2_digest(dialect, *key, buflist, signature);
+	x_smb2_digest(algo, *key, buflist, signature);
 }
 
 

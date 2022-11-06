@@ -192,7 +192,8 @@ uint16_t x_smbd_conn_curr_dialect();
 
 int x_smbd_conn_negprot(x_smbd_conn_t *smbd_conn,
 		uint16_t dialect,
-		uint16_t cipher,
+		uint16_t encryption_algo,
+		uint16_t signing_algo,
 		uint16_t client_security_mode,
 		uint16_t server_security_mode,
 		uint32_t client_capabilities,
