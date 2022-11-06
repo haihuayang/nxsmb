@@ -25,6 +25,7 @@ struct x_smbd_srv_t
 	int fd;
 };
 
+X_DECLARE_MEMBER_TRAITS(requ_conn_traits, x_smbd_requ_t, conn_link)
 struct x_smbd_conn_t
 {
 	enum { MAX_MSG = 4 };
@@ -64,6 +65,7 @@ struct x_smbd_conn_t
 	x_bufref_t *send_buf_head{}, *send_buf_tail{};
 
 	x_ddlist_t chan_list;
+	x_tp_ddlist_t<requ_conn_traits> pending_requ_list;
 	x_tp_ddlist_t<fdevt_user_conn_traits> fdevt_user_list;
 };
 
@@ -401,21 +403,57 @@ static int x_smbd_reply_interim(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_re
 #define X_SMBD_REPLY_INTERIM(smbd_conn, smbd_requ) \
 	x_smbd_reply_interim((smbd_conn), (smbd_requ), __FILE__, __LINE__)
 
-static void x_smbd_conn_cancel(x_smbd_conn_t *smbd_conn, uint64_t async_id)
+/* must be in context of smbd_conn */
+void x_smbd_requ_async_insert(x_smbd_requ_t *smbd_requ,
+		void (*cancel_fn)(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ))
 {
-	x_smbd_requ_t *smbd_requ = x_smbd_requ_async_lookup(async_id, smbd_conn, true);
+	X_ASSERT(!smbd_requ->cancel_fn);
+	smbd_requ->cancel_fn = cancel_fn;
+	smbd_requ->async = true;
+	g_smbd_conn_curr->pending_requ_list.push_back(smbd_requ);
+	x_smbd_ref_inc(smbd_requ);
+}
+
+/* must be in context of smbd_conn */
+bool x_smbd_requ_async_remove(x_smbd_requ_t *smbd_requ)
+{
+	X_ASSERT(smbd_requ->async);
+	if (!smbd_requ->cancel_fn) {
+		return false;
+	}
+	g_smbd_conn_curr->pending_requ_list.remove(smbd_requ);
+	smbd_requ->cancel_fn = nullptr;
+	x_smbd_ref_dec(smbd_requ);
+	return true;
+}
+
+static void x_smbd_conn_cancel(x_smbd_conn_t *smbd_conn,
+		const x_smb2_header_t &smb2_hdr)
+{
+	x_smbd_requ_t *smbd_requ;
+	if (smb2_hdr.flags & SMB2_HDR_FLAG_ASYNC) {
+		smbd_requ = x_smbd_requ_async_lookup(smb2_hdr.async_id, smbd_conn, true);
+	} else {
+		for (smbd_requ = smbd_conn->pending_requ_list.get_front();
+				smbd_requ;
+				smbd_requ = smbd_conn->pending_requ_list.next(smbd_requ)) {
+			if (smbd_requ->in_smb2_hdr.mid == smb2_hdr.mid) {
+				break;
+			}
+		}
+	}
+
 	if (!smbd_requ) {
-		X_LOG_ERR("%ld not found", async_id);
+		X_LOG_ERR("cannot find pending requ by flags=0x%x, async_id=x%lx, mid=%lu",
+				smb2_hdr.flags, smb2_hdr.async_id, smb2_hdr.mid);
 		return;
 	}
 
 	auto cancel_fn = smbd_requ->cancel_fn;
-	if (!cancel_fn) {
-		X_LOG_NOTICE("requ %ld, %p not cancellable", async_id, smbd_requ);
-	} else {
-		smbd_requ->cancel_fn = nullptr;
-		cancel_fn(smbd_conn, smbd_requ);
-	}
+	smbd_requ->cancel_fn = nullptr;
+	smbd_conn->pending_requ_list.remove(smbd_requ);
+	cancel_fn(smbd_conn, smbd_requ);
+
 	x_smbd_ref_dec(smbd_requ);
 }
 
@@ -648,6 +686,11 @@ static int x_smbd_conn_process_smb2(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smb
 		auto in_smb2_hdr = (const x_smb2_header_t *)(buf->data + offset);
 		smbd_requ->in_smb2_hdr.credit_charge = X_LE2H16(in_smb2_hdr->credit_charge);
 		smbd_requ->in_smb2_hdr.opcode = X_LE2H16(in_smb2_hdr->opcode);
+		if (smbd_requ->in_smb2_hdr.opcode >= X_SMB2_OP_MAX) {
+			/* windows server reset connection immediately,
+			   while samba response STATUS_INVALID_PARAMETER */
+			return -EBADMSG;
+		}
 		smbd_requ->in_smb2_hdr.credit = X_LE2H16(in_smb2_hdr->credit);
 		smbd_requ->in_smb2_hdr.flags = X_LE2H32(in_smb2_hdr->flags);
 		smbd_requ->in_smb2_hdr.next_command = X_LE2H32(in_smb2_hdr->next_command);
@@ -659,23 +702,19 @@ static int x_smbd_conn_process_smb2(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smb
 		} else {
 		}
 		smbd_requ->in_smb2_hdr.mid = X_LE2H64(in_smb2_hdr->mid);
-
-		if (smbd_requ->in_smb2_hdr.opcode >= X_SMB2_OP_MAX) {
-			/* windows server reset connection immediately,
-			   while samba response STATUS_INVALID_PARAMETER */
-			return -EBADMSG;
+		if (smbd_requ->in_smb2_hdr.flags & SMB2_HDR_FLAG_ASYNC) {
+			smbd_requ->in_smb2_hdr.async_id = X_LE2H64(in_smb2_hdr->async_id);
+		} else {
+			smbd_requ->in_smb2_hdr.pid = X_LE2H32(in_smb2_hdr->pid);
+			smbd_requ->in_smb2_hdr.tid = X_LE2H32(in_smb2_hdr->tid);
 		}
+		smbd_requ->in_smb2_hdr.sess_id = X_LE2H64(in_smb2_hdr->sess_id);
+
 		smbd_requ->in_offset = offset;
 		smbd_requ->in_requ_len = in_requ_len;
 
 		if (smbd_requ->in_smb2_hdr.opcode == X_SMB2_OP_CANCEL) {
-			uint64_t in_async_id;
-			if (smbd_requ->in_smb2_hdr.flags & SMB2_HDR_FLAG_ASYNC) {
-				in_async_id = X_LE2H64(in_smb2_hdr->async_id);
-			} else {
-				in_async_id = X_LE2H64(in_smb2_hdr->mid);
-			}
-			x_smbd_conn_cancel(smbd_conn, in_async_id);
+			x_smbd_conn_cancel(smbd_conn, smbd_requ->in_smb2_hdr);
 			continue;
 		}
 
@@ -690,8 +729,6 @@ static int x_smbd_conn_process_smb2(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smb
 			continue;
 		}
 
-		smbd_requ->in_smb2_hdr.tid = X_LE2H32(in_smb2_hdr->tid);
-		smbd_requ->in_smb2_hdr.sess_id = X_LE2H64(in_smb2_hdr->sess_id);
 		memcpy(smbd_requ->in_smb2_hdr.signature, in_smb2_hdr->signature,
 				sizeof(in_smb2_hdr->signature));
 
@@ -1051,6 +1088,10 @@ static void x_smbd_conn_upcall_cb_unmonitor(x_epoll_upcall_t *upcall)
 	}
 
 	x_smbd_conn_terminate_chans(smbd_conn);
+	while (x_smbd_requ_t *smbd_requ = smbd_conn->pending_requ_list.get_front()) {
+		X_ASSERT(x_smbd_requ_async_remove(smbd_requ));
+	}
+
 	X_SMBD_REF_DEC(g_smbd_conn_curr);
 	x_smbd_ref_dec(smbd_conn);
 }

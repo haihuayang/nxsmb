@@ -373,6 +373,7 @@ struct x_smbd_requ_t
 
 	x_job_t job;
 	x_dlink_t async_link; // link into open
+	x_dlink_t conn_link; // link into conn
 	void *requ_state = nullptr;
 
 	x_buf_t *in_buf;

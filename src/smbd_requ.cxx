@@ -75,7 +75,7 @@ x_smbd_requ_t *x_smbd_requ_async_lookup(uint64_t id, const x_smbd_conn_t *smbd_c
 		return nullptr;
 	}
 
-	if (x_smbd_chan_get_conn(smbd_requ->smbd_chan) != smbd_conn) {
+	if (x_smbd_chan_get_conn(smbd_requ->smbd_chan) != smbd_conn || !smbd_requ->cancel_fn) {
 		x_smbd_ref_dec(smbd_requ);
 		return nullptr;
 	}
@@ -84,28 +84,6 @@ x_smbd_requ_t *x_smbd_requ_async_lookup(uint64_t id, const x_smbd_conn_t *smbd_c
 		x_smbd_ref_dec(smbd_requ);
 	}
 	return smbd_requ;
-}
-
-/* must be in context of smbd_conn */
-void x_smbd_requ_async_insert(x_smbd_requ_t *smbd_requ,
-		void (*cancel_fn)(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ))
-{
-	X_ASSERT(!smbd_requ->cancel_fn);
-	smbd_requ->cancel_fn = cancel_fn;
-	smbd_requ->async = true;
-	x_smbd_ref_inc(smbd_requ);
-}
-
-/* must be in context of smbd_conn */
-bool x_smbd_requ_async_remove(x_smbd_requ_t *smbd_requ)
-{
-	X_ASSERT(smbd_requ->async);
-	if (!smbd_requ->cancel_fn) {
-		return false;
-	}
-	smbd_requ->cancel_fn = nullptr;
-	x_smbd_ref_dec(smbd_requ);
-	return true;
 }
 
 void x_smbd_requ_async_done(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ,
