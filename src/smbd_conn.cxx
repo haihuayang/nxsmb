@@ -292,14 +292,13 @@ static uint32_t calculate_out_hdr_flags(uint32_t in_hdr_flags, uint32_t out_hdr_
 	return out_hdr_flags;
 }
 
-void x_smb2_reply(x_smbd_conn_t *smbd_conn,
+static void x_smb2_reply_msg(x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ,
 		x_bufref_t *buf_head,
 		x_bufref_t *buf_tail,
 		NTSTATUS status,
 		size_t reply_size)
 {
-	smbd_requ->out_credit_granted = x_smb2_calculate_credit(smbd_conn, smbd_requ, status);
 	smbd_requ->out_hdr_flags = calculate_out_hdr_flags(smbd_requ->in_smb2_hdr.flags, smbd_requ->out_hdr_flags);
 	x_smb2_header_t *smb2_hdr = (x_smb2_header_t *)buf_head->get_data();
 	smb2_hdr->protocol_id = X_H2BE32(X_SMB2_MAGIC);
@@ -354,6 +353,21 @@ void x_smb2_reply(x_smbd_conn_t *smbd_conn,
 	smbd_requ->out_length += x_convert_assert<uint32_t>(reply_size);
 }
 
+void x_smb2_reply(x_smbd_conn_t *smbd_conn,
+		x_smbd_requ_t *smbd_requ,
+		x_bufref_t *buf_head,
+		x_bufref_t *buf_tail,
+		NTSTATUS status,
+		size_t reply_size)
+{
+	if (!smbd_requ->async) {
+		smbd_requ->out_credit_granted = x_smb2_calculate_credit(smbd_conn, smbd_requ, status);
+	} else {
+		smbd_requ->out_credit_granted = 0;
+	}
+	x_smb2_reply_msg(smbd_conn, smbd_requ, buf_head, buf_tail, status, reply_size);
+}
+
 static int x_smbd_reply_error(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ,
 		NTSTATUS status,
 		const char *file, unsigned int line)
@@ -396,7 +410,7 @@ static int x_smbd_reply_interim(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_re
 	smbd_requ->async = true;
 
 	x_bufref_t *bufref = new x_bufref_t{out_buf, 8, SMB2_HDR_BODY + 8};
-	x_smb2_reply(smbd_conn, smbd_requ, bufref, bufref, NT_STATUS_PENDING, SMB2_HDR_BODY + 8);
+	x_smb2_reply_msg(smbd_conn, smbd_requ, bufref, bufref, NT_STATUS_PENDING, SMB2_HDR_BODY + 8);
 	return 0;
 }
 
