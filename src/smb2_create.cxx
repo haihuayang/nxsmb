@@ -283,6 +283,74 @@ static uint32_t encode_contexts(const x_smb2_state_create_t &state,
 	return x_convert_assert<uint32_t>(p - out_ptr);
 }
 
+static const char16_t SEP = u'\\';
+static bool pop_comp(std::u16string &path)
+{
+	auto length = path.length();
+	if (length == 0) {
+		return true;
+	}
+	if (path[length - 1] != u'.') {
+		return true;
+	}
+	if (length == 1) {
+		return true;
+	}
+	if (path[length - 2] == SEP) {
+		/* convert '\.\' to '\' */
+		path.resize(length - 2);
+		return true;
+	}
+	if (length == 2) {
+		return true;
+	}
+	if (path[length - 2] != u'.') {
+		return true;
+	}
+	if (path[length - 3] != SEP) {
+		return true;
+	}
+	if (length == 3) {
+		return false;
+	}
+	/* TODO cannot pop if previous component is .. too */
+	auto pos = path.rfind(SEP, length - 4);
+	if (pos == std::u16string::npos) {
+		return false;
+	}
+	path.resize(pos);
+	return true;
+}
+
+/* TODO windows does not allow path starting with '.' or '\' */
+static bool normalize_path(std::u16string &path,
+		const char16_t *path_begin, const char16_t *path_end)
+{
+	std::u16string ret;
+	for (; path_begin < path_end; ++path_begin) {
+		char16_t curr = *path_begin;
+		if (!curr) {
+			return false;
+		}
+		if (curr != SEP) {
+			ret.push_back(curr);
+			continue;
+		}
+		if (!pop_comp(ret)) {
+			return false;
+		}
+
+		if (ret.length() == 0 || ret[ret.length() - 1] != SEP) {
+			ret.push_back(curr);
+		}
+	}
+	if (!pop_comp(ret)) {
+		return false;
+	}
+	path = std::move(ret);
+	return true;
+}
+
 static NTSTATUS decode_in_create(x_smb2_state_create_t &state,
 		const uint8_t *in_hdr, uint32_t in_len)
 {
@@ -326,7 +394,9 @@ static NTSTATUS decode_in_create(x_smb2_state_create_t &state,
 	const char16_t *in_path_end_trimed = x_rskip_sep(in_path_end,
 			in_name_begin, u'\\');
 	state.end_with_sep = in_path_end_trimed != in_path_end;
-	state.in_path.assign(in_name_begin, in_path_end_trimed);
+	if (!normalize_path(state.in_path, in_name_begin, in_path_end)) {
+		return NT_STATUS_INVALID_PARAMETER;
+	}
 
 	if (in_context_length != 0 && !decode_contexts(state,
 				in_hdr + in_context_offset,
