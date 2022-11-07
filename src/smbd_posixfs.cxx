@@ -1849,6 +1849,19 @@ static NTSTATUS posixfs_object_set_delete_on_close(posixfs_object_t *posixfs_obj
 			return NT_STATUS_CANNOT_DELETE;
 		}
 		posixfs_stream->meta.delete_on_close = true;
+		if (posixfs_object->base.type == x_smbd_object_t::type_dir &&
+				posixfs_stream == &posixfs_object->default_stream) {
+			auto &open_list = posixfs_stream->open_list;
+			posixfs_open_t *curr_open;
+			for (curr_open = open_list.get_front(); curr_open; curr_open = open_list.next(curr_open)) {
+				x_smbd_requ_t *requ_notify;
+				while ((requ_notify = curr_open->notify_requ_list.get_front()) != nullptr) {
+					curr_open->notify_requ_list.remove(requ_notify);
+					x_smbd_conn_post_cancel(x_smbd_chan_get_conn(requ_notify->smbd_chan),
+							requ_notify, NT_STATUS_DELETE_PENDING);
+				}
+			}
+		}
 	} else {
 		posixfs_stream->meta.delete_on_close = false;
 	}
@@ -4662,12 +4675,12 @@ NTSTATUS posixfs_object_op_notify(
 		std::unique_ptr<x_smb2_state_notify_t> &state)
 {
 	posixfs_object_t *posixfs_object = posixfs_object_from_base_t::container(smbd_object);
-	if (!posixfs_object_is_dir(posixfs_object)) {
-		return NT_STATUS_INVALID_PARAMETER;
-	}
-
 	posixfs_open_t *posixfs_open = posixfs_open_from_base_t::container(smbd_requ->smbd_open);
-	std::lock_guard<std::mutex> lock(posixfs_object->base.mutex);
+	auto lock = std::lock_guard(posixfs_object->base.mutex);
+
+	if (posixfs_object->default_stream.meta.delete_on_close) {
+		return NT_STATUS_DELETE_PENDING;
+	}
 
 	X_LOG_DBG("changes count %d", posixfs_open->notify_changes.size());
 	state->out_notify_changes = std::move(posixfs_open->notify_changes);
@@ -4739,7 +4752,7 @@ NTSTATUS posixfs_object_op_set_delete_on_close(
 {
 	posixfs_object_t *posixfs_object = posixfs_object_from_base_t::container(smbd_object);
 	posixfs_stream_t *posixfs_stream = posixfs_get_stream(posixfs_object, smbd_open->smbd_stream);
-	std::lock_guard<std::mutex> lock(posixfs_object->base.mutex);
+	auto lock = std::lock_guard(posixfs_object->base.mutex);
 	return posixfs_object_set_delete_on_close(posixfs_object,
 			posixfs_stream, delete_on_close);
 }

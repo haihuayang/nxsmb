@@ -119,6 +119,10 @@ NTSTATUS x_smb2_process_notify(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_req
 	}
 
 	auto smbd_open = smbd_requ->smbd_open;
+	if (x_smbd_open_is_data(smbd_open)) {
+		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
+	}
+
 	if (!smbd_open->check_access(idl::SEC_DIR_LIST)) {
 		RETURN_OP_STATUS(smbd_requ, NT_STATUS_ACCESS_DENIED);
 	}
