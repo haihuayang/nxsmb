@@ -35,12 +35,12 @@ struct x_smb2_fsctl_srv_copychunk_out_t
 
 struct copychunk_evt_t
 {
-	static void func(x_smbd_conn_t *smbd_conn, x_fdevt_user_t *fdevt_user, bool terminated)
+	static void func(x_smbd_conn_t *smbd_conn, x_fdevt_user_t *fdevt_user)
 	{
 		copychunk_evt_t *evt = X_CONTAINER_OF(fdevt_user, copychunk_evt_t, base);
 		x_smbd_requ_t *smbd_requ = evt->smbd_requ;
-		X_LOG_DBG("evt=%p, requ=%p, terminated=%d", evt, smbd_requ, terminated);
-		x_smbd_requ_async_done(smbd_conn, smbd_requ, evt->status, terminated);
+		X_LOG_DBG("evt=%p, requ=%p, smbd_conn=%p", evt, smbd_requ, smbd_conn);
+		x_smbd_requ_async_done(smbd_conn, smbd_requ, evt->status);
 		delete evt;
 	}
 

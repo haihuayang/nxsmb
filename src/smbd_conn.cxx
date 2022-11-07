@@ -23,6 +23,8 @@ struct x_smbd_srv_t
 	x_epoll_upcall_t upcall;
 	uint64_t ep_id;
 	int fd;
+	std::mutex mutex;
+	x_tp_ddlist_t<fdevt_user_conn_traits> fdevt_user_list;
 };
 
 X_DECLARE_MEMBER_TRAITS(requ_conn_traits, x_smbd_requ_t, conn_link)
@@ -1010,7 +1012,7 @@ static bool x_smbd_conn_do_user(x_smbd_conn_t *smbd_conn, x_fdevents_t &fdevents
 		smbd_conn->fdevt_user_list.remove(fdevt_user);
 		lock.unlock();
 
-		fdevt_user->func(smbd_conn, fdevt_user, false);
+		fdevt_user->func(smbd_conn, fdevt_user);
 
 		lock.lock();
 	}
@@ -1084,6 +1086,12 @@ static void x_smbd_conn_upcall_cb_unmonitor(x_epoll_upcall_t *upcall)
 	X_ASSERT_SYSCALL(close(smbd_conn->fd));
 	smbd_conn->fd = -1;
 	g_smbd_conn_curr = x_smbd_ref_inc(smbd_conn);
+
+	x_smbd_conn_terminate_chans(smbd_conn);
+	while (x_smbd_requ_t *smbd_requ = smbd_conn->pending_requ_list.get_front()) {
+		X_ASSERT(x_smbd_requ_async_remove(smbd_requ));
+	}
+
 	{
 		std::unique_lock<std::mutex> lock(smbd_conn->mutex);
 		smbd_conn->state = x_smbd_conn_t::STATE_DONE;
@@ -1093,17 +1101,8 @@ static void x_smbd_conn_upcall_cb_unmonitor(x_epoll_upcall_t *upcall)
 				break;
 			}
 			smbd_conn->fdevt_user_list.remove(fdevt_user);
-			lock.unlock();
-
-			fdevt_user->func(smbd_conn, fdevt_user, true);
-
-			lock.lock();
+			fdevt_user->func(nullptr, fdevt_user);
 		}
-	}
-
-	x_smbd_conn_terminate_chans(smbd_conn);
-	while (x_smbd_requ_t *smbd_requ = smbd_conn->pending_requ_list.get_front()) {
-		X_ASSERT(x_smbd_requ_async_remove(smbd_requ));
 	}
 
 	X_SMBD_REF_DEC(g_smbd_conn_curr);
@@ -1134,25 +1133,56 @@ static inline x_smbd_srv_t *x_smbd_from_upcall(x_epoll_upcall_t *upcall)
 	return X_CONTAINER_OF(upcall, x_smbd_srv_t, upcall);
 }
 
+static bool x_smbd_srv_do_recv(x_smbd_srv_t *smbd_srv, x_fdevents_t &fdevents)
+{
+	x_sockaddr_t saddr;
+	socklen_t slen = sizeof(saddr);
+	int fd = accept(smbd_srv->fd, &saddr.sa, &slen);
+	X_LOG_DBG("%s accept %d, %d", task_name, fd, errno);
+	if (fd >= 0) {
+		x_smbd_srv_accepted(smbd_srv, fd, saddr);
+	} else if (errno == EINTR) {
+	} else if (errno == EMFILE) {
+	} else if (errno == EAGAIN) {
+		fdevents = x_fdevents_consume(fdevents, FDEVT_IN);
+	} else {
+		X_PANIC("accept errno=", errno);
+	}
+
+	return false;
+}
+
+static bool x_smbd_srv_do_user(x_smbd_srv_t *smbd_srv, x_fdevents_t &fdevents)
+{
+	X_LOG_DBG("%s %p x%lx x%llx", task_name, smbd_srv, smbd_srv->ep_id, fdevents);
+	std::unique_lock<std::mutex> lock(smbd_srv->mutex);
+	for (;;) {
+		x_fdevt_user_t *fdevt_user = smbd_srv->fdevt_user_list.get_front();
+		if (!fdevt_user) {
+			break;
+		}
+		smbd_srv->fdevt_user_list.remove(fdevt_user);
+		fdevt_user->func(nullptr, fdevt_user);
+	}
+
+	fdevents = x_fdevents_consume(fdevents, FDEVT_USER);
+	return false;
+}
+
+
 static bool x_smbd_srv_upcall_cb_getevents(x_epoll_upcall_t *upcall, x_fdevents_t &fdevents)
 {
 	x_smbd_srv_t *smbd_srv = x_smbd_from_upcall(upcall);
+	X_LOG_DBG("%s %p x%llx", task_name, smbd_srv, fdevents);
 	uint32_t events = x_fdevents_processable(fdevents);
-
-	if (events & FDEVT_IN) {
-		x_sockaddr_t saddr;
-		socklen_t slen = sizeof(saddr);
-		int fd = accept(smbd_srv->fd, &saddr.sa, &slen);
-		X_LOG_DBG("%s accept %d, %d", task_name, fd, errno);
-		if (fd >= 0) {
-			x_smbd_srv_accepted(smbd_srv, fd, saddr);
-		} else if (errno == EINTR) {
-		} else if (errno == EMFILE) {
-		} else if (errno == EAGAIN) {
-			fdevents = x_fdevents_consume(fdevents, FDEVT_IN);
-		} else {
-			X_PANIC("accept errno=", errno);
+	if (events & FDEVT_USER) {
+		if (x_smbd_srv_do_user(smbd_srv, fdevents)) {
+			return true;
 		}
+		events = x_fdevents_processable(fdevents);
+	}
+	if (events & FDEVT_IN) {
+		return x_smbd_srv_do_recv(smbd_srv, fdevents);
 	}
 	return false;
 }
@@ -1181,16 +1211,18 @@ int x_smbd_conn_srv_init(int port)
 	g_smbd_srv.upcall.cbs = &x_smbd_srv_upcall_cbs;
 
 	g_smbd_srv.ep_id = x_evtmgmt_monitor(g_evtmgmt, fd, FDEVT_IN, &g_smbd_srv.upcall);
-	x_evtmgmt_enable_events(g_evtmgmt, g_smbd_srv.ep_id, FDEVT_IN | FDEVT_ERR | FDEVT_SHUTDOWN);
+	x_evtmgmt_enable_events(g_evtmgmt, g_smbd_srv.ep_id,
+			FDEVT_IN | FDEVT_ERR | FDEVT_SHUTDOWN | FDEVT_USER);
 	return 0;
 }
 
-bool x_smbd_conn_post_user(x_smbd_conn_t *smbd_conn, x_fdevt_user_t *fdevt_user)
+bool x_smbd_conn_post_user(x_smbd_conn_t *smbd_conn, x_fdevt_user_t *fdevt_user,
+		bool always)
 {
 	bool notify = false;
 	bool queued = false;
 	{
-		std::lock_guard<std::mutex> lock(smbd_conn->mutex);
+		auto lock = std::lock_guard(smbd_conn->mutex);
 		if (smbd_conn->state != x_smbd_conn_t::STATE_DONE) {
 			notify = smbd_conn->fdevt_user_list.get_front() == nullptr;
 			smbd_conn->fdevt_user_list.push_back(fdevt_user);
@@ -1200,13 +1232,22 @@ bool x_smbd_conn_post_user(x_smbd_conn_t *smbd_conn, x_fdevt_user_t *fdevt_user)
 	if (notify) {
 		x_evtmgmt_post_events(g_evtmgmt, smbd_conn->ep_id, FDEVT_USER);
 	}
-	return queued;
-#if 0
-	if (!queued) {
-		/* cancel the event */
-		fdevt_user->func(smbd_conn, fdevt_user, true);
+	if (queued) {
+		return true;
+	} else if (!always) {
+		return false;
 	}
-#endif
+	/* queued to srv's user event queue to clean up the request */
+	X_LOG_WARN("smbd_conn %p is done, queued to srv"); \
+	{
+		auto lock = std::lock_guard(g_smbd_srv.mutex);
+		notify = g_smbd_srv.fdevt_user_list.get_front() == nullptr;
+		g_smbd_srv.fdevt_user_list.push_back(fdevt_user);
+	}
+	if (notify) {
+		x_evtmgmt_post_events(g_evtmgmt, g_smbd_srv.ep_id, FDEVT_USER);
+	}
+	return true;
 }
 
 void x_smbd_conn_link_chan(x_smbd_conn_t *smbd_conn, x_dlink_t *link)
@@ -1223,8 +1264,6 @@ void x_smbd_conn_requ_done(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ,
 		NTSTATUS status)
 {
 	X_ASSERT(!NT_STATUS_EQUAL(status, NT_STATUS_PENDING));
-
-	x_smbd_requ_done(smbd_requ);
 
 	if (!is_success(status)) {
 		smbd_requ->status = status;
@@ -1261,13 +1300,13 @@ void x_smbd_conn_requ_done(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ,
 
 struct x_smbd_cancel_evt_t
 {
-	static void func(x_smbd_conn_t *smbd_conn, x_fdevt_user_t *fdevt_user, bool terminated)
+	static void func(x_smbd_conn_t *smbd_conn, x_fdevt_user_t *fdevt_user)
 	{
 		x_smbd_cancel_evt_t *evt = X_CONTAINER_OF(fdevt_user, x_smbd_cancel_evt_t, base);
 		x_smbd_requ_t *smbd_requ = evt->smbd_requ;
-		X_LOG_DBG("evt=%p, requ=%p, terminated=%d", evt, smbd_requ, terminated);
+		X_LOG_DBG("evt=%p, requ=%p, smbd_conn=%p", evt, smbd_requ, smbd_conn);
 
-		x_smbd_requ_async_done(smbd_conn, smbd_requ, evt->status, terminated);
+		x_smbd_requ_async_done(smbd_conn, smbd_requ, evt->status);
 
 		delete evt;
 	}
@@ -1289,14 +1328,7 @@ void x_smbd_conn_post_cancel(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ,
 		NTSTATUS status)
 {
 	x_smbd_cancel_evt_t *evt = new x_smbd_cancel_evt_t(smbd_requ, status);
-	if (!x_smbd_conn_post_user(smbd_conn, &evt->base)) {
-		X_LOG_DBG("x_smbd_conn_post_user %p failed", smbd_requ);
-		/* failed posting, smbd_conn should already terminated,
-		 * it is OK to run it not in smbd_conn's context
-		 */
-		x_smbd_requ_async_done(smbd_conn, smbd_requ, status, true);
-		delete evt;
-	}
+	x_smbd_conn_post_user(smbd_conn, &evt->base, true);
 }
 
 NTSTATUS x_smbd_conn_validate_negotiate_info(const x_smbd_conn_t *smbd_conn,

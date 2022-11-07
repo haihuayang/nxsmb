@@ -855,19 +855,19 @@ static void posixfs_create_cancel(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_
 
 struct posixfs_defer_open_evt_t
 {
-	static void func(x_smbd_conn_t *smbd_conn, x_fdevt_user_t *fdevt_user, bool terminated)
+	static void func(x_smbd_conn_t *smbd_conn, x_fdevt_user_t *fdevt_user)
 	{
 		posixfs_defer_open_evt_t *evt = X_CONTAINER_OF(fdevt_user,
 				posixfs_defer_open_evt_t, base);
 		x_smbd_requ_t *smbd_requ = evt->smbd_requ;
-		X_LOG_DBG("evt=%p, requ=%p, terminated=%d", evt, smbd_requ, terminated);
+		X_LOG_DBG("evt=%p, requ=%p, smbd_conn=%p", evt, smbd_requ, smbd_conn);
 
 		auto state = smbd_requ->release_state<x_smb2_state_create_t>();
-		if (x_smbd_requ_async_remove(smbd_requ) && !terminated) {
+		if (x_smbd_requ_async_remove(smbd_requ) && smbd_conn) {
 			NTSTATUS status = x_smbd_tcon_op_create(smbd_requ, state);
 			if (!NT_STATUS_EQUAL(status, NT_STATUS_PENDING)) {
 				smbd_requ->save_state(state);
-				smbd_requ->async_done_fn(smbd_conn, smbd_requ, status, false);
+				smbd_requ->async_done_fn(smbd_conn, smbd_requ, status);
 			}
 		}
 
@@ -890,19 +890,19 @@ struct posixfs_defer_open_evt_t
 
 struct posixfs_defer_rename_evt_t
 {
-	static void func(x_smbd_conn_t *smbd_conn, x_fdevt_user_t *fdevt_user, bool terminated)
+	static void func(x_smbd_conn_t *smbd_conn, x_fdevt_user_t *fdevt_user)
 	{
 		posixfs_defer_rename_evt_t *evt = X_CONTAINER_OF(fdevt_user,
 				posixfs_defer_rename_evt_t, base);
 		x_smbd_requ_t *smbd_requ = evt->smbd_requ;
-		X_LOG_DBG("evt=%p, requ=%p, terminated=%d", evt, smbd_requ, terminated);
+		X_LOG_DBG("evt=%p, requ=%p, smbd_conn=%p", evt, smbd_requ, smbd_conn);
 
 		auto state = smbd_requ->release_state<x_smb2_state_rename_t>();
-		if (x_smbd_requ_async_remove(smbd_requ) && !terminated) {
+		if (x_smbd_requ_async_remove(smbd_requ) && smbd_conn) {
 			NTSTATUS status = x_smbd_open_op_rename(smbd_requ, state);
 			if (!NT_STATUS_EQUAL(status, NT_STATUS_PENDING)) {
 				smbd_requ->save_state(state);
-				smbd_requ->async_done_fn(smbd_conn, smbd_requ, status, false);
+				smbd_requ->async_done_fn(smbd_conn, smbd_requ, status);
 			}
 		}
 
@@ -942,15 +942,15 @@ static void share_mode_modified(posixfs_object_t *posixfs_object,
 
 struct posixfs_notify_evt_t
 {
-	static void func(x_smbd_conn_t *smbd_conn, x_fdevt_user_t *fdevt_user, bool terminated)
+	static void func(x_smbd_conn_t *smbd_conn, x_fdevt_user_t *fdevt_user)
 	{
 		posixfs_notify_evt_t *evt = X_CONTAINER_OF(fdevt_user, posixfs_notify_evt_t, base);
 		x_smbd_requ_t *smbd_requ = evt->smbd_requ;
-		X_LOG_DBG("evt=%p, requ=%p, terminated=%d", evt, smbd_requ, terminated);
+		X_LOG_DBG("evt=%p, requ=%p, smbd_conn=%p", evt, smbd_requ, smbd_conn);
 
 		auto state = smbd_requ->get_state<x_smb2_state_notify_t>();
 		state->out_notify_changes = std::move(evt->notify_changes);
-		x_smbd_requ_async_done(smbd_conn, smbd_requ, NT_STATUS_OK, terminated);
+		x_smbd_requ_async_done(smbd_conn, smbd_requ, NT_STATUS_OK);
 		delete evt;
 	}
 
@@ -1440,13 +1440,13 @@ static inline uint8_t get_lease_type(const posixfs_open_t *posixfs_open)
 
 struct posixfs_send_lease_break_evt_t
 {
-	static void func(x_smbd_conn_t *smbd_conn, x_fdevt_user_t *fdevt_user, bool terminated)
+	static void func(x_smbd_conn_t *smbd_conn, x_fdevt_user_t *fdevt_user)
 	{
 		posixfs_send_lease_break_evt_t *evt = X_CONTAINER_OF(fdevt_user,
 				posixfs_send_lease_break_evt_t, base);
 		X_LOG_DBG("evt=%p", evt);
 
-		if (!terminated) {
+		if (smbd_conn) {
 			x_smb2_send_lease_break(smbd_conn,
 					evt->smbd_sess,
 					&evt->lease_key,
@@ -1515,13 +1515,13 @@ static void do_break_lease(posixfs_open_t *posixfs_open,
 
 struct posixfs_send_oplock_break_evt_t
 {
-	static void func(x_smbd_conn_t *smbd_conn, x_fdevt_user_t *fdevt_user, bool terminated)
+	static void func(x_smbd_conn_t *smbd_conn, x_fdevt_user_t *fdevt_user)
 	{
 		posixfs_send_oplock_break_evt_t *evt = X_CONTAINER_OF(fdevt_user,
 				posixfs_send_oplock_break_evt_t, base);
 		X_LOG_DBG("evt=%p", evt);
 
-		if (!terminated) {
+		if (smbd_conn) {
 			x_smb2_send_oplock_break(smbd_conn,
 					evt->smbd_sess,
 					evt->open_persistent_id,
@@ -3250,12 +3250,12 @@ NTSTATUS posixfs_object_op_close(
 
 struct posixfs_read_evt_t
 {
-	static void func(x_smbd_conn_t *smbd_conn, x_fdevt_user_t *fdevt_user, bool terminated)
+	static void func(x_smbd_conn_t *smbd_conn, x_fdevt_user_t *fdevt_user)
 	{
 		posixfs_read_evt_t *evt = X_CONTAINER_OF(fdevt_user, posixfs_read_evt_t, base);
 		x_smbd_requ_t *smbd_requ = evt->smbd_requ;
-		X_LOG_DBG("evt=%p, requ=%p, terminated=%d", evt, smbd_requ, terminated);
-		x_smbd_requ_async_done(smbd_conn, smbd_requ, evt->status, terminated);
+		X_LOG_DBG("evt=%p, requ=%p, smbd_conn=%p", evt, smbd_requ, smbd_conn);
+		x_smbd_requ_async_done(smbd_conn, smbd_requ, evt->status);
 		delete evt;
 	}
 
@@ -3491,12 +3491,12 @@ static NTSTATUS posixfs_do_write(posixfs_object_t *posixfs_object,
 
 struct posixfs_write_evt_t
 {
-	static void func(x_smbd_conn_t *smbd_conn, x_fdevt_user_t *fdevt_user, bool terminated)
+	static void func(x_smbd_conn_t *smbd_conn, x_fdevt_user_t *fdevt_user)
 	{
 		posixfs_write_evt_t *evt = X_CONTAINER_OF(fdevt_user, posixfs_write_evt_t, base);
 		x_smbd_requ_t *smbd_requ = evt->smbd_requ;
-		X_LOG_DBG("evt=%p, requ=%p, terminated=%d", evt, smbd_requ, terminated);
-		x_smbd_requ_async_done(smbd_conn, smbd_requ, evt->status, terminated);
+		X_LOG_DBG("evt=%p, requ=%p, smbd_conn=%p", evt, smbd_requ, smbd_conn);
+		x_smbd_requ_async_done(smbd_conn, smbd_requ, evt->status);
 		delete evt;
 	}
 
@@ -3672,12 +3672,12 @@ static void posixfs_lock_cancel(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_re
 
 struct posixfs_lock_evt_t
 {
-	static void func(x_smbd_conn_t *smbd_conn, x_fdevt_user_t *fdevt_user, bool terminated)
+	static void func(x_smbd_conn_t *smbd_conn, x_fdevt_user_t *fdevt_user)
 	{
 		posixfs_lock_evt_t *evt = X_CONTAINER_OF(fdevt_user, posixfs_lock_evt_t, base);
 		x_smbd_requ_t *smbd_requ = evt->smbd_requ;
-		X_LOG_DBG("evt=%p, requ=%p, terminated=%d", evt, smbd_requ, terminated);
-		x_smbd_requ_async_done(smbd_conn, smbd_requ, NT_STATUS_OK, terminated);
+		X_LOG_DBG("evt=%p, requ=%p, smbd_conn=%p", evt, smbd_requ, smbd_conn);
+		x_smbd_requ_async_done(smbd_conn, smbd_requ, NT_STATUS_OK);
 		delete evt;
 	}
 

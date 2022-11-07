@@ -87,13 +87,12 @@ x_smbd_requ_t *x_smbd_requ_async_lookup(uint64_t id, const x_smbd_conn_t *smbd_c
 }
 
 void x_smbd_requ_async_done(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ,
-		NTSTATUS status, bool terminated)
+		NTSTATUS status)
 {
 	if (!x_smbd_requ_async_remove(smbd_requ)) {
 		/* it must be cancelled by x_smbd_conn_cancel */
-		X_ASSERT(NT_STATUS_EQUAL(status, NT_STATUS_CANCELLED));
 	}
-	smbd_requ->async_done_fn(smbd_conn, smbd_requ, status, terminated);
+	smbd_requ->async_done_fn(smbd_conn, smbd_requ, status);
 }
 
 void x_smbd_requ_done(x_smbd_requ_t *smbd_requ)

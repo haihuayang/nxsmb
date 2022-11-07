@@ -305,11 +305,11 @@ static bool smbd_chan_cancel_timer(x_smbd_chan_t *smbd_chan)
 
 struct smbd_chan_auth_timeout_evt_t
 {
-	static void func(x_smbd_conn_t *smbd_conn, x_fdevt_user_t *fdevt_user, bool terminated)
+	static void func(x_smbd_conn_t *smbd_conn, x_fdevt_user_t *fdevt_user)
 	{
 		smbd_chan_auth_timeout_evt_t *evt = X_CONTAINER_OF(fdevt_user, smbd_chan_auth_timeout_evt_t, base);
 
-		if (!terminated) {
+		if (smbd_conn) {
 			x_smbd_chan_t *smbd_chan = evt->smbd_chan;
 			if (smbd_chan->state == x_smbd_chan_t::S_WAIT_INPUT) {
 				smbd_chan->state = x_smbd_chan_t::S_FAILED;
@@ -380,11 +380,11 @@ static NTSTATUS smbd_chan_auth_updated(x_smbd_chan_t *smbd_chan, x_smbd_requ_t *
 
 struct smbd_chan_auth_upcall_evt_t
 {
-	static void func(x_smbd_conn_t *smbd_conn, x_fdevt_user_t *fdevt_user, bool terminated)
+	static void func(x_smbd_conn_t *smbd_conn, x_fdevt_user_t *fdevt_user)
 	{
 		smbd_chan_auth_upcall_evt_t *evt = X_CONTAINER_OF(fdevt_user, smbd_chan_auth_upcall_evt_t, base);
 
-		if (!terminated) {
+		if (smbd_conn) {
 			x_smbd_chan_t *smbd_chan = evt->smbd_chan;
 			X_ASSERT(smbd_chan->auth_requ);
 			x_smbd_ptr_t<x_smbd_requ_t> smbd_requ{std::exchange(smbd_chan->auth_requ, nullptr)};
@@ -556,10 +556,10 @@ static void smbd_chan_logoff(x_smbd_conn_t *smbd_conn, x_smbd_chan_t *smbd_chan)
 
 struct smbd_chan_logoff_evt_t
 {
-	static void func(x_smbd_conn_t *smbd_conn, x_fdevt_user_t *fdevt_user, bool terminated)
+	static void func(x_smbd_conn_t *smbd_conn, x_fdevt_user_t *fdevt_user)
 	{
 		smbd_chan_logoff_evt_t *evt = X_CONTAINER_OF(fdevt_user, smbd_chan_logoff_evt_t, base);
-		if (!terminated) {
+		if (smbd_conn) {
 			smbd_chan_logoff(smbd_conn, evt->smbd_chan);
 		}
 		delete evt;
@@ -591,7 +591,7 @@ void x_smbd_chan_logoff(x_dlink_t *sess_link, x_smbd_sess_t *smbd_sess)
 	}
 }
 
-bool x_smbd_chan_post_user(x_smbd_chan_t *smbd_chan, x_fdevt_user_t *fdevt_user)
+bool x_smbd_chan_post_user(x_smbd_chan_t *smbd_chan, x_fdevt_user_t *fdevt_user, bool always)
 {
-	return x_smbd_conn_post_user(smbd_chan->smbd_conn, fdevt_user);
+	return x_smbd_conn_post_user(smbd_chan->smbd_conn, fdevt_user, always);
 }

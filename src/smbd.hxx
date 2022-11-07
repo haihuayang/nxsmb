@@ -171,13 +171,12 @@ struct x_smbd_key_set_t
 
 struct x_fdevt_user_t
 {
-	typedef void func_t(x_smbd_conn_t *smbd_conn, x_fdevt_user_t *, bool terminated);
+	typedef void func_t(x_smbd_conn_t *smbd_conn, x_fdevt_user_t *);
 	x_fdevt_user_t(func_t f) : func(f) {}
 	x_fdevt_user_t(const x_fdevt_user_t &) = delete;
 	x_fdevt_user_t &operator=(const x_fdevt_user_t &) = delete;
 	x_dlink_t link;
 	func_t *const func;
-	// void (* cbfunc)(x_smbd_conn_t *smbd_conn, x_fdevt_user_t *, bool terminated);
 };
 X_DECLARE_MEMBER_TRAITS(fdevt_user_conn_traits, x_fdevt_user_t, link)
 
@@ -207,13 +206,10 @@ void x_smbd_conn_update_preauth(x_smbd_conn_t *smbd_conn,
 const x_smb2_preauth_t *x_smbd_conn_get_preauth(x_smbd_conn_t *smbd_conn);
 void x_smbd_conn_link_chan(x_smbd_conn_t *smbd_conn, x_dlink_t *link);
 void x_smbd_conn_unlink_chan(x_smbd_conn_t *smbd_conn, x_dlink_t *link);
-bool x_smbd_conn_post_user(x_smbd_conn_t *smbd_conn, x_fdevt_user_t *fdevt_user);
+bool x_smbd_conn_post_user(x_smbd_conn_t *smbd_conn, x_fdevt_user_t *fdevt_user, bool always);
 #define X_SMBD_CHAN_POST_USER(smbd_chan, evt) do { \
 	auto __evt = (evt); \
-	if (!x_smbd_chan_post_user((smbd_chan), &__evt->base)) { \
-		X_LOG_WARN("x_smbd_chan_post_user failed post evt"); \
-		delete __evt; \
-	} \
+	x_smbd_chan_post_user((smbd_chan), &__evt->base, true); \
 } while (0)
 
 void x_smbd_conn_post_cancel(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ,
@@ -282,7 +278,7 @@ x_smbd_chan_t *x_smbd_chan_match(x_dlink_t *conn_link, x_smbd_conn_t *smbd_conn)
 x_smbd_chan_t *x_smbd_chan_get_active(x_dlink_t *conn_link);
 bool x_smbd_chan_is_active(const x_smbd_chan_t *smbd_chan);
 void x_smbd_chan_logoff(x_dlink_t *link, x_smbd_sess_t *smbd_sess);
-bool x_smbd_chan_post_user(x_smbd_chan_t *smbd_chan, x_fdevt_user_t *fdevt_user);
+bool x_smbd_chan_post_user(x_smbd_chan_t *smbd_chan, x_fdevt_user_t *fdevt_user, bool always);
 
 
 
@@ -398,7 +394,7 @@ struct x_smbd_requ_t
 	x_smbd_open_t *smbd_open{};
 	void (*cancel_fn)(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ);
 	void (*async_done_fn)(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ,
-			NTSTATUS status, bool terminated);
+			NTSTATUS status);
 };
 X_DECLARE_MEMBER_TRAITS(requ_async_traits, x_smbd_requ_t, async_link)
 
@@ -411,7 +407,7 @@ void x_smbd_requ_async_insert(x_smbd_requ_t *smbd_requ,
 		void (*cancel_fn)(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ));
 bool x_smbd_requ_async_remove(x_smbd_requ_t *smbd_requ);
 void x_smbd_requ_async_done(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ,
-		NTSTATUS status, bool terminated);
+		NTSTATUS status);
 void x_smbd_requ_done(x_smbd_requ_t *smbd_requ);
 NTSTATUS x_smbd_requ_init_open(x_smbd_requ_t *smbd_requ,
 		uint64_t id_persistent, uint64_t id_volatile);

@@ -285,7 +285,7 @@ bool x_smbd_sess_post_user(x_smbd_sess_t *smbd_sess, x_fdevt_user_t *evt)
 		if (!smbd_chan) {
 			continue;
 		}
-		posted = x_smbd_chan_post_user(smbd_chan, evt);
+		posted = x_smbd_chan_post_user(smbd_chan, evt, false);
 		x_smbd_ref_dec(smbd_chan);
 		if (posted) {
 			return true;
