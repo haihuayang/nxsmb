@@ -189,8 +189,10 @@ int posixfs_create(int dirfd, bool is_dir, const char *path,
 		}
 	}
 
-	// file_attrs &= FILE_ATTRIBUTE_ALL_MASK;
-	file_attrs &= SAMBA_ATTRIBUTES_MASK;
+	/* TODO pretend supporting FILE_ATTRIBUTE_ENCRYPTED */
+	file_attrs &= FILE_ATTRIBUTE_READONLY | FILE_ATTRIBUTE_HIDDEN
+		| FILE_ATTRIBUTE_SYSTEM | FILE_ATTRIBUTE_OFFLINE
+		| FILE_ATTRIBUTE_TEMPORARY | FILE_ATTRIBUTE_ENCRYPTED;
 	if (is_dir) {
 		file_attrs &= ~(uint32_t)FILE_ATTRIBUTE_ARCHIVE;
 		file_attrs |= (uint32_t)FILE_ATTRIBUTE_DIRECTORY;
