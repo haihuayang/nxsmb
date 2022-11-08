@@ -521,7 +521,17 @@ NTSTATUS x_smb2_process_create(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_req
 		RETURN_OP_STATUS(smbd_requ, status);
 	}
 
-	if (state->in_create_options & (0xff000000u | FILE_RESERVER_OPFILTER)) {
+	if (state->in_impersonation_level >= X_SMB2_IMPERSONATION_MAX) {
+		RETURN_OP_STATUS(smbd_requ, NT_STATUS_BAD_IMPERSONATION_LEVEL);
+	}
+
+	if (state->in_create_options & (FILE_CREATE_TREE_CONNECTION
+				| FILE_OPEN_BY_FILE_ID
+				| FILE_RESERVER_OPFILTER)) {
+		RETURN_OP_STATUS(smbd_requ, NT_STATUS_NOT_SUPPORTED);
+	}
+
+	if (state->in_create_options & (0xff000000u)) {
 		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
 
