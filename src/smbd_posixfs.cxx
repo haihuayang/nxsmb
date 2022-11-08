@@ -2357,7 +2357,6 @@ static NTSTATUS posixfs_create_open_exist_object(
 	bool reload_meta = false;
 	if (overwrite) {
 		// TODO DELETE_ALL_STREAM;
-		/* TODO set AlSi */
 		int err = ftruncate(posixfs_object->fd, 0);
 		X_TODO_ASSERT(err == 0);
 		reload_meta = true;
@@ -2372,6 +2371,10 @@ static NTSTATUS posixfs_create_open_exist_object(
 				&posixfs_object->meta,
 				&posixfs_object->default_stream.meta);
 		X_TODO_ASSERT(err == 0);
+		if ((state->contexts & X_SMB2_CONTEXT_FLAG_ALSI)) {
+			posixfs_object->default_stream.meta.allocation_size =
+				state->in_allocation_size;
+		}
 		posixfs_object->statex_modified = false;
 	}
 

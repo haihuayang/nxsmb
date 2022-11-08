@@ -203,6 +203,9 @@ int posixfs_create(int dirfd, bool is_dir, const char *path,
 	/* TODO delete file if fail */
 	posixfs_post_create(fd, file_attrs,
 			object_meta, stream_meta, ntacl_blob);
+	if (!is_dir) {
+		stream_meta->allocation_size = allocation_size;
+	}
 	return fd;
 }
 
