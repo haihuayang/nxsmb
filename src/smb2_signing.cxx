@@ -107,7 +107,7 @@ static inline void gmac_digest_by_software(const x_smb2_key_t &key,
 	rc = EVP_EncryptFinal_ex(ctx, NULL, &unused);
 	X_ASSERT(rc == 1);
 
-	rc = EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_AEAD_GET_TAG, 16, digest);
+	rc = EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_GET_TAG, 16, digest);
 	X_ASSERT(rc == 1);
 #if 0
 	printf("Calculated tag:\n  ");
