@@ -14,7 +14,7 @@
 #include <string>
 
 extern "C" {
-#include "samba/nsswitch/winbind_struct_protocol.h"
+#include "winbind_struct_protocol.h"
 }
 
 
