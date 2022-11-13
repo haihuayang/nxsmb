@@ -96,7 +96,7 @@ static std::vector<std::string> parse_stringlist(const std::string &str)
 	return ret;
 }
 
-static bool parse_volume_map(std::map<std::string, std::pair<std::string, std::shared_ptr<x_smbd_share_t>>> &map, const std::string &str)
+static bool parse_volume_map(std::map<std::string, std::tuple<std::string, std::string, std::shared_ptr<x_smbd_share_t>>> &map, const std::string &str)
 {
 	std::istringstream is(str);
 	std::string token;
@@ -106,8 +106,14 @@ static bool parse_volume_map(std::map<std::string, std::pair<std::string, std::s
 			return false;
 		}
 		std::string volume = token.substr(0, sep);
-		std::string node = token.substr(sep + 1);
-		map[volume] = std::make_pair<std::string, std::shared_ptr<x_smbd_share_t>>(std::move(node), nullptr);
+		++sep;
+		auto sep2 = token.find(':', sep);
+		if (sep2 == std::string::npos) {
+			return false;
+		}
+		std::string node = token.substr(sep, sep2 - sep);
+		std::string path = token.substr(sep2 + 1);
+		map[volume] = std::make_tuple<std::string, std::string, std::shared_ptr<x_smbd_share_t>>(std::move(node), std::move(path), nullptr);
 	}
 	return true;
 }
@@ -146,8 +152,8 @@ static void add_share(x_smbd_conf_t &smbd_conf,
 		for (const auto &v: share_spec.volumes) {
 			auto it = smbd_conf.volume_map.find(v);
 			X_ASSERT(it != smbd_conf.volume_map.end());
-			X_ASSERT(!it->second.second);
-			it->second.second = share;
+			X_ASSERT(!std::get<2>(it->second));
+			std::get<2>(it->second) = share;
 		}
 
 	} else {
@@ -254,8 +260,6 @@ static bool parse_global_param(x_smbd_conf_t &smbd_conf,
 		smbd_conf.samba_locks_dir = value;
 	} else if (name == "my:nodes") {
 		smbd_conf.nodes = parse_stringlist(value);
-	} else if (name == "my:volume dir") {
-		smbd_conf.volume_dir = value;
 	} else if (name == "my:volume map") {
 		return parse_volume_map(smbd_conf.volume_map, value);
 	} else if (name == "interfaces") {
@@ -314,10 +318,6 @@ static bool parse_share_param(share_spec_t &share_spec,
 			X_PANIC("Unexpected boolean %s at %s:%u",
 					value.c_str(), path, lineno);
 		}
-	} else if (name == "my distribute root") {
-		share_spec.my_distribute_root = value;
-	} else if (name == "my distribute vgs") {
-		share_spec.my_distribute_vgs = parse_stringlist(value);
 	} else if (name == "read only") {
 		share_spec.read_only = parse_bool(value);
 	} else if (name == "my:volumes") {
@@ -474,7 +474,7 @@ std::shared_ptr<x_smbd_share_t> x_smbd_find_share(const std::string &name,
 				return nullptr;
 			}
 			volume = std::move(vol_tmp);
-			return it->second.second;
+			return std::get<2>(it->second);
 		}
 	}
 
