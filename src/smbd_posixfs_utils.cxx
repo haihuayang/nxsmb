@@ -10,12 +10,10 @@ extern "C" {
 #include "samba/libcli/smb/smb2_constants.h"
 }
 
-#if 0
-ssize_t posixfs_getxattr(int fd, const char *name, void *data, size_t size);
-{
-	ssize_t err = fgetxattr(fd, name, );
-}
+#ifdef NXSMBD_USE_ZFS
+#else
 #endif
+
 static int posixfs_dos_attr_get(int fd, dos_attr_t *dos_attr)
 {
 	ssize_t err = fgetxattr(fd, XATTR_DOS_ATTR, dos_attr, sizeof *dos_attr);
@@ -133,7 +131,7 @@ int posixfs_statex_getat(int dirfd, const char *name,
 	return err;
 }
 
-void posixfs_post_create(int fd, uint32_t file_attrs,
+void posixfs_post_create(int fd, bool is_dir, uint32_t file_attrs,
 		x_smbd_object_meta_t *object_meta,
 		x_smbd_stream_meta_t *stream_meta,
 		const std::vector<uint8_t> &ntacl_blob)
@@ -201,7 +199,7 @@ int posixfs_create(int dirfd, bool is_dir, const char *path,
 		file_attrs &= ~(uint32_t)FILE_ATTRIBUTE_DIRECTORY;
 	}
 	/* TODO delete file if fail */
-	posixfs_post_create(fd, file_attrs,
+	posixfs_post_create(fd, is_dir, file_attrs,
 			object_meta, stream_meta, ntacl_blob);
 	if (!is_dir) {
 		stream_meta->allocation_size = allocation_size;
