@@ -85,22 +85,35 @@ static bool parse_uint32(const std::string &str, uint32_t &ret)
 	return true;
 }
 
-static std::vector<std::string> parse_stringlist(const std::string &str)
+/* unlike str_list_make_v3, we suppose the config file is utf8 */
+static std::vector<std::string> split_string(const std::string &str)
 {
 	std::vector<std::string> ret;
-	std::istringstream is(str);
-	std::string token;
-	while (std::getline(is, token, ' ')) {
-		ret.push_back(token);
+	const char *s = str.c_str();
+	while (*s) {
+		if (*s == ' ' || *s == '\t') {
+			++s;
+			continue;
+		}
+		const char *p = strpbrk(s, " \t");
+		if (!p) {
+			ret.emplace_back(s);
+			break;
+		}
+		ret.emplace_back(s, p);
+		s = p + 1;
 	}
 	return ret;
 }
 
+static std::vector<std::string> parse_stringlist(const std::string &str)
+{
+	return split_string(str);
+}
+
 static bool parse_volume_map(std::map<std::string, std::tuple<std::string, std::string, std::shared_ptr<x_smbd_share_t>>> &map, const std::string &str)
 {
-	std::istringstream is(str);
-	std::string token;
-	while (std::getline(is, token, ' ')) {
+	for (auto &token: split_string(str)) {
 		auto sep = token.find(':');
 		if (sep == std::string::npos) {
 			return false;
@@ -346,6 +359,45 @@ static bool split_option(const std::string opt, size_t pos,
 	return true;
 }
 
+static void parse_line(x_smbd_conf_t &smbd_conf,
+		std::vector<std::unique_ptr<share_spec_t>> &share_specs,
+		std::unique_ptr<share_spec_t> &share_spec,
+		std::string &line,
+		const char *path, unsigned int lineno)
+{
+	size_t pos = skip(line, 0, line.length());
+	if (pos == line.length() || line.compare(pos, 1, "#") == 0) {
+		return;
+	}
+	if (line[pos] == '[') {
+		auto end = line.find(']', pos + 1);
+		if (end == std::string::npos) {
+			X_PANIC("Parsing error at %s:%u",
+					path, lineno);
+		}
+		std::string section = line.substr(pos + 1, end - pos - 1);
+		if (share_spec) {
+			share_specs.push_back(std::move(share_spec));
+			share_spec = nullptr;
+		}
+		if (section != "global") {
+			share_spec.reset(new share_spec_t(section));
+		}
+	} else {
+		std::string name, value;
+		if (!split_option(line, pos, name, value)) {
+			X_PANIC("No '=' at %s:%u",
+					path, lineno);
+		}
+
+		if (share_spec) {
+			parse_share_param(*share_spec, name, value, path, lineno);
+		} else {
+			parse_global_param(smbd_conf, name, value);
+		}
+	}
+}
+
 static std::string get_samba_path(const std::string &config_path)
 {
 	auto sep = config_path.rfind('/');
@@ -367,49 +419,39 @@ static int parse_smbconf(x_smbd_conf_t &smbd_conf, const char *path,
 	smbd_conf.capabilities = SMB2_CAP_DFS | SMB2_CAP_LARGE_MTU | SMB2_CAP_LEASING
 		| SMB2_CAP_DIRECTORY_LEASING | SMB2_CAP_MULTI_CHANNEL;
 
-	std::string line;
+	std::string line, last_line;
 	std::ifstream in(path);
 
 	auto samba_path = get_samba_path(path);
 	smbd_conf.private_dir = samba_path + "/private";
 	smbd_conf.samba_locks_dir = samba_path + "/var/locks";
 
-
 	unsigned int lineno = 0;
 	while (std::getline(in, line)) {
 		++lineno;
-		size_t pos = skip(line, 0, line.length());;
-		if (pos == line.length() || line.compare(pos, 1, "#") == 0) {
+		auto length = line.length();
+		bool end_with_slash = false;
+		if (length > 0 && line[length - 1] == '\\') {
+			end_with_slash = true;
+			line[length - 1] = ' ';
+		}
+		if (last_line.length()) {
+			last_line += line;
+		} else {
+			last_line = std::move(line);
+		}
+
+		if (end_with_slash) {
 			continue;
 		}
-		if (line[pos] == '[') {
-			auto end = line.find(']', pos + 1);
-			if (end == std::string::npos) {
-				X_PANIC("Parsing error at %s:%u",
-						path, lineno);
-			}
-			std::string section = line.substr(pos + 1, end - pos - 1);
-			if (share_spec) {
-				share_specs.push_back(std::move(share_spec));
-				share_spec = nullptr;
-			}
-			if (section != "global") {
-				share_spec.reset(new share_spec_t(section));
-			}
-		} else {
-			std::string name, value;
-			if (!split_option(line, pos, name, value)) {
-				X_PANIC("No '=' at %s:%u",
-						path, lineno);
-			}
-
-			if (share_spec) {
-				parse_share_param(*share_spec, name, value, path, lineno);
-			} else {
-				parse_global_param(smbd_conf, name, value);
-			}
-		}
+		parse_line(smbd_conf, share_specs, share_spec, last_line, path, lineno);
+		last_line.clear();
 	}
+
+	if (last_line.length()) {
+		parse_line(smbd_conf, share_specs, share_spec, last_line, path, lineno);
+	}
+
 	if (share_spec) {
 		share_specs.push_back(std::move(share_spec));
 	}
