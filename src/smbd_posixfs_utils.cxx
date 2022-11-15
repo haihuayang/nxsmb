@@ -11,10 +11,142 @@ extern "C" {
 }
 
 #ifdef NXSMBD_USE_ZFS
-#else
-#endif
+#define MINORBITS       20
+#define MINORMASK       ((1U << MINORBITS) - 1)
 
-static int posixfs_dos_attr_get(int fd, dos_attr_t *dos_attr)
+#define MAJOR(dev)      ((unsigned int) ((dev) >> MINORBITS))
+#define MINOR(dev)      ((unsigned int) ((dev) & MINORMASK))
+
+#define encode_dev(x) makedev(MAJOR(x), MINOR(x))
+
+static int minerva_zfsdev_fd = -1;
+void x_smbd_posixfs_init_dev()
+{
+	int zfsdev = open(ZFS_DEV_PATH, O_RDWR);
+	X_ASSERT(zfsdev != -1);
+	minerva_zfsdev_fd = zfsdev;
+}
+
+static void fill_statex(x_smbd_object_meta_t *object_meta,
+		x_smbd_stream_meta_t *stream_meta,
+		const zfs_ntnx_kstat_t kst,
+		const dos_attr_t &dos_attr,
+		uint64_t fsid)
+{
+	object_meta->fsid = fsid;
+	object_meta->inode = kst.ino;
+	object_meta->creation = x_timespec_to_nttime(dos_attr.create_time);
+	object_meta->last_access = x_timespec_to_nttime(kst.atime);
+	object_meta->last_write = x_timespec_to_nttime(kst.mtime);
+	object_meta->change = x_timespec_to_nttime(kst.ctime);
+	stream_meta->end_of_file = S_ISDIR(kst.mode) ? 0 : kst.size;
+	stream_meta->allocation_size = S_ISDIR(kst.mode) ? 0 :
+		std::max((uint64_t)kst.blocks * 512, (uint64_t)kst.size); /* TODO */
+	object_meta->file_attributes = dos_attr.file_attrs;
+	object_meta->nlink = kst.nlink;
+}
+
+static void posixfs_statex_get_(int fd,
+		zfs_ntnx_kstat_t &kst,
+		dos_attr_t &dos_attr,
+		uint64_t &fsid)
+{
+	zfs_ntnx_attrex_tag_t tags[3], *ptag = tags;
+
+	ptag->tag = ZFS_NTNX_ATTREX_TAG_STAT;
+	ptag->size = sizeof(zfs_ntnx_kstat_t);
+	ptag->data = (unsigned long)&kst;
+	ptag++;
+
+	ptag->tag = ZFS_NTNX_ATTREX_TAG_DOS_ATTR;
+	ptag->size = sizeof(dos_attr_t);
+	ptag->data = (unsigned long)&dos_attr;
+	ptag++;
+
+	ptag->tag = ZFS_NTNX_ATTREX_TAG_FSID;
+	ptag->size = sizeof(uint64_t);
+	ptag->data = 0;
+	ptag++;
+
+	int err = zfs_ntnx_ioc_attrex(minerva_zfsdev_fd, fd,
+			AT_SYMLINK_NOFOLLOW,
+			nullptr, ZFS_NTNX_ATTREX_OP_GET,
+			3, tags);
+	X_ASSERT(err == 0);
+
+	if (dos_attr.file_attrs & FILE_ATTRIBUTE_DIRECTORY) {
+		X_ASSERT(S_ISDIR(kst.mode));
+	} else {
+		X_ASSERT(!S_ISDIR(kst.mode));
+	}
+	fsid = tags[2].data;
+}
+
+int posixfs_statex_get(int fd, x_smbd_object_meta_t *object_meta,
+		x_smbd_stream_meta_t *stream_meta)
+{
+	zfs_ntnx_kstat_t kst;
+	dos_attr_t dos_attr;
+	uint64_t fsid;
+	posixfs_statex_get_(fd, kst, dos_attr, fsid);
+	fill_statex(object_meta, stream_meta, kst, dos_attr, fsid);
+	return 0;
+}
+
+int posixfs_dos_attr_get(int fd, dos_attr_t *dos_attr)
+{
+	zfs_ntnx_attrex_tag_t tags[1], *ptag = tags;
+
+	ptag->tag = ZFS_NTNX_ATTREX_TAG_DOS_ATTR;
+	ptag->size = sizeof(dos_attr_t);
+	ptag->data = (unsigned long)&dos_attr;
+	ptag++;
+
+	int err = zfs_ntnx_ioc_attrex(minerva_zfsdev_fd, fd,
+			AT_SYMLINK_NOFOLLOW,
+			nullptr, ZFS_NTNX_ATTREX_OP_GET,
+			1, tags);
+	X_ASSERT(err == 0);
+	return 0;
+}
+
+int posixfs_dos_attr_set(int fd, const dos_attr_t *dos_attr)
+{
+	int err = zfs_ntnx_set_dos_attr(minerva_zfsdev_fd, fd, AT_SYMLINK_NOFOLLOW,
+			nullptr, dos_attr);
+	X_ASSERT(err == 0);
+	return 0;
+}
+
+void posixfs_post_create(int fd, uint32_t file_attrs,
+		x_smbd_object_meta_t *object_meta,
+		x_smbd_stream_meta_t *stream_meta,
+		const std::vector<uint8_t> &ntacl_blob)
+{
+	zfs_ntnx_kstat_t kst;
+	dos_attr_t dos_attr;
+	uint64_t fsid;
+	posixfs_statex_get_(fd, kst, dos_attr, fsid);
+	if (file_attrs != 0) {
+		dos_attr.attr_mask = DOS_SET_CREATE_TIME | DOS_SET_FILE_ATTR,
+		dos_attr.file_attrs = file_attrs;
+		dos_attr.create_time = kst.mtime;
+		int err = posixfs_dos_attr_set(fd, &dos_attr);
+		X_ASSERT(err == 0);
+	}
+
+	fill_statex(object_meta, stream_meta, kst, dos_attr, fsid);
+	if (!ntacl_blob.empty()) {
+		posixfs_set_ntacl_blob(fd, ntacl_blob);
+	}
+}
+
+#else
+void x_smbd_posixfs_init_dev()
+{
+}
+
+int posixfs_dos_attr_get(int fd, dos_attr_t *dos_attr)
 {
 	ssize_t err = fgetxattr(fd, XATTR_DOS_ATTR, dos_attr, sizeof *dos_attr);
 	// TODO int err = ioctl(fd, FS_IOC_GET_DOS_ATTR, &dos_attr);
@@ -68,6 +200,37 @@ int posixfs_statex_get(int fd, x_smbd_object_meta_t *object_meta,
 	fill_statex(object_meta, stream_meta, stat, dos_attr);
 	return 0;
 }
+
+void posixfs_post_create(int fd, uint32_t file_attrs,
+		x_smbd_object_meta_t *object_meta,
+		x_smbd_stream_meta_t *stream_meta,
+		const std::vector<uint8_t> &ntacl_blob)
+{
+	struct stat stat;
+	int err = fstat(fd, &stat);
+	X_ASSERT(err == 0);
+	if (S_ISDIR(stat.st_mode)) {
+		file_attrs &= ~(uint32_t)FILE_ATTRIBUTE_ARCHIVE;
+		file_attrs |= (uint32_t)FILE_ATTRIBUTE_DIRECTORY;
+	} else {
+		file_attrs |= (uint32_t)FILE_ATTRIBUTE_ARCHIVE;
+		file_attrs &= ~(uint32_t)FILE_ATTRIBUTE_DIRECTORY;
+	}
+
+	dos_attr_t dos_attr = {
+		.attr_mask = DOS_SET_CREATE_TIME | DOS_SET_FILE_ATTR,
+		.file_attrs = file_attrs,
+		.create_time = stat.st_mtim,
+	};
+	err = posixfs_dos_attr_set(fd, &dos_attr);
+	X_ASSERT(err == 0);
+
+	fill_statex(object_meta, stream_meta, stat, dos_attr);
+	if (!ntacl_blob.empty()) {
+		posixfs_set_ntacl_blob(fd, ntacl_blob);
+	}
+}
+#endif
 
 static int ntacl_get(int fd, std::vector<uint8_t> &out_data)
 {
@@ -131,28 +294,6 @@ int posixfs_statex_getat(int dirfd, const char *name,
 	return err;
 }
 
-void posixfs_post_create(int fd, bool is_dir, uint32_t file_attrs,
-		x_smbd_object_meta_t *object_meta,
-		x_smbd_stream_meta_t *stream_meta,
-		const std::vector<uint8_t> &ntacl_blob)
-{
-	struct stat stat;
-	int err = fstat(fd, &stat);
-	X_ASSERT(err == 0);
-	dos_attr_t dos_attr = {
-		.attr_mask = DOS_SET_CREATE_TIME | DOS_SET_FILE_ATTR,
-		.file_attrs = file_attrs,
-		.create_time = stat.st_mtim,
-	};
-	err = posixfs_dos_attr_set(fd, &dos_attr);
-	X_ASSERT(err == 0);
-
-	fill_statex(object_meta, stream_meta, stat, dos_attr);
-	if (!ntacl_blob.empty()) {
-		posixfs_set_ntacl_blob(fd, ntacl_blob);
-	}
-}
-
 /* TODO we can use file_attrs to indicate if it is a dir */
 int posixfs_create(int dirfd, bool is_dir, const char *path,
 		x_smbd_object_meta_t *object_meta,
@@ -191,15 +332,8 @@ int posixfs_create(int dirfd, bool is_dir, const char *path,
 	file_attrs &= FILE_ATTRIBUTE_READONLY | FILE_ATTRIBUTE_HIDDEN
 		| FILE_ATTRIBUTE_SYSTEM | FILE_ATTRIBUTE_OFFLINE
 		| FILE_ATTRIBUTE_TEMPORARY | FILE_ATTRIBUTE_ENCRYPTED;
-	if (is_dir) {
-		file_attrs &= ~(uint32_t)FILE_ATTRIBUTE_ARCHIVE;
-		file_attrs |= (uint32_t)FILE_ATTRIBUTE_DIRECTORY;
-	} else {
-		file_attrs |= (uint32_t)FILE_ATTRIBUTE_ARCHIVE;
-		file_attrs &= ~(uint32_t)FILE_ATTRIBUTE_DIRECTORY;
-	}
 	/* TODO delete file if fail */
-	posixfs_post_create(fd, is_dir, file_attrs,
+	posixfs_post_create(fd, file_attrs,
 			object_meta, stream_meta, ntacl_blob);
 	if (!is_dir) {
 		stream_meta->allocation_size = allocation_size;

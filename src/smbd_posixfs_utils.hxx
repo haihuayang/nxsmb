@@ -19,6 +19,13 @@ extern "C" {
 #include "samba/libcli/util/ntstatus.h"
 }
 
+#define NXSMBD_USE_ZFS 1
+#ifdef NXSMBD_USE_ZFS
+extern "C" {
+#include "zfsdev.h"
+}
+#else
+
 /* Attr Mask */
 #define DOS_SET_CREATE_TIME   0x0001L
 #define DOS_SET_FILE_ATTR     0x0002L
@@ -36,10 +43,12 @@ typedef struct dos_attr_s {
 } dos_attr_t;
 
 #define XATTR_DOS_ATTR "user.dos_attr"
+#endif
+
 #define XATTR_NTACL "security.NTACL"
 #define XATTR_TLD_PATH "user.tld_path"
 
-// int posixfs_dos_attr_get(int fd, dos_attr_t *dos_attr);
+int posixfs_dos_attr_get(int fd, dos_attr_t *dos_attr);
 int posixfs_dos_attr_set(int fd, const dos_attr_t *dos_attr);
 int posixfs_statex_get(int fd, x_smbd_object_meta_t *object_meta,
 		x_smbd_stream_meta_t *stream_meta);
@@ -49,7 +58,8 @@ int posixfs_statex_getat(int dirfd, const char *name, x_smbd_object_meta_t *obje
 int posixfs_get_ntacl_blob(int fd, std::vector<uint8_t> &blob);
 int posixfs_set_ntacl_blob(int fd, const std::vector<uint8_t> &blob);
 NTSTATUS posixfs_get_sd(int fd, std::shared_ptr<idl::security_descriptor> &psd);
-void posixfs_post_create(int fd, uint32_t file_attrs, x_smbd_object_meta_t *object_meta,
+void posixfs_post_create(int fd, uint32_t file_attrs,
+		x_smbd_object_meta_t *object_meta,
 		x_smbd_stream_meta_t *stream_meta,
 		const std::vector<uint8_t> &ntacl_blob);
 int posixfs_create(int dirfd, bool is_dir, const char *path,
@@ -59,6 +69,7 @@ int posixfs_create(int dirfd, bool is_dir, const char *path,
 		uint64_t allocation_size,
 		const std::vector<uint8_t> &ntacl_blob);
 
+void x_smbd_posixfs_init_dev();
 
 #endif /* __smbd_posixfs_utils__hxx__ */
 

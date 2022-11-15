@@ -4832,6 +4832,7 @@ posixfs_object_t::posixfs_object_t(
 
 int x_smbd_posixfs_init(size_t max_open)
 {
+	x_smbd_posixfs_init_dev();
 	size_t bucket_size = x_next_2_power(max_open);
 	std::vector<posixfs_object_pool_t::bucket_t> buckets(bucket_size);
 	posixfs_object_pool.buckets.swap(buckets);
@@ -4941,13 +4942,13 @@ NTSTATUS x_smbd_posixfs_create_open(x_smbd_open_t **psmbd_open,
 
 /* caller lock smbd_object->mutex */
 NTSTATUS x_smbd_posixfs_object_init(x_smbd_object_t *smbd_object,
-		int fd, uint32_t file_attributes,
+		int fd, bool is_dir,
 		const std::string &unix_path,
 		const std::vector<uint8_t> &ntacl_blob)
 {
 	posixfs_object_t *posixfs_object = posixfs_object_from_base_t::container(smbd_object);
 
-	posixfs_post_create(fd, file_attributes,
+	posixfs_post_create(fd, 0u,
 			&posixfs_object->meta,
 			&posixfs_object->default_stream.meta,
 			ntacl_blob);

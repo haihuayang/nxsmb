@@ -2,3 +2,6 @@
 	path = samba
 	url = haihua-yang.ubvm.nutanix.com:ws/projects/samba
 	branch = nxsmb
+[submodule "zfs"]
+	path = zfs
+	url = ssh://gerrit.eng.nutanix.com:29418/zfs

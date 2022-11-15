@@ -97,7 +97,7 @@ static int init_default_dir(int dirfd)
 	std::vector<uint8_t> ntacl_blob;
 	create_acl_blob(ntacl_blob, psd, idl::XATTR_SD_HASH_TYPE_NONE, std::array<uint8_t, idl::XATTR_SD_HASH_SIZE>());
 
-	posixfs_post_create(dirfd, FILE_ATTRIBUTE_DIRECTORY, &object_meta, &stream_meta, ntacl_blob);
+	posixfs_post_create(dirfd, 0u, &object_meta, &stream_meta, ntacl_blob);
 	return 0;
 }
 
@@ -235,7 +235,7 @@ static int show_attrex(char **argv)
 
 	return 0;
 }
-#if 0
+
 static int set_dos_attr(char **argv)
 {
 	const char *path = argv[0];
@@ -249,27 +249,26 @@ static int set_dos_attr(char **argv)
 	printf("modify file_attrs 0x%x to 0x%lx\n", dos_attr.file_attrs,
 			file_attrs);
 	dos_attr.file_attrs = x_convert_assert<uint32_t>(file_attrs);
-
+	dos_attr.attr_mask = DOS_SET_FILE_ATTR;
 	posixfs_dos_attr_set(fd, &dos_attr);
 
 	close(fd);
 
 	return 0;
 }
-#endif
+
 int main(int argc, char **argv)
 {
 	const char *command = argv[1];
+	x_smbd_posixfs_init_dev();
 	if (strcmp(command, "init-top-dir") == 0) {
 		return init_top_dir(argv + 2);
 	} else if (strcmp(command, "init-volume") == 0) {
 		return init_volume(argv + 2);
 	} else if (strcmp(command, "attrex") == 0) {
 		return show_attrex(argv + 2);
-#if 0
 	} else if (strcmp(command, "set-dos-attr") == 0) {
 		return set_dos_attr(argv + 2);
-#endif
 	} else if (strcmp(command, "set-default-security-desc") == 0) {
 		return set_default_security_desc(argv + 2);
 	} else if (strcmp(command, "show-security-desc") == 0) {

@@ -143,7 +143,7 @@ NTSTATUS x_smbd_posixfs_create_open(x_smbd_open_t **psmbd_open,
 		std::unique_ptr<x_smb2_state_create_t> &state,
 		std::vector<x_smb2_change_t> &changes);
 NTSTATUS x_smbd_posixfs_object_init(x_smbd_object_t *smbd_object,
-		int fd, uint32_t file_attributes,
+		int fd, bool is_dir,
 		const std::string &unix_path,
 		const std::vector<uint8_t> &ntacl_blob);
 std::unique_lock<std::mutex> x_smbd_posixfs_lock_object(x_smbd_object_t *smbd_object);

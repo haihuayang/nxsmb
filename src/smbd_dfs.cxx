@@ -355,7 +355,7 @@ static inline void create_new_tld(dfs_share_t &dfs_share,
 	} else {
 		X_TODO;
 	}
-	x_smbd_posixfs_object_init(smbd_object, fd, FILE_ATTRIBUTE_DIRECTORY,
+	x_smbd_posixfs_object_init(smbd_object, fd, true,
 			name, ntacl_blob);
 #if 0
 	x_smbd_object_meta_t object_meta;
