@@ -233,7 +233,7 @@ static NTSTATUS smbd_chan_auth_succeeded(x_smbd_chan_t *smbd_chan,
 		bool is_bind,
 		const x_auth_info_t &auth_info)
 {
-	X_LOG_DBG("auth_info %s", tostr(auth_info).c_str());
+	X_LOG_DBG("auth_info %s", x_tostr(auth_info).c_str());
 	X_ASSERT(auth_info.domain_sid.num_auths < auth_info.domain_sid.sub_auths.size());
 	
 	/* TODO find_user by auth_info

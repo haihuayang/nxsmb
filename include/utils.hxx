@@ -9,6 +9,7 @@
 #include <string>
 #include <array>
 #include <cstring>
+#include <sstream>
 
 /* unit is nsec */
 typedef uint64_t x_tick_t;
@@ -123,6 +124,14 @@ static inline const char16_t *x_next_sep(const char16_t *in, const char16_t *end
 }
 
 std::string x_hex_dump(const void *data, size_t length, const char *prefix);
+
+template <class T>
+std::string x_tostr(const T &v)
+{
+	std::ostringstream os;
+	os << v;
+	return os.str();
+}
 
 #define X_DEFINE_ENUM_FLAG_OPERATORS(T) \
 inline T operator~ (T a) { return static_cast<T>( ~static_cast<std::underlying_type<T>::type>(a) ); } \

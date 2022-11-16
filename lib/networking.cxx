@@ -2,6 +2,7 @@
 #include "include/xdefines.h"
 #include "include/bits.hxx"
 #include "include/networking.hxx"
+#include "include/utils.hxx"
 #include <sys/types.h>
 #include <sys/ioctl.h>
 #include <unistd.h>
@@ -9,11 +10,13 @@
 #include <net/if.h>
 #include <netdb.h>
 #include <netinet/in.h>
+#include <arpa/inet.h>
 #include <string.h>
 #include <linux/sockios.h>
 #include <linux/ethtool.h>
 #include <stdlib.h>
 #include <string>
+#include <iostream>
 #include <fnmatch.h>
 
 #define HAVE_IPV6 1
@@ -594,6 +597,26 @@ static inline void make_net(struct sockaddr_storage *pss_out,
 	make_bcast_or_net(pss_out, pss_in, nmask, false);
 }
 
+static std::ostream &operator<<(std::ostream &os, const struct sockaddr_storage &val)
+{
+	char buf[INET6_ADDRSTRLEN + 1];
+	if (val.ss_family == AF_INET) {
+		const struct sockaddr_in *sin = (const struct sockaddr_in *)&val;
+		os << inet_ntop(val.ss_family, &sin->sin_addr, buf, sizeof buf);
+	} else {
+		const struct sockaddr_in6 *sin6 = (const struct sockaddr_in6 *)&val;
+		os << inet_ntop(val.ss_family, &sin6->sin6_addr, buf, sizeof buf);
+	}
+	return os;
+}
+
+static std::ostream &operator<<(std::ostream &os, const x_iface_t &val)
+{
+	os << "#" << val.if_index << ' ' << val.name << ' ' << val.ip << '/'
+		<< val.netmask << '/' << val.bcast;
+	return os;
+}
+
 int x_probe_ifaces(std::vector<x_iface_t> &ifaces)
 {
 	int err;
@@ -670,8 +693,11 @@ int x_probe_ifaces(std::vector<x_iface_t> &ifaces)
 		iface.flags = ifptr->ifa_flags;
 		iface.if_index = if_index;
 		strcpy(iface.name, ifptr->ifa_name);
+		memset(&iface.ip, 0, sizeof(iface.ip));
 		memcpy(&iface.ip, ifptr->ifa_addr, copy_size);
+		memset(&iface.netmask, 0, sizeof(iface.netmask));
 		memcpy(&iface.netmask, ifptr->ifa_netmask, copy_size);
+		memset(&iface.bcast, 0, sizeof(iface.bcast));
 		memcpy(&iface.bcast, &bcast, copy_size);
 
 		query_iface_speed_from_name(ifptr->ifa_name, &if_speed);
@@ -682,6 +708,7 @@ int x_probe_ifaces(std::vector<x_iface_t> &ifaces)
 		if (true || rx_queues > 1) {
 			iface.capability |= X_FSCTL_NET_IFACE_RSS_CAPABLE;
 		}
+		X_LOG_DBG("probe iface %s", x_tostr(iface).c_str());
 	}
 
 	freeifaddrs(iflist);

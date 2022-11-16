@@ -457,6 +457,10 @@ struct fsctl_net_iface_info_t
 	struct sockaddr_storage sockaddr;
 };
 
+enum {
+	FSCTL_NET_IFACE_AF_INET6=(int)(0x0017),
+};
+
 static NTSTATUS x_smb2_fsctl_query_network_interface_info(
 		x_smbd_conn_t *smbd_conn,
 		x_smbd_tcon_t *smbd_tcon,
@@ -482,8 +486,8 @@ static NTSTATUS x_smb2_fsctl_query_network_interface_info(
 	state.out_buf = x_buf_alloc(sizeof(fsctl_net_iface_info_t) * local_ifaces.size());
 	uint8_t *p = state.out_buf->data;
 	fsctl_net_iface_info_t *last_info = nullptr;
+	fsctl_net_iface_info_t *info = (fsctl_net_iface_info_t *)p;
 	for (auto &iface: local_ifaces) {
-		fsctl_net_iface_info_t *info = (fsctl_net_iface_info_t *)p;
 		if (last_info) {
 			last_info->next = X_H2LE32(sizeof(fsctl_net_iface_info_t));
 		}
@@ -493,7 +497,11 @@ static NTSTATUS x_smb2_fsctl_query_network_interface_info(
 		info->rss_queue = 0; // samba always set to 0
 		info->linkspeed = X_H2LE64(iface.linkspeed);
 		info->sockaddr = iface.ip;
+		if (iface.ip.ss_family == AF_INET6) {
+			info->sockaddr.ss_family = FSCTL_NET_IFACE_AF_INET6;
+		}
 		last_info = info;
+		++info;
 	}
 	state.out_buf_length = x_convert_assert<uint32_t>(sizeof(fsctl_net_iface_info_t) * local_ifaces.size());
 
