@@ -95,7 +95,7 @@ bool x_smbd_marshall_dir_entry(x_smb2_chain_marshall_t &marshall,
 			info->allocation_size = X_H2LE64(stream_meta.allocation_size);
 			info->file_attributes = X_H2LE32(object_meta.file_attributes);
 			info->file_name_length = X_H2LE32(x_convert_assert<uint32_t>(name.size() * 2));
-			if (object_meta.file_attributes & FILE_ATTRIBUTE_REPARSE_POINT) {
+			if (object_meta.file_attributes & X_SMB2_FILE_ATTRIBUTE_REPARSE_POINT) {
 				info->ea_size = X_H2LE32(IO_REPARSE_TAG_DFS);
 			} else {
 				/*
@@ -135,7 +135,7 @@ bool x_smbd_marshall_dir_entry(x_smb2_chain_marshall_t &marshall,
 			info->allocation_size = X_H2LE64(stream_meta.allocation_size);
 			info->file_attributes = X_H2LE32(object_meta.file_attributes);
 			info->file_name_length = X_H2LE32(x_convert_assert<uint32_t>(name.size() * 2));
-			if (object_meta.file_attributes & FILE_ATTRIBUTE_REPARSE_POINT) {
+			if (object_meta.file_attributes & X_SMB2_FILE_ATTRIBUTE_REPARSE_POINT) {
 				info->ea_size = X_H2LE32(IO_REPARSE_TAG_DFS);
 			} else {
 				/*
@@ -193,7 +193,7 @@ bool x_smbd_marshall_dir_entry(x_smb2_chain_marshall_t &marshall,
 			info->allocation_size = X_H2LE64(stream_meta.allocation_size);
 			info->file_attributes = X_H2LE32(object_meta.file_attributes);
 			info->file_name_length = X_H2LE32(x_convert_assert<uint32_t>(name.size() * 2));
-			if (object_meta.file_attributes & FILE_ATTRIBUTE_REPARSE_POINT) {
+			if (object_meta.file_attributes & X_SMB2_FILE_ATTRIBUTE_REPARSE_POINT) {
 				info->ea_size = X_H2LE32(IO_REPARSE_TAG_DFS);
 			} else {
 				/*
@@ -229,7 +229,7 @@ bool x_smbd_marshall_dir_entry(x_smb2_chain_marshall_t &marshall,
 			info->allocation_size = X_H2LE64(stream_meta.allocation_size);
 			info->file_attributes = X_H2LE32(object_meta.file_attributes);
 			info->file_name_length = X_H2LE32(x_convert_assert<uint32_t>(name.size() * 2));
-			if (object_meta.file_attributes & FILE_ATTRIBUTE_REPARSE_POINT) {
+			if (object_meta.file_attributes & X_SMB2_FILE_ATTRIBUTE_REPARSE_POINT) {
 				info->ea_size = X_H2LE32(IO_REPARSE_TAG_DFS);
 			} else {
 				/*

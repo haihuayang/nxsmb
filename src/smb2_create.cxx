@@ -548,10 +548,13 @@ NTSTATUS x_smb2_process_create(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_req
 		RETURN_OP_STATUS(smbd_requ, NT_STATUS_ACCESS_DENIED);
 	}
 
-	if (state->in_file_attributes & (FILE_ATTRIBUTE_DEVICE | FILE_ATTRIBUTE_VOLUME
-				| ~FILE_ATTRIBUTE_ALL_MASK)) {
+	if (state->in_file_attributes & (X_SMB2_FILE_ATTRIBUTE_DEVICE
+				| X_SMB2_FILE_ATTRIBUTE_VOLUME
+				| ~X_SMB2_FILE_ATTRIBUTE_ALL_MASK)) {
 		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
+
+	state->in_file_attributes &= X_NXSMB_FILE_ATTRIBUTE_MASK;
 
 	/* windows server deny in_desired_access == 0 */
 	if (state->in_desired_access == 0) {

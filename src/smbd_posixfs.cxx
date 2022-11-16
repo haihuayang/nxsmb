@@ -58,12 +58,12 @@ static NTSTATUS posixfs_set_basic_info(int fd,
 {
 	dos_attr_t dos_attr = { 0 };
 	if (basic_info.file_attributes != 0) {
-		if ((object_meta->file_attributes & FILE_ATTRIBUTE_DIRECTORY) !=
-				(basic_info.file_attributes & FILE_ATTRIBUTE_DIRECTORY)) {
+		if ((object_meta->file_attributes & X_SMB2_FILE_ATTRIBUTE_DIRECTORY) !=
+				(basic_info.file_attributes & X_SMB2_FILE_ATTRIBUTE_DIRECTORY)) {
 			return NT_STATUS_INVALID_PARAMETER;
 		}
 		dos_attr.attr_mask |= DOS_SET_FILE_ATTR;
-		dos_attr.file_attrs = basic_info.file_attributes;
+		dos_attr.file_attrs = basic_info.file_attributes & X_NXSMB_FILE_ATTRIBUTE_MASK;
 		notify_actions |= FILE_NOTIFY_CHANGE_ATTRIBUTES;
 	} else {
 		dos_attr.file_attrs = object_meta->file_attributes;
@@ -1845,7 +1845,7 @@ static NTSTATUS posixfs_object_set_delete_on_close(posixfs_object_t *posixfs_obj
 		bool delete_on_close)
 {
 	if (delete_on_close) {
-		if (posixfs_object->meta.file_attributes & FILE_ATTRIBUTE_READONLY) {
+		if (posixfs_object->meta.file_attributes & X_SMB2_FILE_ATTRIBUTE_READONLY) {
 			return NT_STATUS_CANNOT_DELETE;
 		}
 		posixfs_stream->meta.delete_on_close = true;
@@ -2226,7 +2226,7 @@ static std::pair<uint32_t, uint32_t> posixfs_access_check(
 
 	uint32_t granted = state->out_maximal_access;
 	if (state->in_desired_access & idl::SEC_FLAG_MAXIMUM_ALLOWED) {
-		if (posixfs_object->meta.file_attributes & FILE_ATTRIBUTE_READONLY) {
+		if (posixfs_object->meta.file_attributes & X_SMB2_FILE_ATTRIBUTE_READONLY) {
 			granted &= ~(idl::SEC_FILE_WRITE_DATA | idl::SEC_FILE_APPEND_DATA);
 		}
 		granted |= idl::SEC_FILE_READ_ATTRIBUTE;
@@ -2285,7 +2285,7 @@ static NTSTATUS posixfs_create_open_exist_object(
 		}
 	}
 
-	if ((posixfs_object->meta.file_attributes & FILE_ATTRIBUTE_READONLY) &&
+	if ((posixfs_object->meta.file_attributes & X_SMB2_FILE_ATTRIBUTE_READONLY) &&
 			(state->in_desired_access & (idl::SEC_FILE_WRITE_DATA | idl::SEC_FILE_APPEND_DATA))) {
 		X_LOG_NOTICE("deny access 0x%x to %s due to readonly 0x%x",
 				state->in_desired_access, posixfs_object->unix_path.c_str(),
@@ -2293,7 +2293,7 @@ static NTSTATUS posixfs_create_open_exist_object(
 		return NT_STATUS_ACCESS_DENIED;
 	}
 
-	if (posixfs_object->meta.file_attributes & FILE_ATTRIBUTE_REPARSE_POINT) {
+	if (posixfs_object->meta.file_attributes & X_SMB2_FILE_ATTRIBUTE_REPARSE_POINT) {
 		X_LOG_DBG("object %s is reparse_point", posixfs_object->unix_path.c_str());
 		return NT_STATUS_PATH_NOT_COVERED;
 	}
@@ -2549,7 +2549,7 @@ static NTSTATUS open_object_exist_ads(
 		posixfs_ads->initialized = true;
 	}
 
-	if ((posixfs_object->meta.file_attributes & FILE_ATTRIBUTE_READONLY) &&
+	if ((posixfs_object->meta.file_attributes & X_SMB2_FILE_ATTRIBUTE_READONLY) &&
 			(state->in_desired_access & (idl::SEC_FILE_WRITE_DATA | idl::SEC_FILE_APPEND_DATA))) {
 		X_LOG_NOTICE("deny access 0x%x to %s due to readonly 0x%x",
 				state->in_desired_access, posixfs_object->unix_path.c_str(),
@@ -2558,7 +2558,7 @@ static NTSTATUS open_object_exist_ads(
 	}
 
 	/* is this check needed? */
-	if (posixfs_object->meta.file_attributes & FILE_ATTRIBUTE_REPARSE_POINT) {
+	if (posixfs_object->meta.file_attributes & X_SMB2_FILE_ATTRIBUTE_REPARSE_POINT) {
 		X_LOG_DBG("object %s is reparse_point", posixfs_object->unix_path.c_str());
 		return NT_STATUS_PATH_NOT_COVERED;
 	}

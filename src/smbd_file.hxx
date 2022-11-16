@@ -12,7 +12,7 @@
 struct x_smbd_object_meta_t
 {
 	bool isdir() const {
-		return file_attributes & FILE_ATTRIBUTE_DIRECTORY;
+		return file_attributes & X_SMB2_FILE_ATTRIBUTE_DIRECTORY;
 	}
 	uint64_t fsid;
 	uint64_t inode;

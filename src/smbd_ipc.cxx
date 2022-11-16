@@ -609,7 +609,7 @@ static NTSTATUS ipc_create_open(x_smbd_open_t **psmbd_open,
 	}
 
 	state->out_info.out_allocation_size = 4096;
-	state->out_info.out_file_attributes = FILE_ATTRIBUTE_NORMAL;
+	state->out_info.out_file_attributes = X_SMB2_FILE_ATTRIBUTE_NORMAL;
 	state->out_oplock_level = 0;
 	state->out_create_flags = 0;
 	state->out_create_action = FILE_WAS_OPENED;

@@ -266,8 +266,8 @@ static bool dfs_root_process_entry(
 		if (ret != 0) {
 			return false;
 		}
-		if (object_meta->file_attributes & FILE_ATTRIBUTE_DIRECTORY && strcmp(ent_name, pesudo_tld_dir) != 0) {
-			object_meta->file_attributes |= FILE_ATTRIBUTE_REPARSE_POINT;
+		if (object_meta->file_attributes & X_SMB2_FILE_ATTRIBUTE_DIRECTORY && strcmp(ent_name, pesudo_tld_dir) != 0) {
+			object_meta->file_attributes |= X_SMB2_FILE_ATTRIBUTE_REPARSE_POINT;
 		}
 	} else {
 		/* TODO should lock dir_obj */
@@ -298,10 +298,10 @@ static bool dfs_tld_manager_process_entry(
 		if (ret != 0) {
 			return false;
 		}
-		if (!(object_meta->file_attributes & FILE_ATTRIBUTE_DIRECTORY)) {
+		if (!(object_meta->file_attributes & X_SMB2_FILE_ATTRIBUTE_DIRECTORY)) {
 			return false;
 		}
-		object_meta->file_attributes &= uint32_t(~FILE_ATTRIBUTE_REPARSE_POINT);
+		object_meta->file_attributes &= uint32_t(~X_SMB2_FILE_ATTRIBUTE_REPARSE_POINT);
 	} else if (file_number == 0) {
 		/* TODO should lock dir_obj */
 		ret = posixfs_object_get_statex(dir_obj, object_meta, stream_meta);

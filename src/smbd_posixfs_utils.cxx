@@ -22,6 +22,9 @@ extern "C" {
 static int minerva_zfsdev_fd = -1;
 void x_smbd_posixfs_init_dev()
 {
+	/* set /sys/module/zfs/parameters/zfs_enable_inode_gen_in_atime to 0
+	 * to use access time
+	 */
 	int zfsdev = open(ZFS_DEV_PATH, O_RDWR);
 	X_ASSERT(zfsdev != -1);
 	minerva_zfsdev_fd = zfsdev;
@@ -74,10 +77,13 @@ static void posixfs_statex_get_(int fd,
 			3, tags);
 	X_ASSERT(err == 0);
 
-	if (dos_attr.file_attrs & FILE_ATTRIBUTE_DIRECTORY) {
+	if (dos_attr.file_attrs & X_SMB2_FILE_ATTRIBUTE_DIRECTORY) {
 		X_ASSERT(S_ISDIR(kst.mode));
 	} else {
 		X_ASSERT(!S_ISDIR(kst.mode));
+		if (!dos_attr.file_attrs) {
+			dos_attr.file_attrs = X_SMB2_FILE_ATTRIBUTE_NORMAL;
+		}
 	}
 	fsid = tags[2].data;
 }
@@ -112,8 +118,15 @@ int posixfs_dos_attr_get(int fd, dos_attr_t *dos_attr)
 
 int posixfs_dos_attr_set(int fd, const dos_attr_t *dos_attr)
 {
+	dos_attr_t tmp = *dos_attr;
+	/* zfs does not support */
+	tmp.file_attrs &= ~(X_SMB2_FILE_ATTRIBUTE_NORMAL
+			| X_SMB2_FILE_ATTRIBUTE_ENCRYPTED
+			| X_SMB2_FILE_ATTRIBUTE_TEMPORARY
+			| X_SMB2_FILE_ATTRIBUTE_OFFLINE
+			| X_SMB2_FILE_ATTRIBUTE_DIRECTORY);
 	int err = zfs_ntnx_set_dos_attr(minerva_zfsdev_fd, fd, AT_SYMLINK_NOFOLLOW,
-			nullptr, dos_attr);
+			nullptr, &tmp);
 	X_ASSERT(err == 0);
 	return 0;
 }
@@ -191,7 +204,7 @@ int posixfs_statex_get(int fd, x_smbd_object_meta_t *object_meta,
 	dos_attr_t dos_attr;
 	posixfs_dos_attr_get(fd, &dos_attr);
 
-	if (dos_attr.file_attrs & FILE_ATTRIBUTE_DIRECTORY) {
+	if (dos_attr.file_attrs & X_SMB2_FILE_ATTRIBUTE_DIRECTORY) {
 		X_ASSERT(S_ISDIR(stat.st_mode));
 	} else {
 		X_ASSERT(!S_ISDIR(stat.st_mode));
@@ -210,11 +223,11 @@ void posixfs_post_create(int fd, uint32_t file_attrs,
 	int err = fstat(fd, &stat);
 	X_ASSERT(err == 0);
 	if (S_ISDIR(stat.st_mode)) {
-		file_attrs &= ~(uint32_t)FILE_ATTRIBUTE_ARCHIVE;
-		file_attrs |= (uint32_t)FILE_ATTRIBUTE_DIRECTORY;
+		file_attrs &= ~(uint32_t)X_SMB2_FILE_ATTRIBUTE_ARCHIVE;
+		file_attrs |= (uint32_t)X_SMB2_FILE_ATTRIBUTE_DIRECTORY;
 	} else {
-		file_attrs |= (uint32_t)FILE_ATTRIBUTE_ARCHIVE;
-		file_attrs &= ~(uint32_t)FILE_ATTRIBUTE_DIRECTORY;
+		file_attrs |= (uint32_t)X_SMB2_FILE_ATTRIBUTE_ARCHIVE;
+		file_attrs &= ~(uint32_t)X_SMB2_FILE_ATTRIBUTE_DIRECTORY;
 	}
 
 	dos_attr_t dos_attr = {
@@ -328,11 +341,13 @@ int posixfs_create(int dirfd, bool is_dir, const char *path,
 		}
 	}
 
-	/* TODO pretend supporting FILE_ATTRIBUTE_ENCRYPTED */
-	file_attrs &= FILE_ATTRIBUTE_READONLY | FILE_ATTRIBUTE_HIDDEN
-		| FILE_ATTRIBUTE_SYSTEM | FILE_ATTRIBUTE_OFFLINE
-		| FILE_ATTRIBUTE_TEMPORARY | FILE_ATTRIBUTE_ENCRYPTED;
 	/* TODO delete file if fail */
+	file_attrs &= ~(X_SMB2_FILE_ATTRIBUTE_NORMAL);
+	if (is_dir) {
+		file_attrs |= X_SMB2_FILE_ATTRIBUTE_DIRECTORY;
+	} else {
+		file_attrs |= X_SMB2_FILE_ATTRIBUTE_ARCHIVE;
+	}
 	posixfs_post_create(fd, file_attrs,
 			object_meta, stream_meta, ntacl_blob);
 	if (!is_dir) {
