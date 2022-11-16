@@ -758,12 +758,12 @@ static int x_smbd_conn_process_smb2(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smb
 		} else if (NT_STATUS_EQUAL(status, X_NT_STATUS_INTERNAL_BLOCKED)) {
 			return 0;
 		}
-		x_smbd_requ_done(smbd_requ);
 
 		if (!is_success(status)) {
 			X_SMBD_REPLY_ERROR(smbd_conn, smbd_requ, status);
 			smbd_requ->status = status;
 		}
+		x_smbd_requ_done(smbd_requ);
 	}
 
 	/* CANCEL request do not have response */
@@ -1270,6 +1270,7 @@ void x_smbd_conn_requ_done(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ,
 		X_SMBD_REPLY_ERROR(smbd_conn, smbd_requ, status);
 	}
 
+	x_smbd_requ_done(smbd_requ);
 	int err = x_smbd_conn_process_smb2(smbd_conn, smbd_requ, smbd_requ->in_offset + smbd_requ->in_requ_len);
 	if (err < 0) {
 		X_TODO; // x_smbd_conn_reset(smbd_conn);

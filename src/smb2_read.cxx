@@ -81,7 +81,6 @@ static void x_smb2_read_async_done(x_smbd_conn_t *smbd_conn,
 {
 	X_LOG_DBG("status=0x%x", status.v);
 	auto state = smbd_requ->release_state<x_smb2_state_read_t>();
-	x_smbd_requ_done(smbd_requ);
 	if (!smbd_conn) {
 		return;
 	}

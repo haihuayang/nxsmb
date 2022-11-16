@@ -514,7 +514,6 @@ static void ioctl_async_done(x_smbd_conn_t *smbd_conn,
 {
 	X_LOG_DBG("status=0x%x", status.v);
 	auto state = smbd_requ->release_state<x_smb2_state_ioctl_t>();
-	x_smbd_requ_done(smbd_requ);
 	if (!smbd_conn) {
 		return;
 	}
