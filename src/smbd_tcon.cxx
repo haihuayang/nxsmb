@@ -153,8 +153,13 @@ NTSTATUS x_smbd_tcon_op_create(x_smbd_requ_t *smbd_requ,
 				state->in_path.data() + state->in_path.length(),
 				smbd_tcon->volume);
 		if (!NT_STATUS_IS_OK(status)) {
+			X_LOG_WARN("resolve_path failed");
 			return status;
 		}
+		X_LOG_DBG("resolve_path(%s) to %s, %ld, %ld",
+				x_convert_utf16_to_utf8(state->in_path).c_str(),
+				x_convert_utf16_to_utf8(path).c_str(),
+				path_priv_data, open_priv_data);
 
 		state->smbd_object = topdir->ops->open_object(&status,
 				topdir, path, path_priv_data, true);

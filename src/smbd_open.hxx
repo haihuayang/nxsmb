@@ -115,11 +115,12 @@ struct x_smbd_object_ops_t
 			x_smbd_open_t *smbd_open,
 			x_smbd_requ_t *smbd_requ,
 			bool delete_on_close);
-	void (*notify_change)(x_smbd_object_t *smbd_object,
+	void (*notify_change)(std::shared_ptr<x_smbd_topdir_t> &topdir,
+			const std::u16string &path,
+			const std::u16string &fullpath,
+			const std::u16string *new_fullpath,
 			uint32_t notify_action,
 			uint32_t notify_filter,
-			const std::u16string &path,
-			const std::u16string *new_name_path,
 			const x_smb2_lease_key_t &ignore_lease_key,
 			bool last_level);
 	void (*destroy)(x_smbd_object_t *smbd_object, x_smbd_open_t *smbd_open);
@@ -340,7 +341,7 @@ static inline NTSTATUS x_smbd_open_op_set_delete_on_close(
 	return smbd_object->topdir->ops->set_delete_on_close(smbd_object, smbd_open,
 			smbd_requ, delete_on_close);
 }
-
+#if 0
 static inline void x_smbd_object_notify_change(x_smbd_object_t *smbd_object,
 		uint32_t notify_action,
 		uint32_t notify_filter,
@@ -353,7 +354,7 @@ static inline void x_smbd_object_notify_change(x_smbd_object_t *smbd_object,
 			notify_action, notify_filter, path, new_path,
 			ignore_lease_key, last_level);
 }
-
+#endif
 static inline std::string x_smbd_open_op_get_path(
 		const x_smbd_open_t *smbd_open)
 {

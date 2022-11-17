@@ -10,25 +10,9 @@ static void notify_one_level(std::shared_ptr<x_smbd_topdir_t> &topdir,
 		const x_smb2_lease_key_t &ignore_lease_key,
 		bool last_level)
 {
-	NTSTATUS status;
-	x_smbd_object_t *smbd_object = topdir->ops->open_object(&status,
-			topdir, path, 0, false);
-	if (!smbd_object) {
-		X_LOG_DBG("skip notify %d,x%x '%s', '%s'", notify_action,
-				notify_filter,
-				x_convert_utf16_to_utf8(path).c_str(),
-				x_convert_utf16_to_utf8(fullpath).c_str());
-		return;
-	}
-
-	X_LOG_DBG("notify object %d,x%x '%s', '%s'", notify_action,
-			notify_filter,
-			x_convert_utf16_to_utf8(path).c_str(),
-			x_convert_utf16_to_utf8(fullpath).c_str());
-	x_smbd_object_notify_change(smbd_object, notify_action, notify_filter,
-			fullpath, new_fullpath, ignore_lease_key, last_level);
-
-	x_smbd_object_release(smbd_object, nullptr);
+	topdir->ops->notify_change(topdir, path, fullpath, new_fullpath,
+			notify_action, notify_filter,
+			ignore_lease_key, last_level);
 }
 
 static void notify_change(std::shared_ptr<x_smbd_topdir_t> &topdir,

@@ -15,23 +15,20 @@ static const char *pesudo_tld_dir = ".tlds";
 enum {
 	dfs_object_type_none,
 	dfs_object_type_dfs_root,
-	dfs_object_type_tld_manager,
-	dfs_object_type_root_top_level,
+	dfs_object_type_dfs_top_level,
+	dfs_object_type_dfs_denied,
 
 	dfs_object_type_volume_root,
-	dfs_object_type_volume_normal,
 	dfs_object_type_volume_top_level,
+	dfs_object_type_volume_normal,
 };
 
 enum {
 	dfs_open_type_none,
-	dfs_open_type_normal,
+	dfs_open_type_dfs_root,
+	dfs_open_type_tld_manager,
 	dfs_open_type_under_tld_manager,
-};
-
-struct dfs_object_t
-{
-	x_smbd_object_t base;
+	dfs_open_type_normal,
 };
 
 static const char *pseudo_entries[] = {
@@ -123,7 +120,7 @@ static NTSTATUS dfs_root_resolve_path(
 
 	if (path_start == in_path_end) {
 		path_priv_data = dfs_object_type_dfs_root;
-		open_priv_data = dfs_open_type_normal;
+		open_priv_data = dfs_open_type_dfs_root;
 		topdir = dfs_share.root_dir;
 		path.clear();
 		return NT_STATUS_OK;
@@ -133,12 +130,15 @@ static NTSTATUS dfs_root_resolve_path(
 	std::string utf8_top_level = x_convert_utf16_to_lower_utf8(path_start, sep);
 	if (sep == in_path_end) {
 		if (utf8_top_level == pesudo_tld_dir) {
-			path_priv_data = dfs_object_type_tld_manager;
+			open_priv_data = dfs_open_type_tld_manager;
+			path_priv_data = dfs_object_type_dfs_root;
+			/* the pesudo_tld_dir actually ref to the root */
+			path.clear();
 		} else {
-			path_priv_data = dfs_object_type_root_top_level;
+			open_priv_data = dfs_open_type_normal;
+			path_priv_data = dfs_object_type_dfs_top_level;
+			path.assign(path_start, in_path_end);
 		}
-		open_priv_data = dfs_open_type_normal;
-		path.assign(path_start, in_path_end);
 		topdir = dfs_share.root_dir;
 		return NT_STATUS_OK;
 	}
@@ -146,9 +146,10 @@ static NTSTATUS dfs_root_resolve_path(
 	if (utf8_top_level == pesudo_tld_dir) {
 		auto sep2 = x_next_sep(sep + 1, in_path_end, u'\\');
 		if (sep2 != in_path_end) {
-			return NT_STATUS_OBJECT_NAME_NOT_FOUND;
+			path_priv_data = dfs_object_type_dfs_denied;
+		} else {
+			path_priv_data = dfs_object_type_dfs_top_level;
 		}
-		path_priv_data = dfs_object_type_root_top_level;
 		open_priv_data = dfs_open_type_under_tld_manager;
 		path.assign(sep + 1, in_path_end);
 		topdir = dfs_share.root_dir;
@@ -301,7 +302,7 @@ static bool dfs_tld_manager_process_entry(
 		if (!(object_meta->file_attributes & X_SMB2_FILE_ATTRIBUTE_DIRECTORY)) {
 			return false;
 		}
-		object_meta->file_attributes &= uint32_t(~X_SMB2_FILE_ATTRIBUTE_REPARSE_POINT);
+		object_meta->file_attributes &= ~X_SMB2_FILE_ATTRIBUTE_REPARSE_POINT;
 	} else if (file_number == 0) {
 		/* TODO should lock dir_obj */
 		ret = posixfs_object_get_statex(dir_obj, object_meta, stream_meta);
@@ -373,16 +374,21 @@ static NTSTATUS dfs_root_object_op_rename(x_smbd_object_t *smbd_object,
 		const std::u16string &new_path,
 		std::unique_ptr<x_smb2_state_rename_t> &state)
 {
-	if (smbd_object->priv_data == dfs_object_type_dfs_root) {
+	if (smbd_open->priv_data == dfs_open_type_dfs_root) {
+		/* should not reach here because we do not grant delete permission
+		 * on it
+		 */
 		X_ASSERT(false);
 		return NT_STATUS_UNSUCCESSFUL;
-	} else if (smbd_object->priv_data == dfs_object_type_tld_manager) {
+
+	} else if (smbd_open->priv_data == dfs_open_type_tld_manager) {
+		/* should not reach here because we do not grant delete permission
+		 * on it
+		 */
 		X_ASSERT(false);
 		return NT_STATUS_UNSUCCESSFUL;
-	}
-	
-	X_ASSERT(smbd_object->priv_data == dfs_object_type_root_top_level);
-	if (smbd_open->priv_data == dfs_open_type_under_tld_manager) {
+
+	} else if (smbd_open->priv_data == dfs_open_type_under_tld_manager) {
 		/* we do not allow to open the top level dir directly, so it must be tld */
 		auto sep = new_path.find(u'\\');
 		if (sep == std::u16string::npos) {
@@ -414,7 +420,7 @@ static NTSTATUS dfs_root_object_op_rename(x_smbd_object_t *smbd_object,
 		}
 		return status;
 	} else {
-		X_ASSERT(smbd_open->priv_data == 0);
+		X_ASSERT(smbd_open->priv_data == dfs_open_type_normal);
 		auto sep = new_path.find(u'\\');
 		if (sep != std::u16string::npos) {
 			return NT_STATUS_ACCESS_DENIED;
@@ -430,16 +436,14 @@ NTSTATUS dfs_share_t::delete_object(x_smbd_object_t *smbd_object,
 		x_smbd_open_t *smbd_open, int fd,
 		std::vector<x_smb2_change_t> &changes)
 {
-	if (smbd_object->priv_data == dfs_object_type_dfs_root) {
+	if (smbd_open->priv_data == dfs_open_type_dfs_root) {
 		X_ASSERT(false);
 		return NT_STATUS_UNSUCCESSFUL;
-	} else if (smbd_object->priv_data == dfs_object_type_tld_manager) {
+	} else if (smbd_open->priv_data == dfs_open_type_tld_manager) {
 		X_ASSERT(false);
 		return NT_STATUS_UNSUCCESSFUL;
 	}
 	
-	X_ASSERT(smbd_object->priv_data == dfs_object_type_root_top_level);
-
 	X_ASSERT(smbd_object->type != x_smbd_object_t::type_not_exist);
 	if (smbd_object->type == x_smbd_object_t::type_dir) {
 		std::string volume, uuid;
@@ -469,7 +473,7 @@ NTSTATUS dfs_share_t::delete_object(x_smbd_object_t *smbd_object,
 			std::u16string path = x_convert_utf8_to_utf16(pesudo_tld_dir);
 			path += u'\\';
 			path += smbd_object->path;
-			changes.push_back(x_smb2_change_t{NOTIFY_ACTION_REMOVED, 
+			changes.push_back(x_smb2_change_t{NOTIFY_ACTION_REMOVED,
 					FILE_NOTIFY_CHANGE_DIR_NAME,
 					smbd_open->parent_lease_key,
 					path,
@@ -490,8 +494,7 @@ static NTSTATUS dfs_root_object_op_read(
 		x_smbd_requ_t *smbd_requ,
 		std::unique_ptr<x_smb2_state_read_t> &state)
 {
-	if (smbd_object->priv_data != dfs_object_type_root_top_level ||
-			smbd_open->priv_data != dfs_open_type_normal) {
+	if (smbd_open->priv_data != dfs_open_type_normal) {
 		return NT_STATUS_INVALID_DEVICE_REQUEST;
 	}
 	return posixfs_object_op_read(smbd_object, smbd_open, smbd_requ, state);
@@ -503,8 +506,7 @@ static NTSTATUS dfs_root_object_op_write(
 		x_smbd_requ_t *smbd_requ,
 		std::unique_ptr<x_smb2_state_write_t> &state)
 {
-	if (smbd_object->priv_data != dfs_object_type_root_top_level ||
-			smbd_open->priv_data != dfs_open_type_normal) {
+	if (smbd_open->priv_data != dfs_open_type_normal) {
 		return NT_STATUS_INVALID_DEVICE_REQUEST;
 	}
 	return posixfs_object_op_write(smbd_object, smbd_open, smbd_requ, state);
@@ -517,8 +519,7 @@ static NTSTATUS dfs_root_object_op_lock(
 		x_smbd_requ_t *smbd_requ,
 		std::unique_ptr<x_smb2_state_lock_t> &state)
 {
-	if (smbd_object->priv_data != dfs_object_type_root_top_level ||
-			smbd_open->priv_data != dfs_open_type_normal) {
+	if (smbd_open->priv_data != dfs_open_type_normal) {
 		return NT_STATUS_INVALID_DEVICE_REQUEST;
 	}
 	return posixfs_object_op_lock(smbd_object, smbd_open, smbd_conn, smbd_requ, state);
@@ -552,27 +553,15 @@ static NTSTATUS dfs_root_object_op_qdir(
 		x_smbd_requ_t *smbd_requ,
 		std::unique_ptr<x_smb2_state_qdir_t> &state)
 {
-	if (smbd_object->priv_data == dfs_object_type_dfs_root) {
+	if (smbd_open->priv_data == dfs_open_type_dfs_root) {
 		return posixfs_object_qdir(smbd_object, smbd_conn, smbd_requ, state,
 				pseudo_entries, PSEUDO_ENTRIES_COUNT,
 				dfs_root_process_entry);
-	} else if (smbd_object->priv_data == dfs_object_type_tld_manager) {
-		NTSTATUS status;
-		x_smbd_object_t *root_object = posixfs_open_object(&status,
-				smbd_object->topdir, u"", dfs_object_type_dfs_root,
-				true);
-		if (!root_object) {
-			return status;
-		}
-		status = posixfs_object_qdir(root_object, smbd_conn, smbd_requ, state,
+	} else if (smbd_open->priv_data == dfs_open_type_tld_manager) {
+		return posixfs_object_qdir(smbd_object, smbd_conn, smbd_requ, state,
 				pseudo_entries, PSEUDO_ENTRIES_COUNT,
 				dfs_tld_manager_process_entry);
-		x_smbd_object_release(root_object, nullptr);
-		return status;
-	}
-	
-	X_ASSERT(smbd_object->priv_data == dfs_object_type_root_top_level);
-	if (smbd_open->priv_data == dfs_open_type_under_tld_manager) {
+	} else if (smbd_open->priv_data == dfs_open_type_under_tld_manager) {
 		return posixfs_object_qdir(smbd_object, smbd_conn, smbd_requ, state,
 				pseudo_entries, PSEUDO_ENTRIES_COUNT,
 				dfs_tld_process_entry);
@@ -587,13 +576,11 @@ static NTSTATUS dfs_root_object_op_set_delete_on_close(
 		x_smbd_requ_t *smbd_requ,
 		bool delete_on_close)
 {
-	if (smbd_object->priv_data == dfs_object_type_dfs_root) {
+	if (smbd_open->priv_data == dfs_open_type_dfs_root) {
 		return NT_STATUS_ACCESS_DENIED;
-	} else if (smbd_object->priv_data == dfs_object_type_tld_manager) {
+	} else if (smbd_open->priv_data == dfs_open_type_tld_manager) {
 		return NT_STATUS_ACCESS_DENIED;
-	}
-	X_ASSERT(smbd_object->priv_data == dfs_object_type_root_top_level);
-	if (smbd_open->priv_data == dfs_open_type_under_tld_manager) {
+	} else if (smbd_open->priv_data == dfs_open_type_under_tld_manager) {
 		return posixfs_object_op_set_delete_on_close(smbd_object,
 				smbd_open, smbd_requ, delete_on_close);
 	} else {
@@ -602,28 +589,42 @@ static NTSTATUS dfs_root_object_op_set_delete_on_close(
 	}
 }
 
-static void dfs_root_notify_change(x_smbd_object_t *smbd_object,
+static void dfs_root_notify_change(std::shared_ptr<x_smbd_topdir_t> &topdir,
+		const std::u16string &path,
+		const std::u16string &fullpath,
+		const std::u16string *new_fullpath,
 		uint32_t notify_action,
 		uint32_t notify_filter,
-		const std::u16string &path,
-		const std::u16string *new_path,
 		const x_smb2_lease_key_t &ignore_lease_key,
 		bool last_level)
 {
-	if (smbd_object->priv_data == dfs_object_type_dfs_root) {
-		posixfs_object_notify_change(smbd_object,
-				notify_action, notify_filter,
-				path, new_path,
-				ignore_lease_key, last_level);
-	} else if (smbd_object->priv_data == dfs_object_type_tld_manager) {
-		posixfs_object_notify_change(smbd_object,
-				notify_action, notify_filter,
-				path, new_path,
-				ignore_lease_key, last_level);
-		// TODO
+	NTSTATUS status;
+	x_smbd_object_t *smbd_object = nullptr;
+	long open_priv_data;
+	if (path.empty()) {
+		open_priv_data = dfs_open_type_dfs_root;
+		smbd_object = topdir->ops->open_object(&status,
+				topdir, path, dfs_object_type_dfs_root, false);
 	} else {
-		X_TODO;
+		open_priv_data = dfs_open_type_tld_manager;
+		std::string utf8_path = x_convert_utf16_to_lower_utf8(path);
+		if (utf8_path != pesudo_tld_dir) {
+			return;
+		}
+		smbd_object = topdir->ops->open_object(&status,
+				topdir, std::u16string(), dfs_object_type_dfs_root, false);
 	}
+
+	if (!smbd_object) {
+		return;
+	}
+
+	posixfs_object_notify_change(smbd_object, notify_action, notify_filter,
+			path.empty() ? 0: x_convert<uint32_t>(path.length() + 1),
+			fullpath, new_fullpath, ignore_lease_key,
+			last_level,
+			open_priv_data);
+	x_smbd_object_release(smbd_object, nullptr);
 }
 
 static inline void dfs_root_op_lease_break(
@@ -640,16 +641,17 @@ static x_smbd_object_t *dfs_root_op_open_object(NTSTATUS *pstatus,
 		long path_priv_data,
 		bool create_if)
 {
-	if (path_priv_data == dfs_object_type_dfs_root) {
-		return posixfs_open_object(pstatus, topdir, path, path_priv_data, create_if);
+	if (path_priv_data == dfs_object_type_dfs_denied) {
+		*pstatus = NT_STATUS_ACCESS_DENIED;
+		return nullptr;
 	}
 
-	if (path_priv_data == dfs_object_type_tld_manager) {
-		return posixfs_open_object(pstatus, topdir, path, path_priv_data, create_if);
+	x_smbd_object_t *smbd_object = posixfs_open_object(topdir,
+			path, path_priv_data, create_if);
+	if (!smbd_object) {
+		*pstatus = NT_STATUS_OBJECT_NAME_NOT_FOUND;
 	}
-
-	X_ASSERT(path_priv_data == dfs_object_type_root_top_level || !create_if);
-	return posixfs_open_object(pstatus, topdir, path, path_priv_data, create_if);
+	return smbd_object;
 }
 
 static NTSTATUS dfs_root_create_open(dfs_share_t &dfs_share,
@@ -660,23 +662,21 @@ static NTSTATUS dfs_root_create_open(dfs_share_t &dfs_share,
 {
 	x_smbd_object_t *smbd_object = state->smbd_object;
 	std::lock_guard lock(smbd_object->mutex);
-	if (smbd_object->priv_data == dfs_object_type_dfs_root) {
+	if (state->open_priv_data == dfs_open_type_dfs_root) {
 		if (state->in_ads_name.size() > 0) {
 			return NT_STATUS_ACCESS_DENIED;
 		}
 		return x_smbd_posixfs_create_open(psmbd_open, smbd_requ,
 				state, changes);
-	} else if (smbd_object->priv_data == dfs_object_type_tld_manager) {
+
+	} else if (state->open_priv_data == dfs_open_type_tld_manager) {
 		if (state->in_ads_name.size() > 0) {
 			return NT_STATUS_ACCESS_DENIED;
 		}
 		return x_smbd_posixfs_create_open(psmbd_open, smbd_requ,
 				state, changes);
-	}
 
-	X_ASSERT(smbd_object->priv_data == dfs_object_type_root_top_level);
-
-	if (state->open_priv_data == dfs_open_type_under_tld_manager) {
+	} else if (state->open_priv_data == dfs_open_type_under_tld_manager) {
 		if (smbd_object->type == x_smbd_object_t::type_dir) {
 			return x_smbd_posixfs_create_open(psmbd_open,
 					smbd_requ, state, changes);
@@ -812,7 +812,12 @@ static x_smbd_object_t *dfs_volume_op_open_object(NTSTATUS *pstatus,
 		long path_priv_data,
 		bool create_if)
 {
-	return posixfs_open_object(pstatus, topdir, path, path_priv_data, create_if);
+	x_smbd_object_t *smbd_object = posixfs_open_object(topdir, path,
+			path_priv_data, create_if);
+	if (!smbd_object) {
+		*pstatus = NT_STATUS_OBJECT_NAME_NOT_FOUND;
+	}
+	return smbd_object;
 }
 
 static NTSTATUS dfs_volume_create_open(x_smbd_open_t **psmbd_open,
@@ -872,7 +877,7 @@ static const x_smbd_object_ops_t dfs_volume_object_ops = {
 	posixfs_object_op_oplock_break,
 	dfs_volume_object_op_rename,
 	posixfs_object_op_set_delete_on_close,
-	posixfs_object_notify_change,
+	posixfs_simple_notify_change,
 	posixfs_object_op_destroy,
 	posixfs_op_release_object,
 	posixfs_op_get_path,

@@ -973,10 +973,12 @@ struct posixfs_notify_evt_t
 void posixfs_object_notify_change(x_smbd_object_t *smbd_object,
 		uint32_t notify_action,
 		uint32_t notify_filter,
+		uint32_t prefix_length,
 		const std::u16string &fullpath,
 		const std::u16string *new_name_path,
 		const x_smb2_lease_key_t &ignore_lease_key,
-		bool last_level)
+		bool last_level,
+		long open_priv_data)
 {
 	posixfs_object_t *posixfs_object = posixfs_object_from_base_t::container(smbd_object);
 
@@ -987,6 +989,10 @@ void posixfs_object_notify_change(x_smbd_object_t *smbd_object,
 	auto &open_list = posixfs_object->default_stream.open_list;
 	posixfs_open_t *curr_open;
 	for (curr_open = open_list.get_front(); curr_open; curr_open = open_list.next(curr_open)) {
+		if (curr_open->base.priv_data != open_priv_data) {
+			continue;
+		}
+
 		if (last_level && curr_open->smbd_lease) {
 			do_break_lease(curr_open, &ignore_lease_key, 0);
 		}
@@ -998,15 +1004,15 @@ void posixfs_object_notify_change(x_smbd_object_t *smbd_object,
 			continue;
 		}
 		if (subpath.empty()) {
-			if (smbd_object->path.empty()) {
+			if (prefix_length == 0) {
 				subpath = fullpath;
 				if (new_name_path) {
 					new_subpath = *new_name_path;
 				}
 			} else {
-				subpath = fullpath.substr(smbd_object->path.size() + 1);
+				subpath = fullpath.substr(prefix_length);
 				if (new_name_path) {
-					new_subpath = new_name_path->substr(smbd_object->path.size() + 1);
+					new_subpath = new_name_path->substr(prefix_length);
 				}
 			}
 		}
@@ -1035,6 +1041,37 @@ void posixfs_object_notify_change(x_smbd_object_t *smbd_object,
 					std::move(notify_changes)));
 		lock.lock();
 	}
+}
+
+void posixfs_simple_notify_change(std::shared_ptr<x_smbd_topdir_t> &topdir,
+		const std::u16string &path,
+		const std::u16string &fullpath,
+		const std::u16string *new_fullpath,
+		uint32_t notify_action,
+		uint32_t notify_filter,
+		const x_smb2_lease_key_t &ignore_lease_key,
+		bool last_level)
+{
+	NTSTATUS status;
+	x_smbd_object_t *smbd_object = topdir->ops->open_object(&status,
+			topdir, path, 0, false);
+	if (!smbd_object) {
+		X_LOG_DBG("skip notify %d,x%x '%s', '%s'", notify_action,
+				notify_filter,
+				x_convert_utf16_to_utf8(path).c_str(),
+				x_convert_utf16_to_utf8(fullpath).c_str());
+		return;
+	}
+
+	X_LOG_DBG("notify object %d,x%x '%s', '%s'", notify_action,
+			notify_filter,
+			x_convert_utf16_to_utf8(path).c_str(),
+			x_convert_utf16_to_utf8(fullpath).c_str());
+	posixfs_object_notify_change(smbd_object, notify_action, notify_filter,
+			path.empty() ? 0: x_convert<uint32_t>(path.length() + 1),
+			fullpath, new_fullpath, ignore_lease_key, last_level, 0);
+
+	x_smbd_object_release(smbd_object, nullptr);
 }
 
 /* rename_internals_fsp */
@@ -4781,7 +4818,7 @@ void posixfs_object_op_destroy(x_smbd_object_t *smbd_object,
 	delete posixfs_open;
 }
 
-x_smbd_object_t *posixfs_open_object(NTSTATUS *pstatus,
+x_smbd_object_t *posixfs_open_object(
 		std::shared_ptr<x_smbd_topdir_t> &topdir,
 		const std::u16string &path, long path_data,
 		bool create_if)
