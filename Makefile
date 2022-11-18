@@ -103,6 +103,7 @@ a = \
 
 SET_src_smbd_nx := \
 	smbd_file_info \
+	smbd_access \
 	smbd_posixfs \
 	smbd_notify \
 	smbd_dfs \

@@ -5,6 +5,7 @@
 #include <fcntl.h>
 #include <sys/statvfs.h>
 #include "smbd_ntacl.hxx"
+#include "smbd_access.hxx"
 #include "smbd_lease.hxx"
 #include "smbd_share.hxx"
 #include "smbd_conf.hxx"
@@ -1879,11 +1880,17 @@ static NTSTATUS grant_oplock(posixfs_object_t *posixfs_object,
 /* posixfs_object mutex is locked */
 static NTSTATUS posixfs_object_set_delete_on_close(posixfs_object_t *posixfs_object,
 		posixfs_stream_t *posixfs_stream,
+		uint32_t access_mask,
 		bool delete_on_close)
 {
 	if (delete_on_close) {
-		if (posixfs_object->meta.file_attributes & X_SMB2_FILE_ATTRIBUTE_READONLY) {
-			return NT_STATUS_CANNOT_DELETE;
+		NTSTATUS status = x_smbd_can_set_delete_on_close(&posixfs_object->base,
+				(posixfs_stream == &posixfs_object->default_stream) ?
+					nullptr : &posixfs_stream->base,
+				posixfs_object->meta.file_attributes,
+				access_mask);
+		if (!NT_STATUS_IS_OK(status)) {
+			return status;
 		}
 		posixfs_stream->meta.delete_on_close = true;
 		if (posixfs_object->base.type == x_smbd_object_t::type_dir &&
@@ -1914,7 +1921,8 @@ static posixfs_open_t *posixfs_open_create(
 {
 	NTSTATUS status;
 	if (state.in_create_options & FILE_DELETE_ON_CLOSE) {
-		status = posixfs_object_set_delete_on_close(posixfs_object, posixfs_stream, true);
+		status = posixfs_object_set_delete_on_close(posixfs_object, posixfs_stream,
+				state.granted_access, true);
 		if (!NT_STATUS_IS_OK(status)) {
 			*pstatus = status;
 			return nullptr;
@@ -2278,6 +2286,14 @@ static std::pair<uint32_t, uint32_t> posixfs_access_check(
 	}
 
 	uint32_t rejected_mask = desired_access & ~granted;
+	if ((rejected_mask & idl::SEC_STD_DELETE) && !(state->in_desired_access
+				& idl::SEC_FLAG_MAXIMUM_ALLOWED)) {
+		if (can_delete_file_in_directory(posixfs_object,
+					smbd_requ->smbd_tcon, smbd_user)) {
+			granted |= idl::SEC_STD_DELETE;
+			rejected_mask &= ~idl::SEC_STD_DELETE;
+		}
+	}
 	return {granted, rejected_mask};
 }
 
@@ -2344,19 +2360,11 @@ static NTSTATUS posixfs_create_open_exist_object(
 	auto smbd_user = x_smbd_sess_get_user(smbd_requ->smbd_sess);
 	auto [granted, rejected_mask] = posixfs_access_check(posixfs_object,
 			*smbd_user, *psd, smbd_requ, state);
-	if (rejected_mask == idl::SEC_STD_DELETE) {
-	       	if (!can_delete_file_in_directory(posixfs_object,
-					smbd_requ->smbd_tcon, *smbd_user)) {
-			return NT_STATUS_ACCESS_DENIED;
-		}
-	} else if (rejected_mask != 0) {
+	if (rejected_mask != 0) {
 		return NT_STATUS_ACCESS_DENIED;
 	}
 
-	if (!NT_STATUS_IS_OK(status)) {
-		return status;
-	}
-
+	/* TODO seems windows do not check this for folder */
 	if (granted & idl::SEC_STD_DELETE) {
 		if (!check_ads_share_access(posixfs_object, granted)) {
 			return NT_STATUS_SHARING_VIOLATION;
@@ -2430,7 +2438,25 @@ static NTSTATUS posixfs_create_open_new_object(
 		x_smb2_state_create_t &state)
 {
 	std::shared_ptr<idl::security_descriptor> psd;
-	NTSTATUS status = posixfs_new_object(posixfs_object, smbd_requ,
+	uint32_t access_mask;
+	if (state.in_desired_access & idl::SEC_FLAG_MAXIMUM_ALLOWED) {
+		access_mask = idl::SEC_RIGHTS_FILE_ALL;
+	} else {
+		access_mask = state.in_desired_access;
+	}
+
+	NTSTATUS status;
+	if (state.in_create_options & FILE_DELETE_ON_CLOSE) {
+		status = x_smbd_can_set_delete_on_close(
+				&posixfs_object->base, nullptr,
+				state.in_file_attributes,
+				access_mask);
+		if (!NT_STATUS_IS_OK(status)) {
+			return status;
+		}
+	}
+
+	status = posixfs_new_object(posixfs_object, smbd_requ,
 			state, state.in_file_attributes, state.in_allocation_size, psd);
 	if (!NT_STATUS_IS_OK(status)) {
 		return status;
@@ -4794,7 +4820,7 @@ NTSTATUS posixfs_object_op_set_delete_on_close(
 	posixfs_stream_t *posixfs_stream = posixfs_get_stream(posixfs_object, smbd_open->smbd_stream);
 	auto lock = std::lock_guard(posixfs_object->base.mutex);
 	return posixfs_object_set_delete_on_close(posixfs_object,
-			posixfs_stream, delete_on_close);
+			posixfs_stream, smbd_open->access_mask, delete_on_close);
 }
 
 static void posixfs_object_release_stream(posixfs_object_t *posixfs_object,
