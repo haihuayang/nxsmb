@@ -24,6 +24,18 @@ struct posixfs_ads_header_t
 // TODO ext4 xattr max size is 4k
 static const uint64_t posixfs_ads_max_length = 0x1000 - sizeof(posixfs_ads_header_t);
 
+static std::u16string get_parent_path(
+		const std::u16string &path)
+{
+	X_ASSERT(!path.empty());
+	std::u16string parent_path;
+	auto sep = path.rfind('\\');
+	if (sep != std::u16string::npos) {
+		parent_path = path.substr(0, sep);
+	}
+	return parent_path;
+}
+
 
 struct qdir_t
 {
@@ -1318,6 +1330,36 @@ static void posixfs_rename_cancel(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_
 	x_smbd_conn_post_cancel(smbd_conn, smbd_requ, NT_STATUS_CANCELLED);
 }
 
+static NTSTATUS parent_dirname_compatible_open(
+		std::shared_ptr<x_smbd_topdir_t> &topdir,
+		const std::u16string &path)
+{
+	if (path.empty()) {
+		return NT_STATUS_INVALID_PARAMETER;
+	}
+	std::u16string parent_path = get_parent_path(path);
+	NTSTATUS status;
+	x_smbd_object_t *smbd_object = topdir->ops->open_object(&status,
+			topdir, parent_path, 0, false);
+	if (!smbd_object) {
+		return NT_STATUS_OK;
+	}
+
+	status = NT_STATUS_OK;
+	posixfs_object_t *posixfs_object = posixfs_object_from_base_t::container(smbd_object);
+	const posixfs_open_t *curr_open;
+	auto &open_list = posixfs_object->default_stream.open_list;
+	auto lock = std::lock_guard(smbd_object->mutex);
+	for (curr_open = open_list.get_front(); curr_open; curr_open = open_list.next(curr_open)) {
+		if (curr_open->base.access_mask & idl::SEC_STD_DELETE) {
+			status = NT_STATUS_SHARING_VIOLATION;
+			break;
+		}
+	}
+	x_smbd_object_release(smbd_object, nullptr);
+	return status;
+}
+
 NTSTATUS posixfs_object_op_rename(x_smbd_object_t *smbd_object,
 		x_smbd_open_t *smbd_open,
 		x_smbd_requ_t *smbd_requ,
@@ -1327,6 +1369,14 @@ NTSTATUS posixfs_object_op_rename(x_smbd_object_t *smbd_object,
 	posixfs_object_t *posixfs_object = posixfs_object_from_base_t::container(smbd_object);
 	posixfs_open_t *posixfs_open = posixfs_open_from_base_t::container(smbd_open);
 	posixfs_stream_t *posixfs_stream = posixfs_get_stream(posixfs_object, posixfs_open);
+
+	NTSTATUS status;
+	if (!smbd_open->smbd_stream) {
+		status = parent_dirname_compatible_open(smbd_object->topdir, new_path);
+		if (!NT_STATUS_IS_OK(status)) {
+			return status;
+		}
+	}
 
 	auto lock = std::lock_guard(posixfs_object->base.mutex);
 
@@ -1357,7 +1407,6 @@ NTSTATUS posixfs_object_op_rename(x_smbd_object_t *smbd_object,
 	auto &new_bucket = pool.buckets[new_bucket_idx];
 	auto old_bucket_idx = posixfs_object->hash % pool.buckets.size();
 
-	NTSTATUS status;
 	std::u16string old_path;
 	if (new_bucket_idx == old_bucket_idx) {
 		auto bucket_lock = std::lock_guard(new_bucket.mutex);
