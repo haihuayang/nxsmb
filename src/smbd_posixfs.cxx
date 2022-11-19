@@ -3924,7 +3924,6 @@ NTSTATUS posixfs_object_op_lock(
 			posixfs_open->locks.insert(posixfs_open->locks.end(),
 					state->in_lock_elements.begin(),
 					state->in_lock_elements.end());
-			return NT_STATUS_OK;
 		} else if (state->in_lock_elements[0].flags & SMB2_LOCK_FLAG_FAIL_IMMEDIATELY) {
 			return NT_STATUS_LOCK_NOT_GRANTED;
 		} else {
@@ -3937,6 +3936,10 @@ NTSTATUS posixfs_object_op_lock(
 			return NT_STATUS_PENDING;
 		}
 	}
+	/* when lock success, it break oplock */
+	break_others_to_none(posixfs_object, posixfs_stream,
+			posixfs_open->smbd_lease, posixfs_open->oplock_level);
+	return NT_STATUS_OK;
 }
 
 template<typename T>
