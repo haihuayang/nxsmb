@@ -210,6 +210,15 @@ static inline std::string x_str_toupper(const std::string &s)
 	return ret;
 }
 
+static inline bool x_str_has_wild(const std::u16string &s)
+{
+	for (auto c: s) {
+		if (c == u'*' || c == u'?' || c == u'<' || c == u'>' || c == u'"') {
+			return true;
+		}
+	}
+	return false;
+}
 
 #endif /* __charset__hxx__ */
 
