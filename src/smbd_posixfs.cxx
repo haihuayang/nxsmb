@@ -1620,6 +1620,11 @@ static void do_break_oplock(posixfs_object_t *posixfs_object,
 {
 	/* already hold posixfs_object mutex */
 	X_ASSERT(break_to == X_SMB2_LEASE_READ || break_to == X_SMB2_OPLOCK_LEVEL_NONE);
+	if (posixfs_open->oplock_break_sent != oplock_break_sent_t::OPLOCK_BREAK_NOT_SENT) {
+		X_LOG_DBG("posixfs_open->oplock_break_sent = %d",
+				posixfs_open->oplock_break_sent);
+		return;
+	}
 
 	uint8_t oplock_level = break_to == X_SMB2_LEASE_READ ?
 		X_SMB2_OPLOCK_LEVEL_II : X_SMB2_OPLOCK_LEVEL_NONE;
@@ -4784,10 +4789,10 @@ NTSTATUS posixfs_object_op_oplock_break(
 	bool modified = false;
 	auto lock = std::lock_guard(posixfs_object->base.mutex);
 
-	if (posixfs_open->oplock_break_sent != oplock_break_sent_t::OPLOCK_BREAK_NOT_SENT) {
-		if (x_smbd_cancel_timer(x_smbd_timer_t::BREAK, &posixfs_open->oplock_break_timer)) {
-			x_smbd_ref_dec(&posixfs_open->base);
-		}
+	if (posixfs_open->oplock_break_sent == oplock_break_sent_t::OPLOCK_BREAK_NOT_SENT) {
+		return NT_STATUS_INVALID_OPLOCK_PROTOCOL;
+	} else if (x_smbd_cancel_timer(x_smbd_timer_t::BREAK, &posixfs_open->oplock_break_timer)) {
+		x_smbd_ref_dec(&posixfs_open->base);
 	}
 
 	if (posixfs_open->oplock_break_sent == oplock_break_sent_t::OPLOCK_BREAK_TO_NONE_SENT || state->in_oplock_level == X_SMB2_OPLOCK_LEVEL_NONE) {

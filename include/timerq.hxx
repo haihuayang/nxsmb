@@ -19,7 +19,7 @@ struct x_timerq_entry_t
 		S_QUEUED,
 		S_CANCELLED,
 		S_FIRED,
-	} state;
+	} state = S_NONE;
 	uint64_t queue_time;
 	void (*func)(x_timerq_entry_t *entry);
 };
