@@ -477,6 +477,11 @@ void x_smbd_conn_requ_done(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ,
 	return (status); \
 } while (0)
 
+#define RETURN_STATUS(status) do { \
+	X_LOG_DBG("0x%lx", (status).v); \
+	return (status); \
+} while (0)
+
 /* TODO */
 #define DEBUG(...) do { } while (0)
 

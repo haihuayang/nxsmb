@@ -98,8 +98,9 @@ NTSTATUS x_smb2_process_getinfo(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_re
 		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
 
-	X_LOG_OP("%ld GETINFO 0x%lx, 0x%lx", smbd_requ->in_smb2_hdr.mid,
-			state->in_file_id_persistent, state->in_file_id_volatile);
+	X_LOG_OP("%ld GETINFO 0x%lx:%lx %d:%d", smbd_requ->in_smb2_hdr.mid,
+			state->in_file_id_persistent, state->in_file_id_volatile,
+			state->in_info_class, state->in_info_level);
 
 	NTSTATUS status = x_smbd_requ_init_open(smbd_requ,
 			state->in_file_id_persistent,
