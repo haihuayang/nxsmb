@@ -76,16 +76,16 @@ static NTSTATUS decode_in_rename(x_smb2_state_rename_t &state,
 		uint32_t in_input_buffer_length)
 {
 	if (in_input_buffer_length < sizeof(x_smb2_rename_info_t)) {
-		return NT_STATUS_INVALID_PARAMETER;
+		RETURN_STATUS(NT_STATUS_INVALID_PARAMETER);
 	}
 	const x_smb2_rename_info_t *in_info = (const x_smb2_rename_info_t *)(in_hdr + in_input_buffer_offset);
 	uint32_t file_name_length = X_LE2H32(in_info->file_name_length);
 	if ((file_name_length % 2) != 0 || file_name_length +
 			sizeof(x_smb2_rename_info_t) > in_input_buffer_length) {
-		return NT_STATUS_INVALID_PARAMETER;
+		RETURN_STATUS(NT_STATUS_INVALID_PARAMETER);
 	}
 	if (file_name_length == 0) {
-		return NT_STATUS_INFO_LENGTH_MISMATCH;
+		RETURN_STATUS(NT_STATUS_INFO_LENGTH_MISMATCH);
 	}
 
 	const char16_t *in_name_begin = (const char16_t *)(in_info + 1);
@@ -104,7 +104,7 @@ static NTSTATUS decode_in_rename(x_smb2_state_rename_t &state,
 		state.in_path.clear();
 	} else {
 		/* rename not allow both path and stream */
-		return NT_STATUS_NOT_SUPPORTED;
+		RETURN_STATUS(NT_STATUS_SHARING_VIOLATION);
 	}
 
 	state.in_replace_if_exists = in_info->replace_if_exists;
@@ -150,11 +150,11 @@ static NTSTATUS x_smb2_process_rename(x_smbd_conn_t *smbd_conn,
 
 	if (smbd_requ->smbd_open->smbd_stream) {
 		if (state->in_path.size()) {
-			return NT_STATUS_INVALID_PARAMETER;
+			RETURN_OP_STATUS(smbd_requ, NT_STATUS_OBJECT_NAME_INVALID);
 		}
 	} else {
 		if (state->in_stream_name.size()) {
-			return NT_STATUS_INVALID_PARAMETER;
+			RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 		}
 	}
 
@@ -198,7 +198,7 @@ NTSTATUS x_smb2_process_setinfo(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_re
 			NTSTATUS status = decode_in_rename(*state, in_hdr, 
 					in_input_buffer_offset, in_input_buffer_length);
 			if (!NT_STATUS_IS_OK(status)) {
-				RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
+				RETURN_OP_STATUS(smbd_requ, status);
 			}
 
 			state->in_file_id_persistent = in_file_id_persistent;

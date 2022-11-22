@@ -57,21 +57,8 @@ static NTSTATUS simplefs_object_op_qdir(
 			simplefs_process_entry);
 }
 
-static x_smbd_object_t *simplefs_open_object(NTSTATUS *pstatus,
-		std::shared_ptr<x_smbd_topdir_t> &topdir,
-		const std::u16string &path, long path_data,
-		bool create_if)
-{
-	x_smbd_object_t *smbd_object = posixfs_open_object(topdir, path,
-			path_data, create_if);
-	if (!smbd_object) {
-		*pstatus = NT_STATUS_OBJECT_NAME_NOT_FOUND;
-	}
-	return smbd_object;
-}
-
 static const x_smbd_object_ops_t simplefs_object_ops = {
-	simplefs_open_object,
+	x_smbd_posixfs_open_object,
 	posixfs_object_op_close,
 	posixfs_object_op_read,
 	posixfs_object_op_write,

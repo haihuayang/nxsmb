@@ -121,7 +121,7 @@ NTSTATUS posixfs_object_qdir(
 			const char *ent_name,
 			uint32_t file_number));
 
-x_smbd_object_t *posixfs_open_object(
+x_smbd_object_t *x_smbd_posixfs_open_object(NTSTATUS *pstatus,
 		std::shared_ptr<x_smbd_topdir_t> &topdir,
 		const std::u16string &path, long path_data,
 		bool create_if);
@@ -143,10 +143,6 @@ void posixfs_simple_notify_change(std::shared_ptr<x_smbd_topdir_t> &topdir,
 		uint32_t notify_filter,
 		const x_smb2_lease_key_t &ignore_lease_key,
 		bool last_level);
-
-NTSTATUS x_smbd_posixfs_open_object(x_smbd_object_t **psmbd_object,
-		std::shared_ptr<x_smbd_topdir_t> &topdir,
-		const std::u16string &path, uint64_t path_data);
 
 NTSTATUS x_smbd_posixfs_create_open(x_smbd_open_t **psmbd_open,
 		x_smbd_requ_t *smbd_requ,

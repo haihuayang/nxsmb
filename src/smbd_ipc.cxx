@@ -219,7 +219,7 @@ static NTSTATUS process_dcerpc_bind(
 	} else {
 		bind_ack.assoc_group_id = 0x53f0;
 	}
-	bind_ack.secondary_address= "\\PIPE\\" + x_convert_utf16_to_utf8(ipc_object->base.path);
+	bind_ack.secondary_address= "\\PIPE\\" + x_convert_utf16_to_utf8_assert(ipc_object->base.path);
 
 	x_ndr_push(bind_ack, body_output, ndr_flags);
 	resp_type = idl::DCERPC_PKT_BIND_ACK;

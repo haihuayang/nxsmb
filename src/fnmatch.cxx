@@ -8,9 +8,9 @@ struct x_fnmatch_t
 	std::regex re;
 };
 
-bool x_fnmatch_match(const x_fnmatch_t *fnmatch, const char *name)
+bool x_fnmatch_match(const x_fnmatch_t &fnmatch, const char *name)
 {
-	return std::regex_match(name, fnmatch->re);
+	return std::regex_match(name, fnmatch.re);
 }
 
 x_fnmatch_t *x_fnmatch_create(const std::u16string &pattern, bool icase)
@@ -42,7 +42,10 @@ x_fnmatch_t *x_fnmatch_create(const std::u16string &pattern, bool icase)
 			// TODO multibytes
 			u8.push_back(x_convert_assert<char>(c));
 		} else {
-			x_convert_utf16_to_utf8(&c, &c + 1, std::back_inserter(u8));
+			if (!x_convert_utf16_to_utf8_new(&c, &c + 1, u8)) {
+				X_TODO;
+				return nullptr;
+			}
 		}
 	}
 
@@ -50,5 +53,10 @@ x_fnmatch_t *x_fnmatch_create(const std::u16string &pattern, bool icase)
 
 	(void)has_wildcard; // TODO not used for now
 	return new x_fnmatch_t(u8, options);
+}
+
+void x_fnmatch_destroy(x_fnmatch_t *fnmatch)
+{
+	delete fnmatch;
 }
 

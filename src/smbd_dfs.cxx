@@ -103,7 +103,7 @@ static NTSTATUS dfs_root_resolve_path(
 		auto sep = x_next_sep(in_path_begin, in_path_end, u'\\');
 		if (sep == in_path_end) {
 			X_LOG_ERR("Invalid dfs_root path '%s'",
-					x_convert_utf16_to_utf8(in_path_begin,
+					x_convert_utf16_to_utf8_safe(in_path_begin,
 						in_path_end).c_str());
 			return NT_STATUS_OBJECT_NAME_NOT_FOUND;
 		}
@@ -127,7 +127,11 @@ static NTSTATUS dfs_root_resolve_path(
 	}
 
 	auto sep = x_next_sep(path_start, in_path_end, u'\\');
-	std::string utf8_top_level = x_convert_utf16_to_lower_utf8(path_start, sep);
+	std::string utf8_top_level;
+	if (!x_convert_utf16_to_utf8_new(path_start, sep,
+				utf8_top_level, x_tolower)) {
+		return NT_STATUS_ILLEGAL_CHARACTER;
+	}
 	if (sep == in_path_end) {
 		if (utf8_top_level == pesudo_tld_dir) {
 			open_priv_data = dfs_open_type_tld_manager;
@@ -321,7 +325,7 @@ static inline void create_new_tld(dfs_share_t &dfs_share,
 	// tld creation is started from the node host the share root
 	X_ASSERT(dfs_share.root_dir);
 	const std::u16string &u16name = smbd_object->path;
-	auto name = x_convert_utf16_to_utf8(u16name);
+	auto name = x_convert_utf16_to_utf8_assert(u16name);
 
 	uint8_t uuid[16];
 	generate_random_buffer(uuid, sizeof uuid);
@@ -394,8 +398,11 @@ static NTSTATUS dfs_root_object_op_rename(x_smbd_object_t *smbd_object,
 		if (sep == std::u16string::npos) {
 			return NT_STATUS_ACCESS_DENIED;
 		}
-		std::string first_level = x_convert_utf16_to_lower_utf8(new_path.begin(),
-				new_path.begin() + sep);
+		std::string first_level;
+		if (!x_convert_utf16_to_utf8_new(new_path.data(),
+				new_path.data() + sep, first_level, x_tolower)) {
+			return NT_STATUS_ILLEGAL_CHARACTER;
+		}
 		if (first_level != pesudo_tld_dir) {
 			return NT_STATUS_ACCESS_DENIED;
 		}
@@ -470,7 +477,7 @@ NTSTATUS dfs_share_t::delete_object(x_smbd_object_t *smbd_object,
 					return NT_STATUS_INTERNAL_ERROR;
 				}
 			}
-			std::u16string path = x_convert_utf8_to_utf16(pesudo_tld_dir);
+			std::u16string path = x_convert_utf8_to_utf16_assert(pesudo_tld_dir);
 			path += u'\\';
 			path += smbd_object->path;
 			changes.push_back(x_smb2_change_t{NOTIFY_ACTION_REMOVED,
@@ -607,7 +614,7 @@ static void dfs_root_notify_change(std::shared_ptr<x_smbd_topdir_t> &topdir,
 				topdir, path, dfs_object_type_dfs_root, false);
 	} else {
 		open_priv_data = dfs_open_type_tld_manager;
-		std::string utf8_path = x_convert_utf16_to_lower_utf8(path);
+		std::string utf8_path = x_convert_utf16_to_utf8_assert(path, x_tolower);
 		if (utf8_path != pesudo_tld_dir) {
 			return;
 		}
@@ -646,12 +653,9 @@ static x_smbd_object_t *dfs_root_op_open_object(NTSTATUS *pstatus,
 		return nullptr;
 	}
 
-	x_smbd_object_t *smbd_object = posixfs_open_object(topdir,
+	return x_smbd_posixfs_open_object(
+			pstatus, topdir,
 			path, path_priv_data, create_if);
-	if (!smbd_object) {
-		*pstatus = NT_STATUS_OBJECT_NAME_NOT_FOUND;
-	}
-	return smbd_object;
 }
 
 static NTSTATUS dfs_root_create_open(dfs_share_t &dfs_share,
@@ -806,20 +810,6 @@ static NTSTATUS dfs_volume_object_op_qdir(
 			dfs_volume_process_entry);
 }
 
-static x_smbd_object_t *dfs_volume_op_open_object(NTSTATUS *pstatus,
-		std::shared_ptr<x_smbd_topdir_t> &topdir,
-		const std::u16string &path,
-		long path_priv_data,
-		bool create_if)
-{
-	x_smbd_object_t *smbd_object = posixfs_open_object(topdir, path,
-			path_priv_data, create_if);
-	if (!smbd_object) {
-		*pstatus = NT_STATUS_OBJECT_NAME_NOT_FOUND;
-	}
-	return smbd_object;
-}
-
 static NTSTATUS dfs_volume_create_open(x_smbd_open_t **psmbd_open,
 		x_smbd_requ_t *smbd_requ,
 		const std::string &volume,
@@ -862,7 +852,7 @@ static NTSTATUS dfs_volume_object_op_rename(x_smbd_object_t *smbd_object,
 }
 
 static const x_smbd_object_ops_t dfs_volume_object_ops = {
-	dfs_volume_op_open_object,
+	x_smbd_posixfs_open_object,
 	posixfs_object_op_close,
 	posixfs_object_op_read,
 	posixfs_object_op_write,
@@ -922,7 +912,7 @@ static NTSTATUS dfs_root_referral(const dfs_share_t &dfs_share,
 	std::u16string alt_path(in_full_path_begin, in_share_end);
 	std::string node = "\\";
 	node += node_name + "." + smbd_conf.dns_domain + "\\-";
-	std::u16string node16 = x_convert_utf8_to_utf16(node);
+	std::u16string node16 = x_convert_utf8_to_utf16_assert(node);
 	node16.append(in_share_begin, in_share_end);
 	dfs_referral_resp.referrals.push_back(x_referral_t{DFS_SERVER_ROOT, 0,
 			dfs_share.dfs_referral_ttl, alt_path, node16});
@@ -951,7 +941,7 @@ static NTSTATUS dfs_volume_referral(const dfs_share_t &dfs_share,
 
 	std::u16string alt_path(in_full_path_begin, in_tld_end);
 	std::string node = "\\" + node_name + "." + smbd_conf.dns_domain + "\\--" + volume + "\\" + uuid;
-	std::u16string node16 = x_convert_utf8_to_utf16(node);
+	std::u16string node16 = x_convert_utf8_to_utf16_assert(node);
 	dfs_referral_resp.referrals.push_back(x_referral_t{0, 0,
 			dfs_share.dfs_referral_ttl, alt_path, node16});
 	dfs_referral_resp.header_flags = DFS_HEADER_FLAG_STORAGE_SVR;
@@ -981,7 +971,11 @@ static NTSTATUS dfs_share_get_dfs_referral(const dfs_share_t &dfs_share,
 	in_tld_begin = x_skip_sep(in_share_end + 1, in_full_path_end, u'\\');
 	in_tld_end = x_next_sep(in_tld_begin, in_full_path_end, u'\\');
 
-	std::string tld = x_convert_utf16_to_lower_utf8(in_tld_begin, in_tld_end);
+	std::string tld;
+	if (!x_convert_utf16_to_utf8_new(in_tld_begin, in_tld_end, tld, x_tolower)) {
+		return NT_STATUS_ILLEGAL_CHARACTER;
+	}
+
 	if (tld == pesudo_tld_dir) {
 		return dfs_root_referral(dfs_share, smbd_conf,
 				dfs_referral_resp,

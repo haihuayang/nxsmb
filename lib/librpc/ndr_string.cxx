@@ -99,7 +99,11 @@ x_ndr_off_t x_ndr_scalars_string_intl(std::u16string &val, x_ndr_pull_t &ndr, x_
 x_ndr_off_t x_ndr_scalars_string(const std::u16string &val, x_ndr_push_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, bool add_nul_empty)
 {
 	if (flags & (LIBNDR_FLAG_STR_ASCII|LIBNDR_FLAG_STR_UTF8)) {
-		return x_ndr_scalars_string_intl(x_convert_utf16_to_utf8(val), ndr, bpos, epos, flags, add_nul_empty);
+		std::string utf8_val;
+		if (!x_convert_utf16_to_utf8_new(val, utf8_val)) {
+			return -NDR_ERR_CHARCNV;
+		}
+		return x_ndr_scalars_string_intl(utf8_val, ndr, bpos, epos, flags, add_nul_empty);
 	} else {
 		return x_ndr_scalars_string_intl(val, ndr, bpos, epos, flags, add_nul_empty);
 	}
@@ -113,7 +117,9 @@ x_ndr_off_t x_ndr_scalars_string(std::u16string &val, x_ndr_pull_t &ndr, x_ndr_o
 		if (bpos < 0) {
 			return bpos;
 		}
-		val = x_convert_utf8_to_utf16(tmp);
+		if (!x_convert_utf8_to_utf16_new(tmp, val)) {
+			return -NDR_ERR_CHARCNV;
+		}
 		return bpos;
 	} else {
 		return x_ndr_scalars_string_intl(val, ndr, bpos, epos, flags, add_nul_empty);
@@ -122,7 +128,7 @@ x_ndr_off_t x_ndr_scalars_string(std::u16string &val, x_ndr_pull_t &ndr, x_ndr_o
 
 void x_ndr_ostr_string(const std::u16string &val, x_ndr_ostr_t &ndr, uint32_t flags)
 {
-	ndr.os << "u\"" << x_convert_utf16_to_utf8(val) << '"';
+	ndr.os << "u\"" << x_convert_utf16_to_utf8_safe(val) << '"';
 }
 
 x_ndr_off_t x_ndr_scalars_string(const std::string &val, x_ndr_push_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, bool add_nul_empty)
@@ -130,7 +136,11 @@ x_ndr_off_t x_ndr_scalars_string(const std::string &val, x_ndr_push_t &ndr, x_nd
 	if (flags & (LIBNDR_FLAG_STR_ASCII|LIBNDR_FLAG_STR_UTF8)) {
 		return x_ndr_scalars_string_intl(val, ndr, bpos, epos, flags, add_nul_empty);
 	} else {
-		return x_ndr_scalars_string_intl(x_convert_utf8_to_utf16(val), ndr, bpos, epos, flags, add_nul_empty);
+		std::u16string tmp;
+		if (!x_convert_utf8_to_utf16_new(val, tmp)) {
+			return -NDR_ERR_CHARCNV;
+		}
+		return x_ndr_scalars_string_intl(tmp, ndr, bpos, epos, flags, add_nul_empty);
 	}
 }
 
@@ -144,7 +154,9 @@ x_ndr_off_t x_ndr_scalars_string(std::string &val, x_ndr_pull_t &ndr, x_ndr_off_
 		if (bpos < 0) {
 			return bpos;
 		}
-		val = x_convert_utf16_to_utf8(tmp);
+		if (!x_convert_utf16_to_utf8_new(tmp, val)) {
+			return -NDR_ERR_CHARCNV;
+		}
 		return bpos;
 	}
 }

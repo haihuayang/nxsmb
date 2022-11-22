@@ -30,7 +30,7 @@ static uint32_t net_share_enum_all_1(std::shared_ptr<idl::srvsvc_NetShareCtr1> &
 		idl::srvsvc_ShareType type =
 			(share->get_type() == SMB2_SHARE_TYPE_DISK ? idl::STYPE_DISKTREE : idl::STYPE_IPC_HIDDEN);
 		ctr1->array->push_back(idl::srvsvc_NetShareInfo1{
-				std::make_shared<std::u16string>(x_convert_utf8_to_utf16(share->name)),
+				std::make_shared<std::u16string>(x_convert_utf8_to_utf16_assert(share->name)),
 				type,
 				std::make_shared<std::u16string>()});
 	};
@@ -101,7 +101,7 @@ static bool x_smbd_dcerpc_impl_srvsvc_NetShareGetInfo(
 		x_smbd_sess_t *smbd_sess,
 		idl::srvsvc_NetShareGetInfo &arg)
 {
-	std::string share_name = x_convert_utf16_to_utf8(arg.share_name);
+	std::string share_name = x_convert_utf16_to_utf8_assert(arg.share_name);
 	std::string volume;
 	auto smbd_share = x_smbd_find_share(share_name, volume);
 	if (!smbd_share || !volume.empty()) {
@@ -227,7 +227,7 @@ static bool x_smbd_dcerpc_impl_srvsvc_NetSrvGetInfo(
 		X_ASSERT(!info);
 		info = std::make_shared<idl::srvsvc_NetSrvInfo101>();
 		info->platform_id = idl::PLATFORM_ID_NT;
-		info->server_name = std::make_shared<std::u16string>(x_convert_utf8_to_utf16(smbd_conf->netbios_name));
+		info->server_name = std::make_shared<std::u16string>(x_convert_utf8_to_utf16_assert(smbd_conf->netbios_name));
 		info->version_major = 0x06;
 		info->version_minor = 0x01;
 		info->server_type = smbd_conf->get_default_server_announce();

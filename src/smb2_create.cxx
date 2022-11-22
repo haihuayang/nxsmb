@@ -582,8 +582,8 @@ NTSTATUS x_smb2_process_create(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_req
 
 	/* TODO log stream too */
 	X_LOG_OP("%ld CREATE '%s':'%s'", smbd_requ->in_smb2_hdr.mid,
-			x_convert_utf16_to_utf8(state->in_path).c_str(),
-			x_convert_utf16_to_utf8(state->in_ads_name).c_str());
+			x_convert_utf16_to_utf8_safe(state->in_path).c_str(),
+			x_convert_utf16_to_utf8_safe(state->in_ads_name).c_str());
 
 	if (x_str_has_wild(state->in_path)) {
 		RETURN_OP_STATUS(smbd_requ, NT_STATUS_OBJECT_NAME_INVALID);

@@ -28,9 +28,23 @@ NTSTATUS x_smb2_parse_stream_name(std::u16string &stream_name,
 		bool &is_dollar_data,
 		const char16_t *begin, const char16_t *end)
 {
-	/* TODO check valid name, e.g., not include \\ or / */
-	const char16_t *sep = x_next_sep(begin, end, u':');
-	if (sep != end) {
+	// check_path_syntax_internal
+	const char16_t *sep = nullptr;
+	const char16_t *pch;
+	for (pch = begin ; pch < end; ++pch) {
+		char16_t ch = *pch;
+		if (ch == u'/' || ch == u'\\') {
+			return NT_STATUS_OBJECT_NAME_INVALID;
+		}
+		if (ch == u':') {
+			if (sep) {
+				return NT_STATUS_OBJECT_NAME_INVALID;
+			}
+			sep = pch;
+		}
+	}
+
+	if (sep) {
 		if (!name_is_dollar_data(sep + 1, end)) {
 			return NT_STATUS_OBJECT_NAME_INVALID;
 		}
@@ -41,7 +55,7 @@ NTSTATUS x_smb2_parse_stream_name(std::u16string &stream_name,
 		if (begin == end) {
 			return NT_STATUS_OBJECT_NAME_INVALID;
 		}
-		stream_name = x_utf16le_decode(begin, sep);
+		stream_name = x_utf16le_decode(begin, end);
 		is_dollar_data = false;
 	}
 	return NT_STATUS_OK;

@@ -105,8 +105,9 @@ NTSTATUS x_map_nt_error_from_ndr_err(idl::x_ndr_err_code_t ndr_err);
 
 
 struct x_fnmatch_t;
-bool x_fnmatch_match(const x_fnmatch_t *fnmatch, const char *name);
+bool x_fnmatch_match(const x_fnmatch_t &fnmatch, const char *name);
 x_fnmatch_t *x_fnmatch_create(const std::u16string &pattern, bool icase);
+void x_fnmatch_destroy(x_fnmatch_t *fnmatch);
 
 #endif /* __misc__hxx__ */
 

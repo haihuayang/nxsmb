@@ -361,7 +361,7 @@ static inline std::string x_smbd_open_op_get_path(
 	x_smbd_object_t *smbd_object = smbd_open->smbd_object;
 	std::u16string path = smbd_object->topdir->ops->get_path(
 			smbd_object, smbd_open);
-	return x_convert_utf16_to_utf8(path);
+	return x_convert_utf16_to_utf8_safe(path);
 }
 
 static inline void x_smbd_open_op_destroy(

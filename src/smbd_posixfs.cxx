@@ -415,17 +415,13 @@ static posixfs_object_pool_t posixfs_object_pool;
 			(pads) ? &(pads)->base.base : &(pobj)->default_stream.base)
 
 
-static std::string convert_to_unix(const std::u16string &req_path)
+static bool convert_to_unix(std::string &ret, const std::u16string &req_path)
 {
-	/* TODO case insenctive */
+	/* we suppose file system support case insenctive */
 	/* TODO does smb allow leading '/'? if so need to remove it */
-	std::string ret = x_convert_utf16_to_utf8(req_path);
-	for (auto &c: ret) {
-		if (c == '\\') {
-			c = '/';
-		}
-	}
-	return ret;
+	return x_convert_utf16_to_utf8_new(req_path, ret, [](char32_t uc) {
+			return (uc == '\\') ? '/' : uc;
+		});
 }
 
 static inline void posixfs_object_update_type(posixfs_object_t *posixfs_object)
@@ -444,13 +440,15 @@ static inline bool posixfs_object_is_dir(const posixfs_object_t *posixfs_object)
 }
 
 /* TODO dfs need one more fact refer the topdir */
-static uint64_t hash_object(const std::shared_ptr<x_smbd_topdir_t> &topdir,
+static std::pair<bool, uint64_t> hash_object(const x_smbd_topdir_t &topdir,
 		const std::u16string &path)
 {
-	uint64_t hash = std::hash<std::u16string>()(path);
-	hash ^= topdir->uuid;
-	return hash;
-	//return (hash >> 32) ^ hash;
+	auto [ ok, hash ] = x_strcase_hash(path);
+	if (ok) {
+		return { true, hash ^ topdir.uuid };
+	} else {
+		return { false, 0 };
+	}
 }
 
 static inline void posixfs_object_incref(posixfs_object_t *posixfs_object)
@@ -486,9 +484,9 @@ static posixfs_object_t *posixfs_object_lookup(
 		const std::shared_ptr<x_smbd_topdir_t> &topdir,
 		const std::u16string &path,
 		uint64_t path_data,
-		bool create_if)
+		bool create_if,
+		uint64_t hash)
 {
-	auto hash = hash_object(topdir, path);
 	auto &pool = posixfs_object_pool;
 	auto bucket_idx = hash % pool.buckets.size();
 	auto &bucket = pool.buckets[bucket_idx];
@@ -500,7 +498,7 @@ static posixfs_object_t *posixfs_object_lookup(
 	for (x_dqlink_t *link = bucket.head.get_front(); link; link = link->get_next()) {
 		elem = X_CONTAINER_OF(link, posixfs_object_t, hash_link);
 		if (elem->hash == hash && elem->base.topdir->uuid == topdir->uuid
-				&& elem->base.path == path) {
+				&& x_strcase_equal(elem->base.path, path)) {
 			matched_object = elem;
 			break;
 		}
@@ -1148,15 +1146,15 @@ void posixfs_simple_notify_change(std::shared_ptr<x_smbd_topdir_t> &topdir,
 	if (!smbd_object) {
 		X_LOG_DBG("skip notify %d,x%x '%s', '%s'", notify_action,
 				notify_filter,
-				x_convert_utf16_to_utf8(path).c_str(),
-				x_convert_utf16_to_utf8(fullpath).c_str());
+				x_convert_utf16_to_utf8_safe(path).c_str(),
+				x_convert_utf16_to_utf8_safe(fullpath).c_str());
 		return;
 	}
 
 	X_LOG_DBG("notify object %d,x%x '%s', '%s'", notify_action,
 			notify_filter,
-			x_convert_utf16_to_utf8(path).c_str(),
-			x_convert_utf16_to_utf8(fullpath).c_str());
+			x_convert_utf16_to_utf8_safe(path).c_str(),
+			x_convert_utf16_to_utf8_safe(fullpath).c_str());
 	posixfs_object_notify_change(smbd_object, notify_action, notify_filter,
 			path.empty() ? 0: x_convert<uint32_t>(path.length() + 1),
 			fullpath, new_fullpath, ignore_lease_key, last_level, 0);
@@ -1188,7 +1186,11 @@ static NTSTATUS rename_object_intl(posixfs_object_pool_t::bucket_t &new_bucket,
 	}
 
 	/* check if exists on file system */
-	std::string new_unix_path = convert_to_unix(new_path);
+	std::string new_unix_path;
+	if (!convert_to_unix(new_unix_path, new_path)) {
+		return NT_STATUS_ILLEGAL_CHARACTER;
+	}
+
 	int fd = openat(topdir->fd, new_unix_path.c_str(), O_RDONLY);
 	if (fd != -1) {
 		if (new_object) {
@@ -1234,7 +1236,7 @@ static NTSTATUS rename_ads_intl(posixfs_object_t *posixfs_object,
 		if (other_ads == posixfs_ads) {
 			continue;
 		}
-		if (other_ads->name == new_stream_name) { // TODO case insensitive
+		if (x_strcase_equal(other_ads->name, new_stream_name)) {
 			/* windows server behavior */
 			return replace_if_exists ? NT_STATUS_INVALID_PARAMETER :
 				NT_STATUS_OBJECT_NAME_COLLISION;
@@ -1242,10 +1244,13 @@ static NTSTATUS rename_ads_intl(posixfs_object_t *posixfs_object,
 	}
 
 	bool collision = false;
-	std::string new_name_utf8 = x_convert_utf16_to_utf8(new_stream_name);
+	std::string new_name_utf8;
+	if (!x_convert_utf16_to_utf8_new(new_stream_name, new_name_utf8)) {
+		return NT_STATUS_ILLEGAL_CHARACTER;
+	}
 	posixfs_ads_foreach_1(posixfs_object, [=, &collision] (const char *xattr_name,
 				const char *stream_name) {
-			if (strcasecmp(stream_name, new_name_utf8.c_str()) == 0) {
+			if (x_strcase_equal(stream_name, new_name_utf8)) {
 				if (replace_if_exists) {
 					fremovexattr(posixfs_object->fd, xattr_name);
 				} else {
@@ -1370,6 +1375,13 @@ NTSTATUS posixfs_object_op_rename(x_smbd_object_t *smbd_object,
 	posixfs_open_t *posixfs_open = posixfs_open_from_base_t::container(smbd_open);
 	posixfs_stream_t *posixfs_stream = posixfs_get_stream(posixfs_object, posixfs_open);
 
+	auto &topdir = posixfs_object->base.topdir;
+
+	auto [ ok, new_hash ] = hash_object(*topdir, new_path);
+	if (!ok) {
+		return NT_STATUS_ILLEGAL_CHARACTER;
+	}
+
 	NTSTATUS status;
 	if (!smbd_open->smbd_stream) {
 		status = parent_dirname_compatible_open(smbd_object->topdir, new_path);
@@ -1399,10 +1411,7 @@ NTSTATUS posixfs_object_op_rename(x_smbd_object_t *smbd_object,
 				state->in_replace_if_exists, state->in_stream_name);
 	}
 
-	auto &topdir = posixfs_object->base.topdir;
-
 	auto &pool = posixfs_object_pool;
-	auto new_hash = hash_object(topdir, new_path);
 	auto new_bucket_idx = new_hash % pool.buckets.size();
 	auto &new_bucket = pool.buckets[new_bucket_idx];
 	auto old_bucket_idx = posixfs_object->hash % pool.buckets.size();
@@ -1437,17 +1446,20 @@ static posixfs_object_t *posixfs_object_open(
 		const std::shared_ptr<x_smbd_topdir_t> &topdir,
 		const std::u16string &path,
 		uint64_t path_data,
-		bool create_if)
+		bool create_if,
+		uint64_t hash)
 {
 	posixfs_object_t *posixfs_object = posixfs_object_lookup(topdir, path,
-			path_data, create_if);
+			path_data, create_if, hash);
 	if (!posixfs_object) {
 		return nullptr;
 	}
 
 	std::unique_lock<std::mutex> lock(posixfs_object->base.mutex);
 	if (!(posixfs_object->base.flags & x_smbd_object_t::flag_initialized)) {
-		std::string unix_path = convert_to_unix(path);
+		std::string unix_path;
+		X_ASSERT(convert_to_unix(unix_path, path));
+
 		int fd = posixfs_open(topdir->fd, unix_path.c_str(),
 				&posixfs_object->meta,
 				&posixfs_object->default_stream.meta);
@@ -2125,7 +2137,8 @@ static int open_parent(const std::shared_ptr<x_smbd_topdir_t> &topdir,
 		return dup(topdir->fd);
 	}
 	parent_path = path.substr(0, sep);
-	std::string unix_path = convert_to_unix(parent_path);
+	std::string unix_path;
+	X_ASSERT(convert_to_unix(unix_path, parent_path));
 	int fd = openat(topdir->fd, unix_path.c_str(), O_RDONLY | O_NOFOLLOW);
 	return fd;
 }
@@ -2623,7 +2636,7 @@ static posixfs_ads_t *posixfs_ads_add(
 	return posixfs_ads;
 }
 
-static posixfs_ads_t *posixfs_ads_open(
+static std::pair<bool, posixfs_ads_t *> posixfs_ads_open(
 		posixfs_object_t *posixfs_object,
 		const std::u16string &name,
 		bool exist_only)
@@ -2631,23 +2644,25 @@ static posixfs_ads_t *posixfs_ads_open(
 	posixfs_ads_t *ads{};
 	for (ads = posixfs_object->ads_list.get_front(); ads;
 			ads = posixfs_object->ads_list.next(ads)) {
-		/* TODO case insensitive */
-		if (ads->name == name) {
+		if (x_strcase_equal(ads->name, name)) {
 			if (ads->exists || !exist_only) {
 				++ads->base.ref_count;
-				return ads;
+				return { true, ads };
 			} else {
-				return nullptr;
+				return { true, nullptr };
 			}
 		}
 	}
 	
-	std::string utf8_name = x_convert_utf16_to_utf8(name);
+	std::string utf8_name;
+	if (!x_convert_utf16_to_utf8_new(name, utf8_name)) {
+		return { false, nullptr };
+	}
 	
-	posixfs_ads_foreach_1(posixfs_object, [&utf8_name, &ads] (const char *xattr_name,
+	posixfs_ads_foreach_1(posixfs_object, [&utf8_name, &name, &ads] (const char *xattr_name,
 				const char *stream_name) {
-			if (strcasecmp(stream_name, utf8_name.c_str()) == 0) {
-				ads = new posixfs_ads_t(x_convert_utf8_to_utf16(stream_name));
+			if (x_strcase_equal(utf8_name, stream_name)) {
+				ads = new posixfs_ads_t(name);
 				ads->xattr_name = xattr_name;
 				ads->exists = true;
 				return false;
@@ -2657,7 +2672,7 @@ static posixfs_ads_t *posixfs_ads_open(
 	if (ads) {
 		posixfs_object_add_ads(posixfs_object, ads);
 	}
-	return ads;
+	return { true, ads };
 }
 
 static void posixfs_ads_release(posixfs_object_t *posixfs_object,
@@ -2704,7 +2719,7 @@ static NTSTATUS open_object_new_ads(
 	// TODO should it fail for large in_allocation_size?
 	uint32_t allocation_size = x_convert_assert<uint32_t>(
 			std::min(state.in_allocation_size, posixfs_ads_max_length));
-	posixfs_ads->xattr_name = posixfs_get_ads_xattr_name(x_convert_utf16_to_utf8(
+	posixfs_ads->xattr_name = posixfs_get_ads_xattr_name(x_convert_utf16_to_utf8_assert(
 				posixfs_ads->name));
 	posixfs_ads_reset(posixfs_object, posixfs_ads, allocation_size);
 
@@ -2840,10 +2855,13 @@ static NTSTATUS posixfs_create_open_overwrite_ads(
 		x_smbd_requ_t *smbd_requ,
 		std::unique_ptr<x_smb2_state_create_t> &state)
 {
-	posixfs_ads_t *posixfs_ads = posixfs_ads_open(
+	auto [ ok, posixfs_ads ] = posixfs_ads_open(
 			posixfs_object,
 			state->in_ads_name,
 			true);
+	if (!ok) {
+		return NT_STATUS_ILLEGAL_CHARACTER;
+	}
 	CHECK_STREAM_LEASE(state->smbd_lease, posixfs_object, posixfs_ads);
 
 	if (!posixfs_ads) {
@@ -2867,10 +2885,14 @@ static NTSTATUS posixfs_create_open_overwrite_ads_if(
 		x_smbd_requ_t *smbd_requ,
 		std::unique_ptr<x_smb2_state_create_t> &state)
 {
-	posixfs_ads_t *posixfs_ads = posixfs_ads_open(
+	auto [ok, posixfs_ads] = posixfs_ads_open(
 			posixfs_object,
 			state->in_ads_name,
 			false);
+	if (!ok) {
+		return NT_STATUS_ILLEGAL_CHARACTER;
+	}
+
 	CHECK_STREAM_LEASE(state->smbd_lease, posixfs_object, posixfs_ads);
 
 	NTSTATUS status = NT_STATUS_OK;
@@ -2905,10 +2927,13 @@ static NTSTATUS posix_create_open_exist_ads(
 		x_smbd_requ_t *smbd_requ,
 		std::unique_ptr<x_smb2_state_create_t> &state)
 {
-	posixfs_ads_t *posixfs_ads = posixfs_ads_open(
+	auto [ok, posixfs_ads] = posixfs_ads_open(
 			posixfs_object,
 			state->in_ads_name,
 			true);
+	if (!ok) {
+		return NT_STATUS_ILLEGAL_CHARACTER;
+	}
 
 	CHECK_STREAM_LEASE(state->smbd_lease, posixfs_object, posixfs_ads);
 
@@ -2933,10 +2958,13 @@ static NTSTATUS posixfs_create_open_new_ads(
 		x_smbd_requ_t *smbd_requ,
 		std::unique_ptr<x_smb2_state_create_t> &state)
 {
-	posixfs_ads_t *posixfs_ads = posixfs_ads_open(
+	auto [ok, posixfs_ads] = posixfs_ads_open(
 			posixfs_object,
 			state->in_ads_name,
 			false);
+	if (!ok) {
+		return NT_STATUS_ILLEGAL_CHARACTER;
+	}
 
 	if (!posixfs_ads) {
 		posixfs_ads = posixfs_ads_add(posixfs_object,
@@ -2963,10 +2991,13 @@ static NTSTATUS posixfs_create_open_new_ads_if(
 		x_smbd_requ_t *smbd_requ,
 		std::unique_ptr<x_smb2_state_create_t> &state)
 {
-	posixfs_ads_t *posixfs_ads = posixfs_ads_open(
+	auto [ok, posixfs_ads] = posixfs_ads_open(
 			posixfs_object,
 			state->in_ads_name,
 			false);
+	if (!ok) {
+		return NT_STATUS_ILLEGAL_CHARACTER;
+	}
 
 	CHECK_STREAM_LEASE(state->smbd_lease, posixfs_object, posixfs_ads);
 
@@ -3332,12 +3363,17 @@ static NTSTATUS posixfs_object_remove(posixfs_object_t *posixfs_object,
 		posixfs_ads_foreach_1(posixfs_object, [posixfs_object, posixfs_open, &changes] (
 					const char *xattr_name,
 					const char *stream_name) {
-				changes.push_back(x_smb2_change_t{
-						NOTIFY_ACTION_REMOVED_STREAM,
-						FILE_NOTIFY_CHANGE_STREAM_NAME,
-						posixfs_open->base.parent_lease_key,
-						posixfs_object->base.path + u':' + x_convert_utf8_to_utf16(stream_name),
-						{}});
+				std::u16string u16_name;
+				if (x_convert_utf8_to_utf16_new(stream_name, u16_name)) {
+					changes.push_back(x_smb2_change_t{
+							NOTIFY_ACTION_REMOVED_STREAM,
+							FILE_NOTIFY_CHANGE_STREAM_NAME,
+							posixfs_open->base.parent_lease_key,
+							posixfs_object->base.path + u':' + u16_name,
+							{}});
+				} else {
+					X_LOG_ERR("invalid stream_name '%s'", stream_name);
+				}
 				return true;
 			});
 
@@ -3970,23 +4006,23 @@ static NTSTATUS getinfo_encode_le(T val,
 }
 
 static bool marshall_stream_info(x_smb2_chain_marshall_t &marshall,
-		const char *stream_name,
+		const std::u16string &name,
 		uint64_t size, uint64_t allocation_size)
 {
-	std::u16string name = u":" + x_convert_utf8_to_utf16(stream_name);
-	name += u":$DATA";
+	const std::u16string suffix = u":$DATA";
 
-	uint32_t rec_size = x_convert_assert<uint32_t>(sizeof(x_smb2_file_stream_name_info_t) + name.size() * 2);
+	uint32_t rec_size = x_convert_assert<uint32_t>(sizeof(x_smb2_file_stream_name_info_t) + name.size() * 2 + suffix.size() * 2);
 	uint8_t *pbegin = marshall.get_begin(rec_size);
 	if (!pbegin) {
 		return false;
 	}
 	x_smb2_file_stream_name_info_t *info = (x_smb2_file_stream_name_info_t *)pbegin;
 	info->next_offset = 0;
-	info->name_length = X_H2LE32(x_convert_assert<uint32_t>(name.size() * 2));
+	info->name_length = X_H2LE32(x_convert_assert<uint32_t>(name.size() * 2 + suffix.size() * 2));
 	info->size = X_H2LE64(size);
 	info->allocation_size = X_H2LE64(allocation_size);
-	x_utf16le_encode(name, info->name);
+	char16_t *p = x_utf16le_encode(name, info->name);
+	x_utf16le_encode(suffix, p);
 	return true;
 }
 
@@ -3997,7 +4033,7 @@ static NTSTATUS getinfo_stream_info(const posixfs_object_t *posixfs_object,
 	x_smb2_chain_marshall_t marshall{state.out_data.data(), state.out_data.data() + state.out_data.size(), 8};
 
 	if (!posixfs_object_is_dir(posixfs_object)) {
-		if (!marshall_stream_info(marshall, "",
+		if (!marshall_stream_info(marshall, u":",
 					posixfs_object->default_stream.meta.end_of_file,
 					posixfs_object->default_stream.meta.allocation_size)) {
 			return STATUS_BUFFER_OVERFLOW;
@@ -4007,7 +4043,12 @@ static NTSTATUS getinfo_stream_info(const posixfs_object_t *posixfs_object,
 	bool marshall_ret = true;
 	posixfs_ads_foreach_2(posixfs_object,
 			[&marshall, &marshall_ret] (const char *stream_name, uint64_t eof, uint64_t alloc) {
-			marshall_ret = marshall_stream_info(marshall, stream_name, eof, alloc);
+			std::u16string name = u":";
+			if (x_convert_utf8_to_utf16_new(stream_name, name)) {
+				marshall_ret = marshall_stream_info(marshall, name, eof, alloc);
+			} else {
+				X_LOG_ERR("invalid stream_name '%s'", stream_name);
+			}
 			return marshall_ret;
 		});
 	if (!marshall_ret) {
@@ -4397,7 +4438,7 @@ static NTSTATUS getinfo_fs(x_smbd_requ_t *smbd_requ,
 		std::string netbios_name = x_smbd_conf_get()->netbios_name;
 		std::string volume = x_smbd_tcon_get_volume_label(smbd_requ->smbd_tcon);
 		size_t hash = std::hash<std::string>{}(netbios_name + ":" + volume);
-		std::u16string u16_volume = x_convert_utf8_to_utf16(volume);
+		std::u16string u16_volume = x_convert_utf8_to_utf16_assert(volume);
 
 		uint32_t output_buffer_length = state.in_output_buffer_length & ~1;
 		size_t buf_size = std::min(size_t(output_buffer_length),
@@ -4776,7 +4817,6 @@ NTSTATUS posixfs_object_qdir(
 	uint32_t num = 0, matched_count = 0;
 
 	x_smb2_chain_marshall_t marshall{state->out_data.data(), state->out_data.data() + state->out_data.size(), 8};
-
 	x_fnmatch_t *fnmatch = x_fnmatch_create(state->in_name, true);
 	while (num < max_count) {
 		qdir_pos_t qdir_pos;
@@ -4786,7 +4826,7 @@ NTSTATUS posixfs_object_qdir(
 			break;
 		}
 
-		if (fnmatch && !x_fnmatch_match(fnmatch, ent_name)) {
+		if (fnmatch && !x_fnmatch_match(*fnmatch, ent_name)) {
 			continue;
 		}
 
@@ -4809,14 +4849,24 @@ NTSTATUS posixfs_object_qdir(
 			}
 		}
 
+		std::u16string u16_name;
+		if (!x_convert_utf8_to_utf16_new(ent_name, u16_name)) {
+			X_LOG_ERR("invalid character entry '%s'", ent_name);
+			continue;
+		}
+
 		++matched_count;
 		if (x_smbd_marshall_dir_entry(marshall, object_meta, stream_meta,
-					ent_name, state->in_info_level)) {
+					u16_name, state->in_info_level)) {
 			++num;
 		} else {
 			qdir_unget(*qdir, qdir_pos);
 			max_count = num;
 		}
+	}
+
+	if (fnmatch) {
+		x_fnmatch_destroy(fnmatch);
 	}
 
 	if (num > 0) {
@@ -4957,16 +5007,23 @@ void posixfs_object_op_destroy(x_smbd_object_t *smbd_object,
 	delete posixfs_open;
 }
 
-x_smbd_object_t *posixfs_open_object(
+x_smbd_object_t *x_smbd_posixfs_open_object(NTSTATUS *pstatus,
 		std::shared_ptr<x_smbd_topdir_t> &topdir,
 		const std::u16string &path, long path_data,
 		bool create_if)
 {
+	auto [ ok, hash ] = hash_object(*topdir, path);
+	if (!ok) {
+		*pstatus = NT_STATUS_ILLEGAL_CHARACTER;
+		return nullptr;
+	}
+
 	posixfs_object_t *posixfs_object = posixfs_object_open(
-			topdir, path, path_data, create_if);
+			topdir, path, path_data, create_if, hash);
 	if (posixfs_object) {
 		return &posixfs_object->base;
 	} else {
+		*pstatus = NT_STATUS_OBJECT_NAME_NOT_FOUND;
 		return nullptr;
 	}
 }

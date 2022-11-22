@@ -157,8 +157,8 @@ NTSTATUS x_smbd_tcon_op_create(x_smbd_requ_t *smbd_requ,
 			return status;
 		}
 		X_LOG_DBG("resolve_path(%s) to %s, %ld, %ld",
-				x_convert_utf16_to_utf8(state->in_path).c_str(),
-				x_convert_utf16_to_utf8(path).c_str(),
+				x_convert_utf16_to_utf8_safe(state->in_path).c_str(),
+				x_convert_utf16_to_utf8_safe(path).c_str(),
 				path_priv_data, open_priv_data);
 
 		state->smbd_object = topdir->ops->open_object(&status,

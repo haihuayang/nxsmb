@@ -880,11 +880,13 @@ static x_dom_sid_with_attrs_t sid_attr_compose(
 
 static std::string safe_utf16_ptr_to_utf8(const std::shared_ptr<std::u16string> &u16s)
 {
+	std::string ret;
 	if (u16s) {
-		return x_convert_utf16_to_utf8(*u16s);
-	} else {
-		return "";
+		if (!x_convert_utf16_to_utf8_new(*u16s, ret)) {
+			X_LOG_DBG("Invalid u16string");
+		}
 	}
+	return ret;
 }
 
 static void auth_info_from_pac_logon_info(x_auth_info_t &auth_info, const idl::PAC_LOGON_INFO &logon_info)

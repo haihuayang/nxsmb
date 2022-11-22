@@ -18,8 +18,8 @@ static bool x_smbd_dcerpc_impl_wkssvc_NetWkstaGetInfo(
 		info->platform_id = idl::PLATFORM_ID_NT;
 		info->version_major = 0x06;
 		info->version_minor = 0x01;
-		info->server_name = std::make_shared<std::u16string>(x_convert_utf8_to_utf16(smbd_conf->netbios_name));
-		info->domain_name = std::make_shared<std::u16string>(x_convert_utf8_to_utf16(smbd_conf->workgroup));
+		info->server_name = std::make_shared<std::u16string>(x_convert_utf8_to_utf16_assert(smbd_conf->netbios_name));
+		info->domain_name = std::make_shared<std::u16string>(x_convert_utf8_to_utf16_assert(smbd_conf->workgroup));
 		arg.__result = WERR_OK;
 		}
 		break;

@@ -48,7 +48,7 @@ void x_smbd_get_file_info(x_smb2_file_network_open_info_t &info,
 bool x_smbd_marshall_dir_entry(x_smb2_chain_marshall_t &marshall,
 		const x_smbd_object_meta_t &object_meta,
 		const x_smbd_stream_meta_t &stream_meta,
-		const char *fname, int info_level);
+		const std::u16string &name, int info_level);
 
 
 #endif /* __smbd_file__hxx__ */

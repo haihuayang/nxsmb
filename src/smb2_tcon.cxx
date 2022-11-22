@@ -184,10 +184,12 @@ NTSTATUS x_smb2_process_tcon(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
 
-	/* convert lower case utf8 */
-	std::string in_path = x_convert_utf16_to_lower_utf8((char16_t *)(in_hdr + in_path_offset),
-			(char16_t *)(in_hdr + in_path_offset + in_path_length));
-	/* TODO fail with NT_STATUS_ILLEGAL_CHARACTER */
+	std::string in_path;
+	if (!x_convert_utf16_to_utf8_new((char16_t *)(in_hdr + in_path_offset),
+				(char16_t *)(in_hdr + in_path_offset + in_path_length),
+				in_path, x_tolower)) {
+		RETURN_OP_STATUS(smbd_requ, NT_STATUS_ILLEGAL_CHARACTER);
+	}
 
 	// smbd_smb2_tree_connect
 	const char *in_path_s = in_path.c_str();

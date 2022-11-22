@@ -264,7 +264,10 @@ static NTSTATUS fsctl_dfs_get_refers_internal(
 	}
 
 	auto smbd_conf = x_smbd_conf_get();
-	std::string share = x_convert_utf16_to_lower_utf8(in_share_begin, in_share_end);
+	std::string share;
+	if (!x_convert_utf16_to_utf8_new(in_share_begin, in_share_end, share, x_tolower)) {
+		return NT_STATUS_ILLEGAL_CHARACTER;
+	}
 	std::string volume;
 	std::shared_ptr<x_smbd_share_t> smbd_share = x_smbd_find_share(share, volume);
 	if (!smbd_share) {

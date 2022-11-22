@@ -1,6 +1,24 @@
 
 #include "include/charset.hxx"
 
+std::pair<bool, uint64_t> x_strcase_hash(const char16_t *begin, const char16_t *end)
+{
+	uint64_t hash = 0;
+	while (begin != end) {
+		auto [uc, next] = x_utf16_pull_unicode(begin, end);
+		if (!next) {
+			return { false, 0 };
+		}
+
+		uc = x_tolower(uc);
+		/* better hash algorithm later */
+		hash = hash * 31 + uc;
+		begin = next;
+	}
+	return { true, hash };
+
+}
+
 /* samba/lib/util/charset/codepoints.c */
 const uint16_t x_lowcase_table[] = {
 	0x0000,0x0001,0x0002,0x0003,0x0004,0x0005,0x0006,0x0007,

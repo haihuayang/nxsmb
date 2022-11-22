@@ -1286,10 +1286,10 @@ x_auth_ntlmssp_t::x_auth_ntlmssp_t(x_auth_context_t *context, const x_auth_ops_t
 	   }
 	   */
 	is_standalone = false;
-	netbios_name = x_convert_utf8_to_utf16(smbd_conf->netbios_name);
-	netbios_domain = x_convert_utf8_to_utf16(smbd_conf->workgroup);
+	netbios_name = x_convert_utf8_to_utf16_assert(smbd_conf->netbios_name);
+	netbios_domain = x_convert_utf8_to_utf16_assert(smbd_conf->workgroup);
 
-	dns_domain = x_convert_utf8_to_utf16(smbd_conf->dns_domain);
+	dns_domain = x_convert_utf8_to_utf16_assert(smbd_conf->dns_domain);
 	std::u16string tmp_dns_name = netbios_name;
 	if (dns_domain.size()) {
 		tmp_dns_name += u".";
@@ -1495,7 +1495,8 @@ static inline NTSTATUS handle_negotiate(x_auth_ntlmssp_t &auth_ntlmssp,
 		auth_ntlmssp.server_av_pair_list = chal_msg.TargetInfo;
 	}
 
-	chal_msg.TargetName = std::make_shared<std::string>(x_convert_utf16_to_utf8(target_name));
+	/* TODO target_name illegal charset */
+	chal_msg.TargetName = std::make_shared<std::string>(x_convert_utf16_to_utf8_safe(target_name));
 	chal_msg.NegotiateFlags = idl::NEGOTIATE(chal_flags);
 	chal_msg.ServerChallenge = cryptkey;
 
