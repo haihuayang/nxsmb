@@ -164,10 +164,29 @@ enum {
 
 enum {
 	SMB2_FILE_INFO_FS_VOLUME_INFORMATION = 1,
+	SMB2_FILE_INFO_FS_LABEL_INFORMATION = 2,
 	SMB2_FILE_INFO_FS_SIZE_INFORMATION = 3,
+	SMB2_FILE_INFO_FS_DEVICE_INFORMATION = 4,
 	SMB2_FILE_INFO_FS_ATTRIBUTE_INFORMATION = 5,
 };
 
+/* SMB_FS_DEVICE_INFORMATION device types. */
+enum {
+	X_SMB2_FILE_DEVICE_CD_ROM	= 0x2,
+	X_SMB2_FILE_DEVICE_DISK		= 0x7,
+};
+
+/* SMB_FS_DEVICE_INFORMATION characteristics. */
+enum {
+	X_SMB2_FILE_REMOVABLE_MEDIA	= 0x001,
+	X_SMB2_FILE_READ_ONLY_DEVICE	= 0x002,
+	X_SMB2_FILE_FLOPPY_DISKETTE	= 0x004,
+	X_SMB2_FILE_WRITE_ONCE_MEDIA	= 0x008,
+	X_SMB2_FILE_REMOTE_DEVICE	= 0x010,
+	X_SMB2_FILE_DEVICE_IS_MOUNTED	= 0x020,
+	X_SMB2_FILE_VIRTUAL_VOLUME	= 0x040,
+	X_SMB2_FILE_DEVICE_SECURE_OPEN	= 0x100,
+};
 
 /* This maps to 0x1F01FF */
 #define FILE_GENERIC_ALL (idl::STANDARD_RIGHTS_REQUIRED_ACCESS|\
@@ -549,12 +568,24 @@ struct x_smb2_fs_volume_info_t
 	char16_t label[];
 } __attribute__ ((aligned (8)));
 
+struct x_smb2_fs_label_info_t
+{
+	uint32_t label_length;
+	char16_t label[];
+} __attribute__ ((aligned (8)));
+
 struct x_smb2_fs_size_info_t
 {
 	uint64_t allocation_size;
 	uint64_t free_units;
 	uint32_t sectors_per_unit;
 	uint32_t bytes_per_sector;
+};
+
+struct x_smb2_fs_device_info_t
+{
+	uint32_t device_type;;
+	uint32_t characteristics;
 };
 
 struct x_smb2_fs_attr_info_t

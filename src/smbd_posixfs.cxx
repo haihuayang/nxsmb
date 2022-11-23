@@ -4084,6 +4084,12 @@ static NTSTATUS getinfo_file(posixfs_object_t *posixfs_object,
 
 		x_smbd_get_file_info(*info, posixfs_object->meta);
 
+	} else if (state.in_info_level == SMB2_FILE_INFO_FILE_INTERNAL_INFORMATION) {
+		if (state.in_output_buffer_length < sizeof(uint64_t)) {
+			RETURN_STATUS(NT_STATUS_INFO_LENGTH_MISMATCH);
+		}
+		return getinfo_encode_le(uint64_t(posixfs_object->meta.inode), state);
+
 	} else if (state.in_info_level == SMB2_FILE_INFO_FILE_EA_INFORMATION) {
 		/* TODO we do not support EA for now */
 		return getinfo_encode_le(uint32_t(0), state);
@@ -4461,6 +4467,33 @@ static NTSTATUS getinfo_fs(x_smbd_requ_t *smbd_requ,
 
 		return NT_STATUS_OK;
 
+	} else if (state.in_info_level == SMB2_FILE_INFO_FS_LABEL_INFORMATION) {
+		if (state.in_output_buffer_length < sizeof(x_smb2_fs_label_info_t)) {
+			return NT_STATUS_INFO_LENGTH_MISMATCH;
+		}
+
+		std::string netbios_name = x_smbd_conf_get()->netbios_name;
+		std::string volume = x_smbd_tcon_get_volume_label(smbd_requ->smbd_tcon);
+		std::u16string u16_volume = x_convert_utf8_to_utf16_assert(volume);
+
+		uint32_t output_buffer_length = state.in_output_buffer_length & ~1;
+		size_t buf_size = std::min(size_t(output_buffer_length),
+				offsetof(x_smb2_fs_label_info_t, label) +
+				u16_volume.length() * 2);
+
+		state.out_data.resize(buf_size);
+		x_smb2_fs_label_info_t *info =
+			(x_smb2_fs_label_info_t *)state.out_data.data();
+		info->label_length = X_H2LE32(8);
+		char16_t *buf = info->label;
+		char16_t *buf_end = (char16_t *)((char *)info + buf_size);
+		buf = x_utf16le_encode(u16_volume, buf, buf_end);
+		if (!buf) {
+			return STATUS_BUFFER_OVERFLOW;
+		}
+
+		return NT_STATUS_OK;
+
 	} else if (state.in_info_level == SMB2_FILE_INFO_FS_SIZE_INFORMATION) {
 		if (state.in_output_buffer_length < sizeof(x_smb2_fs_size_info_t)) {
 			return NT_STATUS_INFO_LENGTH_MISMATCH;
@@ -4474,6 +4507,18 @@ static NTSTATUS getinfo_fs(x_smbd_requ_t *smbd_requ,
 		info->free_units = X_H2LE64(fsstat.f_bfree);
 		info->sectors_per_unit = X_H2LE32(x_convert_assert<uint32_t>(fsstat.f_bsize / 512));
 		info->bytes_per_sector = X_H2LE32(512);
+		return NT_STATUS_OK;
+
+	} else if (state.in_info_level == SMB2_FILE_INFO_FS_DEVICE_INFORMATION) {
+		if (state.in_output_buffer_length < sizeof(x_smb2_fs_device_info_t)) {
+			return NT_STATUS_INFO_LENGTH_MISMATCH;
+		}
+
+		state.out_data.resize(sizeof(x_smb2_fs_device_info_t));
+		x_smb2_fs_device_info_t *info = (x_smb2_fs_device_info_t *)state.out_data.data();
+		info->device_type = X_H2LE32(X_SMB2_FILE_DEVICE_DISK);
+		info->characteristics = X_H2LE32(X_SMB2_FILE_DEVICE_IS_MOUNTED);
+		/* TODO if readonly characteristics |= FILE_READ_ONLY_DEVICE */
 		return NT_STATUS_OK;
 
 	} else if (state.in_info_level == SMB2_FILE_INFO_FS_ATTRIBUTE_INFORMATION) {
