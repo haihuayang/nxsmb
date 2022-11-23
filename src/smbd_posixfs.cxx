@@ -71,9 +71,14 @@ static NTSTATUS posixfs_set_basic_info(int fd,
 {
 	dos_attr_t dos_attr = { 0 };
 	if (basic_info.file_attributes != 0) {
-		if ((object_meta->file_attributes & X_SMB2_FILE_ATTRIBUTE_DIRECTORY) !=
-				(basic_info.file_attributes & X_SMB2_FILE_ATTRIBUTE_DIRECTORY)) {
-			return NT_STATUS_INVALID_PARAMETER;
+		if ((object_meta->file_attributes & X_SMB2_FILE_ATTRIBUTE_DIRECTORY)) {
+			if (basic_info.file_attributes & X_SMB2_FILE_ATTRIBUTE_ARCHIVE) {
+				RETURN_STATUS(NT_STATUS_INVALID_PARAMETER);
+			}
+		} else {
+			if (basic_info.file_attributes & X_SMB2_FILE_ATTRIBUTE_DIRECTORY) {
+				RETURN_STATUS(NT_STATUS_INVALID_PARAMETER);
+			}
 		}
 		dos_attr.attr_mask |= DOS_SET_FILE_ATTR;
 		dos_attr.file_attrs = basic_info.file_attributes & X_NXSMB_FILE_ATTRIBUTE_MASK;
@@ -4084,6 +4089,20 @@ static NTSTATUS getinfo_file(posixfs_object_t *posixfs_object,
 
 		x_smbd_get_file_info(*info, posixfs_object->meta);
 
+	} else if (state.in_info_level == SMB2_FILE_INFO_FILE_STANDARD_INFORMATION) {
+		if (state.in_output_buffer_length < sizeof(x_smb2_file_standard_info_t)) {
+			RETURN_STATUS(NT_STATUS_INFO_LENGTH_MISMATCH);
+		}
+		state.out_data.resize(sizeof(x_smb2_file_standard_info_t));
+		x_smb2_file_standard_info_t *info =
+			(x_smb2_file_standard_info_t *)state.out_data.data();
+
+		x_smbd_get_file_info(*info, posixfs_object->meta,
+				posixfs_stream->meta,
+				smbd_open->access_mask,
+				posixfs_open->mode,
+				posixfs_open->current_offset);
+
 	} else if (state.in_info_level == SMB2_FILE_INFO_FILE_INTERNAL_INFORMATION) {
 		if (state.in_output_buffer_length < sizeof(uint64_t)) {
 			RETURN_STATUS(NT_STATUS_INFO_LENGTH_MISMATCH);
@@ -4102,6 +4121,10 @@ static NTSTATUS getinfo_file(posixfs_object_t *posixfs_object,
 
 	} else if (state.in_info_level == SMB2_FILE_INFO_FILE_MODE_INFORMATION) {
 		return getinfo_encode_le(posixfs_open->mode, state);
+
+	} else if (state.in_info_level == SMB2_FILE_INFO_FILE_ALIGNMENT_INFORMATION) {
+		/* No alignment needed. */
+		return getinfo_encode_le(uint32_t(0), state);
 
 	} else if (state.in_info_level == SMB2_FILE_INFO_FILE_FULL_EA_INFORMATION) {
 		/* TODO we do not support EA for now */
@@ -4124,6 +4147,35 @@ static NTSTATUS getinfo_file(posixfs_object_t *posixfs_object,
 				posixfs_open->mode,
 				posixfs_open->current_offset);
 
+	} else if (state.in_info_level == SMB2_FILE_INFO_FILE_ALTERNATE_NAME_INFORMATION) {
+		if (state.in_output_buffer_length < sizeof(x_smb2_file_alternate_name_info_t)) {
+			RETURN_STATUS(NT_STATUS_INFO_LENGTH_MISMATCH);
+		}
+		/* TODO not support 8.3 name for now */
+		RETURN_STATUS(NT_STATUS_OBJECT_NAME_NOT_FOUND);
+
+	} else if (state.in_info_level == SMB2_FILE_INFO_FILE_STREAM_INFORMATION) {
+		if (state.in_output_buffer_length < sizeof(x_smb2_file_stream_name_info_t) + 8) {
+			RETURN_STATUS(NT_STATUS_INFO_LENGTH_MISMATCH);
+		}
+		return getinfo_stream_info(posixfs_object, state);
+
+	} else if (state.in_info_level == SMB2_FILE_INFO_FILE_COMPRESSION_INFORMATION) {
+		if (state.in_output_buffer_length < sizeof(x_smb2_file_compression_info_t) + 8) {
+			RETURN_STATUS(NT_STATUS_INFO_LENGTH_MISMATCH);
+		}
+		state.out_data.resize(sizeof(x_smb2_file_compression_info_t));
+		x_smb2_file_compression_info_t *info =
+			(x_smb2_file_compression_info_t *)state.out_data.data();
+		// TODO not support compression for now
+		info->file_size = X_H2LE64(posixfs_stream->meta.end_of_file);
+		info->format = 0;
+		info->unit_shift = 0;
+		info->chunk_shift = 0;
+		info->cluster_shift = 0;
+		info->unused0 = 0;
+		info->unused1 = 0;
+
 	} else if (state.in_info_level == SMB2_FILE_INFO_FILE_NETWORK_OPEN_INFORMATION) {
 		if (state.in_output_buffer_length < sizeof(x_smb2_file_network_open_info_t)) {
 			RETURN_STATUS(NT_STATUS_INFO_LENGTH_MISMATCH);
@@ -4138,18 +4190,16 @@ static NTSTATUS getinfo_file(posixfs_object_t *posixfs_object,
 		x_smbd_get_file_info(*info, posixfs_object->meta,
 				posixfs_stream->meta);
 
-	} else if (state.in_info_level == SMB2_FILE_INFO_FILE_ALTERNATE_NAME_INFORMATION) {
-		if (state.in_output_buffer_length < sizeof(x_smb2_file_alternate_name_info_t)) {
+	} else if (state.in_info_level == SMB2_FILE_INFO_FILE_ATTRIBUTE_TAG_INFORMATION) {
+		if (state.in_output_buffer_length < sizeof(x_smb2_file_attribute_tag_info_t)) {
 			RETURN_STATUS(NT_STATUS_INFO_LENGTH_MISMATCH);
 		}
-		/* TODO not support 8.3 name for now */
-		RETURN_STATUS(NT_STATUS_OBJECT_NAME_NOT_FOUND);
-
-	} else if (state.in_info_level == SMB2_FILE_INFO_FILE_STREAM_INFORMATION) {
-		if (state.in_output_buffer_length < sizeof(x_smb2_file_stream_name_info_t) + 8) {
-			RETURN_STATUS(NT_STATUS_INFO_LENGTH_MISMATCH);
-		}
-		return getinfo_stream_info(posixfs_object, state);
+		state.out_data.resize(sizeof(x_smb2_file_attribute_tag_info_t));
+		x_smb2_file_attribute_tag_info_t *info =
+			(x_smb2_file_attribute_tag_info_t *)state.out_data.data();
+		
+		info->file_attributes = X_H2LE32(posixfs_object->meta.file_attributes);
+		info->reparse_tag = 0; // TODO not support for now
 
 	} else if (state.in_info_level == SMB2_FILE_INFO_FILE_NORMALIZED_NAME_INFORMATION) {
 		if (x_smbd_conn_curr_dialect() < 0x311) {
@@ -4465,8 +4515,6 @@ static NTSTATUS getinfo_fs(x_smbd_requ_t *smbd_requ,
 			return STATUS_BUFFER_OVERFLOW;
 		}
 
-		return NT_STATUS_OK;
-
 	} else if (state.in_info_level == SMB2_FILE_INFO_FS_LABEL_INFORMATION) {
 		if (state.in_output_buffer_length < sizeof(x_smb2_fs_label_info_t)) {
 			return NT_STATUS_INFO_LENGTH_MISMATCH;
@@ -4492,8 +4540,6 @@ static NTSTATUS getinfo_fs(x_smbd_requ_t *smbd_requ,
 			return STATUS_BUFFER_OVERFLOW;
 		}
 
-		return NT_STATUS_OK;
-
 	} else if (state.in_info_level == SMB2_FILE_INFO_FS_SIZE_INFORMATION) {
 		if (state.in_output_buffer_length < sizeof(x_smb2_fs_size_info_t)) {
 			return NT_STATUS_INFO_LENGTH_MISMATCH;
@@ -4507,7 +4553,6 @@ static NTSTATUS getinfo_fs(x_smbd_requ_t *smbd_requ,
 		info->free_units = X_H2LE64(fsstat.f_bfree);
 		info->sectors_per_unit = X_H2LE32(x_convert_assert<uint32_t>(fsstat.f_bsize / 512));
 		info->bytes_per_sector = X_H2LE32(512);
-		return NT_STATUS_OK;
 
 	} else if (state.in_info_level == SMB2_FILE_INFO_FS_DEVICE_INFORMATION) {
 		if (state.in_output_buffer_length < sizeof(x_smb2_fs_device_info_t)) {
@@ -4519,7 +4564,6 @@ static NTSTATUS getinfo_fs(x_smbd_requ_t *smbd_requ,
 		info->device_type = X_H2LE32(X_SMB2_FILE_DEVICE_DISK);
 		info->characteristics = X_H2LE32(X_SMB2_FILE_DEVICE_IS_MOUNTED);
 		/* TODO if readonly characteristics |= FILE_READ_ONLY_DEVICE */
-		return NT_STATUS_OK;
 
 	} else if (state.in_info_level == SMB2_FILE_INFO_FS_ATTRIBUTE_INFORMATION) {
 		if (state.in_output_buffer_length < sizeof(x_smb2_fs_attr_info_t)) {
@@ -4560,12 +4604,45 @@ static NTSTATUS getinfo_fs(x_smbd_requ_t *smbd_requ,
 			return STATUS_BUFFER_OVERFLOW;
 		}
 
-		return NT_STATUS_OK;
+	} else if (state.in_info_level == SMB2_FILE_INFO_FS_FULL_SIZE_INFORMATION) {
+		if (state.in_output_buffer_length < sizeof(x_smb2_fs_full_size_info_t)) {
+			return NT_STATUS_INFO_LENGTH_MISMATCH;
+		}
+		struct statvfs fsstat;
+		int err = fstatvfs(posixfs_object->fd, &fsstat);
+		assert(err == 0);
+		state.out_data.resize(sizeof(x_smb2_fs_size_info_t));
+		x_smb2_fs_full_size_info_t *info =
+			(x_smb2_fs_full_size_info_t *)state.out_data.data();
+		info->total_allocation_units = X_H2LE64(fsstat.f_blocks);
+		info->caller_available_allocation_units = X_H2LE64(fsstat.f_bfree);
+		info->actual_available_allocation_units = X_H2LE64(fsstat.f_bfree);
+		info->sectors_per_allocation_unit = X_H2LE32(x_convert_assert<uint32_t>(fsstat.f_bsize / 512));
+		info->bytes_per_sector = X_H2LE32(512);
+
+	} else if (state.in_info_level == SMB2_FILE_INFO_FS_SECTOR_SIZE_INFORMATION) {
+		if (state.in_output_buffer_length < sizeof(x_smb2_fs_sector_size_info_t)) {
+			return NT_STATUS_INFO_LENGTH_MISMATCH;
+		}
+
+		state.out_data.resize(sizeof(x_smb2_fs_sector_size_info_t));
+		x_smb2_fs_sector_size_info_t *info =
+			(x_smb2_fs_sector_size_info_t *)state.out_data.data();
+		uint32_t bytes_per_sector = 512;
+		info->logical_bytes_per_sector = X_H2LE32(bytes_per_sector);
+		info->physical_bytes_per_sector_for_atomicity = X_H2LE32(bytes_per_sector);
+		info->physical_bytes_per_sector_for_performance = X_H2LE32(bytes_per_sector);
+		info->file_system_effective_physical_bytes_per_sector_for_atomicity = X_H2LE32(bytes_per_sector);
+		info->flags = X_H2LE32(X_SMB2_SSINFO_FLAGS_ALIGNED_DEVICE
+				| X_SMB2_SSINFO_FLAGS_PARTITION_ALIGNED_ON_DEVICE);
+		info->byte_offset_for_sector_alignment = 0;
+		info->byte_offset_for_partition_alignment = 0;
 
 	} else {
-		X_TODO;
 		return NT_STATUS_INVALID_LEVEL;
 	}
+	
+	return NT_STATUS_OK;
 }
 
 static NTSTATUS getinfo_security(posixfs_object_t *posixfs_object,

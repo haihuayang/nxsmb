@@ -168,6 +168,18 @@ enum {
 	SMB2_FILE_INFO_FS_SIZE_INFORMATION = 3,
 	SMB2_FILE_INFO_FS_DEVICE_INFORMATION = 4,
 	SMB2_FILE_INFO_FS_ATTRIBUTE_INFORMATION = 5,
+	SMB2_FILE_INFO_FS_QUOTA_INFORMATION = 6,
+	SMB2_FILE_INFO_FS_FULL_SIZE_INFORMATION = 7,
+	SMB2_FILE_INFO_FS_OBJECTID_INFORMATION = 8,
+	SMB2_FILE_INFO_FS_SECTOR_SIZE_INFORMATION = 11,
+};
+
+/* SMB2_FILE_INFO_FS_SECTOR_SIZE_INFORMATION values */
+enum {
+	X_SMB2_SSINFO_FLAGS_ALIGNED_DEVICE		= 0x00000001,
+	X_SMB2_SSINFO_FLAGS_PARTITION_ALIGNED_ON_DEVICE	= 0x00000002,
+	X_SMB2_SSINFO_FLAGS_NO_SEEK_PENALTY		= 0x00000004,
+	X_SMB2_SSINFO_FLAGS_TRIM_ENABLED		= 0x00000008,
 };
 
 /* SMB_FS_DEVICE_INFORMATION device types. */
@@ -559,6 +571,23 @@ struct x_smb2_file_alternate_name_info_t
 	char16_t name[];
 } __attribute__ ((aligned (8)));
 
+struct x_smb2_file_compression_info_t
+{
+	uint64_t file_size;
+	uint16_t format;
+	uint8_t unit_shift;
+	uint8_t chunk_shift;
+	uint8_t cluster_shift;
+	uint8_t unused0;
+	uint16_t unused1;
+};
+
+struct x_smb2_file_attribute_tag_info_t
+{
+	uint32_t file_attributes;
+	uint32_t reparse_tag;
+};
+
 struct x_smb2_fs_volume_info_t
 {
 	uint64_t creation_time;
@@ -595,6 +624,32 @@ struct x_smb2_fs_attr_info_t
 	uint32_t label_length;
 	char16_t label[];
 } __attribute__ ((aligned (8)));
+
+struct x_smb2_fs_full_size_info_t
+{
+	uint64_t total_allocation_units;
+	uint64_t caller_available_allocation_units;
+	uint64_t actual_available_allocation_units;
+	uint32_t sectors_per_allocation_unit;
+	uint32_t bytes_per_sector;
+};
+
+struct x_smb2_fs_object_id_info_t
+{
+	uint8_t object_id[16];
+	uint8_t extended_info[48];
+};
+
+struct x_smb2_fs_sector_size_info_t
+{
+	uint32_t logical_bytes_per_sector;
+	uint32_t physical_bytes_per_sector_for_atomicity;
+	uint32_t physical_bytes_per_sector_for_performance;
+	uint32_t file_system_effective_physical_bytes_per_sector_for_atomicity;
+	uint32_t flags;
+	uint32_t byte_offset_for_sector_alignment;
+	uint32_t byte_offset_for_partition_alignment;
+};
 
 struct x_smb2_file_dir_info_t
 {

@@ -34,6 +34,13 @@ struct x_smbd_stream_meta_t
 void x_smbd_get_file_info(x_smb2_file_basic_info_t &info,
 		const x_smbd_object_meta_t &object_meta);
 
+void x_smbd_get_file_info(x_smb2_file_standard_info_t &info,
+		const x_smbd_object_meta_t &object_meta,
+		const x_smbd_stream_meta_t &stream_meta,
+		uint32_t access_mask,
+		uint32_t mode,
+		uint64_t current_offset);
+
 void x_smbd_get_file_info(x_smb2_file_all_info_t &info,
 		const x_smbd_object_meta_t &object_meta,
 		const x_smbd_stream_meta_t &stream_meta,

@@ -12,6 +12,32 @@ void x_smbd_get_file_info(x_smb2_file_basic_info_t &info,
 	info.unused = 0;
 }
 
+void x_smbd_get_file_info(x_smb2_file_standard_info_t &info,
+		const x_smbd_object_meta_t &object_meta,
+		const x_smbd_stream_meta_t &stream_meta,
+		uint32_t access_mask,
+		uint32_t mode,
+		uint64_t current_offset)
+{
+	info.allocation_size = X_H2LE64(stream_meta.allocation_size);
+	info.end_of_file = X_H2LE64(stream_meta.end_of_file);
+
+	uint8_t delete_pending = stream_meta.delete_on_close ? 1 : 0;
+	/* not sure why samba for nlink to 1 for directory, just follow it */
+	uint32_t nlink = x_convert<uint32_t>(object_meta.nlink);
+	if (nlink && object_meta.isdir()) {
+		nlink = 1;
+	}
+	if (nlink > 0) {
+		nlink -= delete_pending;
+	}
+
+	info.nlinks = X_H2LE32(nlink);
+	info.delete_pending = delete_pending;
+	info.directory = object_meta.isdir() ? 1 : 0;
+	info.unused = 0;
+}
+
 void x_smbd_get_file_info(x_smb2_file_all_info_t &info,
 		const x_smbd_object_meta_t &object_meta,
 		const x_smbd_stream_meta_t &stream_meta,
@@ -25,23 +51,10 @@ void x_smbd_get_file_info(x_smb2_file_all_info_t &info,
 	info.basic_info.change.val = X_H2LE64(object_meta.change.val);
 	info.basic_info.file_attributes = X_H2LE32(object_meta.file_attributes);
 	info.basic_info.unused = 0;
-	info.standard_info.allocation_size = X_H2LE64(stream_meta.allocation_size);
-	info.standard_info.end_of_file = X_H2LE64(stream_meta.end_of_file);
 
-	uint8_t delete_pending = stream_meta.delete_on_close ? 1 : 0;
-	/* not sure why samba for nlink to 1 for directory, just follow it */
-	uint32_t nlink = x_convert<uint32_t>(object_meta.nlink);
-	if (nlink && object_meta.isdir()) {
-		nlink = 1;
-	}
-	if (nlink > 0) {
-		nlink -= delete_pending;
-	}
-
-	info.standard_info.nlinks = X_H2LE32(nlink);
-	info.standard_info.delete_pending = delete_pending;
-	info.standard_info.directory = object_meta.isdir() ? 1 : 0;
-	info.standard_info.unused = 0;
+	x_smbd_get_file_info(info.standard_info, object_meta, stream_meta,
+			access_mask,
+			mode, current_offset);
 
 	info.file_id = X_H2LE64(object_meta.inode);
 	info.ea_size = 0; // not supported
