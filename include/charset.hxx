@@ -10,6 +10,7 @@
 #include "include/bits.hxx"
 #include <string>
 #include <stdint.h>
+#include <string.h>
 
 static const char32_t x_unicode_invalid = char32_t(-1);
 
@@ -367,26 +368,92 @@ static inline char16_t *x_utf16le_encode(const char16_t *s,
 	return begin;
 }
 
+static inline bool x_strcase_equal(const char16_t *s1, const char16_t *s2, size_t size)
+{
+	const char16_t *s1end = s1 + size;
+	const char16_t *s2end = s2 + size;
+	while (s1 != s1end) {
+		auto [uc1, next1] = x_utf16_pull_unicode(s1, s1end);
+		if (!next1) {
+			/* not valid utf16, failback the byte compare */
+			return memcmp(s1, s2, (s1end - s1) * sizeof(char16_t));
+		}
+		auto [uc2, next2] = x_utf16_pull_unicode(s2, s2end);
+		if (!next2) {
+			return false;
+		}
+
+		if (uc1 != uc2 && x_tolower(uc1) != x_tolower(uc2)) {
+			return false;
+		}
+		s1 = next1;
+		s2 = next2;
+	}
+	return true;
+}
+
 static inline bool x_strcase_equal(const std::u16string &s1, const std::u16string &s2)
 {
-	/* TODO case */
-	return s1 == s2;
+	size_t size = s1.size();
+	if (size != s2.size()) {
+		return false;
+	}
+	return x_strcase_equal(s1.data(), s2.data(), size);
+}
+
+static inline bool x_strcase_equal(const char8_t *s1, const char8_t *s2, size_t size)
+{
+	const char8_t *s1end = s1 + size;
+	const char8_t *s2end = s2 + size;
+	while (s1 != s1end) {
+		auto [uc1, next1] = x_utf8_pull_unicode(s1, s1end);
+		if (!next1) {
+			/* not valid utf8, failback the byte compare */
+			return memcmp(s1, s2, (s1end - s1) * sizeof(char8_t));
+		}
+		auto [uc2, next2] = x_utf8_pull_unicode(s2, s2end);
+		if (!next2) {
+			return false;
+		}
+
+		if (uc1 != uc2 && x_tolower(uc1) != x_tolower(uc2)) {
+			return false;
+		}
+		s1 = next1;
+		s2 = next2;
+	}
+	return true;
 }
 
 static inline bool x_strcase_equal(const std::string &s1, const std::string &s2)
 {
-	/* TODO case */
-	return s1 == s2;
+	size_t size = s1.size();
+	if (size != s2.size()) {
+		return false;
+	}
+	return x_strcase_equal((const char8_t *)s1.data(), (const char8_t *)s2.data(), size);
 }
 
 static inline std::string x_str_toupper(const std::string &s)
 {
-	/* TODO utf8 */
-	std::string ret = s;
-	for (auto &c: ret) {
-		c = x_convert_assert<char>(std::toupper(c));
-	}
+	std::string ret;
+	ret.reserve(s.size());
+	const char8_t *begin = (const char8_t *)s.data();
+	const char8_t *end = begin + s.size();
+	while (begin != end) {
+		auto [uc, next] = x_utf8_pull_unicode(begin, end);
+		if (!next) {
+			/* not valid utf8, failback byte toupper */
+			for ( ; begin != end; ++begin) {
+				ret.push_back((char)std::toupper(*begin));
+			}
+			break;
+		}
 
+		uc = x_toupper(uc);
+		x_unicode_push_utf8(uc, ret);
+		begin = next;
+	}
 	return ret;
 }
 
