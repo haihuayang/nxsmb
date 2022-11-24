@@ -4686,10 +4686,13 @@ static NTSTATUS getinfo_security(posixfs_object_t *posixfs_object,
 		psd = create_empty_sec_desc();
 	}
 
-
-	auto ndr_ret = idl::x_ndr_push(*psd, state.out_data, state.in_output_buffer_length);
+	/* TODO ndr_push should fail when buffer is not enough */
+	auto ndr_ret = idl::x_ndr_push(*psd, state.out_data, 0);
 	if (ndr_ret < 0) {
 		return x_map_nt_error_from_ndr_err(idl::x_ndr_err_code_t(-ndr_ret));
+	}
+	if (state.out_data.size() > state.in_output_buffer_length) {
+		return NT_STATUS_BUFFER_TOO_SMALL;
 	}
 	return NT_STATUS_OK;
 }
