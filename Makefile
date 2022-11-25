@@ -165,7 +165,7 @@ SET_src_nxutils := \
 	misc \
 
 $(TARGET_DIR_out)/bin/smbd_nx: $(SET_src_smbd_nx:%=$(TARGET_DIR_out)/src/%.o) $(TARGET_SET_lib:%=$(TARGET_DIR_out)/lib%.a)
-	$(CXX) -g $(TARGET_LDFLAGS) -o $@ $^ -lcrypto -lpthread -lresolv -ldl
+	$(CXX) -g $(TARGET_LDFLAGS) -o $@ $^ -lcrypto -lz -lpthread -lresolv -ldl
 
 $(TARGET_DIR_out)/bin/nxutils: $(SET_src_nxutils:%=$(TARGET_DIR_out)/src/%.o) $(TARGET_SET_lib:%=$(TARGET_DIR_out)/lib%.a)
 	$(CXX) -g $(TARGET_LDFLAGS) -o $@ $^ -lpthread -lresolv -ldl
@@ -289,7 +289,6 @@ TARGET_SRC_libsamba := \
 		lib/tdb/common/mutex \
 		lib/tdb/common/traverse \
 		lib/tdb/common/transaction \
-		third_party/zlib/crc32 \
 		source4/heimdal/lib/roken/resolve \
 		source4/heimdal/lib/asn1/timegm \
 		source4/heimdal/lib/asn1/extra \

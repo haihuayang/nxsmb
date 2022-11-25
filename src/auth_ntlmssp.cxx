@@ -12,7 +12,6 @@ extern "C" {
 #include "samba/lib/crypto/md5.h"
 #include "samba/lib/crypto/arcfour.h"
 #include "samba/lib/crypto/hmacmd5.h"
-#include "samba/third_party/zlib/zlib.h"
 #include "./samba/nsswitch/libwbclient/wbclient.h"
 
 // #include "samba/auth/gensec/gensec.h"
@@ -32,6 +31,7 @@ extern "C" {
 #include "include/librpc/ntlmssp.hxx"
 #include "include/charset.hxx"
 #include "util_sid.hxx"
+#include <zlib.h>
 
 #define DEBUG(...) do { } while (0)
 #define dump_data_pw(...) do { } while (0)
