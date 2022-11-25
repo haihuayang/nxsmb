@@ -113,7 +113,7 @@ static char *dom_sid_parse(idl::dom_sid &sid, const char *str, char end)
 	if (!str
 	    || (str[0]!='S' && str[0]!='s')
 	    || (str[1]!='-')) {
-		return false;
+		return nullptr;
 	}
 
 	/* Get the SID revision number */
@@ -121,7 +121,7 @@ static char *dom_sid_parse(idl::dom_sid &sid, const char *str, char end)
 	p = str+2;
 	x = (uint64_t)strtoul(p, &q, 10);
 	if (x==0 || x > UINT8_MAX || !q || *q!='-') {
-		return false;
+		return nullptr;
 	}
 	sid.sid_rev_num = (uint8_t)x;
 
@@ -133,7 +133,7 @@ static char *dom_sid_parse(idl::dom_sid &sid, const char *str, char end)
 	p = q+1;
 	x = strtoull(p, &q, 0);
 	if (!q || *q!='-' || (x & AUTHORITY_MASK)) {
-		return false;
+		return nullptr;
 	}
 	sid.id_auth[5] = (x & 0x0000000000ffULL);
 	sid.id_auth[4] = (x & 0x00000000ff00ULL) >> 8;
