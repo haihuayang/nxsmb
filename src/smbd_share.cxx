@@ -2,10 +2,7 @@
 #include "smbd_share.hxx"
 #include <fcntl.h>
 #include <unistd.h>
-extern "C" {
-#include "samba/include/config.h"
-#include "samba/lib/crypto/sha512.h"
-}
+#include <openssl/sha.h>
 
 static std::atomic<uint64_t> g_topdir_next_id = 0;
 x_smbd_topdir_t::x_smbd_topdir_t(const x_smbd_object_ops_t *ops, int fd,
@@ -24,10 +21,10 @@ x_smbd_topdir_t::~x_smbd_topdir_t()
 static x_smb2_uuid_t create_volume_id(const std::string &name)
 {
 	x_smb2_uuid_t uuid[4];
-	struct hc_sha512state sctx;
-	samba_SHA512_Init(&sctx);
-	samba_SHA512_Update(&sctx, name.data(), name.length());
-	samba_SHA512_Final(&uuid[0], &sctx);
+	SHA512_CTX sctx;
+	SHA512_Init(&sctx);
+	SHA512_Update(&sctx, name.data(), name.length());
+	SHA512_Final((unsigned char *)&uuid[0], &sctx);
 	return uuid[0];
 }
 

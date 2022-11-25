@@ -1,32 +1,25 @@
 
 #include "smb2.hxx"
-extern "C" {
-#include "samba/include/config.h"
-#include "samba/lib/crypto/crypto.h"
-}
 #include <openssl/evp.h>
 #include <openssl/cmac.h>
+#include <openssl/hmac.h>
+#include <openssl/sha.h>
 
 void x_smb2_key_derivation(const uint8_t *KI, size_t KI_len,
 		const x_array_const_t<char> &label,
 		const x_array_const_t<char> &context,
 		x_smb2_key_t &key)
 {
-	struct HMACSHA256Context ctx;
+	HMAC_CTX ctx;
+	HMAC_Init(&ctx, KI, int(KI_len), EVP_sha256());
+
 	uint32_t buf;
 	static const uint8_t zero = 0;
 	uint8_t digest[SHA256_DIGEST_LENGTH];
 	uint32_t i = 1;
 	uint32_t L = 128;
 
-	/*
-	 * a simplified version of
-	 * "NIST Special Publication 800-108" section 5.1
-	 * using hmac-sha256.
-	 */
-	hmac_sha256_init(KI, KI_len, &ctx);
-
-#define HMAC_UPDATE(d, s, c) hmac_sha256_update((const uint8_t *)(d), (s), (c))
+#define HMAC_UPDATE(d, s, c) HMAC_Update(c, (unsigned char *)(d), s)
 
 	buf = X_H2BE32(i);
 	HMAC_UPDATE(&buf, sizeof(buf), &ctx);
@@ -35,8 +28,10 @@ void x_smb2_key_derivation(const uint8_t *KI, size_t KI_len,
 	HMAC_UPDATE(context.data, context.size, &ctx);
 	buf = X_H2BE32(L);
 	HMAC_UPDATE(&buf, sizeof(buf), &ctx);
-
-	hmac_sha256_final(digest, &ctx);
+	unsigned int dlen;
+	HMAC_Final(&ctx, digest, &dlen);
+	HMAC_cleanup(&ctx);
+	X_ASSERT(dlen == SHA256_DIGEST_LENGTH);
 
 	memcpy(key.data(), digest, 16);
 }
@@ -53,7 +48,7 @@ void x_smb2_key_derivation(const uint8_t *KI, size_t KI_len,
  * Param vector, input, the remain fragments of input data
  * Param count, input, the number of iovec in vector.
  */
-static inline void cmac_digest_by_software(const x_smb2_key_t &key,
+static inline void cmac_aes_128_digest(const x_smb2_key_t &key,
 		void *digest,
 		const struct iovec *vector, unsigned int count)
 {
@@ -70,7 +65,7 @@ static inline void cmac_digest_by_software(const x_smb2_key_t &key,
 	CMAC_CTX_free(ctx);
 }
 
-static inline void gmac_digest_by_software(const x_smb2_key_t &key,
+static inline void gmac_aes_128_digest(const x_smb2_key_t &key,
 		void *digest,
 		const struct iovec *vector, unsigned int count)
 {
@@ -138,15 +133,17 @@ static inline void hmac_sha256_digest(const x_smb2_key_t &key,
 		void *digest,
 		const struct iovec *vector, unsigned int count)
 {
-	struct HMACSHA256Context m;
+	HMAC_CTX ctx;
+	HMAC_Init(&ctx, key.data(), 16, EVP_sha256());
 	uint8_t sha256_digest[SHA256_DIGEST_LENGTH];
 
-	memset(&m, 0, sizeof m);
-	hmac_sha256_init(key.data(), 16, &m);
 	for (unsigned int i = 0; i < count; ++i) {
-		hmac_sha256_update((const uint8_t *)vector[i].iov_base, vector[i].iov_len, &m);
+		HMAC_Update(&ctx, (const uint8_t *)vector[i].iov_base, vector[i].iov_len);
 	}
-	hmac_sha256_final(sha256_digest, &m);
+	unsigned int dlen;
+	HMAC_Final(&ctx, sha256_digest, &dlen);
+	HMAC_cleanup(&ctx);
+	X_ASSERT(dlen == SHA256_DIGEST_LENGTH);
 	memcpy(digest, sha256_digest, 16);
 }
 
@@ -180,9 +177,9 @@ static void x_smb2_digest(uint16_t algo,
 	}
 
 	if (algo == X_SMB2_SIGNING_AES128_GMAC) {
-		gmac_digest_by_software(key, digest, iov, niov);
+		gmac_aes_128_digest(key, digest, iov, niov);
 	} else if (algo == X_SMB2_SIGNING_AES128_CMAC) {
-		cmac_digest_by_software(key, digest, iov, niov);
+		cmac_aes_128_digest(key, digest, iov, niov);
 	} else {
 		hmac_sha256_digest(key, digest, iov, niov);
 	}

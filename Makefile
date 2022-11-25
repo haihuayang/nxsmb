@@ -268,16 +268,6 @@ TARGET_SRC_libsamba := \
 		lib/util/sys_rw_data \
 		lib/util/sys_rw \
 		lib/util/iov_buf \
-		lib/crypto/aes \
-		lib/crypto/rijndael-alg-fst \
-		lib/crypto/md4 \
-		lib/crypto/md5 \
-		lib/crypto/sha256 \
-		lib/crypto/sha512 \
-		lib/crypto/hmacmd5 \
-		lib/crypto/hmacsha256 \
-		lib/crypto/aes_cmac_128 \
-		lib/crypto/arcfour \
 		lib/replace/replace \
 		lib/tdb/common/tdb \
 		lib/tdb/common/error \
