@@ -3,6 +3,14 @@
 #include <stdlib.h>
 #include <string.h>
 #include "include/asn1_wrap.hxx"
+#include <gssapi/gssapi_spnego.h>
+#include <asn1-common.h>
+#include <der.h>
+extern "C" {
+#include "lib/asn1/spnego_asn1.h"
+#include "lib/asn1/gssapi_asn1.h"
+}
+#if 0
 extern "C" {
 #include "heimdal/lib/asn1/asn1-common.h"
 #include "heimdal/lib/gssapi/gssapi/gssapi.h"
@@ -11,6 +19,7 @@ extern "C" {
 #include "heimdal/lib/asn1/der.h"
 #include "source4/heimdal/lib/gssapi/spnego/spnego_asn1.h"
 }
+#endif
 
 // TODO
 #define gensec_setting_bool(setting, mech, name, default_value) default_value
@@ -20,6 +29,8 @@ X_ASN1_METHOD(NegotiationToken)
 X_ASN1_METHOD(MechTypeList)
 X_ASN1_METHOD(GSSAPIContextToken)
 
+static gss_OID_desc _gss_spnego_mskrb_mechanism_oid_desc =
+	{ 9, (void *)"\x2a\x86\x48\x82\xf7\x12\x01\x02\x02" };
 
 struct x_auth_spnego_t
 {

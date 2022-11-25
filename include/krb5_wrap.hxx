@@ -8,9 +8,13 @@
 
 #include "include/xdefines.h"
 extern "C" {
-#include "samba/source4/heimdal/lib/krb5/krb5.h"
-#include "samba/source4/heimdal/lib/gssapi/gssapi/gssapi.h"
+#include <krb5.h>
+#include <gssapi/gssapi.h>
 }
+
+#define HAVE_KRB5_KEYTAB_ENTRY_KEYBLOCK 1
+#define HAVE_KRB5_KEYBLOCK_KEYVALUE 1
+#define HAVE_CHECKSUM_IN_KRB5_CHECKSUM 1
 
 #ifdef HAVE_KRB5_KEYTAB_ENTRY_KEY	       /* MIT */
 #define KRB5_KT_KEY(k)	  (&(k)->key)
@@ -37,6 +41,7 @@ extern "C" {
 #else /* MIT */
 #define KRB5_ERROR_CODE(k)      ((k)->error)
 #endif /* HAVE_E_DATA_POINTER_IN_KRB5_ERROR */
+
 
 #include "include/librpc/krb5pac.hxx"
 

@@ -1,5 +1,6 @@
 
 #include "smbd_ctrl.hxx"
+#include <sys/un.h>
 
 /* to access ctrl,
    socat ABSTRACT-CONNECT:nxsmbctrl -

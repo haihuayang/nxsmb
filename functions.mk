@@ -15,13 +15,29 @@ $(1)/$(2).c: $(1)/$(2).h
 $(1)/$(2).c $(1)/$(2).h: $(HOST_DIR_out)/bin/compile_et
 endef
 
+ifeq (, $(ASN1_COMPILE))
+ifeq (, $(shell which asn1_compile))
+ASN1_COMPILE := /usr/libexec/heimdal/asn1_compile
+else
+ASN1_COMPILE := asn1_compile
+endif
+endif
+
 define asn1_compile_wrap
-$(1)/$(2)_asn1.h $(1)/$(2)_asn1.c: $(1)/$(2)_asn1.files
+$(3)_path := $(shell realpath $(2)/$(3).asn1)
 
-$(1)/$(2)_asn1.files: samba/source4/heimdal/$(2).asn1
-	$(HOST_DIR_out)/bin/asn1_compile --one-code-file $(ASN1_OPT_$(notdir $(2))) --output-dir=$(TARGET_DIR_out)/samba/source4/heimdal/$(dir $(2)) $$< $(notdir $(2))
+$(1)/$(2)/$(3)_asn1.h: $(1)/$(2)/$(3)_asn1_files
+	cp $(1)/$(2)/$(3)_asn1.hx $(1)/$(2)/$(3)_asn1.h
 
-$(1)/$(2)_asn1.files: $(HOST_DIR_out)/bin/asn1_compile
+$(1)/$(2)/$(3)_asn1-priv.h: $(1)/$(2)/$(3)_asn1_files
+	cp $(1)/$(2)/$(3)_asn1-priv.hx $(1)/$(2)/$(3)_asn1-priv.h
+
+$(1)/$(2)/$(3)_asn1.c: $(1)/$(2)/$(3)_asn1_files
+	cp $(1)/$(2)/asn1_$(3)_asn1.x $(1)/$(2)/$(3)_asn1.c
+
+$(1)/$(2)/$(3)_asn1_files: $(2)/$(3).asn1
+	echo $$($(3)_path)
+	cd $(1)/$(2); $(ASN1_COMPILE) --one-code-file $(ASN1_OPT_$(3)) $$($(3)_path) $(3)_asn1
 endef
 
 define make_proto_wrap

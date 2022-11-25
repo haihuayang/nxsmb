@@ -26,8 +26,7 @@
 
 #define DEBUG(...) do { } while (0)
 
-#ifdef HAVE_KRB5
-
+#define HAVE_KRB5_KU_OTHER_CKSUM
 // #include "librpc/idl/krb5pac.h"
 // #include "auth/kerberos/pac_utils.h"
 
@@ -416,4 +415,3 @@ NTSTATUS kerberos_pac_logon_info(gss_const_buffer_t pac_blob,
 	return NT_STATUS_INVALID_PARAMETER;
 }
 
-#endif

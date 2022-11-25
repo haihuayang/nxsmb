@@ -1,4 +1,4 @@
-
+#if 0
 extern "C" {
 #include "heimdal/lib/asn1/asn1-common.h"
 #include "heimdal/lib/gssapi/gssapi/gssapi.h"
@@ -19,7 +19,7 @@ extern "C" {
 
 // #include "samba/auth/gensec/gensec.h"
 }
-
+#endif
 #include <stdlib.h>
 #include <string.h>
 
@@ -34,6 +34,20 @@ extern "C" {
 #include "include/asn1_wrap.hxx"
 #include "include/krb5_wrap.hxx"
 #include "include/charset.hxx"
+#include <gssapi/gssapi_krb5.h>
+
+// Heimdal interface
+#define KRB5_KEY_TYPE(k)        ((k)->keytype)
+#define KRB5_KEY_LENGTH(k)      ((k)->keyvalue.length)
+#define KRB5_KEY_DATA(k)        ((k)->keyvalue.data)
+#define KRB5_KEY_DATA_CAST      void
+
+/**
+ * zero a structure
+ */
+#ifndef ZERO_STRUCT
+#define ZERO_STRUCT(x) memset((char *)&(x), 0, sizeof(x))
+#endif
 
 using x_krb5_principal_ptr_t = std::unique_ptr<Principal, std::function<void (Principal *)>>;
 using x_krb5_principals_ptr_t = std::unique_ptr<Principals, std::function<void (Principals *)>>;
