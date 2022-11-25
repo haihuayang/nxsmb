@@ -5,6 +5,7 @@ extern "C" {
 #include "samba/lib/crypto/crypto.h"
 }
 #include <openssl/evp.h>
+#include <openssl/cmac.h>
 
 void x_smb2_key_derivation(const uint8_t *KI, size_t KI_len,
 		const x_array_const_t<char> &label,
@@ -56,17 +57,17 @@ static inline void cmac_digest_by_software(const x_smb2_key_t &key,
 		void *digest,
 		const struct iovec *vector, unsigned int count)
 {
-	struct aes_cmac_128_context ctx;
-	aes_cmac_128_init(&ctx, key.data());
+	CMAC_CTX *ctx = CMAC_CTX_new();
+	CMAC_Init(ctx, key.data(), 16, EVP_aes_128_cbc(), NULL);
 
 	for (unsigned int i=0; i < count; i++) {
-		aes_cmac_128_update(&ctx,
+		CMAC_Update(ctx, 
 				(const uint8_t *)vector[i].iov_base,
 				vector[i].iov_len);
 	}
-	uint8_t tmp_digest[16];
-	aes_cmac_128_final(&ctx, tmp_digest);
-	memcpy(digest, tmp_digest, 16);
+	size_t dlen;
+	CMAC_Final(ctx, (unsigned char *)digest, &dlen);
+	CMAC_CTX_free(ctx);
 }
 
 static inline void gmac_digest_by_software(const x_smb2_key_t &key,
