@@ -23,12 +23,11 @@
 */
 
 #include "include/krb5_wrap.hxx"
+#include "include/nttime.hxx"
 
 #define DEBUG(...) do { } while (0)
 
 #define HAVE_KRB5_KU_OTHER_CKSUM
-// #include "librpc/idl/krb5pac.h"
-// #include "auth/kerberos/pac_utils.h"
 
 static krb5_error_code check_pac_checksum(const void *input_data, size_t input_length,
 					  idl::PAC_SIGNATURE_DATA *sig,
@@ -125,7 +124,7 @@ NTSTATUS kerberos_decode_pac(gss_const_buffer_t pac_buf,
 	NTSTATUS status;
 	krb5_error_code ret;
 
-	NTTIME tgs_authtime_nttime;
+	idl::NTTIME tgs_authtime_nttime;
 
 	// struct PAC_DATA *pac_data = NULL;
 
@@ -319,11 +318,11 @@ NTSTATUS kerberos_decode_pac(gss_const_buffer_t pac_buf,
 
 	if (tgs_authtime) {
 		/* Convert to NT time, so as not to loose accuracy in comparison */
-		unix_to_nt_time(&tgs_authtime_nttime, tgs_authtime);
+		tgs_authtime_nttime = x_unix_to_nttime(tgs_authtime);
 
-		if (tgs_authtime_nttime != logon_name->logon_time.val) {
-			DEBUG(3, ("PAC Decode: "
-				  "Logon time mismatch between ticket and PAC!\n"));
+		if (tgs_authtime_nttime.val != logon_name->logon_time.val) {
+			X_LOG_ERR("PAC Decode: "
+				  "Logon time mismatch between ticket and PAC!");
 			DEBUG(3, ("PAC Decode: PAC: %s\n",
 				  nt_time_string(tmp_ctx, logon_name->logon_time)));
 			DEBUG(3, ("PAC Decode: Ticket: %s\n",

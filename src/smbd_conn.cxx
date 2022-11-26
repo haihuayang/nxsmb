@@ -2,10 +2,6 @@
 #include "smbd.hxx"
 #include "smbd_stats.hxx"
 #include "smbd_conf.hxx"
-extern "C" {
-#include "samba/include/config.h"
-#include "samba/lib/crypto/sha512.h"
-}
 
 enum {
 	MAX_MSG_SIZE = 0x1000000,

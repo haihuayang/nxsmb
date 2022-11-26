@@ -12,6 +12,7 @@
 #include "include/asn1_wrap.hxx"
 #include "include/librpc/ntlmssp.hxx"
 #include "include/charset.hxx"
+#include "include/nttime.hxx"
 #include "util_sid.hxx"
 #include <zlib.h>
 #include <openssl/evp.h>

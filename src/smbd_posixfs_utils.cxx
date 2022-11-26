@@ -1,6 +1,7 @@
 
 #include "smbd_posixfs_utils.hxx"
 #include "misc.hxx"
+#include "include/nttime.hxx"
 #include <unistd.h>
 #include <fcntl.h>
 #include <sys/types.h>

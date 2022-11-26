@@ -19,13 +19,13 @@
 #include "include/librpc/misc.hxx"
 #include "include/librpc/security.hxx"
 #include "include/librpc/samr.hxx"
+#include <gssapi.h>
 extern "C" {
 #include "samba/libcli/smb/smb_constants.h"
 #include "samba/libcli/smb/smb2_constants.h"
 #include "samba/libcli/util/ntstatus.h"
 #include "samba/lib/util/byteorder.h"
 #include "samba/source3/include/ntioctl.h"
-#include "samba/source4/heimdal/lib/gssapi/gssapi/gssapi.h"
 }
 
 

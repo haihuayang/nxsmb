@@ -33,7 +33,6 @@ extern "C" {
 #include "samba/libcli/util/ntstatus.h"
 #include "samba/lib/util/byteorder.h"
 #include "samba/source3/include/ntioctl.h"
-#include "samba/source4/heimdal/lib/gssapi/gssapi/gssapi.h"
 }
 
 #include "smbd_user.hxx"

@@ -1,5 +1,6 @@
 #include "smbd.hxx"
 #include "smbd_conf.hxx"
+#include "include/nttime.hxx"
 
 namespace {
 

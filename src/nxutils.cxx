@@ -7,6 +7,7 @@ extern "C" {
 #include "samba/libcli/util/ntstatus.h"
 }
 
+#include "include/nttime.hxx"
 #include "smbd_ntacl.hxx"
 #include "smbd_posixfs_utils.hxx"
 // #include "smbd_vfs.hxx"

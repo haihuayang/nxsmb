@@ -144,7 +144,7 @@ ASN1_OPT_spnego := --sequence=MechTypeList
 
 $(foreach i,$(TARGET_SET_asn1),$(eval $(call asn1_compile_wrap,$(TARGET_DIR_out),lib/asn1,$(i))))
 
-TARGET_SRC_libsamba := \
+unused_TARGET_SRC_libsamba := \
 		lib/util/genrand \
 		lib/util/time \
 		lib/util/time_basic \
@@ -205,6 +205,7 @@ TARGET_SRC_libnxsmb := \
 		lib/charset \
 		lib/networking \
 		lib/hexdump \
+		lib/rand \
 
 
 

@@ -10,6 +10,7 @@
 #include "smbd_share.hxx"
 #include "smbd_conf.hxx"
 #include "util_io.hxx"
+#include "include/nttime.hxx"
 #include <dirent.h>
 #include <sys/syscall.h>
 #include <sys/xattr.h>
