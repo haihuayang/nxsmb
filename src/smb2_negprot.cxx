@@ -1,7 +1,4 @@
 #include "smbd.hxx"
-extern "C" {
-#include "samba/lib/util/samba_util.h"
-}
 #include "smbd_conf.hxx"
 
 namespace {
@@ -283,7 +280,7 @@ static void generate_context(x_smb2_negprot_t &negprot,
 	data += 2;
 	x_put_le16(data, X_SMB2_PREAUTH_INTEGRITY_SHA512);
 	data += 2;
-	generate_random_buffer(data, 32);
+	x_rand_bytes(data, 32);
 	data += 32;
 	++context_count;
 

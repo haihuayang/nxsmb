@@ -1,25 +1,4 @@
-#if 0
-extern "C" {
-#include "heimdal/lib/asn1/asn1-common.h"
-#include "heimdal/lib/gssapi/gssapi/gssapi.h"
-#include "heimdal/lib/gssapi/mech/gssapi_asn1.h"
-#include "heimdal/lib/gssapi/spnego/spnego_locl.h"
-#include "heimdal/lib/asn1/der.h"
-#include "heimdal/lib/gssapi/spnego/spnego_asn1.h"
-#include "heimdal/lib/ntlm/heimntlm.h"
-#include "samba/libcli/util/ntstatus.h"
-#include "samba/libcli/util/hresult.h"
-#include "samba/lib/util/samba_util.h"
-#include "samba/lib/crypto/md5.h"
-#include "samba/source4/heimdal/lib/krb5/krb5.h"
-#include "samba/nsswitch/libwbclient/wbclient.h"
 
-#include "samba/source3/libads/kerberos_proto.h"
-#include "samba/lib/krb5_wrap/krb5_samba.h"
-
-// #include "samba/auth/gensec/gensec.h"
-}
-#endif
 #include <stdlib.h>
 #include <string.h>
 
@@ -35,12 +14,6 @@ extern "C" {
 #include "include/krb5_wrap.hxx"
 #include "include/charset.hxx"
 #include <gssapi/gssapi_krb5.h>
-
-// Heimdal interface
-#define KRB5_KEY_TYPE(k)        ((k)->keytype)
-#define KRB5_KEY_LENGTH(k)      ((k)->keyvalue.length)
-#define KRB5_KEY_DATA(k)        ((k)->keyvalue.data)
-#define KRB5_KEY_DATA_CAST      void
 
 /**
  * zero a structure

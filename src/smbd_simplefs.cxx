@@ -8,7 +8,7 @@ static const char *pseudo_entries[] = {
 	"..",
 //	".snapshot",
 };
-#define PSEUDO_ENTRIES_COUNT    ARRAY_SIZE(pseudo_entries)
+#define PSEUDO_ENTRIES_COUNT    X_ARRAY_SIZE(pseudo_entries)
 
 static bool simplefs_process_entry(
 		x_smbd_object_meta_t *object_meta,

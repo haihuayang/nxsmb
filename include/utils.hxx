@@ -133,6 +133,8 @@ std::string x_tostr(const T &v)
 	return os.str();
 }
 
+void x_rand_bytes(void *buf, size_t size);
+
 #define X_DEFINE_ENUM_FLAG_OPERATORS(T) \
 inline T operator~ (T a) { return static_cast<T>( ~static_cast<std::underlying_type<T>::type>(a) ); } \
 inline T operator| (T a, T b) { return static_cast<T>( static_cast<std::underlying_type<T>::type>(a) | static_cast<std::underlying_type<T>::type>(b) ); } \

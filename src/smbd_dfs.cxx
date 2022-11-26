@@ -36,7 +36,7 @@ static const char *pseudo_entries[] = {
 	"..",
 //	".snapshot",
 };
-#define PSEUDO_ENTRIES_COUNT    ARRAY_SIZE(pseudo_entries)
+#define PSEUDO_ENTRIES_COUNT    X_ARRAY_SIZE(pseudo_entries)
 
 static std::pair<std::string, std::string> find_node_by_volume(const x_smbd_conf_t &smbd_conf,
 		const std::string &volume)
@@ -328,7 +328,7 @@ static inline void create_new_tld(dfs_share_t &dfs_share,
 	auto name = x_convert_utf16_to_utf8_assert(u16name);
 
 	uint8_t uuid[16];
-	generate_random_buffer(uuid, sizeof uuid);
+	x_rand_bytes(uuid, sizeof uuid);
 	size_t volume_idx = uuid[0] % dfs_share.volumes.size();
 	char uuid_str[33];
 	for (uint32_t i = 0; i < 16; ++i) {
@@ -774,7 +774,7 @@ static bool dfs_volume_process_entry(
 	/* TODO match pattern */
 
 	int ret = 0;
-	if (file_number >= ARRAY_SIZE(pseudo_entries)) {
+	if (file_number >= X_ARRAY_SIZE(pseudo_entries)) {
 		ret = posixfs_object_statex_getat(dir_obj, ent_name,
 				object_meta, stream_meta, ppsd);
 	} else if (file_number == 0) {
@@ -806,7 +806,7 @@ static NTSTATUS dfs_volume_object_op_qdir(
 		std::unique_ptr<x_smb2_state_qdir_t> &state)
 {
 	return posixfs_object_qdir(smbd_object, smbd_conn, smbd_requ, state,
-			pseudo_entries, ARRAY_SIZE(pseudo_entries),
+			pseudo_entries, X_ARRAY_SIZE(pseudo_entries),
 			dfs_volume_process_entry);
 }
 

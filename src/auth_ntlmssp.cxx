@@ -18,7 +18,6 @@
 #include <openssl/md5.h>
 #include <openssl/hmac.h>
 #include <openssl/rc4.h>
-#include <openssl/rand.h>
 
 extern "C" {
 #include "samba/libcli/util/hresult.h"
@@ -1453,7 +1452,7 @@ static inline NTSTATUS handle_negotiate(x_auth_ntlmssp_t &auth_ntlmssp,
 	}
 
 	std::array<uint8_t, 8> cryptkey;
-	RAND_bytes(cryptkey.data(), cryptkey.size());
+	x_rand_bytes(cryptkey.data(), cryptkey.size());
 
 	uint32_t chal_flags = auth_ntlmssp.neg_flags;
 	std::u16string target_name;

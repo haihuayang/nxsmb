@@ -15,7 +15,6 @@
 #include <stdint.h>
 #include <memory>
 extern "C" {
-#include "samba/lib/util/samba_util.h"
 #include "samba/libcli/util/ntstatus.h"
 }
 
