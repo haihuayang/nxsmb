@@ -2,7 +2,7 @@
 #include "smbd_secrets.hxx"
 #include "smbd_conf.hxx"
 #include <string>
-#include <samba/lib/tdb/include/tdb.h>
+#include <tdb.h>
 #include <fcntl.h>
 
 /* copy from samba/source3/include/secrets.h, cannot include it

@@ -18,7 +18,6 @@ TARGET_DIR_out := target.dbg.linux.x86_64
 
 TARGET_SET_samba_dir := \
 	samba/lib/replace \
-	samba/lib/tdb/common \
 	samba/lib/util \
 	samba/lib/crypto \
 	samba/libcli/util \
@@ -55,7 +54,6 @@ TARGET_CFLAGS_samba = \
 	-Isamba/source4 \
 	-Isamba \
 	-Isamba/lib/replace \
-	-Isamba/lib/tdb/include \
 	-I. \
 	-Isamba/lib/talloc \
 	-Isamba/source3 \
@@ -128,7 +126,7 @@ SET_src_nxutils := \
 	misc \
 
 $(TARGET_DIR_out)/bin/smbd_nx: $(SET_src_smbd_nx:%=$(TARGET_DIR_out)/src/%.o) $(TARGET_SET_lib:%=$(TARGET_DIR_out)/lib%.a)
-	$(CXX) -g $(TARGET_LDFLAGS) -o $@ $^ $(TARGET_LDFLAGS_heimdal) -lcrypto -lz -lcom_err -lpthread -lresolv -ldl
+	$(CXX) -g $(TARGET_LDFLAGS) -o $@ $^ $(TARGET_LDFLAGS_heimdal) -ltdb -lcrypto -lz -lcom_err -lpthread -lresolv -ldl
 
 $(TARGET_DIR_out)/bin/nxutils: $(SET_src_nxutils:%=$(TARGET_DIR_out)/src/%.o) $(TARGET_SET_lib:%=$(TARGET_DIR_out)/lib%.a)
 	$(CXX) -g $(TARGET_LDFLAGS) -o $@ $^ -lpthread -lresolv -ldl
@@ -155,16 +153,6 @@ TARGET_SRC_libsamba := \
 		lib/util/sys_rw \
 		lib/util/iov_buf \
 		lib/replace/replace \
-		lib/tdb/common/tdb \
-		lib/tdb/common/error \
-		lib/tdb/common/hash \
-		lib/tdb/common/open \
-		lib/tdb/common/freelist \
-		lib/tdb/common/io \
-		lib/tdb/common/lock \
-		lib/tdb/common/mutex \
-		lib/tdb/common/traverse \
-		lib/tdb/common/transaction \
 
 TARGET_GEN_ntstatus := ntstatus_gen.h nterr_gen.c py_ntstatus.c
 TARGET_GEN_werror := werror_gen.h werror_gen.c py_werror.c
