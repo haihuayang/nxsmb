@@ -15,14 +15,6 @@ $(1)/$(2).c: $(1)/$(2).h
 $(1)/$(2).c $(1)/$(2).h: $(HOST_DIR_out)/bin/compile_et
 endef
 
-ifeq (, $(ASN1_COMPILE))
-ifeq (, $(shell which asn1_compile))
-ASN1_COMPILE := /usr/libexec/heimdal/asn1_compile
-else
-ASN1_COMPILE := asn1_compile
-endif
-endif
-
 define asn1_compile_wrap
 $(3)_path := $(shell realpath $(2)/$(3).asn1)
 

@@ -18,8 +18,7 @@ extern "C" {
 #include "samba/libcli/util/ntstatus.h"
 }
 
-#define NXSMBD_USE_ZFS 1
-#ifdef NXSMBD_USE_ZFS
+#ifdef NXSMBD_MINERVA
 extern "C" {
 #include "zfsdev.h"
 }

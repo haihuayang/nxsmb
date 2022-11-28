@@ -12,10 +12,7 @@
 #include <memory>
 #include <functional>
 #include <string>
-
-extern "C" {
-#include "samba/nsswitch/winbind_struct_protocol.h"
-}
+#include "winbind_wrap.hxx"
 
 
 struct x_wbrequ_t

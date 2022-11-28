@@ -9,10 +9,7 @@
 #include <sys/un.h>
 #include <sys/socket.h>
 #include <stdio.h>
-
-extern "C" {
-#include "samba/nsswitch/winbind_struct_protocol.h"
-}
+#include "include/winbind_wrap.hxx"
 
 static void winbindd_init_request(struct winbindd_request *request,
 		int request_type)

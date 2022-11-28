@@ -16,6 +16,10 @@ TARGET_LDFLAGS := $(TARGET_LDFLAGS) -fsanitize=address -g3
 
 TARGET_DIR_out := target.dbg.linux.x86_64
 
+ifneq (, $(MINERVA))
+TARGET_CXXFLAGS += -DNXSMBD_MINERVA -Izfs/include
+endif
+
 TARGET_SET_samba_dir := \
 	samba/lib/replace \
 	samba/lib/util \
@@ -43,14 +47,11 @@ TARGET_SET_lib := nxsmb samba
 TARGET_CFLAGS_EXTRA := \
 	-D__X_DEVELOPER__=1
 
-# heimdal-krb5-config --cflags
-TARGET_CFLAGS_heimdal = -I/usr/include/heimdal
-TARGET_LDFLAGS_heimdal = -Wl,--enable-new-dtags -Wl,-rpath -Wl,/usr/lib64/heimdal -L/usr/lib64/heimdal -lkrb5 -lgssapi -lasn1
-
 TARGET_CFLAGS_samba = \
 	-I$(TARGET_DIR_out)/samba \
 	-I$(TARGET_DIR_out)/samba/include \
 	-I$(TARGET_DIR_out) \
+	$(SAMBA_NSSWITCH_CFLAGS) \
 	-Isamba/source4 \
 	-Isamba \
 	-Isamba/lib/replace \
@@ -132,7 +133,7 @@ $(TARGET_DIR_out)/bin/nxutils: $(SET_src_nxutils:%=$(TARGET_DIR_out)/src/%.o) $(
 	$(CXX) -g $(TARGET_LDFLAGS) -o $@ $^ -lpthread -lresolv -ldl
 
 $(TARGET_DIR_out)/src/%.o: src/%.cxx | target_mkdir target_idl target_samba_gen
-	$(CXX) -c $(TARGET_CXXFLAGS) $(TARGET_CFLAGS_EXTRA) $(TARGET_CFLAGS_samba) $(TARGET_CFLAGS_heimdal) -Izfs/include -o $@ $<
+	$(CXX) -c $(TARGET_CXXFLAGS) $(TARGET_CFLAGS_EXTRA) $(TARGET_CFLAGS_samba) $(TARGET_CFLAGS_heimdal) -o $@ $<
 
 $(TARGET_SET_tests:%=$(TARGET_DIR_out)/tests/%) : %: %.o $(TARGET_SET_lib:%=$(TARGET_DIR_out)/lib%.a)
 	$(CXX) -g $(TARGET_LDFLAGS) -o $@ $^ -lpthread -lresolv -ldl

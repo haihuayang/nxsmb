@@ -11,7 +11,7 @@ extern "C" {
 #include "samba/libcli/smb/smb2_constants.h"
 }
 
-#ifdef NXSMBD_USE_ZFS
+#ifdef NXSMBD_MINERVA
 #define MINORBITS       20
 #define MINORMASK       ((1U << MINORBITS) - 1)
 

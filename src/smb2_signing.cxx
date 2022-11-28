@@ -10,8 +10,8 @@ void x_smb2_key_derivation(const uint8_t *KI, size_t KI_len,
 		const x_array_const_t<char> &context,
 		x_smb2_key_t &key)
 {
-	HMAC_CTX ctx;
-	HMAC_Init(&ctx, KI, int(KI_len), EVP_sha256());
+	HMAC_CTX *ctx = HMAC_CTX_new();
+	HMAC_Init_ex(ctx, KI, int(KI_len), EVP_sha256(), nullptr);
 
 	uint32_t buf;
 	static const uint8_t zero = 0;
@@ -22,15 +22,15 @@ void x_smb2_key_derivation(const uint8_t *KI, size_t KI_len,
 #define HMAC_UPDATE(d, s, c) HMAC_Update(c, (unsigned char *)(d), s)
 
 	buf = X_H2BE32(i);
-	HMAC_UPDATE(&buf, sizeof(buf), &ctx);
-	HMAC_UPDATE(label.data, label.size, &ctx);
-	HMAC_UPDATE(&zero, 1, &ctx);
-	HMAC_UPDATE(context.data, context.size, &ctx);
+	HMAC_UPDATE(&buf, sizeof(buf), ctx);
+	HMAC_UPDATE(label.data, label.size, ctx);
+	HMAC_UPDATE(&zero, 1, ctx);
+	HMAC_UPDATE(context.data, context.size, ctx);
 	buf = X_H2BE32(L);
-	HMAC_UPDATE(&buf, sizeof(buf), &ctx);
+	HMAC_UPDATE(&buf, sizeof(buf), ctx);
 	unsigned int dlen;
-	HMAC_Final(&ctx, digest, &dlen);
-	HMAC_cleanup(&ctx);
+	HMAC_Final(ctx, digest, &dlen);
+	HMAC_CTX_free(ctx);
 	X_ASSERT(dlen == SHA256_DIGEST_LENGTH);
 
 	memcpy(key.data(), digest, 16);
@@ -133,16 +133,16 @@ static inline void hmac_sha256_digest(const x_smb2_key_t &key,
 		void *digest,
 		const struct iovec *vector, unsigned int count)
 {
-	HMAC_CTX ctx;
-	HMAC_Init(&ctx, key.data(), 16, EVP_sha256());
+	HMAC_CTX *ctx = HMAC_CTX_new();
+	HMAC_Init_ex(ctx, key.data(), 16, EVP_sha256(), nullptr);
 	uint8_t sha256_digest[SHA256_DIGEST_LENGTH];
 
 	for (unsigned int i = 0; i < count; ++i) {
-		HMAC_Update(&ctx, (const uint8_t *)vector[i].iov_base, vector[i].iov_len);
+		HMAC_Update(ctx, (const uint8_t *)vector[i].iov_base, vector[i].iov_len);
 	}
 	unsigned int dlen;
-	HMAC_Final(&ctx, sha256_digest, &dlen);
-	HMAC_cleanup(&ctx);
+	HMAC_Final(ctx, sha256_digest, &dlen);
+	HMAC_CTX_free(ctx);
 	X_ASSERT(dlen == SHA256_DIGEST_LENGTH);
 	memcpy(digest, sha256_digest, 16);
 }

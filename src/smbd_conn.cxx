@@ -2,6 +2,7 @@
 #include "smbd.hxx"
 #include "smbd_stats.hxx"
 #include "smbd_conf.hxx"
+#include <sys/uio.h>
 
 enum {
 	MAX_MSG_SIZE = 0x1000000,

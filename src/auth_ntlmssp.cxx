@@ -19,10 +19,10 @@
 #include <openssl/md5.h>
 #include <openssl/hmac.h>
 #include <openssl/rc4.h>
+#include "libwbclient/wbclient.h"
 
 extern "C" {
 #include "samba/libcli/util/hresult.h"
-#include "samba/nsswitch/libwbclient/wbclient.h"
 }
 
 #define DEBUG(...) do { } while (0)
@@ -40,10 +40,17 @@ struct str_const_t {
 	size_t size;
 };
 
-struct x_ntlmssp_crypt_direction_t {
+struct x_ntlmssp_crypt_direction_t
+{
+	~x_ntlmssp_crypt_direction_t() {
+		if (seal_state) {
+			EVP_CIPHER_CTX_free(seal_state);
+		}
+	}
+
 	uint32_t seq_num;
 	uint8_t sign_key[16];
-	EVP_CIPHER_CTX seal_state;
+	EVP_CIPHER_CTX *seal_state = nullptr;
 };
 
 struct x_auth_ntlmssp_t
@@ -205,9 +212,10 @@ static void arcfour_init(EVP_CIPHER_CTX *ctx, const void *key, size_t key_len)
 
 static void arcfour_crypt(uint8_t *data, const void *key, size_t data_len)
 {
-	EVP_CIPHER_CTX ctx;
-	arcfour_init(&ctx, key, 16);
-	arcfour_crypt_sbox(&ctx, data, data_len);
+	EVP_CIPHER_CTX *ctx = EVP_CIPHER_CTX_new();
+	arcfour_init(ctx, key, 16);
+	arcfour_crypt_sbox(ctx, data, data_len);
+	EVP_CIPHER_CTX_free(ctx);
 }
 
 static void calc_ntlmv2_key(uint8_t subkey[16],
@@ -234,7 +242,7 @@ static std::array<uint8_t, 16> ntlmssp_make_packet_signature(x_auth_ntlmssp_t *n
 {
 	std::array<uint8_t, 16> sig;
 	if (ntlmssp->neg_flags & idl::NTLMSSP_NEGOTIATE_NTLM2) {
-		HMAC_CTX ctx;
+		HMAC_CTX *ctx = HMAC_CTX_new();
 		uint8_t digest[16];
 		uint8_t seq_num[4];
 
@@ -251,18 +259,19 @@ static std::array<uint8_t, 16> ntlmssp_make_packet_signature(x_auth_ntlmssp_t *n
 		 * hmac_md5_init_limK_to_64, but here the key length is < 64
 		 * so we just use HMAC_Init
 		 */
-		HMAC_Init(&ctx, crypt.sign_key, 16, EVP_md5());
+		HMAC_Init_ex(ctx, crypt.sign_key, 16, EVP_md5(), nullptr);
 
 		dump_data_pw("pdu data ", whole_pdu, pdu_length);
 
-		HMAC_Update(&ctx, seq_num, sizeof(seq_num));
-		HMAC_Update(&ctx, whole_pdu, x_convert_assert<uint32_t>(pdu_length));
+		HMAC_Update(ctx, seq_num, sizeof(seq_num));
+		HMAC_Update(ctx, whole_pdu, x_convert_assert<uint32_t>(pdu_length));
 		unsigned int dlen;
-		HMAC_Final(&ctx, digest, &dlen);
+		HMAC_Final(ctx, digest, &dlen);
+		HMAC_CTX_free(ctx);
 		X_ASSERT(dlen == sizeof(digest));
 
 		if (encrypt_sig && (ntlmssp->neg_flags & idl::NTLMSSP_NEGOTIATE_KEY_EXCH)) {
-			arcfour_crypt_sbox(&crypt.seal_state, digest, 8);
+			arcfour_crypt_sbox(crypt.seal_state, digest, 8);
 		}
 
 		SIVAL(sig.data(), 0, idl::NTLMSSP_SIGN_VERSION);
@@ -281,7 +290,7 @@ static std::array<uint8_t, 16> ntlmssp_make_packet_signature(x_auth_ntlmssp_t *n
 
 		crypt.seq_num++;
 
-		arcfour_crypt_sbox(&crypt.seal_state,
+		arcfour_crypt_sbox(crypt.seal_state,
 				   sig.data() + 4, sig.size() - 4);
 	}
 	return sig;
@@ -700,11 +709,15 @@ static void ntlmssp_sign_reset(x_auth_ntlmssp_t *ntlmssp,
 			dump_data_pw("NTLMSSP seal key:\n",
 					seal_key, 16);
 
-			arcfour_init(&ntlmssp->crypt_dirs[i].seal_state,
+			if (ntlmssp->crypt_dirs[i].seal_state) {
+				EVP_CIPHER_CTX_free(ntlmssp->crypt_dirs[i].seal_state);
+			}
+			ntlmssp->crypt_dirs[i].seal_state = EVP_CIPHER_CTX_new();
+			arcfour_init(ntlmssp->crypt_dirs[i].seal_state,
 					seal_key, sizeof(seal_key));
 
 			dump_arc4_state("NTLMSSP seal arc4 state:\n",
-					&ntlmssp->crypt_dirs[i].seal_state);
+					ntlmssp->crypt_dirs[i].seal_state);
 
 			/* seq num */
 			if (reset_seqnums) {
@@ -757,11 +770,15 @@ static void ntlmssp_sign_reset(x_auth_ntlmssp_t *ntlmssp,
 			}
 		}
 
-		arcfour_init(&ntlmssp->crypt_dirs[0].seal_state,
+		if (ntlmssp->crypt_dirs[0].seal_state) {
+			EVP_CIPHER_CTX_free(ntlmssp->crypt_dirs[0].seal_state);
+		}
+		ntlmssp->crypt_dirs[0].seal_state = EVP_CIPHER_CTX_new();
+		arcfour_init(ntlmssp->crypt_dirs[0].seal_state,
 			     seal_session_key, seal_session_key_len);
 
 		dump_arc4_state("NTLMv1 arc4 state:\n",
-				&ntlmssp->crypt_dirs[0].seal_state);
+				ntlmssp->crypt_dirs[0].seal_state);
 
 		if (reset_seqnums) {
 			ntlmssp->crypt_dirs[0].seq_num = 0;
@@ -832,30 +849,31 @@ static NTSTATUS ntlmssp_post_auth2(x_auth_ntlmssp_t *ntlmssp, x_auth_info_t &aut
 	ntlmssp->session_key = auth_info.session_key;
 
 	if (ntlmssp->new_spnego) {
-		HMAC_CTX ctx;
+		HMAC_CTX *ctx = HMAC_CTX_new();
 		uint8_t mic_buffer[idl::NTLMSSP_MIC_SIZE] = { 0, };
 
-		HMAC_Init(&ctx, auth_info.session_key.data(),
+		HMAC_Init_ex(ctx, auth_info.session_key.data(),
 				x_convert_assert<uint32_t>(auth_info.session_key.size()),
-				EVP_md5());
+				EVP_md5(), nullptr);
 
-		HMAC_Update(&ctx, ntlmssp->msg_negotiate.data(),
+		HMAC_Update(ctx, ntlmssp->msg_negotiate.data(),
 				x_convert_assert<uint32_t>(ntlmssp->msg_negotiate.size()));
-		HMAC_Update(&ctx, ntlmssp->msg_challenge.data(),
+		HMAC_Update(ctx, ntlmssp->msg_challenge.data(),
 				x_convert_assert<uint32_t>(ntlmssp->msg_challenge.size()));
 
 		/* checked were we set ntlmssp_state->new_spnego */
 		X_ASSERT(ntlmssp->msg_authenticate.size() >
 			   (idl::NTLMSSP_MIC_OFFSET + idl::NTLMSSP_MIC_SIZE));
 
-		HMAC_Update(&ctx, ntlmssp->msg_authenticate.data(), idl::NTLMSSP_MIC_OFFSET);
-		HMAC_Update(&ctx, mic_buffer, idl::NTLMSSP_MIC_SIZE);
-		HMAC_Update(&ctx, ntlmssp->msg_authenticate.data() +
+		HMAC_Update(ctx, ntlmssp->msg_authenticate.data(), idl::NTLMSSP_MIC_OFFSET);
+		HMAC_Update(ctx, mic_buffer, idl::NTLMSSP_MIC_SIZE);
+		HMAC_Update(ctx, ntlmssp->msg_authenticate.data() +
 				(idl::NTLMSSP_MIC_OFFSET + idl::NTLMSSP_MIC_SIZE),
 				x_convert_assert<uint32_t>(ntlmssp->msg_authenticate.size() -
 					(idl::NTLMSSP_MIC_OFFSET + idl::NTLMSSP_MIC_SIZE)));
 		unsigned int dlen;
-		HMAC_Final(&ctx, mic_buffer, &dlen);
+		HMAC_Final(ctx, mic_buffer, &dlen);
+		HMAC_CTX_free(ctx);
 		X_ASSERT(dlen == sizeof(mic_buffer));
 
 		if (memcmp(ntlmssp->msg_authenticate.data() + idl::NTLMSSP_MIC_OFFSET,
