@@ -24,7 +24,6 @@ extern "C" {
 #include "samba/libcli/smb/smb_constants.h"
 #include "samba/libcli/smb/smb2_constants.h"
 #include "samba/libcli/util/ntstatus.h"
-#include "samba/lib/util/byteorder.h"
 #include "samba/source3/include/ntioctl.h"
 }
 

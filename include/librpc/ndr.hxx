@@ -25,9 +25,7 @@
 
 extern "C" {
 #include "samba/libcli/util/ntstatus.h"
-#include "samba/lib/util/time.h"
 #include "samba/libcli/util/werror.h"
-#include "samba/lib/util/byteorder.h"
 }
 
 #define X_NDR_ERR_CODE_IS_SUCCESS(x) (x >= 0)

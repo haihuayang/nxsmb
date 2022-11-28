@@ -244,7 +244,6 @@ static std::array<uint8_t, 16> ntlmssp_make_packet_signature(x_auth_ntlmssp_t *n
 	if (ntlmssp->neg_flags & idl::NTLMSSP_NEGOTIATE_NTLM2) {
 		HMAC_CTX *ctx = HMAC_CTX_new();
 		uint8_t digest[16];
-		uint8_t seq_num[4];
 
 		auto &crypt = ntlmssp->crypt_dirs[direction];
 		X_LOG_DBG("%s seq = %u, len = %u, pdu_len = %u\n",
@@ -253,7 +252,7 @@ static std::array<uint8_t, 16> ntlmssp_make_packet_signature(x_auth_ntlmssp_t *n
 					(unsigned int)length,
 					(unsigned int)pdu_length);
 
-		SIVAL(seq_num, 0, crypt.seq_num);
+		uint32_t seq_num = X_H2LE32(crypt.seq_num);
 		crypt.seq_num++;
 		/* the microsoft version of hmac_md5 initialisation
 		 * hmac_md5_init_limK_to_64, but here the key length is < 64
@@ -263,7 +262,7 @@ static std::array<uint8_t, 16> ntlmssp_make_packet_signature(x_auth_ntlmssp_t *n
 
 		dump_data_pw("pdu data ", whole_pdu, pdu_length);
 
-		HMAC_Update(ctx, seq_num, sizeof(seq_num));
+		HMAC_Update(ctx, (uint8_t *)&seq_num, sizeof(seq_num));
 		HMAC_Update(ctx, whole_pdu, x_convert_assert<uint32_t>(pdu_length));
 		unsigned int dlen;
 		HMAC_Final(ctx, digest, &dlen);
@@ -274,19 +273,20 @@ static std::array<uint8_t, 16> ntlmssp_make_packet_signature(x_auth_ntlmssp_t *n
 			arcfour_crypt_sbox(crypt.seal_state, digest, 8);
 		}
 
-		SIVAL(sig.data(), 0, idl::NTLMSSP_SIGN_VERSION);
+		*((uint32_t *)sig.data()) = X_H2LE32( idl::NTLMSSP_SIGN_VERSION);
 		memcpy(sig.data() + 4, digest, 8);
-		memcpy(sig.data() + 12, seq_num, 4);
+		memcpy(sig.data() + 12, &seq_num, 4);
 
 		dump_data_pw("ntlmssp v2 sig ", sig.data(), sig.size());
 
 	} else {
 		auto &crypt = ntlmssp->crypt_dirs[0];
 		uint32_t crc = crc32_calc_buffer(data, length);
-		SIVAL(sig.data(), 0, idl::NTLMSSP_SIGN_VERSION);
-		SIVAL(sig.data(), 4, 0);
-		SIVAL(sig.data(), 4, crc);
-		SIVAL(sig.data(), 4, crypt.seq_num);
+		uint32_t *sig_ptr = (uint32_t *)sig.data();
+		sig_ptr[0] = X_H2LE32(idl::NTLMSSP_SIGN_VERSION);
+		sig_ptr[1] = 0;
+		sig_ptr[2] = X_H2LE32(crc);
+		sig_ptr[3] = X_H2LE32(crypt.seq_num);
 
 		crypt.seq_num++;
 
