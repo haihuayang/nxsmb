@@ -33,7 +33,7 @@ static bool decode_in_qdir(x_smb2_state_qdir_t &state,
 		return false;
 	}
 
-	state.in_info_level = X_LE2H8(in_qdir->info_level);
+	state.in_info_level = x_smb2_info_level_t(X_LE2H8(in_qdir->info_level));
 	state.in_flags = X_LE2H8(in_qdir->flags);
 	state.in_file_index = X_LE2H32(in_qdir->file_index);
 	state.in_file_id_persistent = X_LE2H64(in_qdir->file_id_persistent);

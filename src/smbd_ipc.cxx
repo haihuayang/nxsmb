@@ -434,8 +434,8 @@ static NTSTATUS ipc_object_op_getinfo(
 {
 	/* TODO should access check ? */
 	/* SMB2_GETINFO_FILE, SMB2_FILE_STANDARD_INFO */
-	if (state->in_info_class == X_SMB2_GETINFO_FILE) {
-		if (state->in_info_level == SMB2_FILE_INFO_FILE_STANDARD_INFORMATION) {
+	if (state->in_info_class == x_smb2_info_class_t::FILE) {
+		if (state->in_info_level == x_smb2_info_level_t::FILE_STANDARD_INFORMATION) {
 			if (state->in_output_buffer_length < sizeof(x_smb2_file_standard_info_t)) {
 				return STATUS_BUFFER_OVERFLOW;
 			}
@@ -450,7 +450,7 @@ static NTSTATUS ipc_object_op_getinfo(
 			info->directory = 0;
 			info->unused = 0;
 			return NT_STATUS_OK;
-		} else if (state->in_info_level == SMB2_FILE_INFO_FILE_STREAM_INFORMATION) {
+		} else if (state->in_info_level == x_smb2_info_level_t::FILE_STREAM_INFORMATION) {
 			return NT_STATUS_INVALID_PARAMETER;
 		}
 	} 

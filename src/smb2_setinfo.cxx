@@ -50,8 +50,8 @@ static NTSTATUS smb2_setinfo_dispatch(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *s
 		std::unique_ptr<x_smb2_state_setinfo_t> &state,
 		std::vector<x_smb2_change_t> &changes)
 {
-	if (state->in_info_class == X_SMB2_GETINFO_FILE) {
-		if (state->in_info_level == SMB2_FILE_INFO_FILE_DISPOSITION_INFORMATION) {
+	if (state->in_info_class == x_smb2_info_class_t::FILE) {
+		if (state->in_info_level == x_smb2_info_level_t::FILE_DISPOSITION_INFORMATION) {
 			/* MS-FSA 2.1.5.14.3 */
 			if (!smbd_requ->smbd_open->check_access(idl::SEC_STD_DELETE)) {
 				RETURN_OP_STATUS(smbd_requ, NT_STATUS_ACCESS_DENIED);
@@ -187,13 +187,13 @@ NTSTATUS x_smb2_process_setinfo(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_re
 		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
 
-	uint8_t in_info_class = X_LE2H8(in_setinfo->info_class);
-	uint8_t in_info_level = X_LE2H8(in_setinfo->info_level);
+	auto in_info_class = x_smb2_info_class_t(X_LE2H8(in_setinfo->info_class));
+	auto in_info_level = x_smb2_info_level_t(X_LE2H8(in_setinfo->info_level));
 	uint64_t in_file_id_persistent = X_LE2H64(in_setinfo->file_id_persistent);
 	uint64_t in_file_id_volatile = X_LE2H64(in_setinfo->file_id_volatile);
 
-	if (in_info_class == X_SMB2_GETINFO_FILE) {
-		if (in_info_level == SMB2_FILE_INFO_FILE_RENAME_INFORMATION) {
+	if (in_info_class == x_smb2_info_class_t::FILE) {
+		if (in_info_level == x_smb2_info_level_t::FILE_RENAME_INFORMATION) {
 			auto state = std::make_unique<x_smb2_state_rename_t>();
 			NTSTATUS status = decode_in_rename(*state, in_hdr, 
 					in_input_buffer_offset, in_input_buffer_length);

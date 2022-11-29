@@ -32,8 +32,8 @@ static bool decode_in_getinfo(x_smb2_state_getinfo_t &state,
 {
 	const x_smb2_in_getinfo_t *in_getinfo = (const x_smb2_in_getinfo_t *)(in_hdr + sizeof(x_smb2_header_t));
 
-	state.in_info_class = X_LE2H8(in_getinfo->info_class);
-	state.in_info_level = X_LE2H8(in_getinfo->info_level);
+	state.in_info_class = x_smb2_info_class_t(X_LE2H8(in_getinfo->info_class));
+	state.in_info_level = x_smb2_info_level_t(X_LE2H8(in_getinfo->info_level));
 	state.in_output_buffer_length = X_LE2H32(in_getinfo->output_buffer_length);
 	state.in_additional = X_LE2H32(in_getinfo->additional);
 	state.in_flags = X_LE2H32(in_getinfo->flags);

@@ -88,8 +88,8 @@ struct x_smb2_state_lock_t
 
 struct x_smb2_state_getinfo_t
 {
-	uint8_t  in_info_class;
-	uint8_t  in_info_level;
+	x_smb2_info_class_t  in_info_class;
+	x_smb2_info_level_t  in_info_level;
 	uint32_t in_output_buffer_length;
 	uint32_t in_additional;
 	uint32_t in_flags;
@@ -101,8 +101,8 @@ struct x_smb2_state_getinfo_t
 
 struct x_smb2_state_setinfo_t
 {
-	uint8_t  in_info_class;
-	uint8_t  in_info_level;
+	x_smb2_info_class_t  in_info_class;
+	x_smb2_info_level_t  in_info_level;
 	uint32_t in_additional;
 	uint64_t in_file_id_persistent;
 	uint64_t in_file_id_volatile;
@@ -120,7 +120,7 @@ struct x_smb2_state_rename_t
 
 struct x_smb2_state_qdir_t
 {
-	uint8_t in_info_level;
+	x_smb2_info_level_t in_info_level;
 	uint8_t in_flags;
 	uint32_t in_file_index;
 	uint32_t in_output_buffer_length;

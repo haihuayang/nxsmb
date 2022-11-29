@@ -83,13 +83,14 @@ void x_smbd_get_file_info(x_smb2_file_network_open_info_t &info,
 bool x_smbd_marshall_dir_entry(x_smb2_chain_marshall_t &marshall,
 		const x_smbd_object_meta_t &object_meta,
 		const x_smbd_stream_meta_t &stream_meta,
-		const std::u16string &name, int info_level)
+		const std::u16string &name,
+		x_smb2_info_level_t info_level)
 {
 	uint8_t *pbegin;
 	uint32_t rec_size;
 
 	switch (info_level) {
-	case SMB2_FILE_INFO_FILE_ID_BOTH_DIR_INFORMATION:
+	case x_smb2_info_level_t::FILE_ID_BOTH_DIR_INFORMATION:
 		rec_size = x_convert_assert<uint32_t>(sizeof(x_smb2_file_id_both_dir_info_t) + name.size() * 2);
 		pbegin = marshall.get_begin(rec_size);
 		if (!pbegin) {
@@ -129,7 +130,7 @@ bool x_smbd_marshall_dir_entry(x_smb2_chain_marshall_t &marshall,
 		}
 		break;
 
-	case SMB2_FILE_INFO_FILE_ID_FULL_DIR_INFORMATION:
+	case x_smb2_info_level_t::FILE_ID_FULL_DIR_INFORMATION:
 		rec_size = x_convert_assert<uint32_t>(sizeof(x_smb2_file_id_full_dir_info_t) + name.size() * 2);
 		pbegin = marshall.get_begin(rec_size);
 		if (!pbegin) {
@@ -165,7 +166,7 @@ bool x_smbd_marshall_dir_entry(x_smb2_chain_marshall_t &marshall,
 		}
 		break;
 
-	case SMB2_FILE_INFO_FILE_DIRECTORY_INFORMATION:
+	case x_smb2_info_level_t::FILE_DIRECTORY_INFORMATION:
 		rec_size = x_convert_assert<uint32_t>(sizeof(x_smb2_file_dir_info_t) + name.size() * 2);
 		pbegin = marshall.get_begin(rec_size);
 		if (!pbegin) {
@@ -187,7 +188,7 @@ bool x_smbd_marshall_dir_entry(x_smb2_chain_marshall_t &marshall,
 		}
 		break;
 
-	case SMB2_FILE_INFO_FILE_BOTH_DIR_INFORMATION:
+	case x_smb2_info_level_t::FILE_BOTH_DIR_INFORMATION:
 		rec_size = x_convert_assert<uint32_t>(sizeof(x_smb2_file_both_dir_info_t) + name.size() * 2);
 		pbegin = marshall.get_begin(rec_size);
 		if (!pbegin) {
@@ -223,7 +224,7 @@ bool x_smbd_marshall_dir_entry(x_smb2_chain_marshall_t &marshall,
 		}
 		break;
 
-	case SMB2_FILE_INFO_FILE_FULL_DIRECTORY_INFORMATION:
+	case x_smb2_info_level_t::FILE_FULL_DIRECTORY_INFORMATION:
 		rec_size = x_convert_assert<uint32_t>(sizeof(x_smb2_file_full_dir_info_t) + name.size() * 2);
 		pbegin = marshall.get_begin(rec_size);
 		if (!pbegin) {
@@ -256,7 +257,7 @@ bool x_smbd_marshall_dir_entry(x_smb2_chain_marshall_t &marshall,
 		}
 		break;
 
-	case SMB2_FILE_INFO_FILE_NAMES_INFORMATION:
+	case x_smb2_info_level_t::FILE_NAMES_INFORMATION:
 		rec_size = x_convert_assert<uint32_t>(sizeof(x_smb2_file_names_info_t) + name.size() * 2);
 		pbegin = marshall.get_begin(rec_size);
 		if (!pbegin) {
