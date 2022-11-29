@@ -7,14 +7,10 @@
 #endif
 
 #include "include/xdefines.h"
-#include "samba/include/config.h"
 #include <atomic>
 #include <memory>
 #include "misc.hxx"
-
-extern "C" {
-#include "samba/libcli/util/ntstatus.h"
-}
+#include "include/ntstatus.hxx"
 
 enum {
 	X_SMB1_MAGIC = '\xffSMB',

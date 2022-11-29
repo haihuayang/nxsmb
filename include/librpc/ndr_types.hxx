@@ -324,14 +324,14 @@ template <> struct ndr_traits_t<uint3264>
 
 	x_ndr_off_t scalars(uint3264 val, x_ndr_push_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, x_ndr_switch_t level) const {
 		X_ASSERT(level == X_NDR_SWITCH_NONE);
-		if (unlikely(flags & LIBNDR_FLAG_NDR64)) {
+		if (x_unlikely(flags & LIBNDR_FLAG_NDR64)) {
 			return x_ndr_push_uint64_align(val.val, ndr, bpos, epos, flags, 8);
 		}
 		return x_ndr_push_uint32(val.val, ndr, bpos, epos, flags);
 	}
 	x_ndr_off_t scalars(uint3264 &val, x_ndr_pull_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, x_ndr_switch_t level) const {
 		X_ASSERT(level == X_NDR_SWITCH_NONE);
-		if (unlikely(flags & LIBNDR_FLAG_NDR64)) {
+		if (x_unlikely(flags & LIBNDR_FLAG_NDR64)) {
 			uint64_t tmp;
 			x_ndr_off_t ret = x_ndr_pull_uint64_align(tmp, ndr, bpos, epos, flags, 8);
 			if (ret == 0) {

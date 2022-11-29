@@ -6,7 +6,6 @@
 #error "Must be c++"
 #endif
 
-#include "samba/include/config.h"
 #include "include/xdefines.h"
 #include "smbd_file.hxx"
 #include "smbd_ntacl.hxx"
@@ -15,7 +14,6 @@
 #include <stdint.h>
 #include <memory>
 extern "C" {
-#include "samba/libcli/util/ntstatus.h"
 }
 
 #ifdef NXSMBD_MINERVA

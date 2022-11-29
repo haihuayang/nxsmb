@@ -3398,7 +3398,7 @@ static NTSTATUS posixfs_object_remove(posixfs_object_t *posixfs_object,
 		if (!NT_STATUS_IS_OK(status)) {
 			changes.resize(orig_changes_size);
 			X_LOG_WARN("fail to unlink %s status=%x",
-					posixfs_object->unix_path.c_str(), status.v);
+					posixfs_object->unix_path.c_str(), status);
 			return status;
 		}
 		for (posixfs_ads_t *posixfs_ads = posixfs_object->ads_list.get_front();
@@ -4044,7 +4044,7 @@ static NTSTATUS getinfo_stream_info(const posixfs_object_t *posixfs_object,
 		if (!marshall_stream_info(marshall, u":",
 					posixfs_object->default_stream.meta.end_of_file,
 					posixfs_object->default_stream.meta.allocation_size)) {
-			return STATUS_BUFFER_OVERFLOW;
+			return NT_STATUS_BUFFER_OVERFLOW;
 		}
 	}
 
@@ -4060,7 +4060,7 @@ static NTSTATUS getinfo_stream_info(const posixfs_object_t *posixfs_object,
 			return marshall_ret;
 		});
 	if (!marshall_ret) {
-		return STATUS_BUFFER_OVERFLOW;
+		return NT_STATUS_BUFFER_OVERFLOW;
 	}
 	state.out_data.resize(marshall.get_size());
 	return NT_STATUS_OK;
@@ -4234,17 +4234,17 @@ static NTSTATUS getinfo_file(posixfs_object_t *posixfs_object,
 		char16_t *buf_end = (char16_t *)((char *)info + buf_size);
 		buf = x_utf16le_encode(posixfs_object->base.path, buf, buf_end);
 		if (!buf) {
-			return STATUS_BUFFER_OVERFLOW;
+			return NT_STATUS_BUFFER_OVERFLOW;
 		}
 
 		if (posixfs_ads) {
 			if (buf == buf_end) {
-				return STATUS_BUFFER_OVERFLOW;
+				return NT_STATUS_BUFFER_OVERFLOW;
 			}
 			*buf++ = X_H2LE16(u':');
 			buf = x_utf16le_encode(posixfs_ads->name, buf, buf_end);
 			if (!buf) {
-				return STATUS_BUFFER_OVERFLOW;
+				return NT_STATUS_BUFFER_OVERFLOW;
 			}
 		}
 
@@ -4325,7 +4325,7 @@ static NTSTATUS posixfs_set_ea(posixfs_object_t *posixfs_object,
 			return NT_STATUS_INVALID_PARAMETER;
 		}
 		if (is_invalid_windows_ea_name(name)) {
-			return STATUS_INVALID_EA_NAME;
+			return NT_STATUS_INVALID_EA_NAME;
 		}
 		eas.push_back({flags, name_length, value_length, name,
 				in_data + 8 + name_length + 1});
@@ -4515,7 +4515,7 @@ static NTSTATUS getinfo_fs(x_smbd_requ_t *smbd_requ,
 		char16_t *buf_end = (char16_t *)((char *)info + buf_size);
 		buf = x_utf16le_encode(u16_volume, buf, buf_end);
 		if (!buf) {
-			return STATUS_BUFFER_OVERFLOW;
+			return NT_STATUS_BUFFER_OVERFLOW;
 		}
 
 	} else if (state.in_info_level == x_smb2_info_level_t::FS_LABEL_INFORMATION) {
@@ -4540,7 +4540,7 @@ static NTSTATUS getinfo_fs(x_smbd_requ_t *smbd_requ,
 		char16_t *buf_end = (char16_t *)((char *)info + buf_size);
 		buf = x_utf16le_encode(u16_volume, buf, buf_end);
 		if (!buf) {
-			return STATUS_BUFFER_OVERFLOW;
+			return NT_STATUS_BUFFER_OVERFLOW;
 		}
 
 	} else if (state.in_info_level == x_smb2_info_level_t::FS_SIZE_INFORMATION) {
@@ -4604,7 +4604,7 @@ static NTSTATUS getinfo_fs(x_smbd_requ_t *smbd_requ,
 		char16_t *buf_end = (char16_t *)((char *)info + buf_size);
 		buf = x_utf16le_encode(u"NTFS", buf, buf_end);
 		if (!buf) {
-			return STATUS_BUFFER_OVERFLOW;
+			return NT_STATUS_BUFFER_OVERFLOW;
 		}
 
 	} else if (state.in_info_level == x_smb2_info_level_t::FS_FULL_SIZE_INFORMATION) {
@@ -5006,7 +5006,7 @@ NTSTATUS posixfs_object_qdir(
 	if (matched_count > 0) {
 		return NT_STATUS_INFO_LENGTH_MISMATCH;
 	} else {
-		return STATUS_NO_MORE_FILES;
+		return NT_STATUS_NO_MORE_FILES;
 	}
 }
 

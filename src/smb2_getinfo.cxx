@@ -112,7 +112,7 @@ NTSTATUS x_smb2_process_getinfo(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_re
 	status = x_smbd_open_op_getinfo(smbd_requ->smbd_open,
 		       	smbd_conn, smbd_requ,
 			state);
-	if (NT_STATUS_IS_OK(status) || NT_STATUS_EQUAL(status, STATUS_BUFFER_OVERFLOW)) {
+	if (NT_STATUS_IS_OK(status) || NT_STATUS_EQUAL(status, NT_STATUS_BUFFER_OVERFLOW)) {
 		x_smb2_reply_getinfo(smbd_conn, smbd_requ, *state, status);
 		return NT_STATUS_OK;
 	}

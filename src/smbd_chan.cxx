@@ -73,7 +73,7 @@ x_smbd_chan_t *x_smbd_ref_inc(x_smbd_chan_t *smbd_chan)
 template <>
 void x_smbd_ref_dec(x_smbd_chan_t *smbd_chan)
 {
-	if (unlikely(--smbd_chan->refcnt == 0)) {
+	if (x_unlikely(--smbd_chan->refcnt == 0)) {
 		X_LOG_DBG("free smbd_chan %p", smbd_chan);
 		delete smbd_chan;
 	}
@@ -350,7 +350,7 @@ static NTSTATUS smbd_chan_auth_updated(x_smbd_chan_t *smbd_chan, x_smbd_requ_t *
 		bool is_bind,
 		const x_auth_info_t &auth_info)
 {
-	X_LOG_OP("%ld RESP 0x%x", smbd_requ->in_smb2_hdr.mid, status.v);
+	X_LOG_OP("%ld RESP 0x%x", smbd_requ->in_smb2_hdr.mid, status);
 
 	if (NT_STATUS_EQUAL(status, NT_STATUS_MORE_PROCESSING_REQUIRED)) {
 		// hold ref for timer, will be dec in timer func

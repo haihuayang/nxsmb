@@ -155,16 +155,12 @@ unused_TARGET_SRC_libsamba := \
 		lib/util/iov_buf \
 		lib/replace/replace \
 
-TARGET_GEN_ntstatus := ntstatus_gen.h nterr_gen.c py_ntstatus.c
-TARGET_GEN_werror := werror_gen.h werror_gen.c py_werror.c
 
 TARGET_GEN_samba := \
 	$(TARGET_SET_asn1:%=$(TARGET_DIR_out)/lib/asn1/%_asn1.h) \
 	$(TARGET_SET_asn1:%=$(TARGET_DIR_out)/lib/asn1/%_asn1-priv.h) \
 	$(TARGET_SET_idl:%=$(TARGET_DIR_out)/librpc/idl/%.idl.hxx) \
 	$(TARGET_DIR_out)/samba/include/config.h \
-	$(TARGET_GEN_ntstatus:%=$(TARGET_DIR_out)/samba/libcli/util/%) \
-	$(TARGET_GEN_werror:%=$(TARGET_DIR_out)/samba/libcli/util/%)
 
 
 $(TARGET_DIR_out)/libsamba.a: $(TARGET_SRC_libsamba:%=$(TARGET_DIR_out)/samba/%.o) $(TARGET_GEN_libsamba:%=$(TARGET_DIR_out)/samba/%.o)
@@ -207,6 +203,8 @@ TARGET_SRC_libnxsmb := \
 		lib/networking \
 		lib/hexdump \
 		lib/rand \
+		lib/ntstatus \
+		lib/werror \
 
 
 
@@ -257,12 +255,6 @@ target_samba_gen: $(TARGET_GEN_samba)
 
 $(TARGET_DIR_out)/samba/include/config.h: scripts/generate-config
 	scripts/generate-config > $@
-
-$(TARGET_GEN_ntstatus:%=$(TARGET_DIR_out)/samba/libcli/util/%): samba/libcli/util/ntstatus_err_table.txt
-	$(PYTHON) samba/source4/scripting/bin/gen_ntstatus.py $< $(TARGET_GEN_ntstatus:%=$(TARGET_DIR_out)/samba/libcli/util/%)
-
-$(TARGET_GEN_werror:%=$(TARGET_DIR_out)/samba/libcli/util/%): samba/libcli/util/werror_err_table.txt
-	$(PYTHON) samba/source4/scripting/bin/gen_werror.py $< $(TARGET_GEN_werror:%=$(TARGET_DIR_out)/samba/libcli/util/%)
 
 target_idl: $(TARGET_SET_idl:%=$(TARGET_DIR_out)/librpc/idl/%.idl.ndr.cxx) $(TARGET_SET_idl:%=$(TARGET_DIR_out)/librpc/idl/%.idl.hxx)
 

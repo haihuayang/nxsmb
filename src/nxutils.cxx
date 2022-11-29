@@ -1,9 +1,6 @@
 
 #include "include/bits.hxx"
-#include "samba/include/config.h"
-extern "C" {
-#include "samba/libcli/util/ntstatus.h"
-}
+#include "include/ntstatus.hxx"
 
 #include "include/nttime.hxx"
 #include "smbd_ntacl.hxx"

@@ -6,7 +6,6 @@
 #error "Must be c++"
 #endif
 
-#include "samba/include/config.h"
 #include "include/evtmgmt.hxx"
 #include "include/timerq.hxx"
 #include "include/wbpool.hxx"
@@ -27,16 +26,12 @@
 #include "include/librpc/misc.hxx"
 #include "include/librpc/security.hxx"
 #include "include/librpc/samr.hxx"
-extern "C" {
-#include "samba/libcli/util/ntstatus.h"
-#include "samba/source3/include/ntioctl.h"
-}
 
 #include "smbd_user.hxx"
 #include "network.hxx"
 
-#define X_NT_STATUS_INTERNAL_BLOCKED	NT_STATUS(1)
-#define X_NT_STATUS_INTERNAL_TERMINATE	NT_STATUS(2)
+const NTSTATUS X_NT_STATUS_INTERNAL_BLOCKED	= {1};
+const NTSTATUS X_NT_STATUS_INTERNAL_TERMINATE	= {2};
 
 x_auth_t *x_smbd_create_auth(const void *sec_buf, size_t sec_len);
 const std::vector<uint8_t> &x_smbd_get_negprot_spnego();
@@ -469,12 +464,12 @@ void x_smbd_conn_requ_done(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ,
 #define RETURN_OP_STATUS(smbd_requ, status) do { \
 	X_LOG_OP("mid=%ld op=%d 0x%lx at %s:%d", (smbd_requ)->in_smb2_hdr.mid, \
 			(smbd_requ)->in_smb2_hdr.opcode, \
-			(status).v, __FILE__, __LINE__); \
+			NT_STATUS_V(status), __FILE__, __LINE__); \
 	return (status); \
 } while (0)
 
 #define RETURN_STATUS(status) do { \
-	X_LOG_DBG("0x%lx", (status).v); \
+	X_LOG_DBG("0x%lx", NT_STATUS_V(status)); \
 	return (status); \
 } while (0)
 

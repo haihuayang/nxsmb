@@ -145,6 +145,60 @@ static inline void x_ndr_ostr(const NTTIME_hyper &t, x_ndr_ostr_t &ndr, uint32_t
 }
 #endif
 
+template <>
+struct ndr_traits_t<NTSTATUS>
+{
+	using ndr_base_type = NTSTATUS;
+	using has_buffers = std::false_type;
+	using ndr_data_type = x_ndr_type_primary;
+
+	x_ndr_off_t scalars(NTSTATUS t, x_ndr_push_t &ndr,
+			x_ndr_off_t bpos, x_ndr_off_t epos,
+			uint32_t flags, x_ndr_switch_t level) const {
+		X_ASSERT(level == X_NDR_SWITCH_NONE);
+		return x_ndr_push_uint32(NT_STATUS_V(t), ndr, bpos, epos, flags);
+	}
+
+	x_ndr_off_t scalars(NTSTATUS &t, x_ndr_pull_t &ndr,
+			x_ndr_off_t bpos, x_ndr_off_t epos,
+			uint32_t flags, x_ndr_switch_t level) const {
+		X_ASSERT(level == X_NDR_SWITCH_NONE);
+		return x_ndr_pull_uint32(NT_STATUS_V(t), ndr, bpos, epos, flags);
+	}
+
+	void ostr(NTSTATUS t, x_ndr_ostr_t &ndr, uint32_t flags, x_ndr_switch_t level) const {
+		X_ASSERT(level == X_NDR_SWITCH_NONE);
+		ndr.os << NT_STATUS_V(t);
+	}
+};
+
+template <>
+struct ndr_traits_t<WERROR>
+{
+	using ndr_base_type = WERROR;
+	using has_buffers = std::false_type;
+	using ndr_data_type = x_ndr_type_primary;
+
+	x_ndr_off_t scalars(WERROR t, x_ndr_push_t &ndr,
+			x_ndr_off_t bpos, x_ndr_off_t epos,
+			uint32_t flags, x_ndr_switch_t level) const {
+		X_ASSERT(level == X_NDR_SWITCH_NONE);
+		return x_ndr_push_uint32(W_ERROR_V(t), ndr, bpos, epos, flags);
+	}
+
+	x_ndr_off_t scalars(WERROR &t, x_ndr_pull_t &ndr,
+			x_ndr_off_t bpos, x_ndr_off_t epos,
+			uint32_t flags, x_ndr_switch_t level) const {
+		X_ASSERT(level == X_NDR_SWITCH_NONE);
+		return x_ndr_pull_uint32(W_ERROR_V(t), ndr, bpos, epos, flags);
+	}
+
+	void ostr(WERROR t, x_ndr_ostr_t &ndr, uint32_t flags, x_ndr_switch_t level) const {
+		X_ASSERT(level == X_NDR_SWITCH_NONE);
+		ndr.os << W_ERROR_V(t);
+	}
+};
+
 
 }
 

@@ -94,7 +94,7 @@ static NTSTATUS named_pipe_read(
 {
 	if (named_pipe->output.size() == 0) {
 		X_TODO;
-		return STATUS_PENDING; // should keep the original request
+		return NT_STATUS_PENDING; // should keep the original request
 	}
 	uint32_t data_copy = x_convert_assert<uint32_t>(named_pipe->output.size()) - named_pipe->offset;
 	if (data_copy > requ_length) {
@@ -108,7 +108,7 @@ static NTSTATUS named_pipe_read(
 		named_pipe->output.clear();
 		named_pipe->offset = 0;
 	}
-	return named_pipe->output.size() == 0 ? NT_STATUS_OK : STATUS_BUFFER_OVERFLOW;
+	return named_pipe->output.size() == 0 ? NT_STATUS_OK : NT_STATUS_BUFFER_OVERFLOW;
 }
 
 static inline bool process_ncacn_header(x_ncacn_packet_t &header)
@@ -437,7 +437,7 @@ static NTSTATUS ipc_object_op_getinfo(
 	if (state->in_info_class == x_smb2_info_class_t::FILE) {
 		if (state->in_info_level == x_smb2_info_level_t::FILE_STANDARD_INFORMATION) {
 			if (state->in_output_buffer_length < sizeof(x_smb2_file_standard_info_t)) {
-				return STATUS_BUFFER_OVERFLOW;
+				return NT_STATUS_BUFFER_OVERFLOW;
 			}
 			state->out_data.resize(sizeof(x_smb2_file_standard_info_t));
 			x_smb2_file_standard_info_t *info =

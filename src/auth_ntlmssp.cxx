@@ -21,10 +21,6 @@
 #include <openssl/rc4.h>
 #include "libwbclient/wbclient.h"
 
-extern "C" {
-#include "samba/libcli/util/hresult.h"
-}
-
 #define DEBUG(...) do { } while (0)
 #define dump_data_pw(...) do { } while (0)
 #define dump_data(...) do { } while (0)
@@ -1432,8 +1428,7 @@ static NTSTATUS handle_neg_flags(x_auth_ntlmssp_t &auth_ntlmssp,
 
 	missing_flags &= ~auth_ntlmssp.neg_flags;
 	if (missing_flags != 0) {
-		HRESULT hres = HRES_SEC_E_UNSUPPORTED_FUNCTION;
-		NTSTATUS status = NT_STATUS(HRES_ERROR_V(hres));
+		NTSTATUS status = {0x80090302}; // HRES_SEC_E_UNSUPPORTED_FUNCTION
 #if 0
 		DEBUG(1, ("%s: Got %s flags[0x%08x] "
 			  "- possible downgrade detected! "

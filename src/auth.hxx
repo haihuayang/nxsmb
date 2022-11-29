@@ -6,7 +6,6 @@
 #error "Must be c++"
 #endif
 
-#include "samba/include/config.h"
 #include <vector>
 #include <string>
 #include <string.h>
@@ -21,7 +20,6 @@
 #include "include/librpc/samr.hxx"
 #include <gssapi.h>
 extern "C" {
-#include "samba/libcli/util/ntstatus.h"
 #include "samba/source3/include/ntioctl.h"
 }
 

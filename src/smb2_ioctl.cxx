@@ -220,7 +220,7 @@ static NTSTATUS push_ref_resp(const x_dfs_referral_resp_t &resp, size_t in_max_o
 	idl::x_ndr_push_t ndr{ndr_data, 0};
 	idl::x_ndr_off_t ndr_ret = push_dfs_referral_resp(resp, ndr, 0, in_max_output, 0);
 	if (ndr_ret < 0) {
-		return STATUS_BUFFER_OVERFLOW;
+		return NT_STATUS_BUFFER_OVERFLOW;
 	}
 	out_buf = x_buf_alloc(ndr_data.data.size());
 	memcpy(out_buf->data, ndr_data.data.data(), ndr_data.data.size());

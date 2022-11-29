@@ -1,5 +1,4 @@
 
-#include "samba/include/config.h"
 #include "misc.hxx"
 
 void x_smbd_report_nt_status(NTSTATUS status, unsigned int line, const char *file)
@@ -11,11 +10,11 @@ static const struct {
 	int unix_error;
 	NTSTATUS nt_error;
 } unix_nt_errmap[] = {
-	{ EAGAIN,       STATUS_MORE_ENTRIES },
-	{ EINTR,        STATUS_MORE_ENTRIES },
-	{ ENOBUFS,      STATUS_MORE_ENTRIES },
+	{ EAGAIN,       NT_STATUS_MORE_ENTRIES },
+	{ EINTR,        NT_STATUS_MORE_ENTRIES },
+	{ ENOBUFS,      NT_STATUS_MORE_ENTRIES },
 #ifdef EWOULDBLOCK
-	{ EWOULDBLOCK,  STATUS_MORE_ENTRIES },
+	{ EWOULDBLOCK,  NT_STATUS_MORE_ENTRIES },
 #endif
 	{ EINPROGRESS,  NT_STATUS_MORE_PROCESSING_REQUIRED },
 	{ EPERM,        NT_STATUS_ACCESS_DENIED },

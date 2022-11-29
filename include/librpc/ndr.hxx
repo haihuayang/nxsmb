@@ -22,11 +22,8 @@
 
 #include "libndr.h"
 #include "include/utils.hxx"
-
-extern "C" {
-#include "samba/libcli/util/ntstatus.h"
-#include "samba/libcli/util/werror.h"
-}
+#include "include/ntstatus.hxx"
+#include "include/werror.hxx"
 
 #define X_NDR_ERR_CODE_IS_SUCCESS(x) (x >= 0)
 
@@ -34,7 +31,7 @@ extern "C" {
    less tedious, hopefully making the code more readable */
 #define X_NDR_CHECK(call) ({ \
 	idl::x_ndr_off_t _ret = call; \
-	if (unlikely(!X_NDR_ERR_CODE_IS_SUCCESS(_ret))) { \
+	if (x_unlikely(!X_NDR_ERR_CODE_IS_SUCCESS(_ret))) { \
 		return _ret; \
 	} \
 	_ret; \
@@ -42,7 +39,7 @@ extern "C" {
 
 #define X_NDR_VERIFY(ret, call) do { \
 	auto _ret = (call); \
-	if (unlikely(!X_NDR_ERR_CODE_IS_SUCCESS(_ret))) { \
+	if (x_unlikely(!X_NDR_ERR_CODE_IS_SUCCESS(_ret))) { \
 		return _ret; \
 	} \
 	(ret) = _ret; \

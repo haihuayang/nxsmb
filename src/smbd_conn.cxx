@@ -96,7 +96,7 @@ x_smbd_conn_t *x_smbd_ref_inc(x_smbd_conn_t *smbd_conn)
 template <>
 void x_smbd_ref_dec(x_smbd_conn_t *smbd_conn)
 {
-	if (unlikely(--smbd_conn->refcnt == 0)) {
+	if (x_unlikely(--smbd_conn->refcnt == 0)) {
 		delete smbd_conn;
 	}
 }

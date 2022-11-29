@@ -123,11 +123,11 @@ _PUBLIC_ x_ndr_off_t x_ndr_push_uint32(uint32_t v,
 		uint32_t flags)
 {
 	bpos = x_ndr_align(4, ndr, bpos, epos, flags);
-	if (unlikely(bpos + 4 > epos)) {
+	if (x_unlikely(bpos + 4 > epos)) {
 		return -NDR_ERR_BUFSIZE;
 	}
 	ndr.reserve(bpos + 4);
-	if (unlikely(x_ndr_be(flags))) {
+	if (x_unlikely(x_ndr_be(flags))) {
 		x_put_be32(ndr.get_data() + bpos, v);
 	} else {
 		x_put_le32(ndr.get_data() + bpos, v);
@@ -143,10 +143,10 @@ _PUBLIC_ x_ndr_off_t x_ndr_pull_uint32(uint32_t &v, x_ndr_pull_t &ndr,
 		uint32_t flags)
 {
 	bpos = x_ndr_align(4, ndr, bpos, epos, flags);
-	if (unlikely(bpos + 4 > epos)) {
+	if (x_unlikely(bpos + 4 > epos)) {
 		return -NDR_ERR_BUFSIZE;
 	}
-	if (unlikely(x_ndr_be(flags))) {
+	if (x_unlikely(x_ndr_be(flags))) {
 		v = x_get_be32(ndr.get_data() + bpos);
 	} else {
 		v = x_get_le32(ndr.get_data() + bpos);
@@ -163,11 +163,11 @@ _PUBLIC_ x_ndr_off_t x_ndr_push_uint64_align(uint64_t v,
 		uint32_t flags, uint32_t alignment)
 {
 	bpos = x_ndr_align(alignment, ndr, bpos, epos, flags);
-	if (unlikely(bpos + 8 > epos)) {
+	if (x_unlikely(bpos + 8 > epos)) {
 		return -NDR_ERR_BUFSIZE;
 	}
 	ndr.reserve(bpos + 8);
-	if (unlikely(x_ndr_be(flags))) {
+	if (x_unlikely(x_ndr_be(flags))) {
 		x_put_be64(ndr.get_data() + bpos, v);
 	} else {
 		x_put_le64(ndr.get_data() + bpos, v);
@@ -184,10 +184,10 @@ _PUBLIC_ x_ndr_off_t x_ndr_pull_uint64_align(uint64_t &v,
 		uint32_t flags, uint32_t alignment)
 {
 	bpos = x_ndr_align(alignment, ndr, bpos, epos, flags);
-	if (unlikely(bpos + 8 > epos)) {
+	if (x_unlikely(bpos + 8 > epos)) {
 		return -NDR_ERR_BUFSIZE;
 	}
-	if (unlikely(x_ndr_be(flags))) {
+	if (x_unlikely(x_ndr_be(flags))) {
 		v = x_get_be64(ndr.get_data() + bpos);
 	} else {
 		v = x_get_le64(ndr.get_data() + bpos);
@@ -204,11 +204,11 @@ _PUBLIC_ x_ndr_off_t x_ndr_push_uint16(uint16_t v,
 		uint32_t flags)
 {
 	bpos = x_ndr_align(2, ndr, bpos, epos, flags);
-	if (unlikely(bpos + 2 > epos)) {
+	if (x_unlikely(bpos + 2 > epos)) {
 		return -NDR_ERR_BUFSIZE;
 	}
 	ndr.reserve(bpos + 2);
-	if (unlikely(x_ndr_be(flags))) {
+	if (x_unlikely(x_ndr_be(flags))) {
 		x_put_be16(ndr.get_data() + bpos, v);
 	} else {
 		x_put_le16(ndr.get_data() + bpos, v);
@@ -224,10 +224,10 @@ _PUBLIC_ x_ndr_off_t x_ndr_pull_uint16(uint16_t &v, x_ndr_pull_t &ndr,
 		uint32_t flags)
 {
 	bpos = x_ndr_align(2, ndr, bpos, epos, flags);
-	if (unlikely(bpos + 2 > epos)) {
+	if (x_unlikely(bpos + 2 > epos)) {
 		return -NDR_ERR_BUFSIZE;
 	}
-	if (unlikely(x_ndr_be(flags))) {
+	if (x_unlikely(x_ndr_be(flags))) {
 		v = x_get_be16(ndr.get_data() + bpos);
 	} else {
 		v = x_get_le16(ndr.get_data() + bpos);
@@ -242,7 +242,7 @@ _PUBLIC_ x_ndr_off_t x_ndr_push_uint8(uint8_t v, x_ndr_push_t &ndr,
 		x_ndr_off_t bpos, x_ndr_off_t epos,
 		uint32_t flags)
 {
-	if (unlikely(bpos + 1 > epos)) {
+	if (x_unlikely(bpos + 1 > epos)) {
 		return -NDR_ERR_BUFSIZE;
 	}
 	ndr.reserve(bpos + 1);
@@ -258,7 +258,7 @@ _PUBLIC_ x_ndr_off_t x_ndr_pull_uint8(uint8_t &v,
 		x_ndr_off_t bpos, x_ndr_off_t epos,
 		uint32_t flags)
 {
-	if (unlikely(bpos + 1 > epos)) {
+	if (x_unlikely(bpos + 1 > epos)) {
 		return -NDR_ERR_BUFSIZE;
 	}
 	v = ndr.get_data()[bpos];
@@ -273,7 +273,7 @@ _PUBLIC_ x_ndr_off_t x_ndr_push_uint1632(uint16_t v,
 		x_ndr_off_t bpos, x_ndr_off_t epos,
 		uint32_t flags)
 {
-	if (unlikely(flags & LIBNDR_FLAG_NDR64)) {
+	if (x_unlikely(flags & LIBNDR_FLAG_NDR64)) {
 		return x_ndr_push_uint32(v, ndr, bpos, epos, flags);
 	}
 	return x_ndr_push_uint16(v, ndr, bpos, epos, flags);
@@ -287,11 +287,11 @@ _PUBLIC_ x_ndr_off_t x_ndr_pull_uint1632(uint16_t &v,
 		x_ndr_off_t bpos, x_ndr_off_t epos,
 		uint32_t flags)
 {
-	if (unlikely(flags & LIBNDR_FLAG_NDR64)) {
+	if (x_unlikely(flags & LIBNDR_FLAG_NDR64)) {
 		uint32_t v32 = 0;
 		x_ndr_off_t ret = x_ndr_pull_uint32(v32, ndr, bpos, epos, flags);
 		v = uint16_t(v32);
-		if (unlikely(v32 != v)) {
+		if (x_unlikely(v32 != v)) {
 			// DEBUG(0,(__location__ ": non-zero upper 16 bits 0x%08x\n", (unsigned)v32));
 			return -NDR_ERR_NDR64;
 		}
@@ -324,7 +324,7 @@ static inline x_ndr_off_t x_ndr_push_align_intl(size_t n, x_ndr_push_t &ndr,
 		x_ndr_off_t bpos, x_ndr_off_t epos)
 {
 	x_ndr_off_t new_bpos = ndr.base + (((bpos - ndr.base) + (n-1)) & ~(n-1));
-	if (unlikely(new_bpos > epos)) {
+	if (x_unlikely(new_bpos > epos)) {
 		return -NDR_ERR_LENGTH;
 	}
 	ndr.reserve(new_bpos);
@@ -335,7 +335,7 @@ x_ndr_off_t x_ndr_align(size_t alignment, x_ndr_push_t &ndr,
 		x_ndr_off_t bpos, x_ndr_off_t epos,
 		uint32_t flags)
 {
-	if (unlikely((flags & LIBNDR_FLAG_NOALIGN))) {
+	if (x_unlikely((flags & LIBNDR_FLAG_NOALIGN))) {
 		return bpos;
 	}
 	return x_ndr_push_align_intl(normalize_align(alignment, flags), ndr, bpos, epos);
@@ -345,17 +345,17 @@ static inline x_ndr_off_t x_ndr_pull_align_intl(size_t n, x_ndr_pull_t &ndr,
 		x_ndr_off_t bpos, x_ndr_off_t epos)
 {
 	x_ndr_off_t new_bpos = ndr.base + (((bpos - ndr.base) + (n-1)) & ~(n-1));
-	if (unlikely(new_bpos > epos)) {
+	if (x_unlikely(new_bpos > epos)) {
 		return -NDR_ERR_BUFSIZE;
 	}
 	return new_bpos;
 #if 0
-	if (unlikely(ndr.flags & LIBNDR_FLAG_PAD_CHECK)) {
+	if (x_unlikely(ndr.flags & LIBNDR_FLAG_PAD_CHECK)) {
 		ndr_check_padding(ndr, n);
 	}
 #endif
 #if 0
-	if (unlikely(ndr.offset > ndr.data_size)) {		   \
+	if (x_unlikely(ndr.offset > ndr.data_size)) {		   \
 		if (ndr.flags & LIBNDR_FLAG_INCOMPLETE_BUFFER) { \
 			uint32_t _missing = ndr.offset - ndr.data_size; \
 			ndr.relative_highest_offset = _missing; \
@@ -369,7 +369,7 @@ x_ndr_off_t x_ndr_align(size_t alignment, x_ndr_pull_t &ndr,
 		x_ndr_off_t bpos, x_ndr_off_t epos,
 		uint32_t flags)
 {
-	if (unlikely((flags & LIBNDR_FLAG_NOALIGN))) {
+	if (x_unlikely((flags & LIBNDR_FLAG_NOALIGN))) {
 		return bpos;
 	}
 	return x_ndr_pull_align_intl(normalize_align(alignment, flags), ndr, bpos, epos);
@@ -471,13 +471,13 @@ _PUBLIC_ void ndr_check_padding(x_ndr_pull_t &ndr, size_t n)
 }
 #endif
 #define ORIG_NDR_PULL_ALIGN(ndr, n) do { \
-	if (unlikely(!(ndr.flags & LIBNDR_FLAG_NOALIGN))) {    \
-		if (unlikely(ndr.flags & LIBNDR_FLAG_PAD_CHECK)) {     \
+	if (x_unlikely(!(ndr.flags & LIBNDR_FLAG_NOALIGN))) {    \
+		if (x_unlikely(ndr.flags & LIBNDR_FLAG_PAD_CHECK)) {     \
 			ndr_check_padding(ndr, n); \
 		} \
 		ndr.offset = (ndr.offset + (n-1)) & ~(n-1); \
 	} \
-	if (unlikely(ndr.offset > ndr.data_size)) {		   \
+	if (x_unlikely(ndr.offset > ndr.data_size)) {		   \
 		if (ndr.flags & LIBNDR_FLAG_INCOMPLETE_BUFFER) { \
 			uint32_t _missing = ndr.offset - ndr.data_size; \
 			ndr.relative_highest_offset = _missing; \
@@ -518,7 +518,7 @@ _PUBLIC_ x_ndr_ret_t x_ndr_push_uint16(x_ndr_push_t &ndr, uint32_t extra_flags, 
 }
 #endif
 #define NDR_PULL_NEED_BYTES(ndr, n) do { \
-	if (unlikely((n) > ndr.data_size || ndr.offset + (n) > ndr.data_size)) { \
+	if (x_unlikely((n) > ndr.data_size || ndr.offset + (n) > ndr.data_size)) { \
 		if (ndr.flags & LIBNDR_FLAG_INCOMPLETE_BUFFER) { \
 			uint32_t _available = ndr.data_size - ndr.offset; \
 			uint32_t _missing = n - _available; \
@@ -540,7 +540,7 @@ _PUBLIC_ x_ndr_ret_t x_ndr_pull_uint3264(x_ndr_pull_t &ndr, uint32_t extra_flags
 	uint64_t v64;
 	x_ndr_ret_t ret = X_NDR_CHECK(x_ndr_pull_hyper(ndr, extra_flags, v64));
 	v = (uint32_t)v64;
-	if (unlikely(v64 != v)) {
+	if (x_unlikely(v64 != v)) {
 		DEBUG(0,(__location__ ": non-zero upper 32 bits 0x%016llx\n",
 					(unsigned long long)v64));
 		return ndr_error(NDR_ERR_NDR64, __location__ ": non-zero upper 32 bits 0x%016llx\n",
@@ -654,7 +654,7 @@ _PUBLIC_ x_ndr_ret_t x_ndr_pull_hyper(x_ndr_pull_t &ndr, uint32_t extra_flags, u
  */
 _PUBLIC_ x_ndr_ret_t x_ndr_push_uint3264(x_ndr_push_t &ndr, uint32_t extra_flags, uint32_t v)
 {
-	if (unlikely(ndr.flags & LIBNDR_FLAG_NDR64)) {
+	if (x_unlikely(ndr.flags & LIBNDR_FLAG_NDR64)) {
 		return x_ndr_push_hyper(ndr, extra_flags, v);
 	}
 	return x_ndr_push_uint32(ndr, extra_flags, v);
