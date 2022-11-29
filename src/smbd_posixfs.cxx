@@ -853,15 +853,15 @@ static bool brl_conflict(const posixfs_stream_t *posixfs_stream,
 	const posixfs_open_t *curr_open;
 	for (curr_open = open_list.get_front(); curr_open; curr_open = open_list.next(curr_open)) {
 		for (auto &l: curr_open->locks) {
-			if (!(le.flags & SMB2_LOCK_FLAG_EXCLUSIVE) &&
-					!(l.flags & SMB2_LOCK_FLAG_EXCLUSIVE)) {
+			if (!(le.flags & X_SMB2_LOCK_FLAG_EXCLUSIVE) &&
+					!(l.flags & X_SMB2_LOCK_FLAG_EXCLUSIVE)) {
 				continue;
 			}
 
 			/* A READ lock can stack on top of a WRITE lock if they are
 			 * the same open */
-			if ((l.flags & SMB2_LOCK_FLAG_EXCLUSIVE) &&
-					!(le.flags & SMB2_LOCK_FLAG_EXCLUSIVE) &&
+			if ((l.flags & X_SMB2_LOCK_FLAG_EXCLUSIVE) &&
+					!(le.flags & X_SMB2_LOCK_FLAG_EXCLUSIVE) &&
 					curr_open == posixfs_open) {
 				continue;
 			}
@@ -894,8 +894,8 @@ static bool brl_conflict_other(const posixfs_stream_t *posixfs_stream,
 	const posixfs_open_t *curr_open;
 	for (curr_open = open_list.get_front(); curr_open; curr_open = open_list.next(curr_open)) {
 		for (auto &l: curr_open->locks) {
-			if (!(le.flags & SMB2_LOCK_FLAG_EXCLUSIVE) &&
-					!(l.flags & SMB2_LOCK_FLAG_EXCLUSIVE)) {
+			if (!(le.flags & X_SMB2_LOCK_FLAG_EXCLUSIVE) &&
+					!(l.flags & X_SMB2_LOCK_FLAG_EXCLUSIVE)) {
 				continue;
 			}
 
@@ -912,8 +912,8 @@ static bool brl_conflict_other(const posixfs_stream_t *posixfs_stream,
 			 * if the context is the same. JRA. See LOCKTEST7 in
 			 * smbtorture.
 			 */
-			if (!(l.flags & SMB2_LOCK_FLAG_EXCLUSIVE) &&
-					(le.flags & SMB2_LOCK_FLAG_EXCLUSIVE)) {
+			if (!(l.flags & X_SMB2_LOCK_FLAG_EXCLUSIVE) &&
+					(le.flags & X_SMB2_LOCK_FLAG_EXCLUSIVE)) {
 				return true;
 			}
 		}
@@ -928,7 +928,7 @@ static bool check_io_brl_conflict(posixfs_object_t *posixfs_object,
 	struct x_smb2_lock_element_t le;
 	le.offset = offset;
 	le.length = length;
-	le.flags = is_write ? SMB2_LOCK_FLAG_EXCLUSIVE : SMB2_LOCK_FLAG_SHARED;
+	le.flags = is_write ? X_SMB2_LOCK_FLAG_EXCLUSIVE : X_SMB2_LOCK_FLAG_SHARED;
 	return brl_conflict_other(posixfs_get_stream(posixfs_object, posixfs_open),
 			posixfs_open, le);
 }
@@ -3482,8 +3482,8 @@ NTSTATUS posixfs_object_op_close(
 
 	// TODO if last_write_time updated
 	if (smbd_requ) {
-		if (state->in_flags & SMB2_CLOSE_FLAGS_FULL_INFORMATION) {
-			state->out_flags = SMB2_CLOSE_FLAGS_FULL_INFORMATION;
+		if (state->in_flags & X_SMB2_CLOSE_FLAGS_FULL_INFORMATION) {
+			state->out_flags = X_SMB2_CLOSE_FLAGS_FULL_INFORMATION;
 			/* TODO stream may be freed */
 			fill_out_info(state->out_info, posixfs_object->meta,
 					posixfs_stream->meta);
@@ -3943,7 +3943,7 @@ NTSTATUS posixfs_object_op_lock(
 			smbd_open->smbd_stream);
 	std::lock_guard<std::mutex> lock(posixfs_object->base.mutex);
 
-	if (state->in_lock_elements[0].flags & SMB2_LOCK_FLAG_UNLOCK) {
+	if (state->in_lock_elements[0].flags & X_SMB2_LOCK_FLAG_UNLOCK) {
 		for (auto &l1: state->in_lock_elements) {
 			auto it = posixfs_open->locks.begin();
 			for (; it != posixfs_open->locks.end(); ++it) {
@@ -3966,7 +3966,7 @@ NTSTATUS posixfs_object_op_lock(
 			posixfs_open->locks.insert(posixfs_open->locks.end(),
 					state->in_lock_elements.begin(),
 					state->in_lock_elements.end());
-		} else if (state->in_lock_elements[0].flags & SMB2_LOCK_FLAG_FAIL_IMMEDIATELY) {
+		} else if (state->in_lock_elements[0].flags & X_SMB2_LOCK_FLAG_FAIL_IMMEDIATELY) {
 			return NT_STATUS_LOCK_NOT_GRANTED;
 		} else {
 			X_ASSERT(state->in_lock_elements.size() == 1);
@@ -4758,13 +4758,13 @@ NTSTATUS posixfs_object_op_getinfo(
 {
 	posixfs_object_t *posixfs_object = posixfs_object_from_base_t::container(smbd_object);
 
-	if (state->in_info_class == SMB2_GETINFO_FILE) {
+	if (state->in_info_class == X_SMB2_GETINFO_FILE) {
 		return getinfo_file(posixfs_object, smbd_open, *state);
-	} else if (state->in_info_class == SMB2_GETINFO_FS) {
+	} else if (state->in_info_class == X_SMB2_GETINFO_FS) {
 		return getinfo_fs(smbd_requ, posixfs_object, *state);
-	} else if (state->in_info_class == SMB2_GETINFO_SECURITY) {
+	} else if (state->in_info_class == X_SMB2_GETINFO_SECURITY) {
 		return getinfo_security(posixfs_object, smbd_open, *state);
-	} else if (state->in_info_class == SMB2_GETINFO_QUOTA) {
+	} else if (state->in_info_class == X_SMB2_GETINFO_QUOTA) {
 		return getinfo_quota(posixfs_object, *state);
 	} else {
 		return NT_STATUS_INVALID_PARAMETER;
@@ -4782,13 +4782,13 @@ NTSTATUS posixfs_object_op_setinfo(
 {
 	posixfs_object_t *posixfs_object = posixfs_object_from_base_t::container(smbd_object);
 
-	if (state->in_info_class == SMB2_GETINFO_FILE) {
+	if (state->in_info_class == X_SMB2_GETINFO_FILE) {
 		return setinfo_file(posixfs_object, smbd_requ->smbd_open, *state, changes);
 #if 0
-	} else if (state->in_info_class == SMB2_GETINFO_FS) {
+	} else if (state->in_info_class == X_SMB2_GETINFO_FS) {
 		return setinfo_fs(posixfs_object, smbd_requ, *state);
 #endif
-	} else if (state->in_info_class == SMB2_GETINFO_SECURITY) {
+	} else if (state->in_info_class == X_SMB2_GETINFO_SECURITY) {
 		return setinfo_security(posixfs_object, smbd_requ, *state, changes);
 	} else {
 		return NT_STATUS_INVALID_PARAMETER;
@@ -4916,7 +4916,7 @@ NTSTATUS posixfs_object_qdir(
 	}
 
 	posixfs_open_t *posixfs_open = posixfs_open_from_base_t::container(smbd_requ->smbd_open);
-	if (state->in_flags & (SMB2_CONTINUE_FLAG_REOPEN | SMB2_CONTINUE_FLAG_RESTART)) {
+	if (state->in_flags & (X_SMB2_CONTINUE_FLAG_REOPEN | X_SMB2_CONTINUE_FLAG_RESTART)) {
 		if (posixfs_open->qdir) {
 			delete posixfs_open->qdir;
 			posixfs_open->qdir = nullptr;
@@ -4928,7 +4928,7 @@ NTSTATUS posixfs_object_qdir(
 	}
 
 	uint32_t max_count = 0x7fffffffu;
-	if (state->in_flags & SMB2_CONTINUE_FLAG_SINGLE) {
+	if (state->in_flags & X_SMB2_CONTINUE_FLAG_SINGLE) {
 		max_count = 1;
 	}
 	std::shared_ptr<idl::security_descriptor> psd, *ppsd = nullptr;

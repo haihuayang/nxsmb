@@ -263,9 +263,9 @@ bool x_smbd_lease_grant(x_smbd_lease_t *smbd_lease,
 	lease.epoch = smbd_lease->epoch;
 
 	if (smbd_lease->breaking) {
-		lease.flags |= SMB2_LEASE_FLAG_BREAK_IN_PROGRESS;
+		lease.flags |= X_SMB2_LEASE_FLAG_BREAK_IN_PROGRESS;
 	} else {
-		lease.flags &= ~SMB2_LEASE_FLAG_BREAK_IN_PROGRESS;
+		lease.flags &= ~X_SMB2_LEASE_FLAG_BREAK_IN_PROGRESS;
 	}
 
 	++smbd_lease->open_cnt;
@@ -289,7 +289,7 @@ static void require_break(x_smbd_lease_t *smbd_lease,
 		smbd_lease->breaking_to_required = break_to;
 		smbd_lease->breaking_to_requested = break_to;
 		smbd_lease_incref(smbd_lease);
-		flags = SMB2_NOTIFY_BREAK_LEASE_FLAG_ACK_REQUIRED;
+		flags = X_SMB2_NOTIFY_BREAK_LEASE_FLAG_ACK_REQUIRED;
 		x_smbd_add_timer(x_smbd_timer_t::BREAK, &smbd_lease->timer);
 	}
 	epoch = (smbd_lease->version > 1) ? smbd_lease->epoch : 0;

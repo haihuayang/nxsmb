@@ -14,7 +14,6 @@
 
 extern "C" {
 #include "samba/libcli/smb/smb_constants.h"
-#include "samba/libcli/smb/smb2_constants.h"
 #include "samba/libcli/util/ntstatus.h"
 }
 
@@ -45,6 +44,20 @@ enum {
 	X_SMB2_OP_DECL(SETINFO) \
 	X_SMB2_OP_DECL(BREAK) \
 
+/* SMB2 negotiate dialects */
+enum {
+	X_SMB2_DIALECT_000	= 0x0000 /* early beta dialect */,
+	X_SMB2_DIALECT_202	= 0x0202,
+	X_SMB2_DIALECT_210	= 0x0210,
+	X_SMB2_DIALECT_222	= 0x0222,
+	X_SMB2_DIALECT_224	= 0x0224,
+	X_SMB2_DIALECT_300	= 0x0300,
+	X_SMB2_DIALECT_302	= 0x0302,
+	X_SMB2_DIALECT_310	= 0x0310,
+	X_SMB2_DIALECT_311	= 0x0311,
+	X_SMB2_DIALECT_2FF	= 0x02FF,
+};
+
 struct x_smb2_header_t
 {
 	uint32_t protocol_id;
@@ -65,6 +78,40 @@ struct x_smb2_header_t
 	};
 	uint64_t sess_id;
 	uint8_t signature[16];
+};
+
+enum {
+#define X_SMB2_OP_DECL(x) X_SMB2_OP_##x,
+	X_SMB2_OP_ENUM
+#undef X_SMB2_OP_DECL
+	X_SMB2_OP_MAX
+};
+
+enum {
+	X_SMB2_HDR_FLAG_REDIRECT		= 0x01,
+	X_SMB2_HDR_FLAG_ASYNC			= 0x02,
+	X_SMB2_HDR_FLAG_CHAINED			= 0x04,
+	X_SMB2_HDR_FLAG_SIGNED			= 0x08,
+	X_SMB2_HDR_FLAG_PRIORITY_MASK		= 0x70,
+	X_SMB2_HDR_FLAG_DFS			= 0x10000000,
+	X_SMB2_HDR_FLAG_REPLAY_OPERATION	= 0x20000000,
+};
+
+/* SMB2 negotiate security_mode */
+enum {
+	X_SMB2_NEGOTIATE_SIGNING_ENABLED	= 0x01,
+	X_SMB2_NEGOTIATE_SIGNING_REQUIRED	= 0x02,
+};
+
+/* SMB2 global capabilities */
+enum {
+	X_SMB2_CAP_DFS			= 0x00000001,
+	X_SMB2_CAP_LEASING		= 0x00000002 /* only in dialect >= 0x210 */,
+	X_SMB2_CAP_LARGE_MTU		= 0x00000004 /* only in dialect >= 0x210 */,
+	X_SMB2_CAP_MULTI_CHANNEL	= 0x00000008 /* only in dialect >= 0x222 */,
+	X_SMB2_CAP_PERSISTENT_HANDLES	= 0x00000010 /* only in dialect >= 0x222 */,
+	X_SMB2_CAP_DIRECTORY_LEASING	= 0x00000020 /* only in dialect >= 0x222 */,
+	X_SMB2_CAP_ENCRYPTION		= 0x00000040 /* only in dialect >= 0x222 */,
 };
 
 /* Types of SMB2 Negotiate Contexts - only in dialect >= 0x310 */
@@ -103,6 +150,53 @@ enum {
 	X_SMB2_ENCRYPTION_AES256_GCM	= 0x0004, /* only in dialect >= 0x311 */
 };
 
+/* SMB2 session (request) flags */
+enum {
+	X_SMB2_SESSION_FLAG_BINDING		= 0x01,
+};
+
+/* SMB2 session (response) flags */
+enum {
+	X_SMB2_SESSION_FLAG_IS_GUEST		= 0x0001,
+	X_SMB2_SESSION_FLAG_IS_NULL		= 0x0002,
+	X_SMB2_SESSION_FLAG_ENCRYPT_DATA	= 0x0004 /* in dialect >= 0x224 */,
+};
+
+/* SMB2 sharetype flags */
+enum {
+	X_SMB2_SHARE_TYPE_DISK		= 0x1,
+	X_SMB2_SHARE_TYPE_PIPE		= 0x2,
+	X_SMB2_SHARE_TYPE_PRINT		= 0x3,
+};
+
+/* SMB2 share flags */
+enum {
+	X_SMB2_SHAREFLAG_MANUAL_CACHING			= 0x0000,
+	X_SMB2_SHAREFLAG_AUTO_CACHING			= 0x0010,
+	X_SMB2_SHAREFLAG_VDO_CACHING			= 0x0020,
+	X_SMB2_SHAREFLAG_NO_CACHING			= 0x0030,
+	X_SMB2_SHAREFLAG_DFS				= 0x0001,
+	X_SMB2_SHAREFLAG_DFS_ROOT			= 0x0002,
+	X_SMB2_SHAREFLAG_RESTRICT_EXCLUSIVE_OPENS	= 0x0100,
+	X_SMB2_SHAREFLAG_FORCE_SHARED_DELETE		= 0x0200,
+	X_SMB2_SHAREFLAG_ALLOW_NAMESPACE_CACHING	= 0x0400,
+	X_SMB2_SHAREFLAG_ACCESS_BASED_DIRECTORY_ENUM	= 0x0800,
+	X_SMB2_SHAREFLAG_FORCE_LEVELII_OPLOCKS		= 0x1000,
+	X_SMB2_SHAREFLAG_ENABLE_HASH_V1			= 0x2000,
+	X_SMB2_SHAREFLAG_ENABLE_HASH_V2			= 0x4000,
+	X_SMB2_SHAREFLAG_ENCRYPT_DATA			= 0x8000,
+	X_SMB2_SHAREFLAG_ALL				= 0xFF33,
+};
+
+/* SMB2 share capabilities */
+enum {
+	X_SMB2_SHARE_CAP_DFS				= 0x8,
+	X_SMB2_SHARE_CAP_CONTINUOUS_AVAILABILITY	= 0x10 /* in dialect >= 0x222 */,
+	X_SMB2_SHARE_CAP_SCALEOUT			= 0x20 /* in dialect >= 0x222 */,
+	X_SMB2_SHARE_CAP_CLUSTER			= 0x40 /* in dialect >= 0x222 */,
+	X_SMB2_SHARE_CAP_ASYMMETRIC			= 0x80 /* in dialect >= 0x302 */,
+};
+
 enum {
 	X_SMB2_FILE_ATTRIBUTE_READONLY		= 0x0001u,
 	X_SMB2_FILE_ATTRIBUTE_HIDDEN		= 0x0002u,
@@ -129,6 +223,31 @@ enum {
 			| X_SMB2_FILE_ATTRIBUTE_NORMAL \
 			| X_SMB2_FILE_ATTRIBUTE_TEMPORARY
 			| X_SMB2_FILE_ATTRIBUTE_ENCRYPTED),
+};
+
+enum {
+	X_SMB2_CLOSE_FLAGS_FULL_INFORMATION	= 0x01,
+};
+
+/* 2.2.31 SMB2 IOCTL Request */
+enum {
+	X_SMB2_IOCTL_FLAG_IS_FSCTL	= 0x00000001,
+};
+
+/* flags for SMB2 find */
+enum {
+	X_SMB2_CONTINUE_FLAG_RESTART	= 0x01,
+	X_SMB2_CONTINUE_FLAG_SINGLE	= 0x02,
+	X_SMB2_CONTINUE_FLAG_INDEX	= 0x04,
+	X_SMB2_CONTINUE_FLAG_REOPEN	= 0x10,
+};
+
+/* getinfo classes */
+enum {
+	X_SMB2_GETINFO_FILE		= 0x01,
+	X_SMB2_GETINFO_FS		= 0x02,
+	X_SMB2_GETINFO_SECURITY		= 0x03,
+	X_SMB2_GETINFO_QUOTA		= 0x04,
 };
 
 enum {
@@ -226,6 +345,11 @@ enum {
 		idl::SEC_STD_SYNCHRONIZE)
 
 
+/* SMB2 notify flags */
+enum {
+	X_SMB2_WATCH_TREE	= 0x0001,
+};
+
 /* ChangeNotify flags. */
 #define FILE_NOTIFY_CHANGE_FILE_NAME   0x001u
 #define FILE_NOTIFY_CHANGE_DIR_NAME    0x002u
@@ -265,6 +389,16 @@ enum {
 #define NOTIFY_ACTION_REMOVED_STREAM 7
 #define NOTIFY_ACTION_MODIFIED_STREAM 8
 
+/* SMB2 lock flags */
+enum {
+	X_SMB2_LOCK_FLAG_NONE			= 0x00000000,
+	X_SMB2_LOCK_FLAG_SHARED			= 0x00000001,
+	X_SMB2_LOCK_FLAG_EXCLUSIVE		= 0x00000002,
+	X_SMB2_LOCK_FLAG_UNLOCK			= 0x00000004,
+	X_SMB2_LOCK_FLAG_FAIL_IMMEDIATELY	= 0x00000010,
+	X_SMB2_LOCK_FLAG_ALL_MASK		= 0x00000017,
+};
+
 enum {
 	X_SMB2_OPLOCK_LEVEL_NONE = 0x00,
 	X_SMB2_OPLOCK_LEVEL_II = 0x01,
@@ -284,6 +418,11 @@ enum {
 	/* SMB2 lease flags */
 	X_SMB2_LEASE_FLAG_BREAK_IN_PROGRESS =                0x00000002,
 	X_SMB2_LEASE_FLAG_PARENT_LEASE_KEY_SET =             0x00000004,
+};
+
+/* SMB2 lease break flags */
+enum {
+	X_SMB2_NOTIFY_BREAK_LEASE_FLAG_ACK_REQUIRED	= 0x01,
 };
 
 /* SMB2 impersonation levels */
@@ -383,12 +522,12 @@ static inline void x_buf_release(x_buf_t *buf)
 
 static inline x_buf_t *x_buf_alloc_out_buf(size_t body_size)
 {
-	return x_buf_alloc(8 + SMB2_HDR_BODY + body_size);
+	return x_buf_alloc(8 + sizeof(x_smb2_header_t) + body_size);
 }
 
 static inline uint8_t *x_buf_get_out_hdr(x_buf_t *buf)
 {
-	X_ASSERT(buf->size >= SMB2_HDR_BODY + 8);
+	X_ASSERT(buf->size >= sizeof(x_smb2_header_t) + 8);
 	return buf->data + 8;
 }
 
@@ -417,10 +556,10 @@ struct x_bufref_t
 
 static inline x_bufref_t *x_bufref_alloc(size_t body_size)
 {
-	X_ASSERT(body_size + SMB2_HDR_BODY < 0x100000000ul);
+	X_ASSERT(body_size + sizeof(x_smb2_header_t) < 0x100000000ul);
 	x_buf_t *out_buf = x_buf_alloc_out_buf(body_size);
 	x_bufref_t *bufref = new x_bufref_t{out_buf, 8,
-		x_convert_assert<uint32_t>(SMB2_HDR_BODY + body_size)};
+		x_convert_assert<uint32_t>(sizeof(x_smb2_header_t) + body_size)};
 	return bufref;
 }
 

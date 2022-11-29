@@ -28,7 +28,7 @@ static uint32_t net_share_enum_all_1(std::shared_ptr<idl::srvsvc_NetShareCtr1> &
 	for (auto &it: smbd_conf->shares) {
 		auto &share = it.second;
 		idl::srvsvc_ShareType type =
-			(share->get_type() == SMB2_SHARE_TYPE_DISK ? idl::STYPE_DISKTREE : idl::STYPE_IPC_HIDDEN);
+			(share->get_type() == X_SMB2_SHARE_TYPE_DISK ? idl::STYPE_DISKTREE : idl::STYPE_IPC_HIDDEN);
 		ctr1->array->push_back(idl::srvsvc_NetShareInfo1{
 				std::make_shared<std::u16string>(x_convert_utf8_to_utf16_assert(share->name)),
 				type,
@@ -68,7 +68,7 @@ static void fill_share_info1(Info &info, const std::u16string &share_name,
 {
 	info.name = std::make_shared<std::u16string>(share_name);
 	info.comment = std::make_shared<std::u16string>();
-	info.type = smbd_share.get_type() == SMB2_SHARE_TYPE_PIPE ?
+	info.type = smbd_share.get_type() == X_SMB2_SHARE_TYPE_PIPE ?
 		idl::STYPE_IPC_HIDDEN : idl::STYPE_DISKTREE;
 }
 
@@ -85,7 +85,7 @@ static void fill_share_info2(Info &info, const std::u16string &share_name,
 	info.comment = std::make_shared<std::u16string>();
 	info.permissions = 0;
 	info.current_users = get_share_current_users(smbd_share);
-	if (smbd_share.get_type() == SMB2_SHARE_TYPE_PIPE) {
+	if (smbd_share.get_type() == X_SMB2_SHARE_TYPE_PIPE) {
 		info.type = idl::STYPE_IPC_HIDDEN;
 		info.path = std::make_shared<std::u16string>(u"C:/tmp");
 	} else {

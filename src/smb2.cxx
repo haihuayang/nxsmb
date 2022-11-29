@@ -159,7 +159,7 @@ uint16_t x_smb2_dialect_match(const std::vector<uint16_t> &sdialects,
 			}
 		}
 	}
-	return SMB2_DIALECT_REVISION_000;
+	return X_SMB2_DIALECT_000;
 }
 
 

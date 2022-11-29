@@ -147,7 +147,7 @@ static void x_smb2_reply_tcon(x_smbd_conn_t *smbd_conn,
 	x_bufref_t *bufref = x_bufref_alloc(sizeof(x_smb2_tcon_resp_t));
 
 	uint8_t *out_hdr = bufref->get_data();
-	x_smb2_tcon_resp_t *out_resp = (x_smb2_tcon_resp_t *)(out_hdr + SMB2_HDR_BODY);
+	x_smb2_tcon_resp_t *out_resp = (x_smb2_tcon_resp_t *)(out_hdr + sizeof(x_smb2_header_t));
 
 	out_resp->struct_size = X_H2LE16(sizeof(x_smb2_tcon_resp_t));
 	out_resp->share_type = X_H2LE8(out_share_type);
@@ -157,7 +157,7 @@ static void x_smb2_reply_tcon(x_smbd_conn_t *smbd_conn,
 	out_resp->access_mask = X_H2LE32(out_access_mask);
 
 	x_smb2_reply(smbd_conn, smbd_requ, bufref, bufref, status, 
-			SMB2_HDR_BODY + sizeof(x_smb2_tcon_resp_t));
+			sizeof(x_smb2_header_t) + sizeof(x_smb2_tcon_resp_t));
 }
 
 NTSTATUS x_smb2_process_tcon(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
@@ -165,12 +165,12 @@ NTSTATUS x_smb2_process_tcon(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 	X_LOG_OP("%ld TCON", smbd_requ->in_smb2_hdr.mid);
 	X_ASSERT(smbd_requ->smbd_chan && smbd_requ->smbd_sess);
 
-	if (smbd_requ->in_requ_len < SMB2_HDR_BODY + sizeof(x_smb2_tcon_requ_t) + 1) {
+	if (smbd_requ->in_requ_len < sizeof(x_smb2_header_t) + sizeof(x_smb2_tcon_requ_t) + 1) {
 		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
 
 	const uint8_t *in_hdr = smbd_requ->get_in_data();
-	const x_smb2_tcon_requ_t *in_requ = (const x_smb2_tcon_requ_t *)(in_hdr + SMB2_HDR_BODY);
+	const x_smb2_tcon_requ_t *in_requ = (const x_smb2_tcon_requ_t *)(in_hdr + sizeof(x_smb2_header_t));
 
 	/* TODO signing/encryption */
 
@@ -180,7 +180,7 @@ NTSTATUS x_smb2_process_tcon(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
 
-	if (!x_check_range<uint32_t>(in_path_offset, in_path_length, SMB2_HDR_BODY + sizeof(x_smb2_tcon_requ_t), smbd_requ->in_requ_len)) {
+	if (!x_check_range<uint32_t>(in_path_offset, in_path_length, sizeof(x_smb2_header_t) + sizeof(x_smb2_tcon_requ_t), smbd_requ->in_requ_len)) {
 		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
 
@@ -241,38 +241,38 @@ NTSTATUS x_smb2_process_tcon(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 	uint32_t out_share_flags = 0;
 	uint32_t out_capabilities = 0;
 	if (is_dfs && (volume.size() == 0 || volume == "-")) {
-		out_share_flags |= SMB2_SHAREFLAG_DFS|SMB2_SHAREFLAG_DFS_ROOT;
-		out_capabilities |= SMB2_SHARE_CAP_DFS;
+		out_share_flags |= X_SMB2_SHAREFLAG_DFS|X_SMB2_SHAREFLAG_DFS_ROOT;
+		out_capabilities |= X_SMB2_SHARE_CAP_DFS;
 	}
 	if (smbd_share->abe_enabled()) {
-		out_share_flags |= SMB2_SHAREFLAG_ACCESS_BASED_DIRECTORY_ENUM;
+		out_share_flags |= X_SMB2_SHAREFLAG_ACCESS_BASED_DIRECTORY_ENUM;
 	}
 #if 0
 	if (smbshare->type != TYPE_IPC) {
-		out_capabilities |= SMB2_SHARE_CAP_SCALEOUT | SMB2_SHARE_CAP_CLUSTER;
+		out_capabilities |= X_SMB2_SHARE_CAP_SCALEOUT | X_SMB2_SHARE_CAP_CLUSTER;
 	}
 	switch(lp_csc_policy(SNUM(tcon->compat))) {
 		case CSC_POLICY_MANUAL:
 			break;
 		case CSC_POLICY_DOCUMENTS:
-			*out_share_flags |= SMB2_SHAREFLAG_AUTO_CACHING;
+			*out_share_flags |= X_SMB2_SHAREFLAG_AUTO_CACHING;
 			break;
 		case CSC_POLICY_PROGRAMS:
-			*out_share_flags |= SMB2_SHAREFLAG_VDO_CACHING;
+			*out_share_flags |= X_SMB2_SHAREFLAG_VDO_CACHING;
 			break;
 		case CSC_POLICY_DISABLE:
-			*out_share_flags |= SMB2_SHAREFLAG_NO_CACHING;
+			*out_share_flags |= X_SMB2_SHAREFLAG_NO_CACHING;
 			break;
 		default:
 			break;
 	}
 	if (lp_hide_unreadable(SNUM(tcon->compat)) ||
 			lp_hide_unwriteable_files(SNUM(tcon->compat))) {
-		*out_share_flags |= SMB2_SHAREFLAG_ACCESS_BASED_DIRECTORY_ENUM;
+		*out_share_flags |= X_SMB2_SHAREFLAG_ACCESS_BASED_DIRECTORY_ENUM;
 	}
 
 	if (encryption_desired) {
-		*out_share_flags |= SMB2_SHAREFLAG_ENCRYPT_DATA;
+		*out_share_flags |= X_SMB2_SHAREFLAG_ENCRYPT_DATA;
 	}
 
 #endif

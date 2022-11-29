@@ -47,7 +47,7 @@ struct x_smbd_conf_t
 	uint32_t max_write_size = 1024 * 1024;
 
 	uint32_t capabilities;
-	uint16_t security_mode = SMB2_NEGOTIATE_SIGNING_ENABLED;
+	uint16_t security_mode = X_SMB2_NEGOTIATE_SIGNING_ENABLED;
 	bool lanman_auth = false;
 	bool allow_trusted_domains = true;
 	bool gensec_require_pac = false; // if (gensec_setting_bool(gensec_security->settings, "gensec", "require_pac", false)) {

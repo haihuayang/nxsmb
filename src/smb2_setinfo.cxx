@@ -28,7 +28,7 @@ struct x_smb2_out_setinfo_t
 
 static void encode_out_setinfo(uint8_t *out_hdr)
 {
-	x_smb2_out_setinfo_t *out_setinfo = (x_smb2_out_setinfo_t *)(out_hdr + SMB2_HDR_BODY);
+	x_smb2_out_setinfo_t *out_setinfo = (x_smb2_out_setinfo_t *)(out_hdr + sizeof(x_smb2_header_t));
 	out_setinfo->struct_size = X_H2LE16(sizeof(x_smb2_out_setinfo_t));
 }
 
@@ -43,14 +43,14 @@ static void x_smb2_reply_setinfo(x_smbd_conn_t *smbd_conn,
 	encode_out_setinfo(out_hdr);
 
 	x_smb2_reply(smbd_conn, smbd_requ, bufref, bufref, NT_STATUS_OK, 
-			SMB2_HDR_BODY + sizeof(x_smb2_out_setinfo_t));
+			sizeof(x_smb2_header_t) + sizeof(x_smb2_out_setinfo_t));
 }
 
 static NTSTATUS smb2_setinfo_dispatch(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ,
 		std::unique_ptr<x_smb2_state_setinfo_t> &state,
 		std::vector<x_smb2_change_t> &changes)
 {
-	if (state->in_info_class == SMB2_GETINFO_FILE) {
+	if (state->in_info_class == X_SMB2_GETINFO_FILE) {
 		if (state->in_info_level == SMB2_FILE_INFO_FILE_DISPOSITION_INFORMATION) {
 			/* MS-FSA 2.1.5.14.3 */
 			if (!smbd_requ->smbd_open->check_access(idl::SEC_STD_DELETE)) {
@@ -172,18 +172,18 @@ static NTSTATUS x_smb2_process_rename(x_smbd_conn_t *smbd_conn,
 
 NTSTATUS x_smb2_process_setinfo(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 {
-	if (smbd_requ->in_requ_len < SMB2_HDR_BODY + sizeof(x_smb2_in_setinfo_t)) {
+	if (smbd_requ->in_requ_len < sizeof(x_smb2_header_t) + sizeof(x_smb2_in_setinfo_t)) {
 		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
 
 	const uint8_t *in_hdr = smbd_requ->get_in_data();
 	uint32_t in_len = smbd_requ->in_requ_len;
-	const x_smb2_in_setinfo_t *in_setinfo = (const x_smb2_in_setinfo_t *)(in_hdr + SMB2_HDR_BODY);
+	const x_smb2_in_setinfo_t *in_setinfo = (const x_smb2_in_setinfo_t *)(in_hdr + sizeof(x_smb2_header_t));
 	uint16_t in_input_buffer_offset = X_LE2H16(in_setinfo->input_buffer_offset);
 	uint32_t in_input_buffer_length = X_LE2H32(in_setinfo->input_buffer_length);
 
 	if (!x_check_range<uint32_t>(in_input_buffer_offset, in_input_buffer_length,
-				SMB2_HDR_BODY + sizeof(x_smb2_in_setinfo_t), in_len)) {
+				sizeof(x_smb2_header_t) + sizeof(x_smb2_in_setinfo_t), in_len)) {
 		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
 
@@ -192,7 +192,7 @@ NTSTATUS x_smb2_process_setinfo(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_re
 	uint64_t in_file_id_persistent = X_LE2H64(in_setinfo->file_id_persistent);
 	uint64_t in_file_id_volatile = X_LE2H64(in_setinfo->file_id_volatile);
 
-	if (in_info_class == SMB2_GETINFO_FILE) {
+	if (in_info_class == X_SMB2_GETINFO_FILE) {
 		if (in_info_level == SMB2_FILE_INFO_FILE_RENAME_INFORMATION) {
 			auto state = std::make_unique<x_smb2_state_rename_t>();
 			NTSTATUS status = decode_in_rename(*state, in_hdr, 

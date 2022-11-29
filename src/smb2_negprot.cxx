@@ -65,9 +65,9 @@ static NTSTATUS x_smbd_conn_reply_negprot(x_smbd_conn_t *smbd_conn, x_smbd_requ_
 #if 0
 	// TODO should it consider client capabilities?
 	uint32_t server_capabilities = smbd_conf->capabilities;
-	if (negprot->out_dialect < SMB3_DIALECT_REVISION_300) {
-		server_capabilities &= ~(SMB2_CAP_DIRECTORY_LEASING |
-				SMB2_CAP_MULTI_CHANNEL);
+	if (negprot->out_dialect < X_SMB2_DIALECT_300) {
+		server_capabilities &= ~(X_SMB2_CAP_DIRECTORY_LEASING |
+				X_SMB2_CAP_MULTI_CHANNEL);
 	}
 	x_smbd_conn_set_negprot(smbd_conn, negprot->out_dialect,
 			security_mode, server_capabilities);
@@ -79,7 +79,7 @@ static NTSTATUS x_smbd_conn_reply_negprot(x_smbd_conn_t *smbd_conn, x_smbd_requ_
 
 	x_bufref_t *bufref = x_bufref_alloc(sizeof(x_smb2_negprot_resp_t) + dyn_len);
 	uint8_t *out_hdr = bufref->get_data();
-	x_smb2_negprot_resp_t *out_resp = (x_smb2_negprot_resp_t *)(out_hdr + SMB2_HDR_BODY);
+	x_smb2_negprot_resp_t *out_resp = (x_smb2_negprot_resp_t *)(out_hdr + sizeof(x_smb2_header_t));
 
 	auto [tick_start, tick_system ] = x_smbd_get_time();
 
@@ -95,7 +95,7 @@ static NTSTATUS x_smbd_conn_reply_negprot(x_smbd_conn_t *smbd_conn, x_smbd_requ_
 	out_resp->system_time = X_H2LE64(x_tick_to_nttime(tick_system).val);
 	out_resp->server_start_time = X_H2LE64(x_tick_to_nttime(tick_start).val);
 
-	size_t offset = SMB2_HDR_BODY + sizeof(x_smb2_negprot_resp_t);
+	size_t offset = sizeof(x_smb2_header_t) + sizeof(x_smb2_negprot_resp_t);
 	out_resp->security_buffer_offset = X_H2LE16(x_convert_assert<uint16_t>(offset));
 	out_resp->security_buffer_length = X_H2LE16(x_convert_assert<uint16_t>(security_blob.size()));
 
@@ -115,10 +115,10 @@ static NTSTATUS x_smbd_conn_reply_negprot(x_smbd_conn_t *smbd_conn, x_smbd_requ_
 	}
 
 	x_smb2_reply(smbd_conn, smbd_requ, bufref, bufref, NT_STATUS_OK, 
-			SMB2_HDR_BODY + sizeof(x_smb2_negprot_resp_t) + dyn_len);
-	if (negprot.out_dialect >= SMB3_DIALECT_REVISION_310) {
+			sizeof(x_smb2_header_t) + sizeof(x_smb2_negprot_resp_t) + dyn_len);
+	if (negprot.out_dialect >= X_SMB2_DIALECT_310) {
 		x_smbd_conn_update_preauth(smbd_conn, out_hdr,
-				SMB2_HDR_BODY + sizeof(x_smb2_negprot_resp_t) + dyn_len);
+				sizeof(x_smb2_header_t) + sizeof(x_smb2_negprot_resp_t) + dyn_len);
 	}
 
 	return NT_STATUS_OK;
@@ -158,7 +158,7 @@ int x_smbd_conn_process_smb1negprot(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smb
 	negprot.out_dialect = 0x2ff;
 	negprot.out_security_mode = smbd_conf->security_mode;
 	negprot.out_capabilities = smbd_conf->capabilities & 
-		~(SMB2_CAP_DIRECTORY_LEASING | SMB2_CAP_MULTI_CHANNEL);
+		~(X_SMB2_CAP_DIRECTORY_LEASING | X_SMB2_CAP_MULTI_CHANNEL);
 	x_smbd_conn_reply_negprot(smbd_conn, smbd_requ, *smbd_conf, negprot);
 	return 0;
 }
@@ -326,19 +326,19 @@ NTSTATUS x_smb2_process_negprot(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_re
 	X_LOG_OP("%ld NEGPROT", smbd_requ->in_smb2_hdr.mid);
 
 	// x_smb2_verify_size(smbd_requ, X_SMB2_NEGPROT_BODY_LEN);
-	if (smbd_requ->in_requ_len < SMB2_HDR_BODY + sizeof(x_smb2_negprot_requ_t)) {
+	if (smbd_requ->in_requ_len < sizeof(x_smb2_header_t) + sizeof(x_smb2_negprot_requ_t)) {
 		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
 
 	const uint8_t *in_buf = smbd_requ->get_in_data();
-	const uint8_t *in_body = in_buf + SMB2_HDR_BODY;
+	const uint8_t *in_body = in_buf + sizeof(x_smb2_header_t);
 
 	const x_smb2_negprot_requ_t *in_requ = (const x_smb2_negprot_requ_t *)in_body;
 	uint16_t dialect_count = X_LE2H16(in_requ->dialect_count);
 	if (dialect_count == 0) {
 		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
-	if (SMB2_HDR_BODY + sizeof(x_smb2_negprot_requ_t) + dialect_count * sizeof(uint16_t)
+	if (sizeof(x_smb2_header_t) + sizeof(x_smb2_negprot_requ_t) + dialect_count * sizeof(uint16_t)
 			> smbd_requ->in_requ_len) {
 		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
@@ -348,7 +348,7 @@ NTSTATUS x_smb2_process_negprot(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_re
 	x_smb2_negprot_t negprot;
 	negprot.out_dialect = x_smb2_dialect_match(smbd_conf->dialects,
 			(const uint16_t *)(in_requ + 1), dialect_count);
-	if (negprot.out_dialect == SMB2_DIALECT_REVISION_000) {
+	if (negprot.out_dialect == X_SMB2_DIALECT_000) {
 		RETURN_OP_STATUS(smbd_requ, NT_STATUS_NOT_SUPPORTED);
 	}
 
@@ -361,7 +361,7 @@ NTSTATUS x_smb2_process_negprot(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_re
 	const uint8_t *in_dyn = in_body + X_SMB2_NEGPROT_REQU_BODY_LEN;
 	
 	negprot.out_dialect = x_smb2_dialect_match(smbd_conn, in_dyn, dialect_count);
-	if (negprot.out_dialect == SMB2_DIALECT_REVISION_000) {
+	if (negprot.out_dialect == X_SMB2_DIALECT_000) {
 		RETURN_OP_STATUS(smbd_requ, NT_STATUS_NOT_SUPPORTED);
 	}
 	smbd_conn->client_security_mode = in_security_mode;
@@ -371,11 +371,11 @@ NTSTATUS x_smb2_process_negprot(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_re
 	
 	// uint16_t out_negotiate_context_count = 0;
 	// std::vector<uint8_t> out_negotiate_context;
-	if (negprot.out_dialect >= SMB3_DIALECT_REVISION_310) {
+	if (negprot.out_dialect >= X_SMB2_DIALECT_310) {
 		uint32_t in_context_offset = X_LE2H32(in_requ->context_offset);
 		uint16_t in_context_count = X_LE2H16(in_requ->context_count);
 		if (!x_check_range<uint32_t>(in_context_offset, 0, 
-					SMB2_HDR_BODY + sizeof(x_smb2_negprot_requ_t),
+					sizeof(x_smb2_header_t) + sizeof(x_smb2_negprot_requ_t),
 					smbd_requ->in_requ_len)) {
 			RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 		}
@@ -419,9 +419,9 @@ NTSTATUS x_smb2_process_negprot(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_re
 	negprot.out_security_mode = smbd_conf->security_mode;
 	// TODO should it consider client capabilities?
 	negprot.out_capabilities = smbd_conf->capabilities;
-	if (negprot.out_dialect < SMB3_DIALECT_REVISION_300) {
-		negprot.out_capabilities &= ~(SMB2_CAP_DIRECTORY_LEASING |
-				SMB2_CAP_MULTI_CHANNEL);
+	if (negprot.out_dialect < X_SMB2_DIALECT_300) {
+		negprot.out_capabilities &= ~(X_SMB2_CAP_DIRECTORY_LEASING |
+				X_SMB2_CAP_MULTI_CHANNEL);
 	}
 	x_smbd_conn_negprot(smbd_conn, negprot.out_dialect,
 			negprot.out_encryption_algo,

@@ -112,7 +112,7 @@ x_smbd_conn_t *x_smbd_chan_get_conn(const x_smbd_chan_t *smbd_chan)
 void x_smbd_chan_update_preauth(x_smbd_chan_t *smbd_chan,
 		const void *data, size_t length)
 {
-	// TODO check dialect if (smbd_conn->dialect >= SMB3_DIALECT_REVISION_310) {
+	// TODO check dialect if (smbd_conn->dialect >= X_SMB2_DIALECT_310) {
 	if (!smbd_chan->key_is_valid) {
 		smbd_chan->preauth.update(data, length);
 	}
@@ -180,7 +180,7 @@ static void smbd_chan_set_keys(x_smbd_chan_t *smbd_chan,
 
 	uint16_t dialect = x_smbd_conn_get_dialect(smbd_chan->smbd_conn);
 	const x_array_const_t<char> smb3_context{smbd_chan->preauth.data};
-	if (dialect >= SMB3_DIALECT_REVISION_310) {
+	if (dialect >= X_SMB2_DIALECT_310) {
 		derivation_sign_label = &SMB3_10_signing_label;
 		derivation_sign_context = &smb3_context;
 		derivation_encryption_label = &SMB3_10_encryption_label;
@@ -190,7 +190,7 @@ static void smbd_chan_set_keys(x_smbd_chan_t *smbd_chan,
 		derivation_application_label = &SMB3_10_application_label;
 		derivation_application_context = &smb3_context;
 
-	} else if (dialect >= SMB2_DIALECT_REVISION_224) {
+	} else if (dialect >= X_SMB2_DIALECT_224) {
 		derivation_sign_label = &SMB2_24_signing_label;
 		derivation_sign_context = &SMB2_24_signing_context;
 		derivation_encryption_label = &SMB2_24_encryption_label;
@@ -204,7 +204,7 @@ static void smbd_chan_set_keys(x_smbd_chan_t *smbd_chan,
 	std::array<uint8_t, 16> session_key;
 	memcpy(session_key.data(), auth_session_key.data(), std::min(session_key.size(), auth_session_key.size()));
 	X_LOG_DBG("session_key=\n%s", x_hex_dump(session_key.data(), session_key.size(), "    ").c_str());
-	if (dialect >= SMB2_DIALECT_REVISION_224) {
+	if (dialect >= X_SMB2_DIALECT_224) {
 		x_smb2_key_derivation(session_key.data(), 16,
 				*derivation_sign_label,
 				*derivation_sign_context,
@@ -365,7 +365,7 @@ static NTSTATUS smbd_chan_auth_updated(x_smbd_chan_t *smbd_chan, x_smbd_requ_t *
 	if (NT_STATUS_IS_OK(status)) {
 		status = smbd_chan_auth_succeeded(smbd_chan, is_bind, auth_info);
 		if (NT_STATUS_IS_OK(status)) {
-			smbd_requ->out_hdr_flags |= SMB2_HDR_FLAG_SIGNED;
+			smbd_requ->out_hdr_flags |= X_SMB2_HDR_FLAG_SIGNED;
 		}
 	}
 

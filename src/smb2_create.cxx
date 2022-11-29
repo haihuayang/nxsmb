@@ -354,19 +354,19 @@ static bool normalize_path(std::u16string &path,
 static NTSTATUS decode_in_create(x_smb2_state_create_t &state,
 		const uint8_t *in_hdr, uint32_t in_len)
 {
-	const x_smb2_in_create_t *in_create = (const x_smb2_in_create_t *)(in_hdr + SMB2_HDR_BODY);
+	const x_smb2_in_create_t *in_create = (const x_smb2_in_create_t *)(in_hdr + sizeof(x_smb2_header_t));
 	uint16_t in_name_offset          = X_LE2H16(in_create->name_offset);
 	uint16_t in_name_length          = X_LE2H16(in_create->name_length);
 	uint32_t in_context_offset       = X_LE2H32(in_create->context_offset);
 	uint32_t in_context_length       = X_LE2H32(in_create->context_length);
 
 	if (in_name_length % 2 != 0 || !x_check_range<uint32_t>(in_name_offset, in_name_length, 
-				SMB2_HDR_BODY + sizeof(x_smb2_in_create_t), in_len)) {
+				sizeof(x_smb2_header_t) + sizeof(x_smb2_in_create_t), in_len)) {
 		return NT_STATUS_INVALID_PARAMETER;
 	}
 
 	if (!x_check_range<uint32_t>(in_context_offset, in_context_length, 
-				SMB2_HDR_BODY + sizeof(x_smb2_in_create_t), in_len)) {
+				sizeof(x_smb2_header_t) + sizeof(x_smb2_in_create_t), in_len)) {
 		return NT_STATUS_INVALID_PARAMETER;
 	}
 
@@ -432,7 +432,7 @@ static uint32_t encode_out_create(const x_smb2_state_create_t &state,
 		x_smbd_open_t *smbd_open, uint8_t *out_hdr)
 {
 	/* TODO we assume max output context 256 */
-	x_smb2_out_create_t *out_create = (x_smb2_out_create_t *)(out_hdr + SMB2_HDR_BODY);
+	x_smb2_out_create_t *out_create = (x_smb2_out_create_t *)(out_hdr + sizeof(x_smb2_header_t));
 
 	out_create->struct_size = X_H2LE16(sizeof(x_smb2_out_create_t) + 1);
 	out_create->oplock_level = state.out_oplock_level;
@@ -455,7 +455,7 @@ static uint32_t encode_out_create(const x_smb2_state_create_t &state,
 	if (out_context_length == 0) {
 		out_create->context_offset = out_create->context_length = 0;
 	} else {
-		out_create->context_offset = X_H2LE32(SMB2_HDR_BODY + sizeof(x_smb2_out_create_t));
+		out_create->context_offset = X_H2LE32(sizeof(x_smb2_header_t) + sizeof(x_smb2_out_create_t));
 		out_create->context_length = X_H2LE32(out_context_length);
 	}
 
@@ -483,7 +483,7 @@ static void x_smb2_reply_create(x_smbd_conn_t *smbd_conn,
 	uint8_t *out_hdr = bufref->get_data();
 
 	uint32_t out_length = encode_out_create(state, smbd_requ->smbd_open, out_hdr);
-	bufref->length = SMB2_HDR_BODY + out_length;
+	bufref->length = x_convert_assert<uint32_t>(sizeof(x_smb2_header_t) + out_length);
 	x_smb2_reply(smbd_conn, smbd_requ, bufref, bufref, NT_STATUS_OK, 
 			bufref->length);
 }
@@ -506,7 +506,7 @@ static void x_smb2_create_async_done(x_smbd_conn_t *smbd_conn,
 NTSTATUS x_smb2_process_create(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 {
 	X_ASSERT(smbd_requ->smbd_chan && smbd_requ->smbd_sess);
-	if (smbd_requ->in_requ_len < SMB2_HDR_BODY + sizeof(x_smb2_in_create_t) + 1) {
+	if (smbd_requ->in_requ_len < sizeof(x_smb2_header_t) + sizeof(x_smb2_in_create_t) + 1) {
 		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
 

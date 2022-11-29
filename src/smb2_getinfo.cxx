@@ -30,7 +30,7 @@ struct x_smb2_out_getinfo_t
 static bool decode_in_getinfo(x_smb2_state_getinfo_t &state,
 		const uint8_t *in_hdr, uint32_t in_len)
 {
-	const x_smb2_in_getinfo_t *in_getinfo = (const x_smb2_in_getinfo_t *)(in_hdr + SMB2_HDR_BODY);
+	const x_smb2_in_getinfo_t *in_getinfo = (const x_smb2_in_getinfo_t *)(in_hdr + sizeof(x_smb2_header_t));
 
 	state.in_info_class = X_LE2H8(in_getinfo->info_class);
 	state.in_info_level = X_LE2H8(in_getinfo->info_level);
@@ -62,9 +62,9 @@ static bool decode_in_getinfo(x_smb2_state_getinfo_t &state,
 static void encode_out_getinfo(const x_smb2_state_getinfo_t &state,
 		uint8_t *out_hdr)
 {
-	x_smb2_out_getinfo_t *out_getinfo = (x_smb2_out_getinfo_t *)(out_hdr + SMB2_HDR_BODY);
+	x_smb2_out_getinfo_t *out_getinfo = (x_smb2_out_getinfo_t *)(out_hdr + sizeof(x_smb2_header_t));
 	out_getinfo->struct_size = X_H2LE16(sizeof(x_smb2_out_getinfo_t) + 1);
-	out_getinfo->output_buffer_offset = X_H2LE16(SMB2_HDR_BODY + sizeof(x_smb2_out_getinfo_t));
+	out_getinfo->output_buffer_offset = X_H2LE16(sizeof(x_smb2_header_t) + sizeof(x_smb2_out_getinfo_t));
 	out_getinfo->output_buffer_length = X_H2LE32(x_convert_assert<uint32_t>(state.out_data.size()));
 	memcpy(out_getinfo + 1, state.out_data.data(), state.out_data.size());
 }
@@ -82,12 +82,12 @@ static void x_smb2_reply_getinfo(x_smbd_conn_t *smbd_conn,
 	uint8_t *out_hdr = bufref->get_data();
 	encode_out_getinfo(state, out_hdr);
 	x_smb2_reply(smbd_conn, smbd_requ, bufref, bufref, status, 
-			SMB2_HDR_BODY + sizeof(x_smb2_out_getinfo_t) + state.out_data.size());
+			sizeof(x_smb2_header_t) + sizeof(x_smb2_out_getinfo_t) + state.out_data.size());
 }
 
 NTSTATUS x_smb2_process_getinfo(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 {
-	if (smbd_requ->in_requ_len < SMB2_HDR_BODY + sizeof(x_smb2_in_getinfo_t)) {
+	if (smbd_requ->in_requ_len < sizeof(x_smb2_header_t) + sizeof(x_smb2_in_getinfo_t)) {
 		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
 

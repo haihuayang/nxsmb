@@ -29,12 +29,12 @@ static bool decode_in_write(x_smb2_state_write_t &state,
 		x_buf_t *in_buf, uint32_t in_offset, uint32_t in_len)
 {
 	const uint8_t *in_hdr = in_buf->data + in_offset;
-	const x_smb2_in_write_t *in_write = (const x_smb2_in_write_t *)(in_hdr  + SMB2_HDR_BODY);
+	const x_smb2_in_write_t *in_write = (const x_smb2_in_write_t *)(in_hdr  + sizeof(x_smb2_header_t));
 	uint16_t in_data_offset = X_LE2H16(in_write->data_offset);
 	uint32_t in_length = X_LE2H32(in_write->length);
 
 	if (!x_check_range<uint32_t>(in_data_offset, in_length,
-				SMB2_HDR_BODY + sizeof(x_smb2_in_write_t), in_len)) {
+				sizeof(x_smb2_header_t) + sizeof(x_smb2_in_write_t), in_len)) {
 		return false;
 	}
 
@@ -68,7 +68,7 @@ struct x_smb2_out_write_t
 static void encode_out_write(const x_smb2_state_write_t &state,
 		uint8_t *out_hdr)
 {
-	x_smb2_out_write_t *out_write = (x_smb2_out_write_t *)(out_hdr + SMB2_HDR_BODY);
+	x_smb2_out_write_t *out_write = (x_smb2_out_write_t *)(out_hdr + sizeof(x_smb2_header_t));
 	out_write->struct_size = X_H2LE16(sizeof(x_smb2_out_write_t) + 1);
 	out_write->reserved0 = 0;
 	out_write->count = X_H2LE32(state.out_count);
@@ -89,7 +89,7 @@ static void x_smb2_reply_write(x_smbd_conn_t *smbd_conn,
 	encode_out_write(state, out_hdr);
 
 	x_smb2_reply(smbd_conn, smbd_requ, bufref, bufref, NT_STATUS_OK, 
-			SMB2_HDR_BODY + sizeof(x_smb2_out_write_t));
+			sizeof(x_smb2_header_t) + sizeof(x_smb2_out_write_t));
 }
 
 static void x_smb2_write_async_done(x_smbd_conn_t *smbd_conn,
@@ -109,7 +109,7 @@ static void x_smb2_write_async_done(x_smbd_conn_t *smbd_conn,
 
 NTSTATUS x_smb2_process_write(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 {
-	if (smbd_requ->in_requ_len < SMB2_HDR_BODY + sizeof(x_smb2_in_write_t)) {
+	if (smbd_requ->in_requ_len < sizeof(x_smb2_header_t) + sizeof(x_smb2_in_write_t)) {
 		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
 

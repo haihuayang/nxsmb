@@ -434,7 +434,7 @@ static NTSTATUS ipc_object_op_getinfo(
 {
 	/* TODO should access check ? */
 	/* SMB2_GETINFO_FILE, SMB2_FILE_STANDARD_INFO */
-	if (state->in_info_class == SMB2_GETINFO_FILE) {
+	if (state->in_info_class == X_SMB2_GETINFO_FILE) {
 		if (state->in_info_level == SMB2_FILE_INFO_FILE_STANDARD_INFORMATION) {
 			if (state->in_output_buffer_length < sizeof(x_smb2_file_standard_info_t)) {
 				return STATUS_BUFFER_OVERFLOW;
@@ -682,7 +682,7 @@ struct ipc_share_t : x_smbd_share_t
 			, topdir(ipc_get_topdir()) {
 	}
 	uint8_t get_type() const override {
-		return SMB2_SHARE_TYPE_PIPE;
+		return X_SMB2_SHARE_TYPE_PIPE;
 	}
 	bool is_dfs() const override {
 		return false;

@@ -31,12 +31,12 @@ static bool decode_in_ioctl(x_smb2_state_ioctl_t &state,
 		x_buf_t *in_buf, uint32_t in_offset, uint32_t in_len)
 {
 	const uint8_t *in_hdr = in_buf->data + in_offset;
-	const x_smb2_in_ioctl_t *in_ioctl = (const x_smb2_in_ioctl_t *)(in_hdr + SMB2_HDR_BODY);
+	const x_smb2_in_ioctl_t *in_ioctl = (const x_smb2_in_ioctl_t *)(in_hdr + sizeof(x_smb2_header_t));
 	uint32_t in_input_offset = X_LE2H16(in_ioctl->input_offset);
 	uint32_t in_input_length = X_LE2H32(in_ioctl->input_length);
 
 	if (!x_check_range<uint32_t>(in_input_offset, in_input_length,
-				SMB2_HDR_BODY + sizeof(x_smb2_in_ioctl_t), in_len)) {
+				sizeof(x_smb2_header_t) + sizeof(x_smb2_in_ioctl_t), in_len)) {
 		return false;
 	}
 
@@ -72,7 +72,7 @@ struct x_smb2_out_ioctl_t
 static void encode_out_ioctl(const x_smb2_state_ioctl_t &state,
 		uint8_t *out_hdr)
 {
-	x_smb2_out_ioctl_t *out_ioctl = (x_smb2_out_ioctl_t *)(out_hdr + SMB2_HDR_BODY);
+	x_smb2_out_ioctl_t *out_ioctl = (x_smb2_out_ioctl_t *)(out_hdr + sizeof(x_smb2_header_t));
 	out_ioctl->struct_size = X_H2LE16(sizeof(x_smb2_out_ioctl_t) +
 			(state.out_buf_length != 0));
 
@@ -80,9 +80,9 @@ static void encode_out_ioctl(const x_smb2_state_ioctl_t &state,
 	out_ioctl->ctl_code = X_H2LE32(state.ctl_code);
 	out_ioctl->file_id_persistent = X_H2LE64(state.in_file_id_persistent);
 	out_ioctl->file_id_volatile = X_H2LE64(state.in_file_id_volatile);
-	out_ioctl->input_offset = X_H2LE32(SMB2_HDR_BODY + sizeof(x_smb2_out_ioctl_t));
+	out_ioctl->input_offset = X_H2LE32(sizeof(x_smb2_header_t) + sizeof(x_smb2_out_ioctl_t));
 	out_ioctl->input_length = 0;
-	out_ioctl->output_offset = X_H2LE32(SMB2_HDR_BODY + sizeof(x_smb2_out_ioctl_t));
+	out_ioctl->output_offset = X_H2LE32(sizeof(x_smb2_header_t) + sizeof(x_smb2_out_ioctl_t));
 	out_ioctl->output_length = X_H2LE32(state.out_buf_length);
 	out_ioctl->reserved1 = 0;
 }
@@ -105,7 +105,7 @@ static void x_smb2_reply_ioctl(x_smbd_conn_t *smbd_conn,
 
 	x_smb2_reply(smbd_conn, smbd_requ, bufref,
 			bufref->next ? bufref->next : bufref, status, 
-			SMB2_HDR_BODY + sizeof(x_smb2_out_ioctl_t) + state.out_buf_length);
+			sizeof(x_smb2_header_t) + sizeof(x_smb2_out_ioctl_t) + state.out_buf_length);
 }
 
 
@@ -472,8 +472,8 @@ static NTSTATUS x_smb2_fsctl_query_network_interface_info(
 	if (!file_id_is_nul(state)) {
 		return NT_STATUS_INVALID_PARAMETER;
 	}
-	if (!(x_smbd_conn_get_capabilities(smbd_conn) & SMB2_CAP_MULTI_CHANNEL)) {
-		if (x_smbd_tcon_get_share(smbd_tcon)->get_type() == SMB2_SHARE_TYPE_PIPE) {
+	if (!(x_smbd_conn_get_capabilities(smbd_conn) & X_SMB2_CAP_MULTI_CHANNEL)) {
+		if (x_smbd_tcon_get_share(smbd_tcon)->get_type() == X_SMB2_SHARE_TYPE_PIPE) {
 			return NT_STATUS_FS_DRIVER_REQUIRED;
 		} else {
 			return NT_STATUS_INVALID_DEVICE_REQUEST;
@@ -553,7 +553,7 @@ static NTSTATUS x_smbd_open_ioctl(x_smbd_conn_t *smbd_conn,
 
 NTSTATUS x_smb2_process_ioctl(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 {
-	if (smbd_requ->in_requ_len < SMB2_HDR_BODY + sizeof(x_smb2_in_ioctl_t)) {
+	if (smbd_requ->in_requ_len < sizeof(x_smb2_header_t) + sizeof(x_smb2_in_ioctl_t)) {
 		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
 
@@ -565,7 +565,7 @@ NTSTATUS x_smb2_process_ioctl(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ
 	X_LOG_OP("%ld IOCTL 0x%lx, 0x%lx", smbd_requ->in_smb2_hdr.mid,
 			state->in_file_id_persistent, state->in_file_id_volatile);
 
-	if (state->in_flags != SMB2_IOCTL_FLAG_IS_FSCTL) {
+	if (state->in_flags != X_SMB2_IOCTL_FLAG_IS_FSCTL) {
 		RETURN_OP_STATUS(smbd_requ, NT_STATUS_NOT_SUPPORTED);
 	}
 

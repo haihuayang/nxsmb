@@ -259,7 +259,7 @@ static bool parse_global_param(x_smbd_conf_t &smbd_conf,
 		smbd_conf.lanman_auth = parse_bool(value);
 	} else if (name == "server signing") {
 		if (value == "mandatory") {
-			smbd_conf.security_mode |= SMB2_NEGOTIATE_SIGNING_REQUIRED;
+			smbd_conf.security_mode |= X_SMB2_NEGOTIATE_SIGNING_REQUIRED;
 		}
 	} else if (name == "smb2 max credits") {
 		return parse_uint32(value, smbd_conf.smb2_max_credits);
@@ -280,9 +280,9 @@ static bool parse_global_param(x_smbd_conf_t &smbd_conf,
 	} else if (name == "server multi channel support") {
 		bool server_multi_channel_support = parse_bool(value);
 		if (server_multi_channel_support) {
-			smbd_conf.capabilities |= SMB2_CAP_MULTI_CHANNEL;
+			smbd_conf.capabilities |= X_SMB2_CAP_MULTI_CHANNEL;
 		} else {
-			smbd_conf.capabilities &= ~SMB2_CAP_MULTI_CHANNEL;
+			smbd_conf.capabilities &= ~X_SMB2_CAP_MULTI_CHANNEL;
 		}
 	} else {
 		X_LOG_WARN("unknown global param '%s' with value '%s'",
@@ -416,8 +416,8 @@ static int parse_smbconf(x_smbd_conf_t &smbd_conf, const char *path,
 	std::vector<std::unique_ptr<share_spec_t>> share_specs;
 	std::unique_ptr<share_spec_t> share_spec;
 
-	smbd_conf.capabilities = SMB2_CAP_DFS | SMB2_CAP_LARGE_MTU | SMB2_CAP_LEASING
-		| SMB2_CAP_DIRECTORY_LEASING | SMB2_CAP_MULTI_CHANNEL;
+	smbd_conf.capabilities = X_SMB2_CAP_DFS | X_SMB2_CAP_LARGE_MTU | X_SMB2_CAP_LEASING
+		| X_SMB2_CAP_DIRECTORY_LEASING | X_SMB2_CAP_MULTI_CHANNEL;
 
 	std::string line, last_line;
 	std::ifstream in(path);

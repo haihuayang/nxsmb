@@ -8,7 +8,6 @@
 #include <attr/xattr.h>
 extern "C" {
 #include "samba/libcli/smb/smb_constants.h"
-#include "samba/libcli/smb/smb2_constants.h"
 }
 
 #ifdef NXSMBD_MINERVA

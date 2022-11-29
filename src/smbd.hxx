@@ -29,7 +29,6 @@
 #include "include/librpc/samr.hxx"
 extern "C" {
 #include "samba/libcli/smb/smb_constants.h"
-#include "samba/libcli/smb/smb2_constants.h"
 #include "samba/libcli/util/ntstatus.h"
 #include "samba/source3/include/ntioctl.h"
 }
@@ -335,11 +334,11 @@ struct x_smbd_requ_t
 	}
 
 	bool is_signed() const {
-		return (in_smb2_hdr.flags & SMB2_HDR_FLAG_SIGNED) != 0;
+		return (in_smb2_hdr.flags & X_SMB2_HDR_FLAG_SIGNED) != 0;
 	}
 
 	bool is_compound_related() const {
-		return (in_smb2_hdr.flags & SMB2_HDR_FLAG_CHAINED) != 0;
+		return (in_smb2_hdr.flags & X_SMB2_HDR_FLAG_CHAINED) != 0;
 	}
 
 	bool is_compound_followed() const {

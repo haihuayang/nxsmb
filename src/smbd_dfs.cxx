@@ -52,7 +52,7 @@ struct dfs_share_t : x_smbd_share_t
 			const std::string &name,
 			bool abe_enabled,
 			const std::vector<std::string> &volumes);
-	uint8_t get_type() const override { return SMB2_SHARE_TYPE_DISK; }
+	uint8_t get_type() const override { return X_SMB2_SHARE_TYPE_DISK; }
 	bool is_dfs() const override { return true; }
 	bool abe_enabled() const override { return abe; }
 	NTSTATUS resolve_path(std::shared_ptr<x_smbd_topdir_t> &topdir,

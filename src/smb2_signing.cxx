@@ -77,10 +77,10 @@ static inline void gmac_aes_128_digest(const x_smb2_key_t &key,
 		const x_smb2_header_t *smb2hdr = (const x_smb2_header_t *)vector[0].iov_base;
 		iv[0] = smb2hdr->mid;
 		uint32_t flags = X_LE2H32(smb2hdr->flags);
-		uint64_t high_bits = flags & SMB2_HDR_FLAG_REDIRECT;
+		uint64_t high_bits = flags & X_SMB2_HDR_FLAG_REDIRECT;
 		uint16_t opcode = X_LE2H16(smb2hdr->opcode);
-		if (opcode == SMB2_OP_CANCEL) {
-			high_bits |= SMB2_HDR_FLAG_ASYNC;
+		if (opcode == X_SMB2_OP_CANCEL) {
+			high_bits |= X_SMB2_HDR_FLAG_ASYNC;
 		}
 		iv[1] = X_H2LE64(high_bits);
 	}
@@ -156,17 +156,17 @@ static void x_smb2_digest(uint16_t algo,
 	struct iovec iov[8];
 	unsigned int niov = 0;
 
-	X_ASSERT(buflist->length >= SMB2_HDR_BODY);
+	X_ASSERT(buflist->length >= sizeof(x_smb2_header_t));
 
 	iov[niov].iov_base = buflist->get_data();
-	iov[niov].iov_len = SMB2_HDR_SIGNATURE;
+	iov[niov].iov_len = offsetof(x_smb2_header_t, signature);
 	++niov;
 	iov[niov].iov_base = (void *)zero_sig;
 	iov[niov].iov_len = sizeof(zero_sig);
 	++niov;
-	if (buflist->length > SMB2_HDR_BODY) {
-		iov[niov].iov_base = buflist->get_data() + SMB2_HDR_BODY;
-		iov[niov].iov_len = buflist->length - SMB2_HDR_BODY;
+	if (buflist->length > sizeof(x_smb2_header_t)) {
+		iov[niov].iov_base = buflist->get_data() + sizeof(x_smb2_header_t);
+		iov[niov].iov_len = buflist->length - sizeof(x_smb2_header_t);
 		++niov;
 	}
 
@@ -192,7 +192,7 @@ bool x_smb2_signing_check(uint16_t algo,
 	uint8_t digest[16];
 	x_smb2_digest(algo, *key, buflist, digest);
 	
-	uint8_t *signature = buflist->get_data() + SMB2_HDR_SIGNATURE;
+	uint8_t *signature = buflist->get_data() + offsetof(x_smb2_header_t, signature);
 	return memcmp(digest, signature, 16) == 0;
 }
 
@@ -200,7 +200,7 @@ void x_smb2_signing_sign(uint16_t algo,
 		const x_smb2_key_t *key,
 		x_bufref_t *buflist)
 {
-	uint8_t *signature = buflist->get_data() + SMB2_HDR_SIGNATURE;
+	uint8_t *signature = buflist->get_data() + offsetof(x_smb2_header_t, signature);
 	x_smb2_digest(algo, *key, buflist, signature);
 }
 

@@ -41,7 +41,7 @@ static NTSTATUS x_smb2_reply_notify(x_smbd_conn_t *smbd_conn,
 			output_buffer_length);
 
 	uint8_t *out_hdr = bufref->get_data();
-	x_smb2_out_notify_t *out_notify = (x_smb2_out_notify_t *)(out_hdr + SMB2_HDR_BODY);
+	x_smb2_out_notify_t *out_notify = (x_smb2_out_notify_t *)(out_hdr + sizeof(x_smb2_header_t));
 	uint8_t *out_body = (uint8_t *)(out_notify + 1);
 
 	size_t body_length = x_smb2_notify_marshall(state.out_notify_changes,
@@ -52,11 +52,11 @@ static NTSTATUS x_smb2_reply_notify(x_smbd_conn_t *smbd_conn,
 	} else {
 		status = NT_STATUS_OK;
 	}
-	bufref->length = x_convert_assert<uint32_t>(SMB2_HDR_BODY +
+	bufref->length = x_convert_assert<uint32_t>(sizeof(x_smb2_header_t) +
 			sizeof(x_smb2_out_notify_t) + body_length);
 
 	out_notify->struct_size = X_H2LE16(sizeof(x_smb2_out_notify_t) + 1);
-	out_notify->output_buffer_offset = X_H2LE16(SMB2_HDR_BODY + sizeof(x_smb2_out_notify_t));
+	out_notify->output_buffer_offset = X_H2LE16(sizeof(x_smb2_header_t) + sizeof(x_smb2_out_notify_t));
 	out_notify->output_buffer_length = X_H2LE32(x_convert_assert<uint32_t>(body_length));
 
 	x_smb2_reply(smbd_conn, smbd_requ, bufref, bufref, status, 
@@ -81,7 +81,7 @@ static void x_smb2_notify_async_done(x_smbd_conn_t *smbd_conn,
 
 NTSTATUS x_smb2_process_notify(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 {
-	if (smbd_requ->in_requ_len < SMB2_HDR_BODY + sizeof(x_smb2_in_notify_t)) {
+	if (smbd_requ->in_requ_len < sizeof(x_smb2_header_t) + sizeof(x_smb2_in_notify_t)) {
 		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
 
@@ -91,7 +91,7 @@ NTSTATUS x_smb2_process_notify(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_req
 
 	const uint8_t *in_hdr = smbd_requ->get_in_data();
 	auto state = std::make_unique<x_smb2_state_notify_t>();
-	const x_smb2_in_notify_t *in_notify = (const x_smb2_in_notify_t *)(in_hdr + SMB2_HDR_BODY);
+	const x_smb2_in_notify_t *in_notify = (const x_smb2_in_notify_t *)(in_hdr + sizeof(x_smb2_header_t));
 
 	uint16_t in_flags = X_LE2H16(in_notify->flags);
 	uint64_t in_file_id_persistent = X_LE2H64(in_notify->file_id_persistent);
@@ -130,7 +130,7 @@ NTSTATUS x_smb2_process_notify(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_req
 	if (smbd_open->notify_filter == 0) {
 		smbd_open->notify_filter = in_filter | X_FILE_NOTIFY_CHANGE_VALID;
 		smbd_open->notify_buffer_length = in_output_buffer_length;
-		if (in_flags & SMB2_WATCH_TREE) {
+		if (in_flags & X_SMB2_WATCH_TREE) {
 			smbd_open->notify_filter |= X_FILE_NOTIFY_CHANGE_WATCH_TREE;
 			++smbd_open->smbd_object->topdir->watch_tree_cnt;
 		}

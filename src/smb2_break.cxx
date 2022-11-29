@@ -52,7 +52,7 @@ static void decode_in_lease_break(x_smb2_state_lease_break_t &state,
 static void encode_lease_break_resp(const x_smb2_state_lease_break_t &state,
 		uint8_t *out_hdr)
 {
-	x_smb2_lease_break_t *resp = (x_smb2_lease_break_t *)(out_hdr + SMB2_HDR_BODY);
+	x_smb2_lease_break_t *resp = (x_smb2_lease_break_t *)(out_hdr + sizeof(x_smb2_header_t));
 	resp->struct_size = X_H2LE16(sizeof(x_smb2_lease_break_t));
 	resp->reserved0 = 0;
 	resp->flags = X_H2LE32(state.in_flags);
@@ -73,7 +73,7 @@ static void decode_in_oplock_break(x_smb2_state_oplock_break_t &state,
 static void encode_oplock_break_resp(const x_smb2_state_oplock_break_t &state,
 		uint8_t *out_hdr)
 {
-	x_smb2_oplock_break_t *resp = (x_smb2_oplock_break_t *)(out_hdr + SMB2_HDR_BODY);
+	x_smb2_oplock_break_t *resp = (x_smb2_oplock_break_t *)(out_hdr + sizeof(x_smb2_header_t));
 	resp->struct_size = X_H2LE16(sizeof(x_smb2_oplock_break_t));
 	resp->oplock_level = state.out_oplock_level;
 	resp->reserved0 = 0;
@@ -93,7 +93,7 @@ static void x_smb2_reply_oplock_break(x_smbd_conn_t *smbd_conn,
 	uint8_t *out_hdr = bufref->get_data();
 	encode_oplock_break_resp(state, out_hdr);
 	x_smb2_reply(smbd_conn, smbd_requ, bufref, bufref, NT_STATUS_OK, 
-			SMB2_HDR_BODY + sizeof(x_smb2_oplock_break_t));
+			sizeof(x_smb2_header_t) + sizeof(x_smb2_oplock_break_t));
 }
 
 static NTSTATUS x_smb2_process_oplock_break(x_smbd_conn_t *smbd_conn,
@@ -130,7 +130,7 @@ static void x_smb2_reply_lease_break(x_smbd_conn_t *smbd_conn,
 	uint8_t *out_hdr = bufref->get_data();
 	encode_lease_break_resp(state, out_hdr);
 	x_smb2_reply(smbd_conn, smbd_requ, bufref, bufref, NT_STATUS_OK, 
-			SMB2_HDR_BODY + sizeof(x_smb2_lease_break_t));
+			sizeof(x_smb2_header_t) + sizeof(x_smb2_lease_break_t));
 	if (state.more_break) {
 		x_smb2_send_lease_break(smbd_conn, smbd_requ->smbd_sess,
 				&state.in_key,
@@ -159,7 +159,7 @@ NTSTATUS x_smb2_process_break(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ
 {
 	X_LOG_OP("%ld BREAK", smbd_requ->in_smb2_hdr.mid);
 
-	if (smbd_requ->in_requ_len < SMB2_HDR_BODY + sizeof(x_smb2_oplock_break_t)) {
+	if (smbd_requ->in_requ_len < sizeof(x_smb2_header_t) + sizeof(x_smb2_oplock_break_t)) {
 		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
 
@@ -176,15 +176,15 @@ NTSTATUS x_smb2_process_break(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ
 	}
 #endif
 	const uint8_t *in_hdr = smbd_requ->get_in_data();
-	const x_smb2_oplock_break_t *in_break = (const x_smb2_oplock_break_t *)(in_hdr + SMB2_HDR_BODY);
+	const x_smb2_oplock_break_t *in_break = (const x_smb2_oplock_break_t *)(in_hdr + sizeof(x_smb2_header_t));
 	if (in_break->struct_size >= sizeof(x_smb2_lease_break_t)) {
-		if (smbd_requ->in_requ_len < SMB2_HDR_BODY + sizeof(x_smb2_lease_break_t)) {
+		if (smbd_requ->in_requ_len < sizeof(x_smb2_header_t) + sizeof(x_smb2_lease_break_t)) {
 			RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 		}
 		return x_smb2_process_lease_break(smbd_conn, smbd_requ,
 				(const x_smb2_lease_break_t *)in_break);
 	} else {
-		if (smbd_requ->in_requ_len < SMB2_HDR_BODY + sizeof(x_smb2_oplock_break_t)) {
+		if (smbd_requ->in_requ_len < sizeof(x_smb2_header_t) + sizeof(x_smb2_oplock_break_t)) {
 			RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 		}
 		return x_smb2_process_oplock_break(smbd_conn, smbd_requ,
@@ -201,7 +201,7 @@ void x_smb2_send_lease_break(x_smbd_conn_t *smbd_conn, x_smbd_sess_t *smbd_sess,
 	x_bufref_t *bufref = x_bufref_alloc(sizeof(x_smb2_lease_break_noti_t));
 	uint8_t *out_hdr = bufref->get_data();
 
-	x_smb2_lease_break_noti_t *noti = (x_smb2_lease_break_noti_t *)(out_hdr + SMB2_HDR_BODY);
+	x_smb2_lease_break_noti_t *noti = (x_smb2_lease_break_noti_t *)(out_hdr + sizeof(x_smb2_header_t));
 	noti->struct_size = X_H2LE16(sizeof(x_smb2_lease_break_noti_t));
 	noti->new_epoch = X_H2LE16(new_epoch);
 	// noti->flags = X_H2LE32(SMB2_NOTIFY_BREAK_LEASE_FLAG_ACK_REQUIRED); // TODO
@@ -214,7 +214,7 @@ void x_smb2_send_lease_break(x_smbd_conn_t *smbd_conn, x_smbd_sess_t *smbd_sess,
 	noti->access_mask_hint = 0;
 	noti->share_mask_hint = 0;
 
-	x_smbd_conn_send_unsolicited(smbd_conn, smbd_sess, bufref, SMB2_OP_BREAK);
+	x_smbd_conn_send_unsolicited(smbd_conn, smbd_sess, bufref, X_SMB2_OP_BREAK);
 }
 
 void x_smb2_send_oplock_break(x_smbd_conn_t *smbd_conn, x_smbd_sess_t *smbd_sess,
@@ -223,7 +223,7 @@ void x_smb2_send_oplock_break(x_smbd_conn_t *smbd_conn, x_smbd_sess_t *smbd_sess
 	x_bufref_t *bufref = x_bufref_alloc(sizeof(x_smb2_oplock_break_t));
 	uint8_t *out_hdr = bufref->get_data();
 
-	x_smb2_oplock_break_t *noti = (x_smb2_oplock_break_t *)(out_hdr + SMB2_HDR_BODY);
+	x_smb2_oplock_break_t *noti = (x_smb2_oplock_break_t *)(out_hdr + sizeof(x_smb2_header_t));
 	noti->struct_size = X_H2LE16(sizeof(x_smb2_oplock_break_t));
 	noti->oplock_level = X_H2LE16(oplock_level);
 	noti->reserved0 = 0;
@@ -231,7 +231,7 @@ void x_smb2_send_oplock_break(x_smbd_conn_t *smbd_conn, x_smbd_sess_t *smbd_sess
 	noti->file_id_persistent = X_H2LE64(id_persistent);
 	noti->file_id_volatile = X_H2LE64(id_volatile);
 
-	x_smbd_conn_send_unsolicited(smbd_conn, smbd_sess, bufref, SMB2_OP_BREAK);
+	x_smbd_conn_send_unsolicited(smbd_conn, smbd_sess, bufref, X_SMB2_OP_BREAK);
 }
 
 #if 0

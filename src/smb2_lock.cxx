@@ -20,14 +20,14 @@ struct x_smb2_out_lock_t
 static bool decode_in_lock(x_smb2_state_lock_t &state,
 		const uint8_t *in_hdr, uint32_t in_len)
 {
-	const x_smb2_in_lock_t *in_lock = (const x_smb2_in_lock_t *)(in_hdr + SMB2_HDR_BODY);
+	const x_smb2_in_lock_t *in_lock = (const x_smb2_in_lock_t *)(in_hdr + sizeof(x_smb2_header_t));
 
 	uint16_t lock_count = X_LE2H16(in_lock->lock_count);
 	if (lock_count == 0) {
 		return false;
 	}
 	
-	if ((lock_count - 1) * sizeof(x_smb2_lock_element_t) + sizeof(x_smb2_in_lock_t) + SMB2_HDR_BODY > in_len) {
+	if ((lock_count - 1) * sizeof(x_smb2_lock_element_t) + sizeof(x_smb2_in_lock_t) + sizeof(x_smb2_header_t) > in_len) {
 		return false;
 	}
 
@@ -46,7 +46,7 @@ static bool decode_in_lock(x_smb2_state_lock_t &state,
 
 static void encode_out_lock(uint8_t *out_hdr)
 {
-	x_smb2_out_lock_t *out_lock = (x_smb2_out_lock_t *)(out_hdr + SMB2_HDR_BODY);
+	x_smb2_out_lock_t *out_lock = (x_smb2_out_lock_t *)(out_hdr + sizeof(x_smb2_header_t));
 
 	out_lock->struct_size = X_H2LE16(sizeof(x_smb2_out_lock_t));
 	out_lock->reserved0 = 0;
@@ -63,7 +63,7 @@ static void x_smb2_reply_lock(x_smbd_conn_t *smbd_conn,
 	uint8_t *out_hdr = bufref->get_data();
 	encode_out_lock(out_hdr);
 	x_smb2_reply(smbd_conn, smbd_requ, bufref, bufref, NT_STATUS_OK, 
-			SMB2_HDR_BODY + sizeof(x_smb2_out_lock_t));
+			sizeof(x_smb2_header_t) + sizeof(x_smb2_out_lock_t));
 }
 
 static void x_smb2_lock_async_done(x_smbd_conn_t *smbd_conn,
@@ -83,7 +83,7 @@ static void x_smb2_lock_async_done(x_smbd_conn_t *smbd_conn,
 
 NTSTATUS x_smb2_process_lock(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 {
-	if (smbd_requ->in_requ_len < SMB2_HDR_BODY + sizeof(x_smb2_in_lock_t)) {
+	if (smbd_requ->in_requ_len < sizeof(x_smb2_header_t) + sizeof(x_smb2_in_lock_t)) {
 		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
 
@@ -97,10 +97,10 @@ NTSTATUS x_smb2_process_lock(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 	X_LOG_OP("%ld LOCK 0x%lx, 0x%lx", smbd_requ->in_smb2_hdr.mid,
 			state->in_file_id_persistent, state->in_file_id_volatile);
 
-	bool is_unlock = state->in_lock_elements[0].flags & SMB2_LOCK_FLAG_UNLOCK;
+	bool is_unlock = state->in_lock_elements[0].flags & X_SMB2_LOCK_FLAG_UNLOCK;
 	uint32_t async_count = 0;
 	if (is_unlock) {
-		uint32_t flags = ~(SMB2_LOCK_FLAG_UNLOCK|SMB2_LOCK_FLAG_FAIL_IMMEDIATELY);
+		uint32_t flags = ~(X_SMB2_LOCK_FLAG_UNLOCK|X_SMB2_LOCK_FLAG_FAIL_IMMEDIATELY);
 		for (const auto &le: state->in_lock_elements) {
 			if ((le.flags & flags) != 0) {
 				RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
@@ -108,13 +108,13 @@ NTSTATUS x_smb2_process_lock(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 		}
 	} else {
 		for (const auto &le: state->in_lock_elements) {
-			if ((le.flags & SMB2_LOCK_FLAG_FAIL_IMMEDIATELY) == 0) {
+			if ((le.flags & X_SMB2_LOCK_FLAG_FAIL_IMMEDIATELY) == 0) {
 				if (++async_count > 0 && state->in_lock_elements.size() > 1) {
 					RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 				}
 			}
-			auto f = le.flags & ~SMB2_LOCK_FLAG_FAIL_IMMEDIATELY;
-			if (f != SMB2_LOCK_FLAG_SHARED && f != SMB2_LOCK_FLAG_EXCLUSIVE) {
+			auto f = le.flags & ~X_SMB2_LOCK_FLAG_FAIL_IMMEDIATELY;
+			if (f != X_SMB2_LOCK_FLAG_SHARED && f != X_SMB2_LOCK_FLAG_EXCLUSIVE) {
 				RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 			}
 			if (le.length != 0 && (le.offset + le.length - 1) < le.offset) {

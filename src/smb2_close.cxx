@@ -19,7 +19,7 @@ struct x_smb2_in_close_t
 static bool decode_in_close(x_smb2_state_close_t &state,
 		const uint8_t *in_hdr)
 {
-	const x_smb2_in_close_t *in_close = (const x_smb2_in_close_t *)(in_hdr + SMB2_HDR_BODY);
+	const x_smb2_in_close_t *in_close = (const x_smb2_in_close_t *)(in_hdr + sizeof(x_smb2_header_t));
 
 	state.in_flags = X_LE2H16(in_close->flags);
 	state.in_file_id_persistent = X_LE2H64(in_close->file_id_persistent);
@@ -39,13 +39,13 @@ struct x_smb2_out_close_t
 static void encode_out_close(const x_smb2_state_close_t &state,
 		uint8_t *out_hdr)
 {
-	x_smb2_out_close_t *out_close = (x_smb2_out_close_t *)(out_hdr + SMB2_HDR_BODY);
+	x_smb2_out_close_t *out_close = (x_smb2_out_close_t *)(out_hdr + sizeof(x_smb2_header_t));
 
 	out_close->struct_size = X_H2LE16(X_SMB2_CLOSE_RESP_BODY_LEN);
 	out_close->flags = X_H2LE16(state.out_flags);
 	out_close->reserved0 = 0;
 	/* TODO x_smb2_out_close_t is not 8 bytes aligned, sizeof() is not 0x3c */
-	if (state.out_flags & SMB2_CLOSE_FLAGS_FULL_INFORMATION) {
+	if (state.out_flags & X_SMB2_CLOSE_FLAGS_FULL_INFORMATION) {
 		/* TODO not work for big-endian */
 		memcpy(&out_close->info, &state.out_info, sizeof(state.out_info));
 	} else {
@@ -64,14 +64,14 @@ static void x_smb2_reply_close(x_smbd_conn_t *smbd_conn,
 	
 	encode_out_close(state, out_hdr);
 	x_smb2_reply(smbd_conn, smbd_requ, bufref, bufref, NT_STATUS_OK, 
-			SMB2_HDR_BODY + X_SMB2_CLOSE_RESP_BODY_LEN);
+			sizeof(x_smb2_header_t) + X_SMB2_CLOSE_RESP_BODY_LEN);
 }
 
 NTSTATUS x_smb2_process_close(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 {
 	X_ASSERT(smbd_requ->smbd_chan && smbd_requ->smbd_sess);
 
-	if (smbd_requ->in_requ_len < SMB2_HDR_BODY + sizeof(x_smb2_in_close_t)) {
+	if (smbd_requ->in_requ_len < sizeof(x_smb2_header_t) + sizeof(x_smb2_in_close_t)) {
 		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
 

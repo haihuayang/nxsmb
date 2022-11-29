@@ -9,7 +9,7 @@ struct x_smb2_keepalive_t
 
 static void encode_out_keepalive(uint8_t *out_hdr)
 {
-	x_smb2_keepalive_t *keepalive = (x_smb2_keepalive_t *)(out_hdr + SMB2_HDR_BODY);
+	x_smb2_keepalive_t *keepalive = (x_smb2_keepalive_t *)(out_hdr + sizeof(x_smb2_header_t));
 
 	keepalive->struct_size = X_H2LE16(sizeof(x_smb2_keepalive_t));
 	keepalive->reserved0 = 0;
@@ -23,12 +23,12 @@ static void x_smb2_reply_keepalive(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd
 	
 	encode_out_keepalive(out_hdr);
 	x_smb2_reply(smbd_conn, smbd_requ, bufref, bufref, NT_STATUS_OK, 
-			SMB2_HDR_BODY + sizeof(x_smb2_keepalive_t));
+			sizeof(x_smb2_header_t) + sizeof(x_smb2_keepalive_t));
 }
 
 NTSTATUS x_smb2_process_keepalive(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 {
-	if (smbd_requ->in_requ_len < SMB2_HDR_BODY + sizeof(struct x_smb2_keepalive_t)) {
+	if (smbd_requ->in_requ_len < sizeof(x_smb2_header_t) + sizeof(struct x_smb2_keepalive_t)) {
 		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
 

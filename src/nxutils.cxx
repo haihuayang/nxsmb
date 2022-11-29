@@ -3,7 +3,6 @@
 #include "samba/include/config.h"
 extern "C" {
 #include "samba/libcli/smb/smb_constants.h"
-#include "samba/libcli/smb/smb2_constants.h"
 #include "samba/libcli/util/ntstatus.h"
 }
 
@@ -183,7 +182,7 @@ static inline void output_timespec(const char *name, const struct timespec *ts)
 			lt->tm_min,
 			lt->tm_sec,
 			lt->tm_gmtoff > 0 ? '+' : '-',
-			abs(lt->tm_gmtoff),
+			std::abs(lt->tm_gmtoff),
 			ts->tv_sec, ts->tv_nsec);
 }
 
@@ -200,7 +199,7 @@ static void output_nttime(const char *name, const idl::NTTIME nttime)
 			lt->tm_min,
 			lt->tm_sec,
 			lt->tm_gmtoff > 0 ? '+' : '-',
-			abs(lt->tm_gmtoff),
+			std::abs(lt->tm_gmtoff),
 			ts.tv_sec, ts.tv_nsec);
 }
 

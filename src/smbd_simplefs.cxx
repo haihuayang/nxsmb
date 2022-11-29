@@ -90,7 +90,7 @@ struct simplefs_share_t : x_smbd_share_t
 	}
 					
 	uint8_t get_type() const override {
-		return SMB2_SHARE_TYPE_DISK;
+		return X_SMB2_SHARE_TYPE_DISK;
 	}
 	bool is_dfs() const override { return false; }
 	bool abe_enabled() const override { return abe; }

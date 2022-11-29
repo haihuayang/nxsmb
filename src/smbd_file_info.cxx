@@ -89,7 +89,7 @@ bool x_smbd_marshall_dir_entry(x_smb2_chain_marshall_t &marshall,
 	uint32_t rec_size;
 
 	switch (info_level) {
-	case SMB2_FIND_ID_BOTH_DIRECTORY_INFO:
+	case SMB2_FILE_INFO_FILE_ID_BOTH_DIR_INFORMATION:
 		rec_size = x_convert_assert<uint32_t>(sizeof(x_smb2_file_id_both_dir_info_t) + name.size() * 2);
 		pbegin = marshall.get_begin(rec_size);
 		if (!pbegin) {
@@ -129,7 +129,7 @@ bool x_smbd_marshall_dir_entry(x_smb2_chain_marshall_t &marshall,
 		}
 		break;
 
-	case SMB2_FIND_ID_FULL_DIRECTORY_INFO:
+	case SMB2_FILE_INFO_FILE_ID_FULL_DIR_INFORMATION:
 		rec_size = x_convert_assert<uint32_t>(sizeof(x_smb2_file_id_full_dir_info_t) + name.size() * 2);
 		pbegin = marshall.get_begin(rec_size);
 		if (!pbegin) {
@@ -165,7 +165,7 @@ bool x_smbd_marshall_dir_entry(x_smb2_chain_marshall_t &marshall,
 		}
 		break;
 
-	case SMB2_FIND_DIRECTORY_INFO:
+	case SMB2_FILE_INFO_FILE_DIRECTORY_INFORMATION:
 		rec_size = x_convert_assert<uint32_t>(sizeof(x_smb2_file_dir_info_t) + name.size() * 2);
 		pbegin = marshall.get_begin(rec_size);
 		if (!pbegin) {
@@ -187,7 +187,7 @@ bool x_smbd_marshall_dir_entry(x_smb2_chain_marshall_t &marshall,
 		}
 		break;
 
-	case SMB2_FIND_BOTH_DIRECTORY_INFO:
+	case SMB2_FILE_INFO_FILE_BOTH_DIR_INFORMATION:
 		rec_size = x_convert_assert<uint32_t>(sizeof(x_smb2_file_both_dir_info_t) + name.size() * 2);
 		pbegin = marshall.get_begin(rec_size);
 		if (!pbegin) {
@@ -223,7 +223,7 @@ bool x_smbd_marshall_dir_entry(x_smb2_chain_marshall_t &marshall,
 		}
 		break;
 
-	case SMB2_FIND_FULL_DIRECTORY_INFO:
+	case SMB2_FILE_INFO_FILE_FULL_DIRECTORY_INFORMATION:
 		rec_size = x_convert_assert<uint32_t>(sizeof(x_smb2_file_full_dir_info_t) + name.size() * 2);
 		pbegin = marshall.get_begin(rec_size);
 		if (!pbegin) {
@@ -256,7 +256,7 @@ bool x_smbd_marshall_dir_entry(x_smb2_chain_marshall_t &marshall,
 		}
 		break;
 
-	case SMB2_FIND_NAME_INFO:
+	case SMB2_FILE_INFO_FILE_NAMES_INFORMATION:
 		rec_size = x_convert_assert<uint32_t>(sizeof(x_smb2_file_names_info_t) + name.size() * 2);
 		pbegin = marshall.get_begin(rec_size);
 		if (!pbegin) {
