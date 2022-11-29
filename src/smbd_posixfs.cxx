@@ -1554,19 +1554,19 @@ static bool share_conflict(const x_smbd_open_t *smbd_open,
 	}
 
 	CHECK_MASK(1, smbd_open->access_mask, idl::SEC_FILE_WRITE_DATA | idl::SEC_FILE_APPEND_DATA,
-			share_access, FILE_SHARE_WRITE);
+			share_access, X_SMB2_FILE_SHARE_WRITE);
 	CHECK_MASK(2, access_mask, idl::SEC_FILE_WRITE_DATA | idl::SEC_FILE_APPEND_DATA,
-			smbd_open->share_access, FILE_SHARE_WRITE);
+			smbd_open->share_access, X_SMB2_FILE_SHARE_WRITE);
 
 	CHECK_MASK(3, smbd_open->access_mask, idl::SEC_FILE_READ_DATA | idl::SEC_FILE_EXECUTE,
-			share_access, FILE_SHARE_READ);
+			share_access, X_SMB2_FILE_SHARE_READ);
 	CHECK_MASK(4, access_mask, idl::SEC_FILE_READ_DATA | idl::SEC_FILE_EXECUTE,
-			smbd_open->share_access, FILE_SHARE_READ);
+			smbd_open->share_access, X_SMB2_FILE_SHARE_READ);
 
 	CHECK_MASK(5, smbd_open->access_mask, idl::SEC_STD_DELETE,
-			share_access, FILE_SHARE_DELETE);
+			share_access, X_SMB2_FILE_SHARE_DELETE);
 	CHECK_MASK(6, access_mask, idl::SEC_STD_DELETE,
-			smbd_open->share_access, FILE_SHARE_DELETE);
+			smbd_open->share_access, X_SMB2_FILE_SHARE_DELETE);
 
 	return false;
 }
@@ -1797,7 +1797,7 @@ static void do_break_oplock(posixfs_object_t *posixfs_object,
 static bool delay_for_oplock(posixfs_object_t *posixfs_object,
 		posixfs_stream_t *posixfs_stream,
 		x_smbd_lease_t *smbd_lease,
-		uint32_t create_disposition,
+		x_smb2_create_disposition_t create_disposition,
 		uint32_t desired_access,
 		bool have_sharing_violation,
 		uint32_t open_attempt)
@@ -1809,9 +1809,9 @@ static bool delay_for_oplock(posixfs_object_t *posixfs_object,
 	bool will_overwrite;
 
 	switch (create_disposition) {
-	case FILE_SUPERSEDE:
-	case FILE_OVERWRITE:
-	case FILE_OVERWRITE_IF:
+	case x_smb2_create_disposition_t::SUPERSEDE:
+	case x_smb2_create_disposition_t::OVERWRITE:
+	case x_smb2_create_disposition_t::OVERWRITE_IF:
 		will_overwrite = true;
 		break;
 	default:
@@ -2070,7 +2070,7 @@ static posixfs_open_t *posixfs_open_create(
 		const x_smb2_state_create_t &state)
 {
 	NTSTATUS status;
-	if (state.in_create_options & FILE_DELETE_ON_CLOSE) {
+	if (state.in_create_options & X_SMB2_CREATE_OPTION_DELETE_ON_CLOSE) {
 		status = posixfs_object_set_delete_on_close(posixfs_object, posixfs_stream,
 				state.granted_access, true);
 		if (!NT_STATUS_IS_OK(status)) {
@@ -2122,7 +2122,7 @@ static void fill_out_info(x_smb2_create_close_info_t &info,
 static void reply_requ_create(x_smb2_state_create_t &state,
 		const posixfs_object_t *posixfs_object,
 		const posixfs_stream_t *posixfs_stream,
-		uint32_t create_action)
+		x_smb2_create_action_t create_action)
 {
 	state.out_create_flags = 0;
 	state.out_create_action = create_action;
@@ -2214,12 +2214,12 @@ static NTSTATUS posixfs_new_object(
 		status = normalize_sec_desc(*state.in_security_descriptor,
 				*smbd_user,
 				FILE_GENERIC_ALL,
-				state.in_create_options & FILE_DIRECTORY_FILE);
+				state.in_create_options & X_SMB2_CREATE_OPTION_DIRECTORY_FILE);
 		psd = state.in_security_descriptor;
 	} else {
 		status = make_child_sec_desc(psd, parent_psd,
 				*smbd_user,
-				state.in_create_options & FILE_DIRECTORY_FILE);
+				state.in_create_options & X_SMB2_CREATE_OPTION_DIRECTORY_FILE);
 	}
 	if (!NT_STATUS_IS_OK(status)) {
 		return status;
@@ -2232,7 +2232,7 @@ static NTSTATUS posixfs_new_object(
 
 	/* if parent is not enable inherit, make_sec_desc */
 	int fd = posixfs_create(posixfs_object->base.topdir->fd,
-			state.in_create_options & FILE_DIRECTORY_FILE,
+			state.in_create_options & X_SMB2_CREATE_OPTION_DIRECTORY_FILE,
 			posixfs_object->unix_path.c_str(),
 			&posixfs_object->meta,
 			&posixfs_object->default_stream.meta,
@@ -2368,7 +2368,7 @@ static bool check_ads_share_access(posixfs_object_t *posixfs_object,
 		for (other_open = posixfs_ads->base.open_list.get_front();
 				other_open;
 				other_open = posixfs_ads->base.open_list.next(other_open)) {
-			if (!(other_open->base.share_access & FILE_SHARE_DELETE)) {
+			if (!(other_open->base.share_access & X_SMB2_FILE_SHARE_DELETE)) {
 				X_LOG_NOTICE("ads %s share-access %d violate access 0x%x",
 						posixfs_ads->xattr_name.c_str(),
 						other_open->base.share_access,
@@ -2485,11 +2485,11 @@ static NTSTATUS posixfs_create_open_exist_object(
 	}
 
 	if (posixfs_object->base.type == x_smbd_object_t::type_dir) {
-		if (state->in_create_options & FILE_NON_DIRECTORY_FILE) {
+		if (state->in_create_options & X_SMB2_CREATE_OPTION_NON_DIRECTORY_FILE) {
 			return NT_STATUS_FILE_IS_A_DIRECTORY;
 		}
 	} else {
-		if (state->in_create_options & FILE_DIRECTORY_FILE) {
+		if (state->in_create_options & X_SMB2_CREATE_OPTION_DIRECTORY_FILE) {
 			return NT_STATUS_NOT_A_DIRECTORY;
 		}
 	}
@@ -2583,7 +2583,8 @@ static NTSTATUS posixfs_create_open_exist_object(
 	}
 
 	reply_requ_create(*state, posixfs_object, &posixfs_object->default_stream,
-			overwrite ? FILE_WAS_OVERWRITTEN : FILE_WAS_OPENED);
+			overwrite ? x_smb2_create_action_t::WAS_OVERWRITTEN
+			: x_smb2_create_action_t::WAS_OPENED);
 	posixfs_open = posixfs_open_create(&status, smbd_requ->smbd_tcon, posixfs_object,
 			&posixfs_object->default_stream,
 			*state);
@@ -2605,7 +2606,7 @@ static NTSTATUS posixfs_create_open_new_object(
 	}
 
 	NTSTATUS status;
-	if (state.in_create_options & FILE_DELETE_ON_CLOSE) {
+	if (state.in_create_options & X_SMB2_CREATE_OPTION_DELETE_ON_CLOSE) {
 		status = x_smbd_can_set_delete_on_close(
 				&posixfs_object->base, nullptr,
 				state.in_file_attributes,
@@ -2627,7 +2628,7 @@ static NTSTATUS posixfs_create_open_new_object(
 			state);
 	X_ASSERT(NT_STATUS_IS_OK(status));
 	reply_requ_create(state, posixfs_object, &posixfs_object->default_stream,
-			FILE_WAS_CREATED);
+			x_smb2_create_action_t::WAS_CREATED);
 	posixfs_open = posixfs_open_create(&status, smbd_requ->smbd_tcon, posixfs_object,
 			&posixfs_object->default_stream, state);
 	return status;
@@ -2740,7 +2741,7 @@ static NTSTATUS open_object_new_ads(
        	status = grant_oplock(posixfs_object, &posixfs_ads->base,
 			state);
 	X_ASSERT(NT_STATUS_IS_OK(status));
-	reply_requ_create(state, posixfs_object, &posixfs_ads->base, FILE_WAS_CREATED);
+	reply_requ_create(state, posixfs_object, &posixfs_ads->base, x_smb2_create_action_t::WAS_CREATED);
 	posixfs_open = posixfs_open_create(&status, smbd_requ->smbd_tcon,
 			posixfs_object, &posixfs_ads->base,
 			state);
@@ -2848,7 +2849,8 @@ static NTSTATUS open_object_exist_ads(
 	}
 
 	reply_requ_create(*state, posixfs_object, &posixfs_ads->base,
-			overwrite ? FILE_WAS_OVERWRITTEN : FILE_WAS_OPENED);
+			overwrite ? x_smb2_create_action_t::WAS_OVERWRITTEN
+			: x_smb2_create_action_t::WAS_OPENED);
 	posixfs_open = posixfs_open_create(&status, smbd_requ->smbd_tcon,
 			posixfs_object, &posixfs_ads->base,
 			*state);
@@ -3063,7 +3065,7 @@ static NTSTATUS posixfs_create_open(
 		x_smbd_requ_t *smbd_requ,
 		std::unique_ptr<x_smb2_state_create_t> &state)
 {
-	if (state->in_create_disposition == FILE_CREATE) {
+	if (state->in_create_disposition == x_smb2_create_disposition_t::CREATE) {
 		CHECK_OBJECT_LEASE(state->smbd_lease, posixfs_object);
 
 		if (!posixfs_object->exists()) {
@@ -3095,7 +3097,7 @@ static NTSTATUS posixfs_create_open(
 			}
 		}
 
-	} else if (state->in_create_disposition == FILE_OPEN) {
+	} else if (state->in_create_disposition == x_smb2_create_disposition_t::OPEN) {
 		if (state->in_timestamp != 0) {
 			X_TODO; /* TODO snapshot */
 			return NT_STATUS_OBJECT_NAME_NOT_FOUND;
@@ -3147,7 +3149,7 @@ static NTSTATUS posixfs_create_open(
 			}
 		}
 
-	} else if (state->in_create_disposition == FILE_OPEN_IF) {
+	} else if (state->in_create_disposition == x_smb2_create_disposition_t::OPEN_IF) {
 		if (state->in_timestamp != 0) {
 			/* TODO snapshot */
 			return NT_STATUS_OBJECT_NAME_NOT_FOUND;
@@ -3205,7 +3207,7 @@ static NTSTATUS posixfs_create_open(
 			}
 		}
 
-	} else if (state->in_create_disposition == FILE_OVERWRITE) {
+	} else if (state->in_create_disposition == x_smb2_create_disposition_t::OVERWRITE) {
 		if (!posixfs_object->exists()) {
 			CHECK_OBJECT_LEASE(state->smbd_lease, posixfs_object);
 
@@ -3243,8 +3245,8 @@ static NTSTATUS posixfs_create_open(
 			}
 		}
 	
-	} else if (state->in_create_disposition == FILE_OVERWRITE_IF ||
-			state->in_create_disposition == FILE_SUPERSEDE) {
+	} else if (state->in_create_disposition == x_smb2_create_disposition_t::OVERWRITE_IF ||
+			state->in_create_disposition == x_smb2_create_disposition_t::SUPERSEDE) {
 		/* TODO
 		 * Currently we're using FILE_SUPERSEDE as the same as
 		 * FILE_OVERWRITE_IF but they really are
@@ -4575,17 +4577,17 @@ static NTSTATUS getinfo_fs(x_smbd_requ_t *smbd_requ,
 		int err = fstatvfs(posixfs_object->fd, &fsstat);
 		assert(err == 0);
 
-		uint32_t fs_cap = FILE_CASE_SENSITIVE_SEARCH | FILE_CASE_PRESERVED_NAMES;
+		uint32_t fs_cap = X_SMB2_FS_ATTRIBUTE_FILE_CASE_SENSITIVE_SEARCH | X_SMB2_FS_ATTRIBUTE_FILE_CASE_PRESERVED_NAMES;
 		if (fsstat.f_flag & ST_RDONLY) {
-			fs_cap |= FILE_READ_ONLY_VOLUME;
+			fs_cap |= X_SMB2_FS_ATTRIBUTE_FILE_READ_ONLY_VOLUME;
 		}
 
-		fs_cap |= FILE_VOLUME_QUOTAS;
-		fs_cap |= FILE_SUPPORTS_SPARSE_FILES;
-		fs_cap |= (FILE_SUPPORTS_REPARSE_POINTS | FILE_SUPPORTS_SPARSE_FILES);
-		fs_cap |= FILE_NAMED_STREAMS;
-		fs_cap |= FILE_PERSISTENT_ACLS;;
-		fs_cap |= FILE_SUPPORTS_OBJECT_IDS | FILE_UNICODE_ON_DISK;
+		fs_cap |= X_SMB2_FS_ATTRIBUTE_FILE_VOLUME_QUOTAS;
+		fs_cap |= X_SMB2_FS_ATTRIBUTE_FILE_SUPPORTS_SPARSE_FILES;
+		fs_cap |= (X_SMB2_FS_ATTRIBUTE_FILE_SUPPORTS_REPARSE_POINTS | X_SMB2_FS_ATTRIBUTE_FILE_SUPPORTS_SPARSE_FILES);
+		fs_cap |= X_SMB2_FS_ATTRIBUTE_FILE_NAMED_STREAMS;
+		fs_cap |= X_SMB2_FS_ATTRIBUTE_FILE_PERSISTENT_ACLS;;
+		fs_cap |= X_SMB2_FS_ATTRIBUTE_FILE_SUPPORTS_OBJECT_IDS | X_SMB2_FS_ATTRIBUTE_FILE_UNICODE_ON_DISK;
 		// fs_cap |= smbshare->fake_fs_caps;
 
 		uint32_t output_buffer_length = state.in_output_buffer_length & ~1;
@@ -4802,7 +4804,7 @@ NTSTATUS posixfs_object_op_ioctl(
 {
 	posixfs_object_t *posixfs_object = posixfs_object_from_base_t::container(smbd_object);
 	switch (state->ctl_code) {
-	case FSCTL_CREATE_OR_GET_OBJECT_ID:
+	case X_SMB2_FSCTL_CREATE_OR_GET_OBJECT_ID:
 		if (state->in_max_output_length < sizeof(x_smb2_file_object_id_buffer_t)) {
 			return NT_STATUS_BUFFER_TOO_SMALL;
 		}
@@ -5272,9 +5274,9 @@ NTSTATUS x_smbd_posixfs_create_open(x_smbd_open_t **psmbd_open,
 		return status;
 	}
 
-	if (state->out_create_action == FILE_WAS_CREATED) {
+	if (state->out_create_action == x_smb2_create_action_t::WAS_CREATED) {
 		changes.push_back(x_smb2_change_t{NOTIFY_ACTION_ADDED, 
-				uint16_t((state->in_create_options & FILE_DIRECTORY_FILE) ? FILE_NOTIFY_CHANGE_DIR_NAME : FILE_NOTIFY_CHANGE_FILE_NAME),
+				uint16_t((state->in_create_options & X_SMB2_CREATE_OPTION_DIRECTORY_FILE) ? FILE_NOTIFY_CHANGE_DIR_NAME : FILE_NOTIFY_CHANGE_FILE_NAME),
 				posixfs_open->base.parent_lease_key,
 				posixfs_object->base.path,
 				{}});

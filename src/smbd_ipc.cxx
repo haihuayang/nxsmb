@@ -475,7 +475,7 @@ static NTSTATUS ipc_object_op_ioctl(
 	x_smbd_ipc_object_t *ipc_object = from_smbd_object(smbd_object);
 	named_pipe_t *named_pipe = from_smbd_open(smbd_requ->smbd_open);
 	switch (state->ctl_code) {
-	case FSCTL_PIPE_TRANSCEIVE:
+	case X_SMB2_FSCTL_PIPE_TRANSCEIVE:
 		named_pipe_write(ipc_object, named_pipe,
 				smbd_requ->smbd_sess,
 				state->in_buf->data + state->in_buf_offset,
@@ -612,7 +612,7 @@ static NTSTATUS ipc_create_open(x_smbd_open_t **psmbd_open,
 	state->out_info.out_file_attributes = X_SMB2_FILE_ATTRIBUTE_NORMAL;
 	state->out_oplock_level = 0;
 	state->out_create_flags = 0;
-	state->out_create_action = FILE_WAS_OPENED;
+	state->out_create_action = x_smb2_create_action_t::WAS_OPENED;
 	state->contexts = 0;
 
 	// x_smbd_open_init(&named_pipe->base, &ipc_object->base, smbd_requ->smbd_tcon,

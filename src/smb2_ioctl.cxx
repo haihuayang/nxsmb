@@ -540,10 +540,10 @@ static NTSTATUS x_smbd_open_ioctl(x_smbd_conn_t *smbd_conn,
 	 * FSCTL_SRV_COPYCHUNK_WRITE is issued when a handle only has
 	 * FILE_WRITE_DATA access.
 	 */
-	case FSCTL_SRV_COPYCHUNK_WRITE: /* FALL THROUGH */
-	case FSCTL_SRV_COPYCHUNK:
+	case X_SMB2_FSCTL_SRV_COPYCHUNK_WRITE: /* FALL THROUGH */
+	case X_SMB2_FSCTL_SRV_COPYCHUNK:
 		return x_smb2_ioctl_copychunk(smbd_conn, smbd_requ, state);
-	case FSCTL_SRV_REQUEST_RESUME_KEY:
+	case X_SMB2_FSCTL_SRV_REQUEST_RESUME_KEY:
 		return x_smb2_ioctl_request_resume_key(smbd_requ, *state);
 	default:
 		return x_smbd_open_op_ioctl(smbd_requ->smbd_open,
@@ -581,22 +581,22 @@ NTSTATUS x_smb2_process_ioctl(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ
 
 		status = x_smbd_open_ioctl(smbd_conn, smbd_requ, state);
 		break;
-	case FSCTL_DFS_GET_REFERRALS:
+	case X_SMB2_FSCTL_DFS_GET_REFERRALS:
 		status = x_smb2_fsctl_dfs_get_referrals(smbd_conn, *state);
 		break;
-	case FSCTL_DFS_GET_REFERRALS_EX:
+	case X_SMB2_FSCTL_DFS_GET_REFERRALS_EX:
 		status = x_smb2_fsctl_dfs_get_referrals_ex(smbd_conn, *state);
 		break;
-	case FSCTL_PIPE_WAIT:
+	case X_SMB2_FSCTL_PIPE_WAIT:
 		status = x_smb2_fsctl_pipe_wait(smbd_conn, *state);
 		break;
-	case FSCTL_VALIDATE_NEGOTIATE_INFO_224:
+	case X_SMB2_FSCTL_VALIDATE_NEGOTIATE_INFO_224:
 		status = x_smb2_fsctl_validate_negotiate_info_224(smbd_conn, *state);
 		break;
-	case FSCTL_VALIDATE_NEGOTIATE_INFO:
+	case X_SMB2_FSCTL_VALIDATE_NEGOTIATE_INFO:
 		status = x_smb2_fsctl_validate_negotiate_info(smbd_conn, *state);
 		break;
-	case FSCTL_QUERY_NETWORK_INTERFACE_INFO:
+	case X_SMB2_FSCTL_QUERY_NETWORK_INTERFACE_INFO:
 		status = x_smb2_fsctl_query_network_interface_info(smbd_conn,
 				smbd_requ->smbd_tcon, *state);
 		break;

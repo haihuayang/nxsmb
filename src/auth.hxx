@@ -21,7 +21,6 @@
 #include "include/librpc/samr.hxx"
 #include <gssapi.h>
 extern "C" {
-#include "samba/libcli/smb/smb_constants.h"
 #include "samba/libcli/util/ntstatus.h"
 #include "samba/source3/include/ntioctl.h"
 }

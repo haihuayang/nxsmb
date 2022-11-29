@@ -205,7 +205,7 @@ static NTSTATUS copychunk_check_access(uint32_t fsctl,
 	 * - The Open.GrantedAccess of the destination file does not include
 	 *   FILE_READ_DATA, and the CtlCode is FSCTL_SRV_COPYCHUNK.
 	 */
-	if (fsctl == FSCTL_SRV_COPYCHUNK && !dst_open->check_access(idl::SEC_FILE_READ_DATA)) {
+	if (fsctl == X_SMB2_FSCTL_SRV_COPYCHUNK && !dst_open->check_access(idl::SEC_FILE_READ_DATA)) {
 		X_LOG_NOTICE("copy chunk dst not readable");
 		return NT_STATUS_ACCESS_DENIED;
 	}

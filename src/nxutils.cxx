@@ -2,7 +2,6 @@
 #include "include/bits.hxx"
 #include "samba/include/config.h"
 extern "C" {
-#include "samba/libcli/smb/smb_constants.h"
 #include "samba/libcli/util/ntstatus.h"
 }
 

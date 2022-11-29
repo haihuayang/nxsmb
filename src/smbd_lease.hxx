@@ -6,7 +6,6 @@
 #error "Must be c++"
 #endif
 
-#include "samba/include/config.h"
 #include "include/librpc/misc.hxx"
 #include "include/list.hxx"
 #include "smb2.hxx"

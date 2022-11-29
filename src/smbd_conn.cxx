@@ -765,6 +765,7 @@ static int x_smbd_conn_process_smb2(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smb
 	return 0;
 }
 
+#define SMBnegprot    0x72   /* negotiate protocol */
 static int x_smbd_conn_process_smb(x_smbd_conn_t *smbd_conn, x_buf_t *buf, uint32_t msgsize)
 {
 	uint32_t offset = 0;
@@ -806,6 +807,7 @@ static int x_smbd_conn_process_smb(x_smbd_conn_t *smbd_conn, x_buf_t *buf, uint3
 	}
 }
 
+#define NBSSmessage     0x00   /* session message */
 static int x_smbd_conn_process_nbt(x_smbd_conn_t *smbd_conn)
 {
 	int err;

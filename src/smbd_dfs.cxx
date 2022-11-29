@@ -686,20 +686,21 @@ static NTSTATUS dfs_root_create_open(dfs_share_t &dfs_share,
 					smbd_requ, state, changes);
 		} else {
 			X_ASSERT(smbd_object->type == x_smbd_object_t::type_not_exist);
-			if (state->in_create_disposition != FILE_OPEN_IF && state->in_create_disposition != FILE_CREATE) {
+			if (state->in_create_disposition != x_smb2_create_disposition_t::OPEN_IF
+					&& state->in_create_disposition != x_smb2_create_disposition_t::CREATE) {
 				return NT_STATUS_OBJECT_NAME_NOT_FOUND;
-			} else if (!(state->in_create_options & FILE_DIRECTORY_FILE)) {
+			} else if (!(state->in_create_options & X_SMB2_CREATE_OPTION_DIRECTORY_FILE)) {
 				return NT_STATUS_ACCESS_DENIED;
 			} else {
 				// TODO create new tld
 				// not support SecD
 				create_new_tld(dfs_share, smbd_requ, smbd_object);
-				state->in_create_disposition = FILE_OPEN_IF;
+				state->in_create_disposition = x_smb2_create_disposition_t::OPEN_IF;
 				NTSTATUS status = x_smbd_posixfs_create_open(psmbd_open,
 						smbd_requ,
 						state, changes);
 				if (NT_STATUS_IS_OK(status)) {
-					state->out_create_action = FILE_WAS_CREATED;
+					state->out_create_action = x_smb2_create_action_t::WAS_CREATED;
 				}
 				changes.push_back(x_smb2_change_t{NOTIFY_ACTION_ADDED, 
 						FILE_NOTIFY_CHANGE_DIR_NAME,
@@ -724,7 +725,7 @@ static NTSTATUS dfs_root_create_open(dfs_share_t &dfs_share,
 					state, changes);
 		} else {
 			X_ASSERT(smbd_object->type == x_smbd_object_t::type_not_exist);
-			if ((state->in_create_options & FILE_DIRECTORY_FILE)) {
+			if ((state->in_create_options & X_SMB2_CREATE_OPTION_DIRECTORY_FILE)) {
 				return NT_STATUS_ACCESS_DENIED;
 			}
 
@@ -819,16 +820,16 @@ static NTSTATUS dfs_volume_create_open(x_smbd_open_t **psmbd_open,
 	x_smbd_object_t *smbd_object = state->smbd_object;
 	if (smbd_object->priv_data != dfs_object_type_volume_normal) {
 		/* we do not allow create/delete top level object */
-		if (state->in_create_disposition == FILE_CREATE ||
-				state->in_create_disposition == FILE_OVERWRITE ||
-				state->in_create_disposition == FILE_OVERWRITE_IF ||
-				state->in_create_disposition == FILE_SUPERSEDE) {
+		if (state->in_create_disposition == x_smb2_create_disposition_t::CREATE ||
+				state->in_create_disposition == x_smb2_create_disposition_t::OVERWRITE ||
+				state->in_create_disposition == x_smb2_create_disposition_t::OVERWRITE_IF ||
+				state->in_create_disposition == x_smb2_create_disposition_t::SUPERSEDE) {
 			return NT_STATUS_ACCESS_DENIED;
 		}
 		if (state->in_desired_access & idl::SEC_STD_DELETE) {
 			return NT_STATUS_ACCESS_DENIED;
 		}
-		state->in_create_disposition = FILE_OPEN;
+		state->in_create_disposition = x_smb2_create_disposition_t::OPEN;
 	}
 
 	std::lock_guard lock(smbd_object->mutex);

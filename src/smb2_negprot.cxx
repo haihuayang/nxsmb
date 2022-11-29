@@ -124,6 +124,8 @@ static NTSTATUS x_smbd_conn_reply_negprot(x_smbd_conn_t *smbd_conn, x_smbd_requ_
 	return NT_STATUS_OK;
 }
 
+#define HDR_WCT 32
+#define HDR_VWV 33
 int x_smbd_conn_process_smb1negprot(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 {
 	const uint8_t *in_buf = smbd_requ->in_buf->data;

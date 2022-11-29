@@ -28,7 +28,6 @@
 #include "include/librpc/security.hxx"
 #include "include/librpc/samr.hxx"
 extern "C" {
-#include "samba/libcli/smb/smb_constants.h"
 #include "samba/libcli/util/ntstatus.h"
 #include "samba/source3/include/ntioctl.h"
 }
@@ -100,7 +99,7 @@ struct x_smb2_state_create_t
 	uint32_t in_desired_access;
 	uint32_t in_file_attributes;
 	uint32_t in_share_access;
-	uint32_t in_create_disposition;
+	x_smb2_create_disposition_t in_create_disposition;
 	uint32_t in_create_options;
 	std::shared_ptr<idl::security_descriptor> in_security_descriptor;
 
@@ -116,7 +115,7 @@ struct x_smb2_state_create_t
 	uint8_t out_create_flags;
 	bool base_created = false;
 	uint32_t open_attempt = 0;
-	uint32_t out_create_action;
+	x_smb2_create_action_t out_create_action;
 	uint32_t out_maximal_access{0};
 	uint8_t out_qfid_info[32];
 	x_smb2_create_close_info_t out_info;

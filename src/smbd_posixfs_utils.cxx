@@ -7,7 +7,6 @@
 #include <sys/types.h>
 #include <attr/xattr.h>
 extern "C" {
-#include "samba/libcli/smb/smb_constants.h"
 }
 
 #ifdef NXSMBD_MINERVA

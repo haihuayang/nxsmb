@@ -375,7 +375,7 @@ static NTSTATUS decode_in_create(x_smb2_state_create_t &state,
 	state.in_desired_access       = X_LE2H32(in_create->desired_access);
 	state.in_file_attributes      = X_LE2H32(in_create->file_attributes);
 	state.in_share_access         = X_LE2H32(in_create->share_access);
-	state.in_create_disposition   = X_LE2H32(in_create->create_disposition);
+	state.in_create_disposition   = x_smb2_create_disposition_t(X_LE2H32(in_create->create_disposition));
 	state.in_create_options       = X_LE2H32(in_create->create_options);
 
 	/* TODO check_path_syntax_internal() */
@@ -437,7 +437,7 @@ static uint32_t encode_out_create(const x_smb2_state_create_t &state,
 	out_create->struct_size = X_H2LE16(sizeof(x_smb2_out_create_t) + 1);
 	out_create->oplock_level = state.out_oplock_level;
 	out_create->create_flags = state.out_create_flags;
-	out_create->create_action = X_H2LE32(state.out_create_action);
+	out_create->create_action = X_H2LE32(uint32_t(state.out_create_action));
 	out_create->create_ts = X_H2LE64(state.out_info.out_create_ts.val);
 	out_create->last_access_ts = X_H2LE64(state.out_info.out_last_access_ts.val);
 	out_create->last_write_ts = X_H2LE64(state.out_info.out_last_write_ts.val);
@@ -524,9 +524,9 @@ NTSTATUS x_smb2_process_create(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_req
 		RETURN_OP_STATUS(smbd_requ, NT_STATUS_BAD_IMPERSONATION_LEVEL);
 	}
 
-	if (state->in_create_options & (FILE_CREATE_TREE_CONNECTION
-				| FILE_OPEN_BY_FILE_ID
-				| FILE_RESERVER_OPFILTER)) {
+	if (state->in_create_options & (X_SMB2_CREATE_OPTION_CREATE_TREE_CONNECTION
+				| X_SMB2_CREATE_OPTION_OPEN_BY_FILE_ID
+				| X_SMB2_CREATE_OPTION_RESERVER_OPFILTER)) {
 		RETURN_OP_STATUS(smbd_requ, NT_STATUS_NOT_SUPPORTED);
 	}
 
@@ -534,11 +534,14 @@ NTSTATUS x_smb2_process_create(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_req
 		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
 
-	if ((state->in_create_options & (FILE_DIRECTORY_FILE | FILE_NON_DIRECTORY_FILE)) == (FILE_DIRECTORY_FILE | FILE_NON_DIRECTORY_FILE)) {
+	if ((state->in_create_options & (X_SMB2_CREATE_OPTION_DIRECTORY_FILE
+					| X_SMB2_CREATE_OPTION_NON_DIRECTORY_FILE))
+			== (X_SMB2_CREATE_OPTION_DIRECTORY_FILE
+				| X_SMB2_CREATE_OPTION_NON_DIRECTORY_FILE)) {
 		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
 
-	if ((state->in_create_options & FILE_DIRECTORY_FILE) &&
+	if ((state->in_create_options & X_SMB2_CREATE_OPTION_DIRECTORY_FILE) &&
 			(state->in_ads_name.size() || state->is_dollar_data)) {
 		RETURN_OP_STATUS(smbd_requ, NT_STATUS_NOT_A_DIRECTORY);
 	}
@@ -564,7 +567,7 @@ NTSTATUS x_smb2_process_create(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_req
 	state->in_desired_access = se_file_map_generic(orig_access);
 	X_LOG_DBG("map access 0x%x to 0x%x", orig_access, state->in_desired_access);
 
-	if ((state->in_create_options & FILE_DELETE_ON_CLOSE) &&
+	if ((state->in_create_options & X_SMB2_CREATE_OPTION_DELETE_ON_CLOSE) &&
 			!(state->in_desired_access & idl::SEC_STD_DELETE)) {
 		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
