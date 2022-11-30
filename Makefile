@@ -7,7 +7,6 @@ VERSION := 0.1
 
 include config.mk
 include functions.mk
-include files.mk
 
 TARGET_PROJECT_CFLAGS := -g3 -Wall -DPROJECT=$(PROJECT) -fsanitize=address
 TARGET_CFLAGS = $(TARGET_PROJECT_CFLAGS) -Wstrict-prototypes -MT $@ -MMD -MP -MF $@.d
@@ -20,17 +19,9 @@ ifneq (, $(MINERVA))
 TARGET_CXXFLAGS += -DNXSMBD_MINERVA -Izfs/include
 endif
 
-TARGET_SET_samba_dir := \
-	samba/lib/replace \
-	samba/lib/util \
-	samba/lib/crypto \
-	samba/libcli/util \
-	samba/include
+TARGET_SET_dir := bin lib lib/librpc librpc/idl lib/asn1 src tests
 
-TARGET_SET_dir := bin lib lib/librpc librpc/idl lib/asn1 src tests \
-	$(TARGET_SET_samba_dir)
-
-.PHONY: all target_mkdir target_samba_gen tags
+.PHONY: all target_mkdir target_gen tags
 TARGET_SET_tests := \
 	test-srvsvc \
 	test-timer \
@@ -42,22 +33,16 @@ TARGET_SET_tests := \
 	test-iface \
 	test-idtable \
 
-TARGET_SET_lib := nxsmb samba
+TARGET_SET_lib := nxsmb
 
 TARGET_CFLAGS_EXTRA := \
 	-D__X_DEVELOPER__=1
 
-TARGET_CFLAGS_samba = \
-	-I$(TARGET_DIR_out)/samba \
-	-I$(TARGET_DIR_out)/samba/include \
-	-I$(TARGET_DIR_out) \
+TARGET_CFLAGS_dependent = \
 	$(SAMBA_NSSWITCH_CFLAGS) \
-	-Isamba/source4 \
-	-Isamba \
-	-Isamba/lib/replace \
+	$(TARGET_CFLAGS_heimdal) \
+	-I$(TARGET_DIR_out) \
 	-I. \
-	-Isamba/lib/talloc \
-	-Isamba/source3 \
 
 all: $(TARGET_SET_tests:%=$(TARGET_DIR_out)/tests/%) \
 	$(TARGET_DIR_out)/bin/smbd_nx \
@@ -132,8 +117,8 @@ $(TARGET_DIR_out)/bin/smbd_nx: $(SET_src_smbd_nx:%=$(TARGET_DIR_out)/src/%.o) $(
 $(TARGET_DIR_out)/bin/nxutils: $(SET_src_nxutils:%=$(TARGET_DIR_out)/src/%.o) $(TARGET_SET_lib:%=$(TARGET_DIR_out)/lib%.a)
 	$(CXX) -g $(TARGET_LDFLAGS) -o $@ $^ -lpthread -lresolv -ldl
 
-$(TARGET_DIR_out)/src/%.o: src/%.cxx | target_mkdir target_idl target_samba_gen
-	$(CXX) -c $(TARGET_CXXFLAGS) $(TARGET_CFLAGS_EXTRA) $(TARGET_CFLAGS_samba) $(TARGET_CFLAGS_heimdal) -o $@ $<
+$(TARGET_DIR_out)/src/%.o: src/%.cxx | target_mkdir target_gen
+	$(CXX) -c $(TARGET_CXXFLAGS) $(TARGET_CFLAGS_EXTRA) $(TARGET_CFLAGS_dependent) -o $@ $<
 
 $(TARGET_SET_tests:%=$(TARGET_DIR_out)/tests/%) : %: %.o $(TARGET_SET_lib:%=$(TARGET_DIR_out)/lib%.a)
 	$(CXX) -g $(TARGET_LDFLAGS) -o $@ $^ -lpthread -lresolv -ldl
@@ -142,41 +127,32 @@ TARGET_SET_asn1 := spnego gssapi
 
 ASN1_OPT_spnego := --sequence=MechTypeList
 
-
 $(foreach i,$(TARGET_SET_asn1),$(eval $(call asn1_compile_wrap,$(TARGET_DIR_out),lib/asn1,$(i))))
 
-unused_TARGET_SRC_libsamba := \
-		lib/util/genrand \
-		lib/util/time \
-		lib/util/time_basic \
-		lib/util/blocking \
-		lib/util/sys_rw_data \
-		lib/util/sys_rw \
-		lib/util/iov_buf \
-		lib/replace/replace \
 
+TARGET_SET_idl := \
+	misc \
+	security \
+	lsa \
+	samr \
+	netlogon \
+	krb5pac \
+	ntlmssp \
+	dcerpc \
+	svcctl \
+	srvsvc \
+	wkssvc \
+	dssetup \
+	xattr \
 
-TARGET_GEN_samba := \
+TARGET_GEN_nxsmb := \
 	$(TARGET_SET_asn1:%=$(TARGET_DIR_out)/lib/asn1/%_asn1.h) \
 	$(TARGET_SET_asn1:%=$(TARGET_DIR_out)/lib/asn1/%_asn1-priv.h) \
 	$(TARGET_SET_idl:%=$(TARGET_DIR_out)/librpc/idl/%.idl.hxx) \
-	$(TARGET_DIR_out)/samba/include/config.h \
 
 
-$(TARGET_DIR_out)/libsamba.a: $(TARGET_SRC_libsamba:%=$(TARGET_DIR_out)/samba/%.o) $(TARGET_GEN_libsamba:%=$(TARGET_DIR_out)/samba/%.o)
-	ar rcs $@ $^
-
-$(TARGET_DIR_out)/samba/lib/%.o: samba/lib/%.c | target_samba_gen
-	$(CC) -c $(TARGET_CFLAGS) $(TARGET_CFLAGS_EXTRA) $(TARGET_CFLAGS_samba) \
-		-DBINDIR=\"/usr/bin\" -DSBINDIR=\"/usr/sbin\" \
-		-DLIBDIR=\"/usr/lib\" -DLIBEXECDIR=\"/usr/libexec\" \
-		-o $@ $<
-
-$(TARGET_GEN_libsamba:%=$(TARGET_DIR_out)/samba/%.o): %.o: %.c | target_samba_gen
-	$(CC) -c $(TARGET_CFLAGS) $(TARGET_CFLAGS_EXTRA) $(TARGET_CFLAGS_heimdal) $(TARGET_CFLAGS_samba)  -o $@ $<
-
-$(TARGET_SET_tests:%=$(TARGET_DIR_out)/tests/%.o) : $(TARGET_DIR_out)/tests/%.o: tests/%.cxx | target_mkdir target_idl
-	$(CXX) -c $(TARGET_CXXFLAGS) $(TARGET_CFLAGS_EXTRA) $(TARGET_CFLAGS_heimdal) $(TARGET_CFLAGS_samba) -o $@ $<
+$(TARGET_SET_tests:%=$(TARGET_DIR_out)/tests/%.o) : $(TARGET_DIR_out)/tests/%.o: tests/%.cxx | target_mkdir target_gen
+	$(CXX) -c $(TARGET_CXXFLAGS) $(TARGET_CFLAGS_EXTRA) $(TARGET_CFLAGS_dependent) -o $@ $<
 
 
 TARGET_SRC_libnxsmb := \
@@ -207,30 +183,23 @@ TARGET_SRC_libnxsmb := \
 		lib/werror \
 
 
-
-TARGET_SET_m_idl :=
-#misc security lsa samr netlogon krb5pac ntlmssp dcerpc srvsvc
-
 $(TARGET_DIR_out)/libnxsmb.a: \
 	$(TARGET_SRC_libnxsmb:%=$(TARGET_DIR_out)/%.o) \
 	$(TARGET_SET_idl:%=$(TARGET_DIR_out)/librpc/idl/%.idl.ndr.o) \
 	$(TARGET_SET_asn1:%=$(TARGET_DIR_out)/lib/asn1/%_asn1.o)
 	ar rcs $@ $^
 
-$(TARGET_SRC_libnxsmb:%=$(TARGET_DIR_out)/%.o): $(TARGET_DIR_out)/lib/%.o: lib/%.cxx | target_idl target_samba_gen
-	$(CXX) -c $(TARGET_CXXFLAGS) $(TARGET_CFLAGS_EXTRA) $(TARGET_CFLAGS_heimdal) $(TARGET_CFLAGS_samba) -o $@ $<
+$(TARGET_SRC_libnxsmb:%=$(TARGET_DIR_out)/%.o): $(TARGET_DIR_out)/lib/%.o: lib/%.cxx | target_gen
+	$(CXX) -c $(TARGET_CXXFLAGS) $(TARGET_CFLAGS_EXTRA) $(TARGET_CFLAGS_dependent) -o $@ $<
 
 
 
 $(TARGET_SET_asn1:%=$(TARGET_DIR_out)/lib/asn1/%_asn1.o): $(TARGET_DIR_out)/lib/asn1/%.o: $(TARGET_DIR_out)/lib/asn1/%.c
-	$(CC) -c $(TARGET_CFLAGS) $(TARGET_CFLAGS_EXTRA) $(TARGET_CFLAGS_heimdal) $(TARGET_CFLAGS_samba) -Iinclude/dummy -o $@ $<
+	$(CC) -c $(TARGET_CFLAGS) $(TARGET_CFLAGS_EXTRA) $(TARGET_CFLAGS_dependent) -Iinclude/dummy -o $@ $<
 
-
-#$(TARGET_SET_m_idl:%=$(TARGET_DIR_out)/librpc/idl/%.idl.ndr.o) : $(TARGET_DIR_out)/librpc/idl/%.idl.ndr.o: idl-gen/librpc/idl/%.idl.ndr.cxx
-#	$(CXX) -c $(TARGET_CXXFLAGS) $(TARGET_CFLAGS_EXTRA) -o $@ $<
 
 $(TARGET_SET_idl:%=$(TARGET_DIR_out)/librpc/idl/%.idl.ndr.o) : $(TARGET_DIR_out)/librpc/idl/%.idl.ndr.o: $(TARGET_DIR_out)/librpc/idl/%.idl.ndr.cxx
-	$(CXX) -c $(TARGET_CXXFLAGS) $(TARGET_CFLAGS_EXTRA) $(TARGET_CFLAGS_samba) $(TARGET_CFLAGS_heimdal) -o $@ $<
+	$(CXX) -c $(TARGET_CXXFLAGS) $(TARGET_CFLAGS_EXTRA) $(TARGET_CFLAGS_dependent) -o $@ $<
 
 $(TARGET_SET_idl:%=$(TARGET_DIR_out)/librpc/idl/%.idl.ndr.o) : $(TARGET_DIR_out)/librpc/idl/%.idl.ndr.o: $(TARGET_DIR_out)/librpc/idl/%.idl.hxx
 
@@ -251,14 +220,14 @@ $(TARGET_SET_idl:%=$(TARGET_DIR_out)/librpc/idl/%.idl.hxx): scripts/gen-rpc
 $(TARGET_SET_idl:%=$(TARGET_DIR_out)/librpc/idl/%.json): $(TARGET_DIR_out)/librpc/idl/%.json: samba/librpc/idl/%.idl | target_mkdir
 	CPP=cpp CC=gcc /usr/bin/perl samba/pidl/pidl --quiet --dump-json $< > $@
 
-target_samba_gen: $(TARGET_GEN_samba)
+target_gen: $(TARGET_GEN_nxsmb)
 
-$(TARGET_DIR_out)/samba/include/config.h: scripts/generate-config
-	scripts/generate-config > $@
-
-target_idl: $(TARGET_SET_idl:%=$(TARGET_DIR_out)/librpc/idl/%.idl.ndr.cxx) $(TARGET_SET_idl:%=$(TARGET_DIR_out)/librpc/idl/%.idl.hxx)
-
-TARGET_DEPFILES := $(TARGET_SET_tests:%=$(TARGET_DIR_out)/tests/%.o.d) $(TARGET_SRC_libnxsmb:%=$(TARGET_DIR_out)/%.o.d) $(SET_src_smbd_nx:%=$(TARGET_DIR_out)/src/%.o.d) $(TARGET_SRC_libsamba:%=$(TARGET_DIR_out)/samba/%.o.d) $(TARGET_SET_idl:%=$(TARGET_DIR_out)/librpc/idl/%.idl.ndr.o.d)
+TARGET_DEPFILES := \
+	$(TARGET_SET_tests:%=$(TARGET_DIR_out)/tests/%.o.d) \
+	$(TARGET_SRC_libnxsmb:%=$(TARGET_DIR_out)/%.o.d) \
+	$(SET_src_smbd_nx:%=$(TARGET_DIR_out)/src/%.o.d) \
+	$(TARGET_SET_idl:%=$(TARGET_DIR_out)/librpc/idl/%.idl.ndr.o.d) \
+	$(TARGET_SET_asn1:%=$(TARGET_DIR_out)/lib/asn1/%_asn1.o.d) \
 
 include $(wildcard $(TARGET_DEPFILES))
 
