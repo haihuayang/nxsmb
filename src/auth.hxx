@@ -19,9 +19,6 @@
 #include "include/librpc/security.hxx"
 #include "include/librpc/samr.hxx"
 #include <gssapi.h>
-extern "C" {
-#include "samba/source3/include/ntioctl.h"
-}
 
 
 #define GENSEC_FEATURE_SESSION_KEY	0x00000001

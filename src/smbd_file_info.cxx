@@ -1,6 +1,9 @@
 
 #include "smbd_open.hxx"
 
+/* copy from samba/source3/include/ntioctl.h */
+#define IO_REPARSE_TAG_DFS	     0x8000000A
+
 void x_smbd_get_file_info(x_smb2_file_basic_info_t &info,
 		const x_smbd_object_meta_t &object_meta)
 {
