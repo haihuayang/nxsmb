@@ -366,7 +366,8 @@ static int x_smbd_reply_error(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ
 		NTSTATUS status,
 		const char *file, unsigned int line)
 {
-	X_LOG_OP("%ld RESP 0x%lx at %s:%d", smbd_requ->in_smb2_hdr.mid, status.v, file, line);
+	X_LOG_OP("%ld RESP 0x%x at %s:%d", smbd_requ->in_smb2_hdr.mid,
+			NT_STATUS_V(status), file, line);
 
 	x_buf_t *out_buf = x_buf_alloc_out_buf(8);
 
@@ -634,14 +635,14 @@ static bool x_smb2_validate_message_id(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *
 	uint16_t credit_charge = std::max(smbd_requ->in_smb2_hdr.credit_charge, uint16_t(1u));
 
 	if (smbd_conn->credit_granted < credit_charge) {
-		X_LOG_ERR("credit_charge %u > credit_granted %u",
+		X_LOG_ERR("credit_charge %u > credit_granted %lu",
 				credit_charge, smbd_conn->credit_granted);
 		return false;
 	}
 
 	if (!x_check_range<uint64_t>(smbd_requ->in_smb2_hdr.mid, credit_charge, smbd_conn->credit_seq_low,
 				smbd_conn->credit_seq_low + smbd_conn->credit_seq_range)) {
-		X_LOG_ERR("%lu+%u not in the credit range %lu+%u", smbd_requ->in_smb2_hdr.mid, credit_charge,
+		X_LOG_ERR("%lu+%u not in the credit range %lu+%lu", smbd_requ->in_smb2_hdr.mid, credit_charge,
 				smbd_conn->credit_seq_low, smbd_conn->credit_seq_range);
 		return false;
 	}
@@ -858,7 +859,7 @@ static int x_smbd_conn_check_nbt_hdr(x_smbd_conn_t *smbd_conn)
 static bool x_smbd_conn_do_recv(x_smbd_conn_t *smbd_conn, x_fdevents_t &fdevents)
 {
 	ssize_t err;
-	X_LOG_DBG("%s %p x%lx x%llx", task_name, smbd_conn, smbd_conn->ep_id, fdevents);
+	X_LOG_DBG("%s %p x%lx x%lx", task_name, smbd_conn, smbd_conn->ep_id, fdevents);
 	if (smbd_conn->recv_buf == NULL) {
 		X_ASSERT(smbd_conn->recv_len < sizeof(smbd_conn->nbt_hdr));
 		err = read(smbd_conn->fd, (char *)&smbd_conn->nbt_hdr + smbd_conn->recv_len,
@@ -867,7 +868,8 @@ static bool x_smbd_conn_do_recv(x_smbd_conn_t *smbd_conn, x_fdevents_t &fdevents
 			smbd_conn->recv_len = x_convert_assert<uint32_t>(smbd_conn->recv_len + err);
 			err = x_smbd_conn_check_nbt_hdr(smbd_conn);
 			if (err < 0) {
-				X_LOG_ERR("%s %p x%lx x_smbd_conn_check_nbt_hdr %d", task_name, smbd_conn, smbd_conn->ep_id, err);
+				X_LOG_ERR("%s %p x%lx x_smbd_conn_check_nbt_hdr %ld",
+						task_name, smbd_conn, smbd_conn->ep_id, err);
 				return true;
 			} else if (err == 0) {
 				return false;
@@ -911,7 +913,7 @@ static bool x_smbd_conn_do_recv(x_smbd_conn_t *smbd_conn, x_fdevents_t &fdevents
 
 			err = x_smbd_conn_check_nbt_hdr(smbd_conn);
 			if (err < 0) {
-				X_LOG_ERR("%s %p x%lx x_smbd_conn_check_nbt_hdr piggyback %d",
+				X_LOG_ERR("%s %p x%lx x_smbd_conn_check_nbt_hdr piggyback %ld",
 						task_name, smbd_conn, smbd_conn->ep_id, err);
 				return true;
 			} else if (err == 0) {
@@ -935,7 +937,7 @@ static bool x_smbd_conn_do_recv(x_smbd_conn_t *smbd_conn, x_fdevents_t &fdevents
 
 static bool x_smbd_conn_do_send(x_smbd_conn_t *smbd_conn, x_fdevents_t &fdevents)
 {
-	X_LOG_DBG("%s %p x%lx x%llx", task_name, smbd_conn, smbd_conn->ep_id, fdevents);
+	X_LOG_DBG("%s %p x%lx x%lx", task_name, smbd_conn, smbd_conn->ep_id, fdevents);
 	for (;;) {
 		struct iovec iov[8];
 		uint32_t niov = 0;
@@ -996,7 +998,7 @@ static bool x_smbd_conn_do_send(x_smbd_conn_t *smbd_conn, x_fdevents_t &fdevents
 
 static bool x_smbd_conn_do_user(x_smbd_conn_t *smbd_conn, x_fdevents_t &fdevents)
 {
-	X_LOG_DBG("%s %p x%lx x%llx", task_name, smbd_conn, smbd_conn->ep_id, fdevents);
+	X_LOG_DBG("%s %p x%lx x%lx", task_name, smbd_conn, smbd_conn->ep_id, fdevents);
 	std::unique_lock<std::mutex> lock(smbd_conn->mutex);
 	for (;;) {
 		x_fdevt_user_t *fdevt_user = smbd_conn->fdevt_user_list.get_front();
@@ -1065,7 +1067,7 @@ uint16_t x_smbd_conn_curr_dialect()
 static bool x_smbd_conn_upcall_cb_getevents(x_epoll_upcall_t *upcall, x_fdevents_t &fdevents)
 {
 	x_smbd_conn_t *smbd_conn = x_smbd_conn_from_upcall(upcall);
-	X_LOG_DBG("%s %p x%llx", task_name, smbd_conn, fdevents);
+	X_LOG_DBG("%s %p x%lx", task_name, smbd_conn, fdevents);
 
 	g_smbd_conn_curr = x_smbd_ref_inc(smbd_conn);
 	bool ret = x_smbd_conn_handle_events(smbd_conn, fdevents);
@@ -1148,7 +1150,7 @@ static bool x_smbd_srv_do_recv(x_smbd_srv_t *smbd_srv, x_fdevents_t &fdevents)
 
 static bool x_smbd_srv_do_user(x_smbd_srv_t *smbd_srv, x_fdevents_t &fdevents)
 {
-	X_LOG_DBG("%s %p x%lx x%llx", task_name, smbd_srv, smbd_srv->ep_id, fdevents);
+	X_LOG_DBG("%s %p x%lx x%lx", task_name, smbd_srv, smbd_srv->ep_id, fdevents);
 	std::unique_lock<std::mutex> lock(smbd_srv->mutex);
 	for (;;) {
 		x_fdevt_user_t *fdevt_user = smbd_srv->fdevt_user_list.get_front();
@@ -1167,7 +1169,7 @@ static bool x_smbd_srv_do_user(x_smbd_srv_t *smbd_srv, x_fdevents_t &fdevents)
 static bool x_smbd_srv_upcall_cb_getevents(x_epoll_upcall_t *upcall, x_fdevents_t &fdevents)
 {
 	x_smbd_srv_t *smbd_srv = x_smbd_from_upcall(upcall);
-	X_LOG_DBG("%s %p x%llx", task_name, smbd_srv, fdevents);
+	X_LOG_DBG("%s %p x%lx", task_name, smbd_srv, fdevents);
 	uint32_t events = x_fdevents_processable(fdevents);
 	if (events & FDEVT_USER) {
 		if (x_smbd_srv_do_user(smbd_srv, fdevents)) {
@@ -1232,7 +1234,7 @@ bool x_smbd_conn_post_user(x_smbd_conn_t *smbd_conn, x_fdevt_user_t *fdevt_user,
 		return false;
 	}
 	/* queued to srv's user event queue to clean up the request */
-	X_LOG_WARN("smbd_conn %p is done, queued to srv"); \
+	X_LOG_WARN("smbd_conn %p is done, queued to srv", smbd_conn); \
 	{
 		auto lock = std::lock_guard(g_smbd_srv.mutex);
 		notify = g_smbd_srv.fdevt_user_list.get_front() == nullptr;

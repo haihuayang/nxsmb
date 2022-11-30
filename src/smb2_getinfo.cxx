@@ -100,7 +100,7 @@ NTSTATUS x_smb2_process_getinfo(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_re
 
 	X_LOG_OP("%ld GETINFO 0x%lx:%lx %d:%d", smbd_requ->in_smb2_hdr.mid,
 			state->in_file_id_persistent, state->in_file_id_volatile,
-			state->in_info_class, state->in_info_level);
+			uint8_t(state->in_info_class), uint8_t(state->in_info_level));
 
 	NTSTATUS status = x_smbd_requ_init_open(smbd_requ,
 			state->in_file_id_persistent,

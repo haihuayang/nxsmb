@@ -146,7 +146,7 @@ static bool decode_contexts(x_smb2_state_create_t &state,
 				idl::x_ndr_off_t ret = idl::x_ndr_pull(*sd,
 						data + data_off, data_len, 0);
 				if (ret <= 0) {
-					X_LOG_WARN("failed parsing TAG_SECD, ndr %d", ret);
+					X_LOG_WARN("failed parsing TAG_SECD, ndr %ld", ret);
 					return false;
 				}
 				state.in_security_descriptor = sd;

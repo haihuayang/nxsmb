@@ -297,7 +297,7 @@ static int wbconn_dosend(wbconn_t &wbconn)
 	if (wbconn.requ_off < sizeof(struct winbindd_request)) {
 		err = write(wbconn.fd, (uint8_t *)&requ->header + wbconn.requ_off,
 				sizeof(struct winbindd_request) - wbconn.requ_off);
-		X_LOG_DBG("requ_off=%u %u,%u err=%d errno=%d",
+		X_LOG_DBG("requ_off=%u %u,%u err=%ld errno=%d",
 				wbconn.requ_off, requ->header.cmd,
 				requ->header.length, err, errno);
 		if (err > 0) {
@@ -316,7 +316,7 @@ static int wbconn_dosend(wbconn_t &wbconn)
 	err = write(wbconn.fd, requ->extra.data() +
 			(wbconn.requ_off - sizeof(struct winbindd_request)),
 			requ->extra.size() + requ->header.length - wbconn.requ_off);
-	X_LOG_DBG("requ_off=%u %u,%u err=%d errno=%d",
+	X_LOG_DBG("requ_off=%u %u,%u err=%ld errno=%d",
 			wbconn.requ_off, requ->header.cmd,
 			requ->header.length, err, errno);
 	if (err < 0) {

@@ -1767,7 +1767,7 @@ static void do_break_oplock(posixfs_object_t *posixfs_object,
 	X_ASSERT(break_to == X_SMB2_LEASE_READ || break_to == X_SMB2_OPLOCK_LEVEL_NONE);
 	if (posixfs_open->oplock_break_sent != oplock_break_sent_t::OPLOCK_BREAK_NOT_SENT) {
 		X_LOG_DBG("posixfs_open->oplock_break_sent = %d",
-				posixfs_open->oplock_break_sent);
+				int(posixfs_open->oplock_break_sent));
 		return;
 	}
 
@@ -2370,10 +2370,10 @@ static bool check_ads_share_access(posixfs_object_t *posixfs_object,
 				other_open;
 				other_open = posixfs_ads->base.open_list.next(other_open)) {
 			if (!(other_open->base.share_access & X_SMB2_FILE_SHARE_DELETE)) {
-				X_LOG_NOTICE("ads %s share-access %d violate access 0x%x",
+				X_LOG_NOTICE("ads %s of %s share-access %d violate access 0x%x",
 						posixfs_ads->xattr_name.c_str(),
-						other_open->base.share_access,
 						posixfs_object->unix_path.c_str(),
+						other_open->base.share_access,
 						granted);
 
 				return false;
@@ -3399,7 +3399,8 @@ static NTSTATUS posixfs_object_remove(posixfs_object_t *posixfs_object,
 		if (!NT_STATUS_IS_OK(status)) {
 			changes.resize(orig_changes_size);
 			X_LOG_WARN("fail to unlink %s status=%x",
-					posixfs_object->unix_path.c_str(), status);
+					posixfs_object->unix_path.c_str(),
+					NT_STATUS_V(status));
 			return status;
 		}
 		for (posixfs_ads_t *posixfs_ads = posixfs_object->ads_list.get_front();
@@ -3532,7 +3533,7 @@ static NTSTATUS posixfs_do_read(posixfs_object_t *posixfs_object,
 	state.out_buf = x_buf_alloc(length);
 	ssize_t ret = pread(posixfs_object->fd, state.out_buf->data,
 			length, state.in_offset);
-	X_LOG_DBG("pread %lu at %lu ret %ld", length, state.in_offset, ret);
+	X_LOG_DBG("pread %u at %lu ret %ld", length, state.in_offset, ret);
 	if (ret < 0) {
 		return NT_STATUS_INTERNAL_ERROR;
 	} else if (ret == 0) {
@@ -3724,7 +3725,7 @@ static NTSTATUS posixfs_do_write(posixfs_object_t *posixfs_object,
 	ssize_t ret = pwrite(posixfs_object->fd,
 			state.in_buf->data + state.in_buf_offset,
 			state.in_buf_length, state.in_offset);
-	X_LOG_DBG("pwrite %lu at %lu ret %ld", state.in_buf_length, state.in_offset, ret);
+	X_LOG_DBG("pwrite %u at %lu ret %ld", state.in_buf_length, state.in_offset, ret);
 	if (ret <= 0) {
 		return NT_STATUS_INTERNAL_ERROR;
 	} else {
@@ -4963,7 +4964,7 @@ NTSTATUS posixfs_object_qdir(
 		x_smbd_stream_meta_t stream_meta;
 		if (!process_entry_func(&object_meta, &stream_meta, ppsd,
 					posixfs_object, ent_name, qdir_pos.file_number)) {
-			X_LOG_WARN("qdir_process_entry %s %d,0x%x %d errno=%d",
+			X_LOG_WARN("qdir_process_entry %s %d,0x%lx %d errno=%d",
 					ent_name, qdir_pos.file_number, qdir_pos.filepos,
 					qdir_pos.data_offset, errno);
 			continue;
@@ -5040,7 +5041,7 @@ NTSTATUS posixfs_object_op_notify(
 		return NT_STATUS_DELETE_PENDING;
 	}
 
-	X_LOG_DBG("changes count %d", posixfs_open->notify_changes.size());
+	X_LOG_DBG("changes count %ld", posixfs_open->notify_changes.size());
 	state->out_notify_changes = std::move(posixfs_open->notify_changes);
 	if (!state->out_notify_changes.empty()) {
 		return NT_STATUS_OK;

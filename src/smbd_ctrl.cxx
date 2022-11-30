@@ -90,7 +90,7 @@ static bool x_smbd_ctrl_post_recv(x_smbd_ctrl_conn_t *smbd_ctrl_conn)
 
 static bool x_smbd_ctrl_conn_do_recv(x_smbd_ctrl_conn_t *smbd_ctrl_conn, x_fdevents_t &fdevents)
 {
-	X_LOG_DBG("%s %p x%lx x%llx", task_name, smbd_ctrl_conn, smbd_ctrl_conn->ep_id, fdevents);
+	X_LOG_DBG("%s %p x%lx x%lx", task_name, smbd_ctrl_conn, smbd_ctrl_conn->ep_id, fdevents);
 	ssize_t ret = read(smbd_ctrl_conn->fd,
 			(char *)&smbd_ctrl_conn->recv_buf + smbd_ctrl_conn->recv_len,
 			sizeof(smbd_ctrl_conn->recv_buf) - smbd_ctrl_conn->recv_len - 1);
@@ -115,7 +115,7 @@ static bool x_smbd_ctrl_conn_do_recv(x_smbd_ctrl_conn_t *smbd_ctrl_conn, x_fdeve
 
 static bool x_smbd_ctrl_conn_do_send(x_smbd_ctrl_conn_t *smbd_ctrl_conn, x_fdevents_t &fdevents)
 {
-	X_LOG_DBG("%s %p x%lx x%llx", task_name, smbd_ctrl_conn, smbd_ctrl_conn->ep_id, fdevents);
+	X_LOG_DBG("%s %p x%lx x%lx", task_name, smbd_ctrl_conn, smbd_ctrl_conn->ep_id, fdevents);
 	for (;;) {
 		ssize_t ret = write(smbd_ctrl_conn->fd,
 				smbd_ctrl_conn->output.data() + smbd_ctrl_conn->output_off,
@@ -164,7 +164,7 @@ static bool x_smbd_ctrl_conn_do_send(x_smbd_ctrl_conn_t *smbd_ctrl_conn, x_fdeve
 
 static bool x_smbd_ctrl_conn_do_timer(x_smbd_ctrl_conn_t *smbd_ctrl_conn, x_fdevents_t &fdevents)
 {
-	X_LOG_DBG("%s %p x%llx", task_name, smbd_ctrl_conn, fdevents);
+	X_LOG_DBG("%s %p x%lx", task_name, smbd_ctrl_conn, fdevents);
 	fdevents = x_fdevents_consume(fdevents, FDEVT_TIMER);
 	return false;
 }
@@ -193,7 +193,7 @@ static bool x_smbd_ctrl_conn_handle_events(x_smbd_ctrl_conn_t *smbd_ctrl_conn, x
 static bool x_smbd_ctrl_conn_upcall_cb_getevents(x_epoll_upcall_t *upcall, x_fdevents_t &fdevents)
 {
 	x_smbd_ctrl_conn_t *smbd_ctrl_conn = x_smbd_ctrl_conn_from_upcall(upcall);
-	X_LOG_DBG("%s %p x%llx", task_name, smbd_ctrl_conn, fdevents);
+	X_LOG_DBG("%s %p x%lx", task_name, smbd_ctrl_conn, fdevents);
 
 	bool ret = x_smbd_ctrl_conn_handle_events(smbd_ctrl_conn, fdevents);
 	return ret;

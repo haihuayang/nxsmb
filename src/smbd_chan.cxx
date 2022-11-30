@@ -289,7 +289,7 @@ static inline bool smbd_chan_set_state(x_smbd_chan_t *smbd_chan,
 			std::memory_order_relaxed);
 	if (!ret) {
 		X_LOG_WARN("smbd_chan=%p new_state=%d expected=%d but is %d",
-				new_state, curr_state, old_state);
+				smbd_chan, new_state, curr_state, old_state);
 	}
 	return ret;
 }
@@ -350,7 +350,7 @@ static NTSTATUS smbd_chan_auth_updated(x_smbd_chan_t *smbd_chan, x_smbd_requ_t *
 		bool is_bind,
 		const x_auth_info_t &auth_info)
 {
-	X_LOG_OP("%ld RESP 0x%x", smbd_requ->in_smb2_hdr.mid, status);
+	X_LOG_OP("%ld RESP 0x%x", smbd_requ->in_smb2_hdr.mid, NT_STATUS_V(status));
 
 	if (NT_STATUS_EQUAL(status, NT_STATUS_MORE_PROCESSING_REQUIRED)) {
 		// hold ref for timer, will be dec in timer func

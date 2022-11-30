@@ -80,7 +80,7 @@ enum {
 };
 
 extern unsigned int x_loglevel;
-void x_log(int level, const char *fmt, ...);
+void x_log(int level, const char *fmt, ...) __attribute__((format(printf, 2,3)));
 int x_log_init(unsigned int log_level, const char *log_name);
 
 #define X_LOG_L(level, fmt, ...) do { \
