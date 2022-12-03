@@ -588,20 +588,20 @@ import "srvsvc.idl", "lsa.idl";
 		[in,unique] [string,charset(UTF16)] uint16 *password,
 		[in] wkssvc_joinflags unjoin_flags
 		);
-
+#if HH_ORIG
 	/*****************************/
 	/* Function        0x12      */
 	typedef [bitmap32bit] bitmap {
 		/* TRUE: create the account in the domain */
 		WKSSVC_JOIN_FLAGS_ACCOUNT_CREATE	= 0x00000002
 	} wkssvc_renameflags;
-
+#endif
 	WERROR wkssvc_NetrRenameMachineInDomain(
 		[in,unique] [string,charset(UTF16)] uint16 *server_name,
 		[in,unique] [string,charset(UTF16)] uint16 *NewMachineName,
 		[in,unique] [string,charset(UTF16)] uint16 *Account,
 		[in,unique] [string,charset(UTF16)] uint16 *password,
-		[in] wkssvc_renameflags RenameOptions
+		[in] wkssvc_joinflags RenameOptions
 		);
 
 	/*****************************/
@@ -714,7 +714,7 @@ import "srvsvc.idl", "lsa.idl";
 		[in,unique] [string,charset(UTF16)] uint16 *NewMachineName,
 		[in,unique] [string,charset(UTF16)] uint16 *Account,
 		[in,unique] wkssvc_PasswordBuffer *EncryptedPassword,
-		[in] wkssvc_renameflags RenameOptions
+		[in] wkssvc_joinflags RenameOptions
 		);
 
 	/*****************************/
