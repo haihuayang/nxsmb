@@ -194,8 +194,17 @@ $(TARGET_SRC_libnxsmb:%=$(TARGET_DIR_out)/%.o): $(TARGET_DIR_out)/lib/%.o: lib/%
 
 
 
-$(TARGET_SET_asn1:%=$(TARGET_DIR_out)/lib/asn1/%_asn1.o): $(TARGET_DIR_out)/lib/asn1/%.o: $(TARGET_DIR_out)/lib/asn1/%.c
+$(TARGET_SET_asn1:%=$(TARGET_DIR_out)/lib/asn1/%_asn1.o): $(TARGET_DIR_out)/lib/asn1/%.o: $(TARGET_DIR_out)/lib/asn1/%.c | target_mkdir
 	$(CC) -c $(TARGET_CFLAGS) $(TARGET_CFLAGS_EXTRA) $(TARGET_CFLAGS_dependent) -Iinclude/dummy -o $@ $<
+
+
+$(TARGET_SET_idl:%=$(TARGET_DIR_out)/librpc/idl/%.json): %.json: %.idl.i
+	scripts/idl-parser.py -o $@ $<
+
+$(TARGET_SET_idl:%=$(TARGET_DIR_out)/librpc/idl/%.json): scripts/idl-parser.py
+
+$(TARGET_SET_idl:%=$(TARGET_DIR_out)/librpc/idl/%.idl.i): $(TARGET_DIR_out)/librpc/idl/%.idl.i: lib/librpc/idl/%.idl | target_mkdir
+	$(CC) -E -D__PIDL__ -o $@ -xc $<
 
 
 $(TARGET_SET_idl:%=$(TARGET_DIR_out)/librpc/idl/%.idl.ndr.o) : $(TARGET_DIR_out)/librpc/idl/%.idl.ndr.o: $(TARGET_DIR_out)/librpc/idl/%.idl.ndr.cxx
@@ -217,8 +226,6 @@ include $(wildcard $(TARGET_SET_idl:%=$(TARGET_DIR_out)/librpc/idl/%.d))
 $(TARGET_SET_idl:%=$(TARGET_DIR_out)/librpc/idl/%.idl.ndr.cxx): scripts/gen-rpc
 $(TARGET_SET_idl:%=$(TARGET_DIR_out)/librpc/idl/%.idl.hxx): scripts/gen-rpc
 
-$(TARGET_SET_idl:%=$(TARGET_DIR_out)/librpc/idl/%.json): $(TARGET_DIR_out)/librpc/idl/%.json: samba/librpc/idl/%.idl | target_mkdir
-	CPP=cpp CC=gcc /usr/bin/perl samba/pidl/pidl --quiet --dump-json $< > $@
 
 target_gen: $(TARGET_GEN_nxsmb)
 
