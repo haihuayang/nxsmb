@@ -19,7 +19,7 @@ interface misc
 		uint8  node[6];
 	} GUID;
 
-	typedef [public] struct {
+	typedef [public,noprint] struct {
 		GUID uuid;
 		/* The major version is encoded in the 16 least significant bits, 
 		   the minor in the 16 most significant bits.  
@@ -66,7 +66,7 @@ interface misc
 		REG_RESOURCE_REQUIREMENTS_LIST = 10,
 		REG_QWORD                      = 11
 	} winreg_Type;
-
+#if HH_ORIG
 	typedef [nodiscriminant,public,flag(NDR_LITTLE_ENDIAN)] union {
 		[case(REG_NONE)];
 		[case(REG_SZ)] nstring string;
@@ -100,7 +100,7 @@ interface misc
 		[case(REG_QWORD)] hyper qword;
 		[default,flag(NDR_REMAINING)] DATA_BLOB data;
 	} winreg_Data_GPO;
-
+#endif
 	/* SAM database types */
 	typedef [public,v1_enum] enum {
 		SAM_DATABASE_DOMAIN  = 0, /* Domain users and groups */

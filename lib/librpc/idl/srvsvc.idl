@@ -1173,7 +1173,7 @@ import "misc.idl", "security.idl", "svcctl.idl";
 /**************************/
 /* srvsvc_NetDisk         */
 /**************************/
-	typedef struct {
+	typedef [nopush,nopull] struct {
 		/*
 		 * In theory this should be:
 		 *      [charset(UTF16),string] uint16 annotation[3]

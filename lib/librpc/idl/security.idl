@@ -17,6 +17,7 @@ import "misc.idl";
    just means you need to mark a sid as a "dom_sid2" in the IDL when you
    know it is of the conformant array variety
 */
+#if HH_ORIG
 cpp_quote("#define dom_sid2 dom_sid")
 
 /* same struct as dom_sid but inside a 28 bytes fixed buffer in NDR */
@@ -24,6 +25,7 @@ cpp_quote("#define dom_sid28 dom_sid")
 
 /* same struct as dom_sid but in a variable byte buffer, which is maybe empty in NDR */
 cpp_quote("#define dom_sid0 dom_sid")
+#endif
 
 [
 	/*
@@ -37,14 +39,29 @@ cpp_quote("#define dom_sid0 dom_sid")
 interface security
 {
 
-	typedef bitmap lsa_SystemAccessModeFlags lsa_SystemAccessModeFlags;
+	typedef [bitmap32bit] bitmap {
+		LSA_POLICY_MODE_INTERACTIVE             = 0x00000001,
+		LSA_POLICY_MODE_NETWORK                 = 0x00000002,
+		LSA_POLICY_MODE_BATCH                   = 0x00000004,
+		LSA_POLICY_MODE_SERVICE                 = 0x00000010,
+		LSA_POLICY_MODE_PROXY			= 0x00000020,
+		LSA_POLICY_MODE_DENY_INTERACTIVE        = 0x00000040,
+		LSA_POLICY_MODE_DENY_NETWORK            = 0x00000080,
+		LSA_POLICY_MODE_DENY_BATCH              = 0x00000100,
+		LSA_POLICY_MODE_DENY_SERVICE            = 0x00000200,
+		LSA_POLICY_MODE_REMOTE_INTERACTIVE      = 0x00000400,
+		LSA_POLICY_MODE_DENY_REMOTE_INTERACTIVE = 0x00000800,
+		LSA_POLICY_MODE_ALL			= 0x00000FF7,
+		LSA_POLICY_MODE_ALL_NT4			= 0x00000037
+	} lsa_SystemAccessModeFlags;
 
 	typedef [public,gensize,noprint,nosize,nopull,nopush] struct {
 		uint8  sid_rev_num;             /**< SID revision number */
-		[range(0,15)] int8  num_auths;  /**< Number of sub-authorities */
+		[range(0,15)] uint8  num_auths;  /**< Number of sub-authorities */
 		uint8  id_auth[6];              /**< Identifier Authority */
 		uint32 sub_auths[15];
 	} dom_sid;
+
 	/*
 	  access masks are divided up like this:
                 0xabccdddd
@@ -461,22 +478,6 @@ interface security
 		SEC_PRIV_CREATE_GLOBAL_BIT                = 0x10000000
 	} se_privilege;
 
-	typedef [bitmap32bit] bitmap {
-		LSA_POLICY_MODE_INTERACTIVE             = 0x00000001,
-		LSA_POLICY_MODE_NETWORK                 = 0x00000002,
-		LSA_POLICY_MODE_BATCH                   = 0x00000004,
-		LSA_POLICY_MODE_SERVICE                 = 0x00000010,
-		LSA_POLICY_MODE_PROXY			= 0x00000020,
-		LSA_POLICY_MODE_DENY_INTERACTIVE        = 0x00000040,
-		LSA_POLICY_MODE_DENY_NETWORK            = 0x00000080,
-		LSA_POLICY_MODE_DENY_BATCH              = 0x00000100,
-		LSA_POLICY_MODE_DENY_SERVICE            = 0x00000200,
-		LSA_POLICY_MODE_REMOTE_INTERACTIVE      = 0x00000400,
-		LSA_POLICY_MODE_DENY_REMOTE_INTERACTIVE = 0x00000800,
-		LSA_POLICY_MODE_ALL			= 0x00000FF7,
-		LSA_POLICY_MODE_ALL_NT4			= 0x00000037
-	} lsa_SystemAccessModeFlags;
-
 	typedef [public,bitmap8bit] bitmap {
 		SEC_ACE_FLAG_OBJECT_INHERIT		= 0x01,
 		SEC_ACE_FLAG_CONTAINER_INHERIT		= 0x02,
@@ -533,10 +534,10 @@ interface security
 		[default];
 	} security_ace_object_ctr;
 
-	typedef [public,nopull,gensize,nosize] struct {
+	typedef [public,gensize,nosize] struct {
 		security_ace_type type;  /* SEC_ACE_TYPE_* */
 		security_ace_flags flags; /* SEC_ACE_FLAG_* */
-		[value(ndr_size_security_ace(r,ndr->flags))] uint16 size;
+		[x_size] uint16 size;
 		uint32 access_mask;
 		[switch_is(type)] security_ace_object_ctr object;
 		dom_sid trustee;
@@ -551,7 +552,7 @@ interface security
 
 	typedef [public,gensize,nosize] struct {
 		security_acl_revision revision;
-		[value(ndr_size_security_acl(r,ndr->flags))] uint16 size;
+		[x_size] uint16 size;
 		[range(0,2000)] uint32 num_aces;
 		security_ace aces[num_aces];
 	} security_acl;
@@ -597,8 +598,8 @@ interface security
 		);
 
 	typedef [public] struct {
-		[range(0,0x40000),value(ndr_size_security_descriptor(sd,ndr->flags))] uint32 sd_size;
-		[subcontext(4)] security_descriptor *sd;
+		[range(0,0x40000)] uint32 sd_size;
+		[subcontext(4),subcontext_size(sd_size)] security_descriptor *sd;
 	} sec_desc_buf;
 
 	[nopython] void decode_sec_desc_buf (
@@ -616,7 +617,7 @@ interface security
 	[nopython] void decode_security_token (
 		[in] security_token token
 		);
-
+#if HH_ORIG
 	/* This is not yet sent over the network, but is simply defined in IDL */
 	typedef [public] struct {
 		uid_t uid;
@@ -628,7 +629,7 @@ interface security
 	[nopython] void decode_security_unix_token (
 		[in] security_unix_token unix_token
 		);
-
+#endif
 	/* bits that determine which parts of a security descriptor
 	   are being queried/set */
 	typedef [public,bitmap32bit] bitmap {
@@ -747,4 +748,5 @@ interface security
 		uint32 std_execute;
 		uint32 std_all;
 	} standard_mapping;
+
 }

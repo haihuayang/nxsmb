@@ -10,15 +10,14 @@ import "security.idl", "lsa.idl", "netlogon.idl", "samr.idl";
   uuid("12345778-1234-abcd-0000-00000000"),
   version(0.0),
   pointer_default(unique),
-  helpstring("Active Directory KRB5 PAC"),
-  helper("../librpc/ndr/ndr_krb5pac.h")
+  helpstring("Active Directory KRB5 PAC")
 ]
 interface krb5pac
 {
 	typedef struct {
 		NTTIME logon_time;
-		[value(2*strlen_m(account_name))] uint16 size;
-		[charset(UTF16)] uint8 account_name[size];
+		uint16 size;
+		[subcontext(0),subcontext_size(size),charset(UTF16)] uint16 account_name[];
 	} PAC_LOGON_NAME;
 
 	typedef [public,flag(NDR_PAHEX)] struct {
@@ -132,12 +131,12 @@ interface krb5pac
 		   in such a way that they are backwards compatible with existing
 		   servers. This makes it safe to just use a [default] for
 		   unknown types, which lets us ignore the data */
-		[default]	[subcontext(0)] DATA_BLOB_REM unknown;
+		[default]	DATA_BLOB_REM unknown;
 	} PAC_INFO;
 
-	typedef [public,nopush,nopull] struct {
+	typedef [public] struct {
 		PAC_TYPE type;
-		[value(_ndr_size_PAC_INFO(info, type, 0))] uint32 _ndr_size;
+		uint32 _ndr_size;
 		/*
 		 * We need to have two subcontexts to get the padding right,
 		 * the outer subcontext uses NDR_ROUND(_ndr_size, 8), while
@@ -145,7 +144,7 @@ interface krb5pac
 		 *
 		 * We do that in non-generated push/pull functions.
 		 */
-		[relative,switch_is(type),subcontext(0),subcontext_size(NDR_ROUND(_ndr_size,8)),flag(NDR_ALIGN8)] PAC_INFO *info;
+		[relative,switch_is(type),subcontext(0),subcontext_size(_ndr_size),flag(NDR_ALIGN8)] PAC_INFO *info;
 		[value(0)] uint32 _pad; /* Top half of a 64 bit pointer? */
 	} PAC_BUFFER;
 
@@ -158,7 +157,7 @@ interface krb5pac
 	typedef [public] struct {
 		PAC_TYPE type;
 		uint32 ndr_size;
-		[relative,subcontext(0),subcontext_size(NDR_ROUND(ndr_size,8)),flag(NDR_ALIGN8)] DATA_BLOB_REM *info;
+		[relative,subcontext(0),subcontext_size(ndr_size),flag(NDR_ALIGN8)] DATA_BLOB_REM *info;
 		[value(0)] uint32 _pad; /* Top half of a 64 bit pointer? */
 	} PAC_BUFFER_RAW;
 

@@ -252,6 +252,7 @@ interface dnsp
 	/* this is the format for the dnsProperty attribute in the DNS
 	   partitions in AD */
 	typedef [flag(NDR_NOALIGN),public] struct {
+#if HH_ORIG
 		[value(ndr_size_dnsPropertyData(&data,id,ndr->flags))] uint32 wDataLength;
 		uint32   			namelength;
 		[value(0)] uint32   flag;
@@ -259,6 +260,14 @@ interface dnsp
 		dns_property_id     id;
 		[switch_is(wDataLength?id:DSPROPERTY_ZONE_EMPTY)]     dnsPropertyData data;
 		uint32              name;
+#else
+		[x_relative(s4), switch_is(id)] dnsPropertyData data;
+		uint32   			namelength;
+		[value(0)] uint32   flag;
+		[value(1)] uint32   version;
+		dns_property_id     id;
+		uint32              name;
+#endif
 	} dnsp_DnsProperty;
 
 	/*

@@ -808,7 +808,7 @@ import "misc.idl", "lsa.idl", "security.idl";
 	} samr_UserInfo2;
 
 	/* this is also used in samr and netlogon */
-	typedef [public, flag(NDR_PAHEX)] struct {
+	typedef [public, nopull, nopush, flag(NDR_PAHEX)] struct {
 		uint16 units_per_week;
 		[size_is(1260), length_is(units_per_week/8)] uint8 *bits;
 	} samr_LogonHours;

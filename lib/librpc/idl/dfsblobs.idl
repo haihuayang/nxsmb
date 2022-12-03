@@ -68,7 +68,11 @@ interface dfsblobs
 	} dfs_referral;
 
 	typedef [nodiscriminant] union {
+#if HH_TODO
 		[case(16)] uint8 value[16];
+#else
+		[case(0x22)] uint8 value[16];
+#endif
 		[default];
 	} dfs_padding;
 
@@ -79,7 +83,11 @@ interface dfsblobs
 		uint32 ttl;
 		[switch_is(entry_flags & DFS_FLAG_REFERRAL_DOMAIN_RESP)] dfs_referral referrals;
 		/* this is either 0 or 16 bytes */
+#if HH_TODO
 		[switch_is(size - 18)] dfs_padding service_site_guid;
+#else
+		[switch_is(size)] dfs_padding service_site_guid;
+#endif
 	} dfs_referral_v3;
 
 	typedef [nodiscriminant] union {

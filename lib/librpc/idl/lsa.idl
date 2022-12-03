@@ -17,16 +17,16 @@ import "misc.idl", "security.idl";
 	typedef bitmap security_secinfo security_secinfo;
 	typedef bitmap kerb_EncTypes kerb_EncTypes;
 
-	typedef [public] struct {
+	typedef [public,nopush,nopull] struct {
 		[value(2*strlen_m(string))] uint16 length;
 		[value(2*strlen_m(string))] uint16 size;
-		[charset(UTF16),size_is(size/2),length_is(length/2)] uint16 *string;
+		[charset(UTF16),size_is(size),length_is(length)] uint16 *string;
 	} lsa_String;
 
-	typedef [public] struct {
+	typedef [public,nopush,nopull] struct {
 		[value(2*strlen_m(string))] uint16 length;
 		[value(2*strlen_m_term(string))] uint16 size;
-		[charset(UTF16),size_is(size/2),length_is(length/2)] uint16 *string;
+		[charset(UTF16),size_is(size),length_is(length)] uint16 *string;
 	} lsa_StringLarge;
 
 	typedef [public] struct {
@@ -34,13 +34,13 @@ import "misc.idl", "security.idl";
 		[size_is(count)] lsa_String *names;
 	} lsa_Strings;
 
-	typedef [public] struct {
+	typedef [public,nopush,nopull] struct {
 		[value(strlen_m(string))] uint16 length;
 		[value(strlen_m(string))] uint16 size;
 		[charset(DOS),size_is(size),length_is(length)] uint8 *string;
 	} lsa_AsciiString;
 
-	typedef [public] struct {
+	typedef [public,nopush,nopull] struct {
 		[value(strlen_m(string))] uint16 length;
 		[value(strlen_m_term(string))] uint16 size;
 		[charset(DOS),size_is(size),length_is(length)] uint8 *string;
@@ -49,7 +49,7 @@ import "misc.idl", "security.idl";
 	typedef [public] struct {
 		uint16 length;
 		uint16 size;
-		[size_is(size/2),length_is(length/2)] uint16 *array;
+		[size_is(size),length_is(length)] uint16 *array;
 	} lsa_BinaryString;
 
 	/******************/
@@ -114,14 +114,14 @@ import "misc.idl", "security.idl";
 	/******************/
 	/* Function: 0x06 */
 	typedef struct {
-		uint3264  len; /* ignored */
+		[ x_ignored ] uint3264  len; /* ignored */
 		uint16  impersonation_level;
 		uint8   context_mode;
 		uint8   effective_only;
 	} lsa_QosInfo;
 
 	typedef struct {
-		uint3264 len; /* ignored */
+		[ x_ignored, x_push_value(0x18) ] uint3264 len; /* ignored */
 		uint8 *root_dir;
 		[string,charset(UTF16)] uint16 *object_name;
 		uint32 attributes;
@@ -468,7 +468,7 @@ import "misc.idl", "security.idl";
 	/* Function: 0x0c                                */
 
 	[public] NTSTATUS lsa_CreateTrustedDomain(
-		[in]         policy_handle *policy_handle,
+		[in]         policy_handle *policy_handle_,
 		[in]         lsa_DomainInfo *info,
 		[in]         lsa_TrustedAccessMask access_mask,
 		[out]        policy_handle *trustdom_handle
@@ -951,7 +951,7 @@ import "misc.idl", "security.idl";
 	/* Function:   0x27 */
 	NTSTATUS lsa_QueryTrustedDomainInfoBySid(
 		[in]               policy_handle         *handle,
-		[in,ref]           dom_sid2              *dom_sid,
+		[in,ref]           dom_sid2              *dom_sid_,
 		[in]               lsa_TrustDomInfoEnum  level,
 		[out,switch_is(level),ref] lsa_TrustedDomainInfo **info
         );
@@ -959,7 +959,7 @@ import "misc.idl", "security.idl";
 	/* Function:     0x28 */
 	NTSTATUS lsa_SetTrustedDomainInfo(
 		[in]               policy_handle         *handle,
-		[in]               dom_sid2              *dom_sid,
+		[in]               dom_sid2              *dom_sid_,
 		[in]               lsa_TrustDomInfoEnum  level,
 		[in,switch_is(level)] lsa_TrustedDomainInfo *info
         );
@@ -967,7 +967,7 @@ import "misc.idl", "security.idl";
 	/* Function:      0x29 */
 	NTSTATUS lsa_DeleteTrustedDomain(
 		[in]               policy_handle         *handle,
-		[in]               dom_sid2              *dom_sid
+		[in]               dom_sid2              *dom_sid_
 	);
 
 	/* Function:       0x2a */
@@ -997,8 +997,11 @@ import "misc.idl", "security.idl";
 	/* Function:     0x2d */
 	NTSTATUS lsa_GetUserName(
 		[in,unique] [string,charset(UTF16)] uint16 *system_name,
-		[in,out,ref] lsa_String **account_name,
+		[in,out,ref] lsa_String **account_name
+#ifdef HH_TEMP
+		,
 		[in,out,unique] lsa_String **authority_name
+#endif
 		);
 
 	/**********************/
@@ -1054,7 +1057,7 @@ import "misc.idl", "security.idl";
 
 	/* Function 0x33 */
 	NTSTATUS lsa_CreateTrustedDomainEx(
-		[in]  policy_handle               *policy_handle,
+		[in]  policy_handle               *policy_handle_,
 		[in]  lsa_TrustDomainInfoInfoEx   *info,
 		[in]  lsa_TrustDomainInfoAuthInfo *auth_info,
 		[in]  lsa_TrustedAccessMask access_mask,
@@ -1188,7 +1191,7 @@ import "misc.idl", "security.idl";
 
 	/* Function 0x3b */
 	NTSTATUS lsa_CreateTrustedDomainEx2(
-		[in]  policy_handle               *policy_handle,
+		[in]  policy_handle               *policy_handle_,
 		[in]  lsa_TrustDomainInfoInfoEx   *info,
 		[in]  lsa_TrustDomainInfoAuthInfoInternal *auth_info_internal,
 		[in]  lsa_TrustedAccessMask access_mask,

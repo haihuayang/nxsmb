@@ -14,7 +14,6 @@ import "srvsvc.idl", "lsa.idl";
 ] interface wkssvc
 {
 	typedef [v1_enum] enum srvsvc_PlatformId srvsvc_PlatformId;
-
 #define BOOL uint32
 
 	/******************/

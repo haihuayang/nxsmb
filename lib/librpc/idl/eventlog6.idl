@@ -92,7 +92,7 @@ interface eventlog6
 	} eventlog6_EvtRpcAssertConfigFlags;
 
 	typedef [switch_type(eventlog6_EvtRpcVariantType)] union {
-		[case(EvtRpcVarTypeNull)] int nullVal;
+		[case(EvtRpcVarTypeNull)] int32 nullVal;
 		[case(EvtRpcVarTypeboolean8)] boolean8 boolean8Val;
 		[case(EvtRpcVarTypeUInt32)] uint32 uint32Val;
 		[case(EvtRpcVarTypeUInt64)] hyper uint64Val;

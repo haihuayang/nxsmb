@@ -193,7 +193,7 @@ interface epmapper
 		[case(EPM_PROTOCOL_NULL)] epm_rhs_null null;
 		[default]  [flag(NDR_REMAINING)] DATA_BLOB unknown;
 	} epm_rhs;
-
+#if HH_ORIG
 	typedef struct {
 		epm_protocol protocol;
 		[flag(NDR_REMAINING)] DATA_BLOB lhs_data;
@@ -203,7 +203,17 @@ interface epmapper
 		[subcontext(2)] epm_lhs lhs;
 		[subcontext(2),switch_is(lhs.protocol)] epm_rhs rhs;
 	} epm_floor;
-
+#else
+	typedef struct {
+		[x_length(lhs)] uint16 lhs_len;
+		[x_group_start(lhs)] void unused;
+		epm_protocol protocol;
+		[flag(NDR_REMAINING)] DATA_BLOB lhs_data;
+		[x_group_end(lhs)] void unused;
+		[x_length(rhs)] uint16 rhs_len;
+		[switch_is(protocol)] epm_rhs rhs;
+	} epm_floor;
+#endif
 	/* note that the NDR_NOALIGN flag is inherited by all nested
 	   structures. All of the towers/floors stuff is
 	   non-aligned. I wonder what sort of wicked substance these
@@ -215,8 +225,13 @@ interface epmapper
 	} epm_tower;
 
 	typedef [public] struct {
+#if HH_ORIG
 		[value(ndr_size_epm_tower(&tower, ndr->flags))] uint32  tower_length;
 		[subcontext(4)] epm_tower tower;
+#else
+		[x_length(tower)] uint32  tower_length;
+		epm_tower tower;
+#endif
 	} epm_twr_t;
 
 	typedef struct {

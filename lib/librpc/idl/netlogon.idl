@@ -8,9 +8,6 @@ import "misc.idl", "lsa.idl", "samr.idl", "security.idl";
 
 #include "idl_types.h"
 
-cpp_quote("#define netr_DeltaEnum8Bit netr_DeltaEnum")
-cpp_quote("#define netr_SamDatabaseID8Bit netr_SamDatabaseID")
-
 cpp_quote("#define ENC_CRC32 KERB_ENCTYPE_DES_CBC_CRC")
 cpp_quote("#define ENC_RSA_MD5 KERB_ENCTYPE_DES_CBC_MD5")
 cpp_quote("#define ENC_RC4_HMAC_MD5 KERB_ENCTYPE_RC4_HMAC_MD5")
@@ -21,7 +18,6 @@ cpp_quote("#define ENC_HMAC_SHA1_96_AES256 KERB_ENCTYPE_AES256_CTS_HMAC_SHA1_96"
   uuid("12345678-1234-abcd-ef00-01234567cffb"),
   version(1.0),
   endpoint("ncacn_np:[\\pipe\\netlogon]","ncacn_ip_tcp:","ncalrpc:"),
-  helper("../librpc/ndr/ndr_netlogon.h"),
   ms_union,
   pointer_default(unique)
 ]
@@ -1050,12 +1046,12 @@ interface netlogon
 		uint32 serial_number2;
 		uint32 object_rid;
 		netr_ChangeLogFlags flags;
-		netr_SamDatabaseID8Bit db_index;
-		netr_DeltaEnum8Bit delta_type;
+		netr_SamDatabaseID db_index;
+		netr_DeltaEnum delta_type;
 		[switch_is(flags & (NETR_CHANGELOG_SID_INCLUDED|NETR_CHANGELOG_NAME_INCLUDED))] netr_ChangeLogObject object;
 	} netr_ChangeLogEntry;
 
-	NTSTATUS netr_DatabaseRedo(
+	[in_nopush,in_nopull] NTSTATUS netr_DatabaseRedo(
 		[in]     [string,charset(UTF16)] uint16 *logon_server,
 		[in]     [string,charset(UTF16)] uint16 *computername,
 		[in]     netr_Authenticator *credential,
@@ -1064,11 +1060,9 @@ interface netlogon
 		 * we cannot use subcontext_size() here, as
 		 * change_log_entry_size is encoded after the subcontext
 		 */
-		[in]     [subcontext(4)/*,subcontext_size(change_log_entry_size)*/]
+		[in]     [subcontext(4),subcontext_size(change_log_entry_size)]
 			netr_ChangeLogEntry change_log_entry,
-		[in]     [value(ndr_size_netr_ChangeLogEntry(&change_log_entry,
-				ndr->flags))]
-			uint32 change_log_entry_size,
+		[in]     uint32 change_log_entry_size,
 		[out,ref]    netr_DELTA_ENUM_ARRAY **delta_enum_array
 		);
 
@@ -1101,27 +1095,6 @@ interface netlogon
 
 	/* one unkown bit still: DS_IP_VERSION_AGNOSTIC - gd*/
 
-	const int DSGETDC_VALID_FLAGS = (DS_FORCE_REDISCOVERY |
-					 DS_DIRECTORY_SERVICE_REQUIRED |
-					 DS_DIRECTORY_SERVICE_PREFERRED |
-					 DS_GC_SERVER_REQUIRED |
-					 DS_PDC_REQUIRED |
-					 DS_BACKGROUND_ONLY |
-					 DS_IP_REQUIRED |
-					 DS_KDC_REQUIRED |
-					 DS_TIMESERV_REQUIRED |
-					 DS_WRITABLE_REQUIRED |
-					 DS_GOOD_TIMESERV_PREFERRED |
-					 DS_AVOID_SELF |
-					 DS_ONLY_LDAP_NEEDED |
-					 DS_IS_FLAT_NAME |
-					 DS_IS_DNS_NAME |
-					 DS_TRY_NEXTCLOSEST_SITE |
-					 DS_DIRECTORY_SERVICE_6_REQUIRED |
-					 DS_WEB_SERVICE_REQUIRED |
-					 DS_RETURN_FLAT_NAME |
-					 DS_RETURN_DNS_NAME);
-
 	typedef [bitmap32bit] bitmap {
 		DS_FORCE_REDISCOVERY		= 0x00000001,
 		DS_DIRECTORY_SERVICE_REQUIRED	= 0x00000010,
@@ -1144,6 +1117,27 @@ interface netlogon
 		DS_RETURN_DNS_NAME		= 0x40000000,
 		DS_RETURN_FLAT_NAME		= 0x80000000
 	} netr_DsRGetDCName_flags;
+
+	const int DSGETDC_VALID_FLAGS = (DS_FORCE_REDISCOVERY |
+					 DS_DIRECTORY_SERVICE_REQUIRED |
+					 DS_DIRECTORY_SERVICE_PREFERRED |
+					 DS_GC_SERVER_REQUIRED |
+					 DS_PDC_REQUIRED |
+					 DS_BACKGROUND_ONLY |
+					 DS_IP_REQUIRED |
+					 DS_KDC_REQUIRED |
+					 DS_TIMESERV_REQUIRED |
+					 DS_WRITABLE_REQUIRED |
+					 DS_GOOD_TIMESERV_PREFERRED |
+					 DS_AVOID_SELF |
+					 DS_ONLY_LDAP_NEEDED |
+					 DS_IS_FLAT_NAME |
+					 DS_IS_DNS_NAME |
+					 DS_TRY_NEXTCLOSEST_SITE |
+					 DS_DIRECTORY_SERVICE_6_REQUIRED |
+					 DS_WEB_SERVICE_REQUIRED |
+					 DS_RETURN_FLAT_NAME |
+					 DS_RETURN_DNS_NAME);
 
 	typedef [v1_enum] enum {
 		DS_ADDRESS_TYPE_INET		= 1,
@@ -1329,7 +1323,7 @@ interface netlogon
 		netr_OsVersionInfoEx os;
 	} netr_OsVersion;
 
-	typedef struct {
+	typedef [nopush,nopull] struct {
 		/* value is 284 when info != os, otherwise 0 (for length and
 		   size) */
 		[value(os == NULL ? 0 : 284)] uint16 length;

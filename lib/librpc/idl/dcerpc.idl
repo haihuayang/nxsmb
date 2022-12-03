@@ -19,13 +19,9 @@
 */
 import "misc.idl";
 
-cpp_quote("extern const uint8_t DCERPC_SEC_VT_MAGIC[8];")
-
-[
-  helper("../librpc/ndr/ndr_dcerpc.h")
-]
 interface dcerpc
 {
+	//const uint8_t DCERPC_SEC_VT_MAGIC[] = {0x8a,0xe3,0x13,0x71,0x02,0xf4,0x36,0x71};
 	typedef struct {
 		uint16 context_id;
 		uint8 num_transfer_syntaxes;
@@ -60,7 +56,7 @@ interface dcerpc
 		 * NDR_DCERPC_REQUEST_OBJECT_PRESENT
 		 * is defined differently for ndr_dcerpc.c and py_dcerpc.c
 		 */
-		[switch_is(NDR_DCERPC_REQUEST_OBJECT_PRESENT)] dcerpc_object object;
+		[switch_is(__flags & LIBNDR_FLAG_OBJECT_PRESENT)] dcerpc_object object;
 		[flag(NDR_REMAINING)] DATA_BLOB stub_and_verifier;
 	} dcerpc_request;
 
@@ -105,8 +101,8 @@ interface dcerpc
 		uint16 max_xmit_frag;
 		uint16 max_recv_frag;
 		uint32 assoc_group_id;
-		[value(strlen_m_term_null(secondary_address))] uint16 secondary_address_size;
-		[charset(DOS)] uint8 secondary_address[secondary_address_size];
+		uint16 secondary_address_size;
+		[subcontext(0),subcontext_size(secondary_address_size),flag(STR_ASCII)] string secondary_address;
 		[flag(NDR_ALIGN4)]    DATA_BLOB _pad1;
 		uint8 num_results;
 		dcerpc_ack_ctx ctx_list[num_results];
@@ -132,7 +128,7 @@ interface dcerpc
 		uint8 rpc_vers_minor;   /* Minor version */
 	} dcerpc_bind_nak_version;
 
-	typedef [public,nopull] struct {
+	typedef [public] struct {
 		dcerpc_bind_nak_reason reject_reason;
 		uint8 num_versions;
 		dcerpc_bind_nak_version versions[num_versions];
@@ -335,8 +331,8 @@ interface dcerpc
 	} ClientAddressType;
 
 	typedef [public] struct {
-		AddressType					AddressType;
-		[switch_is(AddressType)] ClientAddressType	ClientAddress;
+		AddressType					AddressType_;
+		[switch_is(AddressType_)] ClientAddressType	ClientAddress;
 		uint8						Padding[12];
 	} ClientAddress;
 
@@ -410,7 +406,7 @@ interface dcerpc
 
 	/* RTS command: 0xB */
 	typedef [public] struct {
-		ClientAddress	ClientAddress;
+		ClientAddress	ClientAddress_;
 	} dcerpc_rts_cmd_ClientAddress;
 
 	/* RTS command: 0xC */
@@ -420,7 +416,7 @@ interface dcerpc
 
 	/* RTS command: 0xD */
 	typedef [public] struct {
-		ForwardDestination	ForwardDestination;
+		ForwardDestination	ForwardDestination_;
 	} dcerpc_rts_cmd_Destination;
 
 	/* RTS command: 0xE */
@@ -641,11 +637,11 @@ interface dcerpc
 			[subcontext(2),flag(NDR_SUBCONTEXT_NO_UNREAD_BYTES)]
 			dcerpc_sec_vt_union u;
 	} dcerpc_sec_vt;
-
+#if HH_ORIG
 	typedef [public,nopush,nopull] struct {
 		uint16 count;
 	} dcerpc_sec_vt_count;
-
+#endif
 	/*
 	 * We assume that the whole verification trailer fits into
 	 * the last 1024 bytes after the stub data.
@@ -658,7 +654,12 @@ interface dcerpc
 	typedef [public,flag(NDR_PAHEX)] struct {
 		[flag(NDR_ALIGN4)] DATA_BLOB _pad;
 		[value(DCERPC_SEC_VT_MAGIC)] uint8 magic[8];
+#if HH_ORIG
 		dcerpc_sec_vt_count count;
 		dcerpc_sec_vt commands[count.count];
+#else
+		uint16 count;
+		dcerpc_sec_vt commands[count];
+#endif
 	} dcerpc_sec_verification_trailer;
 }
