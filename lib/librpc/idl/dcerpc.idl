@@ -103,8 +103,8 @@ interface dcerpc
 		uint32 assoc_group_id;
 		uint16 secondary_address_size;
 		[subcontext(0),subcontext_size(secondary_address_size),flag(STR_ASCII)] string secondary_address;
-		[flag(NDR_ALIGN4)]    DATA_BLOB _pad1;
-		uint8 num_results;
+		/* TODO just make it 4 bytes align */
+		uint32 num_results;
 		dcerpc_ack_ctx ctx_list[num_results];
 		[flag(NDR_REMAINING)] DATA_BLOB auth_info;
 	} dcerpc_bind_ack;
