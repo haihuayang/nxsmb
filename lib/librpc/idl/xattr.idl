@@ -12,7 +12,6 @@ import "security.idl";
 
 [
   version(0.0),
-  helper("../librpc/ndr/ndr_xattr.h"),
   pyhelper("librpc/ndr/py_xattr.c"),
   pointer_default(unique)
 ]
@@ -203,7 +202,7 @@ interface xattr
 		uint16 version;
 		[switch_is(version)] xattr_NTACL_Info info;
 	} xattr_NTACL;
-
+#if HH_ORIG
 	/*
 	 * A wrapper of the common information required to be in the
 	 * hash of the ACL, for the acl_xattr and acl_tdb modules.
@@ -214,5 +213,5 @@ interface xattr
 		gid_t group;
 		mode_t mode;
 	} xattr_sys_acl_hash_wrapper;
-
+#endif
 }
