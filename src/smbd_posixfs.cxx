@@ -4616,7 +4616,7 @@ static NTSTATUS getinfo_fs(x_smbd_requ_t *smbd_requ,
 		struct statvfs fsstat;
 		int err = fstatvfs(posixfs_object->fd, &fsstat);
 		assert(err == 0);
-		state.out_data.resize(sizeof(x_smb2_fs_size_info_t));
+		state.out_data.resize(sizeof(x_smb2_fs_full_size_info_t));
 		x_smb2_fs_full_size_info_t *info =
 			(x_smb2_fs_full_size_info_t *)state.out_data.data();
 		info->total_allocation_units = X_H2LE64(fsstat.f_blocks);
