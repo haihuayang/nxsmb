@@ -11,6 +11,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <getopt.h>
+#include <openssl/crypto.h>
 
 #include "smbd_conf.hxx"
 #include "network.hxx"
@@ -186,6 +187,8 @@ int main(int argc, char **argv)
 	(void)daemon;
 
 	signal(SIGPIPE, SIG_IGN);
+	OPENSSL_init();
+	FIPS_mode_set(0);
 
 	init_smbd();
 
