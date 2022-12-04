@@ -1,8 +1,8 @@
 
 #include "smb2.hxx"
+#include "include/crypto.hxx"
 #include <openssl/evp.h>
 #include <openssl/cmac.h>
-#include <openssl/hmac.h>
 #include <openssl/sha.h>
 
 void x_smb2_key_derivation(const uint8_t *KI, size_t KI_len,
@@ -10,30 +10,25 @@ void x_smb2_key_derivation(const uint8_t *KI, size_t KI_len,
 		const x_array_const_t<char> &context,
 		x_smb2_key_t &key)
 {
-	HMAC_CTX *ctx = HMAC_CTX_new();
-	HMAC_Init_ex(ctx, KI, int(KI_len), EVP_sha256(), nullptr);
-
-	uint32_t buf;
+	uint32_t buf1, buf2;
 	static const uint8_t zero = 0;
-	uint8_t digest[SHA256_DIGEST_LENGTH];
 	uint32_t i = 1;
 	uint32_t L = 128;
 
-#define HMAC_UPDATE(d, s, c) HMAC_Update(c, (unsigned char *)(d), s)
+	buf1 = X_H2BE32(i);
+	buf2 = X_H2BE32(L);
 
-	buf = X_H2BE32(i);
-	HMAC_UPDATE(&buf, sizeof(buf), ctx);
-	HMAC_UPDATE(label.data, label.size, ctx);
-	HMAC_UPDATE(&zero, 1, ctx);
-	HMAC_UPDATE(context.data, context.size, ctx);
-	buf = X_H2BE32(L);
-	HMAC_UPDATE(&buf, sizeof(buf), ctx);
-	unsigned int dlen;
-	HMAC_Final(ctx, digest, &dlen);
-	HMAC_CTX_free(ctx);
-	X_ASSERT(dlen == SHA256_DIGEST_LENGTH);
+	struct iovec iov[] = {
+		{ &buf1, sizeof(buf1), },
+		{ (void *)label.data, label.size, },
+		{ (void *)&zero, 1, },
+		{ (void *)context.data, context.size, },
+		{ &buf2, sizeof(buf2), },
+	};
 
-	memcpy(key.data(), digest, 16);
+	unsigned ret = x_hmac(key.data(), 16, EVP_sha256(),
+			KI, x_convert_assert<unsigned int>(KI_len), iov, 5);
+	X_ASSERT(ret == 16);
 }
 
 /*
@@ -133,18 +128,10 @@ static inline void hmac_sha256_digest(const x_smb2_key_t &key,
 		void *digest,
 		const struct iovec *vector, unsigned int count)
 {
-	HMAC_CTX *ctx = HMAC_CTX_new();
-	HMAC_Init_ex(ctx, key.data(), 16, EVP_sha256(), nullptr);
-	uint8_t sha256_digest[SHA256_DIGEST_LENGTH];
-
-	for (unsigned int i = 0; i < count; ++i) {
-		HMAC_Update(ctx, (const uint8_t *)vector[i].iov_base, vector[i].iov_len);
-	}
-	unsigned int dlen;
-	HMAC_Final(ctx, sha256_digest, &dlen);
-	HMAC_CTX_free(ctx);
-	X_ASSERT(dlen == SHA256_DIGEST_LENGTH);
-	memcpy(digest, sha256_digest, 16);
+	unsigned int dlen = x_hmac(digest, 16, EVP_sha256(),
+			key.data(), 16,
+			vector, count);
+	X_ASSERT(dlen == 16);
 }
 
 static void x_smb2_digest(uint16_t algo,

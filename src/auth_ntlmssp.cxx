@@ -19,7 +19,9 @@
 #include <openssl/md5.h>
 #include <openssl/hmac.h>
 #include <openssl/rc4.h>
-#include "libwbclient/wbclient.h"
+#include "include/crypto.hxx"
+
+
 
 #define DEBUG(...) do { } while (0)
 #define dump_data_pw(...) do { } while (0)
@@ -238,7 +240,6 @@ static std::array<uint8_t, 16> ntlmssp_make_packet_signature(x_auth_ntlmssp_t *n
 {
 	std::array<uint8_t, 16> sig;
 	if (ntlmssp->neg_flags & idl::NTLMSSP_NEGOTIATE_NTLM2) {
-		HMAC_CTX *ctx = HMAC_CTX_new();
 		uint8_t digest[16];
 
 		auto &crypt = ntlmssp->crypt_dirs[direction];
@@ -250,19 +251,21 @@ static std::array<uint8_t, 16> ntlmssp_make_packet_signature(x_auth_ntlmssp_t *n
 
 		uint32_t seq_num = X_H2LE32(crypt.seq_num);
 		crypt.seq_num++;
+
+		dump_data_pw("pdu data ", whole_pdu, pdu_length);
+
+		struct iovec iov[] = {
+			{ &seq_num, sizeof(seq_num), },
+			{ (void *)whole_pdu, x_convert_assert<uint32_t>(pdu_length), },
+		};
+		
 		/* the microsoft version of hmac_md5 initialisation
 		 * hmac_md5_init_limK_to_64, but here the key length is < 64
 		 * so we just use HMAC_Init
 		 */
-		HMAC_Init_ex(ctx, crypt.sign_key, 16, EVP_md5(), nullptr);
-
-		dump_data_pw("pdu data ", whole_pdu, pdu_length);
-
-		HMAC_Update(ctx, (uint8_t *)&seq_num, sizeof(seq_num));
-		HMAC_Update(ctx, whole_pdu, x_convert_assert<uint32_t>(pdu_length));
-		unsigned int dlen;
-		HMAC_Final(ctx, digest, &dlen);
-		HMAC_CTX_free(ctx);
+		unsigned int dlen = x_hmac(digest, sizeof digest,
+				EVP_md5(), crypt.sign_key, 16,
+				iov, 2);
 		X_ASSERT(dlen == sizeof(digest));
 
 		if (encrypt_sig && (ntlmssp->neg_flags & idl::NTLMSSP_NEGOTIATE_KEY_EXCH)) {
@@ -845,32 +848,31 @@ static NTSTATUS ntlmssp_post_auth2(x_auth_ntlmssp_t *ntlmssp, x_auth_info_t &aut
 	ntlmssp->session_key = auth_info.session_key;
 
 	if (ntlmssp->new_spnego) {
-		HMAC_CTX *ctx = HMAC_CTX_new();
 		uint8_t mic_buffer[idl::NTLMSSP_MIC_SIZE] = { 0, };
-
-		HMAC_Init_ex(ctx, auth_info.session_key.data(),
-				x_convert_assert<uint32_t>(auth_info.session_key.size()),
-				EVP_md5(), nullptr);
-
-		HMAC_Update(ctx, ntlmssp->msg_negotiate.data(),
-				x_convert_assert<uint32_t>(ntlmssp->msg_negotiate.size()));
-		HMAC_Update(ctx, ntlmssp->msg_challenge.data(),
-				x_convert_assert<uint32_t>(ntlmssp->msg_challenge.size()));
 
 		/* checked were we set ntlmssp_state->new_spnego */
 		X_ASSERT(ntlmssp->msg_authenticate.size() >
 			   (idl::NTLMSSP_MIC_OFFSET + idl::NTLMSSP_MIC_SIZE));
 
-		HMAC_Update(ctx, ntlmssp->msg_authenticate.data(), idl::NTLMSSP_MIC_OFFSET);
-		HMAC_Update(ctx, mic_buffer, idl::NTLMSSP_MIC_SIZE);
-		HMAC_Update(ctx, ntlmssp->msg_authenticate.data() +
+		struct iovec iov[] = {
+			{ ntlmssp->msg_negotiate.data(),
+				x_convert_assert<uint32_t>(ntlmssp->msg_negotiate.size()), },
+			{ ntlmssp->msg_challenge.data(),
+				x_convert_assert<uint32_t>(ntlmssp->msg_challenge.size()), },
+			{ ntlmssp->msg_authenticate.data(),
+				idl::NTLMSSP_MIC_OFFSET, },
+			{ mic_buffer, idl::NTLMSSP_MIC_SIZE, },
+			{ ntlmssp->msg_authenticate.data() +
 				(idl::NTLMSSP_MIC_OFFSET + idl::NTLMSSP_MIC_SIZE),
 				x_convert_assert<uint32_t>(ntlmssp->msg_authenticate.size() -
-					(idl::NTLMSSP_MIC_OFFSET + idl::NTLMSSP_MIC_SIZE)));
-		unsigned int dlen;
-		HMAC_Final(ctx, mic_buffer, &dlen);
-		HMAC_CTX_free(ctx);
-		X_ASSERT(dlen == sizeof(mic_buffer));
+						(idl::NTLMSSP_MIC_OFFSET + idl::NTLMSSP_MIC_SIZE)), },
+		};
+
+		auto dlen = x_hmac(mic_buffer, idl::NTLMSSP_MIC_SIZE, EVP_md5(),
+				auth_info.session_key.data(),
+				x_convert_assert<uint32_t>(auth_info.session_key.size()),
+				iov, 5);
+		X_ASSERT(dlen == idl::NTLMSSP_MIC_SIZE);
 
 		if (memcmp(ntlmssp->msg_authenticate.data() + idl::NTLMSSP_MIC_OFFSET,
 			     mic_buffer, idl::NTLMSSP_MIC_SIZE) != 0) {

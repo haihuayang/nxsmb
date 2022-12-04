@@ -15,10 +15,6 @@ TARGET_LDFLAGS := $(TARGET_LDFLAGS) -fsanitize=address -g3
 
 TARGET_DIR_out := target.dbg.linux.x86_64
 
-ifneq (, $(MINERVA))
-TARGET_CXXFLAGS += -DNXSMBD_MINERVA -Izfs/include
-endif
-
 TARGET_SET_dir := bin lib lib/librpc librpc/idl lib/asn1 src tests
 
 .PHONY: all target_mkdir target_gen tags
@@ -39,10 +35,14 @@ TARGET_CFLAGS_EXTRA := \
 	-D__X_DEVELOPER__=1
 
 TARGET_CFLAGS_dependent = \
-	$(SAMBA_NSSWITCH_CFLAGS) \
+	$(TARGET_CFLAGS_platform) \
 	$(TARGET_CFLAGS_heimdal) \
 	-I$(TARGET_DIR_out) \
 	-I. \
+
+TARGET_LDFLAGS_dependent = \
+	$(TARGET_LDFLAGS_heimdal) \
+	$(TARGET_LDFLAGS_platform) \
 
 all: $(TARGET_SET_tests:%=$(TARGET_DIR_out)/tests/%) \
 	$(TARGET_DIR_out)/bin/smbd_nx \
@@ -112,7 +112,7 @@ SET_src_nxutils := \
 	misc \
 
 $(TARGET_DIR_out)/bin/smbd_nx: $(SET_src_smbd_nx:%=$(TARGET_DIR_out)/src/%.o) $(TARGET_SET_lib:%=$(TARGET_DIR_out)/lib%.a)
-	$(CXX) -g $(TARGET_LDFLAGS) -o $@ $^ $(TARGET_LDFLAGS_heimdal) -ltdb -lcrypto -lz -lcom_err -lpthread -lresolv -ldl
+	$(CXX) -g $(TARGET_LDFLAGS) -o $@ $^ $(TARGET_LDFLAGS_dependent) -ltdb -lcrypto -lz -lcom_err -lpthread -lresolv -ldl
 
 $(TARGET_DIR_out)/bin/nxutils: $(SET_src_nxutils:%=$(TARGET_DIR_out)/src/%.o) $(TARGET_SET_lib:%=$(TARGET_DIR_out)/lib%.a)
 	$(CXX) -g $(TARGET_LDFLAGS) -o $@ $^ -lpthread -lresolv -ldl
@@ -179,6 +179,7 @@ TARGET_SRC_libnxsmb := \
 		lib/networking \
 		lib/hexdump \
 		lib/rand \
+		lib/crypto \
 		lib/ntstatus \
 		lib/werror \
 
