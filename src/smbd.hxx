@@ -121,6 +121,12 @@ struct x_smb2_state_create_t
 	x_smbd_stream_t *smbd_stream{};
 	x_smbd_lease_t *smbd_lease{};
 	long open_priv_data;
+
+	union {
+		x_smb2_create_dhnc_requ_t dhnc;
+		x_smb2_create_dh2q_requ_t dh2q;
+		x_smb2_create_dh2c_requ_t dh2c;
+	};
 };
 
 template <class T>

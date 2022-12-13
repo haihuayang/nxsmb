@@ -575,6 +575,38 @@ struct x_smb2_lease_t
 	uint8_t unused;
 };
 
+struct x_smb2_create_dhnc_requ_t
+{
+	uint64_t file_id_persistent;
+	uint64_t file_id_volatile;
+};
+
+struct x_smb2_create_dh2q_requ_t
+{
+	uint32_t timeout;
+	uint32_t flags;
+	uint64_t unused0;
+	x_smb2_uuid_t create_guid;
+};
+
+struct x_smb2_create_dh2q_resp_t
+{
+	uint32_t timeout;
+	uint32_t flags;
+};
+
+enum {
+	X_SMB2_DHANDLE_FLAG_PERSISTENT = 0x2,
+};
+
+struct x_smb2_create_dh2c_requ_t
+{
+	uint64_t file_id_persistent;
+	uint64_t file_id_volatile;
+	x_smb2_uuid_t create_guid;
+	uint32_t flags;
+} __attribute__ ((packed));
+
 struct x_buf_t
 {
 	std::atomic<int32_t> ref;

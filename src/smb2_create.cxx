@@ -82,10 +82,26 @@ struct x_smb2_create_context_header_t
 	// uint32_t unused1;
 };
 
+template <class T>
+static inline bool x_bit_any(T v1, T v2)
+{
+	return (v1 & v2) != 0;
+}
+
+template <class T>
+static inline bool x_bit_all(T v1, T v2)
+{
+	return (v1 & v2) == v2;
+}
+
 static bool decode_contexts(x_smb2_state_create_t &state,
 		const uint8_t *data, uint32_t length)
 {
 	bool has_RqLs = false;
+	const x_smb2_create_dhnc_requ_t *dhnc = nullptr;
+	const x_smb2_create_dh2q_requ_t *dh2q = nullptr;
+	const x_smb2_create_dh2c_requ_t *dh2c = nullptr;
+
 	for (;;) {
 		if (length < sizeof(x_smb2_create_context_header_t)) {
 			return false;
@@ -153,13 +169,29 @@ static bool decode_contexts(x_smb2_state_create_t &state,
 			} else if (tag == X_SMB2_CREATE_TAG_EXTA) {
 				// TODO;
 			} else if (tag == X_SMB2_CREATE_TAG_DHNQ) {
-				// TODO
+				/* MS-SMB2 2.2.13.2.3 ignore data content */
+				if (data_len != 16) {
+					return false;
+				}
+				state.contexts |= X_SMB2_CONTEXT_FLAG_DHNQ;
 			} else if (tag == X_SMB2_CREATE_TAG_DHNC) {
-				// TODO
+				if (data_len != sizeof(x_smb2_create_dhnc_requ_t)) {
+					return false;
+				}
+				dhnc = (const x_smb2_create_dhnc_requ_t *)(data + data_off);
+				state.contexts |= X_SMB2_CONTEXT_FLAG_DHNC;
 			} else if (tag == X_SMB2_CREATE_TAG_DH2Q) {
-				// TODO
+				if (data_len != sizeof(x_smb2_create_dh2q_requ_t)) {
+					return false;
+				}
+				dh2q = (const x_smb2_create_dh2q_requ_t *)(data + data_off);
+				state.contexts |= X_SMB2_CONTEXT_FLAG_DH2Q;
 			} else if (tag == X_SMB2_CREATE_TAG_DH2C) {
-				// TODO
+				if (data_len != sizeof(x_smb2_create_dh2c_requ_t)) {
+					return false;
+				}
+				dh2c = (const x_smb2_create_dh2c_requ_t *)(data + data_off);
+				state.contexts |= X_SMB2_CONTEXT_FLAG_DH2C;
 			} else if (tag == X_SMB2_CREATE_TAG_AAPL) {
 				// TODO
 			} else {
@@ -184,6 +216,32 @@ static bool decode_contexts(x_smb2_state_create_t &state,
 			break;
 		}
 	}
+
+	if ((x_bit_any<uint32_t>(state.contexts, X_SMB2_CONTEXT_FLAG_DHNQ |
+				X_SMB2_CONTEXT_FLAG_DHNC) &&
+			x_bit_any<uint32_t>(state.contexts, X_SMB2_CONTEXT_FLAG_DH2Q |
+				X_SMB2_CONTEXT_FLAG_DH2C)) ||
+			x_bit_all<uint32_t>(state.contexts, X_SMB2_CONTEXT_FLAG_DH2Q |
+				X_SMB2_CONTEXT_FLAG_DH2C)) {
+		X_LOG_ERR("Invalid combination of durable contexts");
+		return false;
+	}
+
+	if (state.contexts & X_SMB2_CONTEXT_FLAG_DH2Q) {
+		state.dh2q.timeout = X_LE2H32(dh2q->timeout);
+		state.dh2q.flags = X_LE2H32(dh2q->flags);
+		state.dh2q.create_guid = dh2q->create_guid;
+	} else if (state.contexts & X_SMB2_CONTEXT_FLAG_DH2C) {
+		state.dh2c.file_id_persistent = X_LE2H64(dh2c->file_id_persistent);
+		state.dh2c.file_id_volatile = X_LE2H64(dh2c->file_id_volatile);
+		state.dh2c.create_guid = dh2c->create_guid;
+		state.dh2c.flags = X_LE2H32(dh2c->flags);
+	} else if (state.contexts & X_SMB2_CONTEXT_FLAG_DHNC) {
+		state.contexts &= ~X_SMB2_CONTEXT_FLAG_DHNQ;
+		state.dhnc.file_id_persistent = X_LE2H64(dhnc->file_id_persistent);
+		state.dhnc.file_id_volatile = X_LE2H64(dhnc->file_id_volatile);
+	}
+
 	if (state.in_oplock_level == X_SMB2_OPLOCK_LEVEL_LEASE && !has_RqLs) {
 		X_LOG_WARN("missing RqLs");
 		state.in_oplock_level = X_SMB2_OPLOCK_LEVEL_NONE;
@@ -275,6 +333,32 @@ static uint32_t encode_contexts(const x_smb2_state_create_t &state,
 		memcpy(p, state.out_qfid_info, sizeof state.out_qfid_info);
 		ch->data_length = X_H2LE32(sizeof state.out_qfid_info);
 		p += sizeof state.out_qfid_info;
+	}
+
+	if (state.contexts & X_SMB2_CONTEXT_FLAG_DHNQ) {
+		if (ch) {
+			uint8_t *np = out_ptr + x_pad_len(p - out_ptr, 8);
+			while (p != np) {
+				*p++ = 0;
+			}
+			ch->chain_offset = X_H2LE32(x_convert_assert<uint32_t>(p - (uint8_t *)ch));
+		}
+
+		ch = (x_smb2_create_context_header_t *)p;
+		ch->tag_offset = X_H2LE16(0x10);
+		ch->tag_length = X_H2LE16(0x4);
+		ch->unused0 = 0;
+		ch->data_offset = X_H2LE16(0x18);
+		ch->data_length = X_H2LE32(8);
+
+		p = (uint8_t *)(ch + 1);
+		*(uint32_t *)p = X_H2BE32(X_SMB2_CREATE_TAG_DHNQ);
+		p += 4;
+		*(uint32_t *)p = 0;
+		p += 4;
+
+		memset(p, 0, 8);
+		p += 8;
 	}
 
 	if (ch) {
@@ -404,6 +488,15 @@ static NTSTATUS decode_in_create(x_smb2_state_create_t &state,
 		return NT_STATUS_INVALID_PARAMETER;
 	}
 
+	if (state.contexts & X_SMB2_CONTEXT_FLAG_DHNQ) {
+		if (state.in_oplock_level == X_SMB2_OPLOCK_LEVEL_LEASE) {
+			if ((state.lease.state & X_SMB2_LEASE_HANDLE) == 0) {
+				state.contexts &= ~X_SMB2_CONTEXT_FLAG_DHNQ;
+			}
+		} else if (state.in_oplock_level != X_SMB2_OPLOCK_LEVEL_BATCH) {
+			state.contexts &= ~X_SMB2_CONTEXT_FLAG_DHNQ;
+		}
+	}
 	return NT_STATUS_OK;
 }
 

@@ -5298,7 +5298,10 @@ NTSTATUS x_smbd_posixfs_create_open(x_smbd_open_t **psmbd_open,
 		x_put_le64(state->out_qfid_info + 8, posixfs_object->meta.fsid);
 		memset(state->out_qfid_info + 16, 0, 16);
 	}
-
+	if (contexts & X_SMB2_CONTEXT_FLAG_DHNQ) {
+		/* TODO */
+		state->contexts |= X_SMB2_CONTEXT_FLAG_DHNQ;
+	}
 	*psmbd_open = &posixfs_open->base;
 	return NT_STATUS_OK;
 }
