@@ -83,10 +83,12 @@ struct simplefs_share_t : x_smbd_share_t
 {
 	simplefs_share_t(const std::string &name,
 			bool abe,
-			const std::string &path)
-		: x_smbd_share_t(name), abe(abe)
+			const std::shared_ptr<x_smbd_volume_t> &smbd_volume)
+		: x_smbd_share_t(name)
+		, smbd_volume(smbd_volume)
+		, abe(abe)
 	{
-		root_dir = x_smbd_topdir_create(path, &simplefs_object_ops, name);
+		smbd_volume->set_ops( &simplefs_object_ops);
 	}
 					
 	uint8_t get_type() const override {
@@ -101,7 +103,7 @@ struct simplefs_share_t : x_smbd_share_t
 			std::unique_ptr<x_smb2_state_create_t> &state,
 			std::vector<x_smb2_change_t> &changes) override;
 
-	NTSTATUS resolve_path(std::shared_ptr<x_smbd_topdir_t> &topdir,
+	NTSTATUS resolve_path(std::shared_ptr<x_smbd_volume_t> &smbd_volume,
 			std::u16string &out_path,
 			long &path_priv_data,
 			long &open_priv_data,
@@ -126,12 +128,12 @@ struct simplefs_share_t : x_smbd_share_t
 	{
 		return posixfs_object_op_unlink(smbd_object, fd);
 	}
-	std::shared_ptr<x_smbd_topdir_t> root_dir;
+	std::shared_ptr<x_smbd_volume_t> smbd_volume;
 	const bool abe;
 };
 
 NTSTATUS simplefs_share_t::resolve_path(
-		std::shared_ptr<x_smbd_topdir_t> &topdir,
+		std::shared_ptr<x_smbd_volume_t> &smbd_volume,
 		std::u16string &out_path,
 		long &path_priv_data,
 		long &open_priv_data,
@@ -154,7 +156,7 @@ NTSTATUS simplefs_share_t::resolve_path(
 	}
 	out_path.assign(path_start, in_path_end);
 
-	topdir = this->root_dir;
+	smbd_volume = this->smbd_volume;
 	path_priv_data = 0;
 	open_priv_data = 0;
 	return NT_STATUS_OK;
@@ -174,8 +176,8 @@ NTSTATUS simplefs_share_t::create_open(x_smbd_open_t **psmbd_open,
 std::shared_ptr<x_smbd_share_t> x_smbd_simplefs_share_create(
 		const std::string &name,
 		bool abe,
-		const std::string &path)
+		const std::shared_ptr<x_smbd_volume_t> &smbd_volume)
 {
-	return std::make_shared<simplefs_share_t>(name, abe, path);
+	return std::make_shared<simplefs_share_t>(name, abe, smbd_volume);
 }
 

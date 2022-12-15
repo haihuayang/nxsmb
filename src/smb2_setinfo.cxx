@@ -122,7 +122,7 @@ static void x_smb2_rename_async_done(x_smbd_conn_t *smbd_conn,
 		return;
 	}
 	if (NT_STATUS_IS_OK(status)) {
-		x_smbd_notify_change(smbd_requ->smbd_open->smbd_object->topdir,
+		x_smbd_notify_change(smbd_requ->smbd_open->smbd_object->smbd_volume,
 				state->out_changes);
 		x_smb2_reply_setinfo(smbd_conn, smbd_requ);
 	}
@@ -161,7 +161,7 @@ static NTSTATUS x_smb2_process_rename(x_smbd_conn_t *smbd_conn,
 	smbd_requ->async_done_fn = x_smb2_rename_async_done;
 	status = x_smbd_open_op_rename(smbd_requ, state);
 	if (NT_STATUS_IS_OK(status)) {
-		x_smbd_notify_change(smbd_requ->smbd_open->smbd_object->topdir,
+		x_smbd_notify_change(smbd_requ->smbd_open->smbd_object->smbd_volume,
 				state->out_changes);
 		x_smb2_reply_setinfo(smbd_conn, smbd_requ);
 		return status;
@@ -230,7 +230,7 @@ NTSTATUS x_smb2_process_setinfo(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_re
 	std::vector<x_smb2_change_t> changes;
 	status = smb2_setinfo_dispatch(smbd_conn, smbd_requ, state, changes);
 	if (NT_STATUS_IS_OK(status)) {
-		x_smbd_notify_change(smbd_requ->smbd_open->smbd_object->topdir, changes);
+		x_smbd_notify_change(smbd_requ->smbd_open->smbd_object->smbd_volume, changes);
 		x_smb2_reply_setinfo(smbd_conn, smbd_requ);
 		return status;
 	}

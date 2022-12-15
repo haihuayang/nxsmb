@@ -132,7 +132,7 @@ NTSTATUS x_smb2_process_notify(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_req
 		smbd_open->notify_buffer_length = in_output_buffer_length;
 		if (in_flags & X_SMB2_WATCH_TREE) {
 			smbd_open->notify_filter |= X_FILE_NOTIFY_CHANGE_WATCH_TREE;
-			++smbd_open->smbd_object->topdir->watch_tree_cnt;
+			++smbd_open->smbd_object->smbd_volume->watch_tree_cnt;
 		}
 	}
 

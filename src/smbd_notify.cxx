@@ -1,7 +1,7 @@
 
 #include "smbd_open.hxx"
 
-static void notify_one_level(std::shared_ptr<x_smbd_topdir_t> &topdir,
+static void notify_one_level(std::shared_ptr<x_smbd_volume_t> &smbd_volume,
 		const std::u16string &path,
 		const std::u16string &fullpath,
 		const std::u16string *new_fullpath,
@@ -10,19 +10,19 @@ static void notify_one_level(std::shared_ptr<x_smbd_topdir_t> &topdir,
 		const x_smb2_lease_key_t &ignore_lease_key,
 		bool last_level)
 {
-	topdir->ops->notify_change(topdir, path, fullpath, new_fullpath,
+	smbd_volume->ops->notify_change(smbd_volume, path, fullpath, new_fullpath,
 			notify_action, notify_filter,
 			ignore_lease_key, last_level);
 }
 
-static void notify_change(std::shared_ptr<x_smbd_topdir_t> &topdir,
+static void notify_change(std::shared_ptr<x_smbd_volume_t> &smbd_volume,
 		uint32_t notify_action,
 		uint32_t notify_filter,
 		const std::u16string &path,
 		const std::u16string *new_path,
 		const x_smb2_lease_key_t &ignore_lease_key)
 {
-	bool watch_tree = topdir->watch_tree_cnt > 0;
+	bool watch_tree = smbd_volume->watch_tree_cnt > 0;
 	std::size_t curr_pos = 0, last_sep_pos = 0;
 	for (;;) {
 		auto found = path.find('\\', curr_pos);
@@ -31,7 +31,7 @@ static void notify_change(std::shared_ptr<x_smbd_topdir_t> &topdir,
 		}
 		
 		if (watch_tree) {
-			notify_one_level(topdir,
+			notify_one_level(smbd_volume,
 					path.substr(0, last_sep_pos),
 					path, new_path,
 					notify_action, notify_filter,
@@ -42,7 +42,7 @@ static void notify_change(std::shared_ptr<x_smbd_topdir_t> &topdir,
 		curr_pos = found + 1;
 	}
 
-	notify_one_level(topdir,
+	notify_one_level(smbd_volume,
 			path.substr(0, last_sep_pos),
 			path, new_path,
 			notify_action, notify_filter,
@@ -61,26 +61,26 @@ static bool is_same_parent(const std::u16string &old_path, const std::u16string 
 			new_path, 0, new_sep) == 0;
 }
 
-void x_smbd_notify_change(std::shared_ptr<x_smbd_topdir_t> &topdir,
+void x_smbd_notify_change(std::shared_ptr<x_smbd_volume_t> &smbd_volume,
 		const std::vector<x_smb2_change_t> &changes)
 {
 	for (const auto &change: changes) {
 		if (change.action == NOTIFY_ACTION_OLD_NAME) {
 			X_ASSERT(!change.new_path.empty());
 			if (is_same_parent(change.path, change.new_path)) {
-				notify_change(topdir, change.action, change.filter,
+				notify_change(smbd_volume, change.action, change.filter,
 						change.path, &change.new_path,
 						change.ignore_lease_key);
 			} else {
-				notify_change(topdir, NOTIFY_ACTION_REMOVED, change.filter,
+				notify_change(smbd_volume, NOTIFY_ACTION_REMOVED, change.filter,
 						change.path, nullptr,
 						change.ignore_lease_key);
-				notify_change(topdir, NOTIFY_ACTION_ADDED, change.filter,
+				notify_change(smbd_volume, NOTIFY_ACTION_ADDED, change.filter,
 						change.new_path, nullptr,
 						change.ignore_lease_key);
 			}
 		} else {
-			notify_change(topdir, change.action, change.filter,
+			notify_change(smbd_volume, change.action, change.filter,
 					change.path, nullptr,
 					change.ignore_lease_key);
 		}

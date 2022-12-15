@@ -53,7 +53,7 @@ struct x_smbd_object_t;
 struct x_smbd_object_ops_t
 {
 	x_smbd_object_t *(*open_object)(NTSTATUS *pstatus,
-			std::shared_ptr<x_smbd_topdir_t> &topdir,
+			std::shared_ptr<x_smbd_volume_t> &smbd_volume,
 			const std::u16string &path,
 			long path_priv_data,
 			bool create_if);
@@ -116,7 +116,7 @@ struct x_smbd_object_ops_t
 			x_smbd_open_t *smbd_open,
 			x_smbd_requ_t *smbd_requ,
 			bool delete_on_close);
-	void (*notify_change)(std::shared_ptr<x_smbd_topdir_t> &topdir,
+	void (*notify_change)(std::shared_ptr<x_smbd_volume_t> &smbd_volume,
 			const std::u16string &path,
 			const std::u16string &fullpath,
 			const std::u16string *new_fullpath,
@@ -132,10 +132,11 @@ struct x_smbd_object_ops_t
 
 struct x_smbd_object_t
 {
-	x_smbd_object_t(const std::shared_ptr<x_smbd_topdir_t> &topdir, long priv_data,
+	x_smbd_object_t(const std::shared_ptr<x_smbd_volume_t> &smbd_volume,
+			long priv_data,
 			const std::u16string &path);
 	~x_smbd_object_t();
-	std::shared_ptr<x_smbd_topdir_t> topdir;
+	std::shared_ptr<x_smbd_volume_t> smbd_volume;
 	const long priv_data;
 	std::mutex mutex;
 	enum {
@@ -174,7 +175,7 @@ static inline NTSTATUS x_smbd_open_op_read(
 		std::unique_ptr<x_smb2_state_read_t> &state)
 {
 	x_smbd_object_t *smbd_object = smbd_open->smbd_object;
-	auto op_fn = smbd_object->topdir->ops->read;
+	auto op_fn = smbd_object->smbd_volume->ops->read;
 	if (!op_fn) {
 		return NT_STATUS_INVALID_DEVICE_REQUEST;
 	}
@@ -187,7 +188,7 @@ static inline NTSTATUS x_smbd_open_op_write(
 		std::unique_ptr<x_smb2_state_write_t> &state)
 {
 	x_smbd_object_t *smbd_object = smbd_open->smbd_object;
-	auto op_fn = smbd_object->topdir->ops->write;
+	auto op_fn = smbd_object->smbd_volume->ops->write;
 	if (!op_fn) {
 		return NT_STATUS_INVALID_DEVICE_REQUEST;
 	}
@@ -199,7 +200,7 @@ static inline NTSTATUS x_smbd_open_op_flush(
 		x_smbd_requ_t *smbd_requ)
 {
 	x_smbd_object_t *smbd_object = smbd_open->smbd_object;
-	auto op_fn = smbd_object->topdir->ops->flush;
+	auto op_fn = smbd_object->smbd_volume->ops->flush;
 	if (!op_fn) {
 		return NT_STATUS_INVALID_DEVICE_REQUEST;
 	}
@@ -213,7 +214,7 @@ static inline NTSTATUS x_smbd_open_op_lock(
 		std::unique_ptr<x_smb2_state_lock_t> &state)
 {
 	x_smbd_object_t *smbd_object = smbd_open->smbd_object;
-	auto op_fn = smbd_object->topdir->ops->lock;
+	auto op_fn = smbd_object->smbd_volume->ops->lock;
 	if (!op_fn) {
 		return NT_STATUS_INVALID_DEVICE_REQUEST;
 	}
@@ -226,7 +227,7 @@ static inline NTSTATUS x_smbd_open_op_getinfo(x_smbd_open_t *smbd_open,
 		std::unique_ptr<x_smb2_state_getinfo_t> &state)
 {
 	x_smbd_object_t *smbd_object = smbd_open->smbd_object;
-	return smbd_object->topdir->ops->getinfo(smbd_object, smbd_open,
+	return smbd_object->smbd_volume->ops->getinfo(smbd_object, smbd_open,
 			smbd_conn, smbd_requ, state);
 }
 
@@ -237,7 +238,7 @@ static inline NTSTATUS x_smbd_open_op_setinfo(x_smbd_open_t *smbd_open,
 		std::vector<x_smb2_change_t> &changes)
 {
 	x_smbd_object_t *smbd_object = smbd_open->smbd_object;
-	return smbd_object->topdir->ops->setinfo(smbd_object,
+	return smbd_object->smbd_volume->ops->setinfo(smbd_object,
 			smbd_conn, smbd_requ, state, changes);
 }
 
@@ -247,7 +248,7 @@ static inline NTSTATUS x_smbd_open_op_ioctl(
 		std::unique_ptr<x_smb2_state_ioctl_t> &state)
 {
 	x_smbd_object_t *smbd_object = smbd_open->smbd_object;
-	auto op_fn = smbd_object->topdir->ops->ioctl;
+	auto op_fn = smbd_object->smbd_volume->ops->ioctl;
 	if (!op_fn) {
 		return NT_STATUS_INVALID_DEVICE_REQUEST;
 	}
@@ -261,7 +262,7 @@ static inline NTSTATUS x_smbd_open_op_qdir(
 		std::unique_ptr<x_smb2_state_qdir_t> &state)
 {
 	x_smbd_object_t *smbd_object = smbd_open->smbd_object;
-	auto op_fn = smbd_object->topdir->ops->qdir;
+	auto op_fn = smbd_object->smbd_volume->ops->qdir;
 	if (!op_fn) {
 		return NT_STATUS_INVALID_DEVICE_REQUEST;
 	}
@@ -275,7 +276,7 @@ static inline NTSTATUS x_smbd_open_op_notify(
 		std::unique_ptr<x_smb2_state_notify_t> &state)
 {
 	x_smbd_object_t *smbd_object = smbd_open->smbd_object;
-	auto op_fn = smbd_object->topdir->ops->notify;
+	auto op_fn = smbd_object->smbd_volume->ops->notify;
 	if (!op_fn) {
 		return NT_STATUS_INVALID_DEVICE_REQUEST;
 	}
@@ -286,7 +287,7 @@ static inline void x_smbd_object_op_break_lease(
 		x_smbd_object_t *smbd_object,
 		x_smbd_stream_t *smbd_stream)
 {
-	auto op_fn = smbd_object->topdir->ops->lease_break;
+	auto op_fn = smbd_object->smbd_volume->ops->lease_break;
 	X_ASSERT(op_fn);
 	op_fn(smbd_object, smbd_stream);
 }
@@ -301,7 +302,7 @@ static inline NTSTATUS x_smbd_lease_op_break(
 	return NT_STATUS_INVALID_DEVICE_REQUEST;
 #if 0
 	x_smbd_object_t *smbd_object = smbd_lease->smbd_object;
-	auto op_fn = smbd_object->topdir->ops->lease_break;
+	auto op_fn = smbd_object->smbd_volume->ops->lease_break;
 	if (!op_fn) {
 		return NT_STATUS_INVALID_DEVICE_REQUEST;
 	}
@@ -316,7 +317,7 @@ static inline NTSTATUS x_smbd_open_op_oplock_break(
 		std::unique_ptr<x_smb2_state_oplock_break_t> &state)
 {
 	x_smbd_object_t *smbd_object = smbd_open->smbd_object;
-	auto op_fn = smbd_object->topdir->ops->oplock_break;
+	auto op_fn = smbd_object->smbd_volume->ops->oplock_break;
 	if (!op_fn) {
 		return NT_STATUS_INVALID_DEVICE_REQUEST;
 	}
@@ -329,7 +330,7 @@ static inline NTSTATUS x_smbd_open_op_rename(
 {
 	auto smbd_open = smbd_requ->smbd_open;
 	auto smbd_object = smbd_open->smbd_object;
-	return smbd_object->topdir->ops->rename(smbd_object, smbd_open, smbd_requ,
+	return smbd_object->smbd_volume->ops->rename(smbd_object, smbd_open, smbd_requ,
 			state->in_path, state);
 }
 
@@ -339,7 +340,7 @@ static inline NTSTATUS x_smbd_open_op_set_delete_on_close(
 		bool delete_on_close)
 {
 	x_smbd_object_t *smbd_object = smbd_open->smbd_object;
-	return smbd_object->topdir->ops->set_delete_on_close(smbd_object, smbd_open,
+	return smbd_object->smbd_volume->ops->set_delete_on_close(smbd_object, smbd_open,
 			smbd_requ, delete_on_close);
 }
 #if 0
@@ -351,7 +352,7 @@ static inline void x_smbd_object_notify_change(x_smbd_object_t *smbd_object,
 		const x_smb2_lease_key_t &ignore_lease_key,
 		bool last_level)
 {
-	return smbd_object->topdir->ops->notify_change(smbd_object,
+	return smbd_object->smbd_volume->ops->notify_change(smbd_object,
 			notify_action, notify_filter, path, new_path,
 			ignore_lease_key, last_level);
 }
@@ -360,7 +361,7 @@ static inline std::string x_smbd_open_op_get_path(
 		const x_smbd_open_t *smbd_open)
 {
 	x_smbd_object_t *smbd_object = smbd_open->smbd_object;
-	std::u16string path = smbd_object->topdir->ops->get_path(
+	std::u16string path = smbd_object->smbd_volume->ops->get_path(
 			smbd_object, smbd_open);
 	return x_convert_utf16_to_utf8_safe(path);
 }
@@ -369,7 +370,7 @@ static inline void x_smbd_open_op_destroy(
 		x_smbd_open_t *smbd_open)
 {
 	x_smbd_object_t *smbd_object = smbd_open->smbd_object;
-	return smbd_object->topdir->ops->destroy(smbd_object, smbd_open);
+	return smbd_object->smbd_volume->ops->destroy(smbd_object, smbd_open);
 }
 
 static inline std::pair<uint64_t, uint64_t> x_smbd_open_get_id(x_smbd_open_t *smbd_open)
@@ -380,13 +381,13 @@ static inline std::pair<uint64_t, uint64_t> x_smbd_open_get_id(x_smbd_open_t *sm
 static inline void x_smbd_object_release(x_smbd_object_t *smbd_object,
 		x_smbd_stream_t *smbd_stream)
 {
-	smbd_object->topdir->ops->release_object(smbd_object, smbd_stream);
+	smbd_object->smbd_volume->ops->release_object(smbd_object, smbd_stream);
 }
 #if 0
 	uint32_t (*get_attributes)(const x_smbd_object_t *smbd_object);
 static inline uint32_t x_smbd_object_get_attributes(const x_smbd_object_t *smbd_object)
 {
-	return smbd_object->topdir->ops->get_attributes(smbd_object);
+	return smbd_object->smbd_volume->ops->get_attributes(smbd_object);
 }
 #endif
 

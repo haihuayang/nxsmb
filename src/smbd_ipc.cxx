@@ -560,7 +560,7 @@ static const x_dcerpc_iface_t *find_iface_by_syntax(
 }
 
 static x_smbd_object_t *ipc_open_object(NTSTATUS *pstatus,
-		std::shared_ptr<x_smbd_topdir_t> &topdir,
+		std::shared_ptr<x_smbd_volume_t> &smbd_volume,
 		const std::u16string &path,
 		long path_priv_data,
 		bool create_if)
@@ -661,16 +661,23 @@ static const x_smbd_object_ops_t x_smbd_ipc_object_ops = {
 	ipc_op_get_path,
 };
 
-static std::shared_ptr<x_smbd_topdir_t> ipc_get_topdir()
+static std::shared_ptr<x_smbd_volume_t> ipc_create_volume()
 {
-	static std::shared_ptr<x_smbd_topdir_t> topdir = 
-		x_smbd_topdir_create("", &x_smbd_ipc_object_ops, "IPC$");
-	return topdir;
+	std::shared_ptr<x_smbd_volume_t> smbd_volume = 
+		x_smbd_volume_create("IPC$", "", "", "IPC$");
+	smbd_volume->set_ops(&x_smbd_ipc_object_ops);
+	return smbd_volume;
+}
+
+static std::shared_ptr<x_smbd_volume_t> ipc_get_volume()
+{
+	static std::shared_ptr<x_smbd_volume_t> ipc_volume = ipc_create_volume();
+	return ipc_volume;
 }
 
 x_smbd_ipc_object_t::x_smbd_ipc_object_t(const std::u16string &path,
 		const x_dcerpc_iface_t *iface)
-		: base(ipc_get_topdir(), 0, path), iface(iface)
+	: base(ipc_get_volume(), 0, path), iface(iface)
 {
 	base.flags = x_smbd_object_t::flag_initialized;
 	base.type = x_smbd_object_t::type_file;
@@ -678,8 +685,8 @@ x_smbd_ipc_object_t::x_smbd_ipc_object_t(const std::u16string &path,
 
 struct ipc_share_t : x_smbd_share_t
 {
-	ipc_share_t() : x_smbd_share_t("ipc$")
-			, topdir(ipc_get_topdir()) {
+	ipc_share_t() : x_smbd_share_t("ipc$") , smbd_volume(ipc_get_volume())
+	{
 	}
 	uint8_t get_type() const override {
 		return X_SMB2_SHARE_TYPE_PIPE;
@@ -691,7 +698,7 @@ struct ipc_share_t : x_smbd_share_t
 		return false;
 	}
 
-	NTSTATUS resolve_path(std::shared_ptr<x_smbd_topdir_t> &topdir,
+	NTSTATUS resolve_path(std::shared_ptr<x_smbd_volume_t> &smbd_volume,
 			std::u16string &out_path,
 			long &path_priv_data,
 			long &open_priv_data,
@@ -699,7 +706,7 @@ struct ipc_share_t : x_smbd_share_t
 			const char16_t *in_path_begin,
 			const char16_t *in_path_end,
 			const std::string &volume) override {
-		topdir = this->topdir;
+		smbd_volume = this->smbd_volume;
 		out_path.assign(in_path_begin, in_path_end);
 		path_priv_data = 0;
 		open_priv_data = 0;
@@ -732,7 +739,7 @@ struct ipc_share_t : x_smbd_share_t
 		X_ASSERT(false);
 		return NT_STATUS_UNSUCCESSFUL;
 	}
-	const std::shared_ptr<x_smbd_topdir_t> topdir;
+	const std::shared_ptr<x_smbd_volume_t> smbd_volume;
 };
 
 std::shared_ptr<x_smbd_share_t> x_smbd_ipc_share_create()

@@ -142,12 +142,12 @@ NTSTATUS x_smbd_tcon_op_create(x_smbd_requ_t *smbd_requ,
 	x_smbd_tcon_t *smbd_tcon = smbd_requ->smbd_tcon;
 
 	if (!state->smbd_object) {
-		std::shared_ptr<x_smbd_topdir_t> topdir;
+		std::shared_ptr<x_smbd_volume_t> smbd_volume;
 		std::u16string path;
 		long path_priv_data{};
 		long open_priv_data{};
 		status = smbd_tcon->smbd_share->resolve_path(
-				topdir, path, path_priv_data, open_priv_data,
+				smbd_volume, path, path_priv_data, open_priv_data,
 				smbd_requ->in_smb2_hdr.flags & X_SMB2_HDR_FLAG_DFS,
 				state->in_path.data(),
 				state->in_path.data() + state->in_path.length(),
@@ -161,8 +161,8 @@ NTSTATUS x_smbd_tcon_op_create(x_smbd_requ_t *smbd_requ,
 				x_convert_utf16_to_utf8_safe(path).c_str(),
 				path_priv_data, open_priv_data);
 
-		state->smbd_object = topdir->ops->open_object(&status,
-				topdir, path, path_priv_data, true);
+		state->smbd_object = smbd_volume->ops->open_object(&status,
+				smbd_volume, path, path_priv_data, true);
 		if (!state->smbd_object) {
 			return status;
 		}
@@ -198,7 +198,7 @@ NTSTATUS x_smbd_tcon_op_create(x_smbd_requ_t *smbd_requ,
 			smbd_requ->smbd_open = x_smbd_ref_inc(smbd_open);
 		}
 
-		x_smbd_notify_change(state->smbd_object->topdir, changes);
+		x_smbd_notify_change(state->smbd_object->smbd_volume, changes);
 	}
 
 	return status;

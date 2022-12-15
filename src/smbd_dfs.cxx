@@ -38,24 +38,25 @@ static const char *pseudo_entries[] = {
 };
 #define PSEUDO_ENTRIES_COUNT    X_ARRAY_SIZE(pseudo_entries)
 
+/*
 static std::pair<std::string, std::string> find_node_by_volume(const x_smbd_conf_t &smbd_conf,
 		const std::string &volume)
 {
-	const auto it = smbd_conf.volume_map.find(volume);
-	assert(it != smbd_conf.volume_map.end());
-	return { std::get<0>(it->second), std::get<1>(it->second)};
+	const x_smbd_volume_t *vol = x_smbd_find_volume(smbd_conf, volume);
+	X_ASSERT(vol);
+	return { vol->owner_node, vol->path };
 }
-
+*/
 struct dfs_share_t : x_smbd_share_t
 {
 	dfs_share_t(const x_smbd_conf_t &smbd_conf,
 			const std::string &name,
 			bool abe_enabled,
-			const std::vector<std::string> &volumes);
+			const std::vector<std::shared_ptr<x_smbd_volume_t>> &volumes);
 	uint8_t get_type() const override { return X_SMB2_SHARE_TYPE_DISK; }
 	bool is_dfs() const override { return true; }
 	bool abe_enabled() const override { return abe; }
-	NTSTATUS resolve_path(std::shared_ptr<x_smbd_topdir_t> &topdir,
+	NTSTATUS resolve_path(std::shared_ptr<x_smbd_volume_t> &smbd_volume,
 			std::u16string &out_path,
 			long &path_priv_data,
 			long &open_priv_data,
@@ -81,15 +82,24 @@ struct dfs_share_t : x_smbd_share_t
 			x_smbd_open_t *smbd_open, int fd,
 			std::vector<x_smb2_change_t> &changes) override;
 
+	std::shared_ptr<x_smbd_volume_t> find_volume(const std::string &name) const {
+		for (auto &vol: volumes) {
+			if (vol->name == name) {
+				return vol;
+			}
+		}
+		return nullptr;
+	}
+
 	const bool abe;
-	const std::vector<std::string> volumes;
-	std::shared_ptr<x_smbd_topdir_t> root_dir;
-	std::map<std::string, std::shared_ptr<x_smbd_topdir_t>> local_volume_data_dir;
+	const std::vector<std::shared_ptr<x_smbd_volume_t>> volumes;
+	std::shared_ptr<x_smbd_volume_t> root_volume;
+	std::map<std::string, std::shared_ptr<x_smbd_volume_t>> local_data_volume;
 };
 
 static NTSTATUS dfs_root_resolve_path(
 		const dfs_share_t &dfs_share,
-		std::shared_ptr<x_smbd_topdir_t> &topdir,
+		std::shared_ptr<x_smbd_volume_t> &smbd_volume,
 		std::u16string &path,
 		long &path_priv_data,
 		long &open_priv_data,
@@ -121,7 +131,7 @@ static NTSTATUS dfs_root_resolve_path(
 	if (path_start == in_path_end) {
 		path_priv_data = dfs_object_type_dfs_root;
 		open_priv_data = dfs_open_type_dfs_root;
-		topdir = dfs_share.root_dir;
+		smbd_volume = dfs_share.root_volume;
 		path.clear();
 		return NT_STATUS_OK;
 	}
@@ -143,7 +153,7 @@ static NTSTATUS dfs_root_resolve_path(
 			path_priv_data = dfs_object_type_dfs_top_level;
 			path.assign(path_start, in_path_end);
 		}
-		topdir = dfs_share.root_dir;
+		smbd_volume = dfs_share.root_volume;
 		return NT_STATUS_OK;
 	}
 
@@ -156,7 +166,7 @@ static NTSTATUS dfs_root_resolve_path(
 		}
 		open_priv_data = dfs_open_type_under_tld_manager;
 		path.assign(sep + 1, in_path_end);
-		topdir = dfs_share.root_dir;
+		smbd_volume = dfs_share.root_volume;
 		return NT_STATUS_OK;
 	}
 
@@ -165,7 +175,7 @@ static NTSTATUS dfs_root_resolve_path(
 
 static NTSTATUS dfs_volume_resolve_path(
 		dfs_share_t &dfs_share,
-		std::shared_ptr<x_smbd_topdir_t> &topdir,
+		std::shared_ptr<x_smbd_volume_t> &smbd_volume,
 		std::u16string &path,
 		long &path_priv_data,
 		long &open_priv_data,
@@ -174,8 +184,8 @@ static NTSTATUS dfs_volume_resolve_path(
 		const char16_t *in_path_end,
 		const std::string &volume)
 {
-	auto it = dfs_share.local_volume_data_dir.find(volume);
-	if (it == dfs_share.local_volume_data_dir.end()) {
+	auto it = dfs_share.local_data_volume.find(volume);
+	if (it == dfs_share.local_data_volume.end()) {
 		return NT_STATUS_OBJECT_NAME_NOT_FOUND;
 	}
 
@@ -207,7 +217,7 @@ static NTSTATUS dfs_volume_resolve_path(
 	}
 	open_priv_data = dfs_open_type_none;
 	path.assign(path_start, in_path_end);
-	topdir = it->second;
+	smbd_volume = it->second;
 	return NT_STATUS_OK;
 }
 
@@ -240,9 +250,11 @@ enum class top_level_object_state_t {
 	is_dir,
 };
 
-static inline top_level_object_state_t get_tlo_state(const std::shared_ptr<x_smbd_topdir_t> &topdir, const std::string &tld)
+static inline top_level_object_state_t get_tlo_state(
+		const std::shared_ptr<x_smbd_volume_t> &smbd_volume,
+		const std::string &tld)
 {
-	int fd = openat(topdir->fd, tld.c_str(), O_NOFOLLOW);
+	int fd = openat(smbd_volume->rootdir_fd, tld.c_str(), O_NOFOLLOW);
 	if (fd < 0) {
 		return top_level_object_state_t::not_exist;
 	}
@@ -323,28 +335,25 @@ static inline void create_new_tld(dfs_share_t &dfs_share,
 		x_smbd_object_t *smbd_object)
 {
 	// tld creation is started from the node host the share root
-	X_ASSERT(dfs_share.root_dir);
+	X_ASSERT(dfs_share.root_volume);
 	const std::u16string &u16name = smbd_object->path;
 	auto name = x_convert_utf16_to_utf8_assert(u16name);
 
 	uint8_t uuid[16];
 	x_rand_bytes(uuid, sizeof uuid);
-	size_t volume_idx = uuid[0] % dfs_share.volumes.size();
+	size_t volume_idx = 1 + uuid[0] % (dfs_share.volumes.size() - 1);
 	char uuid_str[33];
 	for (uint32_t i = 0; i < 16; ++i) {
 		snprintf(&uuid_str[2 * i], 3, "%02x", uuid[i]);
 	}
 
-	const auto &volume = dfs_share.volumes[volume_idx];
+	const auto &data_volume = dfs_share.volumes[volume_idx];
 
-	auto smbd_conf = x_smbd_conf_get();
-	auto [ host_node, volume_path ] = find_node_by_volume(*smbd_conf, volume);
-
-	auto &topdir = dfs_share.root_dir;
+	auto &root_volume = dfs_share.root_volume;
 	/* TODO, make the 3 step mkdirat, openat and flock be atomic */
-	int err = mkdirat(topdir->fd, name.c_str(), 0777);
+	int err = mkdirat(root_volume->rootdir_fd, name.c_str(), 0777);
 	X_ASSERT(err == 0);
-	int fd = openat(topdir->fd, name.c_str(), O_RDONLY);
+	int fd = openat(root_volume->rootdir_fd, name.c_str(), O_RDONLY);
 	err = flock(fd, LOCK_EX);
 	X_ASSERT(err == 0);
 
@@ -352,10 +361,9 @@ static inline void create_new_tld(dfs_share_t &dfs_share,
 	/* TODO single node from now, for multi node, it should send msg to
 	   the node hosting tld to create it
 	 */
-	if (host_node == smbd_conf->node) {
-		auto data_dir = dfs_share.local_volume_data_dir[volume];
-		X_ASSERT(data_dir);
-		posixfs_mktld(x_smbd_sess_get_user(smbd_requ->smbd_sess), *data_dir,
+	auto smbd_conf = x_smbd_conf_get();
+	if (data_volume->owner_node == smbd_conf->node) {
+		posixfs_mktld(x_smbd_sess_get_user(smbd_requ->smbd_sess), *data_volume,
 				uuid_str, ntacl_blob);
 	} else {
 		X_TODO;
@@ -369,7 +377,7 @@ static inline void create_new_tld(dfs_share_t &dfs_share,
 			&object_meta, &stream_meta, ntacl_blob);
 	close(fd);
 #endif
-	set_tld_target(fd, volume, uuid_str);
+	set_tld_target(fd, data_volume->name, uuid_str);
 }
 
 static NTSTATUS dfs_root_object_op_rename(x_smbd_object_t *smbd_object,
@@ -459,17 +467,18 @@ NTSTATUS dfs_share_t::delete_object(x_smbd_object_t *smbd_object,
 			return NT_STATUS_UNSUCCESSFUL;
 		}
 
-		auto smbd_conf = x_smbd_conf_get();
-		auto [host_node, volume_path] = find_node_by_volume(*smbd_conf, volume);
+		auto smbd_volume = find_volume(volume);
+		// auto [host_node, volume_path] = find_node_by_volume(*smbd_conf, volume);
 
 		/* TODO first mark dir fd in deleting */
 		/* TODO single node from now, for multi node, it should send msg to
 		   the node hosting tld to delete it
 		 */
-		if (host_node == smbd_conf->node) {
-			auto data_dir = local_volume_data_dir[volume];
-			X_ASSERT(data_dir);
-			err = unlinkat(data_dir->fd, uuid.c_str(), AT_REMOVEDIR);
+		auto smbd_conf = x_smbd_conf_get();
+		if (smbd_volume->owner_node == smbd_conf->node) {
+			auto data_volume = local_data_volume[volume];
+			X_ASSERT(data_volume);
+			err = unlinkat(data_volume->rootdir_fd, uuid.c_str(), AT_REMOVEDIR);
 			if (err != 0) {
 				if (errno == ENOTEMPTY) {
 					return NT_STATUS_DIRECTORY_NOT_EMPTY;
@@ -596,7 +605,7 @@ static NTSTATUS dfs_root_object_op_set_delete_on_close(
 	}
 }
 
-static void dfs_root_notify_change(std::shared_ptr<x_smbd_topdir_t> &topdir,
+static void dfs_root_notify_change(std::shared_ptr<x_smbd_volume_t> &smbd_volume,
 		const std::u16string &path,
 		const std::u16string &fullpath,
 		const std::u16string *new_fullpath,
@@ -610,16 +619,16 @@ static void dfs_root_notify_change(std::shared_ptr<x_smbd_topdir_t> &topdir,
 	long open_priv_data;
 	if (path.empty()) {
 		open_priv_data = dfs_open_type_dfs_root;
-		smbd_object = topdir->ops->open_object(&status,
-				topdir, path, dfs_object_type_dfs_root, false);
+		smbd_object = smbd_volume->ops->open_object(&status,
+				smbd_volume, path, dfs_object_type_dfs_root, false);
 	} else {
 		open_priv_data = dfs_open_type_tld_manager;
 		std::string utf8_path = x_convert_utf16_to_utf8_assert(path, x_tolower);
 		if (utf8_path != pesudo_tld_dir) {
 			return;
 		}
-		smbd_object = topdir->ops->open_object(&status,
-				topdir, std::u16string(), dfs_object_type_dfs_root, false);
+		smbd_object = smbd_volume->ops->open_object(&status,
+				smbd_volume, std::u16string(), dfs_object_type_dfs_root, false);
 	}
 
 	if (!smbd_object) {
@@ -643,7 +652,7 @@ static inline void dfs_root_op_lease_break(
 
 
 static x_smbd_object_t *dfs_root_op_open_object(NTSTATUS *pstatus,
-		std::shared_ptr<x_smbd_topdir_t> &topdir,
+		std::shared_ptr<x_smbd_volume_t> &smbd_volume,
 		const std::u16string &path,
 		long path_priv_data,
 		bool create_if)
@@ -654,7 +663,7 @@ static x_smbd_object_t *dfs_root_op_open_object(NTSTATUS *pstatus,
 	}
 
 	return x_smbd_posixfs_open_object(
-			pstatus, topdir,
+			pstatus, smbd_volume,
 			path, path_priv_data, create_if);
 }
 
@@ -874,7 +883,7 @@ static const x_smbd_object_ops_t dfs_volume_object_ops = {
 	posixfs_op_get_path,
 };
 
-NTSTATUS dfs_share_t::resolve_path(std::shared_ptr<x_smbd_topdir_t> &topdir,
+NTSTATUS dfs_share_t::resolve_path(std::shared_ptr<x_smbd_volume_t> &smbd_volume,
 		std::u16string &out_path,
 		long &path_priv_data,
 		long &open_priv_data,
@@ -886,11 +895,11 @@ NTSTATUS dfs_share_t::resolve_path(std::shared_ptr<x_smbd_topdir_t> &topdir,
 	if (volume.empty()) {
 		return NT_STATUS_PATH_NOT_COVERED;
 	} else if (volume == "-") {
-		return dfs_root_resolve_path(*this, topdir, out_path,
+		return dfs_root_resolve_path(*this, smbd_volume, out_path,
 				path_priv_data, open_priv_data,
 				dfs, in_path_begin, in_path_end);
 	} else {
-		return dfs_volume_resolve_path(*this, topdir, out_path,
+		return dfs_volume_resolve_path(*this, smbd_volume, out_path,
 				path_priv_data, open_priv_data,
 				dfs, in_path_begin, in_path_end,
 				volume);
@@ -908,11 +917,10 @@ static NTSTATUS dfs_root_referral(const dfs_share_t &dfs_share,
 		const char16_t *in_share_end)
 {
 	const auto &first = dfs_share.volumes[0];
-	auto [node_name, volume_path] = find_node_by_volume(smbd_conf, first);
 
 	std::u16string alt_path(in_full_path_begin, in_share_end);
 	std::string node = "\\";
-	node += node_name + "." + smbd_conf.dns_domain + "\\-";
+	node += first->owner_node + "." + smbd_conf.dns_domain + "\\-";
 	std::u16string node16 = x_convert_utf8_to_utf16_assert(node);
 	node16.append(in_share_begin, in_share_end);
 	dfs_referral_resp.referrals.push_back(x_referral_t{DFS_SERVER_ROOT, 0,
@@ -935,10 +943,8 @@ static NTSTATUS dfs_volume_referral(const dfs_share_t &dfs_share,
 		const std::string &volume,
 		const std::string &uuid)
 {
-	const auto &first = dfs_share.volumes[0];
-	const auto it = smbd_conf.volume_map.find(first);
-	X_ASSERT(it != smbd_conf.volume_map.end()); // TODO
-	auto node_name = std::get<0>(it->second);
+	const auto &first_vol = dfs_share.volumes[0];
+	auto node_name = first_vol->owner_node;
 
 	std::u16string alt_path(in_full_path_begin, in_tld_end);
 	std::string node = "\\" + node_name + "." + smbd_conf.dns_domain + "\\--" + volume + "\\" + uuid;
@@ -960,7 +966,7 @@ static NTSTATUS dfs_share_get_dfs_referral(const dfs_share_t &dfs_share,
 		const char16_t *in_share_begin,
 		const char16_t *in_share_end)
 {
-	if (!dfs_share.root_dir || in_share_end == in_full_path_end) {
+	if (!dfs_share.root_volume || in_share_end == in_full_path_end) {
 		return dfs_root_referral(dfs_share, smbd_conf,
 				dfs_referral_resp,
 				in_full_path_begin, in_full_path_end,
@@ -985,7 +991,7 @@ static NTSTATUS dfs_share_get_dfs_referral(const dfs_share_t &dfs_share,
 				in_share_begin, in_share_end);
 	}
 
-	int fd = openat(dfs_share.root_dir->fd, tld.c_str(), O_NOFOLLOW);
+	int fd = openat(dfs_share.root_volume->rootdir_fd, tld.c_str(), O_NOFOLLOW);
 	if (fd < 0) {
 		return NT_STATUS_NOT_FOUND;
 	}
@@ -1055,29 +1061,30 @@ NTSTATUS dfs_share_t::create_open(x_smbd_open_t **psmbd_open,
 dfs_share_t::dfs_share_t(const x_smbd_conf_t &smbd_conf,
 		const std::string &name,
 		bool abe,
-		const std::vector<std::string> &volumes)
-	: x_smbd_share_t(name), abe(abe), volumes(volumes)
+		const std::vector<std::shared_ptr<x_smbd_volume_t>> &smbd_volumes)
+	: x_smbd_share_t(name), abe(abe), volumes(smbd_volumes)
 {
-	auto first_volume = volumes[0];
-	auto [root_node, volume_path] = find_node_by_volume(smbd_conf, first_volume);
-	if (root_node == smbd_conf.node) {
-		std::string path = volume_path + "/root";
-		root_dir = x_smbd_topdir_create(path, &dfs_root_object_ops, name + "/root");
-	}
-	for (const auto &volume: volumes) {
-		auto [node, volume_path] = find_node_by_volume(smbd_conf, volume);
-		if (node == smbd_conf.node) {
-			std::string path = volume_path + "/data";
-			local_volume_data_dir[volume] = x_smbd_topdir_create(path, &dfs_volume_object_ops, name + "/" + volume);
+	X_ASSERT(smbd_volumes.size() > 1);
+	bool first = true;
+	for (const auto &smbd_volume: smbd_volumes) {
+		if (smbd_volume->owner_node == smbd_conf.node) {
+			if (first) {
+				smbd_volume->set_ops(&dfs_root_object_ops);
+				root_volume = smbd_volume;
+			} else {
+				smbd_volume->set_ops(&dfs_volume_object_ops);
+				local_data_volume[smbd_volume->name] = smbd_volume;
+			}
 		}
+		first = false;
 	}
 }
 
 std::shared_ptr<x_smbd_share_t> x_smbd_dfs_share_create(const x_smbd_conf_t &smbd_conf,
 		const std::string &name,
 		bool abe,
-		const std::vector<std::string> &volumes)
+		const std::vector<std::shared_ptr<x_smbd_volume_t>> &smbd_volumes)
 {
-	return std::make_shared<dfs_share_t>(smbd_conf, name, abe, volumes);
+	return std::make_shared<dfs_share_t>(smbd_conf, name, abe, smbd_volumes);
 }
 

@@ -56,8 +56,8 @@ SET_src_smbd_nx := \
 	smbd_dfs \
 	smbd_simplefs \
 	smbd_share \
+	smbd_conf \
 	smbd_ipc \
-	smbd_conf smbd_share \
 	smbd \
 	smbd_stats \
 	smbd_requ \

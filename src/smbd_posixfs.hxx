@@ -13,7 +13,7 @@ struct posixfs_open_t;
 struct posixfs_object_t;
 
 NTSTATUS posixfs_create_open(x_smbd_open_t **psmbd_open,
-		std::shared_ptr<x_smbd_topdir_t> &topdir,
+		std::shared_ptr<x_smbd_volume_t> &smbd_volume,
 		const std::u16string &path, uint64_t path_data,
 		x_smbd_requ_t *smbd_requ,
 		std::unique_ptr<x_smb2_state_create_t> &state);
@@ -79,7 +79,7 @@ NTSTATUS posixfs_object_op_set_delete_on_close(
 		bool delete_on_close);
 NTSTATUS posixfs_object_op_unlink(x_smbd_object_t *smbd_object, int fd);
 void posixfs_notify_fname(
-		std::shared_ptr<x_smbd_topdir_t> topdir,
+		std::shared_ptr<x_smbd_volume_t> smbd_volume,
 		const std::u16string req_path,
 		uint32_t action,
 		uint32_t notify_filter,
@@ -122,7 +122,7 @@ NTSTATUS posixfs_object_qdir(
 			uint32_t file_number));
 
 x_smbd_object_t *x_smbd_posixfs_open_object(NTSTATUS *pstatus,
-		std::shared_ptr<x_smbd_topdir_t> &topdir,
+		std::shared_ptr<x_smbd_volume_t> &smbd_volume,
 		const std::u16string &path, long path_data,
 		bool create_if);
 
@@ -135,7 +135,7 @@ void posixfs_object_notify_change(x_smbd_object_t *smbd_object,
 		const x_smb2_lease_key_t &ignore_lease_key,
 		bool last_level,
 		long open_priv_data);
-void posixfs_simple_notify_change(std::shared_ptr<x_smbd_topdir_t> &topdir,
+void posixfs_simple_notify_change(std::shared_ptr<x_smbd_volume_t> &smbd_volume,
 		const std::u16string &path,
 		const std::u16string &fullpath,
 		const std::u16string *new_fullpath,
@@ -157,7 +157,7 @@ std::unique_lock<std::mutex> x_smbd_posixfs_lock_object(x_smbd_object_t *smbd_ob
 x_smbd_object_t *x_smbd_posixfs_object_open_parent(const x_smbd_object_t *child_object);
 
 int posixfs_mktld(const std::shared_ptr<x_smbd_user_t> &smbd_user,
-		const x_smbd_topdir_t &topdir,
+		const x_smbd_volume_t &smbd_volume,
 		const std::string &name,
 		std::vector<uint8_t> &ntacl_blob);
 

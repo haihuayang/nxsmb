@@ -96,8 +96,8 @@ NTSTATUS x_smbd_open_close(x_smbd_open_t *smbd_open,
 	x_smbd_ref_dec(smbd_open);
 
 	x_smbd_object_t *smbd_object = smbd_open->smbd_object;
-	auto topdir = smbd_object->topdir;
-	auto status = topdir->ops->close(smbd_object, smbd_open,
+	auto smbd_volume = smbd_object->smbd_volume;
+	auto status = smbd_volume->ops->close(smbd_object, smbd_open,
 			smbd_requ, state, changes);
 
 	x_smbd_ref_dec(smbd_open); // ref by smbd_tcon open_list
@@ -115,10 +115,10 @@ NTSTATUS x_smbd_open_op_close(
 	}
 
 	x_smbd_object_t *smbd_object = smbd_open->smbd_object;
-	auto topdir = smbd_object->topdir;
+	auto smbd_volume = smbd_object->smbd_volume;
 	std::vector<x_smb2_change_t> changes;
 	auto status = x_smbd_open_close(smbd_open, smbd_requ, state, changes);
-	x_smbd_notify_change(topdir, changes);
+	x_smbd_notify_change(smbd_volume, changes);
 
 	return status;
 }

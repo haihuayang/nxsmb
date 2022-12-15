@@ -117,37 +117,65 @@ static int make_default_dir(int dirfd, const char *name)
 	return fd;
 }
 
-static int init_volume(char **argv)
+static int make_volume(const char *path, uint16_t vol_id, bool dfs_root)
 {
-	bool root = false;
-	while (*argv) {
-		if (strcmp(*argv, "-r") == 0) {
-			root = true;
-		} else if ((*argv)[0] == '-') {
-			X_ASSERT(false);
-		} else {
-			break;
-		}
-		++argv;
-	}
-
-	const char *path = argv[0];
-	X_ASSERT(path);
-
 	int vol_fd = open(path, O_RDONLY);
 	X_ASSERT(vol_fd >= 0);
 
-	int data_fd = make_default_dir(vol_fd, "data");
-	X_ASSERT(data_fd >= 0);
-	close(data_fd);
-
-	if (root) {
-		int root_fd = make_default_dir(vol_fd, "root");
-		X_ASSERT(root_fd >= 0);
-		int err = mkdirat(root_fd, ".tlds", 0777);
-		X_ASSERT(err == 0);
-		close(root_fd);
+	int rootdir_fd = make_default_dir(vol_fd, "root");
+	X_ASSERT(rootdir_fd >= 0);
+	if (dfs_root) {
+		int tlds_fd = make_default_dir(rootdir_fd, ".tlds");
+		close(tlds_fd);
 	}
+	close(rootdir_fd);
+
+	int vol_id_fd = openat(vol_fd, "id", O_WRONLY | O_CREAT | O_TRUNC, 0644);
+	X_ASSERT(vol_id_fd >= 0);
+	write(vol_id_fd, &vol_id, sizeof vol_id);
+	close(vol_id_fd);
+
+	close(vol_fd);
+	return 0;
+}
+
+static int init_volume(int argc, char **argv)
+{
+	bool dfs_root = false;
+	uint16_t vol_id = 0xffff;
+	int opt;
+	while ((opt = getopt(argc, argv, "ri:")) != -1) {
+		switch (opt) {
+			case 'r':
+				dfs_root = true;
+				break;
+			case 'i': {
+				char *end;
+				unsigned long tmp = strtoul(optarg, &end, 0);
+				if (*end || tmp >= 0xffff) {
+					fprintf(stderr, "Invalid volume id %s\n",
+							optarg);
+					exit(EXIT_FAILURE);
+				}
+				vol_id = x_convert<uint16_t>(tmp);
+				  }
+				break;
+			default: /* '?' */
+				fprintf(stderr, "Usage: %s [-i volume_id] [-r] path\n",
+						argv[0]);
+				exit(EXIT_FAILURE);
+		}
+	}
+
+	if (optind >= argc) {
+		fprintf(stderr, "Usage: %s [-i volume_id] [-r] path\n",
+				argv[0]);
+		exit(EXIT_FAILURE);
+	}
+
+	const char *path = argv[optind];
+
+	make_volume(path, vol_id, dfs_root);
 	return 0;
 }
 
@@ -260,7 +288,7 @@ int main(int argc, char **argv)
 	if (strcmp(command, "init-top-dir") == 0) {
 		return init_top_dir(argv + 2);
 	} else if (strcmp(command, "init-volume") == 0) {
-		return init_volume(argv + 2);
+		return init_volume(argc - 1, argv + 1);
 	} else if (strcmp(command, "attrex") == 0) {
 		return show_attrex(argv + 2);
 	} else if (strcmp(command, "set-dos-attr") == 0) {

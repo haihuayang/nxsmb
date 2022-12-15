@@ -230,7 +230,7 @@ static inline posixfs_ads_t *posixfs_ads_from_smbd_stream(x_smbd_stream_t *smbd_
 struct posixfs_object_t
 {
 	posixfs_object_t(uint64_t h,
-			const std::shared_ptr<x_smbd_topdir_t> &topdir,
+			const std::shared_ptr<x_smbd_volume_t> &smbd_volume,
 			const std::u16string &p, uint64_t data_data);
 	~posixfs_object_t() {
 		if (fd != -1) {
@@ -446,13 +446,13 @@ static inline bool posixfs_object_is_dir(const posixfs_object_t *posixfs_object)
 	return posixfs_object->base.type == x_smbd_object_t::type_dir;
 }
 
-/* TODO dfs need one more fact refer the topdir */
-static std::pair<bool, uint64_t> hash_object(const x_smbd_topdir_t &topdir,
+/* TODO dfs need one more fact refer the smbd_volume */
+static std::pair<bool, uint64_t> hash_object(const x_smbd_volume_t &smbd_volume,
 		const std::u16string &path)
 {
 	auto [ ok, hash ] = x_strcase_hash(path);
 	if (ok) {
-		return { true, hash ^ topdir.uuid };
+		return { true, hash ^ smbd_volume.volume_id };
 	} else {
 		return { false, 0 };
 	}
@@ -488,7 +488,7 @@ static inline void posixfs_stream_decref(posixfs_stream_t *posixfs_stream)
  */
 /* TODO case insensitive */
 static posixfs_object_t *posixfs_object_lookup(
-		const std::shared_ptr<x_smbd_topdir_t> &topdir,
+		const std::shared_ptr<x_smbd_volume_t> &smbd_volume,
 		const std::u16string &path,
 		uint64_t path_data,
 		bool create_if,
@@ -504,7 +504,7 @@ static posixfs_object_t *posixfs_object_lookup(
 
 	for (x_dqlink_t *link = bucket.head.get_front(); link; link = link->get_next()) {
 		elem = X_CONTAINER_OF(link, posixfs_object_t, hash_link);
-		if (elem->hash == hash && elem->base.topdir->uuid == topdir->uuid
+		if (elem->hash == hash && elem->base.smbd_volume == smbd_volume
 				&& x_strcase_equal(elem->base.path, path)) {
 			matched_object = elem;
 			break;
@@ -518,10 +518,10 @@ static posixfs_object_t *posixfs_object_lookup(
 		if (elem && elem->use_count == 0 &&
 				elem->unused_timestamp + posixfs_object_pool_t::cache_time < tick_now) {
 			elem->~posixfs_object_t();
-			new (elem)posixfs_object_t(hash, topdir, path, path_data);
+			new (elem)posixfs_object_t(hash, smbd_volume, path, path_data);
 			matched_object = elem;
 		} else {
-			matched_object = new posixfs_object_t(hash, topdir, path, path_data);
+			matched_object = new posixfs_object_t(hash, smbd_volume, path, path_data);
 			X_ASSERT(matched_object);
 			bucket.head.push_front(&matched_object->hash_link);
 			++pool.count;
@@ -1138,7 +1138,8 @@ void posixfs_object_notify_change(x_smbd_object_t *smbd_object,
 	}
 }
 
-void posixfs_simple_notify_change(std::shared_ptr<x_smbd_topdir_t> &topdir,
+void posixfs_simple_notify_change(
+		std::shared_ptr<x_smbd_volume_t> &smbd_volume,
 		const std::u16string &path,
 		const std::u16string &fullpath,
 		const std::u16string *new_fullpath,
@@ -1148,8 +1149,8 @@ void posixfs_simple_notify_change(std::shared_ptr<x_smbd_topdir_t> &topdir,
 		bool last_level)
 {
 	NTSTATUS status;
-	x_smbd_object_t *smbd_object = topdir->ops->open_object(&status,
-			topdir, path, 0, false);
+	x_smbd_object_t *smbd_object = smbd_volume->ops->open_object(&status,
+			smbd_volume, path, 0, false);
 	if (!smbd_object) {
 		X_LOG_DBG("skip notify %d,x%x '%s', '%s'", notify_action,
 				notify_filter,
@@ -1172,7 +1173,7 @@ void posixfs_simple_notify_change(std::shared_ptr<x_smbd_topdir_t> &topdir,
 /* rename_internals_fsp */
 static NTSTATUS rename_object_intl(posixfs_object_pool_t::bucket_t &new_bucket,
 		posixfs_object_pool_t::bucket_t &old_bucket,
-		const std::shared_ptr<x_smbd_topdir_t> &topdir,
+		const std::shared_ptr<x_smbd_volume_t> &smbd_volume,
 		posixfs_object_t *old_object,
 		const std::u16string &new_path,
 		std::u16string &old_path,
@@ -1181,7 +1182,7 @@ static NTSTATUS rename_object_intl(posixfs_object_pool_t::bucket_t &new_bucket,
 	posixfs_object_t *new_object = nullptr;
 	for (x_dqlink_t *link = new_bucket.head.get_front(); link; link = link->get_next()) {
 		posixfs_object_t *elem = X_CONTAINER_OF(link, posixfs_object_t, hash_link);
-		if (elem->hash == new_hash && elem->base.topdir->uuid == topdir->uuid
+		if (elem->hash == new_hash && elem->base.smbd_volume == smbd_volume
 				&& elem->base.path == new_path) {
 			new_object = elem;
 			break;
@@ -1198,7 +1199,7 @@ static NTSTATUS rename_object_intl(posixfs_object_pool_t::bucket_t &new_bucket,
 		return NT_STATUS_ILLEGAL_CHARACTER;
 	}
 
-	int fd = openat(topdir->fd, new_unix_path.c_str(), O_RDONLY);
+	int fd = openat(smbd_volume->rootdir_fd, new_unix_path.c_str(), O_RDONLY);
 	if (fd != -1) {
 		if (new_object) {
 			new_object->fd = fd;
@@ -1210,8 +1211,8 @@ static NTSTATUS rename_object_intl(posixfs_object_pool_t::bucket_t &new_bucket,
 		return NT_STATUS_OBJECT_NAME_COLLISION;
 	}
 
-	int err = renameat(topdir->fd, old_object->unix_path.c_str(),
-			topdir->fd, new_unix_path.c_str());
+	int err = renameat(smbd_volume->rootdir_fd, old_object->unix_path.c_str(),
+			smbd_volume->rootdir_fd, new_unix_path.c_str());
 	if (err != 0) {
 		return x_map_nt_error_from_unix(-err);
 	}	
@@ -1343,7 +1344,7 @@ static void posixfs_rename_cancel(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_
 }
 
 static NTSTATUS parent_dirname_compatible_open(
-		std::shared_ptr<x_smbd_topdir_t> &topdir,
+		std::shared_ptr<x_smbd_volume_t> &smbd_volume,
 		const std::u16string &path)
 {
 	if (path.empty()) {
@@ -1351,8 +1352,8 @@ static NTSTATUS parent_dirname_compatible_open(
 	}
 	std::u16string parent_path = get_parent_path(path);
 	NTSTATUS status;
-	x_smbd_object_t *smbd_object = topdir->ops->open_object(&status,
-			topdir, parent_path, 0, false);
+	x_smbd_object_t *smbd_object = smbd_volume->ops->open_object(&status,
+			smbd_volume, parent_path, 0, false);
 	if (!smbd_object) {
 		return NT_STATUS_OK;
 	}
@@ -1382,16 +1383,16 @@ NTSTATUS posixfs_object_op_rename(x_smbd_object_t *smbd_object,
 	posixfs_open_t *posixfs_open = posixfs_open_from_base_t::container(smbd_open);
 	posixfs_stream_t *posixfs_stream = posixfs_get_stream(posixfs_object, posixfs_open);
 
-	auto &topdir = posixfs_object->base.topdir;
+	auto &smbd_volume = posixfs_object->base.smbd_volume;
 
-	auto [ ok, new_hash ] = hash_object(*topdir, new_path);
+	auto [ ok, new_hash ] = hash_object(*smbd_volume, new_path);
 	if (!ok) {
 		return NT_STATUS_ILLEGAL_CHARACTER;
 	}
 
 	NTSTATUS status;
 	if (!smbd_open->smbd_stream) {
-		status = parent_dirname_compatible_open(smbd_object->topdir, new_path);
+		status = parent_dirname_compatible_open(smbd_object->smbd_volume, new_path);
 		if (!NT_STATUS_IS_OK(status)) {
 			return status;
 		}
@@ -1426,13 +1427,13 @@ NTSTATUS posixfs_object_op_rename(x_smbd_object_t *smbd_object,
 	std::u16string old_path;
 	if (new_bucket_idx == old_bucket_idx) {
 		auto bucket_lock = std::lock_guard(new_bucket.mutex);
-		status = rename_object_intl(new_bucket, new_bucket, topdir,
+		status = rename_object_intl(new_bucket, new_bucket, smbd_volume,
 				posixfs_object,
 				new_path, old_path, new_hash);
 	} else {
 		auto &old_bucket = pool.buckets[old_bucket_idx];
 		std::scoped_lock bucket_lock(new_bucket.mutex, old_bucket.mutex);
-		status = rename_object_intl(new_bucket, old_bucket, topdir,
+		status = rename_object_intl(new_bucket, old_bucket, smbd_volume,
 				posixfs_object,
 				new_path, old_path, new_hash);
 	}
@@ -1450,13 +1451,13 @@ NTSTATUS posixfs_object_op_rename(x_smbd_object_t *smbd_object,
 }
 
 static posixfs_object_t *posixfs_object_open(
-		const std::shared_ptr<x_smbd_topdir_t> &topdir,
+		const std::shared_ptr<x_smbd_volume_t> &smbd_volume,
 		const std::u16string &path,
 		uint64_t path_data,
 		bool create_if,
 		uint64_t hash)
 {
-	posixfs_object_t *posixfs_object = posixfs_object_lookup(topdir, path,
+	posixfs_object_t *posixfs_object = posixfs_object_lookup(smbd_volume, path,
 			path_data, create_if, hash);
 	if (!posixfs_object) {
 		return nullptr;
@@ -1467,7 +1468,7 @@ static posixfs_object_t *posixfs_object_open(
 		std::string unix_path;
 		X_ASSERT(convert_to_unix(unix_path, path));
 
-		int fd = posixfs_open(topdir->fd, unix_path.c_str(),
+		int fd = posixfs_open(smbd_volume->rootdir_fd, unix_path.c_str(),
 				&posixfs_object->meta,
 				&posixfs_object->default_stream.meta);
 		if (fd < 0) {
@@ -2131,7 +2132,7 @@ static void reply_requ_create(x_smb2_state_create_t &state,
 			posixfs_stream->meta);
 }
 
-static int open_parent(const std::shared_ptr<x_smbd_topdir_t> &topdir,
+static int open_parent(const std::shared_ptr<x_smbd_volume_t> &smbd_volume,
 		const std::u16string &path)
 {
 	if (path.empty()) {
@@ -2141,19 +2142,20 @@ static int open_parent(const std::shared_ptr<x_smbd_topdir_t> &topdir,
 	std::u16string parent_path;
 	auto sep = path.rfind('\\');
 	if (sep == std::u16string::npos) {
-		return dup(topdir->fd);
+		return dup(smbd_volume->rootdir_fd);
 	}
 	parent_path = path.substr(0, sep);
 	std::string unix_path;
 	X_ASSERT(convert_to_unix(unix_path, parent_path));
-	int fd = openat(topdir->fd, unix_path.c_str(), O_RDONLY | O_NOFOLLOW);
+	int fd = openat(smbd_volume->rootdir_fd, unix_path.c_str(), O_RDONLY | O_NOFOLLOW);
 	return fd;
 }
 
 static NTSTATUS get_parent_sd(const posixfs_object_t *posixfs_object,
 		std::shared_ptr<idl::security_descriptor> &psd)
 {
-	int fd = open_parent(posixfs_object->base.topdir, posixfs_object->base.path);
+	int fd = open_parent(posixfs_object->base.smbd_volume,
+			posixfs_object->base.path);
 	if (fd == -1) {
 		return x_map_nt_error_from_unix(-errno);
 	}
@@ -2232,7 +2234,7 @@ static NTSTATUS posixfs_new_object(
 	}
 
 	/* if parent is not enable inherit, make_sec_desc */
-	int fd = posixfs_create(posixfs_object->base.topdir->fd,
+	int fd = posixfs_create(posixfs_object->base.smbd_volume->rootdir_fd,
 			state.in_create_options & X_SMB2_CREATE_OPTION_DIRECTORY_FILE,
 			posixfs_object->unix_path.c_str(),
 			&posixfs_object->meta,
@@ -3317,7 +3319,8 @@ static NTSTATUS posixfs_create_open(
 NTSTATUS posixfs_object_op_unlink(x_smbd_object_t *smbd_object, int fd)
 {
 	posixfs_object_t *posixfs_object = posixfs_object_from_base_t::container(smbd_object);
-	int err = unlinkat(posixfs_object->base.topdir->fd, posixfs_object->unix_path.c_str(),
+	int err = unlinkat(posixfs_object->base.smbd_volume->rootdir_fd,
+			posixfs_object->unix_path.c_str(),
 			posixfs_object_is_dir(posixfs_object) ? AT_REMOVEDIR : 0);
 	if (err != 0) {
 		X_TODO_ASSERT(errno == ENOTEMPTY);
@@ -3458,8 +3461,8 @@ NTSTATUS posixfs_object_op_close(
 	 */
 	if (posixfs_open->base.notify_filter & X_FILE_NOTIFY_CHANGE_WATCH_TREE) {
 		/* TODO make it atomic */
-		X_ASSERT(smbd_object->topdir->watch_tree_cnt > 0);
-		--smbd_object->topdir->watch_tree_cnt;
+		X_ASSERT(smbd_object->smbd_volume->watch_tree_cnt > 0);
+		--smbd_object->smbd_volume->watch_tree_cnt;
 	}
 	x_smbd_requ_t *requ_notify;
 	while ((requ_notify = posixfs_open->notify_requ_list.get_front()) != nullptr) {
@@ -4816,8 +4819,9 @@ NTSTATUS posixfs_object_op_ioctl(
 			x_smb2_file_object_id_buffer_t *data = (x_smb2_file_object_id_buffer_t *)state->out_buf->data;
 			data->object_id.data[0] = X_H2LE64(posixfs_object->meta.fsid);
 			data->object_id.data[1] = X_H2LE64(posixfs_object->meta.inode);
-			data->birth_volume_id.data[0] = X_H2LE64(smbd_object->topdir->volume_id.data[0]); 
-			data->birth_volume_id.data[1] = X_H2LE64(smbd_object->topdir->volume_id.data[1]); 
+			auto volume_uuid = smbd_object->smbd_volume->volume_uuid;
+			data->birth_volume_id.data[0] = X_H2LE64(volume_uuid.data[0]); 
+			data->birth_volume_id.data[1] = X_H2LE64(volume_uuid.data[1]); 
 			data->birth_volume_id = data->object_id;
 			data->domain_id = {0, 0};
 			return NT_STATUS_OK;
@@ -5138,18 +5142,18 @@ void posixfs_object_op_destroy(x_smbd_object_t *smbd_object,
 }
 
 x_smbd_object_t *x_smbd_posixfs_open_object(NTSTATUS *pstatus,
-		std::shared_ptr<x_smbd_topdir_t> &topdir,
+		std::shared_ptr<x_smbd_volume_t> &smbd_volume,
 		const std::u16string &path, long path_data,
 		bool create_if)
 {
-	auto [ ok, hash ] = hash_object(*topdir, path);
+	auto [ ok, hash ] = hash_object(*smbd_volume, path);
 	if (!ok) {
 		*pstatus = NT_STATUS_ILLEGAL_CHARACTER;
 		return nullptr;
 	}
 
 	posixfs_object_t *posixfs_object = posixfs_object_open(
-			topdir, path, path_data, create_if, hash);
+			smbd_volume, path, path_data, create_if, hash);
 	if (posixfs_object) {
 		return &posixfs_object->base;
 	} else {
@@ -5187,9 +5191,9 @@ std::u16string posixfs_op_get_path(const x_smbd_object_t *smbd_object,
 
 posixfs_object_t::posixfs_object_t(
 		uint64_t h,
-		const std::shared_ptr<x_smbd_topdir_t> &topdir,
+		const std::shared_ptr<x_smbd_volume_t> &smbd_volume,
 		const std::u16string &p, uint64_t path_data)
-	: base(topdir, path_data, p), hash(h)
+	: base(smbd_volume, path_data, p), hash(h)
 {
 }
 
@@ -5232,12 +5236,12 @@ int posixfs_object_statex_getat(posixfs_object_t *dir_obj, const char *name,
 }
 
 int posixfs_mktld(const std::shared_ptr<x_smbd_user_t> &smbd_user,
-		const x_smbd_topdir_t &topdir,
+		const x_smbd_volume_t &smbd_volume,
 		const std::string &name,
 		std::vector<uint8_t> &ntacl_blob)
 {
 	std::shared_ptr<idl::security_descriptor> top_psd, psd;
-	NTSTATUS status = posixfs_get_sd(topdir.fd, top_psd);
+	NTSTATUS status = posixfs_get_sd(smbd_volume.rootdir_fd, top_psd);
 	X_ASSERT(NT_STATUS_IS_OK(status));
 
 	status = make_child_sec_desc(psd, top_psd,
@@ -5249,7 +5253,7 @@ int posixfs_mktld(const std::shared_ptr<x_smbd_user_t> &smbd_user,
 	x_smbd_object_meta_t object_meta;
 	x_smbd_stream_meta_t stream_meta;
 	/* if parent is not enable inherit, make_sec_desc */
-	int fd = posixfs_create(topdir.fd,
+	int fd = posixfs_create(smbd_volume.rootdir_fd,
 			true,
 			name.c_str(),
 			&object_meta, &stream_meta,

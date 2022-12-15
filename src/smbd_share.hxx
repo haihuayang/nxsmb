@@ -36,16 +36,29 @@ struct x_dfs_referral_resp_t
 };
 
 struct x_smbd_object_ops_t;
-struct x_smbd_topdir_t
+struct x_smbd_volume_t
 {
-	x_smbd_topdir_t(const x_smbd_object_ops_t *ops, int fd,
-			const x_smb2_uuid_t &volume_id);
-	~x_smbd_topdir_t();
-	const x_smbd_object_ops_t * const ops;
-	uint64_t const uuid;
-	const int fd;
+	x_smbd_volume_t(const std::string &name, const std::string &path,
+			const std::string &owner_node,
+			const std::string &owner_share,
+			const x_smb2_uuid_t &vol_uuid,
+			uint16_t vol_id, int rootdir_fd);
+
+	~x_smbd_volume_t();
+
+	void set_ops(const x_smbd_object_ops_t *ops) {
+		X_ASSERT(!this->ops);
+		this->ops = ops;
+	}
+
+	const x_smbd_object_ops_t *ops = nullptr;
+	const std::string name, path;
+	const std::string owner_node;
+	const std::string owner_share;
+	const x_smb2_uuid_t volume_uuid;
+	const uint16_t volume_id;
+	const int rootdir_fd;
 	std::atomic<uint32_t> watch_tree_cnt{0};
-	const x_smb2_uuid_t volume_id;
 };
 
 struct x_smbd_share_t
@@ -62,7 +75,7 @@ struct x_smbd_share_t
 			const char16_t *in_server_end,
 			const char16_t *in_share_begin,
 			const char16_t *in_share_end) const = 0;
-	virtual NTSTATUS resolve_path(std::shared_ptr<x_smbd_topdir_t> &topdir,
+	virtual NTSTATUS resolve_path(std::shared_ptr<x_smbd_volume_t> &smbd_volume,
 			std::u16string &out_path,
 			long &path_priv_data,
 			long &open_priv_data,
@@ -87,19 +100,20 @@ struct x_smbd_share_t
 	std::vector<std::string> vgs;
 };
 
-std::shared_ptr<x_smbd_topdir_t> x_smbd_topdir_create(const std::string &path, const x_smbd_object_ops_t *ops, const std::string &volume_name);
-
+std::shared_ptr<x_smbd_volume_t> x_smbd_volume_create(
+		const std::string &name, const std::string &path,
+		const std::string &owner_node, const std::string &owner_share);
 std::shared_ptr<x_smbd_share_t> x_smbd_ipc_share_create();
 std::shared_ptr<x_smbd_share_t> x_smbd_dfs_share_create(const x_smbd_conf_t &smbd_conf,
 		const std::string &name,
 		bool abe,
-		const std::vector<std::string> &vgs);
+		const std::vector<std::shared_ptr<x_smbd_volume_t>> &smbd_volumes);
 std::shared_ptr<x_smbd_share_t> x_smbd_dfs_link_create(const std::string &name, const std::string &dfs_root);
 std::shared_ptr<x_smbd_share_t> x_smbd_dfs_root_create(const std::string &name, const std::string &path, const std::vector<std::string> &vgs);
 std::shared_ptr<x_smbd_share_t> x_smbd_simplefs_share_create(
 		const std::string &name,
 		bool abe,
-		const std::string &path);
+		const std::shared_ptr<x_smbd_volume_t> &smbd_volume);
 int x_smbd_simplefs_mktld(const std::shared_ptr<x_smbd_user_t> &smbd_user,
 		std::shared_ptr<x_smbd_share_t> &smbd_share,
 		const std::string &name,

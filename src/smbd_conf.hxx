@@ -69,8 +69,7 @@ struct x_smbd_conf_t
 	std::map<std::string, std::shared_ptr<x_smbd_share_t>> shares;
 	std::string node;
 	std::vector<std::string> nodes;
-	// std::string volume_dir;
-	std::map<std::string, std::tuple<std::string, std::string, std::shared_ptr<x_smbd_share_t>>> volume_map;
+	std::vector<std::shared_ptr<x_smbd_volume_t>> volumes;
 };
 
 int x_smbd_conf_parse(const char *configfile, const std::vector<std::string> &cmdline_options);

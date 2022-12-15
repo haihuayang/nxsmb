@@ -64,7 +64,7 @@ struct x_smbd_object_t;
 struct x_smbd_stream_t;
 struct x_smbd_requ_t;
 struct x_smbd_share_t;
-struct x_smbd_topdir_t;
+struct x_smbd_volume_t;
 
 template <class T>
 T *x_smbd_ref_inc(T *);
@@ -414,7 +414,7 @@ NTSTATUS x_smbd_dfs_resolve_path(
 		const std::shared_ptr<x_smbd_share_t> &smbd_share,
 		const std::u16string &in_path,
 		bool dfs,
-		std::shared_ptr<x_smbd_topdir_t> &topdir,
+		std::shared_ptr<x_smbd_volume_t> &smbd_volume,
 		std::u16string &path);
 
 void x_smb2_send_lease_break(x_smbd_conn_t *smbd_conn, x_smbd_sess_t *smbd_sess,
@@ -489,7 +489,7 @@ void x_smbd_open_append_notify(x_smbd_open_t *smbd_open,
 		uint32_t action,
 		const std::u16string &path);
 
-void x_smbd_notify_change(std::shared_ptr<x_smbd_topdir_t> &topdir,
+void x_smbd_notify_change(std::shared_ptr<x_smbd_volume_t> &smbd_volume,
 		const std::vector<x_smb2_change_t> &changes);
 
 void x_smbd_schedule_async(x_job_t *job);
