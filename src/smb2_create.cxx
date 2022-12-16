@@ -560,7 +560,8 @@ static void x_smb2_reply_create(x_smbd_conn_t *smbd_conn,
 		const x_smb2_state_create_t &state)
 {
 	X_LOG_OP("%ld RESP SUCCESS 0x%lx,0x%lx", smbd_requ->in_smb2_hdr.mid,
-			smbd_requ->smbd_open->id, smbd_requ->smbd_open->id);
+			smbd_requ->smbd_open->id_persistent,
+			smbd_requ->smbd_open->id_volatile);
 
 #if 1
 	/* TODO we assume max output context 256 */

@@ -34,12 +34,13 @@ struct x_smbd_open_t
 	x_smbd_object_t * const smbd_object;
 	x_smbd_stream_t * const smbd_stream; // not null if it is ADS
 	x_smbd_tcon_t * const smbd_tcon;
-	uint64_t id; // TODO we use it for both volatile and persisten id
+	uint64_t id_persistent, id_volatile;
 	enum {
 		S_ACTIVE,
 		S_DONE,
 	};
 	std::atomic<uint32_t> state{S_ACTIVE};
+	bool is_durable = false;
 
 	const uint32_t access_mask, share_access;
 	uint32_t notify_filter = 0;
@@ -373,7 +374,7 @@ static inline void x_smbd_open_op_destroy(
 
 static inline std::pair<uint64_t, uint64_t> x_smbd_open_get_id(x_smbd_open_t *smbd_open)
 {
-	return { smbd_open->id, smbd_open->id };
+	return { smbd_open->id_persistent, smbd_open->id_volatile };
 }
 
 static inline void x_smbd_object_release(x_smbd_object_t *smbd_object,

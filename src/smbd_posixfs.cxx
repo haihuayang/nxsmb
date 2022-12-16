@@ -5300,6 +5300,7 @@ NTSTATUS x_smbd_posixfs_create_open(x_smbd_open_t **psmbd_open,
 	}
 	if (contexts & X_SMB2_CONTEXT_FLAG_DHNQ) {
 		/* TODO */
+		posixfs_open->base.is_durable = true;
 		state->contexts |= X_SMB2_CONTEXT_FLAG_DHNQ;
 	}
 	*psmbd_open = &posixfs_open->base;

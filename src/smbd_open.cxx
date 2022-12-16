@@ -46,14 +46,14 @@ x_smbd_open_t::~x_smbd_open_t()
 template <>
 x_smbd_open_t *x_smbd_ref_inc(x_smbd_open_t *smbd_open)
 {
-	g_smbd_open_table->incref(smbd_open->id);
+	g_smbd_open_table->incref(smbd_open->id_volatile);
 	return smbd_open;
 }
 
 template <>
 void x_smbd_ref_dec(x_smbd_open_t *smbd_open)
 {
-	g_smbd_open_table->decref(smbd_open->id);
+	g_smbd_open_table->decref(smbd_open->id_volatile);
 }
 
 int x_smbd_open_table_init(uint32_t count)
@@ -64,7 +64,8 @@ int x_smbd_open_table_init(uint32_t count)
 
 bool x_smbd_open_store(x_smbd_open_t *smbd_open)
 {
-	return g_smbd_open_table->store(smbd_open, smbd_open->id);
+	smbd_open->id_persistent = 0xfffffffeul;
+	return g_smbd_open_table->store(smbd_open, smbd_open->id_volatile);
 }
 
 x_smbd_open_t *x_smbd_open_lookup(uint64_t id_presistent, uint64_t id_volatile,
@@ -91,7 +92,7 @@ NTSTATUS x_smbd_open_close(x_smbd_open_t *smbd_open,
 	}
 	smbd_open->state = x_smbd_open_t::S_DONE;
 
-	g_smbd_open_table->remove(smbd_open->id);
+	g_smbd_open_table->remove(smbd_open->id_volatile);
 	x_smbd_ref_dec(smbd_open);
 
 	x_smbd_object_t *smbd_object = smbd_open->smbd_object;
@@ -143,7 +144,8 @@ bool x_smbd_open_list_t::output(std::string &data)
 	std::ostringstream os;
 
 	bool ret = g_smbd_open_table->iter_entry(iter, [&os](const x_smbd_open_t *smbd_open) {
-			os << idl::x_hex_t<uint64_t>(smbd_open->id) << ' '
+			os << idl::x_hex_t<uint64_t>(smbd_open->id_persistent) << ','
+			<< idl::x_hex_t<uint64_t>(smbd_open->id_volatile) << ' '
 			<< idl::x_hex_t<uint32_t>(smbd_open->access_mask) << ' '
 			<< idl::x_hex_t<uint32_t>(smbd_open->share_access) << ' '
 			<< idl::x_hex_t<uint32_t>(smbd_open->notify_filter) << ' '
