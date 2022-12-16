@@ -468,14 +468,14 @@ void x_smbd_conn_requ_done(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ,
 		NTSTATUS status);
 
 #define RETURN_OP_STATUS(smbd_requ, status) do { \
-	X_LOG_OP("mid=%ld op=%d 0x%x at %s:%d", (smbd_requ)->in_smb2_hdr.mid, \
+	X_LOG_OP("mid=%ld op=%d %s at %s:%d", (smbd_requ)->in_smb2_hdr.mid, \
 			(smbd_requ)->in_smb2_hdr.opcode, \
-			NT_STATUS_V(status), __FILE__, __LINE__); \
+			x_ntstatus_str(status), __FILE__, __LINE__); \
 	return (status); \
 } while (0)
 
 #define RETURN_STATUS(status) do { \
-	X_LOG_DBG("0x%x", NT_STATUS_V(status)); \
+	X_LOG_DBG("%s", x_ntstatus_str(status)); \
 	return (status); \
 } while (0)
 

@@ -45,5 +45,7 @@ static inline bool NT_STATUS_EQUAL(NTSTATUS x, NTSTATUS y)
 	return NT_STATUS_V(x) == NT_STATUS_V(y);
 }
 
+const char *x_ntstatus_str(NTSTATUS status);
+
 #endif /* __ntstatus__hxx__ */
 
