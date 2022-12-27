@@ -123,9 +123,13 @@ struct x_smb2_state_create_t
 	long open_priv_data;
 
 	union {
-		x_smb2_create_dhnc_requ_t dhnc;
-		x_smb2_create_dh2q_requ_t dh2q;
-		x_smb2_create_dh2c_requ_t dh2c;
+		x_smb2_create_dhnc_requ_t dhnc_requ;
+		x_smb2_create_dh2q_requ_t dh2q_requ;
+		x_smb2_create_dh2c_requ_t dh2c_requ;
+	};
+
+	union {
+		x_smb2_create_dh2q_resp_t dh2q_resp;
 	};
 };
 

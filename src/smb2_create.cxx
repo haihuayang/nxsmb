@@ -228,18 +228,18 @@ static bool decode_contexts(x_smb2_state_create_t &state,
 	}
 
 	if (state.contexts & X_SMB2_CONTEXT_FLAG_DH2Q) {
-		state.dh2q.timeout = X_LE2H32(dh2q->timeout);
-		state.dh2q.flags = X_LE2H32(dh2q->flags);
-		state.dh2q.create_guid = dh2q->create_guid;
+		state.dh2q_requ.timeout = X_LE2H32(dh2q->timeout);
+		state.dh2q_requ.flags = X_LE2H32(dh2q->flags);
+		state.dh2q_requ.create_guid = dh2q->create_guid;
 	} else if (state.contexts & X_SMB2_CONTEXT_FLAG_DH2C) {
-		state.dh2c.file_id_persistent = X_LE2H64(dh2c->file_id_persistent);
-		state.dh2c.file_id_volatile = X_LE2H64(dh2c->file_id_volatile);
-		state.dh2c.create_guid = dh2c->create_guid;
-		state.dh2c.flags = X_LE2H32(dh2c->flags);
+		state.dh2c_requ.file_id_persistent = X_LE2H64(dh2c->file_id_persistent);
+		state.dh2c_requ.file_id_volatile = X_LE2H64(dh2c->file_id_volatile);
+		state.dh2c_requ.create_guid = dh2c->create_guid;
+		state.dh2c_requ.flags = X_LE2H32(dh2c->flags);
 	} else if (state.contexts & X_SMB2_CONTEXT_FLAG_DHNC) {
 		state.contexts &= ~X_SMB2_CONTEXT_FLAG_DHNQ;
-		state.dhnc.file_id_persistent = X_LE2H64(dhnc->file_id_persistent);
-		state.dhnc.file_id_volatile = X_LE2H64(dhnc->file_id_volatile);
+		state.dhnc_requ.file_id_persistent = X_LE2H64(dhnc->file_id_persistent);
+		state.dhnc_requ.file_id_volatile = X_LE2H64(dhnc->file_id_volatile);
 	}
 
 	if (state.in_oplock_level == X_SMB2_OPLOCK_LEVEL_LEASE && !has_RqLs) {
@@ -249,6 +249,37 @@ static bool decode_contexts(x_smb2_state_create_t &state,
 	return true;
 }
 
+template <class Context>
+static void encode_context_one(Context &&ctx,
+		x_smb2_create_context_header_t *&ch,
+		uint8_t *&curr, uint8_t *begin,
+		uint32_t tag)
+{
+	if (ch) {
+		uint8_t *ncurr = begin + x_pad_len(curr - begin, 8);
+		while (curr != ncurr) {
+			*curr++ = 0;
+		}
+		ch->chain_offset = X_H2LE32(x_convert_assert<uint32_t>(curr - (uint8_t *)ch));
+	}
+
+	ch = (x_smb2_create_context_header_t *)curr;
+	ch->tag_offset = X_H2LE16(0x10);
+	ch->tag_length = X_H2LE16(0x4);
+	ch->unused0 = 0;
+	ch->data_offset = X_H2LE16(0x18);
+
+	curr = (uint8_t *)(ch + 1);
+	*(uint32_t *)curr = X_H2BE32(tag);
+	curr += 4;
+	*(uint32_t *)curr = 0;
+	curr += 4;
+
+	uint32_t data_len = ctx(curr);
+	ch->data_length = X_H2LE32(data_len);
+	curr += data_len;
+}
+
 static uint32_t encode_contexts(const x_smb2_state_create_t &state,
 		uint8_t *out_ptr)
 {
@@ -256,109 +287,41 @@ static uint32_t encode_contexts(const x_smb2_state_create_t &state,
 	x_smb2_create_context_header_t *ch = nullptr;
 
 	if (state.out_oplock_level == X_SMB2_OPLOCK_LEVEL_LEASE) {
-		if (ch) {
-			uint8_t *np = out_ptr + x_pad_len(p - out_ptr, 8);
-			while (p != np) {
-				*p++ = 0;
-			}
-			ch->chain_offset = X_H2LE32(x_convert_assert<uint32_t>(p - (uint8_t *)ch));
-		}
-
-		ch = (x_smb2_create_context_header_t *)p;
-		ch->tag_offset = X_H2LE16(0x10);
-		ch->tag_length = X_H2LE16(0x4);
-		ch->unused0 = 0;
-		ch->data_offset = X_H2LE16(0x18);
-
-		p = (uint8_t *)(ch + 1);
-		*(uint32_t *)p = X_H2BE32(X_SMB2_CREATE_TAG_RQLS);
-		p += 4;
-		*(uint32_t *)p = 0;
-		p += 4;
-
-		uint32_t data_len = encode_smb2_lease(state.lease, p);
-		ch->data_length = X_H2LE32(data_len);
-		p += data_len;
+		encode_context_one([&state] (uint8_t *ptr) {
+				return encode_smb2_lease(state.lease, ptr);
+			}, ch, p, out_ptr, X_SMB2_CREATE_TAG_RQLS);
 	}
 
 	if (state.contexts & X_SMB2_CONTEXT_FLAG_MXAC) {
-		if (ch) {
-			uint8_t *np = out_ptr + x_pad_len(p - out_ptr, 8);
-			while (p != np) {
-				*p++ = 0;
-			}
-			ch->chain_offset = X_H2LE32(x_convert_assert<uint32_t>(p - (uint8_t *)ch));
-		}
-
-		ch = (x_smb2_create_context_header_t *)p;
-		ch->tag_offset = X_H2LE16(0x10);
-		ch->tag_length = X_H2LE16(0x4);
-		ch->unused0 = 0;
-		ch->data_offset = X_H2LE16(0x18);
-
-		p = (uint8_t *)(ch + 1);
-		*(uint32_t *)p = X_H2BE32(X_SMB2_CREATE_TAG_MXAC);
-		p += 4;
-		*(uint32_t *)p = 0;
-		p += 4;
-
-		*(uint32_t *)p = 0; /* MxAc INFO, query status */
-		p += 4;
-		*(uint32_t *)p = X_H2LE32(state.out_maximal_access);
-		p += 4;
-		ch->data_length = X_H2LE32(8);
+		encode_context_one([&state] (uint8_t *ptr) {
+				uint32_t *data = (uint32_t *)ptr;
+				data[0] = 0; /* MxAc INFO, query status */
+				data[1] = X_H2LE32(state.out_maximal_access);
+				return 8;
+			}, ch, p, out_ptr, X_SMB2_CREATE_TAG_MXAC);
 	}
 
 	if (state.contexts & X_SMB2_CONTEXT_FLAG_QFID) {
-		if (ch) {
-			uint8_t *np = out_ptr + x_pad_len(p - out_ptr, 8);
-			while (p != np) {
-				*p++ = 0;
-			}
-			ch->chain_offset = X_H2LE32(x_convert_assert<uint32_t>(p - (uint8_t *)ch));
-		}
-
-		ch = (x_smb2_create_context_header_t *)p;
-		ch->tag_offset = X_H2LE16(0x10);
-		ch->tag_length = X_H2LE16(0x4);
-		ch->unused0 = 0;
-		ch->data_offset = X_H2LE16(0x18);
-
-		p = (uint8_t *)(ch + 1);
-		*(uint32_t *)p = X_H2BE32(X_SMB2_CREATE_TAG_QFID);
-		p += 4;
-		*(uint32_t *)p = 0;
-		p += 4;
-
-		memcpy(p, state.out_qfid_info, sizeof state.out_qfid_info);
-		ch->data_length = X_H2LE32(sizeof state.out_qfid_info);
-		p += sizeof state.out_qfid_info;
+		encode_context_one([&state] (uint8_t *ptr) {
+				memcpy(ptr, state.out_qfid_info, sizeof state.out_qfid_info);
+				return x_convert<uint32_t>(sizeof state.out_qfid_info);
+			}, ch, p, out_ptr, X_SMB2_CREATE_TAG_QFID);
 	}
 
 	if (state.contexts & X_SMB2_CONTEXT_FLAG_DHNQ) {
-		if (ch) {
-			uint8_t *np = out_ptr + x_pad_len(p - out_ptr, 8);
-			while (p != np) {
-				*p++ = 0;
-			}
-			ch->chain_offset = X_H2LE32(x_convert_assert<uint32_t>(p - (uint8_t *)ch));
-		}
+		encode_context_one([&state] (uint8_t *ptr) {
+				memset(ptr, 0, 8);
+				return 8;
+			}, ch, p, out_ptr, X_SMB2_CREATE_TAG_DHNQ);
+	}
 
-		ch = (x_smb2_create_context_header_t *)p;
-		ch->tag_offset = X_H2LE16(0x10);
-		ch->tag_length = X_H2LE16(0x4);
-		ch->unused0 = 0;
-		ch->data_offset = X_H2LE16(0x18);
-		ch->data_length = X_H2LE32(8);
-
-		p = (uint8_t *)(ch + 1);
-		*(uint32_t *)p = X_H2BE32(X_SMB2_CREATE_TAG_DHNQ);
-		p += 4;
-		*(uint32_t *)p = 0;
-		p += 4;
-
-		memset(p, 0, 8);
-		p += 8;
+	if (state.contexts & X_SMB2_CONTEXT_FLAG_DH2Q) {
+		encode_context_one([&state] (uint8_t *ptr) {
+				x_smb2_create_dh2q_resp_t *dn2q = (x_smb2_create_dh2q_resp_t *)ptr;
+				dn2q->timeout = X_H2LE32(state.dh2q_resp.timeout);
+				dn2q->flags = X_H2LE32(state.dh2q_resp.flags);
+				return x_convert<uint32_t>(sizeof(x_smb2_create_dh2q_resp_t));
+			}, ch, p, out_ptr, X_SMB2_CREATE_TAG_DH2Q);
 	}
 
 	if (ch) {
