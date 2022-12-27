@@ -41,6 +41,8 @@ struct x_smbd_open_t
 	};
 	std::atomic<uint32_t> state{S_ACTIVE};
 	bool is_durable = false;
+	bool is_persistent = false;
+	uint32_t durable_timeout_msec = 0;
 
 	const uint32_t access_mask, share_access;
 	uint32_t notify_filter = 0;

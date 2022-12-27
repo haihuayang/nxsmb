@@ -16,6 +16,7 @@ struct share_spec_t
 	share_spec_t(const std::string &name) : name(name) { }
 	std::string name;
 	bool read_only = false;
+	bool continuously_available = false;
 	bool abe = false;
 	bool dfs_test = false;
 	uint32_t dfs_referral_ttl = default_dfs_referral_ttl;
@@ -192,6 +193,8 @@ static void add_share(x_smbd_conf_t &smbd_conf,
 			volumes.push_back(std::move(smbd_volume));
 		}
 		share = x_smbd_dfs_share_create(smbd_conf, share_spec.name,
+				share_spec.read_only,
+				share_spec.continuously_available,
 				share_spec.abe,
 				volumes);
 	} else {
@@ -199,6 +202,8 @@ static void add_share(x_smbd_conf_t &smbd_conf,
 				share_spec.volumes[0]);
 		X_ASSERT(smbd_volume);
 		share = x_smbd_simplefs_share_create(share_spec.name,
+				share_spec.read_only,
+				share_spec.continuously_available,
 				share_spec.abe,
 				smbd_volume);
 	}
@@ -359,6 +364,8 @@ static bool parse_share_param(share_spec_t &share_spec,
 		}
 	} else if (name == "read only") {
 		share_spec.read_only = parse_bool(value);
+	} else if (name == "continuously available") {
+		share_spec.continuously_available = parse_bool(value);
 	} else if (name == "my:volumes") {
 		share_spec.volumes = parse_stringlist(value);
 	} else if (name == "dfs test") {

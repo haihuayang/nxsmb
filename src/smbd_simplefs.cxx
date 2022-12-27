@@ -82,9 +82,11 @@ static const x_smbd_object_ops_t simplefs_object_ops = {
 struct simplefs_share_t : x_smbd_share_t
 {
 	simplefs_share_t(const std::string &name,
+			bool read_only,
+			bool continuously_available,
 			bool abe,
 			const std::shared_ptr<x_smbd_volume_t> &smbd_volume)
-		: x_smbd_share_t(name)
+		: x_smbd_share_t(name, read_only, continuously_available, abe)
 		, smbd_volume(smbd_volume)
 		, abe(abe)
 	{
@@ -95,7 +97,6 @@ struct simplefs_share_t : x_smbd_share_t
 		return X_SMB2_SHARE_TYPE_DISK;
 	}
 	bool is_dfs() const override { return false; }
-	bool abe_enabled() const override { return abe; }
 
 	NTSTATUS create_open(x_smbd_open_t **psmbd_open,
 			x_smbd_requ_t *smbd_requ,
@@ -175,9 +176,13 @@ NTSTATUS simplefs_share_t::create_open(x_smbd_open_t **psmbd_open,
 
 std::shared_ptr<x_smbd_share_t> x_smbd_simplefs_share_create(
 		const std::string &name,
+		bool read_only,
+		bool continuously_available,
 		bool abe,
 		const std::shared_ptr<x_smbd_volume_t> &smbd_volume)
 {
-	return std::make_shared<simplefs_share_t>(name, abe, smbd_volume);
+	return std::make_shared<simplefs_share_t>(name,
+			read_only, continuously_available,
+			abe, smbd_volume);
 }
 

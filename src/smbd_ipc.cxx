@@ -685,16 +685,15 @@ x_smbd_ipc_object_t::x_smbd_ipc_object_t(const std::u16string &path,
 
 struct ipc_share_t : x_smbd_share_t
 {
-	ipc_share_t() : x_smbd_share_t("ipc$") , smbd_volume(ipc_get_volume())
+	ipc_share_t()
+		: x_smbd_share_t("ipc$", false, false, false)
+		, smbd_volume(ipc_get_volume())
 	{
 	}
 	uint8_t get_type() const override {
 		return X_SMB2_SHARE_TYPE_PIPE;
 	}
 	bool is_dfs() const override {
-		return false;
-	}
-	bool abe_enabled() const override {
 		return false;
 	}
 

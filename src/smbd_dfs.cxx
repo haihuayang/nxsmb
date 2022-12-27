@@ -51,11 +51,12 @@ struct dfs_share_t : x_smbd_share_t
 {
 	dfs_share_t(const x_smbd_conf_t &smbd_conf,
 			const std::string &name,
+			bool read_only,
+			bool continuously_available,
 			bool abe_enabled,
 			const std::vector<std::shared_ptr<x_smbd_volume_t>> &volumes);
 	uint8_t get_type() const override { return X_SMB2_SHARE_TYPE_DISK; }
 	bool is_dfs() const override { return true; }
-	bool abe_enabled() const override { return abe; }
 	NTSTATUS resolve_path(std::shared_ptr<x_smbd_volume_t> &smbd_volume,
 			std::u16string &out_path,
 			long &path_priv_data,
@@ -91,7 +92,6 @@ struct dfs_share_t : x_smbd_share_t
 		return nullptr;
 	}
 
-	const bool abe;
 	const std::vector<std::shared_ptr<x_smbd_volume_t>> volumes;
 	std::shared_ptr<x_smbd_volume_t> root_volume;
 	std::map<std::string, std::shared_ptr<x_smbd_volume_t>> local_data_volume;
@@ -1060,9 +1060,11 @@ NTSTATUS dfs_share_t::create_open(x_smbd_open_t **psmbd_open,
 
 dfs_share_t::dfs_share_t(const x_smbd_conf_t &smbd_conf,
 		const std::string &name,
+		bool read_only,
+		bool continuously_available,
 		bool abe,
 		const std::vector<std::shared_ptr<x_smbd_volume_t>> &smbd_volumes)
-	: x_smbd_share_t(name), abe(abe), volumes(smbd_volumes)
+	: x_smbd_share_t(name, read_only, continuously_available, abe), volumes(smbd_volumes)
 {
 	X_ASSERT(smbd_volumes.size() > 1);
 	bool first = true;
@@ -1082,9 +1084,13 @@ dfs_share_t::dfs_share_t(const x_smbd_conf_t &smbd_conf,
 
 std::shared_ptr<x_smbd_share_t> x_smbd_dfs_share_create(const x_smbd_conf_t &smbd_conf,
 		const std::string &name,
+		bool read_only,
+		bool continuously_available,
 		bool abe,
 		const std::vector<std::shared_ptr<x_smbd_volume_t>> &smbd_volumes)
 {
-	return std::make_shared<dfs_share_t>(smbd_conf, name, abe, smbd_volumes);
+	return std::make_shared<dfs_share_t>(smbd_conf, name,
+			read_only, continuously_available,
+			abe, smbd_volumes);
 }
 

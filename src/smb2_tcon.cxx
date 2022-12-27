@@ -244,7 +244,7 @@ NTSTATUS x_smb2_process_tcon(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 		out_share_flags |= X_SMB2_SHAREFLAG_DFS|X_SMB2_SHAREFLAG_DFS_ROOT;
 		out_capabilities |= X_SMB2_SHARE_CAP_DFS;
 	}
-	if (smbd_share->abe_enabled()) {
+	if (smbd_share->abe) {
 		out_share_flags |= X_SMB2_SHAREFLAG_ACCESS_BASED_DIRECTORY_ENUM;
 	}
 #if 0

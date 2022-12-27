@@ -293,6 +293,8 @@ x_smbd_tcon_t *x_smbd_tcon_create(x_smbd_sess_t *smbd_sess,
 uint32_t x_smbd_tcon_get_id(const x_smbd_tcon_t *smbd_tcon);
 bool x_smbd_tcon_access_check(const x_smbd_tcon_t *smbd_tcon, uint32_t desired_access);
 uint32_t x_smbd_tcon_get_share_access(const x_smbd_tcon_t *smbd_tcon);
+bool x_smbd_tcon_get_read_only(const x_smbd_tcon_t *smbd_tcon);
+bool x_smbd_tcon_get_continuously_available(const x_smbd_tcon_t *smbd_tcon);
 bool x_smbd_tcon_get_abe(const x_smbd_tcon_t *smbd_tcon);
 bool x_smbd_tcon_match(const x_smbd_tcon_t *smbd_tcon, const x_smbd_sess_t *smbd_sess, uint32_t tid);
 x_smbd_sess_t *x_smbd_tcon_get_sess(const x_smbd_tcon_t *smbd_tcon);
