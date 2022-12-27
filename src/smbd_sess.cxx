@@ -263,6 +263,10 @@ NTSTATUS x_smbd_sess_logoff(x_smbd_sess_t *smbd_sess)
 // smb2srv_session_close_previous_send
 void x_smbd_sess_close_previous(const x_smbd_sess_t *curr_sess, uint64_t prev_session_id)
 {
+	if (prev_session_id == curr_sess->id) {
+		return;
+	}
+
 	auto [found, prev_sess] = g_smbd_sess_table->lookup(prev_session_id);
 	if (!found) {
 		return;
