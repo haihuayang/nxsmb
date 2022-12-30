@@ -33,16 +33,28 @@ struct x_smbd_open_t
 	const x_tick_t tick_create;
 	x_smbd_object_t * const smbd_object;
 	x_smbd_stream_t * const smbd_stream; // not null if it is ADS
-	x_smbd_tcon_t * const smbd_tcon;
-	uint64_t id_persistent, id_volatile;
+	x_smbd_tcon_t * smbd_tcon = nullptr;
+	uint64_t id_persistent = 0xfeu; // resolve id for non durable
+	uint64_t id_volatile;
 	enum {
 		S_ACTIVE,
+		S_INACTIVE, /* durable handle waiting reconnect */
 		S_DONE,
 	};
 	std::atomic<uint32_t> state{S_ACTIVE};
-	bool is_durable = false;
-	bool is_persistent = false;
+	enum {
+		DH_NONE,
+		DH_DURABLE,
+		DH_PERSISTENT,
+	} dh_mode = DH_NONE;
 	uint32_t durable_timeout_msec = 0;
+	x_timerq_entry_t durable_timer;
+	/* ideally it should not use timerq for durable timer because opens'
+	 * timeout are not same. so it also check durable_timeout_tick
+	 * if it is really expired
+	 */
+	x_tick_t durable_expire_tick;
+	idl::dom_sid const owner;
 
 	const uint32_t access_mask, share_access;
 	uint32_t notify_filter = 0;

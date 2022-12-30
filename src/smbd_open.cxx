@@ -25,12 +25,17 @@ bool x_smbd_open_has_space()
 	return g_smbd_open_table->alloc_count + g_smbd_open_extra < g_smbd_open_table->count;
 }
 
+static idl::dom_sid smbd_open_get_owner(const x_smbd_tcon_t *smbd_tcon)
+{
+	return x_smbd_tcon_get_user(smbd_tcon)->get_owner_sid();
+}
+
 x_smbd_open_t::x_smbd_open_t(x_smbd_object_t *so,
 		x_smbd_stream_t *strm,
 		x_smbd_tcon_t *st,
 		uint32_t am, uint32_t sa, long priv_data)
 	: tick_create(tick_now), smbd_object(so), smbd_stream(strm)
-	, smbd_tcon(x_smbd_ref_inc(st))
+	, smbd_tcon(x_smbd_ref_inc(st)), owner(smbd_open_get_owner(st))
 	, access_mask(am), share_access(sa), priv_data(priv_data)
 {
 	X_SMBD_COUNTER_INC(open_create, 1);
@@ -38,7 +43,7 @@ x_smbd_open_t::x_smbd_open_t(x_smbd_object_t *so,
 
 x_smbd_open_t::~x_smbd_open_t()
 {
-	x_smbd_ref_dec(smbd_tcon);
+	x_smbd_ref_dec_if(smbd_tcon);
 	x_smbd_object_release(smbd_object, nullptr);
 	X_SMBD_COUNTER_INC(open_delete, 1);
 }
@@ -64,7 +69,6 @@ int x_smbd_open_table_init(uint32_t count)
 
 bool x_smbd_open_store(x_smbd_open_t *smbd_open)
 {
-	smbd_open->id_persistent = 0xfffffffeul;
 	return g_smbd_open_table->store(smbd_open, smbd_open->id_volatile);
 }
 
@@ -81,6 +85,53 @@ x_smbd_open_t *x_smbd_open_lookup(uint64_t id_presistent, uint64_t id_volatile,
 	return nullptr;
 }
 
+static void smbd_open_durable_timeout(x_timerq_entry_t *timerq_entry)
+{
+	x_smbd_open_t *smbd_open = X_CONTAINER_OF(timerq_entry,
+			x_smbd_open_t, durable_timer);
+	X_LOG_DBG("durable_timeout %lx,%lx", smbd_open->id_persistent,
+			smbd_open->id_volatile);
+	smbd_open->state = x_smbd_open_t::S_DONE;
+
+	g_smbd_open_table->remove(smbd_open->id_volatile);
+	x_smbd_ref_dec(smbd_open);
+
+	x_smbd_object_t *smbd_object = smbd_open->smbd_object;
+	auto smbd_volume = smbd_object->smbd_volume;
+	std::vector<x_smb2_change_t> changes;
+	std::unique_ptr<x_smb2_state_close_t> state;
+	smbd_volume->ops->close(smbd_object, smbd_open,
+			nullptr, state, changes);
+	/* TODO changes */
+
+	x_smbd_ref_dec(smbd_open); // ref by timer
+}
+
+static NTSTATUS smbd_open_set_durable(x_smbd_open_t *smbd_open)
+{
+	X_LOG_DBG("set_durable %lx,%lx", smbd_open->id_persistent,
+			smbd_open->id_volatile);
+	X_ASSERT(smbd_open->smbd_object);
+	x_smbd_tcon_t *smbd_tcon;
+	{
+		/* TODO save durable info to volume so it can restore open
+		 * when new smbd take over
+		 */
+		auto lock = std::lock_guard(smbd_open->smbd_object->mutex);
+		X_ASSERT(smbd_open->state == x_smbd_open_t::S_ACTIVE);
+		X_ASSERT(smbd_open->smbd_tcon);
+		smbd_open->state = x_smbd_open_t::S_INACTIVE;
+		smbd_tcon = smbd_open->smbd_tcon;
+		smbd_open->smbd_tcon = nullptr;
+		smbd_open->durable_timer.func = smbd_open_durable_timeout;
+		smbd_open->durable_expire_tick = x_tick_add(tick_now,
+				smbd_open->durable_timeout_msec * 1000000u);
+		x_smbd_add_timer(x_smbd_timer_t::DURABLE, &smbd_open->durable_timer);
+	}
+	x_smbd_ref_dec(smbd_tcon);
+	return NT_STATUS_OK;
+}
+
 NTSTATUS x_smbd_open_close(x_smbd_open_t *smbd_open,
 		x_smbd_requ_t *smbd_requ,
 		std::unique_ptr<x_smb2_state_close_t> &state,
@@ -91,6 +142,15 @@ NTSTATUS x_smbd_open_close(x_smbd_open_t *smbd_open,
 	if (smbd_open->state == x_smbd_open_t::S_DONE) {
 		return NT_STATUS_FILE_CLOSED;
 	}
+
+	NTSTATUS status;
+	if (shutdown && smbd_open->dh_mode != x_smbd_open_t::DH_NONE) {
+		status = smbd_open_set_durable(smbd_open);
+		if (NT_STATUS_IS_OK(status)) {
+			return status;
+		}
+	}
+
 	smbd_open->state = x_smbd_open_t::S_DONE;
 
 	g_smbd_open_table->remove(smbd_open->id_volatile);
@@ -98,7 +158,7 @@ NTSTATUS x_smbd_open_close(x_smbd_open_t *smbd_open,
 
 	x_smbd_object_t *smbd_object = smbd_open->smbd_object;
 	auto smbd_volume = smbd_object->smbd_volume;
-	auto status = smbd_volume->ops->close(smbd_object, smbd_open,
+	status = smbd_volume->ops->close(smbd_object, smbd_open,
 			smbd_requ, state, changes);
 
 	x_smbd_ref_dec(smbd_open); // ref by smbd_tcon open_list
@@ -141,6 +201,7 @@ struct x_smbd_open_list_t : x_smbd_ctrl_handler_t
 	smbd_open_table_t::iter_t iter;
 };
 
+static const char dh_mode_name[] = "-DP";
 bool x_smbd_open_list_t::output(std::string &data)
 {
 	std::ostringstream os;
@@ -150,6 +211,7 @@ bool x_smbd_open_list_t::output(std::string &data)
 			<< idl::x_hex_t<uint64_t>(smbd_open->id_volatile) << ' '
 			<< idl::x_hex_t<uint32_t>(smbd_open->access_mask) << ' '
 			<< idl::x_hex_t<uint32_t>(smbd_open->share_access) << ' '
+			<< dh_mode_name[int(smbd_open->dh_mode)] << ' '
 			<< idl::x_hex_t<uint32_t>(smbd_open->notify_filter) << ' '
 			<< idl::x_hex_t<uint32_t>(x_smbd_tcon_get_id(smbd_open->smbd_tcon)) << " '"
 			<< x_smbd_open_op_get_path(smbd_open) << "'" << std::endl;

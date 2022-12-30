@@ -36,9 +36,15 @@ const NTSTATUS X_NT_STATUS_INTERNAL_TERMINATE	= {2};
 x_auth_t *x_smbd_create_auth(const void *sec_buf, size_t sec_len);
 const std::vector<uint8_t> &x_smbd_get_negprot_spnego();
 
+enum {
+	/* in seconds */
+	X_SMBD_DURABLE_TIMEOUT_MAX = (3 * 60),
+};
+
 enum class x_smbd_timer_t {
 	SESSSETUP,
 	BREAK,
+	DURABLE,
 	LAST,
 };
 void x_smbd_add_timer(x_smbd_timer_t timer_id, x_timerq_entry_t *entry);
@@ -294,6 +300,7 @@ x_smbd_tcon_t *x_smbd_tcon_create(x_smbd_sess_t *smbd_sess,
 uint32_t x_smbd_tcon_get_id(const x_smbd_tcon_t *smbd_tcon);
 bool x_smbd_tcon_access_check(const x_smbd_tcon_t *smbd_tcon, uint32_t desired_access);
 uint32_t x_smbd_tcon_get_share_access(const x_smbd_tcon_t *smbd_tcon);
+std::shared_ptr<x_smbd_user_t> x_smbd_tcon_get_user(const x_smbd_tcon_t *smbd_tcon);
 bool x_smbd_tcon_get_read_only(const x_smbd_tcon_t *smbd_tcon);
 bool x_smbd_tcon_get_continuously_available(const x_smbd_tcon_t *smbd_tcon);
 bool x_smbd_tcon_get_abe(const x_smbd_tcon_t *smbd_tcon);

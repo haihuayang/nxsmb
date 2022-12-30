@@ -5306,26 +5306,25 @@ NTSTATUS x_smbd_posixfs_create_open(x_smbd_open_t **psmbd_open,
 		/* TODO */
 		if ((state->dh2q_requ.flags & X_SMB2_DHANDLE_FLAG_PERSISTENT) &&
 				x_smbd_tcon_get_continuously_available(posixfs_open->base.smbd_tcon)) {
-			posixfs_open->base.is_persistent = true;
+			posixfs_open->base.dh_mode = x_smbd_open_t::DH_PERSISTENT;
+		} else {
+			posixfs_open->base.dh_mode = x_smbd_open_t::DH_DURABLE;
 		}
-		posixfs_open->base.is_durable = true;
-#define DURABLE_TIMEOUT_MSEC_MAX (3 * 60 * 1000u)
 		if (state->dh2q_requ.timeout == 0) {
-			posixfs_open->base.durable_timeout_msec = DURABLE_TIMEOUT_MSEC_MAX;
+			posixfs_open->base.durable_timeout_msec = X_SMBD_DURABLE_TIMEOUT_MAX * 1000u;
 		} else {
 			posixfs_open->base.durable_timeout_msec = std::min(
 					state->dh2q_requ.timeout,
-					DURABLE_TIMEOUT_MSEC_MAX);
+					X_SMBD_DURABLE_TIMEOUT_MAX * 1000u);
 		}
 		state->contexts |= X_SMB2_CONTEXT_FLAG_DH2Q;
 		state->dh2q_resp.timeout = posixfs_open->base.durable_timeout_msec;
-		state->dh2q_resp.flags = (posixfs_open->base.is_persistent) ?
-			X_SMB2_DHANDLE_FLAG_PERSISTENT : 0;
-	}
-	if (contexts & X_SMB2_CONTEXT_FLAG_DHNQ) {
+		state->dh2q_resp.flags = (state->dh2q_requ.flags &
+				X_SMB2_DHANDLE_FLAG_PERSISTENT);
+	} else if (contexts & X_SMB2_CONTEXT_FLAG_DHNQ) {
 		/* TODO */
-		posixfs_open->base.is_durable = true;
-		posixfs_open->base.durable_timeout_msec = DURABLE_TIMEOUT_MSEC_MAX;
+		posixfs_open->base.dh_mode = x_smbd_open_t::DH_DURABLE;
+		posixfs_open->base.durable_timeout_msec = X_SMBD_DURABLE_TIMEOUT_MAX * 1000u;
 		state->contexts |= X_SMB2_CONTEXT_FLAG_DHNQ;
 	}
 	*psmbd_open = &posixfs_open->base;

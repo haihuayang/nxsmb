@@ -120,6 +120,7 @@ static void init_smbd()
 
 	TIMERQ_INIT(x_smbd_timer_t::SESSSETUP, 40);
 	TIMERQ_INIT(x_smbd_timer_t::BREAK, 35);
+	TIMERQ_INIT(x_smbd_timer_t::DURABLE, X_SMBD_DURABLE_TIMEOUT_MAX);
 
 	x_smbd_conn_srv_init(smbd_conf->port);
 
