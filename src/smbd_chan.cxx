@@ -96,9 +96,10 @@ static inline void smbd_chan_unlink_conn(x_smbd_chan_t *smbd_chan, x_smbd_conn_t
 	x_smbd_ref_dec(smbd_chan);
 }
 
-static inline void smbd_chan_unlink_sess(x_smbd_chan_t *smbd_chan, x_smbd_sess_t *smbd_sess)
+static inline void smbd_chan_unlink_sess(x_smbd_chan_t *smbd_chan,
+		x_smbd_sess_t *smbd_sess, bool shutdown)
 {
-	if (x_smbd_sess_unlink_chan(smbd_sess, &smbd_chan->sess_link)) {
+	if (x_smbd_sess_unlink_chan(smbd_sess, &smbd_chan->sess_link, shutdown)) {
 		x_smbd_ref_dec(smbd_chan);
 	}
 }
@@ -314,7 +315,8 @@ struct smbd_chan_auth_timeout_evt_t
 			if (smbd_chan->state == x_smbd_chan_t::S_WAIT_INPUT) {
 				smbd_chan->state = x_smbd_chan_t::S_FAILED;
 				smbd_chan_unlink_conn(smbd_chan, smbd_conn);
-				smbd_chan_unlink_sess(smbd_chan, smbd_chan->smbd_sess);
+				smbd_chan_unlink_sess(smbd_chan,
+						smbd_chan->smbd_sess, false);
 			}
 		}
 		delete evt;
@@ -372,7 +374,7 @@ static NTSTATUS smbd_chan_auth_updated(x_smbd_chan_t *smbd_chan, x_smbd_requ_t *
 	if (!NT_STATUS_IS_OK(status)) {
 		smbd_chan->state = x_smbd_chan_t::S_FAILED;
 		smbd_chan_unlink_conn(smbd_chan, g_smbd_conn_curr);
-		smbd_chan_unlink_sess(smbd_chan, smbd_chan->smbd_sess);
+		smbd_chan_unlink_sess(smbd_chan, smbd_chan->smbd_sess, false);
 	}
 
 	return status;
@@ -520,7 +522,7 @@ void x_smbd_chan_unlinked(x_dlink_t *conn_link, x_smbd_conn_t *smbd_conn)
 		}
 	}
 	smbd_chan->state = x_smbd_chan_t::S_DONE;
-	smbd_chan_unlink_sess(smbd_chan, smbd_chan->smbd_sess);
+	smbd_chan_unlink_sess(smbd_chan, smbd_chan->smbd_sess, true);
 
 	/* dec the ref hold by smbd_conn */
 	x_smbd_ref_dec(smbd_chan);

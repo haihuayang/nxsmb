@@ -84,7 +84,8 @@ x_smbd_open_t *x_smbd_open_lookup(uint64_t id_presistent, uint64_t id_volatile,
 NTSTATUS x_smbd_open_close(x_smbd_open_t *smbd_open,
 		x_smbd_requ_t *smbd_requ,
 		std::unique_ptr<x_smb2_state_close_t> &state,
-		std::vector<x_smb2_change_t> &changes)
+		std::vector<x_smb2_change_t> &changes,
+		bool shutdown)
 {
 	/* TODO atomic change and set */
 	if (smbd_open->state == x_smbd_open_t::S_DONE) {
@@ -117,18 +118,19 @@ NTSTATUS x_smbd_open_op_close(
 	x_smbd_object_t *smbd_object = smbd_open->smbd_object;
 	auto smbd_volume = smbd_object->smbd_volume;
 	std::vector<x_smb2_change_t> changes;
-	auto status = x_smbd_open_close(smbd_open, smbd_requ, state, changes);
+	auto status = x_smbd_open_close(smbd_open, smbd_requ, state, changes, false);
 	x_smbd_notify_change(smbd_volume, changes);
 
 	return status;
 }
 
 void x_smbd_open_unlinked(x_dlink_t *link, x_smbd_tcon_t *smbd_tcon,
-		std::vector<x_smb2_change_t> &changes)
+		std::vector<x_smb2_change_t> &changes,
+		bool shutdown)
 {
 	x_smbd_open_t *smbd_open = X_CONTAINER_OF(link, x_smbd_open_t, tcon_link);
 	std::unique_ptr<x_smb2_state_close_t> state;
-	x_smbd_open_close(smbd_open, nullptr, state, changes);
+	x_smbd_open_close(smbd_open, nullptr, state, changes, shutdown);
 }
 
 struct x_smbd_open_list_t : x_smbd_ctrl_handler_t

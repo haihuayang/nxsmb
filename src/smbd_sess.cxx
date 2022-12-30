@@ -126,7 +126,7 @@ bool x_smbd_sess_link_chan(x_smbd_sess_t *smbd_sess, x_dlink_t *link)
 }
 
 template <class L>
-static void smbd_sess_terminate(x_smbd_sess_t *smbd_sess, L &lock)
+static void smbd_sess_terminate(x_smbd_sess_t *smbd_sess, L &lock, bool shutdown)
 {
 	x_dlink_t *link;
 	smbd_sess->smbd_user = nullptr;
@@ -145,12 +145,13 @@ static void smbd_sess_terminate(x_smbd_sess_t *smbd_sess, L &lock)
 	while ((link = smbd_sess->tcon_list.get_front()) != nullptr) {
 		smbd_sess->tcon_list.remove(link);
 		lock.unlock();
-		x_smbd_tcon_unlinked(link, smbd_sess);
+		x_smbd_tcon_unlinked(link, smbd_sess, shutdown);
 		lock.lock();
 	}
 }
 
-bool x_smbd_sess_unlink_chan(x_smbd_sess_t *smbd_sess, x_dlink_t *link)
+bool x_smbd_sess_unlink_chan(x_smbd_sess_t *smbd_sess, x_dlink_t *link,
+		bool shutdown)
 {
 	std::unique_lock<std::mutex> lock(smbd_sess->mutex);
 	if (!link->is_valid()) {
@@ -160,7 +161,7 @@ bool x_smbd_sess_unlink_chan(x_smbd_sess_t *smbd_sess, x_dlink_t *link)
 	if (--smbd_sess->chan_count == 0) {
 		if (smbd_sess->state != x_smbd_sess_t::S_DONE) {
 			smbd_sess->state = x_smbd_sess_t::S_DONE;
-			smbd_sess_terminate(smbd_sess, lock);
+			smbd_sess_terminate(smbd_sess, lock, shutdown);
 		}
 	}
 	return true;
@@ -256,7 +257,7 @@ NTSTATUS x_smbd_sess_logoff(x_smbd_sess_t *smbd_sess)
 	}
 	smbd_sess->state = x_smbd_sess_t::S_DONE;
 
-	smbd_sess_terminate(smbd_sess, lock);
+	smbd_sess_terminate(smbd_sess, lock, false);
 	return NT_STATUS_OK;
 }
 
@@ -274,6 +275,7 @@ void x_smbd_sess_close_previous(const x_smbd_sess_t *curr_sess, uint64_t prev_se
 
 	X_ASSERT(curr_sess->smbd_user);
 	if (prev_sess->smbd_user && match_user(*curr_sess->smbd_user, *prev_sess->smbd_user)) {
+		/* TODO should it keep the durable handles? */
 		x_smbd_sess_logoff(prev_sess);
 	}
 	x_smbd_ref_dec(prev_sess);

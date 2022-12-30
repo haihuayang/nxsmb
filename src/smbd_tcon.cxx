@@ -182,7 +182,7 @@ NTSTATUS x_smbd_tcon_op_create(x_smbd_requ_t *smbd_requ,
 
 	/* changes may include many stream deletion */
 	std::vector<x_smb2_change_t> changes;
-       	x_smbd_open_t *smbd_open = nullptr;
+	x_smbd_open_t *smbd_open = nullptr;
 	/* TODO should we check the open limit before create the open */
 	status = smbd_tcon->smbd_share->create_open(&smbd_open,
 			smbd_requ, smbd_tcon->volume, state,
@@ -197,7 +197,7 @@ NTSTATUS x_smbd_tcon_op_create(x_smbd_requ_t *smbd_requ,
 			std::lock_guard<std::mutex> lock(smbd_tcon->mutex);
 			if (smbd_tcon->state != x_smbd_tcon_t::S_ACTIVE) {
 				std::unique_ptr<x_smb2_state_close_t> state;
-				x_smbd_open_close(smbd_open, nullptr, state, changes);
+				x_smbd_open_close(smbd_open, nullptr, state, changes, false);
 				status = NT_STATUS_NETWORK_NAME_DELETED;
 			} else {
 				smbd_tcon->open_list.push_back(&smbd_open->tcon_link);
@@ -223,7 +223,7 @@ NTSTATUS x_smbd_tcon_delete_object(x_smbd_tcon_t *smbd_tcon,
 			smbd_open, fd, changes);
 }
 
-static bool smbd_tcon_terminate(x_smbd_tcon_t *smbd_tcon)
+static bool smbd_tcon_terminate(x_smbd_tcon_t *smbd_tcon, bool shutdown)
 {
 	std::unique_lock<std::mutex> lock(smbd_tcon->mutex);
 	if (smbd_tcon->state == x_smbd_tcon_t::S_DONE) {
@@ -244,7 +244,7 @@ static bool smbd_tcon_terminate(x_smbd_tcon_t *smbd_tcon)
 	while ((link = smbd_tcon->open_list.get_front()) != nullptr) {
 		smbd_tcon->open_list.remove(link);
 		lock.unlock();
-		x_smbd_open_unlinked(link, smbd_tcon, changes);
+		x_smbd_open_unlinked(link, smbd_tcon, changes, shutdown);
 		lock.lock();
 	}
 	lock.unlock();
@@ -255,16 +255,16 @@ static bool smbd_tcon_terminate(x_smbd_tcon_t *smbd_tcon)
 	return true;
 }
 
-void x_smbd_tcon_unlinked(x_dlink_t *link, x_smbd_sess_t *smbd_sess)
+void x_smbd_tcon_unlinked(x_dlink_t *link, x_smbd_sess_t *smbd_sess, bool shutdown)
 {
 	x_smbd_tcon_t *smbd_tcon = X_CONTAINER_OF(link, x_smbd_tcon_t, sess_link);
-	smbd_tcon_terminate(smbd_tcon);
+	smbd_tcon_terminate(smbd_tcon, shutdown);
 }
 
 bool x_smbd_tcon_disconnect(x_smbd_tcon_t *smbd_tcon)
 {
 	if (x_smbd_sess_unlink_tcon(smbd_tcon->smbd_sess, &smbd_tcon->sess_link)) {
-		return smbd_tcon_terminate(smbd_tcon);
+		return smbd_tcon_terminate(smbd_tcon, false);
 	}
 	return false;
 }

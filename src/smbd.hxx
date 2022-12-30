@@ -242,7 +242,8 @@ bool x_smbd_sess_is_signing_required(const x_smbd_sess_t *smbd_sess);
 x_smbd_chan_t *x_smbd_sess_lookup_chan(x_smbd_sess_t *smbd_sess, x_smbd_conn_t *smbd_conn);
 x_smbd_chan_t *x_smbd_sess_get_active_chan(x_smbd_sess_t *smbd_sess);
 bool x_smbd_sess_link_chan(x_smbd_sess_t *smbd_sess, x_dlink_t *link);
-bool x_smbd_sess_unlink_chan(x_smbd_sess_t *smbd_sess, x_dlink_t *link);
+bool x_smbd_sess_unlink_chan(x_smbd_sess_t *smbd_sess, x_dlink_t *link,
+		bool shutdown);
 void x_smbd_sess_remove_chan(x_smbd_sess_t *smbd_sess, x_smbd_chan_t *smbd_chan);
 std::shared_ptr<x_smbd_user_t> x_smbd_sess_get_user(const x_smbd_sess_t *smbd_sess);
 NTSTATUS x_smbd_sess_logoff(x_smbd_sess_t *smbd_sess);
@@ -303,7 +304,7 @@ std::shared_ptr<x_smbd_share_t> x_smbd_tcon_get_share(const x_smbd_tcon_t *smbd_
 x_smbd_tcon_t *x_smbd_tcon_lookup(uint32_t id, const x_smbd_sess_t *smbd_sess);
 bool x_smbd_tcon_unlink_open(x_smbd_tcon_t *smbd_tcon, x_dlink_t *link);
 bool x_smbd_tcon_disconnect(x_smbd_tcon_t *smbd_tcon);
-void x_smbd_tcon_unlinked(x_dlink_t *link, x_smbd_sess_t *smbd_sess);
+void x_smbd_tcon_unlinked(x_dlink_t *link, x_smbd_sess_t *smbd_sess, bool shutdown);
 NTSTATUS x_smbd_tcon_delete_object(x_smbd_tcon_t *smbd_tcon, 
 		x_smbd_object_t *smbd_object,
 		x_smbd_open_t *smbd_open, int fd,
@@ -320,9 +321,11 @@ bool x_smbd_open_store(x_smbd_open_t *smbd_open);
 NTSTATUS x_smbd_open_close(x_smbd_open_t *smbd_open,
 		x_smbd_requ_t *smbd_requ,
 		std::unique_ptr<x_smb2_state_close_t> &state,
-		std::vector<x_smb2_change_t> &changes);
+		std::vector<x_smb2_change_t> &changes,
+		bool shutdown);
 void x_smbd_open_unlinked(x_dlink_t *link, x_smbd_tcon_t *smbd_tcon,
-		std::vector<x_smb2_change_t> &changes);
+		std::vector<x_smb2_change_t> &changes,
+		bool shutdown);
 
 
 
