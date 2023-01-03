@@ -15,9 +15,7 @@ struct share_spec_t
 
 	share_spec_t(const std::string &name) : name(name) { }
 	std::string name;
-	bool read_only = false;
-	bool continuously_available = false;
-	bool abe = false;
+	uint32_t share_flags = x_smbd_share_t::f_durable_handle;
 	bool dfs_test = false;
 	uint32_t dfs_referral_ttl = default_dfs_referral_ttl;
 	std::vector<std::string> volumes;
@@ -79,6 +77,19 @@ static int parse_uuid(const std::string &str, uuid_t &uuid)
 static bool parse_bool(const std::string &str)
 {
 	return str == "yes";
+}
+
+static bool parse_share_flags(uint32_t &share_flags, uint32_t flag,
+		const std::string &value)
+{
+	if (value == "yes") {
+		share_flags |= flag;
+	} else if (value == "no") {
+		share_flags &= ~flag;
+	} else {
+		return false;
+	}
+	return true;
 }
 
 static bool parse_uint32(const std::string &str, uint32_t &ret)
@@ -193,18 +204,14 @@ static void add_share(x_smbd_conf_t &smbd_conf,
 			volumes.push_back(std::move(smbd_volume));
 		}
 		share = x_smbd_dfs_share_create(smbd_conf, share_spec.name,
-				share_spec.read_only,
-				share_spec.continuously_available,
-				share_spec.abe,
+				share_spec.share_flags,
 				volumes);
 	} else {
 		auto smbd_volume = smbd_volume_find(smbd_conf,
 				share_spec.volumes[0]);
 		X_ASSERT(smbd_volume);
 		share = x_smbd_simplefs_share_create(share_spec.name,
-				share_spec.read_only,
-				share_spec.continuously_available,
-				share_spec.abe,
+				share_spec.share_flags,
 				smbd_volume);
 	}
 	share->dfs_referral_ttl = share_spec.dfs_referral_ttl;
@@ -354,18 +361,23 @@ static bool parse_share_param(share_spec_t &share_spec,
 	} else if (name == "dfs referral ttl") {
 		return parse_uint32(value, share_spec.dfs_referral_ttl);
 	} else if (name == "hide unreadable") {
-		if (value == "yes") {
-			share_spec.abe = true;
-		} else if (value == "no") {
-			share_spec.abe = false;
-		} else {
+		if (!parse_share_flags(share_spec.share_flags,
+					x_smbd_share_t::f_abe, value)) {
 			X_PANIC("Unexpected boolean %s at %s:%u",
 					value.c_str(), path, lineno);
 		}
 	} else if (name == "read only") {
-		share_spec.read_only = parse_bool(value);
+		if (!parse_share_flags(share_spec.share_flags,
+					x_smbd_share_t::f_read_only, value)) {
+			X_PANIC("Unexpected boolean %s at %s:%u",
+					value.c_str(), path, lineno);
+		}
 	} else if (name == "continuously available") {
-		share_spec.continuously_available = parse_bool(value);
+		if (!parse_share_flags(share_spec.share_flags,
+					x_smbd_share_t::f_continuously_available, value)) {
+			X_PANIC("Unexpected boolean %s at %s:%u",
+					value.c_str(), path, lineno);
+		}
 	} else if (name == "my:volumes") {
 		share_spec.volumes = parse_stringlist(value);
 	} else if (name == "dfs test") {

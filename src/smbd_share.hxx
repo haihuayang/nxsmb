@@ -63,13 +63,15 @@ struct x_smbd_volume_t
 
 struct x_smbd_share_t
 {
-	x_smbd_share_t(const std::string &name,
-			bool read_only,
-			bool continuously_available,
-			bool abe)
-		: name(name), read_only(read_only)
-		, continuously_available(continuously_available)
-		, abe(abe)
+	enum {
+		f_read_only = 1,
+		f_durable_handle = 2,
+		f_continuously_available = 4,
+		f_abe = 8,
+	};
+
+	x_smbd_share_t(const std::string &name, uint32_t flags)
+		: name(name), flags(flags)
 	{
 	}
 	virtual ~x_smbd_share_t() { }
@@ -99,10 +101,24 @@ struct x_smbd_share_t
 			x_smbd_open_t *smbd_open, int fd,
 			std::vector<x_smb2_change_t> &changes) = 0;
 
+	bool is_read_only() const {
+		return flags & f_read_only;
+	}
+
+	bool support_durable_handle() const {
+		return flags & f_durable_handle;
+	}
+
+	bool is_continuously_available() const {
+		return flags & f_continuously_available;
+	}
+
+	bool abe_enabled() const {
+		return flags & f_abe;
+	}
+
 	std::string name;
-	bool read_only = false;
-	bool continuously_available = false;
-	bool abe = false;
+	uint32_t flags;
 	bool dfs_test = false;
 	uint32_t max_connections = 0;
 	uint32_t dfs_referral_ttl;
@@ -113,17 +129,14 @@ std::shared_ptr<x_smbd_volume_t> x_smbd_volume_create(
 		const std::string &name, const std::string &path,
 		const std::string &owner_node, const std::string &owner_share);
 std::shared_ptr<x_smbd_share_t> x_smbd_ipc_share_create();
-std::shared_ptr<x_smbd_share_t> x_smbd_dfs_share_create(const x_smbd_conf_t &smbd_conf,
+std::shared_ptr<x_smbd_share_t> x_smbd_dfs_share_create(
+		const x_smbd_conf_t &smbd_conf,
 		const std::string &name,
-		bool read_only,
-		bool continuously_available,
-		bool abe,
+		uint32_t share_flags,
 		const std::vector<std::shared_ptr<x_smbd_volume_t>> &smbd_volumes);
 std::shared_ptr<x_smbd_share_t> x_smbd_simplefs_share_create(
 		const std::string &name,
-		bool read_only,
-		bool continuously_available,
-		bool abe,
+		uint32_t share_flags,
 		const std::shared_ptr<x_smbd_volume_t> &smbd_volume);
 int x_smbd_simplefs_mktld(const std::shared_ptr<x_smbd_user_t> &smbd_user,
 		std::shared_ptr<x_smbd_share_t> &smbd_share,

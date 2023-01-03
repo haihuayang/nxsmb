@@ -81,16 +81,12 @@ static const x_smbd_object_ops_t simplefs_object_ops = {
 
 struct simplefs_share_t : x_smbd_share_t
 {
-	simplefs_share_t(const std::string &name,
-			bool read_only,
-			bool continuously_available,
-			bool abe,
+	simplefs_share_t(const std::string &name, uint32_t share_flags,
 			const std::shared_ptr<x_smbd_volume_t> &smbd_volume)
-		: x_smbd_share_t(name, read_only, continuously_available, abe)
+		: x_smbd_share_t(name, share_flags)
 		, smbd_volume(smbd_volume)
-		, abe(abe)
 	{
-		smbd_volume->set_ops( &simplefs_object_ops);
+		smbd_volume->set_ops(&simplefs_object_ops);
 	}
 					
 	uint8_t get_type() const override {
@@ -130,7 +126,6 @@ struct simplefs_share_t : x_smbd_share_t
 		return posixfs_object_op_unlink(smbd_object, fd);
 	}
 	std::shared_ptr<x_smbd_volume_t> smbd_volume;
-	const bool abe;
 };
 
 NTSTATUS simplefs_share_t::resolve_path(
@@ -176,13 +171,10 @@ NTSTATUS simplefs_share_t::create_open(x_smbd_open_t **psmbd_open,
 
 std::shared_ptr<x_smbd_share_t> x_smbd_simplefs_share_create(
 		const std::string &name,
-		bool read_only,
-		bool continuously_available,
-		bool abe,
+		uint32_t share_flags,
 		const std::shared_ptr<x_smbd_volume_t> &smbd_volume)
 {
-	return std::make_shared<simplefs_share_t>(name,
-			read_only, continuously_available,
-			abe, smbd_volume);
+	return std::make_shared<simplefs_share_t>(name, share_flags,
+			smbd_volume);
 }
 

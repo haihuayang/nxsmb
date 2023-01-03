@@ -97,17 +97,17 @@ uint32_t x_smbd_tcon_get_share_access(const x_smbd_tcon_t *smbd_tcon)
 
 bool x_smbd_tcon_get_read_only(const x_smbd_tcon_t *smbd_tcon)
 {
-	return smbd_tcon->smbd_share->read_only;
+	return smbd_tcon->smbd_share->is_read_only();
 }
 
 bool x_smbd_tcon_get_continuously_available(const x_smbd_tcon_t *smbd_tcon)
 {
-	return smbd_tcon->smbd_share->continuously_available;
+	return smbd_tcon->smbd_share->is_continuously_available();
 }
 
 bool x_smbd_tcon_get_abe(const x_smbd_tcon_t *smbd_tcon)
 {
-	return smbd_tcon->smbd_share->abe;
+	return smbd_tcon->smbd_share->abe_enabled();
 }
 
 bool x_smbd_tcon_match(const x_smbd_tcon_t *smbd_tcon, const x_smbd_sess_t *smbd_sess, uint32_t tid)

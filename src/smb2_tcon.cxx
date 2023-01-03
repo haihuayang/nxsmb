@@ -58,7 +58,7 @@ static uint32_t create_share_access_mask(const std::shared_ptr<x_smbd_share_t> &
 {
 	uint32_t share_access = share_get_maximum_access(share);
 
-	if (share->read_only) {
+	if (share->is_read_only()) {
 		share_access &=
 			~(idl::SEC_FILE_WRITE_DATA | idl::SEC_FILE_APPEND_DATA |
 			  idl::SEC_FILE_WRITE_EA | idl::SEC_FILE_WRITE_ATTRIBUTE |
@@ -244,7 +244,7 @@ NTSTATUS x_smb2_process_tcon(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 		out_share_flags |= X_SMB2_SHAREFLAG_DFS|X_SMB2_SHAREFLAG_DFS_ROOT;
 		out_capabilities |= X_SMB2_SHARE_CAP_DFS;
 	}
-	if (smbd_share->abe) {
+	if (smbd_share->abe_enabled()) {
 		out_share_flags |= X_SMB2_SHAREFLAG_ACCESS_BASED_DIRECTORY_ENUM;
 	}
 #if 0
