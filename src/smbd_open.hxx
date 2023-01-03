@@ -34,7 +34,7 @@ struct x_smbd_open_t
 	x_smbd_object_t * const smbd_object;
 	x_smbd_stream_t * const smbd_stream; // not null if it is ADS
 	x_smbd_tcon_t * smbd_tcon = nullptr;
-	uint64_t id_persistent = 0xfeu; // resolve id for non durable
+	uint64_t id_persistent = 0xfffffffeu; // resolve id for non durable
 	uint64_t id_volatile;
 	enum {
 		S_ACTIVE,
@@ -54,6 +54,7 @@ struct x_smbd_open_t
 	 * if it is really expired
 	 */
 	x_tick_t durable_expire_tick;
+	x_smb2_uuid_t create_guid;
 	idl::dom_sid const owner;
 
 	const uint32_t access_mask, share_access;

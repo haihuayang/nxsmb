@@ -7,6 +7,8 @@
 #endif
 
 #include "smbd.hxx"
+#include "smbd_durable.hxx"
+#include <fcntl.h>
 
 struct x_smbd_conf_t;
 
@@ -42,7 +44,8 @@ struct x_smbd_volume_t
 			const std::string &owner_node,
 			const std::string &owner_share,
 			const x_smb2_uuid_t &vol_uuid,
-			uint16_t vol_id, int rootdir_fd);
+			uint16_t vol_id, int rootdir_fd,
+			x_smbd_durable_db_t *durable_db);
 
 	~x_smbd_volume_t();
 
@@ -59,6 +62,8 @@ struct x_smbd_volume_t
 	const uint16_t volume_id;
 	const int rootdir_fd;
 	std::atomic<uint32_t> watch_tree_cnt{0};
+
+	x_smbd_durable_db_t *smbd_durable_db;
 };
 
 struct x_smbd_share_t
@@ -128,6 +133,29 @@ struct x_smbd_share_t
 std::shared_ptr<x_smbd_volume_t> x_smbd_volume_create(
 		const std::string &name, const std::string &path,
 		const std::string &owner_node, const std::string &owner_share);
+
+struct x_smbd_file_handle_t
+{
+	unsigned int  handle_bytes;
+	int           handle_type;
+	unsigned char f_handle[MAX_HANDLE_SZ];
+};
+
+struct x_smbd_durable_t
+{
+	uint64_t id_volatile;
+	uint32_t access_mask;
+	uint32_t share_access;
+	x_smb2_uuid_t create_guid;
+	idl::dom_sid owner;
+	x_smbd_file_handle_t file_handle;
+};
+
+int x_smbd_volume_save_durable(x_smbd_volume_t &smbd_volume,
+		uint64_t &id_persistent,
+		const x_smbd_durable_t *durable);
+int x_smbd_volume_set_durable_timeout(x_smbd_volume_t &smbd_volume,
+		uint64_t id_persistent, uint32_t timeout_sec);
 std::shared_ptr<x_smbd_share_t> x_smbd_ipc_share_create();
 std::shared_ptr<x_smbd_share_t> x_smbd_dfs_share_create(
 		const x_smbd_conf_t &smbd_conf,

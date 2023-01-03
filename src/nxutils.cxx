@@ -12,6 +12,7 @@
 #include "util_sid.hxx"
 #include "misc.hxx"
 #include <iostream>
+#include "smbd_share.hxx"
 
 static void usage(const char *progname)
 {
@@ -281,6 +282,56 @@ static int set_dos_attr(char **argv)
 	return 0;
 }
 
+struct smbd_durable_db_printer_t : x_smbd_durable_db_visitor_t
+{
+	bool operator()(uint64_t id, uint32_t timeout,
+			void *record, size_t size) override
+	{
+		const x_smbd_durable_t *durable = (x_smbd_durable_t *)record;
+		printf("0x%lx %u 0x%lx 0x%x %s\n",
+				id, timeout,
+				durable->id_volatile,
+				durable->access_mask,
+				x_tostr(durable->owner).c_str());
+		return false;
+	}
+};
+
+static void output_durable_db(int fd)
+{
+	x_smbd_durable_db_t *durable_db = x_smbd_durable_db_open(fd);
+	smbd_durable_db_printer_t printer;
+	x_smbd_durable_db_traverse(durable_db, printer);
+	x_smbd_durable_db_close(durable_db);
+}
+
+static void list_durable_one(const char *volume)
+{
+	int dirfd = open(volume, O_RDONLY);
+	if (dirfd < 0) {
+		fprintf(stderr, "cannot open volume %s\n", volume);
+		return;
+	}
+	int dbfd = openat(dirfd, "durable.db", O_RDONLY);
+	if (dbfd < 0) {
+		fprintf(stderr, "cannot open durable.db for volume %s\n", volume);
+	} else {
+		output_durable_db(dbfd);
+		close(dbfd);
+	}
+
+	close(dirfd);
+}
+
+static int list_durable(int argc, char **argv)
+{
+	char **volumes = argv + 1;
+	for ( ; *volumes; ++volumes) {
+		list_durable_one(*volumes);
+	}
+	return 0;
+}
+
 int main(int argc, char **argv)
 {
 	const char *command = argv[1];
@@ -297,6 +348,8 @@ int main(int argc, char **argv)
 		return set_default_security_desc(argv + 2);
 	} else if (strcmp(command, "show-security-desc") == 0) {
 		return show_security_desc(argv + 2);
+	} else if (strcmp(command, "list-durable") == 0) {
+		return list_durable(argc - 1, argv + 1);
 #if 0
 	} else if (strcmp(command, "create-file") == 0) {
 		return create_file(argv + 2);

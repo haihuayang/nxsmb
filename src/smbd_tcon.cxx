@@ -100,6 +100,11 @@ bool x_smbd_tcon_get_read_only(const x_smbd_tcon_t *smbd_tcon)
 	return smbd_tcon->smbd_share->is_read_only();
 }
 
+bool x_smbd_tcon_get_durable_handle(const x_smbd_tcon_t *smbd_tcon)
+{
+	return smbd_tcon->smbd_share->support_durable_handle();
+}
+
 bool x_smbd_tcon_get_continuously_available(const x_smbd_tcon_t *smbd_tcon)
 {
 	return smbd_tcon->smbd_share->is_continuously_available();
@@ -141,6 +146,44 @@ x_smbd_tcon_t *x_smbd_tcon_lookup(uint32_t id, const x_smbd_sess_t *smbd_sess)
 	} else {
 		g_smbd_tcon_table->decref(id);
 		return nullptr;
+	}
+}
+
+static bool smbd_save_durable(x_smbd_open_t *smbd_open,
+		uint32_t durable_timeout_msec)
+{
+	X_LOG_DBG("save %p durable info to db", smbd_open);
+	uint64_t id_persistent;
+	x_smbd_durable_t durable;
+	durable.access_mask = smbd_open->access_mask;
+	durable.share_access = smbd_open->share_access;
+	durable.id_volatile = smbd_open->id_volatile;
+	durable.owner = smbd_open->owner;
+	/* TODO lease, file_handle create_guid */
+	// durable.create_guid = smbd_open->create_guid;
+
+	int ret = x_smbd_volume_save_durable(*smbd_open->smbd_object->smbd_volume,
+			id_persistent, &durable);
+	if (ret == 0) {
+		smbd_open->id_persistent = id_persistent;
+		smbd_open->dh_mode = x_smbd_open_t::DH_DURABLE;
+
+		if (durable_timeout_msec == 0) {
+			smbd_open->durable_timeout_msec = X_SMBD_DURABLE_TIMEOUT_MAX * 1000u;
+		} else {
+			smbd_open->durable_timeout_msec = std::min(
+					durable_timeout_msec,
+					X_SMBD_DURABLE_TIMEOUT_MAX * 1000u);
+		}
+		X_LOG_DBG("smbd_save_durable for %p 0x%lx 0x%lx",
+				smbd_open, smbd_open->id_persistent,
+				smbd_open->id_volatile);
+		return true;
+	} else {
+		X_LOG_WARN("smbd_save_durable for %p 0x%lx failed, ret = %d",
+				smbd_open,
+				smbd_open->id_volatile, ret);
+		return false;
 	}
 }
 
@@ -195,6 +238,37 @@ NTSTATUS x_smbd_tcon_op_create(x_smbd_requ_t *smbd_requ,
 
 	if (smbd_open) {
 		X_ASSERT(NT_STATUS_IS_OK(status));
+
+		/* we do not support durable handle for ADS */
+		if (!smbd_open->smbd_stream &&
+				smbd_open->smbd_object->type == x_smbd_object_t::type_file) {
+			if (state->in_contexts & X_SMB2_CONTEXT_FLAG_DH2Q) {
+				uint32_t flags = 0;
+				if ((state->dh2q_requ.flags & X_SMB2_DHANDLE_FLAG_PERSISTENT) &&
+						x_smbd_tcon_get_continuously_available(smbd_tcon)) {
+					if (smbd_save_durable(smbd_open, state->dh2q_requ.timeout)) {
+						smbd_open->dh_mode = x_smbd_open_t::DH_PERSISTENT;
+						flags = X_SMB2_DHANDLE_FLAG_PERSISTENT;
+					}
+				} else if (x_smbd_tcon_get_durable_handle(smbd_tcon)) {
+					if (smbd_save_durable(smbd_open, state->dh2q_requ.timeout)) {
+						smbd_open->dh_mode = x_smbd_open_t::DH_DURABLE;
+					}
+				}
+				if (smbd_open->dh_mode != x_smbd_open_t::DH_NONE) {
+					state->out_contexts |= X_SMB2_CONTEXT_FLAG_DH2Q;
+					state->dh2q_resp.timeout = smbd_open->durable_timeout_msec;
+					state->dh2q_resp.flags = flags;
+				}
+
+			} else if (state->in_contexts & X_SMB2_CONTEXT_FLAG_DHNQ) {
+				if (x_smbd_tcon_get_durable_handle(smbd_tcon) &&
+						smbd_save_durable(smbd_open, 0)) {
+					state->out_contexts |= X_SMB2_CONTEXT_FLAG_DHNQ;
+				}
+			}
+		}
+
 		/* if client access the open from other channel now, it does not have
 		 * link into smbd_tcon, probably we should call x_smbd_open_store in the last
 		 */

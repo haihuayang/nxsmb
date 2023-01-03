@@ -78,6 +78,9 @@ static void init_smbd()
 	g_smbd.tick_start_mono = (tick_now1 + tick_now2) / 2;
 	g_smbd.tick_start_real = x_tick_from_timespec(ts_now);
 
+	/* durable db use rand() to pick slot */
+	srand((unsigned int)tick_now2);
+
 	g_smbd.tpool_async = x_threadpool_create(smbd_conf->async_thread_count);
 	x_threadpool_t *tpool = x_threadpool_create(smbd_conf->client_thread_count);
 	g_smbd.tpool_evtmgmt = tpool;

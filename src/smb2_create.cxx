@@ -141,14 +141,14 @@ static bool decode_contexts(x_smb2_state_create_t &state,
 							data_len);
 				}
 			} else if (tag == X_SMB2_CREATE_TAG_QFID) {
-				state.contexts |= X_SMB2_CONTEXT_FLAG_QFID;
+				state.in_contexts |= X_SMB2_CONTEXT_FLAG_QFID;
 			} else if (tag == X_SMB2_CREATE_TAG_ALSI) {
 				if (data_len != sizeof(uint64_t)) {
 					return false;
 				}
 				const uint64_t *pdata = (uint64_t *)(data + data_off);
 				state.in_allocation_size = X_LE2H64(*pdata);
-				state.contexts |= X_SMB2_CONTEXT_FLAG_ALSI;
+				state.in_contexts |= X_SMB2_CONTEXT_FLAG_ALSI;
 			} else if (tag == X_SMB2_CREATE_TAG_TWRP) {
 				if (data_len != sizeof(uint64_t)) {
 					return false;
@@ -156,7 +156,7 @@ static bool decode_contexts(x_smb2_state_create_t &state,
 				const uint64_t *pdata = (uint64_t *)(data + data_off);
 				state.in_timestamp = X_LE2H64(*pdata);
 			} else if (tag == X_SMB2_CREATE_TAG_MXAC) {
-				state.contexts |= X_SMB2_CONTEXT_FLAG_MXAC;
+				state.in_contexts |= X_SMB2_CONTEXT_FLAG_MXAC;
 			} else if (tag == X_SMB2_CREATE_TAG_SECD) {
 				auto sd = std::make_shared<idl::security_descriptor>();
 				idl::x_ndr_off_t ret = idl::x_ndr_pull(*sd,
@@ -173,25 +173,25 @@ static bool decode_contexts(x_smb2_state_create_t &state,
 				if (data_len != 16) {
 					return false;
 				}
-				state.contexts |= X_SMB2_CONTEXT_FLAG_DHNQ;
+				state.in_contexts |= X_SMB2_CONTEXT_FLAG_DHNQ;
 			} else if (tag == X_SMB2_CREATE_TAG_DHNC) {
 				if (data_len != sizeof(x_smb2_create_dhnc_requ_t)) {
 					return false;
 				}
 				dhnc = (const x_smb2_create_dhnc_requ_t *)(data + data_off);
-				state.contexts |= X_SMB2_CONTEXT_FLAG_DHNC;
+				state.in_contexts |= X_SMB2_CONTEXT_FLAG_DHNC;
 			} else if (tag == X_SMB2_CREATE_TAG_DH2Q) {
 				if (data_len != sizeof(x_smb2_create_dh2q_requ_t)) {
 					return false;
 				}
 				dh2q = (const x_smb2_create_dh2q_requ_t *)(data + data_off);
-				state.contexts |= X_SMB2_CONTEXT_FLAG_DH2Q;
+				state.in_contexts |= X_SMB2_CONTEXT_FLAG_DH2Q;
 			} else if (tag == X_SMB2_CREATE_TAG_DH2C) {
 				if (data_len != sizeof(x_smb2_create_dh2c_requ_t)) {
 					return false;
 				}
 				dh2c = (const x_smb2_create_dh2c_requ_t *)(data + data_off);
-				state.contexts |= X_SMB2_CONTEXT_FLAG_DH2C;
+				state.in_contexts |= X_SMB2_CONTEXT_FLAG_DH2C;
 			} else if (tag == X_SMB2_CREATE_TAG_AAPL) {
 				// TODO
 			} else {
@@ -217,27 +217,27 @@ static bool decode_contexts(x_smb2_state_create_t &state,
 		}
 	}
 
-	if ((x_bit_any<uint32_t>(state.contexts, X_SMB2_CONTEXT_FLAG_DHNQ |
+	if ((x_bit_any<uint32_t>(state.in_contexts, X_SMB2_CONTEXT_FLAG_DHNQ |
 				X_SMB2_CONTEXT_FLAG_DHNC) &&
-			x_bit_any<uint32_t>(state.contexts, X_SMB2_CONTEXT_FLAG_DH2Q |
+			x_bit_any<uint32_t>(state.in_contexts, X_SMB2_CONTEXT_FLAG_DH2Q |
 				X_SMB2_CONTEXT_FLAG_DH2C)) ||
-			x_bit_all<uint32_t>(state.contexts, X_SMB2_CONTEXT_FLAG_DH2Q |
+			x_bit_all<uint32_t>(state.in_contexts, X_SMB2_CONTEXT_FLAG_DH2Q |
 				X_SMB2_CONTEXT_FLAG_DH2C)) {
 		X_LOG_ERR("Invalid combination of durable contexts");
 		return false;
 	}
 
-	if (state.contexts & X_SMB2_CONTEXT_FLAG_DH2Q) {
+	if (state.in_contexts & X_SMB2_CONTEXT_FLAG_DH2Q) {
 		state.dh2q_requ.timeout = X_LE2H32(dh2q->timeout);
 		state.dh2q_requ.flags = X_LE2H32(dh2q->flags);
 		state.dh2q_requ.create_guid = dh2q->create_guid;
-	} else if (state.contexts & X_SMB2_CONTEXT_FLAG_DH2C) {
+	} else if (state.in_contexts & X_SMB2_CONTEXT_FLAG_DH2C) {
 		state.dh2c_requ.file_id_persistent = X_LE2H64(dh2c->file_id_persistent);
 		state.dh2c_requ.file_id_volatile = X_LE2H64(dh2c->file_id_volatile);
 		state.dh2c_requ.create_guid = dh2c->create_guid;
 		state.dh2c_requ.flags = X_LE2H32(dh2c->flags);
-	} else if (state.contexts & X_SMB2_CONTEXT_FLAG_DHNC) {
-		state.contexts &= ~X_SMB2_CONTEXT_FLAG_DHNQ;
+	} else if (state.in_contexts & X_SMB2_CONTEXT_FLAG_DHNC) {
+		state.in_contexts &= ~X_SMB2_CONTEXT_FLAG_DHNQ;
 		state.dhnc_requ.file_id_persistent = X_LE2H64(dhnc->file_id_persistent);
 		state.dhnc_requ.file_id_volatile = X_LE2H64(dhnc->file_id_volatile);
 	}
@@ -292,7 +292,7 @@ static uint32_t encode_contexts(const x_smb2_state_create_t &state,
 			}, ch, p, out_ptr, X_SMB2_CREATE_TAG_RQLS);
 	}
 
-	if (state.contexts & X_SMB2_CONTEXT_FLAG_MXAC) {
+	if (state.out_contexts & X_SMB2_CONTEXT_FLAG_MXAC) {
 		encode_context_one([&state] (uint8_t *ptr) {
 				uint32_t *data = (uint32_t *)ptr;
 				data[0] = 0; /* MxAc INFO, query status */
@@ -301,21 +301,21 @@ static uint32_t encode_contexts(const x_smb2_state_create_t &state,
 			}, ch, p, out_ptr, X_SMB2_CREATE_TAG_MXAC);
 	}
 
-	if (state.contexts & X_SMB2_CONTEXT_FLAG_QFID) {
+	if (state.out_contexts & X_SMB2_CONTEXT_FLAG_QFID) {
 		encode_context_one([&state] (uint8_t *ptr) {
 				memcpy(ptr, state.out_qfid_info, sizeof state.out_qfid_info);
 				return x_convert<uint32_t>(sizeof state.out_qfid_info);
 			}, ch, p, out_ptr, X_SMB2_CREATE_TAG_QFID);
 	}
 
-	if (state.contexts & X_SMB2_CONTEXT_FLAG_DHNQ) {
+	if (state.out_contexts & X_SMB2_CONTEXT_FLAG_DHNQ) {
 		encode_context_one([&state] (uint8_t *ptr) {
 				memset(ptr, 0, 8);
 				return 8;
 			}, ch, p, out_ptr, X_SMB2_CREATE_TAG_DHNQ);
 	}
 
-	if (state.contexts & X_SMB2_CONTEXT_FLAG_DH2Q) {
+	if (state.out_contexts & X_SMB2_CONTEXT_FLAG_DH2Q) {
 		encode_context_one([&state] (uint8_t *ptr) {
 				x_smb2_create_dh2q_resp_t *dn2q = (x_smb2_create_dh2q_resp_t *)ptr;
 				dn2q->timeout = X_H2LE32(state.dh2q_resp.timeout);
@@ -451,13 +451,13 @@ static NTSTATUS decode_in_create(x_smb2_state_create_t &state,
 		return NT_STATUS_INVALID_PARAMETER;
 	}
 
-	if (state.contexts & X_SMB2_CONTEXT_FLAG_DHNQ) {
+	if (state.in_contexts & X_SMB2_CONTEXT_FLAG_DHNQ) {
 		if (state.in_oplock_level == X_SMB2_OPLOCK_LEVEL_LEASE) {
 			if ((state.lease.state & X_SMB2_LEASE_HANDLE) == 0) {
-				state.contexts &= ~X_SMB2_CONTEXT_FLAG_DHNQ;
+				state.in_contexts &= ~X_SMB2_CONTEXT_FLAG_DHNQ;
 			}
 		} else if (state.in_oplock_level != X_SMB2_OPLOCK_LEVEL_BATCH) {
-			state.contexts &= ~X_SMB2_CONTEXT_FLAG_DHNQ;
+			state.in_contexts &= ~X_SMB2_CONTEXT_FLAG_DHNQ;
 		}
 	}
 	return NT_STATUS_OK;

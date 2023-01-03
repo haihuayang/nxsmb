@@ -2564,7 +2564,7 @@ static NTSTATUS posixfs_create_open_exist_object(
 		int err = ftruncate(posixfs_object->fd, 0);
 		X_TODO_ASSERT(err == 0);
 		reload_meta = true;
-	} else if ((state->contexts & X_SMB2_CONTEXT_FLAG_ALSI)) {
+	} else if ((state->in_contexts & X_SMB2_CONTEXT_FLAG_ALSI)) {
 		status = posixfs_set_allocation_size_intl(posixfs_object,
 				nullptr,
 				state->in_allocation_size,
@@ -2578,7 +2578,7 @@ static NTSTATUS posixfs_create_open_exist_object(
 				&posixfs_object->meta,
 				&posixfs_object->default_stream.meta);
 		X_TODO_ASSERT(err == 0);
-		if ((state->contexts & X_SMB2_CONTEXT_FLAG_ALSI)) {
+		if ((state->in_contexts & X_SMB2_CONTEXT_FLAG_ALSI)) {
 			posixfs_object->default_stream.meta.allocation_size =
 				state->in_allocation_size;
 		}
@@ -2835,7 +2835,7 @@ static NTSTATUS open_object_exist_ads(
 				std::min(state->in_allocation_size, posixfs_ads_max_length));
 		posixfs_ads_reset(posixfs_object, posixfs_ads,
 				allocation_size);
-	} else if ((state->contexts & X_SMB2_CONTEXT_FLAG_ALSI)) {
+	} else if ((state->in_contexts & X_SMB2_CONTEXT_FLAG_ALSI)) {
 		posixfs_set_allocation_size_intl(posixfs_object,
 				posixfs_ads,
 				state->in_allocation_size,
@@ -5288,44 +5288,17 @@ NTSTATUS x_smbd_posixfs_create_open(x_smbd_open_t **psmbd_open,
 				{}});
 	}
 
-	uint32_t contexts = state->contexts;
-	state->contexts = 0;
 	/* TODO we support MXAC and QFID for now,
 	   without QFID Windows 10 client query
 	   couple getinfo x_smb2_info_level_t::FILE_NETWORK_OPEN_INFORMATION */
-	if (contexts & X_SMB2_CONTEXT_FLAG_MXAC) {
-		state->contexts |= X_SMB2_CONTEXT_FLAG_MXAC;
+	if (state->in_contexts & X_SMB2_CONTEXT_FLAG_MXAC) {
+		state->out_contexts |= X_SMB2_CONTEXT_FLAG_MXAC;
 	}
-	if (contexts & X_SMB2_CONTEXT_FLAG_QFID) {
-		state->contexts |= X_SMB2_CONTEXT_FLAG_QFID;
+	if (state->in_contexts & X_SMB2_CONTEXT_FLAG_QFID) {
 		x_put_le64(state->out_qfid_info, posixfs_object->meta.inode);
 		x_put_le64(state->out_qfid_info + 8, posixfs_object->meta.fsid);
 		memset(state->out_qfid_info + 16, 0, 16);
-	}
-	if (contexts & X_SMB2_CONTEXT_FLAG_DH2Q) {
-		/* TODO */
-		if ((state->dh2q_requ.flags & X_SMB2_DHANDLE_FLAG_PERSISTENT) &&
-				x_smbd_tcon_get_continuously_available(posixfs_open->base.smbd_tcon)) {
-			posixfs_open->base.dh_mode = x_smbd_open_t::DH_PERSISTENT;
-		} else {
-			posixfs_open->base.dh_mode = x_smbd_open_t::DH_DURABLE;
-		}
-		if (state->dh2q_requ.timeout == 0) {
-			posixfs_open->base.durable_timeout_msec = X_SMBD_DURABLE_TIMEOUT_MAX * 1000u;
-		} else {
-			posixfs_open->base.durable_timeout_msec = std::min(
-					state->dh2q_requ.timeout,
-					X_SMBD_DURABLE_TIMEOUT_MAX * 1000u);
-		}
-		state->contexts |= X_SMB2_CONTEXT_FLAG_DH2Q;
-		state->dh2q_resp.timeout = posixfs_open->base.durable_timeout_msec;
-		state->dh2q_resp.flags = (state->dh2q_requ.flags &
-				X_SMB2_DHANDLE_FLAG_PERSISTENT);
-	} else if (contexts & X_SMB2_CONTEXT_FLAG_DHNQ) {
-		/* TODO */
-		posixfs_open->base.dh_mode = x_smbd_open_t::DH_DURABLE;
-		posixfs_open->base.durable_timeout_msec = X_SMBD_DURABLE_TIMEOUT_MAX * 1000u;
-		state->contexts |= X_SMB2_CONTEXT_FLAG_DHNQ;
+		state->out_contexts |= X_SMB2_CONTEXT_FLAG_QFID;
 	}
 	*psmbd_open = &posixfs_open->base;
 	return NT_STATUS_OK;

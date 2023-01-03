@@ -18,9 +18,11 @@ static x_smb2_uuid_t create_volume_id(const std::string &name)
 x_smbd_volume_t::x_smbd_volume_t(const std::string &n, const std::string &p,
 		const std::string &on, const std::string &os,
 		const x_smb2_uuid_t &vol_uuid,
-		uint16_t vol_id, int rfd)
+		uint16_t vol_id, int rfd,
+		x_smbd_durable_db_t *durable_db)
 	: name(n), path(p), owner_node(on), owner_share(os)
 	, volume_uuid(vol_uuid), volume_id(vol_id), rootdir_fd(rfd)
+	, smbd_durable_db(durable_db)
 {
 }
 
@@ -33,7 +35,7 @@ x_smbd_volume_t::~x_smbd_volume_t()
 
 static int smbd_volume_read(int vol_fd,
 		uint16_t &vol_id,
-		int &rootdir_fd)
+		int &rootdir_fd, x_smbd_durable_db_t *&durable_db)
 {
 	int fd = openat(vol_fd, "id", O_RDONLY);
 	if (fd < 0) {
@@ -62,6 +64,12 @@ static int smbd_volume_read(int vol_fd,
 		return -EINVAL;
 	}
 
+	int durable_fd = openat(vol_fd, "durable.db", O_RDWR | O_CREAT, 0644);
+	X_ASSERT(durable_fd != 0);
+
+	durable_db = x_smbd_durable_db_init(durable_fd,
+			0x20000, 0x200000); /* TODO the number */
+
 	vol_id = id;
 	rootdir_fd = rfd;
 	return 0;
@@ -73,6 +81,7 @@ std::shared_ptr<x_smbd_volume_t> x_smbd_volume_create(
 {
 	uint16_t vol_id = 0xffffu;
 	int rootdir_fd = -1;
+	x_smbd_durable_db_t *durable_db;
 
 	if (!path.empty()) {
 		int vol_fd = open(path.c_str(), O_RDONLY);
@@ -81,7 +90,7 @@ std::shared_ptr<x_smbd_volume_t> x_smbd_volume_create(
 			return nullptr;
 		}
 
-		int ret = smbd_volume_read(vol_fd, vol_id, rootdir_fd);
+		int ret = smbd_volume_read(vol_fd, vol_id, rootdir_fd, durable_db);
 		close(vol_fd);
 		if (ret < 0) {
 			X_LOG_ERR("cannot read volume %s, %d", name.c_str(), -ret);
@@ -95,6 +104,22 @@ std::shared_ptr<x_smbd_volume_t> x_smbd_volume_create(
 			vol_id);
 	return std::make_shared<x_smbd_volume_t>(name, path, owner_node,
 			owner_share, create_volume_id(name),
-			vol_id, rootdir_fd);
+			vol_id, rootdir_fd, durable_db);
 }
 
+int x_smbd_volume_save_durable(x_smbd_volume_t &smbd_volume,
+		uint64_t &id_persistent,
+		const x_smbd_durable_t *durable)
+{
+	return x_smbd_durable_db_save(smbd_volume.smbd_durable_db,
+			durable, sizeof *durable,
+			smbd_volume.volume_id,
+			id_persistent);
+}
+
+int x_smbd_volume_set_durable_timeout(x_smbd_volume_t &smbd_volume,
+		uint64_t id_persistent, uint32_t timeout_sec)
+{
+	return x_smbd_durable_db_set_timeout(smbd_volume.smbd_durable_db,
+			id_persistent, timeout_sec);
+}

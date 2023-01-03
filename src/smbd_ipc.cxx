@@ -613,7 +613,6 @@ static NTSTATUS ipc_create_open(x_smbd_open_t **psmbd_open,
 	state->out_oplock_level = 0;
 	state->out_create_flags = 0;
 	state->out_create_action = x_smb2_create_action_t::WAS_OPENED;
-	state->contexts = 0;
 
 	// x_smbd_open_init(&named_pipe->base, &ipc_object->base, smbd_requ->smbd_tcon,
 

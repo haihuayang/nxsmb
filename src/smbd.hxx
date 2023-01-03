@@ -94,7 +94,8 @@ struct x_smb2_state_create_t
 
 	uint8_t in_oplock_level;
 	uint8_t out_oplock_level;
-	uint32_t contexts{0};
+	uint32_t in_contexts{0};
+	uint32_t out_contexts{0};
 
 	uint32_t in_impersonation_level;
 	uint32_t in_desired_access;
@@ -302,6 +303,7 @@ bool x_smbd_tcon_access_check(const x_smbd_tcon_t *smbd_tcon, uint32_t desired_a
 uint32_t x_smbd_tcon_get_share_access(const x_smbd_tcon_t *smbd_tcon);
 std::shared_ptr<x_smbd_user_t> x_smbd_tcon_get_user(const x_smbd_tcon_t *smbd_tcon);
 bool x_smbd_tcon_get_read_only(const x_smbd_tcon_t *smbd_tcon);
+bool x_smbd_tcon_get_durable_handle(const x_smbd_tcon_t *smbd_tcon);
 bool x_smbd_tcon_get_continuously_available(const x_smbd_tcon_t *smbd_tcon);
 bool x_smbd_tcon_get_abe(const x_smbd_tcon_t *smbd_tcon);
 bool x_smbd_tcon_match(const x_smbd_tcon_t *smbd_tcon, const x_smbd_sess_t *smbd_sess, uint32_t tid);

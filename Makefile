@@ -49,6 +49,7 @@ all: $(TARGET_SET_tests:%=$(TARGET_DIR_out)/tests/%) \
 	$(TARGET_DIR_out)/bin/nxutils
 
 SET_src_smbd_nx := \
+	smbd_durable \
 	smbd_file_info \
 	smbd_access \
 	smbd_posixfs \
@@ -108,6 +109,7 @@ SET_src_nxutils := \
 	nxutils \
 	smbd_posixfs_utils \
 	smbd_ntacl \
+	smbd_durable \
 	util_sid \
 	misc \
 

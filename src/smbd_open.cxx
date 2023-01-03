@@ -128,6 +128,15 @@ static NTSTATUS smbd_open_set_durable(x_smbd_open_t *smbd_open)
 				smbd_open->durable_timeout_msec * 1000000u);
 		x_smbd_add_timer(x_smbd_timer_t::DURABLE, &smbd_open->durable_timer);
 	}
+
+	uint32_t durable_sec = (smbd_open->durable_timeout_msec + 999) / 1000;
+	int ret = x_smbd_volume_set_durable_timeout(
+			*smbd_open->smbd_object->smbd_volume,
+			smbd_open->id_persistent,
+			durable_sec);
+	X_LOG_DBG("set_durable_expired for %p 0x%lx, ret = %d",
+			smbd_open, smbd_open->id_persistent, ret);
+
 	x_smbd_ref_dec(smbd_tcon);
 	return NT_STATUS_OK;
 }
@@ -152,6 +161,15 @@ NTSTATUS x_smbd_open_close(x_smbd_open_t *smbd_open,
 	}
 
 	smbd_open->state = x_smbd_open_t::S_DONE;
+
+	if (smbd_open->dh_mode != x_smbd_open_t::DH_NONE) {
+		int ret = x_smbd_volume_set_durable_timeout(
+				*smbd_open->smbd_object->smbd_volume,
+				smbd_open->id_persistent,
+				0); // 0 mean expired immediately
+		X_LOG_DBG("remove_durable for %p 0x%lx, ret = %d",
+				smbd_open, smbd_open->id_persistent, ret);
+	}
 
 	g_smbd_open_table->remove(smbd_open->id_volatile);
 	x_smbd_ref_dec(smbd_open);
