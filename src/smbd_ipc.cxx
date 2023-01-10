@@ -46,8 +46,8 @@ struct x_bind_context_t
 struct named_pipe_t
 {
 	named_pipe_t(x_smbd_object_t *so, x_smbd_tcon_t *st,
-			uint32_t am, uint32_t sa)
-		: base(so, nullptr, st, am, sa, 0) { }
+			const x_smbd_open_state_t &open_state)
+		: base(so, nullptr, st, open_state) { }
 	x_smbd_open_t base;
 	// const x_dcerpc_iface_t *iface;
 	std::vector<x_bind_context_t> bind_contexts;
@@ -600,8 +600,13 @@ static NTSTATUS ipc_create_open(x_smbd_open_t **psmbd_open,
 	x_smbd_ipc_object_t *ipc_object = from_smbd_object(state->smbd_object);
 	named_pipe_t *named_pipe = new named_pipe_t(&ipc_object->base,
 			smbd_requ->smbd_tcon,
-			state->in_desired_access,
-			state->in_share_access);
+			x_smbd_open_state_t{state->in_desired_access,
+				state->in_share_access,
+				x_smbd_conn_curr_client_guid(),
+				state->dh2q_requ.create_guid,
+				x_smbd_tcon_get_user(smbd_requ->smbd_tcon)->get_owner_sid(),
+				state->lease.parent_key,
+				0});
 	if (!x_smbd_open_store(&named_pipe->base)) {
 		delete named_pipe;
 		*psmbd_open = nullptr;

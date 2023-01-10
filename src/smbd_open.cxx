@@ -25,18 +25,12 @@ bool x_smbd_open_has_space()
 	return g_smbd_open_table->alloc_count + g_smbd_open_extra < g_smbd_open_table->count;
 }
 
-static idl::dom_sid smbd_open_get_owner(const x_smbd_tcon_t *smbd_tcon)
-{
-	return x_smbd_tcon_get_user(smbd_tcon)->get_owner_sid();
-}
-
 x_smbd_open_t::x_smbd_open_t(x_smbd_object_t *so,
 		x_smbd_stream_t *strm,
 		x_smbd_tcon_t *st,
-		uint32_t am, uint32_t sa, long priv_data)
+		const x_smbd_open_state_t &open_state)
 	: tick_create(tick_now), smbd_object(so), smbd_stream(strm)
-	, smbd_tcon(x_smbd_ref_inc(st)), owner(smbd_open_get_owner(st))
-	, access_mask(am), share_access(sa), priv_data(priv_data)
+	, smbd_tcon(x_smbd_ref_inc(st)), open_state(open_state)
 {
 	X_SMBD_COUNTER_INC(open_create, 1);
 }
@@ -125,11 +119,11 @@ static NTSTATUS smbd_open_set_durable(x_smbd_open_t *smbd_open)
 		smbd_open->smbd_tcon = nullptr;
 		smbd_open->durable_timer.func = smbd_open_durable_timeout;
 		smbd_open->durable_expire_tick = x_tick_add(tick_now,
-				smbd_open->durable_timeout_msec * 1000000u);
+				smbd_open->open_state.durable_timeout_msec * 1000000u);
 		x_smbd_add_timer(x_smbd_timer_t::DURABLE, &smbd_open->durable_timer);
 	}
 
-	uint32_t durable_sec = (smbd_open->durable_timeout_msec + 999) / 1000;
+	uint32_t durable_sec = (smbd_open->open_state.durable_timeout_msec + 999) / 1000;
 	int ret = x_smbd_volume_set_durable_timeout(
 			*smbd_open->smbd_object->smbd_volume,
 			smbd_open->id_persistent,
@@ -227,8 +221,8 @@ bool x_smbd_open_list_t::output(std::string &data)
 	bool ret = g_smbd_open_table->iter_entry(iter, [&os](const x_smbd_open_t *smbd_open) {
 			os << idl::x_hex_t<uint64_t>(smbd_open->id_persistent) << ','
 			<< idl::x_hex_t<uint64_t>(smbd_open->id_volatile) << ' '
-			<< idl::x_hex_t<uint32_t>(smbd_open->access_mask) << ' '
-			<< idl::x_hex_t<uint32_t>(smbd_open->share_access) << ' '
+			<< idl::x_hex_t<uint32_t>(smbd_open->open_state.access_mask) << ' '
+			<< idl::x_hex_t<uint32_t>(smbd_open->open_state.share_access) << ' '
 			<< dh_mode_name[int(smbd_open->dh_mode)] << ' '
 			<< idl::x_hex_t<uint32_t>(smbd_open->notify_filter) << ' '
 			<< idl::x_hex_t<uint32_t>(x_smbd_tcon_get_id(smbd_open->smbd_tcon)) << " '"

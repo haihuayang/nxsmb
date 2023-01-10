@@ -17,8 +17,7 @@ struct x_smbd_open_t
 {
 	x_smbd_open_t(x_smbd_object_t *so, x_smbd_stream_t *ss,
 			x_smbd_tcon_t *st,
-			uint32_t am, uint32_t sa,
-			long priv_data);
+			const x_smbd_open_state_t &open_state);
 	~x_smbd_open_t();
 	x_smbd_open_t(const x_smbd_open_t &) = delete;
 	x_smbd_open_t(x_smbd_open_t &&) = delete;
@@ -26,7 +25,7 @@ struct x_smbd_open_t
 	x_smbd_open_t &operator=(x_smbd_open_t &&) = delete;
 
 	bool check_access(uint32_t access) const {
-		return (access_mask & access);
+		return (open_state.access_mask & access);
 	}
 
 	x_dlink_t tcon_link; // protected by the mutex of smbd_tcon
@@ -47,21 +46,16 @@ struct x_smbd_open_t
 		DH_DURABLE,
 		DH_PERSISTENT,
 	} dh_mode = DH_NONE;
-	uint32_t durable_timeout_msec = 0;
 	x_timerq_entry_t durable_timer;
 	/* ideally it should not use timerq for durable timer because opens'
 	 * timeout are not same. so it also check durable_timeout_tick
 	 * if it is really expired
 	 */
 	x_tick_t durable_expire_tick;
-	x_smb2_uuid_t create_guid;
-	idl::dom_sid const owner;
 
-	const uint32_t access_mask, share_access;
+	x_smbd_open_state_t open_state;
 	uint32_t notify_filter = 0;
 	uint32_t notify_buffer_length;
-	const long priv_data;
-	x_smb2_lease_key_t parent_lease_key{};
 };
 
 struct x_smbd_object_t;

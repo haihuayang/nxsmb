@@ -17,6 +17,7 @@
 #include <string.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
+#include <fcntl.h>
 #include <unistd.h>
 #include "smb2.hxx"
 #include "smb2_state.hxx"
@@ -38,7 +39,7 @@ const std::vector<uint8_t> &x_smbd_get_negprot_spnego();
 
 enum {
 	/* in seconds */
-	X_SMBD_DURABLE_TIMEOUT_MAX = (3 * 60),
+	X_SMBD_DURABLE_TIMEOUT_MAX = (5 * 60),
 };
 
 enum class x_smbd_timer_t {
@@ -187,6 +188,46 @@ struct x_fdevt_user_t
 	func_t *const func;
 };
 X_DECLARE_MEMBER_TRAITS(fdevt_user_conn_traits, x_fdevt_user_t, link)
+
+struct x_smbd_open_state_t
+{
+	const uint32_t access_mask, share_access;
+	const x_smb2_uuid_t client_guid;
+	const x_smb2_uuid_t create_guid;
+	const idl::dom_sid owner;
+	const x_smb2_lease_key_t parent_lease_key;
+	const long priv_data;
+
+	uint8_t oplock_level{X_SMB2_OPLOCK_LEVEL_NONE};
+	bool delete_on_close = false;
+	uint32_t durable_timeout_msec = 0;
+	uint64_t current_offset = 0;
+};
+
+struct x_smbd_file_handle_t
+{
+	int cmp(const x_smbd_file_handle_t &other) const
+	{
+		if (base.handle_type != other.base.handle_type) {
+			return base.handle_type - other.base.handle_type;
+		}
+		if (base.handle_bytes != other.base.handle_bytes) {
+			return int(base.handle_bytes - other.base.handle_bytes);
+		}
+		return memcmp(base.f_handle, other.base.f_handle, base.handle_bytes);
+	}
+
+	struct file_handle base;
+	unsigned char f_handle[MAX_HANDLE_SZ];
+};
+
+struct x_smbd_durable_t
+{
+	uint64_t id_volatile;
+	x_smbd_open_state_t open_state;
+	x_smbd_file_handle_t file_handle;
+	/* TODO lease state */
+};
 
 
 int x_smbd_conn_srv_init(int port);

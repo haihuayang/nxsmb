@@ -8,7 +8,6 @@
 
 #include "smbd.hxx"
 #include "smbd_durable.hxx"
-#include <fcntl.h>
 
 struct x_smbd_conf_t;
 
@@ -133,33 +132,6 @@ struct x_smbd_share_t
 std::shared_ptr<x_smbd_volume_t> x_smbd_volume_create(
 		const std::string &name, const std::string &path,
 		const std::string &owner_node, const std::string &owner_share);
-
-struct x_smbd_file_handle_t
-{
-	int cmp(const x_smbd_file_handle_t &other) const
-	{
-		if (base.handle_type != other.base.handle_type) {
-			return base.handle_type - other.base.handle_type;
-		}
-		if (base.handle_bytes != other.base.handle_bytes) {
-			return int(base.handle_bytes - other.base.handle_bytes);
-		}
-		return memcmp(base.f_handle, other.base.f_handle, base.handle_bytes);
-	}
-
-	struct file_handle base;
-	unsigned char f_handle[MAX_HANDLE_SZ];
-};
-
-struct x_smbd_durable_t
-{
-	uint64_t id_volatile;
-	uint32_t access_mask;
-	uint32_t share_access;
-	x_smb2_uuid_t create_guid;
-	idl::dom_sid owner;
-	x_smbd_file_handle_t file_handle;
-};
 
 NTSTATUS x_smbd_volume_get_fd_path(std::string &ret,
 		const x_smbd_volume_t &smbd_volumen,

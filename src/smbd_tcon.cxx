@@ -154,14 +154,11 @@ static bool smbd_save_durable(x_smbd_open_t *smbd_open,
 {
 	X_LOG_DBG("save %p durable info to db", smbd_open);
 	uint64_t id_persistent;
-	x_smbd_durable_t durable;
-	durable.access_mask = smbd_open->access_mask;
-	durable.share_access = smbd_open->share_access;
-	durable.id_volatile = smbd_open->id_volatile;
-	durable.owner = smbd_open->owner;
-	durable.file_handle = smbd_open->smbd_object->file_handle;
-	/* TODO lease, create_guid */
-	// durable.create_guid = smbd_open->create_guid;
+	const auto &file_handle = smbd_open->smbd_object->file_handle;
+	X_ASSERT(file_handle.base.handle_bytes <= MAX_HANDLE_SZ);
+	x_smbd_durable_t durable{smbd_open->id_volatile,
+		smbd_open->open_state, smbd_open->smbd_object->file_handle};
+	/* TODO lease */
 
 	int ret = x_smbd_volume_save_durable(*smbd_open->smbd_object->smbd_volume,
 			id_persistent, &durable);
@@ -170,12 +167,13 @@ static bool smbd_save_durable(x_smbd_open_t *smbd_open,
 		smbd_open->dh_mode = x_smbd_open_t::DH_DURABLE;
 
 		if (durable_timeout_msec == 0) {
-			smbd_open->durable_timeout_msec = X_SMBD_DURABLE_TIMEOUT_MAX * 1000u;
+			durable_timeout_msec = X_SMBD_DURABLE_TIMEOUT_MAX * 1000u;
 		} else {
-			smbd_open->durable_timeout_msec = std::min(
+			durable_timeout_msec = std::min(
 					durable_timeout_msec,
 					X_SMBD_DURABLE_TIMEOUT_MAX * 1000u);
 		}
+		smbd_open->open_state.durable_timeout_msec = durable_timeout_msec;
 		X_LOG_DBG("smbd_save_durable for %p 0x%lx 0x%lx",
 				smbd_open, smbd_open->id_persistent,
 				smbd_open->id_volatile);
@@ -258,7 +256,7 @@ NTSTATUS x_smbd_tcon_op_create(x_smbd_requ_t *smbd_requ,
 				}
 				if (smbd_open->dh_mode != x_smbd_open_t::DH_NONE) {
 					state->out_contexts |= X_SMB2_CONTEXT_FLAG_DH2Q;
-					state->dh2q_resp.timeout = smbd_open->durable_timeout_msec;
+					state->dh2q_resp.timeout = smbd_open->open_state.durable_timeout_msec;
 					state->dh2q_resp.flags = flags;
 				}
 
