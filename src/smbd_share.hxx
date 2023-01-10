@@ -136,8 +136,18 @@ std::shared_ptr<x_smbd_volume_t> x_smbd_volume_create(
 
 struct x_smbd_file_handle_t
 {
-	unsigned int  handle_bytes;
-	int           handle_type;
+	int cmp(const x_smbd_file_handle_t &other) const
+	{
+		if (base.handle_type != other.base.handle_type) {
+			return base.handle_type - other.base.handle_type;
+		}
+		if (base.handle_bytes != other.base.handle_bytes) {
+			return int(base.handle_bytes - other.base.handle_bytes);
+		}
+		return memcmp(base.f_handle, other.base.f_handle, base.handle_bytes);
+	}
+
+	struct file_handle base;
 	unsigned char f_handle[MAX_HANDLE_SZ];
 };
 
@@ -151,6 +161,9 @@ struct x_smbd_durable_t
 	x_smbd_file_handle_t file_handle;
 };
 
+NTSTATUS x_smbd_volume_get_fd_path(std::string &ret,
+		const x_smbd_volume_t &smbd_volumen,
+		int fd);
 int x_smbd_volume_save_durable(x_smbd_volume_t &smbd_volume,
 		uint64_t &id_persistent,
 		const x_smbd_durable_t *durable);

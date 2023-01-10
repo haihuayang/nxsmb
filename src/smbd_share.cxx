@@ -107,6 +107,37 @@ std::shared_ptr<x_smbd_volume_t> x_smbd_volume_create(
 			vol_id, rootdir_fd, durable_db);
 }
 
+NTSTATUS x_smbd_volume_get_fd_path(std::string &path,
+		const x_smbd_volume_t &smbd_volume,
+		int fd)
+{
+	char file_path[PATH_MAX];
+	char fd_path[64];
+	snprintf(fd_path, sizeof fd_path, "/proc/self/fd/%d", fd);
+	ssize_t ret = readlink(fd_path, file_path, PATH_MAX);
+	if (ret >= PATH_MAX) {
+		X_LOG_ERR("file_handle path too long");
+		return NT_STATUS_OBJECT_NAME_NOT_FOUND;
+	}
+
+	X_ASSERT(ret > 0);
+	file_path[ret] = '\0';
+	if (strncmp(file_path, smbd_volume.path.c_str(),
+				smbd_volume.path.length()) != 0) {
+		X_LOG_ERR("file_handle path %s not under volume %s",
+				file_path, smbd_volume.path.c_str());
+		return NT_STATUS_OBJECT_NAME_NOT_FOUND;
+	}
+	if (strncmp(file_path + smbd_volume.path.length(), "/root/", 6) != 0) {
+		X_LOG_ERR("file_handle path %s not under volume root",
+				file_path);
+		return NT_STATUS_OBJECT_NAME_NOT_FOUND;
+	}
+
+	path = file_path + smbd_volume.path.length() + 6;
+	return NT_STATUS_OK;
+}
+
 int x_smbd_volume_save_durable(x_smbd_volume_t &smbd_volume,
 		uint64_t &id_persistent,
 		const x_smbd_durable_t *durable)

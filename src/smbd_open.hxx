@@ -167,6 +167,7 @@ struct x_smbd_object_t
 	};
 	uint16_t type = type_not_exist;
 	std::u16string path;
+	x_smbd_file_handle_t file_handle;
 };
 
 struct x_smbd_stream_t

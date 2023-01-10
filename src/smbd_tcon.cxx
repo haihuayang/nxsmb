@@ -159,7 +159,8 @@ static bool smbd_save_durable(x_smbd_open_t *smbd_open,
 	durable.share_access = smbd_open->share_access;
 	durable.id_volatile = smbd_open->id_volatile;
 	durable.owner = smbd_open->owner;
-	/* TODO lease, file_handle create_guid */
+	durable.file_handle = smbd_open->smbd_object->file_handle;
+	/* TODO lease, create_guid */
 	// durable.create_guid = smbd_open->create_guid;
 
 	int ret = x_smbd_volume_save_durable(*smbd_open->smbd_object->smbd_volume,

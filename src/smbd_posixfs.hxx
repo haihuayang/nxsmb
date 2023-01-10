@@ -126,6 +126,10 @@ x_smbd_object_t *x_smbd_posixfs_open_object(NTSTATUS *pstatus,
 		const std::u16string &path, long path_data,
 		bool create_if);
 
+x_smbd_object_t *x_smbd_posixfs_open_object_by_handle(NTSTATUS *pstatus,
+		std::shared_ptr<x_smbd_volume_t> &smbd_volume,
+		x_smbd_file_handle_t *file_handle);
+
 void posixfs_object_notify_change(x_smbd_object_t *smbd_object,
 		uint32_t notify_action,
 		uint32_t notify_filter,
