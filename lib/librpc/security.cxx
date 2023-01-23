@@ -93,13 +93,13 @@ x_ndr_off_t ndr_traits_dom_sid2::scalars(dom_sid &val, x_ndr_pull_t &ndr, x_ndr_
 static long dom_sid_compare_id_auth(const dom_sid &sid1,
 		const dom_sid &sid2)
 {
-	long cmp = sid1.sid_rev_num - sid2.sid_rev_num;
+	long cmp = long(sid1.sid_rev_num) - long(sid2.sid_rev_num);
 	if (cmp) {
 		return cmp;
 	}
 
 	for (int i = 0; i < 6; i++) {
-		cmp = sid1.id_auth[i] - sid2.id_auth[i];
+		cmp = long(sid1.id_auth[i]) - long(sid2.id_auth[i]);
 		if (cmp) {
 			return cmp;
 		}
@@ -113,7 +113,7 @@ static long dom_sid_compare_subauth(const dom_sid &sid1,
 {
 	long cmp;
 	for (int i = num_auth - 1; i >= 0; --i) {
-		cmp = sid1.sub_auths[i] - sid2.sub_auths[i];
+		cmp = long(sid1.sub_auths[i]) - long(sid2.sub_auths[i]);
 		if (cmp) {
 			return cmp;
 		}
@@ -138,9 +138,31 @@ long dom_sid_compare_domain(const dom_sid &sid1,
 	return dom_sid_compare_id_auth(sid1, sid2);
 }
 
+/* equivilant to dom_sid_compare(sid, dom_sid_compose(domain, rid)) */
+long dom_sid_compare_domain_and_rid(const dom_sid &sid,
+		const dom_sid &domain, uint32_t rid)
+{
+	long cmp = long(sid.num_auths) - long(domain.num_auths + 1);
+	if (cmp) {
+		return cmp;
+	}
+
+	cmp = long(sid.sub_auths[domain.num_auths]) - long(rid);
+	if (cmp) {
+		return cmp;
+	}
+
+	cmp = dom_sid_compare_subauth(sid, domain, domain.num_auths);
+	if (cmp) {
+		return cmp;
+	}
+
+	return dom_sid_compare_id_auth(sid, domain);
+}
+
 long dom_sid_compare(const dom_sid &sid1, const dom_sid &sid2)
 {
-	long cmp = sid1.num_auths - sid2.num_auths;
+	long cmp = long(sid1.num_auths) - long(sid2.num_auths);
 
 	if (cmp) {
 		return cmp;

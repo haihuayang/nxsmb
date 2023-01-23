@@ -28,6 +28,7 @@ TARGET_SET_tests := \
 	test-ntlmssp \
 	test-iface \
 	test-idtable \
+	test-sid \
 
 TARGET_SET_lib := nxsmb
 
