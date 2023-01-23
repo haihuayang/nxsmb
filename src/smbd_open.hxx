@@ -67,6 +67,10 @@ struct x_smbd_object_ops_t
 			long path_priv_data,
 			bool create_if);
 
+	NTSTATUS (*open_durable)(x_smbd_open_t *&smbd_open,
+			std::shared_ptr<x_smbd_volume_t> &smbd_volume,
+			const x_smbd_durable_t &durable);
+
 	NTSTATUS (*close)(x_smbd_object_t *smbd_object,
 			x_smbd_open_t *smbd_open,
 			x_smbd_requ_t *smbd_requ,
@@ -393,6 +397,14 @@ static inline void x_smbd_object_release(x_smbd_object_t *smbd_object,
 {
 	smbd_object->smbd_volume->ops->release_object(smbd_object, smbd_stream);
 }
+
+static inline NTSTATUS x_smbd_open_durable(x_smbd_open_t *&smbd_open,
+		std::shared_ptr<x_smbd_volume_t> &smbd_volume,
+		const x_smbd_durable_t &durable)
+{
+	return smbd_volume->ops->open_durable(smbd_open, smbd_volume, durable);
+}
+
 #if 0
 	uint32_t (*get_attributes)(const x_smbd_object_t *smbd_object);
 static inline uint32_t x_smbd_object_get_attributes(const x_smbd_object_t *smbd_object)

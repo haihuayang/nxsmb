@@ -285,9 +285,40 @@ void x_smbd_durable_db_traverse(x_smbd_durable_db_t *durable_db,
 		}
 	}
 }
+#if 0
+void x_smbd_durable_db_restore(x_smbd_durable_db_t *durable_db,
+		x_smbd_durable_db_visitor_t &visitor)
+{
+	uint32_t epoch = get_epoch();
+	for (uint32_t i = 0; i < durable_db->capacity; ++i) {
+		x_smbd_durable_marker_t marker = durable_db->markers[i];
+		if (marker.expired > epoch) {
+			void *record = durable_db->records +
+				(X_SMBD_DURABLE_DB_RECORD_SIZE * i);
+			x_smbd_durable_t *smbd_durable = record;
+			uint32_t timeout_msec = smbd_durable->timeout_msec;
+			
+			uint64_t id = (uint64_t(marker.gen) << 32) | i;
+			uint32_t timeout = marker.expired == 0xffffffffu ?
+				0xffffffffu : marker.expired - epoch;
 
+			x_smbd_open_t *smbd_open;
+			NTSTATUS status = smbd_volume->open_by_handle(
+					smbd_open, smbd_volume,
+					smbd_durable
+
+			if (visitor(id, timeout, durable_db->records +
+						(X_SMBD_DURABLE_DB_RECORD_SIZE * i),
+						X_SMBD_DURABLE_DB_RECORD_SIZE)) {
+				break;
+			}
+		}
+	}
+}
+#endif
 void x_smbd_durable_db_close(x_smbd_durable_db_t *durable_db)
 {
 	delete durable_db;
 }
+
 

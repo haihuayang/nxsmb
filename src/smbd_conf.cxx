@@ -641,4 +641,11 @@ x_smbd_conf_t::x_smbd_conf_t()
 	strcpy((char *)&guid, "nxsmbd");
 }
 
-
+int x_smbd_restore_durable(const x_smbd_conf_t &smbd_conf)
+{
+	for (auto smbd_volume: smbd_conf.volumes) {
+		/* TODO only for local volume */
+		x_smbd_volume_restore_durable(smbd_volume);
+	}
+	return 0;
+}

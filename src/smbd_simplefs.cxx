@@ -59,6 +59,7 @@ static NTSTATUS simplefs_object_op_qdir(
 
 static const x_smbd_object_ops_t simplefs_object_ops = {
 	x_smbd_posixfs_open_object,
+	posixfs_op_open_durable,
 	posixfs_object_op_close,
 	posixfs_object_op_read,
 	posixfs_object_op_write,

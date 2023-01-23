@@ -751,6 +751,7 @@ static NTSTATUS dfs_root_create_open(dfs_share_t &dfs_share,
 
 static const x_smbd_object_ops_t dfs_root_object_ops = {
 	dfs_root_op_open_object,
+	posixfs_op_open_durable,
 	posixfs_object_op_close,
 	dfs_root_object_op_read,
 	dfs_root_object_op_write,
@@ -861,6 +862,7 @@ static NTSTATUS dfs_volume_object_op_rename(x_smbd_object_t *smbd_object,
 
 static const x_smbd_object_ops_t dfs_volume_object_ops = {
 	x_smbd_posixfs_open_object,
+	posixfs_op_open_durable,
 	posixfs_object_op_close,
 	posixfs_object_op_read,
 	posixfs_object_op_write,

@@ -645,6 +645,7 @@ static std::u16string ipc_op_get_path(const x_smbd_object_t *smbd_object,
 
 static const x_smbd_object_ops_t x_smbd_ipc_object_ops = {
 	ipc_open_object,
+	nullptr,
 	ipc_object_op_close,
 	ipc_object_op_read,
 	ipc_object_op_write,

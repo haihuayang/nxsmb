@@ -135,6 +135,36 @@ static NTSTATUS smbd_open_set_durable(x_smbd_open_t *smbd_open)
 	return NT_STATUS_OK;
 }
 
+NTSTATUS x_smbd_open_restore(
+		std::shared_ptr<x_smbd_volume_t> &smbd_volume,
+		x_smbd_durable_t &smbd_durable)
+{
+	if (!x_smbd_open_has_space()) {
+		return NT_STATUS_INSUFFICIENT_RESOURCES;
+	}
+
+	x_smbd_open_t *smbd_open{};
+	NTSTATUS status = x_smbd_open_durable(smbd_open, smbd_volume,
+			smbd_durable);
+	if (!NT_STATUS_IS_OK(status)) {
+		return status;
+	}
+
+	{
+		auto lock = std::lock_guard(smbd_open->smbd_object->mutex);
+		X_ASSERT(smbd_open->state == x_smbd_open_t::S_ACTIVE);
+		X_ASSERT(!smbd_open->smbd_tcon);
+		smbd_open->state = x_smbd_open_t::S_INACTIVE;
+		smbd_open->durable_timer.func = smbd_open_durable_timeout;
+		smbd_open->durable_expire_tick = x_tick_add(tick_now,
+				smbd_open->open_state.durable_timeout_msec * 1000000u);
+		x_smbd_add_timer(x_smbd_timer_t::DURABLE, &smbd_open->durable_timer);
+	}
+
+	smbd_durable.id_volatile = smbd_open->id_volatile;
+	return NT_STATUS_OK;
+}
+
 NTSTATUS x_smbd_open_close(x_smbd_open_t *smbd_open,
 		x_smbd_requ_t *smbd_requ,
 		std::unique_ptr<x_smb2_state_close_t> &state,

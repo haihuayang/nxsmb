@@ -95,6 +95,9 @@ void posixfs_op_release_object(x_smbd_object_t *smbd_object, x_smbd_stream_t *sm
 uint32_t posixfs_op_get_attributes(const x_smbd_object_t *smbd_object);
 std::u16string posixfs_op_get_path(const x_smbd_object_t *smbd_object,
 		const x_smbd_open_t *smbd_open);
+NTSTATUS posixfs_op_open_durable(x_smbd_open_t *&smbd_open,
+		std::shared_ptr<x_smbd_volume_t> &smbd_volume,
+		const x_smbd_durable_t &durable);
 
 
 int posixfs_object_get_statex(const posixfs_object_t *posixfs_object,

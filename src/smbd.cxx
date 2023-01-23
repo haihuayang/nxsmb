@@ -125,8 +125,9 @@ static void init_smbd()
 	TIMERQ_INIT(x_smbd_timer_t::BREAK, 35);
 	TIMERQ_INIT(x_smbd_timer_t::DURABLE, X_SMBD_DURABLE_TIMEOUT_MAX);
 
-	x_smbd_conn_srv_init(smbd_conf->port);
 
+	x_smbd_restore_durable(*smbd_conf);
+	x_smbd_conn_srv_init(smbd_conf->port);
 }
 
 const std::vector<uint8_t> &x_smbd_get_negprot_spnego()
