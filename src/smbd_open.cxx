@@ -188,6 +188,7 @@ NTSTATUS x_smbd_open_restore(
 		x_smbd_durable_t &smbd_durable)
 {
 	if (!x_smbd_open_has_space()) {
+		X_LOG_WARN("too many opens, cannot allocate new");
 		return NT_STATUS_INSUFFICIENT_RESOURCES;
 	}
 

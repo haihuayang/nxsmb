@@ -57,6 +57,8 @@ struct x_smbd_conf_t
 	bool host_msdfs = true;
 
 	unsigned int log_level = X_LOG_LEVEL_DBG;
+	uint32_t max_connections = 512;
+	uint32_t max_opens = 1024;
 	std::string log_name = "stderr";
 	std::string netbios_name, workgroup, dns_domain, realm;
 	std::string private_dir;

@@ -12,6 +12,7 @@
 #include <stdio.h>
 #include <getopt.h>
 #include <openssl/crypto.h>
+#include <sys/resource.h>
 
 #include "smbd_conf.hxx"
 #include "network.hxx"
@@ -58,8 +59,7 @@ x_auth_t *x_smbd_create_auth(const void *sec_buf, size_t sec_len)
 enum {
 	X_SMBD_MAX_SESSION = 1024,
 	X_SMBD_MAX_TCON = 1024,
-	X_SMBD_MAX_OPEN = 1024,
-	X_SMBD_MAX_REQUEST = 1024,
+	X_SMBD_MAX_REQUEST = 64 * 1024,
 };
 
 static void init_smbd()
@@ -89,14 +89,15 @@ static void init_smbd()
 	g_smbd.wbpool = x_wbpool_create(g_evtmgmt, 2,
 			smbd_conf->samba_locks_dir + "/winbindd_privileged/pipe");
 
-	x_smbd_open_table_init(X_SMBD_MAX_OPEN);
+	uint32_t max_opens = std::max(smbd_conf->max_opens, 1024u);
+	x_smbd_open_table_init(max_opens);
 	x_smbd_tcon_table_init(X_SMBD_MAX_TCON);
 	x_smbd_sess_table_init(X_SMBD_MAX_SESSION);
-	x_smbd_requ_pool_init(X_SMBD_MAX_OPEN); // TODO use X_SMBD_MAX_OPEN for now
-	x_smbd_lease_pool_init(X_SMBD_MAX_OPEN, X_SMBD_MAX_OPEN / 16); // TODO use X_SMBD_MAX_OPEN for now
+	x_smbd_requ_pool_init(max_opens); // TODO use max_opens for now
+	x_smbd_lease_pool_init(max_opens, max_opens / 16); // TODO use max_opens for now
 
 	x_smbd_ipc_init();
-	x_smbd_posixfs_init(X_SMBD_MAX_OPEN);
+	x_smbd_posixfs_init(max_opens);
 	x_smbd_ctrl_init(g_evtmgmt);
 
 	int err = x_smbd_secrets_init();
@@ -125,6 +126,16 @@ static void init_smbd()
 	TIMERQ_INIT(x_smbd_timer_t::BREAK, 35);
 	TIMERQ_INIT(x_smbd_timer_t::DURABLE, X_SMBD_DURABLE_TIMEOUT_MAX);
 
+	/* reserver 80 fd for other purpose for now */
+	uint32_t max_fd = max_opens + smbd_conf->max_connections + 80;
+	struct rlimit rl_nofile;
+	X_ASSERT(getrlimit(RLIMIT_NOFILE, &rl_nofile) == 0);
+	X_LOG_DBG("RLIMIT_NOFILE max=%lu cur=%lu",
+			rl_nofile.rlim_max, rl_nofile.rlim_cur);
+	if (rl_nofile.rlim_cur < max_fd) {
+		rl_nofile.rlim_max = rl_nofile.rlim_cur = max_fd;
+		X_ASSERT(setrlimit(RLIMIT_NOFILE, &rl_nofile));
+	}
 
 	x_smbd_restore_durable(*smbd_conf);
 	x_smbd_conn_srv_init(smbd_conf->port);

@@ -190,6 +190,7 @@ NTSTATUS x_smbd_tcon_op_create(x_smbd_requ_t *smbd_requ,
 		std::unique_ptr<x_smb2_state_create_t> &state)
 {
 	if (!x_smbd_open_has_space()) {
+		X_LOG_WARN("too many opens, cannot allocate new");
 		return NT_STATUS_INSUFFICIENT_RESOURCES;
 	}
 
