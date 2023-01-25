@@ -1767,14 +1767,16 @@ static void do_break_lease(posixfs_open_t *posixfs_open,
 		return;
 	}
 
-	x_smbd_sess_t *smbd_sess = x_smbd_tcon_get_sess(posixfs_open->base.smbd_tcon);
-	X_SMBD_SESS_POST_USER(smbd_sess, new posixfs_send_lease_break_evt_t(
-				smbd_sess, lease_key, curr_state, break_to,
-				new_epoch, flags));
-	/* if posted fails, the connection is in shutdown,
-	 * and it eventually close the open and wakeup the
-	 * defer opens
-	 */
+	if (posixfs_open->base.smbd_tcon) {
+		x_smbd_sess_t *smbd_sess = x_smbd_tcon_get_sess(posixfs_open->base.smbd_tcon);
+		X_SMBD_SESS_POST_USER(smbd_sess, new posixfs_send_lease_break_evt_t(
+					smbd_sess, lease_key, curr_state, break_to,
+					new_epoch, flags));
+		/* if posted fails, the connection is in shutdown,
+		 * and it eventually close the open and wakeup the
+		 * defer opens
+		 */
+	}
 }
 
 struct posixfs_send_oplock_break_evt_t
@@ -1855,22 +1857,24 @@ static void do_break_oplock(posixfs_object_t *posixfs_object,
 	uint8_t oplock_level = break_to == X_SMB2_LEASE_READ ?
 		X_SMB2_OPLOCK_LEVEL_II : X_SMB2_OPLOCK_LEVEL_NONE;
 	auto [ persistent_id, volatile_id ] = x_smbd_open_get_id(&posixfs_open->base); 
-	x_smbd_sess_t *smbd_sess = x_smbd_tcon_get_sess(posixfs_open->base.smbd_tcon);
-	X_SMBD_SESS_POST_USER(smbd_sess, new posixfs_send_oplock_break_evt_t(
-				smbd_sess, persistent_id, volatile_id,
-				oplock_level));
-	/* if posted fails, the connection is in shutdown,
-	 * and it eventually close the open and wakeup the
-	 * defer opens
-	 */
-	if (posixfs_open->get_oplock_level() == X_SMB2_OPLOCK_LEVEL_II && break_to == X_SMB2_OPLOCK_LEVEL_NONE) {
-		posixfs_open->set_oplock_level(oplock_level);
-		share_mode_modified(posixfs_object, posixfs_open->base.smbd_stream);
-		return;
+	if (posixfs_open->base.smbd_tcon) {
+		x_smbd_sess_t *smbd_sess = x_smbd_tcon_get_sess(posixfs_open->base.smbd_tcon);
+		X_SMBD_SESS_POST_USER(smbd_sess, new posixfs_send_oplock_break_evt_t(
+					smbd_sess, persistent_id, volatile_id,
+					oplock_level));
+		/* if posted fails, the connection is in shutdown,
+		 * and it eventually close the open and wakeup the
+		 * defer opens
+		 */
+		if (posixfs_open->get_oplock_level() == X_SMB2_OPLOCK_LEVEL_II && break_to == X_SMB2_OPLOCK_LEVEL_NONE) {
+			posixfs_open->set_oplock_level(oplock_level);
+			share_mode_modified(posixfs_object, posixfs_open->base.smbd_stream);
+			return;
+		}
+		posixfs_open->oplock_break_sent = (break_to == X_SMB2_LEASE_READ ?
+				oplock_break_sent_t::OPLOCK_BREAK_TO_LEVEL_II_SENT :
+				oplock_break_sent_t::OPLOCK_BREAK_TO_NONE_SENT);
 	}
-	posixfs_open->oplock_break_sent = (break_to == X_SMB2_LEASE_READ ?
-			oplock_break_sent_t::OPLOCK_BREAK_TO_LEVEL_II_SENT :
-			oplock_break_sent_t::OPLOCK_BREAK_TO_NONE_SENT);
 	x_smbd_ref_inc(&posixfs_open->base);
 	x_smbd_add_timer(x_smbd_timer_t::BREAK, &posixfs_open->oplock_break_timer);
 }
