@@ -560,23 +560,9 @@ static void x_smb2_create_async_done(x_smbd_conn_t *smbd_conn,
 	x_smbd_conn_requ_done(smbd_conn, smbd_requ, status);
 }
 
-NTSTATUS x_smb2_process_create(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
+static NTSTATUS smb2_process_create(x_smbd_requ_t *smbd_requ,
+		std::unique_ptr<x_smb2_state_create_t> &state)
 {
-	X_ASSERT(smbd_requ->smbd_chan && smbd_requ->smbd_sess);
-	if (smbd_requ->in_requ_len < sizeof(x_smb2_header_t) + sizeof(x_smb2_in_create_t) + 1) {
-		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
-	}
-
-	const uint8_t *in_hdr = smbd_requ->get_in_data();
-
-	/* TODO check limit of open for both total and per conn*/
-
-	auto state = std::make_unique<x_smb2_state_create_t>();
-	NTSTATUS status = decode_in_create(*state, in_hdr, smbd_requ->in_requ_len);
-	if (!NT_STATUS_IS_OK(status)) {
-		RETURN_OP_STATUS(smbd_requ, status);
-	}
-
 	if (state->in_impersonation_level >= X_SMB2_IMPERSONATION_MAX) {
 		RETURN_OP_STATUS(smbd_requ, NT_STATUS_BAD_IMPERSONATION_LEVEL);
 	}
@@ -655,7 +641,35 @@ NTSTATUS x_smb2_process_create(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_req
 				state->lease.key, state->lease.version, true);
 	}
 
-	status = x_smbd_tcon_op_create(smbd_requ, state);
+	return x_smbd_tcon_op_create(smbd_requ, state);
+}
+
+NTSTATUS x_smb2_process_create(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
+{
+	X_ASSERT(smbd_requ->smbd_chan && smbd_requ->smbd_sess);
+	X_ASSERT(!smbd_requ->smbd_open);
+
+	if (smbd_requ->in_requ_len < sizeof(x_smb2_header_t) + sizeof(x_smb2_in_create_t) + 1) {
+		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
+	}
+
+	const uint8_t *in_hdr = smbd_requ->get_in_data();
+
+	/* TODO check limit of open for both total and per conn*/
+
+	auto state = std::make_unique<x_smb2_state_create_t>();
+	NTSTATUS status = decode_in_create(*state, in_hdr, smbd_requ->in_requ_len);
+	if (!NT_STATUS_IS_OK(status)) {
+		RETURN_OP_STATUS(smbd_requ, status);
+	}
+
+	if (x_bit_any<uint32_t>(state->in_contexts, X_SMB2_CONTEXT_FLAG_DHNC |
+				X_SMB2_CONTEXT_FLAG_DH2C)) {
+		status = x_smbd_tcon_op_recreate(smbd_requ, state);
+	} else {
+		status = smb2_process_create(smbd_requ, state);
+	}
+
 	if (NT_STATUS_IS_OK(status)) {
 		x_smb2_reply_create(smbd_conn, smbd_requ, *state);
 		return status;

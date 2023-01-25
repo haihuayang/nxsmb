@@ -14,7 +14,7 @@
 
 enum {
 	X_SMBD_DURABLE_DB_VERSION_1 = 1,
-	X_SMBD_DURABLE_DB_RECORD_SIZE = 256,
+	X_SMBD_DURABLE_DB_RECORD_SIZE = 512, // >= sizeof(x_smbd_durable_t)
 	X_SMBD_DURABLE_TORELANT = 10,
 };
 
@@ -129,19 +129,34 @@ int x_smbd_durable_db_save(x_smbd_durable_db_t *db,
 	X_ASSERT(orig_val == __atomic_exchange_n(&db->markers[slot].val, new_marker.val, __ATOMIC_ACQ_REL));
 	msync(&db->markers[slot], sizeof(x_smbd_durable_marker_t), MS_SYNC);
 	id = (uint64_t(volume_id) << 48) | (uint64_t(new_marker.gen) << 32) | slot;
+	X_LOG_DBG("volume=0x%x id=0x%lx", volume_id, id);
 	++db->count;
 	return 0;
+}
+
+static inline uint32_t get_durable_slot(uint64_t id)
+{
+	return x_convert<uint32_t>(id);
 }
 
 int x_smbd_durable_db_set_timeout(x_smbd_durable_db_t *db,
 		uint64_t id, uint32_t timeout)
 {
-	uint32_t slot = x_convert<uint32_t>(id);
+	X_LOG_DBG("id=0x%lx, timeout=%d", id, timeout);
+	uint32_t slot = get_durable_slot(id);
 	if (slot >= db->capacity) {
 		return -ENOENT;
 	}
 
-	uint32_t expired = timeout ? get_epoch() + timeout : 0;
+	uint32_t expired;
+	if (timeout == 0) {
+		expired = 0;
+	} else if (timeout == 0xffffffffu) {
+		expired = 0xffffffffu;
+	} else {
+		expired = get_epoch() + timeout;
+	}
+
 	x_smbd_durable_marker_t old_marker, new_marker;
 	old_marker.val = __atomic_load_n(&db->markers[slot].val, __ATOMIC_ACQUIRE);
 	new_marker.val = old_marker.val;
@@ -285,6 +300,24 @@ void x_smbd_durable_db_traverse(x_smbd_durable_db_t *durable_db,
 		}
 	}
 }
+
+void *x_smbd_durable_db_lookup(x_smbd_durable_db_t *durable_db,
+		uint64_t id)
+{
+	uint32_t slot = get_durable_slot(id);
+	if (slot >= durable_db->capacity) {
+		return nullptr;
+	}
+	
+	uint32_t epoch = get_epoch();
+	const x_smbd_durable_marker_t marker = durable_db->markers[slot];
+	if (marker.expired < epoch) {
+		return nullptr;
+	}
+
+	return  durable_db->records + (X_SMBD_DURABLE_DB_RECORD_SIZE * slot);
+}
+
 #if 0
 void x_smbd_durable_db_restore(x_smbd_durable_db_t *durable_db,
 		x_smbd_durable_db_visitor_t &visitor)

@@ -27,6 +27,10 @@ struct x_smbd_user_t
 		X_ASSERT(sid_compose(owner, domain_sid, uid));
 		return owner;
 	}
+
+	bool match(const idl::dom_sid &sid) const {
+		return idl::dom_sid_compare_domain_and_rid(sid, domain_sid, uid) == 0;
+	}
 };
 
 

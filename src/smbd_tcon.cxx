@@ -189,8 +189,6 @@ static bool smbd_save_durable(x_smbd_open_t *smbd_open,
 NTSTATUS x_smbd_tcon_op_create(x_smbd_requ_t *smbd_requ,
 		std::unique_ptr<x_smb2_state_create_t> &state)
 {
-	X_ASSERT(!smbd_requ->smbd_open);
-
 	if (!x_smbd_open_has_space()) {
 		return NT_STATUS_INSUFFICIENT_RESOURCES;
 	}
@@ -289,6 +287,54 @@ NTSTATUS x_smbd_tcon_op_create(x_smbd_requ_t *smbd_requ,
 		x_smbd_notify_change(state->smbd_object->smbd_volume, changes);
 	}
 
+	return status;
+}
+
+NTSTATUS x_smbd_tcon_op_recreate(x_smbd_requ_t *smbd_requ,
+		std::unique_ptr<x_smb2_state_create_t> &state)
+{
+	x_smbd_tcon_t *smbd_tcon = smbd_requ->smbd_tcon;
+
+	if (!x_smbd_tcon_get_durable_handle(smbd_tcon)) {
+		RETURN_OP_STATUS(smbd_requ, NT_STATUS_OBJECT_NAME_NOT_FOUND);
+	}
+	uint64_t id_persistent = state->dhnc_requ.file_id_persistent;
+	std::shared_ptr<x_smbd_volume_t> smbd_volume;
+	x_smbd_durable_t *durable = x_smbd_share_lookup_durable(
+			smbd_volume, smbd_requ->smbd_tcon->smbd_share,
+			id_persistent);
+	if (!durable) {
+		RETURN_OP_STATUS(smbd_requ, NT_STATUS_OBJECT_NAME_NOT_FOUND);
+	}
+
+	uint64_t id_volatile = durable->id_volatile;
+
+	x_smbd_open_t *smbd_open = x_smbd_open_reopen(id_persistent, id_volatile,
+			smbd_tcon);
+	if (!smbd_open) {
+		RETURN_OP_STATUS(smbd_requ, NT_STATUS_OBJECT_NAME_NOT_FOUND);
+	}
+
+	/* if client access the open from other channel now, it does not have
+	 * link into smbd_tcon, probably we should call x_smbd_open_store in the last
+	 */
+	NTSTATUS status = NT_STATUS_OK;
+	{
+		std::vector<x_smb2_change_t> changes;
+		std::lock_guard<std::mutex> lock(smbd_tcon->mutex);
+		if (smbd_tcon->state != x_smbd_tcon_t::S_ACTIVE) {
+			std::unique_ptr<x_smb2_state_close_t> state;
+			x_smbd_open_close(smbd_open, nullptr, state, changes, false);
+			status = NT_STATUS_NETWORK_NAME_DELETED;
+		} else {
+			smbd_tcon->open_list.push_back(&smbd_open->tcon_link);
+		}
+	}
+
+	if (NT_STATUS_IS_OK(status)) {
+		x_smbd_ref_inc(smbd_open); // ref by smbd_tcon open_list
+		smbd_requ->smbd_open = x_smbd_ref_inc(smbd_open);
+	}
 	return status;
 }
 

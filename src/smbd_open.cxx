@@ -79,25 +79,73 @@ x_smbd_open_t *x_smbd_open_lookup(uint64_t id_presistent, uint64_t id_volatile,
 	return nullptr;
 }
 
+static inline bool smbd_open_set_state(x_smbd_open_t *smbd_open,
+		uint32_t curr_state, uint32_t new_state)
+{
+	uint32_t old_state = curr_state;
+	if (!std::atomic_compare_exchange_strong_explicit(&smbd_open->state,
+				&old_state, new_state,
+				std::memory_order_release,
+				std::memory_order_relaxed)) {
+		X_LOG_NOTICE("smbd_open_set_state(%p, %d, %d) unexpected %d", 
+				smbd_open, new_state, curr_state, old_state);
+		return false;
+	}
+	return true;
+}
+
+static bool smbd_open_check(x_smbd_open_t *smbd_open, x_smbd_tcon_t *smbd_tcon)
+{
+	if (!x_smbd_cancel_timer(x_smbd_timer_t::DURABLE, &smbd_open->durable_timer)) {
+		return false;
+	}
+	if (!smbd_open_set_state(smbd_open, x_smbd_open_t::S_ACTIVE,
+				x_smbd_open_t::S_INACTIVE)) {
+		return false;
+	}
+	auto &open_state = smbd_open->open_state;
+	if (!(open_state.client_guid == x_smbd_conn_curr_client_guid())) {
+		return false;
+	}
+	if (!x_smbd_tcon_get_user(smbd_tcon)->match(open_state.owner)) {
+		return false;
+	}
+
+	return true;
+}
+
+x_smbd_open_t *x_smbd_open_reopen(uint64_t id_presistent, uint64_t id_volatile,
+		x_smbd_tcon_t *smbd_tcon)
+{
+	auto [found, smbd_open] = g_smbd_open_table->lookup(id_volatile);
+	if (found) {
+		if (smbd_open_check(smbd_open, smbd_tcon)) {
+			return smbd_open;
+		}
+		x_smbd_ref_dec(smbd_open);
+	}
+	return nullptr;
+}
+
 static void smbd_open_durable_timeout(x_timerq_entry_t *timerq_entry)
 {
 	x_smbd_open_t *smbd_open = X_CONTAINER_OF(timerq_entry,
 			x_smbd_open_t, durable_timer);
 	X_LOG_DBG("durable_timeout %lx,%lx", smbd_open->id_persistent,
 			smbd_open->id_volatile);
-	smbd_open->state = x_smbd_open_t::S_DONE;
+	if (smbd_open_set_state(smbd_open, x_smbd_open_t::S_INACTIVE, 
+				x_smbd_open_t::S_DONE)) {
+		g_smbd_open_table->remove(smbd_open->id_volatile);
+		x_smbd_ref_dec(smbd_open);
 
-	g_smbd_open_table->remove(smbd_open->id_volatile);
-	x_smbd_ref_dec(smbd_open);
-
-	x_smbd_object_t *smbd_object = smbd_open->smbd_object;
-	auto smbd_volume = smbd_object->smbd_volume;
-	std::vector<x_smb2_change_t> changes;
-	std::unique_ptr<x_smb2_state_close_t> state;
-	smbd_volume->ops->close(smbd_object, smbd_open,
-			nullptr, state, changes);
-	/* TODO changes */
-
+		x_smbd_object_t *smbd_object = smbd_open->smbd_object;
+		auto smbd_volume = smbd_object->smbd_volume;
+		std::vector<x_smb2_change_t> changes;
+		std::unique_ptr<x_smb2_state_close_t> state;
+		smbd_volume->ops->close(smbd_object, smbd_open,
+				nullptr, state, changes);
+		/* TODO changes */
+	}
 	x_smbd_ref_dec(smbd_open); // ref by timer
 }
 

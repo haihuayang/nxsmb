@@ -166,5 +166,10 @@ int x_smbd_restore_durable(const x_smbd_conf_t &smbd_conf);
 
 int x_smbd_volume_restore_durable(std::shared_ptr<x_smbd_volume_t> &smbd_volume);
 
+x_smbd_durable_t *x_smbd_share_lookup_durable(
+		std::shared_ptr<x_smbd_volume_t> &smbd_volume,
+		const std::shared_ptr<x_smbd_share_t> &smbd_share,
+		uint64_t id_persistent);
+
 #endif /* __smbd_share__hxx__ */
 

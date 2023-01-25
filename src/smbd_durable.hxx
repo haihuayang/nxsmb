@@ -35,5 +35,8 @@ struct x_smbd_durable_db_visitor_t
 void x_smbd_durable_db_traverse(x_smbd_durable_db_t *durable_db,
 		x_smbd_durable_db_visitor_t &visitor);
 
+void *x_smbd_durable_db_lookup(x_smbd_durable_db_t *durable_db,
+		uint64_t id);
+
 #endif /* __smbd_durable__hxx__ */
 

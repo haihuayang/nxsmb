@@ -291,8 +291,8 @@ struct smbd_durable_db_printer_t : x_smbd_durable_db_visitor_t
 		printf("0x%lx %u 0x%lx 0x%x %s\n",
 				id, timeout,
 				durable->id_volatile,
-				durable->access_mask,
-				x_tostr(durable->owner).c_str());
+				durable->open_state.access_mask,
+				x_tostr(durable->open_state.owner).c_str());
 		return false;
 	}
 };
