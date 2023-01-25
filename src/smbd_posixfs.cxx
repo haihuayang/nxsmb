@@ -5001,32 +5001,45 @@ static void qdir_unget(qdir_t &qdir, qdir_pos_t &pos)
 	qdir.filepos = pos.filepos;
 }
 
+struct posixfs_qdir_evt_t
+{
+	static void func(x_smbd_conn_t *smbd_conn, x_fdevt_user_t *fdevt_user)
+	{
+		posixfs_qdir_evt_t *evt = X_CONTAINER_OF(fdevt_user, posixfs_qdir_evt_t, base);
+		x_smbd_requ_t *smbd_requ = evt->smbd_requ;
+		X_LOG_DBG("evt=%p, requ=%p, smbd_conn=%p", evt, smbd_requ, smbd_conn);
+		x_smbd_requ_async_done(smbd_conn, smbd_requ, evt->status);
+		delete evt;
+	}
+
+	posixfs_qdir_evt_t(x_smbd_requ_t *r, NTSTATUS s)
+		: base(func), smbd_requ(r), status(s)
+	{
+	}
+	~posixfs_qdir_evt_t()
+	{
+		x_smbd_ref_dec(smbd_requ);
+	}
+	x_fdevt_user_t base;
+	x_smbd_requ_t * const smbd_requ;
+	NTSTATUS const status;
+};
+
 #define DIR_READ_ACCESS_MASK (idl::SEC_FILE_READ_DATA| \
 		idl::SEC_FILE_READ_EA| \
 		idl::SEC_FILE_READ_ATTRIBUTE| \
 		idl::SEC_STD_READ_CONTROL)
 
-NTSTATUS posixfs_object_qdir(
-		x_smbd_object_t *smbd_object,
-		x_smbd_conn_t *smbd_conn,
+static NTSTATUS posixfs_do_qdir(
+		posixfs_object_t *posixfs_object,
 		x_smbd_requ_t *smbd_requ,
-		std::unique_ptr<x_smb2_state_qdir_t> &state,
-		const char *pseudo_entries[],
+		x_smb2_state_qdir_t &state,
+		const char **pseudo_entries,
 		uint32_t pseudo_entry_count,
-		bool (*process_entry_func)(x_smbd_object_meta_t *object_meta,
-			x_smbd_stream_meta_t *stream_meta,
-			std::shared_ptr<idl::security_descriptor> *psd,
-			posixfs_object_t *dir_obj,
-			const char *ent_name,
-			uint32_t file_number))
+		posixfs_qdir_entry_func_t *process_entry_func)
 {
-	posixfs_object_t *posixfs_object = posixfs_object_from_base_t::container(smbd_object);
-	if (!posixfs_object_is_dir(posixfs_object)) {
-		return NT_STATUS_INVALID_PARAMETER;
-	}
-
 	posixfs_open_t *posixfs_open = posixfs_open_from_base_t::container(smbd_requ->smbd_open);
-	if (state->in_flags & (X_SMB2_CONTINUE_FLAG_REOPEN | X_SMB2_CONTINUE_FLAG_RESTART)) {
+	if (state.in_flags & (X_SMB2_CONTINUE_FLAG_REOPEN | X_SMB2_CONTINUE_FLAG_RESTART)) {
 		if (posixfs_open->qdir) {
 			delete posixfs_open->qdir;
 			posixfs_open->qdir = nullptr;
@@ -5038,7 +5051,7 @@ NTSTATUS posixfs_object_qdir(
 	}
 
 	uint32_t max_count = 0x7fffffffu;
-	if (state->in_flags & X_SMB2_CONTINUE_FLAG_SINGLE) {
+	if (state.in_flags & X_SMB2_CONTINUE_FLAG_SINGLE) {
 		max_count = 1;
 	}
 	std::shared_ptr<idl::security_descriptor> psd, *ppsd = nullptr;
@@ -5049,11 +5062,11 @@ NTSTATUS posixfs_object_qdir(
 	}
 
 	qdir_t *qdir = posixfs_open->qdir;
-	state->out_data.resize(state->in_output_buffer_length);
+	state.out_data.resize(state.in_output_buffer_length);
 	uint32_t num = 0, matched_count = 0;
 
-	x_smb2_chain_marshall_t marshall{state->out_data.data(), state->out_data.data() + state->out_data.size(), 8};
-	x_fnmatch_t *fnmatch = x_fnmatch_create(state->in_name, true);
+	x_smb2_chain_marshall_t marshall{state.out_data.data(), state.out_data.data() + state.out_data.size(), 8};
+	x_fnmatch_t *fnmatch = x_fnmatch_create(state.in_name, true);
 	while (num < max_count) {
 		qdir_pos_t qdir_pos;
 		const char *ent_name = qdir_get(*qdir, qdir_pos, posixfs_object,
@@ -5093,7 +5106,7 @@ NTSTATUS posixfs_object_qdir(
 
 		++matched_count;
 		if (x_smbd_marshall_dir_entry(marshall, object_meta, stream_meta,
-					u16_name, state->in_info_level)) {
+					u16_name, state.in_info_level)) {
 			++num;
 		} else {
 			qdir_unget(*qdir, qdir_pos);
@@ -5106,11 +5119,11 @@ NTSTATUS posixfs_object_qdir(
 	}
 
 	if (num > 0) {
-		state->out_data.resize(marshall.get_size());
+		state.out_data.resize(marshall.get_size());
 		return NT_STATUS_OK;
 	}
 	
-	state->out_data.resize(0);
+	state.out_data.resize(0);
 	if (matched_count > 0) {
 		return NT_STATUS_INFO_LENGTH_MISMATCH;
 	} else {
@@ -5118,6 +5131,102 @@ NTSTATUS posixfs_object_qdir(
 	}
 }
 
+struct posixfs_qdir_job_t
+{
+	posixfs_qdir_job_t(posixfs_object_t *po, x_smbd_requ_t *r,
+			const char *pseudo_entries[],
+			uint32_t pseudo_entry_count,
+			posixfs_qdir_entry_func_t *process_entry_func);
+	x_job_t base;
+	posixfs_object_t *posixfs_object;
+	x_smbd_requ_t *smbd_requ;
+	const char ** const pseudo_entries;
+	const uint32_t pseudo_entry_count;
+	posixfs_qdir_entry_func_t * const process_entry_func;
+};
+
+static x_job_t::retval_t posixfs_qdir_job_run(x_job_t *job)
+{
+	posixfs_qdir_job_t *posixfs_qdir_job = X_CONTAINER_OF(job, posixfs_qdir_job_t, base);
+
+	x_smbd_requ_t *smbd_requ = posixfs_qdir_job->smbd_requ;
+	posixfs_object_t *posixfs_object = posixfs_qdir_job->posixfs_object;
+	posixfs_qdir_job->smbd_requ = nullptr;
+	posixfs_qdir_job->posixfs_object = nullptr;
+
+	auto state = smbd_requ->get_state<x_smb2_state_qdir_t>();
+
+	NTSTATUS status = posixfs_do_qdir(posixfs_object,
+			smbd_requ,
+			*state,
+			posixfs_qdir_job->pseudo_entries,
+			posixfs_qdir_job->pseudo_entry_count,
+			posixfs_qdir_job->process_entry_func);
+
+	posixfs_object_release(posixfs_object);
+	X_SMBD_CHAN_POST_USER(smbd_requ->smbd_chan,
+			new posixfs_qdir_evt_t(smbd_requ, status));
+	return x_job_t::JOB_DONE;
+}
+
+static void posixfs_qdir_job_done(x_job_t *job)
+{
+	posixfs_qdir_job_t *posixfs_qdir_job = X_CONTAINER_OF(job, posixfs_qdir_job_t, base);
+	X_ASSERT(!posixfs_qdir_job->posixfs_object);
+	X_ASSERT(!posixfs_qdir_job->smbd_requ);
+	delete posixfs_qdir_job;
+}
+
+static const x_job_ops_t posixfs_qdir_job_ops = {
+	posixfs_qdir_job_run,
+	posixfs_qdir_job_done,
+};
+
+inline posixfs_qdir_job_t::posixfs_qdir_job_t(posixfs_object_t *po, x_smbd_requ_t *r,
+		const char *pseudo_entries[],
+		uint32_t pseudo_entry_count,
+		posixfs_qdir_entry_func_t *process_entry_func)
+	: posixfs_object(po), smbd_requ(r)
+	, pseudo_entries(pseudo_entries), pseudo_entry_count(pseudo_entry_count)
+	, process_entry_func(process_entry_func)
+{
+	base.ops = &posixfs_qdir_job_ops;
+}
+
+static void posixfs_qdir_cancel(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
+{
+	x_smbd_conn_post_cancel(smbd_conn, smbd_requ, NT_STATUS_CANCELLED);
+}
+
+NTSTATUS posixfs_object_qdir(
+		x_smbd_object_t *smbd_object,
+		x_smbd_conn_t *smbd_conn,
+		x_smbd_requ_t *smbd_requ,
+		std::unique_ptr<x_smb2_state_qdir_t> &state,
+		const char *pseudo_entries[],
+		uint32_t pseudo_entry_count,
+		posixfs_qdir_entry_func_t *process_entry_func)
+{
+	posixfs_object_t *posixfs_object = posixfs_object_from_base_t::container(smbd_object);
+	if (!posixfs_object_is_dir(posixfs_object)) {
+		return NT_STATUS_INVALID_PARAMETER;
+	}
+
+#if 1
+	posixfs_object_incref(posixfs_object);
+	x_smbd_ref_inc(smbd_requ);
+	posixfs_qdir_job_t *qdir_job = new posixfs_qdir_job_t(posixfs_object,
+			smbd_requ, pseudo_entries, pseudo_entry_count,
+			process_entry_func);
+	smbd_requ->save_state(state);
+	x_smbd_requ_async_insert(smbd_requ, posixfs_qdir_cancel);
+	x_smbd_schedule_async(&qdir_job->base);
+	return NT_STATUS_PENDING;
+#else
+	return posixfs_do_qdir(posixfs_object, smbd_requ, *state,
+			pseudo_entries, pseudo_entry_count, process_entry_func);
+#endif
+}
 
 
 /* SMB2_NOTIFY */

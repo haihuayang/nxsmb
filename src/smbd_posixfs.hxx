@@ -110,6 +110,14 @@ int posixfs_object_statex_getat(posixfs_object_t *dir_obj, const char *name,
 		x_smbd_object_meta_t *object_meta,
 		x_smbd_stream_meta_t *stream_meta,
 		std::shared_ptr<idl::security_descriptor> *ppsd);
+
+typedef bool posixfs_qdir_entry_func_t(x_smbd_object_meta_t *object_meta,
+		x_smbd_stream_meta_t *stream_meta,
+		std::shared_ptr<idl::security_descriptor> *ppsd,
+		posixfs_object_t *dir_obj,
+		const char *ent_name,
+		uint32_t file_number);
+
 NTSTATUS posixfs_object_qdir(
 		x_smbd_object_t *smbd_object,
 		x_smbd_conn_t *smbd_conn,
@@ -117,12 +125,7 @@ NTSTATUS posixfs_object_qdir(
 		std::unique_ptr<x_smb2_state_qdir_t> &state,
 		const char *pseudo_entries[],
 		uint32_t pseudo_entry_count,
-		bool (*process_entry_func)(x_smbd_object_meta_t *object_meta,
-			x_smbd_stream_meta_t *stream_meta,
-			std::shared_ptr<idl::security_descriptor> *ppsd,
-			posixfs_object_t *dir_obj,
-			const char *ent_name,
-			uint32_t file_number));
+		posixfs_qdir_entry_func_t *process_entry_func);
 
 x_smbd_object_t *x_smbd_posixfs_open_object(NTSTATUS *pstatus,
 		std::shared_ptr<x_smbd_volume_t> &smbd_volume,

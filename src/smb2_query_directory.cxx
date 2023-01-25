@@ -79,6 +79,21 @@ static void x_smb2_reply_qdir(x_smbd_conn_t *smbd_conn,
 			sizeof(x_smb2_header_t) + sizeof(x_smb2_out_qdir_t) + state.out_data.size());
 }
 
+static void x_smb2_qdir_async_done(x_smbd_conn_t *smbd_conn,
+		x_smbd_requ_t *smbd_requ,
+		NTSTATUS status)
+{
+	X_LOG_DBG("status=0x%x", status.v);
+	auto state = smbd_requ->release_state<x_smb2_state_qdir_t>();
+	if (!smbd_conn) {
+		return;
+	}
+	if (NT_STATUS_IS_OK(status)) {
+		x_smb2_reply_qdir(smbd_conn, smbd_requ, *state);
+	}
+	x_smbd_conn_requ_done(smbd_conn, smbd_requ, status);
+}
+
 NTSTATUS x_smb2_process_query_directory(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 {
 	if (smbd_requ->in_requ_len < sizeof(x_smb2_header_t) + sizeof(x_smb2_in_qdir_t)) {
@@ -102,6 +117,7 @@ NTSTATUS x_smb2_process_query_directory(x_smbd_conn_t *smbd_conn, x_smbd_requ_t 
 		RETURN_OP_STATUS(smbd_requ, status);
 	}
 
+	smbd_requ->async_done_fn = x_smb2_qdir_async_done;
 	status = x_smbd_open_op_qdir(smbd_requ->smbd_open,
 			smbd_conn, smbd_requ, state);
 	if (NT_STATUS_IS_OK(status)) {
