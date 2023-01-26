@@ -75,7 +75,8 @@ static NTSTATUS posixfs_set_basic_info(int fd,
 		dos_attr.attr_mask |= DOS_SET_FILE_ATTR;
 		dos_attr.file_attrs = basic_info.file_attributes & X_NXSMB_FILE_ATTRIBUTE_MASK;
 		if ((object_meta->file_attributes & X_SMB2_FILE_ATTRIBUTE_DIRECTORY)) {
-			if (basic_info.file_attributes & X_SMB2_FILE_ATTRIBUTE_ARCHIVE) {
+			if (basic_info.file_attributes & (X_SMB2_FILE_ATTRIBUTE_ARCHIVE
+						| X_SMB2_FILE_ATTRIBUTE_TEMPORARY)) {
 				RETURN_STATUS(NT_STATUS_INVALID_PARAMETER);
 			}
 			dos_attr.file_attrs |= X_SMB2_FILE_ATTRIBUTE_DIRECTORY;
