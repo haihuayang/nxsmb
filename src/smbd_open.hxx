@@ -56,6 +56,7 @@ struct x_smbd_open_t
 	x_smbd_open_state_t open_state;
 	uint32_t notify_filter = 0;
 	uint32_t notify_buffer_length;
+	x_smbd_lease_t *smbd_lease{};
 };
 
 struct x_smbd_object_t;
