@@ -336,6 +336,9 @@ NTSTATUS x_smbd_tcon_op_recreate(x_smbd_requ_t *smbd_requ,
 		x_smbd_ref_inc(smbd_open); // ref by smbd_tcon open_list
 		smbd_requ->smbd_open = x_smbd_ref_inc(smbd_open);
 	}
+	/* TODO is other action possible */
+	state->out_create_action = x_smb2_create_action_t::WAS_OPENED;
+	state->out_oplock_level = smbd_open->open_state.oplock_level;
 	return status;
 }
 

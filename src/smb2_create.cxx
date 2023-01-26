@@ -490,17 +490,19 @@ static uint32_t encode_out_create(const x_smb2_state_create_t &state,
 	/* TODO we assume max output context 256 */
 	x_smb2_out_create_t *out_create = (x_smb2_out_create_t *)(out_hdr + sizeof(x_smb2_header_t));
 
+	auto [object_meta, stream_meta] = x_smbd_open_op_get_meta(smbd_open);
+
 	out_create->struct_size = X_H2LE16(sizeof(x_smb2_out_create_t) + 1);
 	out_create->oplock_level = state.out_oplock_level;
 	out_create->create_flags = state.out_create_flags;
 	out_create->create_action = X_H2LE32(uint32_t(state.out_create_action));
-	out_create->create_ts = X_H2LE64(state.out_info.out_create_ts.val);
-	out_create->last_access_ts = X_H2LE64(state.out_info.out_last_access_ts.val);
-	out_create->last_write_ts = X_H2LE64(state.out_info.out_last_write_ts.val);
-	out_create->change_ts = X_H2LE64(state.out_info.out_change_ts.val);
-	out_create->allocation_size = X_H2LE64(state.out_info.out_allocation_size);
-	out_create->end_of_file = X_H2LE64(state.out_info.out_end_of_file);
-	out_create->file_attributes = X_H2LE32(state.out_info.out_file_attributes);
+	out_create->create_ts = X_H2LE64(object_meta->creation.val);
+	out_create->last_access_ts = X_H2LE64(object_meta->last_access.val);
+	out_create->last_write_ts = X_H2LE64(object_meta->last_write.val);
+	out_create->change_ts = X_H2LE64(object_meta->change.val);
+	out_create->allocation_size = X_H2LE64(stream_meta->allocation_size);
+	out_create->end_of_file = X_H2LE64(stream_meta->end_of_file);
+	out_create->file_attributes = X_H2LE32(object_meta->file_attributes);
 	out_create->reserved0 = 0;
 	auto [id_persistent, id_volatile] = x_smbd_open_get_id(smbd_open);
 	out_create->file_id_persistent = X_H2LE64(id_persistent);

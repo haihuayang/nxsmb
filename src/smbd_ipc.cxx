@@ -21,6 +21,10 @@ static const idl::ndr_syntax_id PNIO = {
 	0
 };
 
+static const x_smbd_object_meta_t ipc_object_meta{0, 0, 1, 0, 0, 0, 0, 
+	X_SMB2_FILE_ATTRIBUTE_NORMAL};
+
+static const x_smbd_stream_meta_t ipc_stream_meta{0, 4096, false};
 
 struct x_ncacn_packet_t
 {
@@ -613,8 +617,6 @@ static NTSTATUS ipc_create_open(x_smbd_open_t **psmbd_open,
 		return NT_STATUS_INSUFFICIENT_RESOURCES;
 	}
 
-	state->out_info.out_allocation_size = 4096;
-	state->out_info.out_file_attributes = X_SMB2_FILE_ATTRIBUTE_NORMAL;
 	state->out_oplock_level = 0;
 	state->out_create_flags = 0;
 	state->out_create_action = x_smb2_create_action_t::WAS_OPENED;
@@ -637,6 +639,13 @@ static uint32_t ipc_op_get_attributes(const x_smbd_object_t *smbd_object)
 	return FILE_ATTRIBUTE_NORMAL;
 }
 #endif
+static std::pair<const x_smbd_object_meta_t *, const x_smbd_stream_meta_t *>
+ipc_op_get_meta(const x_smbd_object_t *smbd_object,
+		const x_smbd_open_t *smbd_open)
+{
+	return {&ipc_object_meta, &ipc_stream_meta};
+}
+
 static std::u16string ipc_op_get_path(const x_smbd_object_t *smbd_object,
 		const x_smbd_open_t *smbd_open)
 {
@@ -663,6 +672,7 @@ static const x_smbd_object_ops_t x_smbd_ipc_object_ops = {
 	nullptr, // notify_fname
 	ipc_object_op_destroy,
 	ipc_op_release_object,
+	ipc_op_get_meta,
 	ipc_op_get_path,
 };
 

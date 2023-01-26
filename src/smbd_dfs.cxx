@@ -769,6 +769,7 @@ static const x_smbd_object_ops_t dfs_root_object_ops = {
 	dfs_root_notify_change,
 	posixfs_object_op_destroy,
 	posixfs_op_release_object,
+	posixfs_op_get_meta,
 	posixfs_op_get_path,
 };
 
@@ -880,6 +881,7 @@ static const x_smbd_object_ops_t dfs_volume_object_ops = {
 	posixfs_simple_notify_change,
 	posixfs_object_op_destroy,
 	posixfs_op_release_object,
+	posixfs_op_get_meta,
 	posixfs_op_get_path,
 };
 

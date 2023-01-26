@@ -140,6 +140,9 @@ struct x_smbd_object_ops_t
 			bool last_level);
 	void (*destroy)(x_smbd_object_t *smbd_object, x_smbd_open_t *smbd_open);
 	void (*release_object)(x_smbd_object_t *smbd_object, x_smbd_stream_t *smbd_stream);
+	std::pair<const x_smbd_object_meta_t *, const x_smbd_stream_meta_t *> (*get_meta)(
+			const x_smbd_object_t *smbd_object,
+			const x_smbd_open_t *smbd_open);
 	std::u16string (*get_path)(const x_smbd_object_t *smbd_object,
 			const x_smbd_open_t *smbd_open);
 };
@@ -379,6 +382,14 @@ static inline std::string x_smbd_open_op_get_path(
 	std::u16string path = smbd_object->smbd_volume->ops->get_path(
 			smbd_object, smbd_open);
 	return x_convert_utf16_to_utf8_safe(path);
+}
+
+static inline std::pair<const x_smbd_object_meta_t *, const x_smbd_stream_meta_t *>
+x_smbd_open_op_get_meta(const x_smbd_open_t *smbd_open)
+{
+	x_smbd_object_t *smbd_object = smbd_open->smbd_object;
+	return smbd_object->smbd_volume->ops->get_meta(
+			smbd_object, smbd_open);
 }
 
 static inline void x_smbd_open_op_destroy(

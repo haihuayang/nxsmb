@@ -121,7 +121,6 @@ struct x_smb2_state_create_t
 	x_smb2_create_action_t out_create_action;
 	uint32_t out_maximal_access{0};
 	uint8_t out_qfid_info[32];
-	x_smb2_create_close_info_t out_info;
 
 	uint32_t granted_access{0}; // internally used
 

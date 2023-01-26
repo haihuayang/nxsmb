@@ -30,7 +30,7 @@ x_smbd_open_t::x_smbd_open_t(x_smbd_object_t *so,
 		x_smbd_tcon_t *st,
 		const x_smbd_open_state_t &open_state)
 	: tick_create(tick_now), smbd_object(so), smbd_stream(strm)
-	, smbd_tcon(x_smbd_ref_inc(st)), open_state(open_state)
+	, smbd_tcon(st ? x_smbd_ref_inc(st) : nullptr), open_state(open_state)
 {
 	X_SMBD_COUNTER_INC(open_create, 1);
 }
@@ -96,18 +96,24 @@ static inline bool smbd_open_set_state(x_smbd_open_t *smbd_open,
 
 static bool smbd_open_check(x_smbd_open_t *smbd_open, x_smbd_tcon_t *smbd_tcon)
 {
-	if (!x_smbd_cancel_timer(x_smbd_timer_t::DURABLE, &smbd_open->durable_timer)) {
+	auto &open_state = smbd_open->open_state;
+	if (smbd_open->smbd_tcon) {
+		X_LOG_NOTICE("open is active");
+		return false;
+	}
+	if (smbd_open->smbd_lease && !(open_state.client_guid == x_smbd_conn_curr_client_guid())) {
+		X_LOG_NOTICE("open.client_guid not match client guid");
+		return false;
+	}
+	if (!x_smbd_tcon_get_user(smbd_tcon)->match(open_state.owner)) {
+		X_LOG_NOTICE("user sid not match");
 		return false;
 	}
 	if (!smbd_open_set_state(smbd_open, x_smbd_open_t::S_ACTIVE,
 				x_smbd_open_t::S_INACTIVE)) {
 		return false;
 	}
-	auto &open_state = smbd_open->open_state;
-	if (!(open_state.client_guid == x_smbd_conn_curr_client_guid())) {
-		return false;
-	}
-	if (!x_smbd_tcon_get_user(smbd_tcon)->match(open_state.owner)) {
+	if (!x_smbd_cancel_timer(x_smbd_timer_t::DURABLE, &smbd_open->durable_timer)) {
 		return false;
 	}
 
@@ -119,7 +125,9 @@ x_smbd_open_t *x_smbd_open_reopen(uint64_t id_presistent, uint64_t id_volatile,
 {
 	auto [found, smbd_open] = g_smbd_open_table->lookup(id_volatile);
 	if (found) {
+		auto lock = std::lock_guard(smbd_open->smbd_object->mutex);
 		if (smbd_open_check(smbd_open, smbd_tcon)) {
+			smbd_open->smbd_tcon = x_smbd_ref_inc(smbd_tcon);
 			return smbd_open;
 		}
 		x_smbd_ref_dec(smbd_open);

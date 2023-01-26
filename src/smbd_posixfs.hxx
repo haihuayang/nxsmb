@@ -93,6 +93,9 @@ NTSTATUS posixfs_object_op_rename(x_smbd_object_t *smbd_object,
 		std::unique_ptr<x_smb2_state_rename_t> &state);
 void posixfs_op_release_object(x_smbd_object_t *smbd_object, x_smbd_stream_t *smbd_stream);
 uint32_t posixfs_op_get_attributes(const x_smbd_object_t *smbd_object);
+std::pair<const x_smbd_object_meta_t *, const x_smbd_stream_meta_t *>
+posixfs_op_get_meta(const x_smbd_object_t *smbd_object,
+		const x_smbd_open_t *smbd_open);
 std::u16string posixfs_op_get_path(const x_smbd_object_t *smbd_object,
 		const x_smbd_open_t *smbd_open);
 NTSTATUS posixfs_op_open_durable(x_smbd_open_t *&smbd_open,

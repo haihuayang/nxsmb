@@ -2235,8 +2235,6 @@ static void reply_requ_create(x_smb2_state_create_t &state,
 {
 	state.out_create_flags = 0;
 	state.out_create_action = create_action;
-	fill_out_info(state.out_info, posixfs_object->meta,
-			posixfs_stream->meta);
 }
 
 static int open_parent(const std::shared_ptr<x_smbd_volume_t> &smbd_volume,
@@ -5510,6 +5508,16 @@ uint32_t posixfs_op_get_attributes(const x_smbd_object_t *smbd_object)
 {
 	const posixfs_object_t *posixfs_object = posixfs_object_from_base_t::container(smbd_object);
 	return posixfs_object->meta.file_attributes;
+}
+
+std::pair<const x_smbd_object_meta_t *, const x_smbd_stream_meta_t *>
+posixfs_op_get_meta(const x_smbd_object_t *smbd_object,
+		const x_smbd_open_t *smbd_open)
+{
+	const posixfs_object_t *posixfs_object = posixfs_object_from_base_t::container(smbd_object);
+	const posixfs_stream_t *posixfs_stream = posixfs_get_stream(posixfs_object,
+			smbd_open->smbd_stream);
+	return {&posixfs_object->meta, &posixfs_stream->meta};
 }
 
 std::u16string posixfs_op_get_path(const x_smbd_object_t *smbd_object,
