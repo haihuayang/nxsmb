@@ -678,3 +678,14 @@ x_smbd_durable_t *x_smbd_share_lookup_durable(
 	return nullptr;
 }
 
+std::shared_ptr<x_smbd_volume_t> x_smbd_find_volume(x_smbd_conf_t &smbd_conf,
+		const std::string &name)
+{
+	for (auto &vol: smbd_conf.volumes) {
+		if (vol->name == name) {
+			return vol;
+		}
+	}
+	return nullptr;
+}
+

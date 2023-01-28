@@ -3497,8 +3497,7 @@ static NTSTATUS posixfs_object_remove(posixfs_object_t *posixfs_object,
 			FILE_NOTIFY_CHANGE_DIR_NAME : FILE_NOTIFY_CHANGE_FILE_NAME;
 
 		// NTSTATUS status = x_smbd_object_unlink(&posixfs_object->base, posixfs_object->fd);
-		NTSTATUS status = x_smbd_tcon_delete_object(
-				posixfs_open->base.smbd_tcon,
+		NTSTATUS status = x_smbd_object_delete(
 				&posixfs_object->base,
 				&posixfs_open->base,
 				posixfs_object->fd,
@@ -5502,6 +5501,13 @@ void posixfs_op_release_object(x_smbd_object_t *smbd_object, x_smbd_stream_t *sm
 		posixfs_object_release_stream(posixfs_object, smbd_stream);
 	}
 	posixfs_object_release(posixfs_object);
+}
+
+NTSTATUS posixfs_op_object_delete(x_smbd_object_t *smbd_object,
+		x_smbd_open_t *smbd_open, int fd,
+		std::vector<x_smb2_change_t> &changes)
+{
+	return posixfs_object_op_unlink(smbd_object, fd);
 }
 
 uint32_t posixfs_op_get_attributes(const x_smbd_object_t *smbd_object)

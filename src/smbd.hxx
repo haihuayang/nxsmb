@@ -356,10 +356,6 @@ x_smbd_tcon_t *x_smbd_tcon_lookup(uint32_t id, const x_smbd_sess_t *smbd_sess);
 bool x_smbd_tcon_unlink_open(x_smbd_tcon_t *smbd_tcon, x_dlink_t *link);
 bool x_smbd_tcon_disconnect(x_smbd_tcon_t *smbd_tcon);
 void x_smbd_tcon_unlinked(x_dlink_t *link, x_smbd_sess_t *smbd_sess, bool shutdown);
-NTSTATUS x_smbd_tcon_delete_object(x_smbd_tcon_t *smbd_tcon, 
-		x_smbd_object_t *smbd_object,
-		x_smbd_open_t *smbd_open, int fd,
-		std::vector<x_smb2_change_t> &changes);
 std::string x_smbd_tcon_get_volume_label(const x_smbd_tcon_t *smbd_tcon);
 
 

@@ -77,6 +77,8 @@ struct x_smbd_conf_t
 int x_smbd_conf_parse(const char *configfile, const std::vector<std::string> &cmdline_options);
 std::shared_ptr<x_smbd_conf_t> x_smbd_conf_get();
 std::shared_ptr<x_smbd_share_t> x_smbd_find_share(const std::string &name, std::string &volume);
+std::shared_ptr<x_smbd_volume_t> x_smbd_find_volume(x_smbd_conf_t &smbd_conf,
+		const std::string &name);
 
 #endif /* __smbconf__hxx__ */
 

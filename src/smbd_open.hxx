@@ -140,6 +140,9 @@ struct x_smbd_object_ops_t
 			bool last_level);
 	void (*destroy)(x_smbd_object_t *smbd_object, x_smbd_open_t *smbd_open);
 	void (*release_object)(x_smbd_object_t *smbd_object, x_smbd_stream_t *smbd_stream);
+	NTSTATUS (*delete_object)(x_smbd_object_t *smbd_object,
+			x_smbd_open_t *smbd_open, int fd,
+			std::vector<x_smb2_change_t> &changes);
 	std::pair<const x_smbd_object_meta_t *, const x_smbd_stream_meta_t *> (*get_meta)(
 			const x_smbd_object_t *smbd_object,
 			const x_smbd_open_t *smbd_open);
@@ -408,6 +411,15 @@ static inline void x_smbd_object_release(x_smbd_object_t *smbd_object,
 		x_smbd_stream_t *smbd_stream)
 {
 	smbd_object->smbd_volume->ops->release_object(smbd_object, smbd_stream);
+}
+
+static inline NTSTATUS x_smbd_object_delete(
+		x_smbd_object_t *smbd_object,
+		x_smbd_open_t *smbd_open, int fd,
+		std::vector<x_smb2_change_t> &changes)
+{
+	return smbd_object->smbd_volume->ops->delete_object(smbd_object,
+			smbd_open, fd, changes);
 }
 
 static inline NTSTATUS x_smbd_open_durable(x_smbd_open_t *&smbd_open,

@@ -633,6 +633,14 @@ static void ipc_op_release_object(x_smbd_object_t *smbd_object,
 	X_ASSERT(!smbd_stream);
 	// do nothing
 }
+
+static NTSTATUS ipc_op_delete_object(x_smbd_object_t *smbd_object,
+			x_smbd_open_t *smbd_open, int fd,
+			std::vector<x_smb2_change_t> &changes)
+{
+	X_ASSERT(false);
+	return NT_STATUS_UNSUCCESSFUL;
+}
 #if 0
 static uint32_t ipc_op_get_attributes(const x_smbd_object_t *smbd_object)
 {
@@ -672,6 +680,7 @@ static const x_smbd_object_ops_t x_smbd_ipc_object_ops = {
 	nullptr, // notify_fname
 	ipc_object_op_destroy,
 	ipc_op_release_object,
+	ipc_op_delete_object,
 	ipc_op_get_meta,
 	ipc_op_get_path,
 };
@@ -746,13 +755,6 @@ struct ipc_share_t : x_smbd_share_t
 				volume, state);
 	}
 
-	virtual NTSTATUS delete_object(x_smbd_object_t *smbd_object,
-			x_smbd_open_t *smbd_open, int fd,
-			std::vector<x_smb2_change_t> &changes) override
-	{
-		X_ASSERT(false);
-		return NT_STATUS_UNSUCCESSFUL;
-	}
 	const std::shared_ptr<x_smbd_volume_t> smbd_volume;
 };
 

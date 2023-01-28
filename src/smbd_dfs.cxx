@@ -77,18 +77,6 @@ struct dfs_share_t : x_smbd_share_t
 			const char16_t *in_server_end,
 			const char16_t *in_share_begin,
 			const char16_t *in_share_end) const override;
-	virtual NTSTATUS delete_object(x_smbd_object_t *smbd_object,
-			x_smbd_open_t *smbd_open, int fd,
-			std::vector<x_smb2_change_t> &changes) override;
-
-	std::shared_ptr<x_smbd_volume_t> find_volume(const std::string &name) const {
-		for (auto &vol: volumes) {
-			if (vol->name == name) {
-				return vol;
-			}
-		}
-		return nullptr;
-	}
 
 	const std::vector<std::shared_ptr<x_smbd_volume_t>> volumes;
 	std::shared_ptr<x_smbd_volume_t> root_volume;
@@ -460,7 +448,7 @@ static NTSTATUS dfs_root_object_op_rename(x_smbd_object_t *smbd_object,
 
 
 /* smbd_object->mutex is already locked */
-NTSTATUS dfs_share_t::delete_object(x_smbd_object_t *smbd_object,
+static NTSTATUS dfs_root_op_delete_object(x_smbd_object_t *smbd_object,
 		x_smbd_open_t *smbd_open, int fd,
 		std::vector<x_smb2_change_t> &changes)
 {
@@ -480,18 +468,16 @@ NTSTATUS dfs_share_t::delete_object(x_smbd_object_t *smbd_object,
 			return NT_STATUS_UNSUCCESSFUL;
 		}
 
-		auto smbd_volume = find_volume(volume);
-		// auto [host_node, volume_path] = find_node_by_volume(*smbd_conf, volume);
+		auto smbd_conf = x_smbd_conf_get();
+		auto smbd_volume = x_smbd_find_volume(*smbd_conf, volume);
+		X_ASSERT(smbd_volume);
 
 		/* TODO first mark dir fd in deleting */
 		/* TODO single node from now, for multi node, it should send msg to
 		   the node hosting tld to delete it
 		 */
-		auto smbd_conf = x_smbd_conf_get();
 		if (smbd_volume->owner_node == smbd_conf->node) {
-			auto data_volume = local_data_volume[volume];
-			X_ASSERT(data_volume);
-			err = unlinkat(data_volume->rootdir_fd, uuid.c_str(), AT_REMOVEDIR);
+			err = unlinkat(smbd_volume->rootdir_fd, uuid.c_str(), AT_REMOVEDIR);
 			if (err != 0) {
 				if (errno == ENOTEMPTY) {
 					return NT_STATUS_DIRECTORY_NOT_EMPTY;
@@ -784,6 +770,7 @@ static const x_smbd_object_ops_t dfs_root_object_ops = {
 	dfs_root_notify_change,
 	posixfs_object_op_destroy,
 	posixfs_op_release_object,
+	dfs_root_op_delete_object,
 	posixfs_op_get_meta,
 	posixfs_op_get_path,
 };
@@ -896,6 +883,7 @@ static const x_smbd_object_ops_t dfs_volume_object_ops = {
 	posixfs_simple_notify_change,
 	posixfs_object_op_destroy,
 	posixfs_op_release_object,
+	posixfs_op_object_delete,
 	posixfs_op_get_meta,
 	posixfs_op_get_path,
 };

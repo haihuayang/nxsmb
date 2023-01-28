@@ -101,9 +101,6 @@ struct x_smbd_share_t
 			const std::string &volume,
 			std::unique_ptr<x_smb2_state_create_t> &state,
 			std::vector<x_smb2_change_t>& changes) = 0;
-	virtual NTSTATUS delete_object(x_smbd_object_t *smbd_object,
-			x_smbd_open_t *smbd_open, int fd,
-			std::vector<x_smb2_change_t> &changes) = 0;
 
 	bool is_read_only() const {
 		return flags & f_read_only;

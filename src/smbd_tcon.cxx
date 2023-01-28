@@ -342,15 +342,6 @@ NTSTATUS x_smbd_tcon_op_recreate(x_smbd_requ_t *smbd_requ,
 	return status;
 }
 
-NTSTATUS x_smbd_tcon_delete_object(x_smbd_tcon_t *smbd_tcon, 
-		x_smbd_object_t *smbd_object,
-		x_smbd_open_t *smbd_open, int fd,
-		std::vector<x_smb2_change_t> &changes)
-{
-	return smbd_tcon->smbd_share->delete_object(smbd_object,
-			smbd_open, fd, changes);
-}
-
 static bool smbd_tcon_terminate(x_smbd_tcon_t *smbd_tcon, bool shutdown)
 {
 	std::unique_lock<std::mutex> lock(smbd_tcon->mutex);

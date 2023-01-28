@@ -77,6 +77,7 @@ static const x_smbd_object_ops_t simplefs_object_ops = {
 	posixfs_simple_notify_change,
 	posixfs_object_op_destroy,
 	posixfs_op_release_object,
+	posixfs_op_object_delete,
 	posixfs_op_get_meta,
 	posixfs_op_get_path,
 };
@@ -121,12 +122,6 @@ struct simplefs_share_t : x_smbd_share_t
 		return NT_STATUS_FS_DRIVER_REQUIRED;
 	}
 
-	virtual NTSTATUS delete_object(x_smbd_object_t *smbd_object,
-			x_smbd_open_t *smbd_open, int fd,
-			std::vector<x_smb2_change_t> &changes) override
-	{
-		return posixfs_object_op_unlink(smbd_object, fd);
-	}
 	std::shared_ptr<x_smbd_volume_t> smbd_volume;
 };
 
