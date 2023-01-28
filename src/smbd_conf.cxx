@@ -603,7 +603,7 @@ std::shared_ptr<x_smbd_share_t> x_smbd_find_share(const std::string &name,
 		if (*in_share_s == '-') {
 			std::string vol_tmp = in_share_s + 1;
 			auto smbd_volume = smbd_volume_find(*smbd_conf, vol_tmp);
-			if (!smbd_volume && smbd_volume->owner_share.empty()) {
+			if (!smbd_volume || smbd_volume->owner_share.empty()) {
 				return nullptr;
 			}
 			auto it = smbd_conf->shares.find(smbd_volume->owner_share);

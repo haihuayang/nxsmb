@@ -95,6 +95,31 @@ struct dfs_share_t : x_smbd_share_t
 	std::map<std::string, std::shared_ptr<x_smbd_volume_t>> local_data_volume;
 };
 
+static const char16_t *parse_dfs_path(const char16_t *in_path_begin,
+		const char16_t *in_path_end)
+{
+	/* windows server return NT_STATUS_INVALID_PARAMETER for empty
+	 * path, and point to root if there is no \\
+	 */
+	if (in_path_begin == in_path_end) {
+		return nullptr;
+	}
+	in_path_begin = x_skip_sep(in_path_begin, in_path_end, u'\\');
+	auto sep = x_next_sep(in_path_begin, in_path_end, u'\\');
+	if (sep == in_path_end) {
+		return in_path_end;
+	}
+
+	in_path_begin = x_skip_sep(sep + 1, in_path_end, u'\\');
+
+	sep = x_next_sep(in_path_begin, in_path_end, u'\\');
+	if (sep == in_path_end) {
+		return in_path_end;
+	}
+
+	return x_skip_sep(sep + 1, in_path_end, u'\\');
+}
+
 static NTSTATUS dfs_root_resolve_path(
 		const dfs_share_t &dfs_share,
 		std::shared_ptr<x_smbd_volume_t> &smbd_volume,
@@ -107,20 +132,12 @@ static NTSTATUS dfs_root_resolve_path(
 {
 	const char16_t *path_start;
 	if (dfs) {
-		/* TODO we just skip the first 2 components for now */
-		auto sep = x_next_sep(in_path_begin, in_path_end, u'\\');
-		if (sep == in_path_end) {
+		path_start = parse_dfs_path(in_path_begin, in_path_end);
+		if (!path_start) {
 			X_LOG_ERR("Invalid dfs_root path '%s'",
 					x_convert_utf16_to_utf8_safe(in_path_begin,
 						in_path_end).c_str());
-			return NT_STATUS_OBJECT_NAME_NOT_FOUND;
-		}
-
-		sep = x_next_sep(sep + 1, in_path_end, u'\\');
-		if (sep == in_path_end) {
-			path_start = in_path_end;
-		} else {
-			path_start = sep + 1;
+			return NT_STATUS_INVALID_PARAMETER;
 		}
 	} else {
 		path_start = in_path_begin;
@@ -189,14 +206,12 @@ static NTSTATUS dfs_volume_resolve_path(
 
 	const char16_t *path_start;
 	if (dfs) {
-		/* TODO we just skip the first 2 components for now */
-		auto sep = x_next_sep(in_path_begin, in_path_end, u'\\');
-		X_ASSERT(sep != in_path_end);
-		sep = x_next_sep(sep + 1, in_path_end, u'\\');
-		if (sep == in_path_end) {
-			path_start = sep;
-		} else {
-			path_start = sep + 1;
+		path_start = parse_dfs_path(in_path_begin, in_path_end);
+		if (!path_start) {
+			X_LOG_ERR("Invalid dfs_root path '%s'",
+					x_convert_utf16_to_utf8_safe(in_path_begin,
+						in_path_end).c_str());
+			return NT_STATUS_INVALID_PARAMETER;
 		}
 	} else {
 		path_start = in_path_begin;
