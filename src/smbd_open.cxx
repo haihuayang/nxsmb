@@ -87,10 +87,12 @@ static inline bool smbd_open_set_state(x_smbd_open_t *smbd_open,
 				&old_state, new_state,
 				std::memory_order_release,
 				std::memory_order_relaxed)) {
-		X_LOG_NOTICE("smbd_open_set_state(%p, %d, %d) unexpected %d", 
-				smbd_open, new_state, curr_state, old_state);
+		X_LOG_NOTICE("smbd_open_set_state %p, %d->%d unexpected %d", 
+				smbd_open, curr_state, new_state, old_state);
 		return false;
 	}
+	X_LOG_DBG("smbd_open_set_state %p %d->%d", smbd_open, curr_state,
+			new_state);
 	return true;
 }
 
@@ -109,8 +111,8 @@ static bool smbd_open_check(x_smbd_open_t *smbd_open, x_smbd_tcon_t *smbd_tcon)
 		X_LOG_NOTICE("user sid not match");
 		return false;
 	}
-	if (!smbd_open_set_state(smbd_open, x_smbd_open_t::S_ACTIVE,
-				x_smbd_open_t::S_INACTIVE)) {
+	if (!smbd_open_set_state(smbd_open, x_smbd_open_t::S_INACTIVE,
+				x_smbd_open_t::S_ACTIVE)) {
 		return false;
 	}
 	if (!x_smbd_cancel_timer(x_smbd_timer_t::DURABLE, &smbd_open->durable_timer)) {
@@ -168,9 +170,9 @@ static NTSTATUS smbd_open_set_durable(x_smbd_open_t *smbd_open)
 		 * when new smbd take over
 		 */
 		auto lock = std::lock_guard(smbd_open->smbd_object->mutex);
-		X_ASSERT(smbd_open->state == x_smbd_open_t::S_ACTIVE);
 		X_ASSERT(smbd_open->smbd_tcon);
-		smbd_open->state = x_smbd_open_t::S_INACTIVE;
+		smbd_open_set_state(smbd_open, x_smbd_open_t::S_ACTIVE,
+				x_smbd_open_t::S_INACTIVE);
 		smbd_tcon = smbd_open->smbd_tcon;
 		smbd_open->smbd_tcon = nullptr;
 		smbd_open->durable_timer.func = smbd_open_durable_timeout;
