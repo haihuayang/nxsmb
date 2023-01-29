@@ -29,6 +29,9 @@ x_smbd_lease_t *x_smbd_lease_find(
 		const x_smb2_lease_key_t &lease_key,
 		uint8_t version,
 		bool create_if);
+bool x_smbd_lease_match_get(const x_smbd_lease_t *smbd_lease,
+		const x_smb2_uuid_t &client_guid,
+		x_smb2_lease_t &lease);
 
 void x_smbd_lease_release(x_smbd_lease_t *smbd_lease);
 

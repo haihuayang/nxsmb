@@ -96,43 +96,62 @@ static inline bool smbd_open_set_state(x_smbd_open_t *smbd_open,
 	return true;
 }
 
-static bool smbd_open_check(x_smbd_open_t *smbd_open, x_smbd_tcon_t *smbd_tcon)
+static NTSTATUS smbd_open_check(x_smbd_open_t *smbd_open, x_smbd_tcon_t *smbd_tcon,
+		x_smb2_state_create_t &state)
 {
 	auto &open_state = smbd_open->open_state;
 	if (smbd_open->smbd_tcon) {
 		X_LOG_NOTICE("open is active");
-		return false;
+		return NT_STATUS_OBJECT_NAME_NOT_FOUND;
 	}
-	if (smbd_open->smbd_lease && !(open_state.client_guid == x_smbd_conn_curr_client_guid())) {
-		X_LOG_NOTICE("open.client_guid not match client guid");
-		return false;
+	if (smbd_open->smbd_lease) {
+		if (!x_smbd_lease_match_get(smbd_open->smbd_lease,
+					x_smbd_conn_curr_client_guid(),
+					state.lease)) {
+			X_LOG_NOTICE("lease not match");
+			return NT_STATUS_OBJECT_NAME_NOT_FOUND;
+		}
+		if (state.in_ads_name.size()) {
+			X_LOG_NOTICE("we do not support reconnect ADS");
+			return NT_STATUS_INVALID_PARAMETER;
+		}
+		/* TODO dfs path and case */
+		if (state.in_path != smbd_open->smbd_object->path) {
+			X_LOG_NOTICE("path not match");
+			return NT_STATUS_INVALID_PARAMETER;
+		}
 	}
 	if (!x_smbd_tcon_get_user(smbd_tcon)->match(open_state.owner)) {
 		X_LOG_NOTICE("user sid not match");
-		return false;
+		return NT_STATUS_OBJECT_NAME_NOT_FOUND;
 	}
 	if (!smbd_open_set_state(smbd_open, x_smbd_open_t::S_INACTIVE,
 				x_smbd_open_t::S_ACTIVE)) {
-		return false;
+		return NT_STATUS_OBJECT_NAME_NOT_FOUND;
 	}
 	if (!x_smbd_cancel_timer(x_smbd_timer_t::DURABLE, &smbd_open->durable_timer)) {
-		return false;
+		return NT_STATUS_OBJECT_NAME_NOT_FOUND;
 	}
 
-	return true;
+	return NT_STATUS_OK;
 }
 
-x_smbd_open_t *x_smbd_open_reopen(uint64_t id_presistent, uint64_t id_volatile,
-		x_smbd_tcon_t *smbd_tcon)
+x_smbd_open_t *x_smbd_open_reopen(NTSTATUS &status,
+		uint64_t id_presistent, uint64_t id_volatile,
+		x_smbd_tcon_t *smbd_tcon,
+		x_smb2_state_create_t &state)
 {
 	auto [found, smbd_open] = g_smbd_open_table->lookup(id_volatile);
 	if (found) {
 		auto lock = std::lock_guard(smbd_open->smbd_object->mutex);
-		if (smbd_open_check(smbd_open, smbd_tcon)) {
+		status = smbd_open_check(smbd_open, smbd_tcon, state);
+		if (NT_STATUS_IS_OK(status)) {
 			smbd_open->smbd_tcon = x_smbd_ref_inc(smbd_tcon);
 			return smbd_open;
 		}
 		x_smbd_ref_dec(smbd_open);
+	} else {
+		status = NT_STATUS_OBJECT_NAME_NOT_FOUND;
 	}
 	return nullptr;
 }

@@ -204,6 +204,25 @@ x_smbd_lease_t *x_smbd_lease_find(
 	return smbd_lease;
 }
 
+bool x_smbd_lease_match_get(const x_smbd_lease_t *smbd_lease,
+		const x_smb2_uuid_t &client_guid,
+		x_smb2_lease_t &lease)
+{
+	if (lease.version != smbd_lease->version) {
+		return false;
+	}
+	if (!smbd_lease_match(smbd_lease, client_guid, lease.key)) {
+		return false;
+	}
+	lease.state = smbd_lease->lease_state;
+	if (smbd_lease->breaking) {
+		lease.flags = X_SMB2_LEASE_FLAG_BREAK_IN_PROGRESS;
+	} else {
+		lease.flags = 0;
+	}
+	return true;
+}
+
 bool x_smbd_lease_grant(x_smbd_lease_t *smbd_lease,
 		x_smb2_lease_t &lease,
 		uint8_t granted, uint8_t requested,

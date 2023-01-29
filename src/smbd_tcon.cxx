@@ -295,6 +295,7 @@ NTSTATUS x_smbd_tcon_op_recreate(x_smbd_requ_t *smbd_requ,
 		std::unique_ptr<x_smb2_state_create_t> &state)
 {
 	x_smbd_tcon_t *smbd_tcon = smbd_requ->smbd_tcon;
+	NTSTATUS status = NT_STATUS_OK;
 
 	if (!x_smbd_tcon_get_durable_handle(smbd_tcon)) {
 		RETURN_OP_STATUS(smbd_requ, NT_STATUS_OBJECT_NAME_NOT_FOUND);
@@ -310,16 +311,16 @@ NTSTATUS x_smbd_tcon_op_recreate(x_smbd_requ_t *smbd_requ,
 
 	uint64_t id_volatile = durable->id_volatile;
 
-	x_smbd_open_t *smbd_open = x_smbd_open_reopen(id_persistent, id_volatile,
-			smbd_tcon);
+	x_smbd_open_t *smbd_open = x_smbd_open_reopen(status,
+			id_persistent, id_volatile,
+			smbd_tcon, *state);
 	if (!smbd_open) {
-		RETURN_OP_STATUS(smbd_requ, NT_STATUS_OBJECT_NAME_NOT_FOUND);
+		RETURN_OP_STATUS(smbd_requ, status);
 	}
 
 	/* if client access the open from other channel now, it does not have
 	 * link into smbd_tcon, probably we should call x_smbd_open_store in the last
 	 */
-	NTSTATUS status = NT_STATUS_OK;
 	{
 		std::vector<x_smb2_change_t> changes;
 		std::lock_guard<std::mutex> lock(smbd_tcon->mutex);

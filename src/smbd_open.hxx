@@ -429,8 +429,10 @@ static inline NTSTATUS x_smbd_open_durable(x_smbd_open_t *&smbd_open,
 	return smbd_volume->ops->open_durable(smbd_open, smbd_volume, durable);
 }
 
-x_smbd_open_t *x_smbd_open_reopen(uint64_t id_presistent, uint64_t id_volatile,
-		x_smbd_tcon_t *smbd_tcon);
+x_smbd_open_t *x_smbd_open_reopen(NTSTATUS &status,
+		uint64_t id_presistent, uint64_t id_volatile,
+		x_smbd_tcon_t *smbd_tcon,
+		x_smb2_state_create_t &state);
 
 #if 0
 	uint32_t (*get_attributes)(const x_smbd_object_t *smbd_object);

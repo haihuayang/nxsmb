@@ -135,11 +135,9 @@ static bool decode_contexts(x_smb2_state_create_t &state,
 		if (tag_len == 4) {
 			uint32_t tag = x_get_be32(data + tag_off);
 			if (tag == X_SMB2_CREATE_TAG_RQLS) {
-				if (state.in_oplock_level == X_SMB2_OPLOCK_LEVEL_LEASE) {
-					has_RqLs = decode_smb2_lease(state.lease,
-							data + data_off,
-							data_len);
-				}
+				has_RqLs = decode_smb2_lease(state.lease,
+						data + data_off,
+						data_len);
 			} else if (tag == X_SMB2_CREATE_TAG_QFID) {
 				state.in_contexts |= X_SMB2_CONTEXT_FLAG_QFID;
 			} else if (tag == X_SMB2_CREATE_TAG_ALSI) {
@@ -424,6 +422,9 @@ static NTSTATUS decode_in_create(x_smb2_state_create_t &state,
 	state.in_share_access         = X_LE2H32(in_create->share_access);
 	state.in_create_disposition   = x_smb2_create_disposition_t(X_LE2H32(in_create->create_disposition));
 	state.in_create_options       = X_LE2H32(in_create->create_options);
+
+	/* invalidate lease context */
+	state.lease.version = 0;
 
 	/* TODO check_path_syntax_internal() */
 	const char16_t *in_name_begin = (const char16_t *)(in_hdr + in_name_offset);
