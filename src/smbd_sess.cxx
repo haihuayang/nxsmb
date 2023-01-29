@@ -249,7 +249,7 @@ NTSTATUS x_smbd_sess_auth_succeeded(x_smbd_sess_t *smbd_sess,
 	return NT_STATUS_OK;
 }
 
-static NTSTATUS smbd_sess_logoff(x_smbd_sess_t *smbd_sess, bool shutdown)
+static NTSTATUS smbd_sess_logoff(x_smbd_sess_t *smbd_sess)
 {
 	std::unique_lock<std::mutex> lock(smbd_sess->mutex);
 	if (smbd_sess->state != x_smbd_sess_t::S_ACTIVE) {
@@ -257,13 +257,13 @@ static NTSTATUS smbd_sess_logoff(x_smbd_sess_t *smbd_sess, bool shutdown)
 	}
 	smbd_sess->state = x_smbd_sess_t::S_DONE;
 
-	smbd_sess_terminate(smbd_sess, lock, shutdown);
+	smbd_sess_terminate(smbd_sess, lock, true);
 	return NT_STATUS_OK;
 }
 
 NTSTATUS x_smbd_sess_logoff(x_smbd_sess_t *smbd_sess)
 {
-	return smbd_sess_logoff(smbd_sess, false);
+	return smbd_sess_logoff(smbd_sess);
 }
 
 // smb2srv_session_close_previous_send
@@ -280,7 +280,7 @@ void x_smbd_sess_close_previous(const x_smbd_sess_t *curr_sess, uint64_t prev_se
 
 	X_ASSERT(curr_sess->smbd_user);
 	if (prev_sess->smbd_user && match_user(*curr_sess->smbd_user, *prev_sess->smbd_user)) {
-		smbd_sess_logoff(prev_sess, true);
+		smbd_sess_logoff(prev_sess);
 	}
 	x_smbd_ref_dec(prev_sess);
 }
