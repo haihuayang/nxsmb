@@ -173,11 +173,28 @@ struct x_smbd_object_t
 	uint16_t type = type_not_exist;
 	std::u16string path;
 	x_smbd_file_handle_t file_handle;
+	x_smbd_object_meta_t meta;
 };
 
 struct x_smbd_stream_t
 {
+	x_smbd_stream_meta_t meta;
 };
+
+static inline void x_smbd_object_update_type(x_smbd_object_t *smbd_object)
+{
+	if (smbd_object->meta.isdir()) {
+		smbd_object->type = x_smbd_object_t::type_dir;
+	} else {
+		/* TODO we only support dir and file for now */
+		smbd_object->type = x_smbd_object_t::type_file;
+	}
+}
+
+static inline bool x_smbd_object_is_dir(const x_smbd_object_t *smbd_object)
+{
+	return smbd_object->type == x_smbd_object_t::type_dir;
+}
 
 static inline bool x_smbd_open_is_data(const x_smbd_open_t *smbd_open)
 {
