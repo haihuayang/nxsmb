@@ -28,6 +28,10 @@ struct x_smbd_open_t
 		return (open_state.access_mask & access);
 	}
 
+	bool is_disconnected() const {
+		return smbd_tcon == nullptr;
+	}
+
 	x_dlink_t tcon_link; // protected by the mutex of smbd_tcon
 	const x_tick_t tick_create;
 	x_smbd_object_t * const smbd_object;
