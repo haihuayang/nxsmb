@@ -110,8 +110,8 @@ static NTSTATUS x_smb2_process_oplock_break(x_smbd_conn_t *smbd_conn,
 		RETURN_OP_STATUS(smbd_requ, status);
 	}
 
-	status = x_smbd_open_op_oplock_break(smbd_requ->smbd_open,
-			smbd_conn, smbd_requ, state);
+	status = x_smbd_break_oplock(smbd_requ->smbd_open,
+			smbd_requ, *state);
 	if (NT_STATUS_IS_OK(status)) {
 		x_smb2_reply_oplock_break(smbd_conn, smbd_requ, *state);
 	}

@@ -455,7 +455,7 @@ NTSTATUS x_smbd_lease_process_break(x_smb2_state_lease_break_t &state)
 
 	status = smbd_lease_process_break(smbd_lease, state, modified);
 	if (modified) {
-		x_smbd_object_op_break_lease(smbd_lease->smbd_object, smbd_lease->smbd_stream);
+		x_smbd_break_lease(smbd_lease->smbd_object, smbd_lease->smbd_stream);
 	}
 	smbd_lease_decref(smbd_lease);
 	return status;
@@ -478,7 +478,7 @@ static void smbd_lease_break_timeout(x_timerq_entry_t *timerq_entry)
 		}
 	}
 	if (modified) {
-		x_smbd_object_op_break_lease(smbd_lease->smbd_object,
+		x_smbd_break_lease(smbd_lease->smbd_object,
 				smbd_lease->smbd_stream);
 	}
 	smbd_lease_decref(smbd_lease);

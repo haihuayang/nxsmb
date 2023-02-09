@@ -61,36 +61,35 @@ static NTSTATUS simplefs_op_create_open(x_smbd_open_t **psmbd_open,
 		x_smbd_requ_t *smbd_requ,
 		x_smbd_share_t &smbd_share,
 		std::unique_ptr<x_smb2_state_create_t> &state,
+		bool overwrite,
+		bool exists,
 		std::vector<x_smb2_change_t> &changes)
 {
 	return x_smbd_posixfs_create_open(psmbd_open, smbd_requ,
-			state, changes);
+			state, overwrite, exists, changes);
 }
+
 
 static const x_smbd_object_ops_t simplefs_object_ops = {
 	x_smbd_posixfs_open_object,
+	x_smbd_posixfs_create_object,
 	simplefs_op_create_open,
 	posixfs_op_open_durable,
-	posixfs_object_op_close,
 	posixfs_object_op_read,
 	posixfs_object_op_write,
 	posixfs_object_op_flush,
-	posixfs_object_op_lock,
 	posixfs_object_op_getinfo,
 	posixfs_object_op_setinfo,
 	posixfs_object_op_ioctl,
 	simplefs_object_op_qdir,
-	posixfs_object_op_notify,
-	posixfs_object_op_lease_break,
-	posixfs_object_op_oplock_break,
 	posixfs_object_op_rename,
 	posixfs_object_op_set_delete_on_close,
 	posixfs_simple_notify_change,
 	posixfs_object_op_destroy,
 	posixfs_op_release_object,
 	posixfs_op_object_delete,
-	posixfs_op_get_meta,
-	posixfs_op_get_path,
+	x_smbd_posixfs_op_access_check,
+	x_smbd_posixfs_op_lease_granted,
 };
 
 

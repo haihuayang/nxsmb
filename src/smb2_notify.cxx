@@ -79,6 +79,45 @@ static void x_smb2_notify_async_done(x_smbd_conn_t *smbd_conn,
 	x_smbd_conn_requ_done(smbd_conn, smbd_requ, status);
 }
 
+/* SMB2_NOTIFY */
+static void posixfs_notify_cancel(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
+{
+	x_smbd_open_t *smbd_open = smbd_requ->smbd_open;
+	x_smbd_object_t *smbd_object = smbd_open->smbd_object;
+
+	{
+		std::lock_guard<std::mutex> lock(smbd_object->mutex);
+		smbd_open->notify_requ_list.remove(smbd_requ);
+	}
+	x_smbd_conn_post_cancel(smbd_conn, smbd_requ, NT_STATUS_CANCELLED);
+}
+
+static NTSTATUS smbd_open_notify(x_smbd_open_t *smbd_open,
+		x_smbd_requ_t *smbd_requ,
+		std::unique_ptr<x_smb2_state_notify_t> &state)
+{
+	x_smbd_object_t *smbd_object = smbd_open->smbd_object;
+	auto lock = std::lock_guard(smbd_object->mutex);
+
+	if (smbd_object->stream_meta.delete_on_close) {
+		return NT_STATUS_DELETE_PENDING;
+	}
+
+	X_LOG_DBG("changes count %ld", smbd_open->notify_changes.size());
+	state->out_notify_changes = std::move(smbd_open->notify_changes);
+	if (!state->out_notify_changes.empty()) {
+		return NT_STATUS_OK;
+	} else if (!smbd_requ->is_compound_followed()) {
+		smbd_requ->save_state(state);
+		x_smbd_ref_inc(smbd_requ);
+		smbd_open->notify_requ_list.push_back(smbd_requ);
+		x_smbd_requ_async_insert(smbd_requ, posixfs_notify_cancel);
+		return NT_STATUS_PENDING;
+	} else {
+		return NT_STATUS_INTERNAL_ERROR;
+	}
+}
+
 NTSTATUS x_smb2_process_notify(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 {
 	if (smbd_requ->in_requ_len < sizeof(x_smb2_header_t) + sizeof(x_smb2_in_notify_t)) {
@@ -137,8 +176,8 @@ NTSTATUS x_smb2_process_notify(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_req
 	}
 
 	smbd_requ->async_done_fn = x_smb2_notify_async_done;
-	status = x_smbd_open_op_notify(smbd_open,
-			smbd_conn, smbd_requ, state);
+	status = smbd_open_notify(smbd_open,
+			smbd_requ, state);
 	if (NT_STATUS_IS_OK(status)) {
 		return x_smb2_reply_notify(smbd_conn, smbd_requ, *state);
 	}

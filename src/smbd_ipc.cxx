@@ -503,16 +503,7 @@ static NTSTATUS ipc_object_op_qdir(
 {
 	return NT_STATUS_INVALID_PARAMETER;
 }
-
-static NTSTATUS ipc_object_op_notify(
-		x_smbd_object_t *smbd_object,
-		x_smbd_conn_t *smbd_conn,
-		x_smbd_requ_t *smbd_requ,
-		std::unique_ptr<x_smb2_state_notify_t> &state)
-{
-	return NT_STATUS_INVALID_PARAMETER;
-}
-
+#if 0
 static NTSTATUS ipc_object_op_close(
 		x_smbd_object_t *smbd_object,
 		x_smbd_open_t *smbd_open,
@@ -525,7 +516,7 @@ static NTSTATUS ipc_object_op_close(
 	}
 	return NT_STATUS_OK;
 }
-
+#endif
 static void ipc_object_op_destroy(x_smbd_object_t *smbd_object,
 		x_smbd_open_t *smbd_open)
 {
@@ -589,12 +580,27 @@ static NTSTATUS ipc_open_object(x_smbd_object_t **psmbd_object,
 	return NT_STATUS_OK;
 }
 
+static NTSTATUS ipc_create_object(x_smbd_object_t *smbd_object,
+		x_smbd_stream_t *smbd_stream,
+		const x_smbd_user_t &smbd_user,
+		x_smb2_state_create_t &state,
+		uint32_t file_attributes,
+		uint64_t allocation_size,
+		std::vector<x_smb2_change_t> &changes)
+{
+	X_ASSERT(false);
+	return NT_STATUS_ACCESS_DENIED;
+}
+
 static NTSTATUS ipc_create_open(x_smbd_open_t **psmbd_open,
 		x_smbd_requ_t *smbd_requ,
 		x_smbd_share_t &smbd_share,
 		std::unique_ptr<x_smb2_state_create_t> &state,
+		bool overwrite,
+		bool exists,
 		std::vector<x_smb2_change_t> &changes)
 {
+	X_ASSERT(!overwrite);
 	X_ASSERT(state->open_priv_data == 0);
 	if (state->end_with_sep) {
 		return NT_STATUS_OBJECT_NAME_INVALID;
@@ -643,11 +649,12 @@ static void ipc_op_release_object(x_smbd_object_t *smbd_object,
 }
 
 static NTSTATUS ipc_op_delete_object(x_smbd_object_t *smbd_object,
-			x_smbd_open_t *smbd_open, int fd,
+			x_smbd_stream_t *smbd_stream,
+			x_smbd_open_t *smbd_open,
 			std::vector<x_smb2_change_t> &changes)
 {
 	X_ASSERT(false);
-	return NT_STATUS_UNSUCCESSFUL;
+	return NT_STATUS_INTERNAL_ERROR;
 }
 #if 0
 static uint32_t ipc_op_get_attributes(const x_smbd_object_t *smbd_object)
@@ -655,43 +662,46 @@ static uint32_t ipc_op_get_attributes(const x_smbd_object_t *smbd_object)
 	return FILE_ATTRIBUTE_NORMAL;
 }
 #endif
-static std::pair<const x_smbd_object_meta_t *, const x_smbd_stream_meta_t *>
-ipc_op_get_meta(const x_smbd_object_t *smbd_object,
-		const x_smbd_open_t *smbd_open)
+
+static NTSTATUS ipc_op_access_check(x_smbd_object_t *smbd_object,
+		uint32_t &granted_access,
+		uint32_t &maximal_access,
+		x_smbd_tcon_t *smbd_tcon,
+		const x_smbd_user_t &smbd_user,
+		uint32_t desired_access,
+		bool overwrite)
 {
-	return {&ipc_object_meta, &ipc_stream_meta};
+	X_ASSERT(0);
+	return NT_STATUS_INTERNAL_ERROR;
 }
 
-static std::u16string ipc_op_get_path(const x_smbd_object_t *smbd_object,
-		const x_smbd_open_t *smbd_open)
+static void ipc_op_lease_granted(x_smbd_object_t *smbd_object,
+		x_smbd_stream_t *smbd_stream)
 {
-	return smbd_object->path;
+	X_ASSERT(0);
 }
+
 
 static const x_smbd_object_ops_t x_smbd_ipc_object_ops = {
 	ipc_open_object,
+	ipc_create_object,
 	ipc_create_open,
 	nullptr,
-	ipc_object_op_close,
 	ipc_object_op_read,
 	ipc_object_op_write,
 	ipc_object_op_flush,
-	nullptr, // op_lock
 	ipc_object_op_getinfo,
 	ipc_object_op_setinfo,
 	ipc_object_op_ioctl,
 	ipc_object_op_qdir,
-	ipc_object_op_notify,
-	nullptr, // op_lease_break
-	nullptr, // op_oplock_break
 	nullptr, // op_rename
 	nullptr, // op_set_delete_on_close
 	nullptr, // notify_fname
 	ipc_object_op_destroy,
 	ipc_op_release_object,
 	ipc_op_delete_object,
-	ipc_op_get_meta,
-	ipc_op_get_path,
+	ipc_op_access_check,
+	ipc_op_lease_granted,
 };
 
 static std::shared_ptr<x_smbd_volume_t> ipc_create_volume()
@@ -714,6 +724,8 @@ x_smbd_ipc_object_t::x_smbd_ipc_object_t(const std::u16string &path,
 {
 	base.flags = x_smbd_object_t::flag_initialized;
 	base.type = x_smbd_object_t::type_file;
+	base.meta = ipc_object_meta;
+	base.stream_meta = ipc_stream_meta;
 }
 
 struct ipc_share_t : x_smbd_share_t

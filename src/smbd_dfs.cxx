@@ -10,6 +10,18 @@
 #include "smbd_posixfs_utils.hxx"
 #include <sys/file.h>
 
+static NTSTATUS todo_dfs_create_object(x_smbd_object_t *smbd_object,
+		x_smbd_stream_t *smbd_stream,
+		const x_smbd_user_t &smbd_user,
+		x_smb2_state_create_t &state,
+		uint32_t file_attributes,
+		uint64_t allocation_size,
+		std::vector<x_smb2_change_t> &changes)
+{
+	X_TODO;
+	return NT_STATUS_ACCESS_DENIED;
+}
+
 static const char *pesudo_tld_dir = ".tlds";
 
 enum {
@@ -220,6 +232,22 @@ static void set_tld_target(int fd, const std::string &volume, const std::string 
 	std::string val = volume + ':' + uuid;
 	ssize_t err = fsetxattr(fd, XATTR_TLD_PATH, val.c_str(), val.length() + 1, 0);
 	X_ASSERT(err == 0);
+}
+
+static int get_tld_target(x_smbd_object_t *smbd_object, std::string &volume, std::string &uuid)
+{
+	char buf[1024];
+	ssize_t err = posixfs_object_getxattr(smbd_object, XATTR_TLD_PATH, buf, sizeof buf - 1);
+	if (err < 0) {
+		return -1;
+	}
+
+	buf[err] = '\0';
+	const char *sep = strchr(buf, ':');
+	X_ASSERT(sep);
+	volume.assign(buf, sep - buf);
+	uuid = sep + 1;
+	return 0;
 }
 
 static int get_tld_target(int fd, std::string &volume, std::string &uuid)
@@ -442,7 +470,8 @@ static NTSTATUS dfs_root_object_op_rename(x_smbd_object_t *smbd_object,
 
 /* smbd_object->mutex is already locked */
 static NTSTATUS dfs_root_op_delete_object(x_smbd_object_t *smbd_object,
-		x_smbd_open_t *smbd_open, int fd,
+		x_smbd_stream_t *smbd_stream,
+		x_smbd_open_t *smbd_open,
 		std::vector<x_smb2_change_t> &changes)
 {
 	if (smbd_open->open_state.priv_data == dfs_open_type_dfs_root) {
@@ -454,9 +483,9 @@ static NTSTATUS dfs_root_op_delete_object(x_smbd_object_t *smbd_object,
 	}
 	
 	X_ASSERT(smbd_object->type != x_smbd_object_t::type_not_exist);
-	if (smbd_object->type == x_smbd_object_t::type_dir) {
+	if (smbd_object->type == x_smbd_object_t::type_dir && !smbd_stream) {
 		std::string volume, uuid;
-		int err = get_tld_target(fd, volume, uuid);
+		int err = get_tld_target(smbd_object, volume, uuid);
 		if (err != 0) {
 			return NT_STATUS_UNSUCCESSFUL;
 		}
@@ -489,11 +518,9 @@ static NTSTATUS dfs_root_op_delete_object(x_smbd_object_t *smbd_object,
 		} else {
 			X_TODO;
 		}
-
-		return posixfs_object_op_unlink(smbd_object, fd);
-	} else {
-		return posixfs_object_op_unlink(smbd_object, fd);
 	}
+	return posixfs_op_object_delete(smbd_object, smbd_stream,
+			smbd_open, changes);
 }
 
 static NTSTATUS dfs_root_object_op_read(
@@ -518,19 +545,6 @@ static NTSTATUS dfs_root_object_op_write(
 		return NT_STATUS_INVALID_DEVICE_REQUEST;
 	}
 	return posixfs_object_op_write(smbd_object, smbd_open, smbd_requ, state);
-}
-
-static NTSTATUS dfs_root_object_op_lock(
-		x_smbd_object_t *smbd_object,
-		x_smbd_open_t *smbd_open,
-		x_smbd_conn_t *smbd_conn,
-		x_smbd_requ_t *smbd_requ,
-		std::unique_ptr<x_smb2_state_lock_t> &state)
-{
-	if (smbd_open->open_state.priv_data != dfs_open_type_normal) {
-		return NT_STATUS_INVALID_DEVICE_REQUEST;
-	}
-	return posixfs_object_op_lock(smbd_object, smbd_open, smbd_conn, smbd_requ, state);
 }
 
 
@@ -638,13 +652,6 @@ static void dfs_root_notify_change(std::shared_ptr<x_smbd_volume_t> &smbd_volume
 	x_smbd_object_release(smbd_object, nullptr);
 }
 
-static inline void dfs_root_op_lease_break(
-		x_smbd_object_t *smbd_object,
-		x_smbd_stream_t *smbd_stream)
-{
-	X_TODO;
-}
-
 
 static NTSTATUS dfs_root_op_open_object(x_smbd_object_t **psmbd_object,
 		x_smbd_stream_t **psmbd_stream,
@@ -668,6 +675,8 @@ static NTSTATUS dfs_root_op_create_open(
 		x_smbd_requ_t *smbd_requ,
 		x_smbd_share_t &smbd_share,
 		std::unique_ptr<x_smb2_state_create_t> &state,
+		bool overwrite,
+		bool exists,
 		std::vector<x_smb2_change_t> &changes)
 {
 	x_smbd_object_t *smbd_object = state->smbd_object;
@@ -678,19 +687,19 @@ static NTSTATUS dfs_root_op_create_open(
 			return NT_STATUS_ACCESS_DENIED;
 		}
 		return x_smbd_posixfs_create_open(psmbd_open, smbd_requ,
-				state, changes);
+				state, overwrite, exists, changes);
 
 	} else if (state->open_priv_data == dfs_open_type_tld_manager) {
 		if (state->in_ads_name.size() > 0) {
 			return NT_STATUS_ACCESS_DENIED;
 		}
 		return x_smbd_posixfs_create_open(psmbd_open, smbd_requ,
-				state, changes);
+				state, overwrite, exists, changes);
 
 	} else if (state->open_priv_data == dfs_open_type_under_tld_manager) {
 		if (smbd_object->type == x_smbd_object_t::type_dir) {
 			return x_smbd_posixfs_create_open(psmbd_open,
-					smbd_requ, state, changes);
+					smbd_requ, state, overwrite, exists, changes);
 		} else {
 			X_ASSERT(smbd_object->type == x_smbd_object_t::type_not_exist);
 			if (state->in_create_disposition != x_smb2_create_disposition_t::OPEN_IF
@@ -705,7 +714,7 @@ static NTSTATUS dfs_root_op_create_open(
 				state->in_create_disposition = x_smb2_create_disposition_t::OPEN_IF;
 				NTSTATUS status = x_smbd_posixfs_create_open(psmbd_open,
 						smbd_requ,
-						state, changes);
+						state, overwrite, exists, changes);
 				if (NT_STATUS_IS_OK(status)) {
 					state->out_create_action = x_smb2_create_action_t::WAS_CREATED;
 				}
@@ -729,7 +738,7 @@ static NTSTATUS dfs_root_op_create_open(
 		} else if (smbd_object->type == x_smbd_object_t::type_file) {
 			return x_smbd_posixfs_create_open(psmbd_open,
 					smbd_requ,
-					state, changes);
+					state, overwrite, exists, changes);
 		} else {
 			X_ASSERT(smbd_object->type == x_smbd_object_t::type_not_exist);
 			if ((state->in_create_options & X_SMB2_CREATE_OPTION_DIRECTORY_FILE)) {
@@ -741,7 +750,7 @@ static NTSTATUS dfs_root_op_create_open(
 			}
 			return x_smbd_posixfs_create_open(psmbd_open,
 					smbd_requ,
-					state, changes);
+					state, overwrite, exists, changes);
 		}
 	}
 
@@ -751,28 +760,24 @@ static NTSTATUS dfs_root_op_create_open(
 
 static const x_smbd_object_ops_t dfs_root_object_ops = {
 	dfs_root_op_open_object,
+	todo_dfs_create_object,
 	dfs_root_op_create_open,
 	posixfs_op_open_durable,
-	posixfs_object_op_close,
 	dfs_root_object_op_read,
 	dfs_root_object_op_write,
 	posixfs_object_op_flush,
-	dfs_root_object_op_lock,
 	posixfs_object_op_getinfo,
 	posixfs_object_op_setinfo,
 	posixfs_object_op_ioctl,
 	dfs_root_object_op_qdir,
-	posixfs_object_op_notify,
-	posixfs_object_op_lease_break,
-	posixfs_object_op_oplock_break,
 	dfs_root_object_op_rename,
 	dfs_root_object_op_set_delete_on_close,
 	dfs_root_notify_change,
 	posixfs_object_op_destroy,
 	posixfs_op_release_object,
 	dfs_root_op_delete_object,
-	posixfs_op_get_meta,
-	posixfs_op_get_path,
+	x_smbd_posixfs_op_access_check,
+	x_smbd_posixfs_op_lease_granted,
 };
 
 static bool dfs_volume_process_entry(
@@ -826,6 +831,8 @@ static NTSTATUS dfs_volume_op_create_open(x_smbd_open_t **psmbd_open,
 		x_smbd_requ_t *smbd_requ,
 		x_smbd_share_t &smbd_share,
 		std::unique_ptr<x_smb2_state_create_t> &state,
+		bool overwrite,
+		bool exists,
 		std::vector<x_smb2_change_t> &changes)
 {
 	x_smbd_object_t *smbd_object = state->smbd_object;
@@ -846,7 +853,7 @@ static NTSTATUS dfs_volume_op_create_open(x_smbd_open_t **psmbd_open,
 	std::lock_guard lock(smbd_object->mutex);
 	return x_smbd_posixfs_create_open(psmbd_open,
 			smbd_requ,
-			state, changes);
+			state, overwrite, exists, changes);
 }
 
 static NTSTATUS dfs_volume_object_op_rename(x_smbd_object_t *smbd_object,
@@ -865,28 +872,24 @@ static NTSTATUS dfs_volume_object_op_rename(x_smbd_object_t *smbd_object,
 
 static const x_smbd_object_ops_t dfs_volume_object_ops = {
 	x_smbd_posixfs_open_object,
+	todo_dfs_create_object,
 	dfs_volume_op_create_open,
 	posixfs_op_open_durable,
-	posixfs_object_op_close,
 	posixfs_object_op_read,
 	posixfs_object_op_write,
 	posixfs_object_op_flush,
-	posixfs_object_op_lock,
 	posixfs_object_op_getinfo,
 	posixfs_object_op_setinfo,
 	posixfs_object_op_ioctl,
 	dfs_volume_object_op_qdir,
-	posixfs_object_op_notify,
-	posixfs_object_op_lease_break,
-	posixfs_object_op_oplock_break,
 	dfs_volume_object_op_rename,
 	posixfs_object_op_set_delete_on_close,
 	posixfs_simple_notify_change,
 	posixfs_object_op_destroy,
 	posixfs_op_release_object,
 	posixfs_op_object_delete,
-	posixfs_op_get_meta,
-	posixfs_op_get_path,
+	x_smbd_posixfs_op_access_check,
+	x_smbd_posixfs_op_lease_granted,
 };
 
 NTSTATUS dfs_share_t::resolve_path(std::shared_ptr<x_smbd_volume_t> &smbd_volume,
