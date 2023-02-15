@@ -563,7 +563,7 @@ static const x_dcerpc_iface_t *find_iface_by_syntax(
 	return nullptr;
 }
 
-static x_smbd_object_t *ipc_open_object(NTSTATUS *pstatus,
+static NTSTATUS ipc_open_object(x_smbd_object_t **psmbd_object,
 		std::shared_ptr<x_smbd_volume_t> &smbd_volume,
 		const std::u16string &path,
 		long path_priv_data,
@@ -577,15 +577,17 @@ static x_smbd_object_t *ipc_open_object(NTSTATUS *pstatus,
 
 	x_smbd_ipc_object_t *ipc_object = find_ipc_object_by_name(in_name);
 	if (!ipc_object) {
-		*pstatus = NT_STATUS_OBJECT_NAME_NOT_FOUND;
+		return NT_STATUS_OBJECT_NAME_NOT_FOUND;
 	}
-	return &ipc_object->base;
+	*psmbd_object = &ipc_object->base;
+	return NT_STATUS_OK;
 }
 
 static NTSTATUS ipc_create_open(x_smbd_open_t **psmbd_open,
-			x_smbd_requ_t *smbd_requ,
-			const std::string &volume,
-			std::unique_ptr<x_smb2_state_create_t> &state)
+		x_smbd_requ_t *smbd_requ,
+		x_smbd_share_t &smbd_share,
+		std::unique_ptr<x_smb2_state_create_t> &state,
+		std::vector<x_smb2_change_t> &changes)
 {
 	X_ASSERT(state->open_priv_data == 0);
 	if (state->end_with_sep) {
@@ -662,6 +664,7 @@ static std::u16string ipc_op_get_path(const x_smbd_object_t *smbd_object,
 
 static const x_smbd_object_ops_t x_smbd_ipc_object_ops = {
 	ipc_open_object,
+	ipc_create_open,
 	nullptr,
 	ipc_object_op_close,
 	ipc_object_op_read,
@@ -744,15 +747,6 @@ struct ipc_share_t : x_smbd_share_t
 			const char16_t *in_share_end) const override
 	{
 		return NT_STATUS_FS_DRIVER_REQUIRED;
-	}
-
-	NTSTATUS create_open(x_smbd_open_t **psmbd_open,
-			x_smbd_requ_t *smbd_requ,
-			const std::string &volume,
-			std::unique_ptr<x_smb2_state_create_t> &state,
-			std::vector<x_smb2_change_t> &changes) override {
-		return ipc_create_open(psmbd_open, smbd_requ,
-				volume, state);
 	}
 
 	const std::shared_ptr<x_smbd_volume_t> smbd_volume;

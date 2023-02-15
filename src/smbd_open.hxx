@@ -66,11 +66,17 @@ struct x_smbd_open_t
 struct x_smbd_object_t;
 struct x_smbd_object_ops_t
 {
-	x_smbd_object_t *(*open_object)(NTSTATUS *pstatus,
+	NTSTATUS (*open_object)(x_smbd_object_t **psmbd_object,
 			std::shared_ptr<x_smbd_volume_t> &smbd_volume,
 			const std::u16string &path,
 			long path_priv_data,
 			bool create_if);
+
+	NTSTATUS (*create_open)(x_smbd_open_t **psmbd_open,
+			x_smbd_requ_t *smbd_requ,
+			x_smbd_share_t &smbd_share,
+			std::unique_ptr<x_smb2_state_create_t> &state,
+			std::vector<x_smb2_change_t> &changes);
 
 	NTSTATUS (*open_durable)(x_smbd_open_t *&smbd_open,
 			std::shared_ptr<x_smbd_volume_t> &smbd_volume,
@@ -152,6 +158,7 @@ struct x_smbd_object_ops_t
 			const x_smbd_open_t *smbd_open);
 	std::u16string (*get_path)(const x_smbd_object_t *smbd_object,
 			const x_smbd_open_t *smbd_open);
+
 };
 
 struct x_smbd_object_t
@@ -443,11 +450,35 @@ static inline NTSTATUS x_smbd_object_delete(
 			smbd_open, fd, changes);
 }
 
+static inline NTSTATUS x_smbd_open_object(x_smbd_object_t **psmbd_object,
+		std::shared_ptr<x_smbd_volume_t> &smbd_volume,
+		const std::u16string &path,
+		long path_priv_data,
+		bool create_if)
+{
+	return smbd_volume->ops->open_object(psmbd_object,
+			smbd_volume, path, path_priv_data,
+			create_if);
+}
+
+
 static inline NTSTATUS x_smbd_open_durable(x_smbd_open_t *&smbd_open,
 		std::shared_ptr<x_smbd_volume_t> &smbd_volume,
 		const x_smbd_durable_t &durable)
 {
 	return smbd_volume->ops->open_durable(smbd_open, smbd_volume, durable);
+}
+
+static inline NTSTATUS x_smbd_create_open(x_smbd_open_t **psmbd_open,
+		x_smbd_requ_t *smbd_requ,
+		x_smbd_share_t &smbd_share,
+		std::unique_ptr<x_smb2_state_create_t> &state,
+		std::vector<x_smb2_change_t> &changes)
+{
+	return state->smbd_object->smbd_volume->ops->create_open(
+			psmbd_open, smbd_requ,
+			smbd_share,
+			state, changes);
 }
 
 x_smbd_open_t *x_smbd_open_reopen(NTSTATUS &status,

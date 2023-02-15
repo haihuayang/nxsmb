@@ -96,11 +96,6 @@ struct x_smbd_share_t
 			const char16_t *in_path_begin,
 			const char16_t *in_path_end,
 			const std::string &volume) = 0;
-	virtual NTSTATUS create_open(x_smbd_open_t **psmbd_open,
-			x_smbd_requ_t *smbd_requ,
-			const std::string &volume,
-			std::unique_ptr<x_smb2_state_create_t> &state,
-			std::vector<x_smb2_change_t>& changes) = 0;
 
 	bool is_read_only() const {
 		return flags & f_read_only;

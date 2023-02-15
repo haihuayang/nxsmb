@@ -57,8 +57,20 @@ static NTSTATUS simplefs_object_op_qdir(
 			simplefs_process_entry);
 }
 
+static NTSTATUS simplefs_op_create_open(x_smbd_open_t **psmbd_open,
+		x_smbd_requ_t *smbd_requ,
+		x_smbd_share_t &smbd_share,
+		std::unique_ptr<x_smb2_state_create_t> &state,
+		std::vector<x_smb2_change_t> &changes)
+{
+	std::lock_guard<std::mutex> lock(state->smbd_object->mutex);
+	return x_smbd_posixfs_create_open(psmbd_open, smbd_requ,
+			state, changes);
+}
+
 static const x_smbd_object_ops_t simplefs_object_ops = {
 	x_smbd_posixfs_open_object,
+	simplefs_op_create_open,
 	posixfs_op_open_durable,
 	posixfs_object_op_close,
 	posixfs_object_op_read,
@@ -82,6 +94,7 @@ static const x_smbd_object_ops_t simplefs_object_ops = {
 	posixfs_op_get_path,
 };
 
+
 struct simplefs_share_t : x_smbd_share_t
 {
 	simplefs_share_t(const std::string &name, uint32_t share_flags,
@@ -96,12 +109,6 @@ struct simplefs_share_t : x_smbd_share_t
 		return X_SMB2_SHARE_TYPE_DISK;
 	}
 	bool is_dfs() const override { return false; }
-
-	NTSTATUS create_open(x_smbd_open_t **psmbd_open,
-			x_smbd_requ_t *smbd_requ,
-			const std::string &volume,
-			std::unique_ptr<x_smb2_state_create_t> &state,
-			std::vector<x_smb2_change_t> &changes) override;
 
 	NTSTATUS resolve_path(std::shared_ptr<x_smbd_volume_t> &smbd_volume,
 			std::u16string &out_path,
@@ -153,17 +160,6 @@ NTSTATUS simplefs_share_t::resolve_path(
 	path_priv_data = 0;
 	open_priv_data = 0;
 	return NT_STATUS_OK;
-}
-
-NTSTATUS simplefs_share_t::create_open(x_smbd_open_t **psmbd_open,
-		x_smbd_requ_t *smbd_requ,
-		const std::string &volume,
-		std::unique_ptr<x_smb2_state_create_t> &state,
-		std::vector<x_smb2_change_t> &changes)
-{
-	std::lock_guard<std::mutex> lock(state->smbd_object->mutex);
-	return x_smbd_posixfs_create_open(psmbd_open, smbd_requ,
-			state, changes);
 }
 
 std::shared_ptr<x_smbd_share_t> x_smbd_simplefs_share_create(

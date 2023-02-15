@@ -217,8 +217,9 @@ NTSTATUS x_smbd_tcon_op_create(x_smbd_requ_t *smbd_requ,
 				x_convert_utf16_to_utf8_safe(path).c_str(),
 				path_priv_data, open_priv_data);
 
-		state->smbd_object = smbd_volume->ops->open_object(&status,
-				smbd_volume, path, path_priv_data, true);
+		status = x_smbd_open_object(&state->smbd_object,
+				smbd_volume, path,
+				path_priv_data, true);
 		if (!state->smbd_object) {
 			return status;
 		}
@@ -230,9 +231,10 @@ NTSTATUS x_smbd_tcon_op_create(x_smbd_requ_t *smbd_requ,
 	std::vector<x_smb2_change_t> changes;
 	x_smbd_open_t *smbd_open = nullptr;
 	/* TODO should we check the open limit before create the open */
-	status = smbd_tcon->smbd_share->create_open(&smbd_open,
-			smbd_requ, smbd_tcon->volume, state,
-			changes);
+	status = x_smbd_create_open(
+			&smbd_open, smbd_requ,
+			*smbd_tcon->smbd_share,
+			state, changes);
 
 	if (smbd_open) {
 		X_ASSERT(NT_STATUS_IS_OK(status));

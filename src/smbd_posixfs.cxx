@@ -1183,10 +1183,10 @@ void posixfs_simple_notify_change(
 		const x_smb2_lease_key_t &ignore_lease_key,
 		bool last_level)
 {
-	NTSTATUS status;
-	x_smbd_object_t *smbd_object = smbd_volume->ops->open_object(&status,
+	x_smbd_object_t *smbd_object = nullptr;
+	NTSTATUS status = x_smbd_open_object(&smbd_object,
 			smbd_volume, path, 0, false);
-	if (!smbd_object) {
+	if (!NT_STATUS_IS_OK(status)) {
 		X_LOG_DBG("skip notify %d,x%x '%s', '%s'", notify_action,
 				notify_filter,
 				x_convert_utf16_to_utf8_safe(path).c_str(),
@@ -1194,6 +1194,7 @@ void posixfs_simple_notify_change(
 		return;
 	}
 
+	X_ASSERT(smbd_object);
 	X_LOG_DBG("notify object %d,x%x '%s', '%s'", notify_action,
 			notify_filter,
 			x_convert_utf16_to_utf8_safe(path).c_str(),
@@ -1386,8 +1387,8 @@ static NTSTATUS parent_dirname_compatible_open(
 		return NT_STATUS_INVALID_PARAMETER;
 	}
 	std::u16string parent_path = get_parent_path(path);
-	NTSTATUS status;
-	x_smbd_object_t *smbd_object = smbd_volume->ops->open_object(&status,
+	x_smbd_object_t *smbd_object = nullptr;
+	NTSTATUS status = x_smbd_open_object(&smbd_object,
 			smbd_volume, parent_path, 0, false);
 	if (!smbd_object) {
 		return NT_STATUS_OK;
@@ -5426,24 +5427,24 @@ void posixfs_object_op_destroy(x_smbd_object_t *smbd_object,
 	delete posixfs_open;
 }
 
-x_smbd_object_t *x_smbd_posixfs_open_object(NTSTATUS *pstatus,
+NTSTATUS x_smbd_posixfs_open_object(x_smbd_object_t **psmbd_object,
 		std::shared_ptr<x_smbd_volume_t> &smbd_volume,
-		const std::u16string &path, long path_data,
+		const std::u16string &path,
+		long path_data,
 		bool create_if)
 {
 	auto [ ok, hash ] = hash_object(*smbd_volume, path);
 	if (!ok) {
-		*pstatus = NT_STATUS_ILLEGAL_CHARACTER;
-		return nullptr;
+		return NT_STATUS_ILLEGAL_CHARACTER;
 	}
 
 	posixfs_object_t *posixfs_object = posixfs_object_open(
 			smbd_volume, path, path_data, create_if, hash);
 	if (posixfs_object) {
-		return &posixfs_object->base;
+		*psmbd_object = &posixfs_object->base;
+		return NT_STATUS_OK;
 	} else {
-		*pstatus = NT_STATUS_OBJECT_NAME_NOT_FOUND;
-		return nullptr;
+		return NT_STATUS_OBJECT_NAME_NOT_FOUND;
 	}
 }
 

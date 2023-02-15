@@ -63,13 +63,6 @@ struct dfs_share_t : x_smbd_share_t
 			const char16_t *in_path_begin,
 			const char16_t *in_path_end,
 			const std::string &volume) override;
-
-	NTSTATUS create_open(x_smbd_open_t **psmbd_open,
-			x_smbd_requ_t *smbd_requ,
-			const std::string &volume,
-			std::unique_ptr<x_smb2_state_create_t> &state,
-			std::vector<x_smb2_change_t> &changes) override;
-
 	NTSTATUS get_dfs_referral(x_dfs_referral_resp_t &dfs_referral,
 			const char16_t *in_full_path_begin,
 			const char16_t *in_full_path_end,
@@ -618,19 +611,21 @@ static void dfs_root_notify_change(std::shared_ptr<x_smbd_volume_t> &smbd_volume
 	long open_priv_data;
 	if (path.empty()) {
 		open_priv_data = dfs_open_type_dfs_root;
-		smbd_object = smbd_volume->ops->open_object(&status,
-				smbd_volume, path, dfs_object_type_dfs_root, false);
+		status = x_smbd_open_object(&smbd_object,
+				smbd_volume, path,
+				dfs_object_type_dfs_root, false);
 	} else {
 		open_priv_data = dfs_open_type_tld_manager;
 		std::string utf8_path = x_convert_utf16_to_utf8_assert(path, x_tolower);
 		if (utf8_path != pesudo_tld_dir) {
 			return;
 		}
-		smbd_object = smbd_volume->ops->open_object(&status,
-				smbd_volume, std::u16string(), dfs_object_type_dfs_root, false);
+		status = x_smbd_open_object(&smbd_object,
+				smbd_volume, std::u16string(),
+				dfs_object_type_dfs_root, false);
 	}
 
-	if (!smbd_object) {
+	if (!NT_STATUS_IS_OK(status)) {
 		return;
 	}
 
@@ -650,29 +645,30 @@ static inline void dfs_root_op_lease_break(
 }
 
 
-static x_smbd_object_t *dfs_root_op_open_object(NTSTATUS *pstatus,
+static NTSTATUS dfs_root_op_open_object(x_smbd_object_t **psmbd_object,
 		std::shared_ptr<x_smbd_volume_t> &smbd_volume,
 		const std::u16string &path,
 		long path_priv_data,
 		bool create_if)
 {
 	if (path_priv_data == dfs_object_type_dfs_denied) {
-		*pstatus = NT_STATUS_ACCESS_DENIED;
-		return nullptr;
+		return NT_STATUS_ACCESS_DENIED;
 	}
 
-	return x_smbd_posixfs_open_object(
-			pstatus, smbd_volume,
+	return x_smbd_posixfs_open_object(psmbd_object,
+			smbd_volume,
 			path, path_priv_data, create_if);
 }
 
-static NTSTATUS dfs_root_create_open(dfs_share_t &dfs_share,
+static NTSTATUS dfs_root_op_create_open(
 		x_smbd_open_t **psmbd_open,
 		x_smbd_requ_t *smbd_requ,
+		x_smbd_share_t &smbd_share,
 		std::unique_ptr<x_smb2_state_create_t> &state,
 		std::vector<x_smb2_change_t> &changes)
 {
 	x_smbd_object_t *smbd_object = state->smbd_object;
+	dfs_share_t &dfs_share = dynamic_cast<dfs_share_t &>(smbd_share);
 	std::lock_guard lock(smbd_object->mutex);
 	if (state->open_priv_data == dfs_open_type_dfs_root) {
 		if (state->in_ads_name.size() > 0) {
@@ -752,6 +748,7 @@ static NTSTATUS dfs_root_create_open(dfs_share_t &dfs_share,
 
 static const x_smbd_object_ops_t dfs_root_object_ops = {
 	dfs_root_op_open_object,
+	dfs_root_op_create_open,
 	posixfs_op_open_durable,
 	posixfs_object_op_close,
 	dfs_root_object_op_read,
@@ -822,9 +819,9 @@ static NTSTATUS dfs_volume_object_op_qdir(
 			dfs_volume_process_entry);
 }
 
-static NTSTATUS dfs_volume_create_open(x_smbd_open_t **psmbd_open,
+static NTSTATUS dfs_volume_op_create_open(x_smbd_open_t **psmbd_open,
 		x_smbd_requ_t *smbd_requ,
-		const std::string &volume,
+		x_smbd_share_t &smbd_share,
 		std::unique_ptr<x_smb2_state_create_t> &state,
 		std::vector<x_smb2_change_t> &changes)
 {
@@ -865,6 +862,7 @@ static NTSTATUS dfs_volume_object_op_rename(x_smbd_object_t *smbd_object,
 
 static const x_smbd_object_ops_t dfs_volume_object_ops = {
 	x_smbd_posixfs_open_object,
+	dfs_volume_op_create_open,
 	posixfs_op_open_durable,
 	posixfs_object_op_close,
 	posixfs_object_op_read,
@@ -1045,22 +1043,6 @@ NTSTATUS dfs_share_t::get_dfs_referral(x_dfs_referral_resp_t &dfs_referral_resp,
 			in_server_end,
 			in_share_begin,
 			in_share_end);
-}
-
-NTSTATUS dfs_share_t::create_open(x_smbd_open_t **psmbd_open,
-		x_smbd_requ_t *smbd_requ,
-		const std::string &volume,
-		std::unique_ptr<x_smb2_state_create_t> &state,
-		std::vector<x_smb2_change_t> &changes)
-{
-	X_ASSERT(!volume.empty());
-	if (volume == "-") {
-		return dfs_root_create_open(*this, psmbd_open,
-				smbd_requ, state, changes);
-	} else {
-		return dfs_volume_create_open(psmbd_open,
-				smbd_requ, volume, state, changes);
-	}
 }
 
 dfs_share_t::dfs_share_t(const x_smbd_conf_t &smbd_conf,

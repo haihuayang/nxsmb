@@ -134,10 +134,19 @@ NTSTATUS posixfs_object_qdir(
 		uint32_t pseudo_entry_count,
 		posixfs_qdir_entry_func_t *process_entry_func);
 
-x_smbd_object_t *x_smbd_posixfs_open_object(NTSTATUS *pstatus,
+NTSTATUS x_smbd_posixfs_open_object(x_smbd_object_t **psmbd_object,
 		std::shared_ptr<x_smbd_volume_t> &smbd_volume,
-		const std::u16string &path, long path_data,
+		const std::u16string &path,
+		long path_data,
 		bool create_if);
+
+NTSTATUS x_smbd_posixfs_op_create_open(x_smbd_open_t *&smbd_open,
+		x_smbd_requ_t *smbd_requ,
+		const std::shared_ptr<x_smbd_share_t> &smbd_share,
+		const std::string &volume_name,
+		std::unique_ptr<x_smb2_state_create_t> &state,
+		std::vector<x_smb2_change_t> &changes);
+
 
 x_smbd_object_t *x_smbd_posixfs_open_object_by_handle(NTSTATUS *pstatus,
 		std::shared_ptr<x_smbd_volume_t> &smbd_volume,
