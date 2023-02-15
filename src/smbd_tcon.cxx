@@ -218,9 +218,10 @@ NTSTATUS x_smbd_tcon_op_create(x_smbd_requ_t *smbd_requ,
 				path_priv_data, open_priv_data);
 
 		status = x_smbd_open_object(&state->smbd_object,
-				smbd_volume, path,
+				&state->smbd_stream,
+				smbd_volume, path, state->in_ads_name,
 				path_priv_data, true);
-		if (!state->smbd_object) {
+		if (!NT_STATUS_IS_OK(status)) {
 			return status;
 		}
 
@@ -231,13 +232,13 @@ NTSTATUS x_smbd_tcon_op_create(x_smbd_requ_t *smbd_requ,
 	std::vector<x_smb2_change_t> changes;
 	x_smbd_open_t *smbd_open = nullptr;
 	/* TODO should we check the open limit before create the open */
-	status = x_smbd_create_open(
+	status = x_smbd_open_create(
 			&smbd_open, smbd_requ,
 			*smbd_tcon->smbd_share,
 			state, changes);
 
-	if (smbd_open) {
-		X_ASSERT(NT_STATUS_IS_OK(status));
+	if (NT_STATUS_IS_OK(status)) {
+		X_ASSERT(smbd_open);
 
 		/* we do not support durable handle for ADS */
 		if (!smbd_open->smbd_stream &&
@@ -288,6 +289,8 @@ NTSTATUS x_smbd_tcon_op_create(x_smbd_requ_t *smbd_requ,
 		}
 
 		x_smbd_notify_change(state->smbd_object->smbd_volume, changes);
+	} else {
+		X_ASSERT(!smbd_open);
 	}
 
 	return status;

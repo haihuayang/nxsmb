@@ -67,8 +67,10 @@ struct x_smbd_object_t;
 struct x_smbd_object_ops_t
 {
 	NTSTATUS (*open_object)(x_smbd_object_t **psmbd_object,
+			x_smbd_stream_t **psmbd_stream,
 			std::shared_ptr<x_smbd_volume_t> &smbd_volume,
 			const std::u16string &path,
+			const std::u16string &ads_name,
 			long path_priv_data,
 			bool create_if);
 
@@ -167,6 +169,8 @@ struct x_smbd_object_t
 			long priv_data,
 			const std::u16string &path);
 	~x_smbd_object_t();
+	bool exists() const { return type != type_not_exist; }
+
 	std::shared_ptr<x_smbd_volume_t> smbd_volume;
 	const long priv_data;
 	std::mutex mutex;
@@ -185,10 +189,12 @@ struct x_smbd_object_t
 	std::u16string path;
 	x_smbd_file_handle_t file_handle;
 	x_smbd_object_meta_t meta;
+	x_smbd_stream_meta_t stream_meta;
 };
 
 struct x_smbd_stream_t
 {
+	bool exists;
 	x_smbd_stream_meta_t meta;
 };
 
@@ -451,13 +457,15 @@ static inline NTSTATUS x_smbd_object_delete(
 }
 
 static inline NTSTATUS x_smbd_open_object(x_smbd_object_t **psmbd_object,
+		x_smbd_stream_t **psmbd_stream,
 		std::shared_ptr<x_smbd_volume_t> &smbd_volume,
 		const std::u16string &path,
+		const std::u16string &ads_name,
 		long path_priv_data,
 		bool create_if)
 {
-	return smbd_volume->ops->open_object(psmbd_object,
-			smbd_volume, path, path_priv_data,
+	return smbd_volume->ops->open_object(psmbd_object, psmbd_stream,
+			smbd_volume, path, ads_name, path_priv_data,
 			create_if);
 }
 
@@ -469,17 +477,11 @@ static inline NTSTATUS x_smbd_open_durable(x_smbd_open_t *&smbd_open,
 	return smbd_volume->ops->open_durable(smbd_open, smbd_volume, durable);
 }
 
-static inline NTSTATUS x_smbd_create_open(x_smbd_open_t **psmbd_open,
+NTSTATUS x_smbd_open_create(x_smbd_open_t **psmbd_open,
 		x_smbd_requ_t *smbd_requ,
 		x_smbd_share_t &smbd_share,
 		std::unique_ptr<x_smb2_state_create_t> &state,
-		std::vector<x_smb2_change_t> &changes)
-{
-	return state->smbd_object->smbd_volume->ops->create_open(
-			psmbd_open, smbd_requ,
-			smbd_share,
-			state, changes);
-}
+		std::vector<x_smb2_change_t> &changes);
 
 x_smbd_open_t *x_smbd_open_reopen(NTSTATUS &status,
 		uint64_t id_presistent, uint64_t id_volatile,

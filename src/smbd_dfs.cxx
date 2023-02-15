@@ -608,11 +608,12 @@ static void dfs_root_notify_change(std::shared_ptr<x_smbd_volume_t> &smbd_volume
 {
 	NTSTATUS status;
 	x_smbd_object_t *smbd_object = nullptr;
+	x_smbd_stream_t *smbd_stream = nullptr;
 	long open_priv_data;
 	if (path.empty()) {
 		open_priv_data = dfs_open_type_dfs_root;
-		status = x_smbd_open_object(&smbd_object,
-				smbd_volume, path,
+		status = x_smbd_open_object(&smbd_object, &smbd_stream,
+				smbd_volume, path, std::u16string(),
 				dfs_object_type_dfs_root, false);
 	} else {
 		open_priv_data = dfs_open_type_tld_manager;
@@ -620,8 +621,8 @@ static void dfs_root_notify_change(std::shared_ptr<x_smbd_volume_t> &smbd_volume
 		if (utf8_path != pesudo_tld_dir) {
 			return;
 		}
-		status = x_smbd_open_object(&smbd_object,
-				smbd_volume, std::u16string(),
+		status = x_smbd_open_object(&smbd_object, &smbd_stream,
+				smbd_volume, std::u16string(), std::u16string(),
 				dfs_object_type_dfs_root, false);
 	}
 
@@ -646,8 +647,10 @@ static inline void dfs_root_op_lease_break(
 
 
 static NTSTATUS dfs_root_op_open_object(x_smbd_object_t **psmbd_object,
+		x_smbd_stream_t **psmbd_stream,
 		std::shared_ptr<x_smbd_volume_t> &smbd_volume,
 		const std::u16string &path,
+		const std::u16string &ads_name,
 		long path_priv_data,
 		bool create_if)
 {
@@ -655,9 +658,9 @@ static NTSTATUS dfs_root_op_open_object(x_smbd_object_t **psmbd_object,
 		return NT_STATUS_ACCESS_DENIED;
 	}
 
-	return x_smbd_posixfs_open_object(psmbd_object,
+	return x_smbd_posixfs_open_object(psmbd_object, psmbd_stream,
 			smbd_volume,
-			path, path_priv_data, create_if);
+			path, ads_name, path_priv_data, create_if);
 }
 
 static NTSTATUS dfs_root_op_create_open(

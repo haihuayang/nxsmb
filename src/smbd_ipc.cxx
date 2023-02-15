@@ -564,12 +564,17 @@ static const x_dcerpc_iface_t *find_iface_by_syntax(
 }
 
 static NTSTATUS ipc_open_object(x_smbd_object_t **psmbd_object,
+		x_smbd_stream_t **psmbd_stream,
 		std::shared_ptr<x_smbd_volume_t> &smbd_volume,
 		const std::u16string &path,
+		const std::u16string &ads_name,
 		long path_priv_data,
 		bool create_if)
 {
 	X_ASSERT(path_priv_data == 0);
+	if (ads_name.length()) {
+		return NT_STATUS_OBJECT_NAME_NOT_FOUND;
+	}
 	std::u16string in_name;
 	in_name.reserve(path.size());
 	std::transform(std::begin(path), std::end(path),
@@ -580,6 +585,7 @@ static NTSTATUS ipc_open_object(x_smbd_object_t **psmbd_object,
 		return NT_STATUS_OBJECT_NAME_NOT_FOUND;
 	}
 	*psmbd_object = &ipc_object->base;
+	*psmbd_stream = nullptr;
 	return NT_STATUS_OK;
 }
 

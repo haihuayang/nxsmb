@@ -135,8 +135,10 @@ NTSTATUS posixfs_object_qdir(
 		posixfs_qdir_entry_func_t *process_entry_func);
 
 NTSTATUS x_smbd_posixfs_open_object(x_smbd_object_t **psmbd_object,
+		x_smbd_stream_t **psmbd_stream,
 		std::shared_ptr<x_smbd_volume_t> &smbd_volume,
 		const std::u16string &path,
+		const std::u16string &ads_name,
 		long path_data,
 		bool create_if);
 

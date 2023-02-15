@@ -63,7 +63,6 @@ static NTSTATUS simplefs_op_create_open(x_smbd_open_t **psmbd_open,
 		std::unique_ptr<x_smb2_state_create_t> &state,
 		std::vector<x_smb2_change_t> &changes)
 {
-	std::lock_guard<std::mutex> lock(state->smbd_object->mutex);
 	return x_smbd_posixfs_create_open(psmbd_open, smbd_requ,
 			state, changes);
 }
