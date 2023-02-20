@@ -54,6 +54,9 @@ static void x_smb2_reply_read(x_smbd_conn_t *smbd_conn,
 {
 	X_LOG_OP("%ld RESP SUCCESS", smbd_requ->in_smb2_hdr.mid);
 
+	smbd_requ->smbd_open->open_state.current_offset =
+		state.in_offset + state.in_length;
+
 	x_bufref_t *bufref = x_bufref_alloc(sizeof(x_smb2_out_read_t));
 	if (state.out_buf) {
 		bufref->next = new x_bufref_t(state.out_buf, 0, state.out_buf_length);
@@ -127,7 +130,9 @@ NTSTATUS x_smb2_process_read(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 		RETURN_OP_STATUS(smbd_requ, NT_STATUS_ACCESS_DENIED);
 	}
 
-	/* TODO check is dir before read */
+	if (!x_smbd_open_is_data(smbd_requ->smbd_open)) {
+		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_DEVICE_REQUEST);
+	}
 
 	if (state->in_length == 0) {
 		state->out_buf_length = 0;
