@@ -2462,7 +2462,6 @@ static NTSTATUS getinfo_file(posixfs_object_t *posixfs_object,
 		}
 
 	} else {
-		X_TODO;
 		RETURN_STATUS(NT_STATUS_INVALID_LEVEL);
 	}
 	return NT_STATUS_OK;
@@ -2687,7 +2686,6 @@ static NTSTATUS setinfo_file(posixfs_object_t *posixfs_object,
 		return NT_STATUS_OK;
 
 	} else {
-		X_TODO;
 		return NT_STATUS_INVALID_LEVEL;
 	}
 }

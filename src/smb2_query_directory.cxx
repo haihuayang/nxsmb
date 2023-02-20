@@ -110,6 +110,18 @@ NTSTATUS x_smb2_process_query_directory(x_smbd_conn_t *smbd_conn, x_smbd_requ_t 
 	X_LOG_OP("%ld FIND 0x%lx, 0x%lx", smbd_requ->in_smb2_hdr.mid,
 			state->in_file_id_persistent, state->in_file_id_volatile);
 
+	switch (state->in_info_level) {
+	case x_smb2_info_level_t::FILE_ID_BOTH_DIR_INFORMATION:
+	case x_smb2_info_level_t::FILE_ID_FULL_DIR_INFORMATION:
+	case x_smb2_info_level_t::FILE_DIRECTORY_INFORMATION:
+	case x_smb2_info_level_t::FILE_BOTH_DIR_INFORMATION:
+	case x_smb2_info_level_t::FILE_FULL_DIRECTORY_INFORMATION:
+	case x_smb2_info_level_t::FILE_NAMES_INFORMATION:
+		break;
+	default:
+		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
+	}
+
 	NTSTATUS status = x_smbd_requ_init_open(smbd_requ,
 			state->in_file_id_persistent,
 			state->in_file_id_volatile);
