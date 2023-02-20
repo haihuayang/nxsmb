@@ -1198,6 +1198,15 @@ static NTSTATUS smbd_open_create_exist(
 		bool overwrite,
 		std::vector<x_smb2_change_t> &changes)
 {
+	if (smbd_object->type == x_smbd_object_t::type_file && overwrite) {
+		// open_match_attributes
+#define MIS_MATCH(attr) (((smbd_object->meta.file_attributes & attr) != 0) && ((state->in_file_attributes & attr) == 0))
+		if (MIS_MATCH(X_SMB2_FILE_ATTRIBUTE_SYSTEM) ||
+				MIS_MATCH(X_SMB2_FILE_ATTRIBUTE_HIDDEN)) {
+			RETURN_OP_STATUS(smbd_requ, NT_STATUS_ACCESS_DENIED);
+		}
+	}
+
 	auto smbd_user = x_smbd_sess_get_user(smbd_requ->smbd_sess);
 	uint32_t granted_access, maximal_access;
 	NTSTATUS status = x_smbd_object_access_check(smbd_object,
