@@ -65,6 +65,11 @@ static bool is_null_ntime(idl::NTTIME nt)
 	return nt.val == 0 || nt.val == NTTIME_FREEZE || nt.val == NTTIME_THAW;
 }
 
+static uint64_t roundup_allocation_size(uint64_t allocation_size)
+{
+	return (allocation_size + 4095ul) & ~4095ul;
+}
+
 static NTSTATUS posixfs_set_basic_info(int fd,
 		uint32_t &notify_actions,
 		const x_smb2_file_basic_info_t &basic_info,
@@ -755,9 +760,9 @@ static NTSTATUS posixfs_set_allocation_size(
 		x_smbd_open_t *smbd_open,
 		uint64_t allocation_size)
 {
-	if (smbd_open->smbd_stream) {
+	if (!smbd_open->smbd_stream) {
 		/* only round up for base file */
-		allocation_size = (allocation_size + 4095ul) & ~4095ul;
+		allocation_size = roundup_allocation_size(allocation_size);
 	}
 
 	auto lock = std::lock_guard(posixfs_object->base.mutex);
@@ -2063,6 +2068,10 @@ static NTSTATUS posixfs_do_write(posixfs_object_t *posixfs_object,
 		uint64_t end_of_write = state.in_offset + ret;
 		if (posixfs_object->base.stream_meta.end_of_file < end_of_write) {
 			posixfs_object->base.stream_meta.end_of_file = end_of_write;
+			if (posixfs_object->base.stream_meta.allocation_size < end_of_write) {
+				posixfs_object->base.stream_meta.allocation_size =
+					roundup_allocation_size(end_of_write);
+			}
 		}
 
 		state.out_count = x_convert_assert<uint32_t>(ret);
