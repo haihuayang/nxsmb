@@ -1423,9 +1423,10 @@ static posixfs_open_t *posixfs_open_create(
 {
 	NTSTATUS status;
 	if (create_options & X_SMB2_CREATE_OPTION_DELETE_ON_CLOSE) {
-		status = posixfs_object_set_delete_on_close(posixfs_object,
+		status = x_smbd_can_set_delete_on_close(&posixfs_object->base,
 				smbd_stream,
-				open_state.access_mask, true);
+				posixfs_object->get_meta().file_attributes,
+				open_state.access_mask);
 		if (!NT_STATUS_IS_OK(status)) {
 			*pstatus = status;
 			return nullptr;
@@ -3335,15 +3336,13 @@ NTSTATUS posixfs_object_qdir(
 #endif
 }
 
-
+/* caller hold the smbd_object->mutex */
 NTSTATUS posixfs_object_op_set_delete_on_close(
 		x_smbd_object_t *smbd_object,
 		x_smbd_open_t *smbd_open,
-		x_smbd_requ_t *smbd_requ,
 		bool delete_on_close)
 {
 	posixfs_object_t *posixfs_object = posixfs_object_from_base_t::container(smbd_object);
-	auto lock = std::lock_guard(posixfs_object->base.mutex);
 	return posixfs_object_set_delete_on_close(posixfs_object,
 			smbd_open->smbd_stream,
 			smbd_open->open_state.access_mask, delete_on_close);

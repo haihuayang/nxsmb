@@ -147,6 +147,9 @@ static NTSTATUS smbd_object_remove(
 	x_smbd_stream_t *smbd_stream = smbd_open->smbd_stream;
 	auto sharemode = get_sharemode(smbd_object, smbd_stream);
 	sharemode->open_list.remove(smbd_open);
+	if (smbd_open->open_state.initial_delete_on_close) {
+		x_smbd_open_op_set_delete_on_close(smbd_open, true);
+	}
 
 	if (smbd_open->locks.size()) {
 		x_smbd_lock_retry(sharemode);
@@ -1569,6 +1572,9 @@ static NTSTATUS smbd_open_create_intl(x_smbd_open_t **psmbd_open,
 
 	state->out_create_flags = 0;
 	state->out_create_action = create_action;
+
+	(*psmbd_open)->open_state.initial_delete_on_close =
+		(state->in_create_options & X_SMB2_CREATE_OPTION_DELETE_ON_CLOSE) != 0;
 
 	if (num_disconnected) {
 		sharemode_modified(smbd_object, smbd_stream);

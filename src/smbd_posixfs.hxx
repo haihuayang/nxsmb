@@ -56,7 +56,6 @@ NTSTATUS posixfs_object_op_ioctl(
 NTSTATUS posixfs_object_op_set_delete_on_close(
 		x_smbd_object_t *smbd_object,
 		x_smbd_open_t *smbd_open,
-		x_smbd_requ_t *smbd_requ,
 		bool delete_on_close);
 NTSTATUS posixfs_object_op_unlink(x_smbd_object_t *smbd_object, int fd);
 void posixfs_notify_fname(

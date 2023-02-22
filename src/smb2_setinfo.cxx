@@ -52,15 +52,18 @@ static NTSTATUS smb2_setinfo_dispatch(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *s
 {
 	if (state->in_info_class == x_smb2_info_class_t::FILE) {
 		if (state->in_info_level == x_smb2_info_level_t::FILE_DISPOSITION_INFORMATION) {
+			auto smbd_open = smbd_requ->smbd_open;
 			/* MS-FSA 2.1.5.14.3 */
-			if (!smbd_requ->smbd_open->check_access(idl::SEC_STD_DELETE)) {
+			if (!smbd_open->check_access(idl::SEC_STD_DELETE)) {
 				RETURN_OP_STATUS(smbd_requ, NT_STATUS_ACCESS_DENIED);
 			}
 			if (state->in_data.size() < 1) {
 				RETURN_OP_STATUS(smbd_requ, NT_STATUS_INFO_LENGTH_MISMATCH);
 			}
 			bool delete_on_close = (state->in_data[0] != 0);
-			return x_smbd_open_op_set_delete_on_close(smbd_requ->smbd_open, smbd_requ,
+			auto lock = std::lock_guard(smbd_open->smbd_object->mutex);
+			return x_smbd_open_op_set_delete_on_close(
+					smbd_requ->smbd_open,
 					delete_on_close);
 		}
 	}

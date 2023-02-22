@@ -595,7 +595,6 @@ static NTSTATUS dfs_root_object_op_qdir(
 static NTSTATUS dfs_root_object_op_set_delete_on_close(
 		x_smbd_object_t *smbd_object,
 		x_smbd_open_t *smbd_open,
-		x_smbd_requ_t *smbd_requ,
 		bool delete_on_close)
 {
 	if (smbd_open->open_state.priv_data == dfs_open_type_dfs_root) {
@@ -604,10 +603,10 @@ static NTSTATUS dfs_root_object_op_set_delete_on_close(
 		return NT_STATUS_ACCESS_DENIED;
 	} else if (smbd_open->open_state.priv_data == dfs_open_type_under_tld_manager) {
 		return posixfs_object_op_set_delete_on_close(smbd_object,
-				smbd_open, smbd_requ, delete_on_close);
+				smbd_open, delete_on_close);
 	} else {
 		return posixfs_object_op_set_delete_on_close(smbd_object,
-				smbd_open, smbd_requ, delete_on_close);
+				smbd_open, delete_on_close);
 	}
 }
 

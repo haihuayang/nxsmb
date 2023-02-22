@@ -198,7 +198,7 @@ struct x_smbd_open_state_t
 	const long priv_data;
 
 	uint8_t oplock_level{X_SMB2_OPLOCK_LEVEL_NONE};
-	bool delete_on_close = false;
+	bool initial_delete_on_close = false;
 	uint32_t durable_timeout_msec = 0;
 	uint64_t current_offset = 0;
 };
