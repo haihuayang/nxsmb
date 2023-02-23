@@ -1505,7 +1505,10 @@ static NTSTATUS get_parent_sd(const posixfs_object_t *posixfs_object,
 	int fd = open_parent(posixfs_object->base.smbd_volume,
 			posixfs_object->base.path);
 	if (fd == -1) {
-		return x_map_nt_error_from_unix(-errno);
+		if (errno == ENOENT) {
+			return NT_STATUS_OBJECT_PATH_NOT_FOUND;
+		}
+		return x_map_nt_error_from_unix(errno);
 	}
 
 	std::vector<uint8_t> blob;
