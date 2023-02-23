@@ -327,6 +327,11 @@ static NTSTATUS smbd_open_check(x_smbd_open_t *smbd_open, x_smbd_tcon_t *smbd_tc
 		X_LOG_NOTICE("open is active");
 		return NT_STATUS_OBJECT_NAME_NOT_FOUND;
 	}
+	if ((state.in_contexts & X_SMB2_CONTEXT_FLAG_DH2C) &&
+			!(open_state.create_guid == state.dh2c_requ.create_guid)) {
+		X_LOG_NOTICE("create_guid not match");
+		return NT_STATUS_OBJECT_NAME_NOT_FOUND;
+	}
 	if (smbd_open->smbd_lease) {
 		if (!x_smbd_lease_match_get(smbd_open->smbd_lease,
 					x_smbd_conn_curr_client_guid(),

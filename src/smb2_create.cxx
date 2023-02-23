@@ -4,9 +4,16 @@
 #include "smbd_ntacl.hxx"
 #include "include/charset.hxx"
 
-enum {
-	X_SMB2_CREATE_REQU_BODY_LEN = 0x38,
-	X_SMB2_CREATE_RESP_BODY_LEN = 0x58,
+static const uint8_t X_SMB2_CREATE_TAG_APP_INSTANCE_ID[] = {
+	0x45, 0xBC, 0xA6, 0x6A, 0xEF, 0xA7, 0xF7, 0x4A,
+	0x90, 0x08, 0xFA, 0x46, 0x2E, 0x14, 0x4D, 0x74,
+};
+
+struct x_smb2_create_requ_app_instance_id_t
+{
+	uint16_t struct_size;
+	uint16_t reserved0;
+	x_smb2_uuid_bytes_t app_instance_id;
 };
 
 struct x_smb2_in_create_t
@@ -193,18 +200,33 @@ static bool decode_contexts(x_smb2_state_create_t &state,
 			} else if (tag == X_SMB2_CREATE_TAG_AAPL) {
 				// TODO
 			} else {
-#if 0
-				// TODO
-				contexts.resize(contexts.size() + 1);
-				auto &ctx = contexts.back();
-				ctx.tag = x_get_be32(data + tag_off);
-				ctx.data.assign(data + data_off, data + data_off + data_len);
-#endif
+				X_LOG_WARN("unknown create context 0x%x", tag);
 			}
+#if 0
+		} else if (tag_len == 16) {
+			if (memcmp(data + tag_off, X_SMB2_CREATE_TAG_APP_INSTANCE_ID, 16) == 0) {
+				if (data_len != sizeof(x_smb2_create_requ_app_instance_id_t)) {
+					return false;
+				}
+				auto ctx = (const x_smb2_create_requ_app_instance_id_t *)(data + data_off);
+				uint16_t struct_size = X_LE2H16(ctx->struct_size);
+				if (struct_size != sizeof(x_smb2_create_requ_app_instance_id_t)) {
+					return false;
+				}
+				// TODO skip for now since not very clear how it is used
+				// state.in_contexts |= X_SMB2_CONTEXT_FLAG_APP_INSTANCE_ID;
+				// state.in_context_app_instance_id = ctx->app_instance_id;
+			} else {
+				X_LOG_WARN("unknown create context");
+			}
+#endif
 		} else if (tag_len < 4) {
+			/* return NT_STATUS_INVALID_PARAMETER if tag_len < 4 */
+			X_LOG_WARN("unknown create context tag_len=%d", tag_len);
 			return false;
 		} else {
 			/* ignore */
+			X_LOG_WARN("unknown create context tag_len=%d", tag_len);
 		}
 
 		data += clen;
@@ -452,13 +474,15 @@ static NTSTATUS decode_in_create(x_smb2_state_create_t &state,
 		return NT_STATUS_INVALID_PARAMETER;
 	}
 
-	if (state.in_contexts & X_SMB2_CONTEXT_FLAG_DHNQ) {
+	if (state.in_contexts & (X_SMB2_CONTEXT_FLAG_DHNQ | X_SMB2_CONTEXT_FLAG_DH2Q)) {
 		if (state.in_oplock_level == X_SMB2_OPLOCK_LEVEL_LEASE) {
 			if ((state.lease.state & X_SMB2_LEASE_HANDLE) == 0) {
-				state.in_contexts &= ~X_SMB2_CONTEXT_FLAG_DHNQ;
+				state.in_contexts &= ~(X_SMB2_CONTEXT_FLAG_DHNQ
+						| X_SMB2_CONTEXT_FLAG_DH2Q);
 			}
 		} else if (state.in_oplock_level != X_SMB2_OPLOCK_LEVEL_BATCH) {
-			state.in_contexts &= ~X_SMB2_CONTEXT_FLAG_DHNQ;
+			state.in_contexts &= ~(X_SMB2_CONTEXT_FLAG_DHNQ
+					| X_SMB2_CONTEXT_FLAG_DH2Q);
 		}
 	}
 	return NT_STATUS_OK;
