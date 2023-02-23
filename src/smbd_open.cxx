@@ -830,11 +830,9 @@ static bool open_mode_check(x_smbd_object_t *smbd_object,
 					idl::SEC_FILE_READ_DATA|
 					idl::SEC_FILE_EXECUTE|
 					idl::SEC_STD_DELETE)) == 0) {
-#if 0
-		DEBUG(10,("share_conflict: No conflict due to "
-					"access_mask = 0x%x\n",
-					(unsigned int)access_mask ));
-#endif
+		X_DBG("share_conflict: No conflict due to "
+				"access_mask = 0x%x\n",
+				(unsigned int)access_mask );
 		return false;
 	}
 
@@ -1242,7 +1240,7 @@ static inline NTSTATUS x_smbd_object_access_check(x_smbd_object_t *smbd_object,
 			overwrite);
 }
 
-static NTSTATUS smbd_open_create_exist(
+static NTSTATUS smbd_open_create(
 		x_smbd_object_t *smbd_object,
 		x_smbd_stream_t *smbd_stream,
 		x_smbd_requ_t *smbd_requ,
@@ -1262,29 +1260,30 @@ static NTSTATUS smbd_open_create_exist(
 		}
 	}
 
+	NTSTATUS status;
 	auto smbd_user = x_smbd_sess_get_user(smbd_requ->smbd_sess);
-	uint32_t granted_access, maximal_access;
-	NTSTATUS status = x_smbd_object_access_check(smbd_object,
-			granted_access,
-			maximal_access,
-			smbd_requ->smbd_tcon,
-			*smbd_user,
-			state->in_desired_access,
-			overwrite);
+	x_smb2_create_action_t create_action;
+	uint32_t granted_access, maximal_access = 0;
+	if (smbd_object->exists()) {
+		status = x_smbd_object_access_check(smbd_object,
+				granted_access,
+				maximal_access,
+				smbd_requ->smbd_tcon,
+				*smbd_user,
+				state->in_desired_access,
+				overwrite);
 
-	if (!NT_STATUS_IS_OK(status)) {
-		return status;
-	}
+		if (!NT_STATUS_IS_OK(status)) {
+			return status;
+		}
 
-	/* TODO seems windows do not check this for folder */
-	if (granted_access & idl::SEC_STD_DELETE) {
-		if (!check_ads_share_access(smbd_object, granted_access)) {
-			return NT_STATUS_SHARING_VIOLATION;
+		/* TODO seems windows do not check this for folder */
+		if (granted_access & idl::SEC_STD_DELETE) {
+			if (!check_ads_share_access(smbd_object, granted_access)) {
+				return NT_STATUS_SHARING_VIOLATION;
+			}
 		}
 	}
-
-	state->granted_access = granted_access;
-	state->out_maximal_access = maximal_access;
 
 	x_smbd_sharemode_t *sharemode = get_sharemode(
 			smbd_object, smbd_stream);
@@ -1314,6 +1313,43 @@ static NTSTATUS smbd_open_create_exist(
 		return NT_STATUS_SHARING_VIOLATION;
 	}
 
+	if (!smbd_object->exists() || (smbd_stream && !smbd_stream->exists)) {
+		if (!smbd_object->exists()) {
+			uint32_t access_mask;
+			if (state->in_desired_access & idl::SEC_FLAG_MAXIMUM_ALLOWED) {
+				access_mask = idl::SEC_RIGHTS_FILE_ALL;
+			} else {
+				access_mask = state->in_desired_access;
+			}
+
+			if (state->in_create_options & X_SMB2_CREATE_OPTION_DELETE_ON_CLOSE) {
+				status = x_smbd_can_set_delete_on_close(
+						smbd_object, nullptr,
+						state->in_file_attributes,
+						access_mask);
+				if (!NT_STATUS_IS_OK(status)) {
+					return status;
+				}
+			}
+		}
+		status = x_smbd_create_object(smbd_object,
+				smbd_stream,
+				*smbd_user, *state,
+				state->in_file_attributes,
+				state->in_allocation_size,
+				changes);
+		if (!NT_STATUS_IS_OK(status)) {
+			return status;
+		}
+		create_action = x_smb2_create_action_t::WAS_CREATED;
+	} else {
+		create_action = overwrite ? x_smb2_create_action_t::WAS_OVERWRITTEN :
+			x_smb2_create_action_t::WAS_OPENED;
+
+		state->granted_access = granted_access;
+		state->out_maximal_access = maximal_access;
+	}
+
        	status = grant_oplock(smbd_object,
 			smbd_stream,
 			sharemode,
@@ -1322,35 +1358,9 @@ static NTSTATUS smbd_open_create_exist(
 		return status;
 	}
 
+	state->out_create_action = create_action;
 	return status;
 }
-
-static NTSTATUS smbd_open_create_new(
-		x_smbd_object_t *smbd_object,
-		x_smbd_stream_t *smbd_stream,
-		x_smbd_requ_t *smbd_requ,
-		x_smb2_state_create_t &state,
-		std::vector<x_smb2_change_t> &changes)
-{
-	auto smbd_user = x_smbd_sess_get_user(smbd_requ->smbd_sess);
-	NTSTATUS status = x_smbd_create_object(smbd_object,
-			smbd_stream,
-			*smbd_user, state,
-			state.in_file_attributes,
-			state.in_allocation_size,
-			changes);
-	if (!NT_STATUS_IS_OK(status)) {
-		return status;
-	}
-
-	x_smbd_sharemode_t *sharemode = get_sharemode(smbd_object,
-			smbd_stream);
-       	status = grant_oplock(smbd_object, smbd_stream, sharemode,
-			state);
-	X_ASSERT(NT_STATUS_IS_OK(status));
-	return status;
-}
-
 
 static NTSTATUS smbd_open_create_intl(x_smbd_open_t **psmbd_open,
 		x_smbd_requ_t *smbd_requ,
@@ -1466,112 +1476,77 @@ static NTSTATUS smbd_open_create_intl(x_smbd_open_t **psmbd_open,
 		return NT_STATUS_INVALID_PARAMETER;
 	}
 
-	/* TODO check can_delete_on_close for existing object and stream */
-	if (!smbd_object->exists()) {
-		uint32_t access_mask;
-		if (state->in_desired_access & idl::SEC_FLAG_MAXIMUM_ALLOWED) {
-			access_mask = idl::SEC_RIGHTS_FILE_ALL;
-		} else {
-			access_mask = state->in_desired_access;
-		}
-
-		NTSTATUS status;
-		if (state->in_create_options & X_SMB2_CREATE_OPTION_DELETE_ON_CLOSE) {
-			status = x_smbd_can_set_delete_on_close(
-					smbd_object, nullptr,
-					state->in_file_attributes,
-					access_mask);
-			if (!NT_STATUS_IS_OK(status)) {
-				return status;
-			}
-		}
-	} else {
-		if (smbd_object->stream_meta.delete_on_close) {
-			return NT_STATUS_DELETE_PENDING;
-		}
-
-		if (smbd_object->type == x_smbd_object_t::type_dir) {
-			if (state->in_create_options & X_SMB2_CREATE_OPTION_NON_DIRECTORY_FILE) {
-				return NT_STATUS_FILE_IS_A_DIRECTORY;
-			}
-		} else {
-			if (state->in_create_options & X_SMB2_CREATE_OPTION_DIRECTORY_FILE) {
-				return NT_STATUS_NOT_A_DIRECTORY;
-			}
-		}
-
-
-		if ((smbd_object->meta.file_attributes & X_SMB2_FILE_ATTRIBUTE_READONLY) &&
-				(state->in_desired_access & (idl::SEC_FILE_WRITE_DATA | idl::SEC_FILE_APPEND_DATA))) {
-			X_LOG_NOTICE("deny access 0x%x to '%s' due to readonly 0x%x",
-					state->in_desired_access,
-					x_convert_utf16_to_utf8_safe(smbd_object->path).c_str(),
-					smbd_object->meta.file_attributes);
-			return NT_STATUS_ACCESS_DENIED;
-		}
-
-		if (smbd_object->meta.file_attributes & X_SMB2_FILE_ATTRIBUTE_REPARSE_POINT) {
-			X_LOG_DBG("object '%s' is reparse_point",
-					x_convert_utf16_to_utf8_safe(smbd_object->path).c_str());
-			return NT_STATUS_PATH_NOT_COVERED;
-		}
-	}
-
 	NTSTATUS status;
-	x_smb2_create_action_t create_action = x_smb2_create_action_t::WAS_OPENED;
 	bool overwrite = false;
 	if (smbd_share.get_type() == X_SMB2_SHARE_TYPE_DISK) {
-		if (!smbd_object->exists() || (smbd_stream && !smbd_stream->exists)) {
-			status = smbd_open_create_new(
-					smbd_object,
-					smbd_stream,
-					smbd_requ,
-					*state,
-					changes);
-			if (!NT_STATUS_IS_OK(status)) {
-				return status;
-			}
-			create_action = x_smb2_create_action_t::WAS_CREATED;
-
-		} else {
-			overwrite = in_disposition == x_smb2_create_disposition_t::OVERWRITE
-				|| in_disposition == x_smb2_create_disposition_t::OVERWRITE_IF
-				|| in_disposition == x_smb2_create_disposition_t::SUPERSEDE;
-			status = smbd_open_create_exist(
-					smbd_object,
-					smbd_stream,
-					smbd_requ,
-					state,
-					overwrite,
-					num_disconnected,
-					smbd_leases,
-					notify_requ_list,
-					changes);
-			if (!NT_STATUS_IS_OK(status)) {
-				return status;
+		if (smbd_object->exists()) {
+			if (smbd_object->stream_meta.delete_on_close) {
+				return NT_STATUS_DELETE_PENDING;
 			}
 
-			create_action = overwrite ? x_smb2_create_action_t::WAS_OVERWRITTEN :
-				x_smb2_create_action_t::WAS_OPENED;
+			if (smbd_object->type == x_smbd_object_t::type_dir) {
+				if (state->in_create_options & X_SMB2_CREATE_OPTION_NON_DIRECTORY_FILE) {
+					return NT_STATUS_FILE_IS_A_DIRECTORY;
+				}
+			} else {
+				if (state->in_create_options & X_SMB2_CREATE_OPTION_DIRECTORY_FILE) {
+					return NT_STATUS_NOT_A_DIRECTORY;
+				}
+			}
+
+
+			if ((smbd_object->meta.file_attributes & X_SMB2_FILE_ATTRIBUTE_READONLY) &&
+					(state->in_desired_access & (idl::SEC_FILE_WRITE_DATA | idl::SEC_FILE_APPEND_DATA))) {
+				X_LOG_NOTICE("deny access 0x%x to '%s' due to readonly 0x%x",
+						state->in_desired_access,
+						x_convert_utf16_to_utf8_safe(smbd_object->path).c_str(),
+						smbd_object->meta.file_attributes);
+				return NT_STATUS_ACCESS_DENIED;
+			}
+
+			if (smbd_object->meta.file_attributes & X_SMB2_FILE_ATTRIBUTE_REPARSE_POINT) {
+				X_LOG_DBG("object '%s' is reparse_point",
+						x_convert_utf16_to_utf8_safe(smbd_object->path).c_str());
+				return NT_STATUS_PATH_NOT_COVERED;
+			}
 		}
 
+		overwrite = in_disposition == x_smb2_create_disposition_t::OVERWRITE
+			|| in_disposition == x_smb2_create_disposition_t::OVERWRITE_IF
+			|| in_disposition == x_smb2_create_disposition_t::SUPERSEDE;
+		status = smbd_open_create(
+				smbd_object,
+				smbd_stream,
+				smbd_requ,
+				state,
+				overwrite,
+				num_disconnected,
+				smbd_leases,
+				notify_requ_list,
+				changes);
+		if (!NT_STATUS_IS_OK(status)) {
+			return status;
+		}
 		if (state->in_contexts & X_SMB2_CONTEXT_FLAG_MXAC) {
 			state->out_contexts |= X_SMB2_CONTEXT_FLAG_MXAC;
 		}
+	}
+
+	if (state->out_create_action == x_smb2_create_action_t::WAS_CREATED) {
+		overwrite = false;
 	}
 
 	/* TODO should we check the open limit before create the open */
 	status = smbd_object->smbd_volume->ops->create_open(psmbd_open,
 			smbd_requ, smbd_share, state,
 			overwrite,
-			create_action != x_smb2_create_action_t::WAS_CREATED,
+			state->out_create_action != x_smb2_create_action_t::WAS_CREATED,
 			changes);
 	if (!NT_STATUS_IS_OK(status)) {
 		return status;
 	}
 
 	state->out_create_flags = 0;
-	state->out_create_action = create_action;
 
 	(*psmbd_open)->open_state.initial_delete_on_close =
 		(state->in_create_options & X_SMB2_CREATE_OPTION_DELETE_ON_CLOSE) != 0;
@@ -1762,3 +1737,21 @@ x_smbd_ctrl_handler_t *x_smbd_open_list_create()
 {
 	return new x_smbd_open_list_t;
 }
+
+/* open with conflict
+ *  client 1 open with file DELETE_ON_CLOSE and durable and close connection
+ * client 2 have permission to create the file
+ *  1, disposition=CREATE, 0xc0000035
+ *  2, disposition=OPEN,   0xc0000043, and the file get deleted
+ *  3, disposition=OPEN_IF, 0xc0000043, and the file get deleted
+
+ * client 2 does not have permission to create the file
+ *  1, disposition=CREATE, 0xc0000035
+ *  2, disposition=OPEN,   0xc0000034, and the file get deleted
+ *  3, disposition=OPEN_IF, 0xc0000043, and the file get deleted
+ *
+ * open without conflict
+ *  1, disposition=CREATE, 0xc0000035
+ *  1, disposition=OPEN, OK, the durable handle is kept
+ *  1, disposition=OPEN_IF, OK, the durable handle is kept
+ */
