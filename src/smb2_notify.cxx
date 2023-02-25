@@ -99,7 +99,7 @@ static NTSTATUS smbd_open_notify(x_smbd_open_t *smbd_open,
 	x_smbd_object_t *smbd_object = smbd_open->smbd_object;
 	auto lock = std::lock_guard(smbd_object->mutex);
 
-	if (smbd_object->stream_meta.delete_on_close) {
+	if (smbd_object->sharemode.meta.delete_on_close) {
 		return NT_STATUS_DELETE_PENDING;
 	}
 

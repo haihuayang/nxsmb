@@ -725,7 +725,7 @@ x_smbd_ipc_object_t::x_smbd_ipc_object_t(const std::u16string &path,
 	base.flags = x_smbd_object_t::flag_initialized;
 	base.type = x_smbd_object_t::type_file;
 	base.meta = ipc_object_meta;
-	base.stream_meta = ipc_stream_meta;
+	base.sharemode.meta = ipc_stream_meta;
 }
 
 struct ipc_share_t : x_smbd_share_t

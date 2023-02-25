@@ -176,6 +176,7 @@ X_DECLARE_MEMBER_TRAITS(x_smbd_open_object_traits, x_smbd_open_t, object_link)
 
 struct x_smbd_sharemode_t
 {
+	x_smbd_stream_meta_t meta;
 	x_tp_ddlist_t<x_smbd_open_object_traits> open_list;
 	x_tp_ddlist_t<requ_async_traits> defer_open_list;
 	x_tp_ddlist_t<requ_async_traits> defer_rename_list;
@@ -190,7 +191,6 @@ struct x_smbd_stream_t
 
 	x_dlink_t object_link; // link into object
 	bool exists;
-	x_smbd_stream_meta_t meta;
 	x_smbd_sharemode_t sharemode;
 	std::u16string name;
 };
@@ -233,7 +233,6 @@ struct x_smbd_object_t
 	std::u16string path;
 	x_smbd_file_handle_t file_handle;
 	x_smbd_object_meta_t meta;
-	x_smbd_stream_meta_t stream_meta;
 	x_smbd_sharemode_t sharemode;
 	x_tp_ddlist_t<x_smbd_stream_object_traits> ads_list;
 };
@@ -258,16 +257,34 @@ static inline bool x_smbd_open_is_data(const x_smbd_open_t *smbd_open)
 	return smbd_open->smbd_stream || smbd_open->smbd_object->type
 		== x_smbd_object_t::type_file;
 }
+#if 0
+static inline const x_smbd_sharemode_t *x_smbd_object_get_sharemode(
+		const x_smbd_object_t *smbd_object,
+		const x_smbd_stream_t *smbd_stream)
+{
+	if (!smbd_stream) {
+		return &smbd_object->sharemode;
+	} else {
+		return &smbd_stream->sharemode;
+	}
+}
+#endif
+static inline x_smbd_sharemode_t *x_smbd_object_get_sharemode(
+		x_smbd_object_t *smbd_object,
+		x_smbd_stream_t *smbd_stream)
+{
+	if (!smbd_stream) {
+		return &smbd_object->sharemode;
+	} else {
+		return &smbd_stream->sharemode;
+	}
+}
 
 static inline x_smbd_sharemode_t *x_smbd_open_get_sharemode(
 		const x_smbd_open_t *smbd_open)
 {
-	x_smbd_stream_t *smbd_stream = smbd_open->smbd_stream;
-	if (!smbd_stream) {
-		return &smbd_open->smbd_object->sharemode;
-	} else {
-		return &smbd_stream->sharemode;
-	}
+	return x_smbd_object_get_sharemode(smbd_open->smbd_object,
+			smbd_open->smbd_stream);
 }
 
 NTSTATUS x_smbd_open_op_close(
@@ -398,12 +415,8 @@ static inline std::pair<const x_smbd_object_meta_t *, const x_smbd_stream_meta_t
 x_smbd_open_op_get_meta(const x_smbd_open_t *smbd_open)
 {
 	x_smbd_object_t *smbd_object = smbd_open->smbd_object;
-	x_smbd_stream_t *smbd_stream = smbd_open->smbd_stream;
-	if (smbd_stream) {
-		return { &smbd_object->meta, &smbd_stream->meta };
-	} else {
-		return { &smbd_object->meta, &smbd_object->stream_meta };
-	}
+	x_smbd_sharemode_t *sharemode = x_smbd_open_get_sharemode(smbd_open);
+	return { &smbd_object->meta, &sharemode->meta };
 }
 
 static inline void x_smbd_open_op_destroy(

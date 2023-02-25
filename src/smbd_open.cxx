@@ -144,8 +144,7 @@ static NTSTATUS smbd_object_remove(
 		return NT_STATUS_OK;
 	}
 
-	x_smbd_stream_t *smbd_stream = smbd_open->smbd_stream;
-	auto sharemode = get_sharemode(smbd_object, smbd_stream);
+	auto sharemode = x_smbd_open_get_sharemode(smbd_open);
 	sharemode->open_list.remove(smbd_open);
 	if (smbd_open->open_state.initial_delete_on_close) {
 		x_smbd_open_op_set_delete_on_close(smbd_open, true);
@@ -160,7 +159,7 @@ static NTSTATUS smbd_object_remove(
 	}
 
 	// auto orig_changes_size = changes.size();
-	if (smbd_object->stream_meta.delete_on_close &&
+	if (smbd_object->sharemode.meta.delete_on_close &&
 			!have_active_open(smbd_object)) {
 		uint32_t notify_filter = x_smbd_object_is_dir(smbd_object) ?
 			FILE_NOTIFY_CHANGE_DIR_NAME : FILE_NOTIFY_CHANGE_FILE_NAME;
@@ -181,21 +180,21 @@ static NTSTATUS smbd_object_remove(
 				smbd_open->open_state.parent_lease_key,
 				smbd_object->path, {}});
 	} else if (smbd_open->smbd_stream &&
-			smbd_open->smbd_stream->meta.delete_on_close) {
+			sharemode->meta.delete_on_close) {
 		NTSTATUS status = x_smbd_object_delete(smbd_object,
-				smbd_stream,
+				smbd_open->smbd_stream,
 				smbd_open,
 				changes);
 
 		if (!NT_STATUS_IS_OK(status)) {
 			return status;
 		}
-		smbd_stream->exists = false;
+		smbd_open->smbd_stream->exists = false;
 		// TODO should it also notify object MODIFIED
 		changes.push_back(x_smb2_change_t{NOTIFY_ACTION_REMOVED_STREAM,
 				FILE_NOTIFY_CHANGE_STREAM_NAME,
 				smbd_open->open_state.parent_lease_key,
-				smbd_object->path + u':' + smbd_stream->name,
+				smbd_object->path + u':' + smbd_open->smbd_stream->name,
 				{}});
 	}
 
@@ -254,10 +253,9 @@ static x_tp_ddlist_t<requ_async_traits> smbd_close_open_intl(
 	if (smbd_requ && (state->in_flags & X_SMB2_CLOSE_FLAGS_FULL_INFORMATION)) {
 		state->out_flags = X_SMB2_CLOSE_FLAGS_FULL_INFORMATION;
 		/* TODO stream may be freed */
-		auto stream_meta = smbd_open->smbd_stream ?
-			&smbd_open->smbd_stream->meta : &smbd_object->stream_meta;
+		auto &stream_meta = x_smbd_open_get_sharemode(smbd_open)->meta;
 		fill_out_info(state->out_info, smbd_object->meta,
-					*stream_meta);
+					stream_meta);
 	}
 	return notify_requ_list;
 }
@@ -1485,7 +1483,7 @@ static NTSTATUS smbd_open_create_intl(x_smbd_open_t **psmbd_open,
 	bool overwrite = false;
 	if (smbd_share.get_type() == X_SMB2_SHARE_TYPE_DISK) {
 		if (smbd_object->exists()) {
-			if (smbd_object->stream_meta.delete_on_close) {
+			if (smbd_object->sharemode.meta.delete_on_close) {
 				return NT_STATUS_DELETE_PENDING;
 			}
 
