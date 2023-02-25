@@ -339,7 +339,6 @@ NTSTATUS x_smbd_tcon_op_recreate(x_smbd_requ_t *smbd_requ,
 	}
 
 	if (NT_STATUS_IS_OK(status)) {
-		x_smbd_ref_inc(smbd_open); // ref by smbd_tcon open_list
 		smbd_requ->smbd_open = x_smbd_ref_inc(smbd_open);
 	}
 	/* TODO is other action possible */

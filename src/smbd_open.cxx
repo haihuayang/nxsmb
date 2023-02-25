@@ -358,6 +358,8 @@ static NTSTATUS smbd_open_check(x_smbd_open_t *smbd_open, x_smbd_tcon_t *smbd_tc
 	if (!x_smbd_cancel_timer(x_smbd_timer_t::DURABLE, &smbd_open->durable_timer)) {
 		return NT_STATUS_OBJECT_NAME_NOT_FOUND;
 	}
+	/* timer ref */
+	x_smbd_ref_dec(smbd_open);
 
 	return NT_STATUS_OK;
 }
