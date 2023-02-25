@@ -548,6 +548,25 @@ void x_smbd_open_append_notify(x_smbd_open_t *smbd_open,
 void x_smbd_notify_change(std::shared_ptr<x_smbd_volume_t> &smbd_volume,
 		const std::vector<x_smb2_change_t> &changes);
 
+void x_smbd_object_notify_change(x_smbd_object_t *smbd_object,
+		uint32_t notify_action,
+		uint32_t notify_filter,
+		uint32_t prefix_length,
+		const std::u16string &fullpath,
+		const std::u16string *new_name_path,
+		const x_smb2_lease_key_t &ignore_lease_key,
+		bool last_level,
+		long open_priv_data);
+
+void x_smbd_simple_notify_change(std::shared_ptr<x_smbd_volume_t> &smbd_volume,
+		const std::u16string &path,
+		const std::u16string &fullpath,
+		const std::u16string *new_fullpath,
+		uint32_t notify_action,
+		uint32_t notify_filter,
+		const x_smb2_lease_key_t &ignore_lease_key,
+		bool last_level);
+
 void x_smbd_schedule_async(x_job_t *job);
 
 #endif /* __smbd__hxx__ */

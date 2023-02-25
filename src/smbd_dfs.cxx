@@ -643,7 +643,7 @@ static void dfs_root_notify_change(std::shared_ptr<x_smbd_volume_t> &smbd_volume
 		return;
 	}
 
-	posixfs_object_notify_change(smbd_object, notify_action, notify_filter,
+	x_smbd_object_notify_change(smbd_object, notify_action, notify_filter,
 			path.empty() ? 0: x_convert<uint32_t>(path.length() + 1),
 			fullpath, new_fullpath, ignore_lease_key,
 			last_level,
@@ -883,7 +883,7 @@ static const x_smbd_object_ops_t dfs_volume_object_ops = {
 	dfs_volume_object_op_qdir,
 	dfs_volume_object_op_rename,
 	posixfs_object_op_set_delete_on_close,
-	posixfs_simple_notify_change,
+	x_smbd_simple_notify_change,
 	posixfs_object_op_destroy,
 	posixfs_op_release_object,
 	posixfs_op_object_delete,
