@@ -1235,7 +1235,7 @@ static posixfs_open_t *posixfs_open_create(
 			x_smbd_open_state_t{state.granted_access,
 				state.in_share_access,
 				x_smbd_conn_curr_client_guid(),
-				state.dh2q_requ.create_guid,
+				state.in_create_guid,
 				x_smbd_tcon_get_user(smbd_tcon)->get_owner_sid(),
 				state.lease.parent_key,
 				state.open_priv_data,

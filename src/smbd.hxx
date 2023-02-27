@@ -129,15 +129,13 @@ struct x_smb2_state_create_t
 	x_smbd_lease_t *smbd_lease{};
 	long open_priv_data;
 
-	union {
-		x_smb2_create_dhnc_requ_t dhnc_requ;
-		x_smb2_create_dh2q_requ_t dh2q_requ;
-		x_smb2_create_dh2c_requ_t dh2c_requ;
-	};
+	uint64_t in_dh_id_persistent;
+	uint64_t in_dh_id_volatile;
+	uint32_t in_dh_timeout;
+	uint32_t in_dh_flags;
+	x_smb2_uuid_t in_create_guid;
 
-	union {
-		x_smb2_create_dh2q_resp_t dh2q_resp;
-	};
+	x_smb2_create_dh2q_resp_t dh2q_resp;
 };
 
 template <class T>

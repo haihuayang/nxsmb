@@ -245,14 +245,14 @@ NTSTATUS x_smbd_tcon_op_create(x_smbd_requ_t *smbd_requ,
 				smbd_open->smbd_object->type == x_smbd_object_t::type_file) {
 			if (state->in_contexts & X_SMB2_CONTEXT_FLAG_DH2Q) {
 				uint32_t flags = 0;
-				if ((state->dh2q_requ.flags & X_SMB2_DHANDLE_FLAG_PERSISTENT) &&
+				if ((state->in_dh_flags & X_SMB2_DHANDLE_FLAG_PERSISTENT) &&
 						x_smbd_tcon_get_continuously_available(smbd_tcon)) {
-					if (smbd_save_durable(smbd_open, state->dh2q_requ.timeout)) {
+					if (smbd_save_durable(smbd_open, state->in_dh_timeout)) {
 						smbd_open->dh_mode = x_smbd_open_t::DH_PERSISTENT;
 						flags = X_SMB2_DHANDLE_FLAG_PERSISTENT;
 					}
 				} else if (x_smbd_tcon_get_durable_handle(smbd_tcon)) {
-					if (smbd_save_durable(smbd_open, state->dh2q_requ.timeout)) {
+					if (smbd_save_durable(smbd_open, state->in_dh_timeout)) {
 						smbd_open->dh_mode = x_smbd_open_t::DH_DURABLE;
 					}
 				}
@@ -305,7 +305,7 @@ NTSTATUS x_smbd_tcon_op_recreate(x_smbd_requ_t *smbd_requ,
 	if (!x_smbd_tcon_get_durable_handle(smbd_tcon)) {
 		RETURN_OP_STATUS(smbd_requ, NT_STATUS_OBJECT_NAME_NOT_FOUND);
 	}
-	uint64_t id_persistent = state->dhnc_requ.file_id_persistent;
+	uint64_t id_persistent = state->in_dh_id_persistent;
 	std::shared_ptr<x_smbd_volume_t> smbd_volume;
 	x_smbd_durable_t *durable = x_smbd_share_lookup_durable(
 			smbd_volume, smbd_requ->smbd_tcon->smbd_share,
