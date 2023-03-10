@@ -115,7 +115,8 @@ struct x_smb2_state_create_t
 	std::u16string in_ads_name;
 
 	uint8_t out_create_flags;
-	bool base_created = false;
+	bool replay_operation = false;
+	bool replay_cached = false;
 	uint32_t open_attempt = 0;
 	uint32_t out_maximal_access{0};
 	uint8_t out_qfid_info[32];

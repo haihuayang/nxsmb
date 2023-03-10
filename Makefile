@@ -50,6 +50,7 @@ all: $(TARGET_SET_tests:%=$(TARGET_DIR_out)/tests/%) \
 	$(TARGET_DIR_out)/bin/nxutils
 
 SET_src_smbd_nx := \
+	smbd_replay \
 	smbd_durable \
 	smbd_file_info \
 	smbd_access \

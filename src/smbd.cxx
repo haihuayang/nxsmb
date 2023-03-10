@@ -17,6 +17,7 @@
 #include "smbd_conf.hxx"
 #include "network.hxx"
 #include "smbd_lease.hxx"
+#include "smbd_replay.hxx"
 #include "smbd_secrets.hxx"
 #include "smbd_stats.hxx"
 #include "auth.hxx"
@@ -95,6 +96,7 @@ static void init_smbd()
 	x_smbd_sess_table_init(X_SMBD_MAX_SESSION);
 	x_smbd_requ_pool_init(max_opens); // TODO use max_opens for now
 	x_smbd_lease_pool_init(max_opens, max_opens / 16); // TODO use max_opens for now
+	x_smbd_replay_cache_init(max_opens, max_opens / 16); // TODO use max_opens for now
 
 	x_smbd_ipc_init();
 	x_smbd_posixfs_init(max_opens);

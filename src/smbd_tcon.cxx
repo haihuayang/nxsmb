@@ -5,6 +5,7 @@
 #include "smbd_open.hxx"
 #include "include/idtable.hxx"
 #include "smbd_share.hxx"
+#include "smbd_replay.hxx"
 
 using smbd_tcon_table_t = x_idtable_t<x_smbd_tcon_t, x_idtable_32_traits_t>;
 static smbd_tcon_table_t *g_smbd_tcon_table;
@@ -178,6 +179,12 @@ static bool smbd_save_durable(x_smbd_open_t *smbd_open,
 		X_LOG_DBG("smbd_save_durable for %p 0x%lx 0x%lx",
 				smbd_open, smbd_open->id_persistent,
 				smbd_open->id_volatile);
+
+		auto &open_state = smbd_open->open_state;
+		if (open_state.create_guid.is_valid()) {
+			x_smbd_replay_cache_set(open_state.client_guid,
+					open_state.create_guid, smbd_open);
+		}
 		return true;
 	} else {
 		X_LOG_WARN("smbd_save_durable for %p 0x%lx failed, ret = %d",

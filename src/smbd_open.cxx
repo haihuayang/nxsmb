@@ -3,6 +3,7 @@
 #include "smbd_ctrl.hxx"
 #include "smbd_stats.hxx"
 #include "smbd_open.hxx"
+#include "smbd_replay.hxx"
 #include "include/idtable.hxx"
 #include "smbd_access.hxx"
 
@@ -268,6 +269,12 @@ static NTSTATUS smbd_object_close(
 		std::vector<x_smb2_change_t> &changes)
 {
 	x_smbd_lease_t *smbd_lease;
+
+	auto &open_state = smbd_open->open_state;
+	if (open_state.create_guid.is_valid()) {
+		x_smbd_replay_cache_clear(open_state.client_guid,
+				open_state.create_guid);
+	}
 
 	std::unique_lock<std::mutex> lock(smbd_object->mutex);
 	auto notify_requ_list = smbd_close_open_intl(smbd_object, smbd_open,
