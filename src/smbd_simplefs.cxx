@@ -62,11 +62,12 @@ static NTSTATUS simplefs_op_create_open(x_smbd_open_t **psmbd_open,
 		x_smbd_share_t &smbd_share,
 		std::unique_ptr<x_smb2_state_create_t> &state,
 		bool overwrite,
-		bool exists,
+		x_smb2_create_action_t create_action,
+		uint8_t oplock_level,
 		std::vector<x_smb2_change_t> &changes)
 {
 	return x_smbd_posixfs_create_open(psmbd_open, smbd_requ,
-			state, overwrite, exists, changes);
+			state, overwrite, create_action, oplock_level, changes);
 }
 
 

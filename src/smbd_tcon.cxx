@@ -150,6 +150,7 @@ x_smbd_tcon_t *x_smbd_tcon_lookup(uint32_t id, const x_smbd_sess_t *smbd_sess)
 }
 
 static bool smbd_save_durable(x_smbd_open_t *smbd_open,
+		x_smbd_dhmode_t dhmode,
 		uint32_t durable_timeout_msec)
 {
 	X_LOG_DBG("save %p durable info to db", smbd_open);
@@ -164,7 +165,7 @@ static bool smbd_save_durable(x_smbd_open_t *smbd_open,
 			id_persistent, &durable);
 	if (ret == 0) {
 		smbd_open->id_persistent = id_persistent;
-		smbd_open->dh_mode = x_smbd_open_t::DH_DURABLE;
+		smbd_open->open_state.dhmode = dhmode;
 
 		if (durable_timeout_msec == 0) {
 			durable_timeout_msec = X_SMBD_DURABLE_TIMEOUT_MAX * 1000u;
@@ -244,28 +245,22 @@ NTSTATUS x_smbd_tcon_op_create(x_smbd_requ_t *smbd_requ,
 		if (!smbd_open->smbd_stream &&
 				smbd_open->smbd_object->type == x_smbd_object_t::type_file) {
 			if (state->in_contexts & X_SMB2_CONTEXT_FLAG_DH2Q) {
-				uint32_t flags = 0;
 				if ((state->in_dh_flags & X_SMB2_DHANDLE_FLAG_PERSISTENT) &&
 						x_smbd_tcon_get_continuously_available(smbd_tcon)) {
-					if (smbd_save_durable(smbd_open, state->in_dh_timeout)) {
-						smbd_open->dh_mode = x_smbd_open_t::DH_PERSISTENT;
-						flags = X_SMB2_DHANDLE_FLAG_PERSISTENT;
-					}
+					smbd_save_durable(smbd_open,
+							x_smbd_dhmode_t::PERSISTENT,
+							state->in_dh_timeout);
 				} else if (x_smbd_tcon_get_durable_handle(smbd_tcon)) {
-					if (smbd_save_durable(smbd_open, state->in_dh_timeout)) {
-						smbd_open->dh_mode = x_smbd_open_t::DH_DURABLE;
-					}
-				}
-				if (smbd_open->dh_mode != x_smbd_open_t::DH_NONE) {
-					state->out_contexts |= X_SMB2_CONTEXT_FLAG_DH2Q;
-					state->dh2q_resp.timeout = smbd_open->open_state.durable_timeout_msec;
-					state->dh2q_resp.flags = flags;
+					smbd_save_durable(smbd_open,
+							x_smbd_dhmode_t::DURABLE,
+							state->in_dh_timeout);
 				}
 
 			} else if (state->in_contexts & X_SMB2_CONTEXT_FLAG_DHNQ) {
-				if (x_smbd_tcon_get_durable_handle(smbd_tcon) &&
-						smbd_save_durable(smbd_open, 0)) {
-					state->out_contexts |= X_SMB2_CONTEXT_FLAG_DHNQ;
+				if (x_smbd_tcon_get_durable_handle(smbd_tcon)) {
+					smbd_save_durable(smbd_open,
+							x_smbd_dhmode_t::DURABLE,
+							0);
 				}
 			}
 		}
@@ -341,9 +336,6 @@ NTSTATUS x_smbd_tcon_op_recreate(x_smbd_requ_t *smbd_requ,
 	if (NT_STATUS_IS_OK(status)) {
 		smbd_requ->smbd_open = x_smbd_ref_inc(smbd_open);
 	}
-	/* TODO is other action possible */
-	state->out_create_action = x_smb2_create_action_t::WAS_OPENED;
-	state->out_oplock_level = smbd_open->open_state.oplock_level;
 	return status;
 }
 

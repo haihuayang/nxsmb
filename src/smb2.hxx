@@ -541,6 +541,9 @@ enum {
 
 struct x_smb2_uuid_t
 {
+	bool is_valid() const {
+		return data[0] != 0 || data[1] != 0;
+	}
 	bool operator==(const x_smb2_uuid_t &other) const {
 		return data[0] == other.data[0] && data[1] == other.data[1];
 	}

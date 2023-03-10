@@ -300,13 +300,27 @@ static void encode_context_one(Context &&ctx,
 	curr += data_len;
 }
 
+static void encode_durable_v2_context(uint32_t timeout, uint32_t flags,
+		x_smb2_create_context_header_t *&ch,
+		uint8_t *&p,
+		uint8_t *&out_ptr)
+{
+	encode_context_one([timeout, flags] (uint8_t *ptr) {
+			x_smb2_create_dh2q_resp_t *dn2q = (x_smb2_create_dh2q_resp_t *)ptr;
+			dn2q->timeout = X_H2LE32(timeout);
+			dn2q->flags = X_H2LE32(flags);
+			return x_convert<uint32_t>(sizeof(x_smb2_create_dh2q_resp_t));
+		}, ch, p, out_ptr, X_SMB2_CREATE_TAG_DH2Q);
+}
+
 static uint32_t encode_contexts(const x_smb2_state_create_t &state,
+		const x_smbd_open_state_t &open_state,
 		uint8_t *out_ptr)
 {
 	uint8_t *p = out_ptr;
 	x_smb2_create_context_header_t *ch = nullptr;
 
-	if (state.out_oplock_level == X_SMB2_OPLOCK_LEVEL_LEASE) {
+	if (open_state.oplock_level == X_SMB2_OPLOCK_LEVEL_LEASE) {
 		encode_context_one([&state] (uint8_t *ptr) {
 				return encode_smb2_lease(state.lease, ptr);
 			}, ch, p, out_ptr, X_SMB2_CREATE_TAG_RQLS);
@@ -328,20 +342,21 @@ static uint32_t encode_contexts(const x_smb2_state_create_t &state,
 			}, ch, p, out_ptr, X_SMB2_CREATE_TAG_QFID);
 	}
 
-	if (state.out_contexts & X_SMB2_CONTEXT_FLAG_DHNQ) {
-		encode_context_one([&state] (uint8_t *ptr) {
-				memset(ptr, 0, 8);
-				return 8;
-			}, ch, p, out_ptr, X_SMB2_CREATE_TAG_DHNQ);
-	}
-
-	if (state.out_contexts & X_SMB2_CONTEXT_FLAG_DH2Q) {
-		encode_context_one([&state] (uint8_t *ptr) {
-				x_smb2_create_dh2q_resp_t *dn2q = (x_smb2_create_dh2q_resp_t *)ptr;
-				dn2q->timeout = X_H2LE32(state.dh2q_resp.timeout);
-				dn2q->flags = X_H2LE32(state.dh2q_resp.flags);
-				return x_convert<uint32_t>(sizeof(x_smb2_create_dh2q_resp_t));
-			}, ch, p, out_ptr, X_SMB2_CREATE_TAG_DH2Q);
+	if ((state.in_contexts & X_SMB2_CONTEXT_FLAG_DH2Q) != 0) {
+		if (open_state.dhmode == x_smbd_dhmode_t::PERSISTENT) {
+			encode_durable_v2_context(open_state.durable_timeout_msec, 
+					X_SMB2_DHANDLE_FLAG_PERSISTENT, ch, p, out_ptr);
+		} else if (open_state.dhmode == x_smbd_dhmode_t::DURABLE) {
+			encode_durable_v2_context(open_state.durable_timeout_msec, 
+					0, ch, p, out_ptr);
+		}
+	} else if ((state.in_contexts & X_SMB2_CONTEXT_FLAG_DHNQ) != 0) {
+		if (open_state.dhmode == x_smbd_dhmode_t::DURABLE) {
+			encode_context_one([&state] (uint8_t *ptr) {
+					memset(ptr, 0, 8);
+					return 8;
+				}, ch, p, out_ptr, X_SMB2_CREATE_TAG_DHNQ);
+		}
 	}
 
 	if (ch) {
@@ -518,9 +533,9 @@ static uint32_t encode_out_create(const x_smb2_state_create_t &state,
 	auto [object_meta, stream_meta] = x_smbd_open_op_get_meta(smbd_open);
 
 	out_create->struct_size = X_H2LE16(sizeof(x_smb2_out_create_t) + 1);
-	out_create->oplock_level = state.out_oplock_level;
+	out_create->oplock_level = smbd_open->open_state.oplock_level;
 	out_create->create_flags = state.out_create_flags;
-	out_create->create_action = X_H2LE32(uint32_t(state.out_create_action));
+	out_create->create_action = X_H2LE32(uint32_t(smbd_open->open_state.create_action));
 	out_create->create_ts = X_H2LE64(object_meta->creation.val);
 	out_create->last_access_ts = X_H2LE64(object_meta->last_access.val);
 	out_create->last_write_ts = X_H2LE64(object_meta->last_write.val);
@@ -534,7 +549,9 @@ static uint32_t encode_out_create(const x_smb2_state_create_t &state,
 	out_create->file_id_volatile = X_H2LE64(id_volatile);
 
 	static_assert((sizeof(x_smb2_out_create_t) % 8) == 0);
-	uint32_t out_context_length = encode_contexts(state, (uint8_t *)(out_create + 1));
+	uint32_t out_context_length = encode_contexts(state,
+			smbd_open->open_state,
+			(uint8_t *)(out_create + 1));
 	if (out_context_length == 0) {
 		out_create->context_offset = out_create->context_length = 0;
 	} else {

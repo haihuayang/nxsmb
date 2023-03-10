@@ -46,11 +46,6 @@ struct x_smbd_open_t
 		S_DONE,
 	};
 	std::atomic<uint32_t> state{S_ACTIVE};
-	enum {
-		DH_NONE,
-		DH_DURABLE,
-		DH_PERSISTENT,
-	} dh_mode = DH_NONE;
 	x_timerq_entry_t durable_timer;
 	/* ideally it should not use timerq for durable timer because opens'
 	 * timeout are not same. so it also check durable_timeout_tick
@@ -104,7 +99,8 @@ struct x_smbd_object_ops_t
 			x_smbd_share_t &smbd_share,
 			std::unique_ptr<x_smb2_state_create_t> &state,
 			bool overwrite,
-			bool exists,
+			x_smb2_create_action_t create_action,
+			uint8_t oplock_level,
 			std::vector<x_smb2_change_t> &changes);
 
 	NTSTATUS (*open_durable)(x_smbd_open_t *&smbd_open,

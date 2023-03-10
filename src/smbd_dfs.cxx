@@ -675,7 +675,8 @@ static NTSTATUS dfs_root_op_create_open(
 		x_smbd_share_t &smbd_share,
 		std::unique_ptr<x_smb2_state_create_t> &state,
 		bool overwrite,
-		bool exists,
+		x_smb2_create_action_t create_action,
+		uint8_t oplock_level,
 		std::vector<x_smb2_change_t> &changes)
 {
 	x_smbd_object_t *smbd_object = state->smbd_object;
@@ -686,19 +687,21 @@ static NTSTATUS dfs_root_op_create_open(
 			return NT_STATUS_ACCESS_DENIED;
 		}
 		return x_smbd_posixfs_create_open(psmbd_open, smbd_requ,
-				state, overwrite, exists, changes);
+				state, overwrite, create_action, oplock_level, changes);
 
 	} else if (state->open_priv_data == dfs_open_type_tld_manager) {
 		if (state->in_ads_name.size() > 0) {
 			return NT_STATUS_ACCESS_DENIED;
 		}
 		return x_smbd_posixfs_create_open(psmbd_open, smbd_requ,
-				state, overwrite, exists, changes);
+				state, overwrite,
+				create_action, oplock_level, changes);
 
 	} else if (state->open_priv_data == dfs_open_type_under_tld_manager) {
 		if (smbd_object->type == x_smbd_object_t::type_dir) {
 			return x_smbd_posixfs_create_open(psmbd_open,
-					smbd_requ, state, overwrite, exists, changes);
+					smbd_requ, state, overwrite,
+					create_action, oplock_level, changes);
 		} else {
 			X_ASSERT(smbd_object->type == x_smbd_object_t::type_not_exist);
 			if (state->in_create_disposition != x_smb2_create_disposition_t::OPEN_IF
@@ -711,12 +714,13 @@ static NTSTATUS dfs_root_op_create_open(
 				// not support SecD
 				create_new_tld(dfs_share, smbd_requ, smbd_object);
 				state->in_create_disposition = x_smb2_create_disposition_t::OPEN_IF;
+				X_ASSERT(create_action == 
+						x_smb2_create_action_t::WAS_CREATED);
 				NTSTATUS status = x_smbd_posixfs_create_open(psmbd_open,
 						smbd_requ,
-						state, overwrite, exists, changes);
-				if (NT_STATUS_IS_OK(status)) {
-					state->out_create_action = x_smb2_create_action_t::WAS_CREATED;
-				}
+						state, overwrite,
+						create_action, oplock_level,
+						changes);
 				changes.push_back(x_smb2_change_t{NOTIFY_ACTION_ADDED, 
 						FILE_NOTIFY_CHANGE_DIR_NAME,
 						x_smb2_lease_key_t{0, 0},
@@ -737,7 +741,8 @@ static NTSTATUS dfs_root_op_create_open(
 		} else if (smbd_object->type == x_smbd_object_t::type_file) {
 			return x_smbd_posixfs_create_open(psmbd_open,
 					smbd_requ,
-					state, overwrite, exists, changes);
+					state, overwrite,
+					create_action, oplock_level, changes);
 		} else {
 			X_ASSERT(smbd_object->type == x_smbd_object_t::type_not_exist);
 			if ((state->in_create_options & X_SMB2_CREATE_OPTION_DIRECTORY_FILE)) {
@@ -749,7 +754,8 @@ static NTSTATUS dfs_root_op_create_open(
 			}
 			return x_smbd_posixfs_create_open(psmbd_open,
 					smbd_requ,
-					state, overwrite, exists, changes);
+					state, overwrite,
+					create_action, oplock_level, changes);
 		}
 	}
 
@@ -831,7 +837,8 @@ static NTSTATUS dfs_volume_op_create_open(x_smbd_open_t **psmbd_open,
 		x_smbd_share_t &smbd_share,
 		std::unique_ptr<x_smb2_state_create_t> &state,
 		bool overwrite,
-		bool exists,
+		x_smb2_create_action_t create_action,
+		uint8_t oplock_level,
 		std::vector<x_smb2_change_t> &changes)
 {
 	x_smbd_object_t *smbd_object = state->smbd_object;
@@ -852,7 +859,7 @@ static NTSTATUS dfs_volume_op_create_open(x_smbd_open_t **psmbd_open,
 	std::lock_guard lock(smbd_object->mutex);
 	return x_smbd_posixfs_create_open(psmbd_open,
 			smbd_requ,
-			state, overwrite, exists, changes);
+			state, overwrite, create_action, oplock_level, changes);
 }
 
 static NTSTATUS dfs_volume_object_op_rename(x_smbd_object_t *smbd_object,

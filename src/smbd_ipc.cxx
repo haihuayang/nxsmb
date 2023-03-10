@@ -597,11 +597,14 @@ static NTSTATUS ipc_create_open(x_smbd_open_t **psmbd_open,
 		x_smbd_share_t &smbd_share,
 		std::unique_ptr<x_smb2_state_create_t> &state,
 		bool overwrite,
-		bool exists,
+		x_smb2_create_action_t create_action,
+		uint8_t oplock_level,
 		std::vector<x_smb2_change_t> &changes)
 {
 	X_ASSERT(!overwrite);
 	X_ASSERT(state->open_priv_data == 0);
+	X_ASSERT(oplock_level == X_SMB2_OPLOCK_LEVEL_NONE);
+	X_ASSERT(create_action == x_smb2_create_action_t::WAS_OPENED);
 	if (state->end_with_sep) {
 		return NT_STATUS_OBJECT_NAME_INVALID;
 	}
@@ -624,16 +627,16 @@ static NTSTATUS ipc_create_open(x_smbd_open_t **psmbd_open,
 				state->in_create_guid,
 				x_smbd_tcon_get_user(smbd_requ->smbd_tcon)->get_owner_sid(),
 				state->lease.parent_key,
-				0});
+				0l,
+				x_smb2_create_action_t::WAS_OPENED,
+				X_SMB2_OPLOCK_LEVEL_NONE});
 	if (!x_smbd_open_store(&named_pipe->base)) {
 		delete named_pipe;
 		*psmbd_open = nullptr;
 		return NT_STATUS_INSUFFICIENT_RESOURCES;
 	}
 
-	state->out_oplock_level = 0;
 	state->out_create_flags = 0;
-	state->out_create_action = x_smb2_create_action_t::WAS_OPENED;
 
 	// x_smbd_open_init(&named_pipe->base, &ipc_object->base, smbd_requ->smbd_tcon,
 

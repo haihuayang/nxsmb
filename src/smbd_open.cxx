@@ -361,6 +361,7 @@ static NTSTATUS smbd_open_check(x_smbd_open_t *smbd_open, x_smbd_tcon_t *smbd_tc
 	/* timer ref */
 	x_smbd_ref_dec(smbd_open);
 
+	open_state.create_action = x_smb2_create_action_t::WAS_OPENED;
 	return NT_STATUS_OK;
 }
 
@@ -483,7 +484,7 @@ NTSTATUS x_smbd_open_close(x_smbd_open_t *smbd_open,
 	}
 
 	NTSTATUS status;
-	if (shutdown && smbd_open->dh_mode != x_smbd_open_t::DH_NONE) {
+	if (shutdown && smbd_open->open_state.dhmode != x_smbd_dhmode_t::NONE) {
 		status = smbd_open_set_durable(smbd_open);
 		if (NT_STATUS_IS_OK(status)) {
 			return status;
@@ -492,7 +493,7 @@ NTSTATUS x_smbd_open_close(x_smbd_open_t *smbd_open,
 
 	smbd_open->state = x_smbd_open_t::S_DONE;
 
-	if (smbd_open->dh_mode != x_smbd_open_t::DH_NONE) {
+	if (smbd_open->open_state.dhmode != x_smbd_dhmode_t::NONE) {
 		int ret = x_smbd_volume_set_durable_timeout(
 				*smbd_open->smbd_object->smbd_volume,
 				smbd_open->id_persistent,
@@ -902,7 +903,8 @@ static inline uint8_t get_lease_type(const x_smbd_open_t *smbd_open)
 static NTSTATUS grant_oplock(x_smbd_object_t *smbd_object,
 		x_smbd_stream_t *smbd_stream,
 		x_smbd_sharemode_t *sharemode,
-		x_smb2_state_create_t &state)
+		x_smb2_state_create_t &state,
+		uint8_t &out_oplock_level)
 {
 	uint8_t granted = X_SMB2_LEASE_NONE;
 	uint8_t requested = X_SMB2_LEASE_NONE;
@@ -1000,7 +1002,7 @@ static NTSTATUS grant_oplock(x_smbd_object_t *smbd_object,
 		if (got_oplock) {
 			granted &= uint8_t(~X_SMB2_LEASE_HANDLE);
 		}
-		state.out_oplock_level = X_SMB2_OPLOCK_LEVEL_LEASE;
+		out_oplock_level = X_SMB2_OPLOCK_LEVEL_LEASE;
 		bool new_lease = false;
 		if (!x_smbd_lease_grant(state.smbd_lease,
 					state.lease,
@@ -1022,17 +1024,17 @@ static NTSTATUS grant_oplock(x_smbd_object_t *smbd_object,
 		}
 		switch (granted) {
 		case X_SMB2_LEASE_READ|X_SMB2_LEASE_WRITE|X_SMB2_LEASE_HANDLE:
-			state.out_oplock_level = X_SMB2_OPLOCK_LEVEL_BATCH;
+			out_oplock_level = X_SMB2_OPLOCK_LEVEL_BATCH;
 			break;
 		case X_SMB2_LEASE_READ|X_SMB2_LEASE_WRITE:
-			state.out_oplock_level = X_SMB2_OPLOCK_LEVEL_EXCLUSIVE;
+			out_oplock_level = X_SMB2_OPLOCK_LEVEL_EXCLUSIVE;
 			break;
 		case X_SMB2_LEASE_READ|X_SMB2_LEASE_HANDLE:
 		case X_SMB2_LEASE_READ:
-			state.out_oplock_level = X_SMB2_OPLOCK_LEVEL_II;
+			out_oplock_level = X_SMB2_OPLOCK_LEVEL_II;
 			break;
 		default:
-			state.out_oplock_level = X_SMB2_OPLOCK_LEVEL_NONE;
+			out_oplock_level = X_SMB2_OPLOCK_LEVEL_NONE;
 			break;
 		}
 	}
@@ -1250,6 +1252,8 @@ static NTSTATUS smbd_open_create(
 		x_smbd_stream_t *smbd_stream,
 		x_smbd_requ_t *smbd_requ,
 		std::unique_ptr<x_smb2_state_create_t> &state,
+		x_smb2_create_action_t &create_action,
+		uint8_t &out_oplock_level,
 		bool overwrite,
 		uint32_t &num_disconnected,
 		std::vector<x_smbd_lease_t *> &smbd_leases,
@@ -1267,7 +1271,6 @@ static NTSTATUS smbd_open_create(
 
 	NTSTATUS status;
 	auto smbd_user = x_smbd_sess_get_user(smbd_requ->smbd_sess);
-	x_smb2_create_action_t create_action;
 	uint32_t granted_access, maximal_access = 0;
 	if (smbd_object->exists()) {
 		status = x_smbd_object_access_check(smbd_object,
@@ -1358,12 +1361,11 @@ static NTSTATUS smbd_open_create(
        	status = grant_oplock(smbd_object,
 			smbd_stream,
 			sharemode,
-			*state);
+			*state, out_oplock_level);
 	if (!NT_STATUS_IS_OK(status)) {
 		return status;
 	}
 
-	state->out_create_action = create_action;
 	return status;
 }
 
@@ -1483,6 +1485,8 @@ static NTSTATUS smbd_open_create_intl(x_smbd_open_t **psmbd_open,
 
 	NTSTATUS status;
 	bool overwrite = false;
+	x_smb2_create_action_t create_action = x_smb2_create_action_t::WAS_OPENED;
+	uint8_t oplock_level = X_SMB2_OPLOCK_LEVEL_NONE;
 	if (smbd_share.get_type() == X_SMB2_SHARE_TYPE_DISK) {
 		if (smbd_object->exists()) {
 			if (smbd_object->sharemode.meta.delete_on_close) {
@@ -1524,6 +1528,8 @@ static NTSTATUS smbd_open_create_intl(x_smbd_open_t **psmbd_open,
 				smbd_stream,
 				smbd_requ,
 				state,
+				create_action,
+				oplock_level,
 				overwrite,
 				num_disconnected,
 				smbd_leases,
@@ -1537,7 +1543,7 @@ static NTSTATUS smbd_open_create_intl(x_smbd_open_t **psmbd_open,
 		}
 	}
 
-	if (state->out_create_action == x_smb2_create_action_t::WAS_CREATED) {
+	if (create_action == x_smb2_create_action_t::WAS_CREATED) {
 		overwrite = false;
 	}
 
@@ -1545,7 +1551,8 @@ static NTSTATUS smbd_open_create_intl(x_smbd_open_t **psmbd_open,
 	status = smbd_object->smbd_volume->ops->create_open(psmbd_open,
 			smbd_requ, smbd_share, state,
 			overwrite,
-			state->out_create_action != x_smb2_create_action_t::WAS_CREATED,
+			create_action,
+			oplock_level,
 			changes);
 	if (!NT_STATUS_IS_OK(status)) {
 		return status;
@@ -1724,7 +1731,7 @@ bool x_smbd_open_list_t::output(std::string &data)
 			<< idl::x_hex_t<uint64_t>(smbd_open->id_volatile) << ' '
 			<< idl::x_hex_t<uint32_t>(smbd_open->open_state.access_mask) << ' '
 			<< idl::x_hex_t<uint32_t>(smbd_open->open_state.share_access) << ' '
-			<< dh_mode_name[int(smbd_open->dh_mode)] << ' '
+			<< dh_mode_name[int(smbd_open->open_state.dhmode)] << ' '
 			<< idl::x_hex_t<uint32_t>(smbd_open->notify_filter) << ' '
 			<< idl::x_hex_t<uint32_t>(x_smbd_tcon_get_id(smbd_open->smbd_tcon)) << " '"
 			<< x_smbd_open_get_path(smbd_open) << "'" << std::endl;

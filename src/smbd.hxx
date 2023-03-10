@@ -94,7 +94,6 @@ struct x_smb2_state_create_t
 	~x_smb2_state_create_t();
 
 	uint8_t in_oplock_level;
-	uint8_t out_oplock_level;
 	uint32_t in_contexts{0};
 	uint32_t out_contexts{0};
 
@@ -118,7 +117,6 @@ struct x_smb2_state_create_t
 	uint8_t out_create_flags;
 	bool base_created = false;
 	uint32_t open_attempt = 0;
-	x_smb2_create_action_t out_create_action;
 	uint32_t out_maximal_access{0};
 	uint8_t out_qfid_info[32];
 
@@ -134,8 +132,6 @@ struct x_smb2_state_create_t
 	uint32_t in_dh_timeout;
 	uint32_t in_dh_flags;
 	x_smb2_uuid_t in_create_guid;
-
-	x_smb2_create_dh2q_resp_t dh2q_resp;
 };
 
 template <class T>
@@ -186,6 +182,13 @@ struct x_fdevt_user_t
 };
 X_DECLARE_MEMBER_TRAITS(fdevt_user_conn_traits, x_fdevt_user_t, link)
 
+enum class x_smbd_dhmode_t
+{
+	NONE,
+	DURABLE,
+	PERSISTENT,
+};
+
 struct x_smbd_open_state_t
 {
 	const uint32_t access_mask, share_access;
@@ -195,7 +198,10 @@ struct x_smbd_open_state_t
 	const x_smb2_lease_key_t parent_lease_key;
 	const long priv_data;
 
+	x_smb2_create_action_t create_action;
 	uint8_t oplock_level{X_SMB2_OPLOCK_LEVEL_NONE};
+	x_smbd_dhmode_t dhmode;
+
 	bool initial_delete_on_close = false;
 	uint32_t durable_timeout_msec = 0;
 	uint64_t current_offset = 0;

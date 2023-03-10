@@ -1228,7 +1228,9 @@ static posixfs_open_t *posixfs_open_create(
 		NTSTATUS *pstatus,
 		x_smbd_tcon_t *smbd_tcon,
 		posixfs_object_t *posixfs_object,
-		const x_smb2_state_create_t &state)
+		const x_smb2_state_create_t &state,
+		x_smb2_create_action_t create_action,
+		uint8_t oplock_level)
 {
 	return posixfs_open_create(pstatus, smbd_tcon, posixfs_object,
 			state.smbd_stream, state.smbd_lease,
@@ -1239,7 +1241,8 @@ static posixfs_open_t *posixfs_open_create(
 				x_smbd_tcon_get_user(smbd_tcon)->get_owner_sid(),
 				state.lease.parent_key,
 				state.open_priv_data,
-				state.out_oplock_level},
+				create_action,
+				oplock_level},
 			state.in_create_options);
 }
 
@@ -3573,7 +3576,8 @@ NTSTATUS x_smbd_posixfs_create_open(x_smbd_open_t **psmbd_open,
 		x_smbd_requ_t *smbd_requ,
 		std::unique_ptr<x_smb2_state_create_t> &state,
 		bool overwrite,
-		bool exists,
+		x_smb2_create_action_t create_action,
+		uint8_t oplock_level,
 		std::vector<x_smb2_change_t> &changes)
 {
 	NTSTATUS status;
@@ -3582,7 +3586,7 @@ NTSTATUS x_smbd_posixfs_create_open(x_smbd_open_t **psmbd_open,
 	posixfs_open_t *posixfs_open = nullptr;
 
 	posixfs_open = posixfs_open_create(&status, smbd_requ->smbd_tcon,
-			posixfs_object, *state);
+			posixfs_object, *state, create_action, oplock_level);
 	if (!posixfs_open) {
 		return status;
 	}
@@ -3593,12 +3597,13 @@ NTSTATUS x_smbd_posixfs_create_open(x_smbd_open_t **psmbd_open,
 		int err = ftruncate(posixfs_object->fd, 0);
 		X_TODO_ASSERT(err == 0);
 		reload_meta = true;
-	} else if (exists && (state->in_contexts & X_SMB2_CONTEXT_FLAG_ALSI)) {
+	} else if (create_action != x_smb2_create_action_t::WAS_CREATED
+			&& (state->in_contexts & X_SMB2_CONTEXT_FLAG_ALSI)) {
 		status = posixfs_set_allocation_size_intl(posixfs_object,
 				nullptr,
 				state->in_allocation_size,
 				state->smbd_lease,
-				state->out_oplock_level);
+				oplock_level);
 		X_TODO_ASSERT(NT_STATUS_IS_OK(status));
 	}
 
