@@ -324,6 +324,14 @@ static void smbd_open_close_disconnected(
 	x_smbd_ref_dec(smbd_open);
 }
 
+bool x_smbd_open_match_get_lease(const x_smbd_open_t *smbd_open,
+		x_smb2_lease_t &lease)
+{
+	return x_smbd_lease_match_get(smbd_open->smbd_lease,
+			x_smbd_conn_curr_client_guid(),
+			lease);
+}
+
 static NTSTATUS smbd_open_check(x_smbd_open_t *smbd_open, x_smbd_tcon_t *smbd_tcon,
 		x_smb2_state_create_t &state)
 {

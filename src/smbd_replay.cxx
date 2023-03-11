@@ -52,7 +52,8 @@ static replay_item_t *replay_cache_find(uint32_t hash,
 NTSTATUS x_smbd_replay_cache_lookup(
 		x_smbd_open_t **psmbd_open,
 		const x_smb2_uuid_t &create_guid,
-		bool replay_operation)
+		bool replay_operation,
+		bool oplock_valid)
 {
 	auto &client_guid = x_smbd_conn_curr_client_guid();
 	uint32_t hash = replay_cache_hash(client_guid, create_guid);
@@ -61,6 +62,9 @@ NTSTATUS x_smbd_replay_cache_lookup(
 	replay_item_t *replay_item = replay_cache_find(hash, client_guid,
 			create_guid);
 	if (!replay_item) {
+		if (!oplock_valid) {
+			return NT_STATUS_NOT_FOUND;
+		}
 		replay_item = new replay_item_t(client_guid, create_guid);
 		g_replay_cache.hashtable.insert(replay_item, hash);
 		return NT_STATUS_FWP_RESERVED;

@@ -346,7 +346,7 @@ static uint32_t encode_contexts(const x_smb2_state_create_t &state,
 			}, ch, p, out_ptr, X_SMB2_CREATE_TAG_QFID);
 	}
 
-	if ((state.in_contexts & X_SMB2_CONTEXT_FLAG_DH2Q) != 0) {
+	if ((state.out_contexts & X_SMB2_CONTEXT_FLAG_DH2Q) != 0) {
 		if (open_state.dhmode == x_smbd_dhmode_t::PERSISTENT) {
 			encode_durable_v2_context(open_state.durable_timeout_msec, 
 					X_SMB2_DHANDLE_FLAG_PERSISTENT, ch, p, out_ptr);
@@ -354,7 +354,7 @@ static uint32_t encode_contexts(const x_smb2_state_create_t &state,
 			encode_durable_v2_context(open_state.durable_timeout_msec, 
 					0, ch, p, out_ptr);
 		}
-	} else if ((state.in_contexts & X_SMB2_CONTEXT_FLAG_DHNQ) != 0) {
+	} else if ((state.out_contexts & X_SMB2_CONTEXT_FLAG_DHNQ) != 0) {
 		if (open_state.dhmode == x_smbd_dhmode_t::DURABLE) {
 			encode_context_one([&state] (uint8_t *ptr) {
 					memset(ptr, 0, 8);
@@ -492,7 +492,7 @@ static NTSTATUS decode_in_create(x_smb2_state_create_t &state,
 				in_context_length)) {
 		return NT_STATUS_INVALID_PARAMETER;
 	}
-
+#if 0
 	if (state.in_contexts & (X_SMB2_CONTEXT_FLAG_DHNQ | X_SMB2_CONTEXT_FLAG_DH2Q)) {
 		if (state.in_oplock_level == X_SMB2_OPLOCK_LEVEL_LEASE) {
 			if ((state.lease.state & X_SMB2_LEASE_HANDLE) == 0) {
@@ -506,6 +506,7 @@ static NTSTATUS decode_in_create(x_smb2_state_create_t &state,
 			state.in_create_guid = { 0, 0 };
 		}
 	}
+#endif
 	return NT_STATUS_OK;
 }
 
@@ -539,7 +540,7 @@ static uint32_t encode_out_create(const x_smb2_state_create_t &state,
 	auto [object_meta, stream_meta] = x_smbd_open_op_get_meta(smbd_open);
 
 	out_create->struct_size = X_H2LE16(sizeof(x_smb2_out_create_t) + 1);
-	out_create->oplock_level = smbd_open->open_state.oplock_level;
+	out_create->oplock_level = state.out_oplock_level;
 	out_create->create_flags = state.out_create_flags;
 	out_create->create_action = X_H2LE32(uint32_t(smbd_open->open_state.create_action));
 	out_create->create_ts = X_H2LE64(object_meta->creation.val);
@@ -614,6 +615,12 @@ static void x_smb2_create_async_done(x_smbd_conn_t *smbd_conn,
 		return;
 	}
 	if (NT_STATUS_IS_OK(status)) {
+		auto &open_state = smbd_requ->smbd_open->open_state;
+		state->out_oplock_level = open_state.oplock_level;
+		if (open_state.dhmode != x_smbd_dhmode_t::NONE) {
+			state->out_contexts |= state->in_contexts &
+				(X_SMB2_CONTEXT_FLAG_DHNQ | X_SMB2_CONTEXT_FLAG_DH2Q);
+		}
 		x_smb2_reply_create(smbd_conn, smbd_requ, *state);
 	} else {
 		smb2_replay_cache_clear_if(*state);
@@ -621,9 +628,26 @@ static void x_smb2_create_async_done(x_smbd_conn_t *smbd_conn,
 	x_smbd_conn_requ_done(smbd_conn, smbd_requ, status);
 }
 
+static bool oplock_valid_for_durable(const x_smb2_state_create_t &state)
+{
+	if (state.in_oplock_level == X_SMB2_OPLOCK_LEVEL_LEASE) {
+		return state.lease.state & X_SMB2_LEASE_HANDLE;
+	} else {
+		return state.in_oplock_level == X_SMB2_OPLOCK_LEVEL_BATCH;
+	}
+}
+
 static NTSTATUS smb2_process_create(x_smbd_requ_t *smbd_requ,
 		std::unique_ptr<x_smb2_state_create_t> &state)
 {
+	if (state->in_contexts & (X_SMB2_CONTEXT_FLAG_DHNQ | X_SMB2_CONTEXT_FLAG_DH2Q)) {
+		if (!oplock_valid_for_durable(*state)) {
+			state->in_contexts &= ~(X_SMB2_CONTEXT_FLAG_DHNQ
+					| X_SMB2_CONTEXT_FLAG_DH2Q);
+			state->in_create_guid = { 0, 0 };
+		}
+	}
+
 	if (state->in_impersonation_level >= X_SMB2_IMPERSONATION_MAX) {
 		RETURN_OP_STATUS(smbd_requ, NT_STATUS_BAD_IMPERSONATION_LEVEL);
 	}
@@ -726,33 +750,62 @@ NTSTATUS x_smb2_process_create(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_req
 
 	state->replay_operation = smbd_requ->in_smb2_hdr.flags & X_SMB2_HDR_FLAG_REPLAY_OPERATION;
 
-	if (x_bit_any<uint32_t>(state->in_contexts, X_SMB2_CONTEXT_FLAG_DHNC |
-				X_SMB2_CONTEXT_FLAG_DH2C)) {
-		status = x_smbd_tcon_op_recreate(smbd_requ, state);
-	} else {
-		if (state->in_contexts & X_SMB2_CONTEXT_FLAG_DH2Q) {
-			if (!state->in_create_guid.is_valid()) {
-				RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
-			}
-
-			status = x_smbd_replay_cache_lookup(
-					&smbd_requ->smbd_open,
-					state->in_create_guid,
-					state->replay_operation);
-			if (NT_STATUS_EQUAL(status, NT_STATUS_FWP_RESERVED)) {
-				state->replay_operation = false;
-				state->replay_cached = true;
-			} else if (NT_STATUS_IS_OK(status)) {
-				X_ASSERT(state->replay_operation);
-				X_ASSERT(smbd_requ->smbd_open);
-			} else {
-				RETURN_OP_STATUS(smbd_requ, status);
-			}
+	if (state->in_contexts & X_SMB2_CONTEXT_FLAG_DH2Q) {
+		if (!state->in_create_guid.is_valid()) {
+			RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 		}
-		if (!smbd_requ->smbd_open) {
-			status = smb2_process_create(smbd_requ, state);
+
+		status = x_smbd_replay_cache_lookup(
+				&smbd_requ->smbd_open,
+				state->in_create_guid,
+				state->replay_operation,
+				oplock_valid_for_durable(*state));
+		if (NT_STATUS_EQUAL(status, NT_STATUS_FWP_RESERVED)) {
+			state->replay_operation = false;
+			state->replay_cached = true;
+		} else if (NT_STATUS_IS_OK(status)) {
+			X_ASSERT(state->replay_operation);
+			X_ASSERT(smbd_requ->smbd_open);
+		} else if (NT_STATUS_EQUAL(status, NT_STATUS_NOT_FOUND)) {
+			X_ASSERT(!smbd_requ->smbd_open);
+			state->replay_operation = false;
 		} else {
-			// TODO create state
+			RETURN_OP_STATUS(smbd_requ, status);
+		}
+	}
+
+	if (smbd_requ->smbd_open) {
+		// TODO create state
+		auto &open_state = smbd_requ->smbd_open->open_state;
+		if (state->in_oplock_level == X_SMB2_OPLOCK_LEVEL_LEASE &&
+				(open_state.oplock_level != X_SMB2_OPLOCK_LEVEL_LEASE ||
+				 !x_smbd_open_match_get_lease(smbd_requ->smbd_open, state->lease))) {
+			X_SMBD_REF_DEC(smbd_requ->smbd_open);
+			RETURN_OP_STATUS(smbd_requ, NT_STATUS_ACCESS_DENIED);
+		}
+
+		state->out_oplock_level = state->in_oplock_level;
+		if (open_state.dhmode != x_smbd_dhmode_t::NONE &&
+				(state->in_oplock_level == X_SMB2_OPLOCK_LEVEL_LEASE ||
+				state->in_oplock_level == X_SMB2_OPLOCK_LEVEL_BATCH)) {
+			state->out_contexts |= X_SMB2_CONTEXT_FLAG_DH2Q;
+		}
+
+	} else {
+		if (x_bit_any<uint32_t>(state->in_contexts, X_SMB2_CONTEXT_FLAG_DHNC |
+					X_SMB2_CONTEXT_FLAG_DH2C)) {
+			status = x_smbd_tcon_op_recreate(smbd_requ, state);
+		} else {
+			status = smb2_process_create(smbd_requ, state);
+		}
+
+		if (NT_STATUS_IS_OK(status)) {
+			auto &open_state = smbd_requ->smbd_open->open_state;
+			state->out_oplock_level = open_state.oplock_level;
+			if (open_state.dhmode != x_smbd_dhmode_t::NONE) {
+				state->out_contexts |= state->in_contexts &
+					(X_SMB2_CONTEXT_FLAG_DHNQ | X_SMB2_CONTEXT_FLAG_DH2Q);
+			}
 		}
 	}
 

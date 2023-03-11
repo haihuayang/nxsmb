@@ -508,6 +508,10 @@ bool x_smbd_check_io_brl_conflict(x_smbd_object_t *smbd_object,
 		const x_smbd_open_t *smbd_open,
 		uint64_t offset, uint64_t length, bool is_write);
 void x_smbd_lock_retry(x_smbd_sharemode_t *sharemode);
+
+bool x_smbd_open_match_get_lease(const x_smbd_open_t *smbd_open,
+		x_smb2_lease_t &lease);
+
 #if 0
 	uint32_t (*get_attributes)(const x_smbd_object_t *smbd_object);
 static inline uint32_t x_smbd_object_get_attributes(const x_smbd_object_t *smbd_object)
