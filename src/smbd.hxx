@@ -91,7 +91,10 @@ inline void x_smbd_ref_dec_if(T *t)
 
 struct x_smb2_state_create_t
 {
+	x_smb2_state_create_t(const x_smb2_uuid_t &client_guid);
 	~x_smb2_state_create_t();
+
+	const x_smb2_uuid_t in_client_guid;
 
 	uint8_t in_oplock_level;
 	uint8_t out_oplock_level;

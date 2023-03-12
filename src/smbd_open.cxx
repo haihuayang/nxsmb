@@ -465,11 +465,33 @@ NTSTATUS x_smbd_open_restore(
 		return NT_STATUS_INSUFFICIENT_RESOURCES;
 	}
 
+	auto &open_state = smbd_durable.open_state;
 	x_smbd_open_t *smbd_open{};
-	NTSTATUS status = x_smbd_open_durable(smbd_open, smbd_volume,
+	NTSTATUS status;
+	if (open_state.create_guid.is_valid()) {
+		NTSTATUS status = x_smbd_replay_cache_lookup(&smbd_open,
+				open_state.client_guid,
+				open_state.create_guid,
+				false);
+		if (!NT_STATUS_EQUAL(status, NT_STATUS_FWP_RESERVED)) {
+			X_LOG_WARN("open is already in replay_cache");
+			return NT_STATUS_FILE_NOT_AVAILABLE;
+		}
+
+		X_ASSERT(!smbd_open);
+	}
+
+	status = x_smbd_open_durable(smbd_open, smbd_volume,
 			smbd_durable);
 	if (!NT_STATUS_IS_OK(status)) {
 		return status;
+	}
+
+	if (open_state.create_guid.is_valid()) {
+		x_smbd_replay_cache_set(open_state.client_guid,
+				open_state.create_guid,
+				smbd_open);
+
 	}
 
 	{

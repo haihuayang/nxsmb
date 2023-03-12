@@ -10,9 +10,9 @@
 
 NTSTATUS x_smbd_replay_cache_lookup(
 		x_smbd_open_t **psmbd_open,
+		const x_smb2_uuid_t &client_guid,
 		const x_smb2_uuid_t &create_guid,
-		bool replay_operation,
-		bool oplock_valid);
+		bool replay_operation);
 
 void x_smbd_replay_cache_clear(
 		const x_smb2_uuid_t &client_guid,
