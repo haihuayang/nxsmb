@@ -51,12 +51,33 @@ bool x_smbd_open_store(x_smbd_open_t *smbd_open)
 	return g_smbd_open_table->store(smbd_open, smbd_open->id_volatile);
 }
 
+static void clear_replay_cache(x_smbd_open_state_t &open_state)
+{
+	/* From Samba smb2srv_open_lookup,
+	 * Clear the replay cache for this create_guid if it exists:
+	 * This is based on the assumption that this lookup will be
+	 * triggered by a client request using the file-id for lookup.
+	 * Hence the client has proven that it has in fact seen the
+	 * reply to its initial create call. So subsequent create replays
+	 * should be treated as invalid. Hence the index for create_guid
+	 * lookup needs to be removed.
+	 */
+
+	/* TODO atomic */
+	if (open_state.replay_cached) {
+		x_smbd_replay_cache_clear(open_state.client_guid,
+				open_state.create_guid);
+		open_state.replay_cached = false;
+	}
+}
+
 x_smbd_open_t *x_smbd_open_lookup(uint64_t id_presistent, uint64_t id_volatile,
 		const x_smbd_tcon_t *smbd_tcon)
 {
 	auto [found, smbd_open] = g_smbd_open_table->lookup(id_volatile);
 	if (found) {
 		if (smbd_open->smbd_tcon == smbd_tcon || !smbd_tcon) {
+			clear_replay_cache(smbd_open->open_state);
 			return smbd_open;
 		}
 		x_smbd_ref_dec(smbd_open);
@@ -270,11 +291,7 @@ static NTSTATUS smbd_object_close(
 {
 	x_smbd_lease_t *smbd_lease;
 
-	auto &open_state = smbd_open->open_state;
-	if (open_state.create_guid.is_valid()) {
-		x_smbd_replay_cache_clear(open_state.client_guid,
-				open_state.create_guid);
-	}
+	clear_replay_cache(smbd_open->open_state);
 
 	std::unique_lock<std::mutex> lock(smbd_object->mutex);
 	auto notify_requ_list = smbd_close_open_intl(smbd_object, smbd_open,
@@ -488,9 +505,11 @@ NTSTATUS x_smbd_open_restore(
 	}
 
 	if (open_state.create_guid.is_valid()) {
+		/* TODO atomic */
 		x_smbd_replay_cache_set(open_state.client_guid,
 				open_state.create_guid,
 				smbd_open);
+		open_state.replay_cached = true;
 
 	}
 
@@ -617,6 +636,11 @@ struct defer_open_evt_t
 			if (!NT_STATUS_EQUAL(status, NT_STATUS_PENDING)) {
 				smbd_requ->save_state(state);
 				smbd_requ->async_done_fn(smbd_conn, smbd_requ, status);
+			}
+		} else {
+			if (state->replay_reserved) {
+				x_smbd_replay_cache_clear(state->in_client_guid,
+						state->in_create_guid);
 			}
 		}
 

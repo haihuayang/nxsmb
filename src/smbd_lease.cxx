@@ -197,6 +197,7 @@ bool x_smbd_lease_match_get(const x_smbd_lease_t *smbd_lease,
 		return false;
 	}
 	lease.state = smbd_lease->lease_state;
+	lease.epoch = smbd_lease->epoch;
 	if (smbd_lease->breaking) {
 		lease.flags = X_SMB2_LEASE_FLAG_BREAK_IN_PROGRESS;
 	} else {

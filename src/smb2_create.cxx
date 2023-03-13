@@ -595,7 +595,7 @@ static void x_smb2_reply_create(x_smbd_conn_t *smbd_conn,
 
 static void smb2_replay_cache_clear_if(const x_smb2_state_create_t &state)
 {
-	if (state.replay_cached) {
+	if (state.replay_reserved) {
 		x_smbd_replay_cache_clear(state.in_client_guid,
 				state.in_create_guid);
 	}
@@ -604,10 +604,12 @@ static void smb2_replay_cache_clear_if(const x_smb2_state_create_t &state)
 static void smb2_replay_cache_set_if(const x_smb2_state_create_t &state,
 		x_smbd_open_t *smbd_open)
 {
-	if (state.replay_cached) {
+	if (state.replay_reserved) {
+		/* TODO atomic */
 		x_smbd_replay_cache_set(state.in_client_guid,
 				state.in_create_guid,
 				smbd_open);
+		smbd_open->open_state.replay_cached = true;
 	}
 }
 
@@ -772,7 +774,7 @@ NTSTATUS x_smb2_process_create(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_req
 				state->replay_operation);
 		if (NT_STATUS_EQUAL(status, NT_STATUS_FWP_RESERVED)) {
 			state->replay_operation = false;
-			state->replay_cached = true;
+			state->replay_reserved = true;
 		} else if (NT_STATUS_IS_OK(status)) {
 			X_ASSERT(state->replay_operation);
 			X_ASSERT(smbd_requ->smbd_open);

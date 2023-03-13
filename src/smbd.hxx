@@ -120,7 +120,7 @@ struct x_smb2_state_create_t
 
 	uint8_t out_create_flags;
 	bool replay_operation = false;
-	bool replay_cached = false;
+	bool replay_reserved = false;
 	uint32_t open_attempt = 0;
 	uint32_t out_maximal_access{0};
 	uint8_t out_qfid_info[32];
@@ -206,6 +206,7 @@ struct x_smbd_open_state_t
 	x_smb2_create_action_t create_action;
 	uint8_t oplock_level{X_SMB2_OPLOCK_LEVEL_NONE};
 	x_smbd_dhmode_t dhmode;
+	bool replay_cached = false;
 
 	bool initial_delete_on_close = false;
 	uint32_t durable_timeout_msec = 0;
