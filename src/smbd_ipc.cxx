@@ -628,6 +628,7 @@ static NTSTATUS ipc_create_open(x_smbd_open_t **psmbd_open,
 				x_smbd_tcon_get_user(smbd_requ->smbd_tcon)->get_owner_sid(),
 				state->lease.parent_key,
 				0l,
+				0,
 				x_smb2_create_action_t::WAS_OPENED,
 				X_SMB2_OPLOCK_LEVEL_NONE});
 	if (!x_smbd_open_store(&named_pipe->base)) {

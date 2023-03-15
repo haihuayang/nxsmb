@@ -141,7 +141,8 @@ static NTSTATUS x_smb2_process_rename(x_smbd_conn_t *smbd_conn,
 
 	NTSTATUS status = x_smbd_requ_init_open(smbd_requ,
 			state->in_file_id_persistent,
-			state->in_file_id_volatile);
+			state->in_file_id_volatile,
+			true);
 	if (!NT_STATUS_IS_OK(status)) {
 		RETURN_OP_STATUS(smbd_requ, status);
 	}
@@ -225,7 +226,8 @@ NTSTATUS x_smb2_process_setinfo(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_re
 
 	NTSTATUS status = x_smbd_requ_init_open(smbd_requ,
 			state->in_file_id_persistent,
-			state->in_file_id_volatile);
+			state->in_file_id_volatile,
+			true);
 	if (!NT_STATUS_IS_OK(status)) {
 		RETURN_OP_STATUS(smbd_requ, status);
 	}

@@ -1241,6 +1241,7 @@ static posixfs_open_t *posixfs_open_create(
 				x_smbd_tcon_get_user(smbd_tcon)->get_owner_sid(),
 				state.lease.parent_key,
 				state.open_priv_data,
+				0,
 				create_action,
 				oplock_level},
 			state.in_create_options);

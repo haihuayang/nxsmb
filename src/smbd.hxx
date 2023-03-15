@@ -203,6 +203,7 @@ struct x_smbd_open_state_t
 	const x_smb2_lease_key_t parent_lease_key;
 	const long priv_data;
 
+	uint16_t channel_sequence;
 	x_smb2_create_action_t create_action;
 	uint8_t oplock_level{X_SMB2_OPLOCK_LEVEL_NONE};
 	x_smbd_dhmode_t dhmode;
@@ -211,6 +212,7 @@ struct x_smbd_open_state_t
 	bool initial_delete_on_close = false;
 	uint32_t durable_timeout_msec = 0;
 	uint64_t current_offset = 0;
+	uint64_t channel_generation;
 };
 
 struct x_smbd_file_handle_t
@@ -283,6 +285,9 @@ void x_smb2_reply(x_smbd_conn_t *smbd_conn,
 		x_bufref_t *buf_tail,
 		NTSTATUS status,
 		size_t reply_size);
+NTSTATUS x_smbd_conn_dispatch_update_counts(
+		x_smbd_requ_t *smbd_requ,
+		bool modify_call);
 
 
 int x_smbd_sess_table_init(uint32_t count);
@@ -438,10 +443,12 @@ struct x_smbd_requ_t
 
 	x_buf_t *in_buf;
 	uint64_t id = 0;
+	uint64_t channel_generation;
 
 	x_smb2_header_t in_smb2_hdr;
 	uint32_t in_msgsize, in_offset, in_requ_len;
 	bool async = false;
+	bool request_counters_updated = false;
 
 	NTSTATUS status{NT_STATUS_OK};
 	NTSTATUS sess_status{NT_STATUS_OK};
@@ -473,7 +480,8 @@ void x_smbd_requ_async_done(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ,
 		NTSTATUS status);
 void x_smbd_requ_done(x_smbd_requ_t *smbd_requ);
 NTSTATUS x_smbd_requ_init_open(x_smbd_requ_t *smbd_requ,
-		uint64_t id_persistent, uint64_t id_volatile);
+		uint64_t id_persistent, uint64_t id_volatile,
+		bool modify_call);
 
 
 NTSTATUS x_smbd_dfs_resolve_path(

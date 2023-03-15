@@ -107,20 +107,20 @@ int x_smbd_requ_pool_init(uint32_t count)
 }
 
 NTSTATUS x_smbd_requ_init_open(x_smbd_requ_t *smbd_requ,
-		uint64_t id_persistent, uint64_t id_volatile)
+		uint64_t id_persistent, uint64_t id_volatile,
+		bool modify_call)
 {
-	if (smbd_requ->smbd_open) {
-		return NT_STATUS_OK;
-	}
-
-	if (!x_smb2_file_id_is_nul(id_persistent, id_volatile)) {
+	if (!smbd_requ->smbd_open && !x_smb2_file_id_is_nul(id_persistent,
+				id_volatile)) {
 		smbd_requ->smbd_open = x_smbd_open_lookup(
 				id_persistent,
 				id_volatile,
 				smbd_requ->smbd_tcon);
-		if (smbd_requ->smbd_open) {
-			return NT_STATUS_OK;
-		}
+	}
+
+	if (smbd_requ->smbd_open) {
+		return x_smbd_conn_dispatch_update_counts(smbd_requ,
+				modify_call);
 	}
 
 	if (smbd_requ->is_compound_related() && !NT_STATUS_IS_OK(smbd_requ->status)) {

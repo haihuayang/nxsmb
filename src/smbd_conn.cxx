@@ -2,6 +2,7 @@
 #include "smbd.hxx"
 #include "smbd_stats.hxx"
 #include "smbd_conf.hxx"
+#include "smbd_open.hxx"
 #include <sys/uio.h>
 
 enum {
@@ -347,6 +348,10 @@ static void x_smb2_reply_msg(x_smbd_conn_t *smbd_conn,
 	smbd_requ->out_length += x_convert_assert<uint32_t>(reply_size);
 }
 
+static void smbd_conn_reply_update_counts(
+		x_smbd_conn_t *smbd_conn,
+		x_smbd_requ_t *smbd_requ);
+
 void x_smb2_reply(x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ,
 		x_bufref_t *buf_head,
@@ -359,6 +364,8 @@ void x_smb2_reply(x_smbd_conn_t *smbd_conn,
 	} else {
 		smbd_requ->out_credit_granted = 0;
 	}
+
+	smbd_conn_reply_update_counts(smbd_conn, smbd_requ);
 	x_smb2_reply_msg(smbd_conn, smbd_requ, buf_head, buf_tail, status, reply_size);
 }
 
@@ -518,7 +525,145 @@ static const struct {
 	{ x_smb2_process_break, true, true, },
 };
 
+/* Samba smbd_smb2_request_dispatch_update_counts */
+NTSTATUS x_smbd_conn_dispatch_update_counts(
+		x_smbd_requ_t *smbd_requ,
+		bool modify_call)
+{
+	if (x_smbd_conn_curr_dialect() < X_SMB2_DIALECT_300) {
+		return NT_STATUS_OK;
+	}
 
+	int generation_wrap = 0;
+	bool update_open = false;
+	uint16_t channel_sequence = smbd_requ->in_smb2_hdr.channel_sequence;
+	x_smbd_open_t *smbd_open = smbd_requ->smbd_open;
+	auto &open_state = smbd_open->open_state;
+	int cmp = channel_sequence - open_state.channel_sequence;
+	if (cmp < 0) {
+		/*
+		 * csn wrap. We need to watch out for long-running
+		 * requests that are still sitting on a previously
+		 * used csn. SMB2_OP_NOTIFY can take VERY long.
+		 */
+		generation_wrap += 1;
+	}
+
+	if (abs(cmp) > INT16_MAX) {
+		/*
+		 * [MS-SMB2] 3.3.5.2.10 - Verifying the Channel Sequence Number:
+		 *
+		 * If the channel sequence number of the request and the one
+		 * known to the server are not equal, the channel sequence
+		 * number and outstanding request counts are only updated
+		 * "... if the unsigned difference using 16-bit arithmetic
+		 * between ChannelSequence and Open.ChannelSequence is less than
+		 * or equal to 0x7FFF ...".
+		 * Otherwise, an error is returned for the modifying
+		 * calls write, set_info, and ioctl.
+		 *
+		 * There are currently two issues with the description:
+		 *
+		 * * For the other calls, the document seems to imply
+		 *   that processing continues without adapting the
+		 *   counters (if the sequence numbers are not equal).
+		 *
+		 *   TODO: This needs clarification!
+		 *
+		 * * Also, the behaviour if the difference is larger
+		 *   than 0x7FFF is not clear. The document seems to
+		 *   imply that if such a difference is reached,
+		 *   the server starts to ignore the counters or
+		 *   in the case of the modifying calls, return errors.
+		 *
+		 *   TODO: This needs clarification!
+		 *
+		 * At this point Samba tries to be a little more
+		 * clever than the description in the MS-SMB2 document
+		 * by heuristically detecting and properly treating
+		 * a 16 bit overflow of the client-submitted sequence
+		 * number:
+		 *
+		 * If the stored channel sequence number is more than
+		 * 0x7FFF larger than the one from the request, then
+		 * the client-provided sequence number has likely
+		 * overflown. We treat this case as valid instead
+		 * of as failure.
+		 *
+		 * The MS-SMB2 behaviour would be setting cmp = -1.
+		 */
+		cmp *= -1;
+	}
+
+	if (smbd_requ->in_smb2_hdr.flags & X_SMB2_HDR_FLAG_REPLAY_OPERATION) {
+		if (cmp == 0 && smbd_open->pre_request_count == 0) {
+			smbd_open->request_count += 1;
+			smbd_requ->request_counters_updated = true;
+		} else if (cmp > 0 && smbd_open->pre_request_count == 0) {
+			smbd_open->pre_request_count += smbd_open->request_count;
+			smbd_open->request_count = 1;
+			open_state.channel_sequence = channel_sequence;
+			open_state.channel_generation += generation_wrap;
+			update_open = true;
+			smbd_requ->request_counters_updated = true;
+		} else if (modify_call) {
+			return NT_STATUS_FILE_NOT_AVAILABLE;
+		}
+	} else {
+		if (cmp == 0) {
+			smbd_open->request_count += 1;
+			smbd_requ->request_counters_updated = true;
+		} else if (cmp > 0) {
+			smbd_open->pre_request_count += smbd_open->request_count;
+			smbd_open->request_count = 1;
+			open_state.channel_sequence = channel_sequence;
+			open_state.channel_generation += generation_wrap;
+			update_open = true;
+			smbd_requ->request_counters_updated = true;
+		} else if (modify_call) {
+			return NT_STATUS_FILE_NOT_AVAILABLE;
+		}
+	}
+	smbd_requ->channel_generation = open_state.channel_generation;
+
+	if (update_open && open_state.dhmode != x_smbd_dhmode_t::NONE) {
+		// return smbXsrv_open_update(op);
+	}
+
+	return NT_STATUS_OK;
+}
+
+static void smbd_conn_reply_update_counts(
+		x_smbd_conn_t *smbd_conn,
+		x_smbd_requ_t *smbd_requ)
+{
+	if (!smbd_requ->request_counters_updated) {
+		return;
+	}
+
+	smbd_requ->request_counters_updated = false;
+
+	if (smbd_conn->dialect < X_SMB2_DIALECT_300) {
+		return;
+	}
+
+	x_smbd_open_t *smbd_open = smbd_requ->smbd_open;
+	if (!smbd_open) {
+		return;
+	}
+
+	uint16_t channel_sequence = smbd_requ->in_smb2_hdr.channel_sequence;
+	auto &open_state = smbd_open->open_state;
+
+	if ((open_state.channel_sequence == channel_sequence) &&
+	    (open_state.channel_generation == smbd_requ->channel_generation)) {
+		X_ASSERT(smbd_open->request_count > 0);
+		smbd_open->request_count -= 1;
+	} else {
+		X_ASSERT(smbd_open->pre_request_count > 0);
+		smbd_open->pre_request_count -= 1;
+	}
+}
 
 static NTSTATUS x_smbd_conn_process_smb2_intl(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 {
@@ -694,6 +839,7 @@ static int x_smbd_conn_process_smb2(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smb
 
 		auto in_smb2_hdr = (const x_smb2_header_t *)(buf->data + offset);
 		smbd_requ->in_smb2_hdr.credit_charge = X_LE2H16(in_smb2_hdr->credit_charge);
+		smbd_requ->in_smb2_hdr.channel_sequence = X_LE2H16(in_smb2_hdr->channel_sequence);
 		smbd_requ->in_smb2_hdr.opcode = X_LE2H16(in_smb2_hdr->opcode);
 		if (smbd_requ->in_smb2_hdr.opcode >= X_SMB2_OP_MAX) {
 			/* windows server reset connection immediately,
