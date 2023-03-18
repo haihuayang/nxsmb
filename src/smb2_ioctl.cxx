@@ -73,8 +73,7 @@ static void encode_out_ioctl(const x_smb2_state_ioctl_t &state,
 		uint8_t *out_hdr)
 {
 	x_smb2_out_ioctl_t *out_ioctl = (x_smb2_out_ioctl_t *)(out_hdr + sizeof(x_smb2_header_t));
-	out_ioctl->struct_size = X_H2LE16(sizeof(x_smb2_out_ioctl_t) +
-			(state.out_buf_length != 0));
+	out_ioctl->struct_size = X_H2LE16(sizeof(x_smb2_out_ioctl_t) + 1);
 
 	out_ioctl->reserved0 = 0;
 	out_ioctl->ctl_code = X_H2LE32(state.ctl_code);
@@ -609,3 +608,32 @@ NTSTATUS x_smb2_process_ioctl(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ
 	}
 	return status;
 }
+
+enum {
+	X_FSCTL_SMBTORTURE_FORCE_UNACKED_TIMEOUT = 0x83848003,
+};
+
+NTSTATUS x_smb2_process_ioctl_torture(x_smbd_conn_t *smbd_conn,
+		x_smbd_requ_t *smbd_requ)
+{
+	if (smbd_requ->in_requ_len < sizeof(x_smb2_header_t) + sizeof(x_smb2_in_ioctl_t)) {
+		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
+	}
+
+	auto state = std::make_unique<x_smb2_state_ioctl_t>();
+	if (!decode_in_ioctl(*state, smbd_requ->in_buf, smbd_requ->in_offset, smbd_requ->in_requ_len)) {
+		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
+	}
+
+	X_LOG_OP("%ld IOCTL 0x%lx, 0x%lx", smbd_requ->in_smb2_hdr.mid,
+			state->in_file_id_persistent, state->in_file_id_volatile);
+
+	switch (state->ctl_code) {
+	case X_FSCTL_SMBTORTURE_FORCE_UNACKED_TIMEOUT:
+		state->out_buf_length = 0;
+		x_smb2_reply_ioctl(smbd_conn, smbd_requ, NT_STATUS_OK, *state);
+		return NT_STATUS_OK;
+	}
+	return NT_STATUS_INVALID_PARAMETER;
+}
+

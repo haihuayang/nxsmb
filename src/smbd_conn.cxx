@@ -713,6 +713,14 @@ static NTSTATUS x_smbd_conn_process_smb2_intl(x_smbd_conn_t *smbd_conn, x_smbd_r
 
 	X_ASSERT(smbd_requ->in_smb2_hdr.opcode < std::size(x_smb2_op_table));
 
+	if (smbd_requ->in_smb2_hdr.opcode == X_SMB2_OP_IOCTL) {
+		NTSTATUS status = x_smb2_process_ioctl_torture(smbd_conn,
+				smbd_requ);
+		if (NT_STATUS_IS_OK(status)) {
+			return status;
+		}
+	}
+
 	const auto &op = x_smb2_op_table[smbd_requ->in_smb2_hdr.opcode];
 	if (op.need_channel) {
 		if (!smbd_requ->smbd_sess) {
