@@ -227,6 +227,7 @@ struct x_smbd_object_t
 		type_not_exist = 0,
 		type_file = 1,
 		type_dir = 2,
+		type_pipe = 3,
 	};
 	uint16_t type = type_not_exist;
 	std::u16string path;
@@ -253,8 +254,9 @@ static inline bool x_smbd_object_is_dir(const x_smbd_object_t *smbd_object)
 
 static inline bool x_smbd_open_is_data(const x_smbd_open_t *smbd_open)
 {
-	return smbd_open->smbd_stream || smbd_open->smbd_object->type
-		== x_smbd_object_t::type_file;
+	return smbd_open->smbd_stream ||
+		smbd_open->smbd_object->type == x_smbd_object_t::type_file ||
+		smbd_open->smbd_object->type == x_smbd_object_t::type_pipe;
 }
 #if 0
 static inline const x_smbd_sharemode_t *x_smbd_object_get_sharemode(

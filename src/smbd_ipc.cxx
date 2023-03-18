@@ -727,7 +727,7 @@ x_smbd_ipc_object_t::x_smbd_ipc_object_t(const std::u16string &path,
 	: base(ipc_get_volume(), 0, path), iface(iface)
 {
 	base.flags = x_smbd_object_t::flag_initialized;
-	base.type = x_smbd_object_t::type_file;
+	base.type = x_smbd_object_t::type_pipe;
 	base.meta = ipc_object_meta;
 	base.sharemode.meta = ipc_stream_meta;
 }

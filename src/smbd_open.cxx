@@ -539,7 +539,7 @@ NTSTATUS x_smbd_open_close(x_smbd_open_t *smbd_open,
 		return NT_STATUS_FILE_CLOSED;
 	}
 
-	NTSTATUS status;
+	NTSTATUS status = NT_STATUS_OK;
 	if (shutdown && smbd_open->open_state.dhmode != x_smbd_dhmode_t::NONE) {
 		status = smbd_open_set_durable(smbd_open);
 		if (NT_STATUS_IS_OK(status)) {
@@ -562,8 +562,10 @@ NTSTATUS x_smbd_open_close(x_smbd_open_t *smbd_open,
 	x_smbd_ref_dec(smbd_open);
 
 	x_smbd_object_t *smbd_object = smbd_open->smbd_object;
-	status = smbd_object_close(smbd_object, smbd_open,
-			smbd_requ, state, changes);
+	if (smbd_object->type != x_smbd_object_t::type_pipe) {
+		status = smbd_object_close(smbd_object, smbd_open,
+				smbd_requ, state, changes);
+	}
 
 	x_smbd_ref_dec(smbd_open); // ref by smbd_tcon open_list
 	return status;

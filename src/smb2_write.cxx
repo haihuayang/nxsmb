@@ -137,6 +137,10 @@ NTSTATUS x_smb2_process_write(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ
 		RETURN_OP_STATUS(smbd_requ, NT_STATUS_ACCESS_DENIED);
 	}
 
+	if (!x_smbd_open_is_data(smbd_requ->smbd_open)) {
+		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_DEVICE_REQUEST);
+	}
+
 	if (state->in_buf) {
 		smbd_requ->async_done_fn = x_smb2_write_async_done;
 		status = x_smbd_open_op_write(smbd_requ->smbd_open, smbd_requ,
