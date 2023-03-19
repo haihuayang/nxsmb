@@ -5,6 +5,16 @@
 #include "smbd_conf.hxx"
 #include "smbd_dcerpc_srvsvc.hxx"
 
+#if 0
+	TODO check permission
+	if (!nt_token_check_sid(&global_sid_Builtin_Administrators,
+				session_info->security_token)) {
+		DEBUG(1, ("Enumerating sessions only allowed for "
+					"administrators\n"));
+		return WERR_ACCESS_DENIED;
+	}
+#endif
+#define SMBD_DCERPC_SRVSVC_CHECK_ACCESS(smbd_sess) do { } while (0)
 
 template <class Arg, class Info>
 static void net_enum(Arg &arg, std::shared_ptr<std::vector<Info>> &array)
@@ -25,7 +35,32 @@ X_SMBD_DCERPC_IMPL_TODO(srvsvc_NetCharDevQSetInfo)
 X_SMBD_DCERPC_IMPL_TODO(srvsvc_NetCharDevQPurge)
 X_SMBD_DCERPC_IMPL_TODO(srvsvc_NetCharDevQPurgeSelf)
 X_SMBD_DCERPC_IMPL_TODO(srvsvc_NetConnEnum)
-X_SMBD_DCERPC_IMPL_TODO(srvsvc_NetFileEnum)
+
+static bool x_smbd_dcerpc_impl_srvsvc_NetFileEnum(
+		x_dcerpc_pipe_t &rpc_pipe,
+		x_smbd_sess_t *smbd_sess,
+		idl::srvsvc_NetFileEnum &arg)
+{
+	SMBD_DCERPC_SRVSVC_CHECK_ACCESS(smbd_sess);
+
+	auto &ctr = arg.info_ctr.ctr;
+	switch (arg.info_ctr.level) {
+	case 2:
+		net_enum(arg, ctr.ctr2->array);
+		break;
+
+	case 3:
+		net_enum(arg, ctr.ctr3->array);
+		break;
+
+	default:
+		arg.__result = WERR_INVALID_LEVEL;
+		break;
+	}
+
+	return true;
+}
+
 X_SMBD_DCERPC_IMPL_TODO(srvsvc_NetFileGetInfo)
 X_SMBD_DCERPC_IMPL_TODO(srvsvc_NetFileClose)
 
@@ -34,15 +69,7 @@ static bool x_smbd_dcerpc_impl_srvsvc_NetSessEnum(
 		x_smbd_sess_t *smbd_sess,
 		idl::srvsvc_NetSessEnum &arg)
 {
-#if 0
-	TODO check permission
-	if (!nt_token_check_sid(&global_sid_Builtin_Administrators,
-				session_info->security_token)) {
-		DEBUG(1, ("Enumerating sessions only allowed for "
-					"administrators\n"));
-		return WERR_ACCESS_DENIED;
-	}
-#endif
+	SMBD_DCERPC_SRVSVC_CHECK_ACCESS(smbd_sess);
 
 	auto &ctr = arg.info_ctr.ctr;
 	switch (arg.info_ctr.level) {

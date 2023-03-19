@@ -9,6 +9,10 @@
 
 #include "include/librpc/srvsvc.hxx"
 
+
+void x_smbd_net_enum(std::vector<idl::srvsvc_NetFileInfo2> &array);
+void x_smbd_net_enum(std::vector<idl::srvsvc_NetFileInfo3> &array);
+
 void x_smbd_net_enum(std::vector<idl::srvsvc_NetSessInfo0> &array);
 void x_smbd_net_enum(std::vector<idl::srvsvc_NetSessInfo1> &array);
 void x_smbd_net_enum(std::vector<idl::srvsvc_NetSessInfo2> &array);

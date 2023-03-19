@@ -6,6 +6,7 @@
 #include "smbd_replay.hxx"
 #include "include/idtable.hxx"
 #include "smbd_access.hxx"
+#include "smbd_dcerpc_srvsvc.hxx"
 
 struct smbd_open_deleter
 {
@@ -1839,6 +1840,79 @@ bool x_smbd_open_list_t::output(std::string &data)
 x_smbd_ctrl_handler_t *x_smbd_open_list_create()
 {
 	return new x_smbd_open_list_t;
+}
+
+static std::u16string get_path(const x_smbd_open_t *smbd_open)
+{
+	auto smbd_object = smbd_open->smbd_object;
+	std::u16string ret =  u"C:\\"
+		+ x_convert_utf8_to_utf16_assert(smbd_object->smbd_volume->name)
+		+ u"\\" + smbd_object->path;
+	if (smbd_open->smbd_stream) {
+		ret += u":" + smbd_open->smbd_stream->name;
+	}
+	return ret;
+}
+
+static inline void smbd_open_to_open_info(std::vector<idl::srvsvc_NetFileInfo2> &array,
+		const x_smbd_open_t *smbd_open, const x_tick_t now)
+{
+	array.push_back(idl::srvsvc_NetFileInfo2{
+			x_convert_assert<uint32_t>(smbd_open->id_volatile),
+			});
+}
+
+static inline void smbd_open_to_open_info(std::vector<idl::srvsvc_NetFileInfo3> &array,
+		const x_smbd_open_t *smbd_open, const x_tick_t now)
+{
+	std::shared_ptr<x_smbd_user_t> smbd_user;
+	const auto smbd_object = smbd_open->smbd_object;
+	size_t lock_count;
+	auto &open_state = smbd_open->open_state;
+	{
+		auto lock = std::lock_guard(smbd_object->mutex);
+		if (smbd_open->smbd_tcon) {
+			smbd_user = x_smbd_tcon_get_user(smbd_open->smbd_tcon);
+		}
+		lock_count = smbd_open->locks.size();
+	}
+
+	std::shared_ptr<std::u16string> user_name;
+	if (smbd_user) {
+		user_name = std::make_shared<std::u16string>(x_convert_utf8_to_utf16_assert(smbd_user->account_name));
+	} else {
+		user_name = std::make_shared<std::u16string>(x_convert_utf8_to_utf16_assert(
+					x_tostr(open_state.owner)));
+	}
+
+	array.push_back(idl::srvsvc_NetFileInfo3{
+			x_convert_assert<uint32_t>(smbd_open->id_volatile),
+			open_state.access_mask & (idl::SEC_FILE_READ_DATA | idl::SEC_FILE_WRITE_DATA),
+			x_convert<uint32_t>(lock_count),
+			std::make_shared<std::u16string>(get_path(smbd_open)),
+			std::move(user_name)
+			});
+}
+
+template <typename T>
+static void smbd_open_enum(std::vector<T> &array)
+{
+	smbd_open_table_t::iter_t iter = g_smbd_open_table->iter_start();
+	auto now = tick_now;
+	g_smbd_open_table->iterate(iter, [now, &array](x_smbd_open_t *smbd_open) {
+			smbd_open_to_open_info(array, smbd_open, now);
+			return true;
+		});
+}
+
+void x_smbd_net_enum(std::vector<idl::srvsvc_NetFileInfo2> &array)
+{
+	smbd_open_enum(array);
+}
+
+void x_smbd_net_enum(std::vector<idl::srvsvc_NetFileInfo3> &array)
+{
+	smbd_open_enum(array);
 }
 
 /* open with conflict
