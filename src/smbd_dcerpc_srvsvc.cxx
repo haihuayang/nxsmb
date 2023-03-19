@@ -3,6 +3,18 @@
 #include "smbd_ntacl.hxx"
 #include "include/librpc/srvsvc.hxx"
 #include "smbd_conf.hxx"
+#include "smbd_dcerpc_srvsvc.hxx"
+
+
+template <class Arg, class Info>
+static void net_enum(Arg &arg, std::shared_ptr<std::vector<Info>> &array)
+{
+	array = std::make_shared<std::vector<Info>>();
+	x_smbd_net_enum(*array);
+	arg.totalentries = x_convert_assert<uint32_t>(array->size());
+	arg.__result = WERR_OK;
+}
+
 
 X_SMBD_DCERPC_IMPL_TODO(srvsvc_NetCharDevEnum)
 X_SMBD_DCERPC_IMPL_TODO(srvsvc_NetCharDevGetInfo)
@@ -16,7 +28,52 @@ X_SMBD_DCERPC_IMPL_TODO(srvsvc_NetConnEnum)
 X_SMBD_DCERPC_IMPL_TODO(srvsvc_NetFileEnum)
 X_SMBD_DCERPC_IMPL_TODO(srvsvc_NetFileGetInfo)
 X_SMBD_DCERPC_IMPL_TODO(srvsvc_NetFileClose)
-X_SMBD_DCERPC_IMPL_TODO(srvsvc_NetSessEnum)
+
+static bool x_smbd_dcerpc_impl_srvsvc_NetSessEnum(
+		x_dcerpc_pipe_t &rpc_pipe,
+		x_smbd_sess_t *smbd_sess,
+		idl::srvsvc_NetSessEnum &arg)
+{
+#if 0
+	TODO check permission
+	if (!nt_token_check_sid(&global_sid_Builtin_Administrators,
+				session_info->security_token)) {
+		DEBUG(1, ("Enumerating sessions only allowed for "
+					"administrators\n"));
+		return WERR_ACCESS_DENIED;
+	}
+#endif
+
+	auto &ctr = arg.info_ctr.ctr;
+	switch (arg.info_ctr.level) {
+	case 0:
+		net_enum(arg, ctr.ctr0->array);
+		break;
+
+	case 1:
+		net_enum(arg, ctr.ctr1->array);
+		break;
+
+	case 2:
+		net_enum(arg, ctr.ctr2->array);
+		break;
+
+	case 10:
+		net_enum(arg, ctr.ctr10->array);
+		break;
+
+	case 502:
+		net_enum(arg, ctr.ctr502->array);
+		break;
+
+	default:
+		arg.__result = WERR_INVALID_LEVEL;
+		break;
+	}
+
+	return true;
+}
+
 X_SMBD_DCERPC_IMPL_TODO(srvsvc_NetSessDel)
 X_SMBD_DCERPC_IMPL_TODO(srvsvc_NetShareAdd)
 
@@ -37,6 +94,29 @@ static uint32_t net_share_enum_all_1(std::shared_ptr<idl::srvsvc_NetShareCtr1> &
 	return x_convert_assert<uint32_t>(ctr1->array->size());
 }
 
+static uint32_t net_share_enum_all_2(std::shared_ptr<idl::srvsvc_NetShareCtr2> &ctr2)
+{
+	// TODO buffer size and resume handle
+	ctr2->array = std::make_shared<std::vector<idl::srvsvc_NetShareInfo2>>();
+	const std::shared_ptr<x_smbd_conf_t> smbd_conf = x_smbd_conf_get();
+	for (auto &it: smbd_conf->shares) {
+		auto &share = it.second;
+		idl::srvsvc_ShareType type =
+			(share->get_type() == X_SMB2_SHARE_TYPE_DISK ? idl::STYPE_DISKTREE : idl::STYPE_IPC_HIDDEN);
+		ctr2->array->push_back(idl::srvsvc_NetShareInfo2{
+				std::make_shared<std::u16string>(x_convert_utf8_to_utf16_assert(share->name)),
+				type,
+				std::make_shared<std::u16string>(),
+				0, // permission
+				500, // TODO max_users
+				1, // TODO current_users
+				std::make_shared<std::u16string>(x_convert_utf8_to_utf16_assert("C:" + share->name)),
+				std::make_shared<std::u16string>(), // password
+				});
+	};
+	return x_convert_assert<uint32_t>(ctr2->array->size());
+}
+
 static bool x_smbd_dcerpc_impl_srvsvc_NetShareEnumAll(
 		x_dcerpc_pipe_t &rpc_pipe,
 		x_smbd_sess_t *smbd_sess,
@@ -46,6 +126,11 @@ static bool x_smbd_dcerpc_impl_srvsvc_NetShareEnumAll(
 	switch (arg.info_ctr.level) {
 	case 1:
 		arg.totalentries = net_share_enum_all_1(arg.info_ctr.ctr.ctr1);
+		arg.__result = WERR_OK;
+		break;
+
+	case 2:
+		arg.totalentries = net_share_enum_all_2(arg.info_ctr.ctr.ctr2);
 		arg.__result = WERR_OK;
 		break;
 

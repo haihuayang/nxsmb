@@ -4,6 +4,8 @@
 #include "smbd_ctrl.hxx"
 #include "smbd_stats.hxx"
 #include "smbd_conf.hxx"
+#include "smbd_dcerpc_srvsvc.hxx"
+
 
 using smbd_sess_table_t = x_idtable_t<x_smbd_sess_t, x_idtable_64_traits_t>;
 static smbd_sess_table_t *g_smbd_sess_table;
@@ -11,7 +13,9 @@ static smbd_sess_table_t *g_smbd_sess_table;
 struct x_smbd_sess_t
 {
 	enum { MAX_CHAN_COUNT = 32, };
-	x_smbd_sess_t() : tick_create(tick_now) {
+	x_smbd_sess_t() : tick_create(tick_now)
+		, machine_name{x_smbd_conn_curr_name()}
+	{
 		X_SMBD_COUNTER_INC(sess_create, 1);
 	}
 	~x_smbd_sess_t() {
@@ -36,6 +40,7 @@ struct x_smbd_sess_t
 
 	x_smbd_key_set_t keys;
 	uint64_t tick_expired;
+	const std::shared_ptr<std::u16string> machine_name;
 };
 
 template <>
@@ -345,5 +350,112 @@ bool x_smbd_sess_list_t::output(std::string &data)
 x_smbd_ctrl_handler_t *x_smbd_sess_list_create()
 {
 	return new x_smbd_sess_list_t;
+}
+
+#include "include/librpc/srvsvc.hxx"
+
+static inline void smbd_sess_to_sess_info(std::vector<idl::srvsvc_NetSessInfo0> &array,
+		const x_smbd_sess_t *smbd_sess, const x_tick_t now)
+{
+	array.push_back(idl::srvsvc_NetSessInfo0{
+			smbd_sess->machine_name,
+			});
+}
+
+static inline void smbd_sess_to_sess_info(std::vector<idl::srvsvc_NetSessInfo1> &array,
+		const x_smbd_sess_t *smbd_sess, const x_tick_t now)
+{
+	std::shared_ptr<x_smbd_user_t> smbd_user = smbd_sess->smbd_user;
+	auto user_name = std::make_shared<std::u16string>(x_convert_utf8_to_utf16_assert(smbd_user->account_name));
+	array.push_back(idl::srvsvc_NetSessInfo1{
+			smbd_sess->machine_name,
+			std::make_shared<std::u16string>(x_convert_utf8_to_utf16_assert(smbd_user->account_name)),
+			1, // TODO num_open
+			x_convert<uint32_t>((now - smbd_sess->tick_create) / X_NSEC_PER_SEC),
+			0, // TODO idle time
+			0, // user_flags
+			});
+}
+
+static inline void smbd_sess_to_sess_info(std::vector<idl::srvsvc_NetSessInfo2> &array,
+		const x_smbd_sess_t *smbd_sess, const x_tick_t now)
+{
+	std::shared_ptr<x_smbd_user_t> smbd_user = smbd_sess->smbd_user;
+	auto user_name = std::make_shared<std::u16string>(x_convert_utf8_to_utf16_assert(smbd_user->account_name));
+	array.push_back(idl::srvsvc_NetSessInfo2{
+			smbd_sess->machine_name,
+			std::make_shared<std::u16string>(x_convert_utf8_to_utf16_assert(smbd_user->account_name)),
+			1, // TODO num_open
+			x_convert<uint32_t>((now - smbd_sess->tick_create) / X_NSEC_PER_SEC),
+			0, // TODO idle time
+			0, // user_flags
+			nullptr,
+			});
+}
+
+static inline void smbd_sess_to_sess_info(std::vector<idl::srvsvc_NetSessInfo10> &array,
+		const x_smbd_sess_t *smbd_sess, const x_tick_t now)
+{
+	std::shared_ptr<x_smbd_user_t> smbd_user = smbd_sess->smbd_user;
+	auto user_name = std::make_shared<std::u16string>(x_convert_utf8_to_utf16_assert(smbd_user->account_name));
+	array.push_back(idl::srvsvc_NetSessInfo10{
+			smbd_sess->machine_name,
+			std::make_shared<std::u16string>(x_convert_utf8_to_utf16_assert(smbd_user->account_name)),
+			x_convert<uint32_t>((now - smbd_sess->tick_create) / X_NSEC_PER_SEC),
+			0, // TODO idle time
+			});
+}
+
+static inline void smbd_sess_to_sess_info(std::vector<idl::srvsvc_NetSessInfo502> &array,
+		const x_smbd_sess_t *smbd_sess, const x_tick_t now)
+{
+	std::shared_ptr<x_smbd_user_t> smbd_user = smbd_sess->smbd_user;
+	auto user_name = std::make_shared<std::u16string>(x_convert_utf8_to_utf16_assert(smbd_user->account_name));
+	array.push_back(idl::srvsvc_NetSessInfo502{
+			smbd_sess->machine_name,
+			std::make_shared<std::u16string>(x_convert_utf8_to_utf16_assert(smbd_user->account_name)),
+			1, // TODO num_open
+			x_convert<uint32_t>((now - smbd_sess->tick_create) / X_NSEC_PER_SEC),
+			0, // TODO idle time
+			0, // user_flags
+			nullptr,
+			nullptr,
+			});
+}
+
+template <typename T>
+static void smbd_sess_enum(std::vector<T> &array)
+{
+	smbd_sess_table_t::iter_t iter = g_smbd_sess_table->iter_start();
+	auto now = tick_now;
+	g_smbd_sess_table->iterate(iter, [now, &array](x_smbd_sess_t *smbd_sess) {
+			smbd_sess_to_sess_info(array, smbd_sess, now);
+			return true;
+		});
+}
+
+void x_smbd_net_enum(std::vector<idl::srvsvc_NetSessInfo0> &array)
+{
+	smbd_sess_enum(array);
+}
+
+void x_smbd_net_enum(std::vector<idl::srvsvc_NetSessInfo1> &array)
+{
+	smbd_sess_enum(array);
+}
+
+void x_smbd_net_enum(std::vector<idl::srvsvc_NetSessInfo2> &array)
+{
+	smbd_sess_enum(array);
+}
+
+void x_smbd_net_enum(std::vector<idl::srvsvc_NetSessInfo10> &array)
+{
+	smbd_sess_enum(array);
+}
+
+void x_smbd_net_enum(std::vector<idl::srvsvc_NetSessInfo502> &array)
+{
+	smbd_sess_enum(array);
 }
 

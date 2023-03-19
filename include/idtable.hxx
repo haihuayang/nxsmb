@@ -347,6 +347,13 @@ struct x_idtable_t
 		return ret;
 	}
 
+	template <typename Func>
+	bool iterate(iter_t &iter, Func &&func) {
+		while (iter_entry(iter, std::forward<Func>(func))) {
+		}
+		return iter.index < count;
+	}
+
 	bool __decref(entry_t *entry) noexcept {
 		uint64_t oval = entry->header.load(std::memory_order_relaxed);
 		for (;;) {
