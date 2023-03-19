@@ -14,7 +14,34 @@ struct smbd_open_deleter
 	}
 };
 
-using smbd_open_table_t = x_idtable_t<x_smbd_open_t, x_idtable_64_traits_t, smbd_open_deleter>;
+struct smbd_open_idtable_traits_t
+{
+	enum {
+		index_max = 0x1ffff8u,
+		index_null = 0x1fffffu,
+		id_invalid = uint64_t(-1),
+	};
+	using id_type = uint64_t;
+	using gen_type = uint32_t;
+	using index_type = uint32_t;
+	static constexpr uint32_t entry_to_gen(uint64_t val) {
+		return val & 0x7fful;
+	}
+	static constexpr uint64_t build_id(uint32_t gen, uint32_t index) {
+		return uint64_t(index) << 11 | gen;
+	}
+	static constexpr uint32_t id_to_index(uint64_t id) {
+		return uint32_t(id >> 11);
+	}
+	static constexpr uint32_t id_to_gen(uint64_t id) {
+		return uint32_t(id & 0x7ffu);
+	}
+	static constexpr uint32_t inc_gen(uint32_t gen) {
+		return (gen + 1) & 0x7ffu;
+	}
+};
+
+using smbd_open_table_t = x_idtable_t<x_smbd_open_t, smbd_open_idtable_traits_t, smbd_open_deleter>;
 static smbd_open_table_t *g_smbd_open_table;
 
 /* allocate extra count of open, so it unlikely exceed the hard limit when multiple thread
@@ -42,6 +69,7 @@ void x_smbd_ref_dec(x_smbd_open_t *smbd_open)
 
 int x_smbd_open_table_init(uint32_t count)
 {
+	X_ASSERT(count + g_smbd_open_extra < smbd_open_idtable_traits_t::index_max);
 	g_smbd_open_table = new smbd_open_table_t(count + g_smbd_open_extra);
 	return 0;
 }
