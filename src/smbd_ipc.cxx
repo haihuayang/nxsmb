@@ -58,6 +58,7 @@ struct named_pipe_t
 	x_dcerpc_pipe_t rpc_pipe;
 	x_ncacn_packet_t pkt;
 	NTSTATUS return_status{NT_STATUS_OK};
+	bool is_transceive = false;
 	uint32_t packet_read = 0;
 	uint32_t offset = 0;
 	std::vector<uint8_t> input;
@@ -112,7 +113,14 @@ static NTSTATUS named_pipe_read(
 		named_pipe->output.clear();
 		named_pipe->offset = 0;
 	}
-	return named_pipe->output.size() == 0 ? NT_STATUS_OK : NT_STATUS_BUFFER_OVERFLOW;
+	if (named_pipe->output.size() == 0) {
+		named_pipe->is_transceive = false;
+		return NT_STATUS_OK;
+	} else if (named_pipe->is_transceive) {
+		return NT_STATUS_OK;
+	} else {
+		return NT_STATUS_BUFFER_OVERFLOW;
+	}
 }
 
 static inline bool process_ncacn_header(x_ncacn_packet_t &header)
@@ -480,6 +488,7 @@ static NTSTATUS ipc_object_op_ioctl(
 	named_pipe_t *named_pipe = from_smbd_open(smbd_requ->smbd_open);
 	switch (state->ctl_code) {
 	case X_SMB2_FSCTL_PIPE_TRANSCEIVE:
+		named_pipe->is_transceive = true;
 		named_pipe_write(ipc_object, named_pipe,
 				smbd_requ->smbd_sess,
 				state->in_buf->data + state->in_buf_offset,
