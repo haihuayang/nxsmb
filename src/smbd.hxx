@@ -248,6 +248,7 @@ extern __thread x_smbd_conn_t *g_smbd_conn_curr;
 #define X_SMBD_CONN_ASSERT(smbd_conn) X_ASSERT((smbd_conn) == g_smbd_conn_curr)
 const x_smb2_uuid_t &x_smbd_conn_curr_client_guid();
 uint16_t x_smbd_conn_curr_dialect();
+std::shared_ptr<std::u16string> x_smbd_conn_curr_name();
 
 int x_smbd_conn_negprot(x_smbd_conn_t *smbd_conn,
 		uint16_t dialect,

@@ -33,6 +33,7 @@ struct x_smbd_conn_t
 	int fd;
 	unsigned int count_msg = 0;
 	const x_sockaddr_t saddr;
+	const std::shared_ptr<std::u16string> machine_name;
 	const x_tick_t tick_create;
 	uint16_t encryption_algo = X_SMB2_ENCRYPTION_INVALID_ALGO;
 	uint16_t signing_algo = X_SMB2_SIGNING_INVALID_ALGO;
@@ -62,9 +63,25 @@ struct x_smbd_conn_t
 	x_tp_ddlist_t<fdevt_user_conn_traits> fdevt_user_list;
 };
 
+static std::u16string machine_name_from_saddr(const x_sockaddr_t &saddr)
+{
+	char buf[INET6_ADDRSTRLEN] = "";
+	if (saddr.family == AF_INET) {
+		snprintf(buf, sizeof buf, "%d.%d.%d.%d",
+			X_IPQUAD_BE(saddr.sin.sin_addr));
+	} else if (saddr.family == AF_INET6) {
+		inet_ntop(AF_INET6, &saddr.sin6.sin6_addr, buf, sizeof buf);
+	} else {
+		X_ASSERT(false);
+	}
+	return x_convert_utf8_to_utf16_assert(buf);
+}
+
 x_smbd_conn_t::x_smbd_conn_t(int fd, const x_sockaddr_t &saddr,
 		uint32_t max_credits)
-	: fd(fd), saddr(saddr), tick_create(tick_now)
+	: fd(fd), saddr(saddr)
+	, machine_name{std::make_shared<std::u16string>(machine_name_from_saddr(saddr))}
+	, tick_create(tick_now)
 	, seq_bitmap(max_credits)
 {
 	X_SMBD_COUNTER_INC(conn_create, 1);
@@ -1215,6 +1232,11 @@ const x_smb2_uuid_t &x_smbd_conn_curr_client_guid()
 uint16_t x_smbd_conn_curr_dialect()
 {
 	return g_smbd_conn_curr->dialect;
+}
+
+std::shared_ptr<std::u16string> x_smbd_conn_curr_name()
+{
+	return g_smbd_conn_curr->machine_name;
 }
 
 
