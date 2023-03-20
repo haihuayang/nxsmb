@@ -80,5 +80,12 @@ static bool x_smbd_dcerpc_impl_##Arg(x_dcerpc_pipe_t &rpc_pipe, x_smbd_sess_t *s
 	return false; \
 }
 
+#define X_SMBD_DCERPC_IMPL_NOT_SUPPORTED(Arg) \
+static bool x_smbd_dcerpc_impl_##Arg(x_dcerpc_pipe_t &rpc_pipe, x_smbd_sess_t *smbd_sess, idl::Arg &arg) \
+{ \
+	(arg).__result = WERR_NOT_SUPPORTED; \
+	return true; \
+}
+
 #endif /* __smbd_dcerpc__hxx__ */
 

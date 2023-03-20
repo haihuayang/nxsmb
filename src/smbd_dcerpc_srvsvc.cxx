@@ -38,10 +38,11 @@ static void net_get_info(Arg &arg, std::shared_ptr<Info> &info, const Data &data
 	arg.__result = WERR_OK;
 }
 
-X_SMBD_DCERPC_IMPL_TODO(srvsvc_NetCharDevEnum)
+
+X_SMBD_DCERPC_IMPL_NOT_SUPPORTED(srvsvc_NetCharDevEnum)
 X_SMBD_DCERPC_IMPL_TODO(srvsvc_NetCharDevGetInfo)
 X_SMBD_DCERPC_IMPL_TODO(srvsvc_NetCharDevControl)
-X_SMBD_DCERPC_IMPL_TODO(srvsvc_NetCharDevQEnum)
+X_SMBD_DCERPC_IMPL_NOT_SUPPORTED(srvsvc_NetCharDevQEnum)
 X_SMBD_DCERPC_IMPL_TODO(srvsvc_NetCharDevQGetInfo)
 X_SMBD_DCERPC_IMPL_TODO(srvsvc_NetCharDevQSetInfo)
 X_SMBD_DCERPC_IMPL_TODO(srvsvc_NetCharDevQPurge)
