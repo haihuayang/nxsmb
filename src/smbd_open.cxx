@@ -1895,7 +1895,7 @@ static inline void smbd_open_to_open_info(std::vector<idl::srvsvc_NetFileInfo3> 
 }
 
 template <typename T>
-static void smbd_open_enum(std::vector<T> &array)
+static WERROR smbd_open_enum(std::vector<T> &array)
 {
 	smbd_open_table_t::iter_t iter = g_smbd_open_table->iter_start();
 	auto now = tick_now;
@@ -1903,16 +1903,19 @@ static void smbd_open_enum(std::vector<T> &array)
 			smbd_open_to_open_info(array, smbd_open, now);
 			return true;
 		});
+	return WERR_OK;
 }
 
-void x_smbd_net_enum(std::vector<idl::srvsvc_NetFileInfo2> &array)
+WERROR x_smbd_net_enum(idl::srvsvc_NetFileEnum &arg,
+		std::vector<idl::srvsvc_NetFileInfo2> &array)
 {
-	smbd_open_enum(array);
+	return smbd_open_enum(array);
 }
 
-void x_smbd_net_enum(std::vector<idl::srvsvc_NetFileInfo3> &array)
+WERROR x_smbd_net_enum(idl::srvsvc_NetFileEnum &arg,
+		std::vector<idl::srvsvc_NetFileInfo3> &array)
 {
-	smbd_open_enum(array);
+	return smbd_open_enum(array);
 }
 
 /* open with conflict

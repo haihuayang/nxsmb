@@ -6,6 +6,8 @@
 #include "include/idtable.hxx"
 #include "smbd_share.hxx"
 #include "smbd_replay.hxx"
+#include "smbd_conf.hxx"
+#include "smbd_dcerpc_srvsvc.hxx"
 
 using smbd_tcon_table_t = x_idtable_t<x_smbd_tcon_t, x_idtable_32_traits_t>;
 static smbd_tcon_table_t *g_smbd_tcon_table;
@@ -442,5 +444,68 @@ bool x_smbd_tcon_list_t::output(std::string &data)
 x_smbd_ctrl_handler_t *x_smbd_tcon_list_create()
 {
 	return new x_smbd_tcon_list_t;
+}
+
+static inline void smbd_tcon_to_tcon_info(std::vector<idl::srvsvc_NetConnInfo0> &array,
+		const x_smbd_tcon_t *smbd_tcon, const x_tick_t now,
+		std::shared_ptr<std::u16string> &share_name)
+{
+	array.push_back(idl::srvsvc_NetConnInfo0{
+			smbd_tcon->tid,
+			});
+}
+
+static inline void smbd_tcon_to_tcon_info(std::vector<idl::srvsvc_NetConnInfo1> &array,
+		const x_smbd_tcon_t *smbd_tcon, const x_tick_t now,
+		std::shared_ptr<std::u16string> &share_name)
+{
+	const auto smbd_user = x_smbd_tcon_get_user(smbd_tcon);
+	array.push_back(idl::srvsvc_NetConnInfo1{
+			smbd_tcon->tid,
+			0x3, // conn_type
+			1, // TODO num_open
+			1, // TODO num_users
+			x_convert<uint32_t>((now - smbd_tcon->tick_create) / X_NSEC_PER_SEC),
+			std::make_shared<std::u16string>(x_convert_utf8_to_utf16_assert(smbd_user->account_name)),
+			share_name,
+			});
+}
+
+template <typename T>
+static WERROR smbd_tcon_enum(idl::srvsvc_NetConnEnum &arg, std::vector<T> &array)
+{
+	std::shared_ptr<x_smbd_share_t> smbd_share;
+	if (arg.path) {
+		std::string volume;
+		// TODO case
+		std::string share_name = x_convert_utf16_to_utf8_safe(*arg.path);
+		smbd_share = x_smbd_find_share(share_name, volume);
+		if (!smbd_share) {
+			X_LOG_WARN("fail to find share '%s'", share_name.c_str());
+			return WERR_INVALID_NAME;
+		}
+	}
+
+	smbd_tcon_table_t::iter_t iter = g_smbd_tcon_table->iter_start();
+	auto now = tick_now;
+	g_smbd_tcon_table->iterate(iter, [now, &array, &smbd_share, &arg](x_smbd_tcon_t *smbd_tcon) {
+			if (smbd_share == smbd_tcon->smbd_share) {
+				smbd_tcon_to_tcon_info(array, smbd_tcon, now, arg.path);
+			}
+			return true;
+		});
+	return WERR_OK;
+}
+
+WERROR x_smbd_net_enum(idl::srvsvc_NetConnEnum &arg,
+		std::vector<idl::srvsvc_NetConnInfo0> &array)
+{
+	return smbd_tcon_enum(arg, array);
+}
+
+WERROR x_smbd_net_enum(idl::srvsvc_NetConnEnum &arg,
+		std::vector<idl::srvsvc_NetConnInfo1> &array)
+{
+	return smbd_tcon_enum(arg, array);
 }
 

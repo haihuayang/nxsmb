@@ -352,7 +352,6 @@ x_smbd_ctrl_handler_t *x_smbd_sess_list_create()
 	return new x_smbd_sess_list_t;
 }
 
-#include "include/librpc/srvsvc.hxx"
 
 static inline void smbd_sess_to_sess_info(std::vector<idl::srvsvc_NetSessInfo0> &array,
 		const x_smbd_sess_t *smbd_sess, const x_tick_t now)
@@ -424,7 +423,7 @@ static inline void smbd_sess_to_sess_info(std::vector<idl::srvsvc_NetSessInfo502
 }
 
 template <typename T>
-static void smbd_sess_enum(std::vector<T> &array)
+static WERROR smbd_sess_enum(std::vector<T> &array)
 {
 	smbd_sess_table_t::iter_t iter = g_smbd_sess_table->iter_start();
 	auto now = tick_now;
@@ -432,30 +431,36 @@ static void smbd_sess_enum(std::vector<T> &array)
 			smbd_sess_to_sess_info(array, smbd_sess, now);
 			return true;
 		});
+	return WERR_OK;
 }
 
-void x_smbd_net_enum(std::vector<idl::srvsvc_NetSessInfo0> &array)
+WERROR x_smbd_net_enum(idl::srvsvc_NetSessEnum &arg,
+		std::vector<idl::srvsvc_NetSessInfo0> &array)
 {
-	smbd_sess_enum(array);
+	return smbd_sess_enum(array);
 }
 
-void x_smbd_net_enum(std::vector<idl::srvsvc_NetSessInfo1> &array)
+WERROR x_smbd_net_enum(idl::srvsvc_NetSessEnum &arg,
+		std::vector<idl::srvsvc_NetSessInfo1> &array)
 {
-	smbd_sess_enum(array);
+	return smbd_sess_enum(array);
 }
 
-void x_smbd_net_enum(std::vector<idl::srvsvc_NetSessInfo2> &array)
+WERROR x_smbd_net_enum(idl::srvsvc_NetSessEnum &arg,
+		std::vector<idl::srvsvc_NetSessInfo2> &array)
 {
-	smbd_sess_enum(array);
+	return smbd_sess_enum(array);
 }
 
-void x_smbd_net_enum(std::vector<idl::srvsvc_NetSessInfo10> &array)
+WERROR x_smbd_net_enum(idl::srvsvc_NetSessEnum &arg,
+		std::vector<idl::srvsvc_NetSessInfo10> &array)
 {
-	smbd_sess_enum(array);
+	return smbd_sess_enum(array);
 }
 
-void x_smbd_net_enum(std::vector<idl::srvsvc_NetSessInfo502> &array)
+WERROR x_smbd_net_enum(idl::srvsvc_NetSessEnum &arg,
+		std::vector<idl::srvsvc_NetSessInfo502> &array)
 {
-	smbd_sess_enum(array);
+	return smbd_sess_enum(array);
 }
 

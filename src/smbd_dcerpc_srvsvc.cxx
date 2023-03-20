@@ -16,16 +16,17 @@
 #endif
 #define SMBD_DCERPC_SRVSVC_CHECK_ACCESS(smbd_sess) do { } while (0)
 
-static void x_smbd_net_enum(std::vector<idl::srvsvc_NetShareInfo1> &array);
-static void x_smbd_net_enum(std::vector<idl::srvsvc_NetShareInfo2> &array);
+static WERROR x_smbd_net_enum(idl::srvsvc_NetShareEnumAll &arg,
+		std::vector<idl::srvsvc_NetShareInfo1> &array);
+static WERROR x_smbd_net_enum(idl::srvsvc_NetShareEnumAll &arg,
+		std::vector<idl::srvsvc_NetShareInfo2> &array);
 
 template <class Arg, class Info>
 static void net_enum(Arg &arg, std::shared_ptr<std::vector<Info>> &array)
 {
 	array = std::make_shared<std::vector<Info>>();
-	x_smbd_net_enum(*array);
+	arg.__result = x_smbd_net_enum(arg, *array);
 	arg.totalentries = x_convert_assert<uint32_t>(array->size());
-	arg.__result = WERR_OK;
 }
 
 template <class Info, class Data>
@@ -47,7 +48,31 @@ X_SMBD_DCERPC_IMPL_TODO(srvsvc_NetCharDevQGetInfo)
 X_SMBD_DCERPC_IMPL_TODO(srvsvc_NetCharDevQSetInfo)
 X_SMBD_DCERPC_IMPL_TODO(srvsvc_NetCharDevQPurge)
 X_SMBD_DCERPC_IMPL_TODO(srvsvc_NetCharDevQPurgeSelf)
-X_SMBD_DCERPC_IMPL_TODO(srvsvc_NetConnEnum)
+
+static bool x_smbd_dcerpc_impl_srvsvc_NetConnEnum(
+		x_dcerpc_pipe_t &rpc_pipe,
+		x_smbd_sess_t *smbd_sess,
+		idl::srvsvc_NetConnEnum &arg)
+{
+	SMBD_DCERPC_SRVSVC_CHECK_ACCESS(smbd_sess);
+
+	auto &ctr = arg.info_ctr.ctr;
+	switch (arg.info_ctr.level) {
+	case 0:
+		net_enum(arg, ctr.ctr0->array);
+		break;
+
+	case 1:
+		net_enum(arg, ctr.ctr1->array);
+		break;
+
+	default:
+		arg.__result = WERR_INVALID_LEVEL;
+		break;
+	}
+
+	return true;
+}
 
 static bool x_smbd_dcerpc_impl_srvsvc_NetFileEnum(
 		x_dcerpc_pipe_t &rpc_pipe,
@@ -234,20 +259,24 @@ idl::sec_desc_buf x_smbd_net_get_info<idl::sec_desc_buf>(const x_smbd_share_t &s
 	};
 }
 
-static void x_smbd_net_enum(std::vector<idl::srvsvc_NetShareInfo1> &array)
+static WERROR x_smbd_net_enum(idl::srvsvc_NetShareEnumAll &arg,
+		std::vector<idl::srvsvc_NetShareInfo1> &array)
 {
 	const std::shared_ptr<x_smbd_conf_t> smbd_conf = x_smbd_conf_get();
 	for (auto &it: smbd_conf->shares) {
 		array.push_back(x_smbd_net_get_info<idl::srvsvc_NetShareInfo1>(*it.second));
 	}
+	return WERR_OK;
 }
 
-static void x_smbd_net_enum(std::vector<idl::srvsvc_NetShareInfo2> &array)
+static WERROR x_smbd_net_enum(idl::srvsvc_NetShareEnumAll &arg,
+		std::vector<idl::srvsvc_NetShareInfo2> &array)
 {
 	const std::shared_ptr<x_smbd_conf_t> smbd_conf = x_smbd_conf_get();
 	for (auto &it: smbd_conf->shares) {
 		array.push_back(x_smbd_net_get_info<idl::srvsvc_NetShareInfo2>(*it.second));
 	}
+	return WERR_OK;
 }
 
 static bool x_smbd_dcerpc_impl_srvsvc_NetShareEnumAll(
