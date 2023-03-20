@@ -16,10 +16,156 @@
 #endif
 #define SMBD_DCERPC_SRVSVC_CHECK_ACCESS(smbd_sess) do { } while (0)
 
+static inline idl::srvsvc_ShareType get_share_type(const x_smbd_share_t &smbd_share)
+{
+	return (smbd_share.get_type() == X_SMB2_SHARE_TYPE_DISK ?
+			idl::STYPE_DISKTREE : idl::STYPE_IPC_HIDDEN);
+}
+
+static uint32_t get_max_users(const x_smbd_share_t &smbd_share)
+{
+	return smbd_share.max_connections ? smbd_share.max_connections : (uint32_t)-1;
+}
+
+static uint32_t get_share_current_users(const x_smbd_share_t &smbd_share)
+{
+	return 1; // TODO
+}
+
+template <class Info, class Data>
+Info x_smbd_net_get_info(const Data &data);
+
+template <>
+idl::srvsvc_NetShareInfo0 x_smbd_net_get_info<idl::srvsvc_NetShareInfo0>(const x_smbd_share_t &share)
+{
+	return idl::srvsvc_NetShareInfo0{
+		std::make_shared<std::u16string>(x_convert_utf8_to_utf16_assert(share.name)),
+	};
+}
+
+template <>
+idl::srvsvc_NetShareInfo1 x_smbd_net_get_info<idl::srvsvc_NetShareInfo1>(const x_smbd_share_t &share)
+{
+	return idl::srvsvc_NetShareInfo1{
+		std::make_shared<std::u16string>(x_convert_utf8_to_utf16_assert(share.name)),
+		get_share_type(share),
+		std::make_shared<std::u16string>() // comment
+	};
+}
+
+template <>
+idl::srvsvc_NetShareInfo2 x_smbd_net_get_info<idl::srvsvc_NetShareInfo2>(const x_smbd_share_t &share)
+{
+	return idl::srvsvc_NetShareInfo2{
+		std::make_shared<std::u16string>(x_convert_utf8_to_utf16_assert(share.name)),
+		get_share_type(share),
+		std::make_shared<std::u16string>(),
+		0, // permission
+		get_max_users(share),
+		get_share_current_users(share),
+		std::make_shared<std::u16string>(x_convert_utf8_to_utf16_assert("C:\\" + share.name)),
+		std::make_shared<std::u16string>(), // password
+	};
+}
+
+template <>
+idl::srvsvc_NetShareInfo501 x_smbd_net_get_info<idl::srvsvc_NetShareInfo501>(const x_smbd_share_t &share)
+{
+	return idl::srvsvc_NetShareInfo501{
+		std::make_shared<std::u16string>(x_convert_utf8_to_utf16_assert(share.name)),
+		get_share_type(share),
+		std::make_shared<std::u16string>(), // comment
+		0
+	};
+}
+
+template <>
+idl::srvsvc_NetShareInfo502 x_smbd_net_get_info<idl::srvsvc_NetShareInfo502>(const x_smbd_share_t &share)
+{
+	return idl::srvsvc_NetShareInfo502{
+		std::make_shared<std::u16string>(x_convert_utf8_to_utf16_assert(share.name)),
+		get_share_type(share),
+		std::make_shared<std::u16string>(),
+		0, // permission
+		get_max_users(share),
+		get_share_current_users(share),
+		std::make_shared<std::u16string>(x_convert_utf8_to_utf16_assert("C:\\" + share.name)),
+		std::make_shared<std::u16string>(), // password
+		{ get_share_security(share.name) },
+	};
+}
+
+template <>
+idl::srvsvc_NetShareInfo1004 x_smbd_net_get_info<idl::srvsvc_NetShareInfo1004>(const x_smbd_share_t &share)
+{
+	return idl::srvsvc_NetShareInfo1004{
+		std::make_shared<std::u16string>(), // comment
+	};
+}
+
+template <>
+idl::srvsvc_NetShareInfo1005 x_smbd_net_get_info<idl::srvsvc_NetShareInfo1005>(const x_smbd_share_t &share)
+{
+	return idl::srvsvc_NetShareInfo1005{
+		idl::NetShareInfo1005Flags(0), // TODO DFS
+	};
+}
+
+template <>
+idl::srvsvc_NetShareInfo1006 x_smbd_net_get_info<idl::srvsvc_NetShareInfo1006>(const x_smbd_share_t &share)
+{
+	return idl::srvsvc_NetShareInfo1006{
+		get_max_users(share),
+	};
+}
+
+template <>
+idl::srvsvc_NetShareInfo1007 x_smbd_net_get_info<idl::srvsvc_NetShareInfo1007>(const x_smbd_share_t &share)
+{
+	return idl::srvsvc_NetShareInfo1007{
+		0, // flags,
+		std::make_shared<std::u16string>(), // alternate_directory_name
+	};
+}
+
+template <>
+idl::sec_desc_buf x_smbd_net_get_info<idl::sec_desc_buf>(const x_smbd_share_t &share)
+{
+	return idl::sec_desc_buf{
+		get_share_security(share.name),
+	};
+}
+
 static WERROR x_smbd_net_enum(idl::srvsvc_NetShareEnumAll &arg,
-		std::vector<idl::srvsvc_NetShareInfo1> &array);
+		std::vector<idl::srvsvc_NetShareInfo0> &array)
+{
+	const std::shared_ptr<x_smbd_conf_t> smbd_conf = x_smbd_conf_get();
+	for (auto &it: smbd_conf->shares) {
+		array.push_back(x_smbd_net_get_info<idl::srvsvc_NetShareInfo0>(*it.second));
+	}
+	return WERR_OK;
+}
+
 static WERROR x_smbd_net_enum(idl::srvsvc_NetShareEnumAll &arg,
-		std::vector<idl::srvsvc_NetShareInfo2> &array);
+		std::vector<idl::srvsvc_NetShareInfo1> &array)
+{
+	const std::shared_ptr<x_smbd_conf_t> smbd_conf = x_smbd_conf_get();
+	for (auto &it: smbd_conf->shares) {
+		array.push_back(x_smbd_net_get_info<idl::srvsvc_NetShareInfo1>(*it.second));
+	}
+	return WERR_OK;
+}
+
+static WERROR x_smbd_net_enum(idl::srvsvc_NetShareEnumAll &arg,
+		std::vector<idl::srvsvc_NetShareInfo2> &array)
+{
+	const std::shared_ptr<x_smbd_conf_t> smbd_conf = x_smbd_conf_get();
+	for (auto &it: smbd_conf->shares) {
+		array.push_back(x_smbd_net_get_info<idl::srvsvc_NetShareInfo2>(*it.second));
+	}
+	return WERR_OK;
+}
+
 
 template <class Arg, class Info>
 static void net_enum(Arg &arg, std::shared_ptr<std::vector<Info>> &array)
@@ -28,9 +174,6 @@ static void net_enum(Arg &arg, std::shared_ptr<std::vector<Info>> &array)
 	arg.__result = x_smbd_net_enum(arg, *array);
 	arg.totalentries = x_convert_assert<uint32_t>(array->size());
 }
-
-template <class Info, class Data>
-Info x_smbd_net_get_info(const Data &data);
 
 template <class Arg, class Info, class Data>
 static void net_get_info(Arg &arg, std::shared_ptr<Info> &info, const Data &data)
@@ -142,143 +285,6 @@ static bool x_smbd_dcerpc_impl_srvsvc_NetSessEnum(
 X_SMBD_DCERPC_IMPL_TODO(srvsvc_NetSessDel)
 X_SMBD_DCERPC_IMPL_TODO(srvsvc_NetShareAdd)
 
-static inline idl::srvsvc_ShareType get_share_type(const x_smbd_share_t &smbd_share)
-{
-	return (smbd_share.get_type() == X_SMB2_SHARE_TYPE_DISK ?
-			idl::STYPE_DISKTREE : idl::STYPE_IPC_HIDDEN);
-}
-
-static uint32_t get_max_users(const x_smbd_share_t &smbd_share)
-{
-	return smbd_share.max_connections ? smbd_share.max_connections : (uint32_t)-1;
-}
-
-static uint32_t get_share_current_users(const x_smbd_share_t &smbd_share)
-{
-	return 1; // TODO
-}
-
-template <>
-idl::srvsvc_NetShareInfo0 x_smbd_net_get_info<idl::srvsvc_NetShareInfo0>(const x_smbd_share_t &share)
-{
-	return idl::srvsvc_NetShareInfo0{
-		std::make_shared<std::u16string>(x_convert_utf8_to_utf16_assert(share.name)),
-	};
-}
-
-template <>
-idl::srvsvc_NetShareInfo1 x_smbd_net_get_info<idl::srvsvc_NetShareInfo1>(const x_smbd_share_t &share)
-{
-	return idl::srvsvc_NetShareInfo1{
-		std::make_shared<std::u16string>(x_convert_utf8_to_utf16_assert(share.name)),
-		get_share_type(share),
-		std::make_shared<std::u16string>() // comment
-	};
-}
-
-template <>
-idl::srvsvc_NetShareInfo2 x_smbd_net_get_info<idl::srvsvc_NetShareInfo2>(const x_smbd_share_t &share)
-{
-	return idl::srvsvc_NetShareInfo2{
-		std::make_shared<std::u16string>(x_convert_utf8_to_utf16_assert(share.name)),
-		get_share_type(share),
-		std::make_shared<std::u16string>(),
-		0, // permission
-		get_max_users(share),
-		get_share_current_users(share),
-		std::make_shared<std::u16string>(x_convert_utf8_to_utf16_assert("C:\\" + share.name)),
-		std::make_shared<std::u16string>(), // password
-	};
-}
-
-template <>
-idl::srvsvc_NetShareInfo501 x_smbd_net_get_info<idl::srvsvc_NetShareInfo501>(const x_smbd_share_t &share)
-{
-	return idl::srvsvc_NetShareInfo501{
-		std::make_shared<std::u16string>(x_convert_utf8_to_utf16_assert(share.name)),
-		get_share_type(share),
-		std::make_shared<std::u16string>(), // comment
-		0
-	};
-}
-
-template <>
-idl::srvsvc_NetShareInfo502 x_smbd_net_get_info<idl::srvsvc_NetShareInfo502>(const x_smbd_share_t &share)
-{
-	return idl::srvsvc_NetShareInfo502{
-		std::make_shared<std::u16string>(x_convert_utf8_to_utf16_assert(share.name)),
-		get_share_type(share),
-		std::make_shared<std::u16string>(),
-		0, // permission
-		get_max_users(share),
-		get_share_current_users(share),
-		std::make_shared<std::u16string>(x_convert_utf8_to_utf16_assert("C:\\" + share.name)),
-		std::make_shared<std::u16string>(), // password
-		{ get_share_security(share.name) },
-	};
-}
-
-template <>
-idl::srvsvc_NetShareInfo1004 x_smbd_net_get_info<idl::srvsvc_NetShareInfo1004>(const x_smbd_share_t &share)
-{
-	return idl::srvsvc_NetShareInfo1004{
-		std::make_shared<std::u16string>(), // comment
-	};
-}
-
-template <>
-idl::srvsvc_NetShareInfo1005 x_smbd_net_get_info<idl::srvsvc_NetShareInfo1005>(const x_smbd_share_t &share)
-{
-	return idl::srvsvc_NetShareInfo1005{
-		idl::NetShareInfo1005Flags(0), // TODO DFS
-	};
-}
-
-template <>
-idl::srvsvc_NetShareInfo1006 x_smbd_net_get_info<idl::srvsvc_NetShareInfo1006>(const x_smbd_share_t &share)
-{
-	return idl::srvsvc_NetShareInfo1006{
-		get_max_users(share),
-	};
-}
-
-template <>
-idl::srvsvc_NetShareInfo1007 x_smbd_net_get_info<idl::srvsvc_NetShareInfo1007>(const x_smbd_share_t &share)
-{
-	return idl::srvsvc_NetShareInfo1007{
-		0, // flags,
-		std::make_shared<std::u16string>(), // alternate_directory_name
-	};
-}
-
-template <>
-idl::sec_desc_buf x_smbd_net_get_info<idl::sec_desc_buf>(const x_smbd_share_t &share)
-{
-	return idl::sec_desc_buf{
-		get_share_security(share.name),
-	};
-}
-
-static WERROR x_smbd_net_enum(idl::srvsvc_NetShareEnumAll &arg,
-		std::vector<idl::srvsvc_NetShareInfo1> &array)
-{
-	const std::shared_ptr<x_smbd_conf_t> smbd_conf = x_smbd_conf_get();
-	for (auto &it: smbd_conf->shares) {
-		array.push_back(x_smbd_net_get_info<idl::srvsvc_NetShareInfo1>(*it.second));
-	}
-	return WERR_OK;
-}
-
-static WERROR x_smbd_net_enum(idl::srvsvc_NetShareEnumAll &arg,
-		std::vector<idl::srvsvc_NetShareInfo2> &array)
-{
-	const std::shared_ptr<x_smbd_conf_t> smbd_conf = x_smbd_conf_get();
-	for (auto &it: smbd_conf->shares) {
-		array.push_back(x_smbd_net_get_info<idl::srvsvc_NetShareInfo2>(*it.second));
-	}
-	return WERR_OK;
-}
-
 static bool x_smbd_dcerpc_impl_srvsvc_NetShareEnumAll(
 		x_dcerpc_pipe_t &rpc_pipe,
 		x_smbd_sess_t *smbd_sess,
@@ -286,6 +292,10 @@ static bool x_smbd_dcerpc_impl_srvsvc_NetShareEnumAll(
 {
 	auto &ctr = arg.info_ctr.ctr;
 	switch (arg.info_ctr.level) {
+	case 0:
+		net_enum(arg, ctr.ctr0->array);
+		break;
+
 	case 1:
 		net_enum(arg, ctr.ctr1->array);
 		break;
@@ -365,7 +375,54 @@ static bool x_smbd_dcerpc_impl_srvsvc_NetShareGetInfo(
 X_SMBD_DCERPC_IMPL_TODO(srvsvc_NetShareSetInfo)
 X_SMBD_DCERPC_IMPL_TODO(srvsvc_NetShareDel)
 X_SMBD_DCERPC_IMPL_TODO(srvsvc_NetShareDelSticky)
-X_SMBD_DCERPC_IMPL_TODO(srvsvc_NetShareCheck)
+X_SMBD_DCERPC_IMPL_NOT_SUPPORTED(srvsvc_NetShareCheck)
+
+
+template <>
+idl::srvsvc_NetSrvInfo100 x_smbd_net_get_info<idl::srvsvc_NetSrvInfo100>(
+		const x_smbd_conf_t &smbd_conf)
+{
+	return idl::srvsvc_NetSrvInfo100{
+		idl::PLATFORM_ID_NT,
+		std::make_shared<std::u16string>(x_convert_utf8_to_utf16_assert(smbd_conf.netbios_name)),
+	};
+}
+
+template <>
+idl::srvsvc_NetSrvInfo101 x_smbd_net_get_info<idl::srvsvc_NetSrvInfo101>(
+		const x_smbd_conf_t &smbd_conf)
+{
+	return idl::srvsvc_NetSrvInfo101{
+		idl::PLATFORM_ID_NT,
+		std::make_shared<std::u16string>(x_convert_utf8_to_utf16_assert(smbd_conf.netbios_name)),
+		0x06, // version_major
+		0x01, // version_minor
+		smbd_conf.get_default_server_announce(),
+		std::make_shared<std::u16string>(), // commnet
+	};
+}
+
+template <>
+idl::srvsvc_NetSrvInfo102 x_smbd_net_get_info<idl::srvsvc_NetSrvInfo102>(
+		const x_smbd_conf_t &smbd_conf)
+{
+	return idl::srvsvc_NetSrvInfo102{
+		idl::PLATFORM_ID_NT,
+		std::make_shared<std::u16string>(x_convert_utf8_to_utf16_assert(smbd_conf.netbios_name)),
+		0x06, // version_major
+		0x01, // version_minor
+		smbd_conf.get_default_server_announce(),
+		std::make_shared<std::u16string>(), // commnet
+		/* copy the values from samba _srvsvc_NetSrvGetInfo */
+		0xffffffff, // users
+		0xf, // disc
+		0, // hidden
+		240, // announce
+		3000, // anndelta
+		100000, // licenses
+		std::make_shared<std::u16string>(u"C:\\"),
+	};
+}
 
 static bool x_smbd_dcerpc_impl_srvsvc_NetSrvGetInfo(
 		x_dcerpc_pipe_t &rpc_pipe,
@@ -375,22 +432,19 @@ static bool x_smbd_dcerpc_impl_srvsvc_NetSrvGetInfo(
 	const std::shared_ptr<x_smbd_conf_t> smbd_conf = x_smbd_conf_get();
 
 	switch (arg.level) {
-	case 101: {
-		auto &info = arg.info.info101;
-		X_ASSERT(!info);
-		info = std::make_shared<idl::srvsvc_NetSrvInfo101>();
-		info->platform_id = idl::PLATFORM_ID_NT;
-		info->server_name = std::make_shared<std::u16string>(x_convert_utf8_to_utf16_assert(smbd_conf->netbios_name));
-		info->version_major = 0x06;
-		info->version_minor = 0x01;
-		info->server_type = smbd_conf->get_default_server_announce();
-		info->comment = std::make_shared<std::u16string>();
-		arg.__result = WERR_OK;
-		}
+	case 100:
+		net_get_info(arg, arg.info.info100, *smbd_conf);
+		break;
+
+	case 101:
+		net_get_info(arg, arg.info.info101, *smbd_conf);
+		break;
+
+	case 102:
+		net_get_info(arg, arg.info.info102, *smbd_conf);
 		break;
 
 	default:
-		X_TODO;
 		arg.__result = WERR_INVALID_LEVEL;
 	}
 	return true;
