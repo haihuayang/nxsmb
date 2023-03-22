@@ -1967,13 +1967,18 @@ x_ndr_off_t ndr_{in_out_name}_traits_t<{self.get_ctype()}>::scalars({constness}{
 				out(f'''
 	{stmt}''')
 		for field in [ x for x in self.fields if x.arg_flags & in_out_flag ]:
-			for stmt in field.scalars_step0(upfunc) + \
-					field.scalars_body(upfunc):
-				out(f'''
-	{stmt}''')
+			stmts = []
 			if field.has_buffers():
-				for stmt in field.buffers_body(upfunc):
-					out(f'''
+				stmts.append(f'auto __tmp_pos_index_{field.order} = __ndr.pos_index;')
+			stmts += field.scalars_step0(upfunc)
+			stmts += field.scalars_body(upfunc)
+			if field.has_buffers():
+				stmts.append(f'__ndr.pos_index = __tmp_pos_index_{field.order};')
+				stmts += field.buffers_body(upfunc)
+				stmts += [f'__ndr.pos_index = __tmp_pos_index_{field.order};']
+
+			for stmt in stmts:
+				out(f'''
 	{stmt}''')
 		for field in [ x for x in self.fields if x.arg_flags & in_out_flag ]:
 			for stmt in field.scalars_post(upfunc):

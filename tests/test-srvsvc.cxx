@@ -15,6 +15,13 @@ static const uint8_t srvsvc_NetShareEnumAll_requ[] = {
 	0x08, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 
 };
 
+static const uint8_t srvsvc_NetDiskEnum_requ[] = {
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x00,
+	0x00, 0x00, 0x00, 0x00,
+};
+
 template <class T>
 void verify_requ(const uint8_t *data, size_t size, bool verify)
 {
@@ -39,6 +46,8 @@ static void test_ndr()
 {
 	verify_requ<idl::srvsvc_NetShareEnumAll>(srvsvc_NetShareEnumAll_requ,
 			sizeof srvsvc_NetShareEnumAll_requ, true);
+	verify_requ<idl::srvsvc_NetDiskEnum>(srvsvc_NetDiskEnum_requ,
+			sizeof srvsvc_NetDiskEnum_requ, true);
 }
 
 int main(int argc, char  **argv)
