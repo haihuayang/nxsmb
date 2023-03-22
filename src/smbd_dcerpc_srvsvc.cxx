@@ -451,7 +451,25 @@ static bool x_smbd_dcerpc_impl_srvsvc_NetSrvGetInfo(
 }
 
 X_SMBD_DCERPC_IMPL_TODO(srvsvc_NetSrvSetInfo)
-X_SMBD_DCERPC_IMPL_TODO(srvsvc_NetDiskEnum)
+
+static bool x_smbd_dcerpc_impl_srvsvc_NetDiskEnum(
+		x_dcerpc_pipe_t &rpc_pipe,
+		x_smbd_sess_t *smbd_sess,
+		idl::srvsvc_NetDiskEnum &arg)
+{
+	auto &array = arg.info.disks;
+	array = std::make_shared<std::vector<idl::srvsvc_NetDiskInfo0>>();
+	array->push_back(idl::srvsvc_NetDiskInfo0{
+			u"C:",
+		});
+	array->push_back(idl::srvsvc_NetDiskInfo0{
+			u"",
+		});
+	arg.totalentries = 1;
+	arg.__result = WERR_OK;
+	return true;
+}
+
 X_SMBD_DCERPC_IMPL_TODO(srvsvc_NetServerStatisticsGet)
 X_SMBD_DCERPC_IMPL_TODO(srvsvc_NetTransportAdd)
 X_SMBD_DCERPC_IMPL_TODO(srvsvc_NetTransportEnum)
