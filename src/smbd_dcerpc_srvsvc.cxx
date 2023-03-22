@@ -184,13 +184,13 @@ static void net_get_info(Arg &arg, std::shared_ptr<Info> &info, const Data &data
 
 
 X_SMBD_DCERPC_IMPL_NOT_SUPPORTED(srvsvc_NetCharDevEnum)
-X_SMBD_DCERPC_IMPL_TODO(srvsvc_NetCharDevGetInfo)
-X_SMBD_DCERPC_IMPL_TODO(srvsvc_NetCharDevControl)
+X_SMBD_DCERPC_IMPL_NOT_SUPPORTED(srvsvc_NetCharDevGetInfo)
+X_SMBD_DCERPC_IMPL_NOT_SUPPORTED(srvsvc_NetCharDevControl)
 X_SMBD_DCERPC_IMPL_NOT_SUPPORTED(srvsvc_NetCharDevQEnum)
-X_SMBD_DCERPC_IMPL_TODO(srvsvc_NetCharDevQGetInfo)
-X_SMBD_DCERPC_IMPL_TODO(srvsvc_NetCharDevQSetInfo)
-X_SMBD_DCERPC_IMPL_TODO(srvsvc_NetCharDevQPurge)
-X_SMBD_DCERPC_IMPL_TODO(srvsvc_NetCharDevQPurgeSelf)
+X_SMBD_DCERPC_IMPL_NOT_SUPPORTED(srvsvc_NetCharDevQGetInfo)
+X_SMBD_DCERPC_IMPL_NOT_SUPPORTED(srvsvc_NetCharDevQSetInfo)
+X_SMBD_DCERPC_IMPL_NOT_SUPPORTED(srvsvc_NetCharDevQPurge)
+X_SMBD_DCERPC_IMPL_NOT_SUPPORTED(srvsvc_NetCharDevQPurgeSelf)
 
 static bool x_smbd_dcerpc_impl_srvsvc_NetConnEnum(
 		x_dcerpc_pipe_t &rpc_pipe,
@@ -242,7 +242,7 @@ static bool x_smbd_dcerpc_impl_srvsvc_NetFileEnum(
 	return true;
 }
 
-X_SMBD_DCERPC_IMPL_TODO(srvsvc_NetFileGetInfo)
+X_SMBD_DCERPC_IMPL_NOT_SUPPORTED(srvsvc_NetFileGetInfo)
 X_SMBD_DCERPC_IMPL_TODO(srvsvc_NetFileClose)
 
 static bool x_smbd_dcerpc_impl_srvsvc_NetSessEnum(
@@ -283,7 +283,7 @@ static bool x_smbd_dcerpc_impl_srvsvc_NetSessEnum(
 }
 
 X_SMBD_DCERPC_IMPL_TODO(srvsvc_NetSessDel)
-X_SMBD_DCERPC_IMPL_TODO(srvsvc_NetShareAdd)
+X_SMBD_DCERPC_IMPL_NOT_SUPPORTED(srvsvc_NetShareAdd)
 
 static bool x_smbd_dcerpc_impl_srvsvc_NetShareEnumAll(
 		x_dcerpc_pipe_t &rpc_pipe,
@@ -305,7 +305,6 @@ static bool x_smbd_dcerpc_impl_srvsvc_NetShareEnumAll(
 		break;
 
 	default:
-		X_TODO;
 		arg.__result = WERR_INVALID_LEVEL;
 		break;
 	}
@@ -372,9 +371,9 @@ static bool x_smbd_dcerpc_impl_srvsvc_NetShareGetInfo(
 	return true;
 }
 
-X_SMBD_DCERPC_IMPL_TODO(srvsvc_NetShareSetInfo)
-X_SMBD_DCERPC_IMPL_TODO(srvsvc_NetShareDel)
-X_SMBD_DCERPC_IMPL_TODO(srvsvc_NetShareDelSticky)
+X_SMBD_DCERPC_IMPL_NOT_SUPPORTED(srvsvc_NetShareSetInfo)
+X_SMBD_DCERPC_IMPL_NOT_SUPPORTED(srvsvc_NetShareDel)
+X_SMBD_DCERPC_IMPL_NOT_SUPPORTED(srvsvc_NetShareDelSticky)
 X_SMBD_DCERPC_IMPL_NOT_SUPPORTED(srvsvc_NetShareCheck)
 
 
@@ -450,7 +449,7 @@ static bool x_smbd_dcerpc_impl_srvsvc_NetSrvGetInfo(
 	return true;
 }
 
-X_SMBD_DCERPC_IMPL_TODO(srvsvc_NetSrvSetInfo)
+X_SMBD_DCERPC_IMPL_NOT_SUPPORTED(srvsvc_NetSrvSetInfo)
 
 static bool x_smbd_dcerpc_impl_srvsvc_NetDiskEnum(
 		x_dcerpc_pipe_t &rpc_pipe,
@@ -470,36 +469,36 @@ static bool x_smbd_dcerpc_impl_srvsvc_NetDiskEnum(
 	return true;
 }
 
-X_SMBD_DCERPC_IMPL_TODO(srvsvc_NetServerStatisticsGet)
-X_SMBD_DCERPC_IMPL_TODO(srvsvc_NetTransportAdd)
-X_SMBD_DCERPC_IMPL_TODO(srvsvc_NetTransportEnum)
-X_SMBD_DCERPC_IMPL_TODO(srvsvc_NetTransportDel)
+X_SMBD_DCERPC_IMPL_NOT_SUPPORTED(srvsvc_NetServerStatisticsGet)
+X_SMBD_DCERPC_IMPL_NOT_SUPPORTED(srvsvc_NetTransportAdd)
+X_SMBD_DCERPC_IMPL_NOT_SUPPORTED(srvsvc_NetTransportEnum)
+X_SMBD_DCERPC_IMPL_NOT_SUPPORTED(srvsvc_NetTransportDel)
 X_SMBD_DCERPC_IMPL_TODO(srvsvc_NetRemoteTOD)
-X_SMBD_DCERPC_IMPL_TODO(srvsvc_NetSetServiceBits)
-X_SMBD_DCERPC_IMPL_TODO(srvsvc_NetPathType)
-X_SMBD_DCERPC_IMPL_TODO(srvsvc_NetPathCanonicalize)
-X_SMBD_DCERPC_IMPL_TODO(srvsvc_NetPathCompare)
+X_SMBD_DCERPC_IMPL_NOT_SUPPORTED(srvsvc_NetSetServiceBits)
+X_SMBD_DCERPC_IMPL_NOT_SUPPORTED(srvsvc_NetPathType)
+X_SMBD_DCERPC_IMPL_NOT_SUPPORTED(srvsvc_NetPathCanonicalize)
+X_SMBD_DCERPC_IMPL_NOT_SUPPORTED(srvsvc_NetPathCompare)
 X_SMBD_DCERPC_IMPL_TODO(srvsvc_NetNameValidate)
-X_SMBD_DCERPC_IMPL_TODO(srvsvc_NETRPRNAMECANONICALIZE)
-X_SMBD_DCERPC_IMPL_TODO(srvsvc_NetPRNameCompare)
+X_SMBD_DCERPC_IMPL_NOT_SUPPORTED(srvsvc_NETRPRNAMECANONICALIZE)
+X_SMBD_DCERPC_IMPL_NOT_SUPPORTED(srvsvc_NetPRNameCompare)
 X_SMBD_DCERPC_IMPL_TODO(srvsvc_NetShareEnum)
-X_SMBD_DCERPC_IMPL_TODO(srvsvc_NetShareDelStart)
-X_SMBD_DCERPC_IMPL_TODO(srvsvc_NetShareDelCommit)
+X_SMBD_DCERPC_IMPL_NOT_SUPPORTED(srvsvc_NetShareDelStart)
+X_SMBD_DCERPC_IMPL_NOT_SUPPORTED(srvsvc_NetShareDelCommit)
 X_SMBD_DCERPC_IMPL_TODO(srvsvc_NetGetFileSecurity)
 X_SMBD_DCERPC_IMPL_TODO(srvsvc_NetSetFileSecurity)
-X_SMBD_DCERPC_IMPL_TODO(srvsvc_NetServerTransportAddEx)
-X_SMBD_DCERPC_IMPL_TODO(srvsvc_NetServerSetServiceBitsEx)
-X_SMBD_DCERPC_IMPL_TODO(srvsvc_NETRDFSGETVERSION)
-X_SMBD_DCERPC_IMPL_TODO(srvsvc_NETRDFSCREATELOCALPARTITION)
-X_SMBD_DCERPC_IMPL_TODO(srvsvc_NETRDFSDELETELOCALPARTITION)
-X_SMBD_DCERPC_IMPL_TODO(srvsvc_NETRDFSSETLOCALVOLUMESTATE)
-X_SMBD_DCERPC_IMPL_TODO(srvsvc_NETRDFSSETSERVERINFO)
-X_SMBD_DCERPC_IMPL_TODO(srvsvc_NETRDFSCREATEEXITPOINT)
-X_SMBD_DCERPC_IMPL_TODO(srvsvc_NETRDFSDELETEEXITPOINT)
-X_SMBD_DCERPC_IMPL_TODO(srvsvc_NETRDFSMODIFYPREFIX)
-X_SMBD_DCERPC_IMPL_TODO(srvsvc_NETRDFSFIXLOCALVOLUME)
-X_SMBD_DCERPC_IMPL_TODO(srvsvc_NETRDFSMANAGERREPORTSITEINFO)
-X_SMBD_DCERPC_IMPL_TODO(srvsvc_NETRSERVERTRANSPORTDELEX)
+X_SMBD_DCERPC_IMPL_NOT_SUPPORTED(srvsvc_NetServerTransportAddEx)
+X_SMBD_DCERPC_IMPL_NOT_SUPPORTED(srvsvc_NetServerSetServiceBitsEx)
+X_SMBD_DCERPC_IMPL_NOT_SUPPORTED(srvsvc_NETRDFSGETVERSION)
+X_SMBD_DCERPC_IMPL_NOT_SUPPORTED(srvsvc_NETRDFSCREATELOCALPARTITION)
+X_SMBD_DCERPC_IMPL_NOT_SUPPORTED(srvsvc_NETRDFSDELETELOCALPARTITION)
+X_SMBD_DCERPC_IMPL_NOT_SUPPORTED(srvsvc_NETRDFSSETLOCALVOLUMESTATE)
+X_SMBD_DCERPC_IMPL_NOT_SUPPORTED(srvsvc_NETRDFSSETSERVERINFO)
+X_SMBD_DCERPC_IMPL_NOT_SUPPORTED(srvsvc_NETRDFSCREATEEXITPOINT)
+X_SMBD_DCERPC_IMPL_NOT_SUPPORTED(srvsvc_NETRDFSDELETEEXITPOINT)
+X_SMBD_DCERPC_IMPL_NOT_SUPPORTED(srvsvc_NETRDFSMODIFYPREFIX)
+X_SMBD_DCERPC_IMPL_NOT_SUPPORTED(srvsvc_NETRDFSFIXLOCALVOLUME)
+X_SMBD_DCERPC_IMPL_NOT_SUPPORTED(srvsvc_NETRDFSMANAGERREPORTSITEINFO)
+X_SMBD_DCERPC_IMPL_NOT_SUPPORTED(srvsvc_NETRSERVERTRANSPORTDELEX)
 
 
 #define X_DCERPC_FUNCTION_DEF(x) X_SMBD_DCERPC_FUNCTION(x)
