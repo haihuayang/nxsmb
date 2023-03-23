@@ -136,7 +136,8 @@ idl::sec_desc_buf x_smbd_net_get_info<idl::sec_desc_buf>(const x_smbd_share_t &s
 	};
 }
 
-static WERROR x_smbd_net_enum(idl::srvsvc_NetShareEnumAll &arg,
+template <class Arg>
+static WERROR x_smbd_net_enum(Arg &arg,
 		std::vector<idl::srvsvc_NetShareInfo0> &array)
 {
 	const std::shared_ptr<x_smbd_conf_t> smbd_conf = x_smbd_conf_get();
@@ -146,7 +147,8 @@ static WERROR x_smbd_net_enum(idl::srvsvc_NetShareEnumAll &arg,
 	return WERR_OK;
 }
 
-static WERROR x_smbd_net_enum(idl::srvsvc_NetShareEnumAll &arg,
+template <class Arg>
+static WERROR x_smbd_net_enum(Arg &arg,
 		std::vector<idl::srvsvc_NetShareInfo1> &array)
 {
 	const std::shared_ptr<x_smbd_conf_t> smbd_conf = x_smbd_conf_get();
@@ -156,12 +158,35 @@ static WERROR x_smbd_net_enum(idl::srvsvc_NetShareEnumAll &arg,
 	return WERR_OK;
 }
 
-static WERROR x_smbd_net_enum(idl::srvsvc_NetShareEnumAll &arg,
+template <class Arg>
+static WERROR x_smbd_net_enum(Arg &arg,
 		std::vector<idl::srvsvc_NetShareInfo2> &array)
 {
 	const std::shared_ptr<x_smbd_conf_t> smbd_conf = x_smbd_conf_get();
 	for (auto &it: smbd_conf->shares) {
 		array.push_back(x_smbd_net_get_info<idl::srvsvc_NetShareInfo2>(*it.second));
+	}
+	return WERR_OK;
+}
+
+template <class Arg>
+static WERROR x_smbd_net_enum(Arg &arg,
+		std::vector<idl::srvsvc_NetShareInfo501> &array)
+{
+	const std::shared_ptr<x_smbd_conf_t> smbd_conf = x_smbd_conf_get();
+	for (auto &it: smbd_conf->shares) {
+		array.push_back(x_smbd_net_get_info<idl::srvsvc_NetShareInfo501>(*it.second));
+	}
+	return WERR_OK;
+}
+
+template <class Arg>
+static WERROR x_smbd_net_enum(Arg &arg,
+		std::vector<idl::srvsvc_NetShareInfo502> &array)
+{
+	const std::shared_ptr<x_smbd_conf_t> smbd_conf = x_smbd_conf_get();
+	for (auto &it: smbd_conf->shares) {
+		array.push_back(x_smbd_net_get_info<idl::srvsvc_NetShareInfo502>(*it.second));
 	}
 	return WERR_OK;
 }
@@ -316,7 +341,7 @@ static bool x_smbd_dcerpc_impl_srvsvc_NetShareGetInfo(
 		x_smbd_sess_t *smbd_sess,
 		idl::srvsvc_NetShareGetInfo &arg)
 {
-	std::string share_name = x_convert_utf16_to_utf8_assert(arg.share_name);
+	std::string share_name = x_convert_utf16_to_utf8_safe(arg.share_name, x_tolower);
 	std::string volume;
 	auto smbd_share = x_smbd_find_share(share_name, volume);
 	if (!smbd_share || !volume.empty()) {
@@ -502,7 +527,37 @@ static bool x_smbd_dcerpc_impl_srvsvc_NetNameValidate(
 
 X_SMBD_DCERPC_IMPL_NOT_SUPPORTED(srvsvc_NETRPRNAMECANONICALIZE)
 X_SMBD_DCERPC_IMPL_NOT_SUPPORTED(srvsvc_NetPRNameCompare)
-X_SMBD_DCERPC_IMPL_TODO(srvsvc_NetShareEnum)
+
+static bool x_smbd_dcerpc_impl_srvsvc_NetShareEnum(
+		x_dcerpc_pipe_t &rpc_pipe,
+		x_smbd_sess_t *smbd_sess,
+		idl::srvsvc_NetShareEnum &arg)
+{
+	auto &ctr = arg.info_ctr.ctr;
+	switch (arg.info_ctr.level) {
+	case 0:
+		net_enum(arg, ctr.ctr0->array);
+		break;
+
+	case 1:
+		net_enum(arg, ctr.ctr1->array);
+		break;
+
+	case 2:
+		net_enum(arg, ctr.ctr2->array);
+		break;
+
+	case 502:
+		net_enum(arg, ctr.ctr502->array);
+		break;
+
+	default:
+		arg.__result = WERR_INVALID_LEVEL;
+		break;
+	}
+	return true;
+}
+
 X_SMBD_DCERPC_IMPL_NOT_SUPPORTED(srvsvc_NetShareDelStart)
 X_SMBD_DCERPC_IMPL_NOT_SUPPORTED(srvsvc_NetShareDelCommit)
 X_SMBD_DCERPC_IMPL_TODO(srvsvc_NetGetFileSecurity)
