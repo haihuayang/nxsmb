@@ -478,7 +478,28 @@ X_SMBD_DCERPC_IMPL_NOT_SUPPORTED(srvsvc_NetSetServiceBits)
 X_SMBD_DCERPC_IMPL_NOT_SUPPORTED(srvsvc_NetPathType)
 X_SMBD_DCERPC_IMPL_NOT_SUPPORTED(srvsvc_NetPathCanonicalize)
 X_SMBD_DCERPC_IMPL_NOT_SUPPORTED(srvsvc_NetPathCompare)
-X_SMBD_DCERPC_IMPL_TODO(srvsvc_NetNameValidate)
+
+/* Characters we disallow in sharenames. */
+#define INVALID_SHARENAME_CHARS u"%<>*?|/\\+=;:\","
+
+static bool x_smbd_dcerpc_impl_srvsvc_NetNameValidate(
+		x_dcerpc_pipe_t &rpc_pipe,
+		x_smbd_sess_t *smbd_sess,
+		idl::srvsvc_NetNameValidate &arg)
+{
+	switch (arg.name_type) {
+	case 0x9:
+		arg.__result = x_str_validate(arg.name, INVALID_SHARENAME_CHARS)
+			? WERR_OK : WERR_INVALID_NAME;
+		break;
+
+	default:
+		arg.__result = WERR_INVALID_LEVEL;
+	}
+
+	return true;
+}
+
 X_SMBD_DCERPC_IMPL_NOT_SUPPORTED(srvsvc_NETRPRNAMECANONICALIZE)
 X_SMBD_DCERPC_IMPL_NOT_SUPPORTED(srvsvc_NetPRNameCompare)
 X_SMBD_DCERPC_IMPL_TODO(srvsvc_NetShareEnum)

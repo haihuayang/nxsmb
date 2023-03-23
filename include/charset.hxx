@@ -474,5 +474,24 @@ static inline std::pair<bool, uint64_t> x_strcase_hash(const std::u16string &s)
 	return x_strcase_hash(s.data(), s.data() + s.size());
 }
 
+/********************************************************************
+ samba validate_net_name
+ Check a string for any occurrences of a specified list of invalid
+ characters.
+********************************************************************/
+
+static inline bool x_str_validate(const std::u16string &str,
+		const char16_t *invalid_chars)
+{
+	for (auto ch: str) {
+		for (auto p = invalid_chars; *p; ++p) {
+			if (ch == *p) {
+				return false;
+			}
+		}
+	}
+	return true;
+}
+
 #endif /* __charset__hxx__ */
 
