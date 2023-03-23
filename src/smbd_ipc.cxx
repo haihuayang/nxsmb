@@ -59,6 +59,7 @@ struct named_pipe_t
 	x_ncacn_packet_t pkt;
 	NTSTATUS return_status{NT_STATUS_OK};
 	bool is_transceive = false;
+	bool got_first = false;
 	uint32_t packet_read = 0;
 	uint32_t offset = 0;
 	std::vector<uint8_t> input;
@@ -113,6 +114,7 @@ static NTSTATUS named_pipe_read(
 		named_pipe->output.clear();
 		named_pipe->offset = 0;
 	}
+	named_pipe->got_first = false;
 	if (named_pipe->output.size() == 0) {
 		named_pipe->is_transceive = false;
 		return NT_STATUS_OK;
@@ -137,11 +139,6 @@ static inline bool process_ncacn_header(x_ncacn_packet_t &header)
 		return false;
 	}
 	if (header.auth_length > header.frag_length) {
-		return false;
-	}
-	const uint8_t required_flags = idl::DCERPC_PFC_FLAG_FIRST | idl::DCERPC_PFC_FLAG_LAST;
-	if ((header.pfc_flags & required_flags) != required_flags) {
-		X_TODO; // dont know how the spec use the flags
 		return false;
 	}
 	return true;
@@ -381,7 +378,27 @@ static int named_pipe_write(
 		data += copy_len;
 	}
 
-	X_ASSERT(named_pipe->packet_read <= named_pipe->pkt.frag_length);
+	auto pfc_flags = named_pipe->pkt.pfc_flags;
+	if ((pfc_flags & idl::DCERPC_PFC_FLAG_FIRST)) {
+		if (named_pipe->got_first) {
+			X_TODO;
+			named_pipe->return_status = NT_STATUS_RPC_PROTOCOL_ERROR;
+			return input_size;
+		}
+		named_pipe->got_first = true;
+	} else {
+		if (!named_pipe->got_first) {
+			X_TODO;
+			named_pipe->return_status = NT_STATUS_RPC_PROTOCOL_ERROR;
+			return input_size;
+		}
+	}
+
+	if (!(pfc_flags & idl::DCERPC_PFC_FLAG_LAST)) {
+		named_pipe->return_status = NT_STATUS_OK;
+		return input_size;
+	}
+	X_TODO_ASSERT(named_pipe->packet_read <= named_pipe->pkt.frag_length);
 	if (input_size) {
 		uint32_t copy_len = named_pipe->pkt.frag_length - named_pipe->packet_read;
 		if (copy_len > input_size) {
