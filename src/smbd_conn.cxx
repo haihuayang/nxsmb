@@ -70,7 +70,18 @@ static std::u16string machine_name_from_saddr(const x_sockaddr_t &saddr)
 		snprintf(buf, sizeof buf, "%d.%d.%d.%d",
 			X_IPQUAD_BE(saddr.sin.sin_addr));
 	} else if (saddr.family == AF_INET6) {
-		inet_ntop(AF_INET6, &saddr.sin6.sin6_addr, buf, sizeof buf);
+		auto &sin6_addr = saddr.sin6.sin6_addr;
+		if (sin6_addr.s6_addr32[0] == 0 && sin6_addr.s6_addr32[1] == 0
+				&& sin6_addr.s6_addr16[4] == 0
+				&& sin6_addr.s6_addr16[5] == 0xffff) {
+			snprintf(buf, sizeof buf, "%d.%d.%d.%d",
+					sin6_addr.s6_addr[12],
+					sin6_addr.s6_addr[13],
+					sin6_addr.s6_addr[14],
+					sin6_addr.s6_addr[15]);
+		} else {
+			inet_ntop(AF_INET6, &saddr.sin6.sin6_addr, buf, sizeof buf);
+		}
 	} else {
 		X_ASSERT(false);
 	}
