@@ -49,7 +49,7 @@ struct x_auth_info_t
 {
 	uint32_t user_flags;
 
-	std::string account_name;
+	std::shared_ptr<std::u16string> account_name;
 	std::string user_principal;
 	std::string full_name;
 	std::string logon_domain;

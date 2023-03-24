@@ -18,7 +18,8 @@ struct x_smbd_user_t
 	uint32_t uid, gid;
 	std::vector<idl::samr_RidWithAttribute> group_rids;
 	std::vector<x_dom_sid_with_attrs_t> other_sids;
-	std::string account_name, logon_domain;
+	std::shared_ptr<std::u16string> account_name;
+	std::string logon_domain;
 
 	std::string tostring() const;
 

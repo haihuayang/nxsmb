@@ -307,7 +307,19 @@ static bool x_smbd_dcerpc_impl_srvsvc_NetSessEnum(
 	return true;
 }
 
-X_SMBD_DCERPC_IMPL_TODO(srvsvc_NetSessDel)
+static bool x_smbd_dcerpc_impl_srvsvc_NetSessDel(
+		x_dcerpc_pipe_t &rpc_pipe,
+		x_smbd_sess_t *smbd_sess,
+		idl::srvsvc_NetSessDel &arg)
+{
+	SMBD_DCERPC_SRVSVC_CHECK_ACCESS(smbd_sess);
+
+	x_smbd_net_sess_del(arg.user.get(), arg.client.get());
+
+	arg.__result = WERR_OK;
+	return true;
+}
+
 X_SMBD_DCERPC_IMPL_NOT_SUPPORTED(srvsvc_NetShareAdd)
 
 static bool x_smbd_dcerpc_impl_srvsvc_NetShareEnumAll(

@@ -885,7 +885,7 @@ static void auth_info_from_pac_logon_info(x_auth_info_t &auth_info, const idl::P
 	auth_info.pass_can_change_time = logon_info.info3.base.allow_password_change;
 	auth_info.pass_must_change_time = logon_info.info3.base.force_password_change;
 
-	auth_info.account_name = safe_utf16_ptr_to_utf8(logon_info.info3.base.account_name.string);
+	auth_info.account_name = logon_info.info3.base.account_name.string;
 	auth_info.full_name = safe_utf16_ptr_to_utf8(logon_info.info3.base.full_name.string);
 	auth_info.logon_script = safe_utf16_ptr_to_utf8(logon_info.info3.base.logon_script.string);
 	auth_info.profile_path = safe_utf16_ptr_to_utf8(logon_info.info3.base.profile_path.string);

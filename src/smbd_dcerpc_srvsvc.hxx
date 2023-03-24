@@ -29,6 +29,8 @@ WERROR x_smbd_net_enum(idl::srvsvc_NetSessEnum &arg,
 		std::vector<idl::srvsvc_NetSessInfo10> &array);
 WERROR x_smbd_net_enum(idl::srvsvc_NetSessEnum &arg,
 		std::vector<idl::srvsvc_NetSessInfo502> &array);
+void x_smbd_net_sess_del(const std::u16string *user,
+		const std::u16string *client);
 
 
 

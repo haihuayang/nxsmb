@@ -1879,7 +1879,7 @@ static inline void smbd_open_to_open_info(std::vector<idl::srvsvc_NetFileInfo3> 
 
 	std::shared_ptr<std::u16string> user_name;
 	if (smbd_user) {
-		user_name = std::make_shared<std::u16string>(x_convert_utf8_to_utf16_assert(smbd_user->account_name));
+		user_name = smbd_user->account_name;
 	} else {
 		user_name = std::make_shared<std::u16string>(x_convert_utf8_to_utf16_assert(
 					x_tostr(open_state.owner)));

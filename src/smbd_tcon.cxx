@@ -466,7 +466,7 @@ static inline void smbd_tcon_to_tcon_info(std::vector<idl::srvsvc_NetConnInfo1> 
 			1, // TODO num_open
 			1, // TODO num_users
 			x_convert<uint32_t>((now - smbd_tcon->tick_create) / X_NSEC_PER_SEC),
-			std::make_shared<std::u16string>(x_convert_utf8_to_utf16_assert(smbd_user->account_name)),
+			smbd_user->account_name,
 			share_name,
 			});
 }

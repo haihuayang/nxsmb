@@ -322,6 +322,16 @@ std::u16string x_convert_utf8_to_utf16_assert(const std::string src,
 	return ret;
 }
 
+template <class UnaryOp = x_identity_t>
+std::u16string x_convert_utf8_to_utf16_safe(const std::string &src, UnaryOp op = {})
+{
+	std::u16string ret;
+	if (!x_convert_utf8_to_utf16_new(src, ret, std::forward<UnaryOp>(op))) {
+		ret = u"[INVALID_UTF16]";
+	}
+	return ret;
+}
+
 static inline std::u16string x_utf16le_decode(const char16_t *begin,
 		const char16_t *end)
 {

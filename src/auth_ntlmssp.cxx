@@ -909,7 +909,8 @@ static NTSTATUS ntlmssp_post_auth(x_auth_ntlmssp_t *ntlmssp, x_auth_info_t &auth
 	// wbc_create_auth_info
 	const auto &auth = wbresp.header.data.auth;
 	auth_info.user_flags = auth.info3.user_flgs;
-	auth_info.account_name = auth.info3.user_name;
+	auth_info.account_name = std::make_shared<std::u16string>(
+			x_convert_utf8_to_utf16_safe(auth.info3.user_name));
 	auth_info.full_name = auth.info3.full_name;
 	auth_info.logon_domain = auth.info3.logon_dom;
 	auth_info.acct_flags = auth.info3.acct_flags;
@@ -1089,7 +1090,7 @@ static NTSTATUS check_anonymous_security(x_auth_ntlmssp_t *ntlmssp,
 	ret = std::make_shared<x_auth_info_t>();
 	x_auth_info_t &auth_info = *ret;
 	auth_info.user_flags = 0;
-	auth_info.account_name = "ANONYMOUS";
+	auth_info.account_name = std::make_shared<std::u16string>(u"<ANONYMOUS>");
 #if 0
 	auth_info.full_name = auth.info3.full_name;
 	auth_info.logon_domain = auth.info3.logon_dom;

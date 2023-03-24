@@ -254,7 +254,7 @@ NTSTATUS x_smbd_sess_auth_succeeded(x_smbd_sess_t *smbd_sess,
 	return NT_STATUS_OK;
 }
 
-static NTSTATUS smbd_sess_logoff(x_smbd_sess_t *smbd_sess)
+static NTSTATUS smbd_sess_logoff(x_smbd_sess_t *smbd_sess, bool shutdown)
 {
 	std::unique_lock<std::mutex> lock(smbd_sess->mutex);
 	if (smbd_sess->state != x_smbd_sess_t::S_ACTIVE) {
@@ -262,13 +262,13 @@ static NTSTATUS smbd_sess_logoff(x_smbd_sess_t *smbd_sess)
 	}
 	smbd_sess->state = x_smbd_sess_t::S_DONE;
 
-	smbd_sess_terminate(smbd_sess, lock, true);
+	smbd_sess_terminate(smbd_sess, lock, shutdown);
 	return NT_STATUS_OK;
 }
 
 NTSTATUS x_smbd_sess_logoff(x_smbd_sess_t *smbd_sess)
 {
-	return smbd_sess_logoff(smbd_sess);
+	return smbd_sess_logoff(smbd_sess, true);
 }
 
 // smb2srv_session_close_previous_send
@@ -285,7 +285,7 @@ void x_smbd_sess_close_previous(const x_smbd_sess_t *curr_sess, uint64_t prev_se
 
 	X_ASSERT(curr_sess->smbd_user);
 	if (prev_sess->smbd_user && match_user(*curr_sess->smbd_user, *prev_sess->smbd_user)) {
-		smbd_sess_logoff(prev_sess);
+		smbd_sess_logoff(prev_sess, true);
 	}
 	x_smbd_ref_dec(prev_sess);
 }
@@ -365,10 +365,9 @@ static inline void smbd_sess_to_sess_info(std::vector<idl::srvsvc_NetSessInfo1> 
 		const x_smbd_sess_t *smbd_sess, const x_tick_t now)
 {
 	std::shared_ptr<x_smbd_user_t> smbd_user = smbd_sess->smbd_user;
-	auto user_name = std::make_shared<std::u16string>(x_convert_utf8_to_utf16_assert(smbd_user->account_name));
 	array.push_back(idl::srvsvc_NetSessInfo1{
 			smbd_sess->machine_name,
-			std::make_shared<std::u16string>(x_convert_utf8_to_utf16_assert(smbd_user->account_name)),
+			smbd_user->account_name,
 			1, // TODO num_open
 			x_convert<uint32_t>((now - smbd_sess->tick_create) / X_NSEC_PER_SEC),
 			0, // TODO idle time
@@ -380,10 +379,9 @@ static inline void smbd_sess_to_sess_info(std::vector<idl::srvsvc_NetSessInfo2> 
 		const x_smbd_sess_t *smbd_sess, const x_tick_t now)
 {
 	std::shared_ptr<x_smbd_user_t> smbd_user = smbd_sess->smbd_user;
-	auto user_name = std::make_shared<std::u16string>(x_convert_utf8_to_utf16_assert(smbd_user->account_name));
 	array.push_back(idl::srvsvc_NetSessInfo2{
 			smbd_sess->machine_name,
-			std::make_shared<std::u16string>(x_convert_utf8_to_utf16_assert(smbd_user->account_name)),
+			smbd_user->account_name,
 			1, // TODO num_open
 			x_convert<uint32_t>((now - smbd_sess->tick_create) / X_NSEC_PER_SEC),
 			0, // TODO idle time
@@ -396,10 +394,9 @@ static inline void smbd_sess_to_sess_info(std::vector<idl::srvsvc_NetSessInfo10>
 		const x_smbd_sess_t *smbd_sess, const x_tick_t now)
 {
 	std::shared_ptr<x_smbd_user_t> smbd_user = smbd_sess->smbd_user;
-	auto user_name = std::make_shared<std::u16string>(x_convert_utf8_to_utf16_assert(smbd_user->account_name));
 	array.push_back(idl::srvsvc_NetSessInfo10{
 			smbd_sess->machine_name,
-			std::make_shared<std::u16string>(x_convert_utf8_to_utf16_assert(smbd_user->account_name)),
+			smbd_user->account_name,
 			x_convert<uint32_t>((now - smbd_sess->tick_create) / X_NSEC_PER_SEC),
 			0, // TODO idle time
 			});
@@ -409,10 +406,9 @@ static inline void smbd_sess_to_sess_info(std::vector<idl::srvsvc_NetSessInfo502
 		const x_smbd_sess_t *smbd_sess, const x_tick_t now)
 {
 	std::shared_ptr<x_smbd_user_t> smbd_user = smbd_sess->smbd_user;
-	auto user_name = std::make_shared<std::u16string>(x_convert_utf8_to_utf16_assert(smbd_user->account_name));
 	array.push_back(idl::srvsvc_NetSessInfo502{
 			smbd_sess->machine_name,
-			std::make_shared<std::u16string>(x_convert_utf8_to_utf16_assert(smbd_user->account_name)),
+			smbd_user->account_name,
 			1, // TODO num_open
 			x_convert<uint32_t>((now - smbd_sess->tick_create) / X_NSEC_PER_SEC),
 			0, // TODO idle time
@@ -464,3 +460,35 @@ WERROR x_smbd_net_enum(idl::srvsvc_NetSessEnum &arg,
 	return smbd_sess_enum(array);
 }
 
+static inline void smbd_sess_del_if(x_smbd_sess_t *smbd_sess,
+		const std::u16string *user, const char16_t *client)
+{
+	auto &smbd_user = smbd_sess->smbd_user;
+	if (user && smbd_user->account_name &&
+			!x_strcase_equal(*user, *smbd_user->account_name)) {
+		return;
+	}
+
+	if (client && !x_strcase_equal(client, *smbd_sess->machine_name)) {
+		return;
+	}
+
+	smbd_sess_logoff(smbd_sess, false);
+}
+
+void x_smbd_net_sess_del(const std::u16string *user, const std::u16string *client)
+{
+	const char16_t *cclient = nullptr;
+	if (client) {
+		cclient = client->c_str();
+		if (cclient[0] == u'\\' && cclient[1] == u'\\') {
+			cclient += 2;
+		}
+	}
+
+	smbd_sess_table_t::iter_t iter = g_smbd_sess_table->iter_start();
+	g_smbd_sess_table->iterate(iter, [user, cclient](x_smbd_sess_t *smbd_sess) {
+			smbd_sess_del_if(smbd_sess, user, cclient);
+			return true;
+		});
+}

@@ -137,7 +137,13 @@ static std::ostream &operator<<(std::ostream &os, const x_auth_info_t &auth_info
 {
 	os << "user_flags: " << auth_info.user_flags
 		<< ", acct_flags: " << auth_info.acct_flags << std::endl;
-	os << "account_name: \"" << auth_info.account_name << "\"" << std::endl;
+	os << "account_name: \"";
+	if (auth_info.account_name) {
+		os << x_convert_utf16_to_utf8_safe(*auth_info.account_name);
+	} else {
+		os << "<NULL>";
+	}
+	os << "\"" << std::endl;
 	os << "user_principal: \"" << auth_info.user_principal << "\"" << std::endl;
 	os << "full_name: \"" << auth_info.full_name << "\"" << std::endl;
 	os << "logon_domain: \"" << auth_info.logon_domain << "\"" << std::endl;
