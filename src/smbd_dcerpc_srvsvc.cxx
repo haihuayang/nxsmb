@@ -5,17 +5,6 @@
 #include "smbd_conf.hxx"
 #include "smbd_dcerpc_srvsvc.hxx"
 
-#if 0
-	TODO check permission
-	if (!nt_token_check_sid(&global_sid_Builtin_Administrators,
-				session_info->security_token)) {
-		DEBUG(1, ("Enumerating sessions only allowed for "
-					"administrators\n"));
-		return WERR_ACCESS_DENIED;
-	}
-#endif
-#define SMBD_DCERPC_SRVSVC_CHECK_ACCESS(smbd_sess) do { } while (0)
-
 static inline idl::srvsvc_ShareType get_share_type(const x_smbd_share_t &smbd_share)
 {
 	return (smbd_share.get_type() == X_SMB2_SHARE_TYPE_DISK ?
@@ -222,7 +211,7 @@ static bool x_smbd_dcerpc_impl_srvsvc_NetConnEnum(
 		x_smbd_sess_t *smbd_sess,
 		idl::srvsvc_NetConnEnum &arg)
 {
-	SMBD_DCERPC_SRVSVC_CHECK_ACCESS(smbd_sess);
+	X_SMBD_DCERPC_CHECK_ADMIN_ACCESS(smbd_sess, arg);
 
 	auto &ctr = arg.info_ctr.ctr;
 	switch (arg.info_ctr.level) {
@@ -247,7 +236,7 @@ static bool x_smbd_dcerpc_impl_srvsvc_NetFileEnum(
 		x_smbd_sess_t *smbd_sess,
 		idl::srvsvc_NetFileEnum &arg)
 {
-	SMBD_DCERPC_SRVSVC_CHECK_ACCESS(smbd_sess);
+	X_SMBD_DCERPC_CHECK_ADMIN_ACCESS(smbd_sess, arg);
 
 	auto &ctr = arg.info_ctr.ctr;
 	switch (arg.info_ctr.level) {
@@ -275,7 +264,7 @@ static bool x_smbd_dcerpc_impl_srvsvc_NetSessEnum(
 		x_smbd_sess_t *smbd_sess,
 		idl::srvsvc_NetSessEnum &arg)
 {
-	SMBD_DCERPC_SRVSVC_CHECK_ACCESS(smbd_sess);
+	X_SMBD_DCERPC_CHECK_ADMIN_ACCESS(smbd_sess, arg);
 
 	auto &ctr = arg.info_ctr.ctr;
 	switch (arg.info_ctr.level) {
@@ -312,7 +301,7 @@ static bool x_smbd_dcerpc_impl_srvsvc_NetSessDel(
 		x_smbd_sess_t *smbd_sess,
 		idl::srvsvc_NetSessDel &arg)
 {
-	SMBD_DCERPC_SRVSVC_CHECK_ACCESS(smbd_sess);
+	X_SMBD_DCERPC_CHECK_ADMIN_ACCESS(smbd_sess, arg);
 
 	x_smbd_net_sess_del(arg.user.get(), arg.client.get());
 
@@ -338,14 +327,17 @@ static bool x_smbd_dcerpc_impl_srvsvc_NetShareEnumAll(
 		break;
 
 	case 2:
+		X_SMBD_DCERPC_CHECK_ADMIN_ACCESS(smbd_sess, arg);
 		net_enum(arg, ctr.ctr2->array);
 		break;
 
 	case 501:
+		X_SMBD_DCERPC_CHECK_ADMIN_ACCESS(smbd_sess, arg);
 		net_enum(arg, ctr.ctr501->array);
 		break;
 
 	case 502:
+		X_SMBD_DCERPC_CHECK_ADMIN_ACCESS(smbd_sess, arg);
 		net_enum(arg, ctr.ctr502->array);
 		break;
 
@@ -379,6 +371,7 @@ static bool x_smbd_dcerpc_impl_srvsvc_NetShareGetInfo(
 		break;
 
 	case 2:
+		X_SMBD_DCERPC_CHECK_ADMIN_ACCESS(smbd_sess, arg);
 		net_get_info(arg, arg.info.info2, *smbd_share);
 		break;
 
@@ -387,6 +380,7 @@ static bool x_smbd_dcerpc_impl_srvsvc_NetShareGetInfo(
 		break;
 
 	case 502:
+		X_SMBD_DCERPC_CHECK_ADMIN_ACCESS(smbd_sess, arg);
 		net_get_info(arg, arg.info.info502, *smbd_share);
 		break;
 
@@ -612,10 +606,12 @@ static bool x_smbd_dcerpc_impl_srvsvc_NetShareEnum(
 		break;
 
 	case 2:
+		X_SMBD_DCERPC_CHECK_ADMIN_ACCESS(smbd_sess, arg);
 		net_enum(arg, ctr.ctr2->array);
 		break;
 
 	case 502:
+		X_SMBD_DCERPC_CHECK_ADMIN_ACCESS(smbd_sess, arg);
 		net_enum(arg, ctr.ctr502->array);
 		break;
 

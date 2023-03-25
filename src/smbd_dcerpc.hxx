@@ -73,6 +73,16 @@ extern const x_dcerpc_iface_t x_smbd_dcerpc_wkssvc;
 extern const x_dcerpc_iface_t x_smbd_dcerpc_dssetup;
 extern const x_dcerpc_iface_t x_smbd_dcerpc_lsarpc;
 
+bool x_smbd_dcerpc_is_admin(const x_smbd_sess_t *smbd_sess);
+
+#define X_SMBD_DCERPC_CHECK_ADMIN_ACCESS(smbd_sess, arg) do { \
+	if (!x_smbd_dcerpc_is_admin(smbd_sess)) { \
+		arg.__result = WERR_ACCESS_DENIED; \
+		return true; \
+	} \
+} while (0)
+
+
 #define X_SMBD_DCERPC_IMPL_TODO(Arg) \
 static bool x_smbd_dcerpc_impl_##Arg(x_dcerpc_pipe_t &rpc_pipe, x_smbd_sess_t *smbd_sess, idl::Arg &arg) \
 { \

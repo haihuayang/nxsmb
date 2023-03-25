@@ -16,3 +16,21 @@ idl::dcerpc_nca_status x_smbd_dcerpc_fault(
 	return idl::dcerpc_nca_status(0);
 }
 
+bool x_smbd_dcerpc_is_admin(const x_smbd_sess_t *smbd_sess)
+{
+	auto smbd_user = x_smbd_sess_get_user(smbd_sess);
+	if (smbd_user->uid == idl::DOMAIN_RID_ADMINS) {
+		return true;
+	}
+	if (smbd_user->gid == idl::DOMAIN_RID_ADMINS) {
+		return true;
+	}
+	for (auto &ra: smbd_user->group_rids) {
+		if (ra.rid == idl::DOMAIN_RID_ADMINS) {
+			return true;
+		}
+	}
+	return false;
+}
+
+
