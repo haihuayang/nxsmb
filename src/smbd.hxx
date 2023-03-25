@@ -292,6 +292,7 @@ NTSTATUS x_smbd_conn_dispatch_update_counts(
 
 
 int x_smbd_sess_table_init(uint32_t count);
+uint32_t x_smbd_sess_get_count();
 x_smbd_sess_t *x_smbd_sess_create(uint64_t &id);
 x_smbd_sess_t *x_smbd_sess_lookup(NTSTATUS &status,
 		uint64_t id, const x_smb2_uuid_t &client_guid);

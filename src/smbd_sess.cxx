@@ -352,6 +352,10 @@ x_smbd_ctrl_handler_t *x_smbd_sess_list_create()
 	return new x_smbd_sess_list_t;
 }
 
+uint32_t x_smbd_sess_get_count()
+{
+	return g_smbd_sess_table->alloc_count;
+}
 
 static inline void smbd_sess_to_sess_info(std::vector<idl::srvsvc_NetSessInfo0> &array,
 		const x_smbd_sess_t *smbd_sess, const x_tick_t now)
