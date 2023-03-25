@@ -510,7 +510,41 @@ X_SMBD_DCERPC_IMPL_NOT_SUPPORTED(srvsvc_NetServerStatisticsGet)
 X_SMBD_DCERPC_IMPL_NOT_SUPPORTED(srvsvc_NetTransportAdd)
 X_SMBD_DCERPC_IMPL_NOT_SUPPORTED(srvsvc_NetTransportEnum)
 X_SMBD_DCERPC_IMPL_NOT_SUPPORTED(srvsvc_NetTransportDel)
-X_SMBD_DCERPC_IMPL_TODO(srvsvc_NetRemoteTOD)
+
+static bool x_smbd_dcerpc_impl_srvsvc_NetRemoteTOD(
+		x_dcerpc_pipe_t &rpc_pipe,
+		x_smbd_sess_t *smbd_sess,
+		idl::srvsvc_NetRemoteTOD &arg)
+{
+	const time_t unixdate = time(NULL);
+	struct tm gtm, *pgtm;
+	struct tm ltm, *pltm;
+
+	pgtm = gmtime_r(&unixdate, &gtm);
+	X_ASSERT(pgtm == &gtm);
+	pltm = localtime_r(&unixdate, &ltm);
+	X_ASSERT(pltm == &ltm);
+
+	auto info = std::make_shared<idl::srvsvc_NetRemoteTODInfo>();
+	info->elapsed = x_convert<uint32_t>(unixdate);
+	info->msecs = 0;	// TODO
+	info->hours = gtm.tm_hour;
+	info->mins = gtm.tm_min;
+	info->secs = gtm.tm_sec;
+	info->hunds = 0;	// TODO
+	info->timezone = -x_convert<int>(ltm.tm_gmtoff / 60);
+	info->tinterval = 10000;
+	info->day = gtm.tm_mday;
+	info->month = gtm.tm_mon + 1;
+	info->year = 1900 + gtm.tm_year;
+	info->weekday = gtm.tm_wday;
+
+	arg.info = std::move(info);
+	arg.__result = WERR_OK;
+
+	return true;
+}
+
 X_SMBD_DCERPC_IMPL_NOT_SUPPORTED(srvsvc_NetSetServiceBits)
 X_SMBD_DCERPC_IMPL_NOT_SUPPORTED(srvsvc_NetPathType)
 X_SMBD_DCERPC_IMPL_NOT_SUPPORTED(srvsvc_NetPathCanonicalize)
