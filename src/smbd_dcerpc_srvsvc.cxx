@@ -341,6 +341,14 @@ static bool x_smbd_dcerpc_impl_srvsvc_NetShareEnumAll(
 		net_enum(arg, ctr.ctr2->array);
 		break;
 
+	case 501:
+		net_enum(arg, ctr.ctr501->array);
+		break;
+
+	case 502:
+		net_enum(arg, ctr.ctr502->array);
+		break;
+
 	default:
 		arg.__result = WERR_INVALID_LEVEL;
 		break;
@@ -411,8 +419,22 @@ static bool x_smbd_dcerpc_impl_srvsvc_NetShareGetInfo(
 X_SMBD_DCERPC_IMPL_NOT_SUPPORTED(srvsvc_NetShareSetInfo)
 X_SMBD_DCERPC_IMPL_NOT_SUPPORTED(srvsvc_NetShareDel)
 X_SMBD_DCERPC_IMPL_NOT_SUPPORTED(srvsvc_NetShareDelSticky)
-X_SMBD_DCERPC_IMPL_NOT_SUPPORTED(srvsvc_NetShareCheck)
 
+static bool x_smbd_dcerpc_impl_srvsvc_NetShareCheck(
+		x_dcerpc_pipe_t &rpc_pipe,
+		x_smbd_sess_t *smbd_sess,
+		idl::srvsvc_NetShareCheck &arg)
+{
+	if (arg.device_name.size() == 0 || x_strcase_equal(arg.device_name,
+				u"C:\\IPC$")) {
+		arg.type = idl::STYPE_IPC;
+	} else {
+		arg.type = idl::STYPE_DISKTREE;
+	}
+
+	arg.__result = WERR_OK;
+	return true;
+}
 
 template <>
 idl::srvsvc_NetSrvInfo100 x_smbd_net_get_info<idl::srvsvc_NetSrvInfo100>(
