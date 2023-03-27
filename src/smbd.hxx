@@ -130,6 +130,7 @@ struct x_smb2_state_create_t
 	x_smbd_object_t *smbd_object{};
 	x_smbd_stream_t *smbd_stream{};
 	x_smbd_lease_t *smbd_lease{};
+	std::shared_ptr<x_smbd_share_t> smbd_share;
 	long open_priv_data;
 
 	uint64_t in_dh_id_persistent;
@@ -349,10 +350,6 @@ bool x_smbd_chan_post_user(x_smbd_chan_t *smbd_chan, x_fdevt_user_t *fdevt_user,
 
 
 int x_smbd_tcon_table_init(uint32_t count);
-NTSTATUS x_smbd_tcon_op_create(x_smbd_requ_t *smbd_requ,
-		std::unique_ptr<x_smb2_state_create_t> &state);
-NTSTATUS x_smbd_tcon_op_recreate(x_smbd_requ_t *smbd_requ,
-		std::unique_ptr<x_smb2_state_create_t> &state);
 x_smbd_tcon_t *x_smbd_tcon_create(x_smbd_sess_t *smbd_sess, 
 		const std::shared_ptr<x_smbd_share_t> &smbshare,
 		const std::string &volume,
@@ -370,28 +367,23 @@ x_smbd_sess_t *x_smbd_tcon_get_sess(const x_smbd_tcon_t *smbd_tcon);
 bool x_smbd_tcon_same_sess(const x_smbd_tcon_t *smbd_tcon1, const x_smbd_tcon_t *smbd_tcon2);
 std::shared_ptr<x_smbd_share_t> x_smbd_tcon_get_share(const x_smbd_tcon_t *smbd_tcon);
 x_smbd_tcon_t *x_smbd_tcon_lookup(uint32_t id, const x_smbd_sess_t *smbd_sess);
+bool x_smbd_tcon_link_open(x_smbd_tcon_t *smbd_tcon, x_dlink_t *link);
 bool x_smbd_tcon_unlink_open(x_smbd_tcon_t *smbd_tcon, x_dlink_t *link);
 bool x_smbd_tcon_disconnect(x_smbd_tcon_t *smbd_tcon);
 void x_smbd_tcon_unlinked(x_dlink_t *link, x_smbd_sess_t *smbd_sess, bool shutdown);
 std::string x_smbd_tcon_get_volume_label(const x_smbd_tcon_t *smbd_tcon);
+NTSTATUS x_smbd_tcon_resolve_path(x_smbd_tcon_t *smbd_tcon,
+		const std::u16string &in_path,
+		bool dfs,
+		std::shared_ptr<x_smbd_share_t> &smbd_share,
+		std::shared_ptr<x_smbd_volume_t> &smbd_volume,
+		std::u16string &path,
+		long &path_priv_data,
+		long &open_priv_data);
 
 
 
 int x_smbd_open_table_init(uint32_t count);
-bool x_smbd_open_has_space();
-x_smbd_open_t *x_smbd_open_lookup(uint64_t id_presistent, uint64_t id_volatile,
-		const x_smbd_tcon_t *smbd_tcon);
-bool x_smbd_open_store(x_smbd_open_t *smbd_open);
-NTSTATUS x_smbd_open_close(x_smbd_open_t *smbd_open,
-		x_smbd_requ_t *smbd_requ,
-		std::unique_ptr<x_smb2_state_close_t> &state,
-		std::vector<x_smb2_change_t> &changes,
-		bool shutdown);
-void x_smbd_open_unlinked(x_dlink_t *link, x_smbd_tcon_t *smbd_tcon,
-		std::vector<x_smb2_change_t> &changes,
-		bool shutdown);
-
-
 
 int x_smbd_posixfs_init(size_t max_open);
 int x_smbd_ipc_init();

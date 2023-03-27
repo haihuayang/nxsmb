@@ -738,7 +738,7 @@ static NTSTATUS smb2_process_create(x_smbd_requ_t *smbd_requ,
 				state->lease.key, state->lease.version, true);
 	}
 
-	return x_smbd_tcon_op_create(smbd_requ, state);
+	return x_smbd_open_op_create(smbd_requ, state);
 }
 
 NTSTATUS x_smb2_process_create(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
@@ -803,7 +803,10 @@ NTSTATUS x_smb2_process_create(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_req
 	} else {
 		if (x_bit_any<uint32_t>(state->in_contexts, X_SMB2_CONTEXT_FLAG_DHNC |
 					X_SMB2_CONTEXT_FLAG_DH2C)) {
-			status = x_smbd_tcon_op_recreate(smbd_requ, state);
+			if (!x_smbd_tcon_get_durable_handle(smbd_requ->smbd_tcon)) {
+				RETURN_OP_STATUS(smbd_requ, NT_STATUS_OBJECT_NAME_NOT_FOUND);
+			}
+			status = x_smbd_open_op_reconnect(smbd_requ, state);
 		} else {
 			status = smb2_process_create(smbd_requ, state);
 		}

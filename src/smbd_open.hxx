@@ -477,6 +477,15 @@ static inline void x_smbd_object_lease_granted(x_smbd_object_t *smbd_object,
 }
 
 
+
+bool x_smbd_open_has_space();
+x_smbd_open_t *x_smbd_open_lookup(uint64_t id_presistent, uint64_t id_volatile,
+		const x_smbd_tcon_t *smbd_tcon);
+bool x_smbd_open_store(x_smbd_open_t *smbd_open);
+void x_smbd_open_unlinked(x_dlink_t *link, x_smbd_tcon_t *smbd_tcon,
+		std::vector<x_smb2_change_t> &changes,
+		bool shutdown);
+
 NTSTATUS x_smbd_open_create(x_smbd_open_t **psmbd_open,
 		x_smbd_requ_t *smbd_requ,
 		x_smbd_share_t &smbd_share,
@@ -487,6 +496,11 @@ x_smbd_open_t *x_smbd_open_reopen(NTSTATUS &status,
 		uint64_t id_presistent, uint64_t id_volatile,
 		x_smbd_tcon_t *smbd_tcon,
 		x_smb2_state_create_t &state);
+
+NTSTATUS x_smbd_open_op_create(x_smbd_requ_t *smbd_requ,
+		std::unique_ptr<x_smb2_state_create_t> &state);
+NTSTATUS x_smbd_open_op_reconnect(x_smbd_requ_t *smbd_requ,
+		std::unique_ptr<x_smb2_state_create_t> &state);
 
 void x_smbd_open_break_lease(x_smbd_open_t *smbd_open,
 		const x_smb2_lease_key_t *ignore_lease_key,

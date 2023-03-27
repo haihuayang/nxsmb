@@ -2,6 +2,7 @@
 #include "smbd.hxx"
 #include "smbd_stats.hxx"
 #include "smbd_ctrl.hxx"
+#include "smbd_open.hxx"
 #include "include/idtable.hxx"
 
 using smbd_requ_table_t = x_idtable_t<x_smbd_requ_t, x_idtable_64_traits_t>;
