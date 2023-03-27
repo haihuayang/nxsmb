@@ -68,6 +68,13 @@ void x_smbd_ref_dec(x_smbd_open_t *smbd_open)
 	g_smbd_open_table->decref(smbd_open->id_volatile);
 }
 
+/* we use smbd_object mutex to protect open */
+static inline auto smbd_object_lock(x_smbd_object_t *smbd_object)
+{
+	return std::lock_guard(smbd_object->mutex);
+}
+
+
 int x_smbd_open_table_init(uint32_t count)
 {
 	X_ASSERT(count + g_smbd_open_extra < smbd_open_idtable_traits_t::index_max);
@@ -322,13 +329,14 @@ static NTSTATUS smbd_object_close(
 
 	clear_replay_cache(smbd_open->open_state);
 
-	std::unique_lock<std::mutex> lock(smbd_object->mutex);
-	auto notify_requ_list = smbd_close_open_intl(smbd_object, smbd_open,
-			smbd_requ, state, changes,
-			smbd_lease);
-	sharemode_modified(smbd_object, smbd_open->smbd_stream);
-
-	lock.unlock();
+	x_tp_ddlist_t<requ_async_traits> notify_requ_list;
+	{
+		auto lock = smbd_object_lock(smbd_object);
+		notify_requ_list = smbd_close_open_intl(smbd_object, smbd_open,
+				smbd_requ, state, changes,
+				smbd_lease);
+		sharemode_modified(smbd_object, smbd_open->smbd_stream);
+	}
 
 	x_smbd_requ_t *requ_notify;
 	while ((requ_notify = notify_requ_list.get_front()) != nullptr) {
@@ -433,7 +441,7 @@ static x_smbd_open_t *smbd_open_reconnect(NTSTATUS &status,
 {
 	auto [found, smbd_open] = g_smbd_open_table->lookup(id_volatile);
 	if (found) {
-		auto lock = std::lock_guard(smbd_open->smbd_object->mutex);
+		auto lock = smbd_object_lock(smbd_open->smbd_object);
 		status = smbd_open_check(smbd_open, smbd_tcon, state);
 		if (NT_STATUS_IS_OK(status)) {
 			smbd_open->smbd_tcon = x_smbd_ref_inc(smbd_tcon);
@@ -478,7 +486,7 @@ static NTSTATUS smbd_open_set_durable(x_smbd_open_t *smbd_open)
 		/* TODO save durable info to volume so it can restore open
 		 * when new smbd take over
 		 */
-		auto lock = std::lock_guard(smbd_open->smbd_object->mutex);
+		auto lock = smbd_object_lock(smbd_open->smbd_object);
 		X_ASSERT(smbd_open->smbd_tcon);
 		smbd_open_set_state(smbd_open, x_smbd_open_t::S_ACTIVE,
 				x_smbd_open_t::S_INACTIVE);
@@ -543,7 +551,7 @@ NTSTATUS x_smbd_open_restore(
 	}
 
 	{
-		auto lock = std::lock_guard(smbd_open->smbd_object->mutex);
+		auto lock = smbd_object_lock(smbd_open->smbd_object);
 		X_ASSERT(smbd_open->state == x_smbd_open_t::S_ACTIVE);
 		X_ASSERT(!smbd_open->smbd_tcon);
 		smbd_open->state = x_smbd_open_t::S_INACTIVE;
@@ -752,18 +760,20 @@ static void oplock_break_timeout(x_timerq_entry_t *timerq_entry)
 			x_smbd_open_t, oplock_break_timer);
 	x_smbd_object_t *smbd_object = smbd_open->smbd_object;
 	bool modified = true;
-	auto lock = std::lock_guard(smbd_object->mutex);
-	if (smbd_open->oplock_break_sent == x_smbd_open_t::OPLOCK_BREAK_TO_NONE_SENT) {
-		smbd_open->oplock_break_sent = x_smbd_open_t::OPLOCK_BREAK_NOT_SENT;
-		smbd_open->open_state.oplock_level = X_SMB2_OPLOCK_LEVEL_NONE;
-	} else if (smbd_open->oplock_break_sent == x_smbd_open_t::OPLOCK_BREAK_TO_LEVEL_II_SENT) {
-		smbd_open->oplock_break_sent = x_smbd_open_t::OPLOCK_BREAK_NOT_SENT;
-		smbd_open->open_state.oplock_level = X_SMB2_OPLOCK_LEVEL_II;
-	} else {
-		modified = false;
-	}
-	if (modified) {
-		sharemode_modified(smbd_object, smbd_open->smbd_stream);
+	{
+		auto lock = smbd_object_lock(smbd_object);
+		if (smbd_open->oplock_break_sent == x_smbd_open_t::OPLOCK_BREAK_TO_NONE_SENT) {
+			smbd_open->oplock_break_sent = x_smbd_open_t::OPLOCK_BREAK_NOT_SENT;
+			smbd_open->open_state.oplock_level = X_SMB2_OPLOCK_LEVEL_NONE;
+		} else if (smbd_open->oplock_break_sent == x_smbd_open_t::OPLOCK_BREAK_TO_LEVEL_II_SENT) {
+			smbd_open->oplock_break_sent = x_smbd_open_t::OPLOCK_BREAK_NOT_SENT;
+			smbd_open->open_state.oplock_level = X_SMB2_OPLOCK_LEVEL_II;
+		} else {
+			modified = false;
+		}
+		if (modified) {
+			sharemode_modified(smbd_object, smbd_open->smbd_stream);
+		}
 	}
 	x_smbd_ref_dec(smbd_open);
 }
@@ -960,7 +970,7 @@ static void smbd_create_cancel(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_req
 			state->smbd_stream);
 
 	{
-		auto lock = std::lock_guard(state->smbd_object->mutex);
+		auto lock = smbd_object_lock(state->smbd_object);
 		sharemode->defer_open_list.remove(smbd_requ);
 	}
 	x_smbd_conn_post_cancel(smbd_conn, smbd_requ, NT_STATUS_CANCELLED);
@@ -1480,7 +1490,7 @@ static NTSTATUS smbd_open_create_intl(x_smbd_open_t **psmbd_open,
 
 	uint32_t num_disconnected = 0;
 	auto in_disposition = state->in_create_disposition;
-	auto lock = std::lock_guard(smbd_object->mutex);
+	auto lock = smbd_object_lock(smbd_object);
 
 	if (in_disposition == x_smb2_create_disposition_t::CREATE) {
 		if (!smbd_object->exists()) {
@@ -1687,7 +1697,7 @@ static NTSTATUS smbd_open_op_create(x_smbd_open_t **psmbd_open,
 void x_smbd_break_lease(x_smbd_object_t *smbd_object,
 		x_smbd_stream_t *smbd_stream)
 {
-	std::unique_lock<std::mutex> lock(smbd_object->mutex);
+	auto lock = smbd_object_lock(smbd_object);
 	sharemode_modified(smbd_object, smbd_stream);
 }
 
@@ -1699,7 +1709,7 @@ NTSTATUS x_smbd_break_oplock(
 	uint8_t out_oplock_level;
 	bool modified = false;
 	x_smbd_object_t *smbd_object = smbd_open->smbd_object;
-	auto lock = std::lock_guard(smbd_object->mutex);
+	auto lock = smbd_object_lock(smbd_object);
 
 	if (smbd_open->oplock_break_sent == x_smbd_open_t::OPLOCK_BREAK_NOT_SENT) {
 		return NT_STATUS_INVALID_OPLOCK_PROTOCOL;
@@ -2044,7 +2054,7 @@ static inline void smbd_open_to_open_info(std::vector<idl::srvsvc_NetFileInfo3> 
 	size_t lock_count;
 	auto &open_state = smbd_open->open_state;
 	{
-		auto lock = std::lock_guard(smbd_object->mutex);
+		auto lock = smbd_object_lock(smbd_object);
 		if (smbd_open->smbd_tcon) {
 			smbd_user = x_smbd_tcon_get_user(smbd_open->smbd_tcon);
 		}
