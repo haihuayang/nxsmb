@@ -188,18 +188,15 @@ static bool smbd_tcon_terminate(x_smbd_tcon_t *smbd_tcon, bool shutdown)
 	g_smbd_tcon_table->remove(smbd_tcon->tid);
 	x_smbd_ref_dec(smbd_tcon);
 
-	std::vector<x_smb2_change_t> changes;
 	x_dlink_t *link;
 	lock.lock();
 	while ((link = smbd_tcon->open_list.get_front()) != nullptr) {
 		smbd_tcon->open_list.remove(link);
 		lock.unlock();
-		x_smbd_open_unlinked(link, smbd_tcon, changes, shutdown);
+		x_smbd_open_unlinked(link, shutdown);
 		lock.lock();
 	}
 	lock.unlock();
-
-	// TODO get topdir, x_smbd_notify_change(topdir, changes);
 
 	x_smbd_ref_dec(smbd_tcon); // ref by smbd_sess tcon_list
 	return true;

@@ -40,18 +40,14 @@ struct x_smbd_open_t
 	x_smbd_tcon_t * smbd_tcon = nullptr;
 	uint64_t id_persistent = 0xfffffffeu; // resolve id for non durable
 	uint64_t id_volatile;
-	enum {
-		S_ACTIVE,
-		S_INACTIVE, /* durable handle waiting reconnect */
-		S_DONE,
-	};
-	std::atomic<uint32_t> state{S_ACTIVE};
 	x_timerq_entry_t durable_timer;
 	/* ideally it should not use timerq for durable timer because opens'
 	 * timeout are not same. so it also check durable_timeout_tick
 	 * if it is really expired
 	 */
 	x_tick_t durable_expire_tick;
+
+	uint32_t state;
 
 	enum {
 		OPLOCK_BREAK_NOT_SENT,
@@ -482,8 +478,7 @@ bool x_smbd_open_has_space();
 x_smbd_open_t *x_smbd_open_lookup(uint64_t id_presistent, uint64_t id_volatile,
 		const x_smbd_tcon_t *smbd_tcon);
 bool x_smbd_open_store(x_smbd_open_t *smbd_open);
-void x_smbd_open_unlinked(x_dlink_t *link, x_smbd_tcon_t *smbd_tcon,
-		std::vector<x_smb2_change_t> &changes,
+void x_smbd_open_unlinked(x_dlink_t *link,
 		bool shutdown);
 
 NTSTATUS x_smbd_open_create(x_smbd_open_t **psmbd_open,
