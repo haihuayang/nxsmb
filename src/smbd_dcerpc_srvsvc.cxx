@@ -257,7 +257,18 @@ static bool x_smbd_dcerpc_impl_srvsvc_NetFileEnum(
 }
 
 X_SMBD_DCERPC_IMPL_NOT_SUPPORTED(srvsvc_NetFileGetInfo)
-X_SMBD_DCERPC_IMPL_TODO(srvsvc_NetFileClose)
+
+static bool x_smbd_dcerpc_impl_srvsvc_NetFileClose(
+		x_dcerpc_pipe_t &rpc_pipe,
+		x_smbd_sess_t *smbd_sess,
+		idl::srvsvc_NetFileClose &arg)
+{
+	X_SMBD_DCERPC_CHECK_ADMIN_ACCESS(smbd_sess, arg);
+
+	x_smbd_net_file_close(arg.fid);
+	arg.__result = WERR_OK;
+	return true;
+}
 
 static bool x_smbd_dcerpc_impl_srvsvc_NetSessEnum(
 		x_dcerpc_pipe_t &rpc_pipe,

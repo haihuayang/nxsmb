@@ -18,6 +18,7 @@ WERROR x_smbd_net_enum(idl::srvsvc_NetFileEnum &arg,
 		std::vector<idl::srvsvc_NetFileInfo2> &array);
 WERROR x_smbd_net_enum(idl::srvsvc_NetFileEnum &arg,
 		std::vector<idl::srvsvc_NetFileInfo3> &array);
+void x_smbd_net_file_close(uint32_t fid);
 
 WERROR x_smbd_net_enum(idl::srvsvc_NetSessEnum &arg,
 		std::vector<idl::srvsvc_NetSessInfo0> &array);

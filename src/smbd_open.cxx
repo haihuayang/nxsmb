@@ -2144,6 +2144,53 @@ WERROR x_smbd_net_enum(idl::srvsvc_NetFileEnum &arg,
 	return smbd_open_enum(array);
 }
 
+static void smbd_net_file_close(x_smbd_open_t *smbd_open)
+{
+	x_smbd_object_t *smbd_object = smbd_open->smbd_object;
+	x_smbd_tcon_t *smbd_tcon = nullptr;
+
+	x_smbd_lease_t *smbd_lease = nullptr;
+	x_tp_ddlist_t<requ_async_traits> notify_requ_list;
+	std::vector<x_smb2_change_t> changes;
+	std::unique_ptr<x_smb2_state_close_t> state;
+
+	{
+		auto lock = smbd_object_lock(smbd_object);
+		if (smbd_open->state == SMBD_OPEN_S_ACTIVE) {
+			/* it could happen when client tdis on other channel */
+			if (!x_smbd_tcon_unlink_open(smbd_open->smbd_tcon, &smbd_open->tcon_link)) {
+				X_LOG_NOTICE("failed to unlink open %p", smbd_open);
+				return;
+			}
+			smbd_tcon = smbd_open->smbd_tcon;
+			smbd_open->smbd_tcon = nullptr;
+		} else if (smbd_open->state != SMBD_OPEN_S_DISCONNECTED) {
+			return;
+		}
+		smbd_open_close(smbd_open, smbd_object, nullptr, state,
+				smbd_lease, notify_requ_list, changes);
+	}
+
+	smbd_open_post_close(smbd_open, smbd_object, smbd_lease,
+			notify_requ_list, changes);
+	if (smbd_tcon) {
+		x_smbd_ref_dec(smbd_tcon);
+		x_smbd_ref_dec(smbd_open); // ref by smbd_tcon open_list
+	}
+}
+
+void x_smbd_net_file_close(uint32_t fid)
+{
+	auto [found, smbd_open] = g_smbd_open_table->lookup(fid);
+	if (!found) {
+		X_LOG_NOTICE("cannot find open by fid 0x%x", fid);
+		return;
+	}
+	smbd_net_file_close(smbd_open);
+	x_smbd_ref_dec(smbd_open);
+}
+
+
 /* open with conflict
  *  client 1 open with file DELETE_ON_CLOSE and durable and close connection
  * client 2 have permission to create the file
