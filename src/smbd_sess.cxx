@@ -428,7 +428,9 @@ static WERROR smbd_sess_enum(std::vector<T> &array)
 	smbd_sess_table_t::iter_t iter = g_smbd_sess_table->iter_start();
 	auto now = tick_now;
 	g_smbd_sess_table->iterate(iter, [now, &array](x_smbd_sess_t *smbd_sess) {
-			smbd_sess_to_sess_info(array, smbd_sess, now);
+			if (smbd_sess->state == x_smbd_sess_t::S_ACTIVE) {
+				smbd_sess_to_sess_info(array, smbd_sess, now);
+			}
 			return true;
 		});
 	return WERR_OK;

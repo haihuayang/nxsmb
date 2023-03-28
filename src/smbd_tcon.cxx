@@ -327,7 +327,8 @@ static WERROR smbd_tcon_enum(idl::srvsvc_NetConnEnum &arg, std::vector<T> &array
 	smbd_tcon_table_t::iter_t iter = g_smbd_tcon_table->iter_start();
 	auto now = tick_now;
 	g_smbd_tcon_table->iterate(iter, [now, &array, &smbd_share, &arg](x_smbd_tcon_t *smbd_tcon) {
-			if (smbd_share == smbd_tcon->smbd_share) {
+			if (smbd_tcon->state == x_smbd_tcon_t::S_ACTIVE &&
+					smbd_share == smbd_tcon->smbd_share) {
 				smbd_tcon_to_tcon_info(array, smbd_tcon, now, arg.path);
 			}
 			return true;
