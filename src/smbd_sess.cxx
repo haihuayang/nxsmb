@@ -40,6 +40,7 @@ struct x_smbd_sess_t
 
 	x_smbd_key_set_t keys;
 	uint64_t tick_expired;
+	std::atomic<uint32_t> num_open = 0;
 	const std::shared_ptr<std::u16string> machine_name;
 };
 
@@ -290,6 +291,11 @@ void x_smbd_sess_close_previous(const x_smbd_sess_t *curr_sess, uint64_t prev_se
 	x_smbd_ref_dec(prev_sess);
 }
 
+void x_smbd_sess_update_num_open(x_smbd_sess_t *smbd_sess, int opens)
+{
+	smbd_sess->num_open.fetch_add(opens, std::memory_order_relaxed);
+}
+
 bool x_smbd_sess_post_user(x_smbd_sess_t *smbd_sess, x_fdevt_user_t *evt)
 {
 	x_dlink_t *link;
@@ -372,7 +378,7 @@ static inline void smbd_sess_to_sess_info(std::vector<idl::srvsvc_NetSessInfo1> 
 	array.push_back(idl::srvsvc_NetSessInfo1{
 			smbd_sess->machine_name,
 			smbd_user->account_name,
-			1, // TODO num_open
+			smbd_sess->num_open.load(std::memory_order_relaxed),
 			x_convert<uint32_t>((now - smbd_sess->tick_create) / X_NSEC_PER_SEC),
 			0, // TODO idle time
 			0, // user_flags
@@ -386,7 +392,7 @@ static inline void smbd_sess_to_sess_info(std::vector<idl::srvsvc_NetSessInfo2> 
 	array.push_back(idl::srvsvc_NetSessInfo2{
 			smbd_sess->machine_name,
 			smbd_user->account_name,
-			1, // TODO num_open
+			smbd_sess->num_open.load(std::memory_order_relaxed),
 			x_convert<uint32_t>((now - smbd_sess->tick_create) / X_NSEC_PER_SEC),
 			0, // TODO idle time
 			0, // user_flags
@@ -413,7 +419,7 @@ static inline void smbd_sess_to_sess_info(std::vector<idl::srvsvc_NetSessInfo502
 	array.push_back(idl::srvsvc_NetSessInfo502{
 			smbd_sess->machine_name,
 			smbd_user->account_name,
-			1, // TODO num_open
+			smbd_sess->num_open.load(std::memory_order_relaxed),
 			x_convert<uint32_t>((now - smbd_sess->tick_create) / X_NSEC_PER_SEC),
 			0, // TODO idle time
 			0, // user_flags

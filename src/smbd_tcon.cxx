@@ -32,12 +32,13 @@ struct x_smbd_tcon_t
 
 	x_dlink_t sess_link; // protected by smbd_sess' mutex
 	const x_tick_t tick_create;
+	const uint32_t share_access;
 	enum {
 		S_ACTIVE,
 		S_DONE,
 	} state = S_ACTIVE;
 	uint32_t tid;
-	const uint32_t share_access;
+	std::atomic<uint32_t> num_open = 0;
 	x_smbd_sess_t * const smbd_sess;
 	const std::shared_ptr<x_smbd_share_t> smbd_share;
 	const std::string volume;
@@ -173,6 +174,13 @@ NTSTATUS x_smbd_tcon_resolve_path(x_smbd_tcon_t *smbd_tcon,
 	return status;
 }
 
+static inline void smbd_tcon_unlink_open(x_smbd_tcon_t *smbd_tcon, x_dlink_t *link)
+{
+	smbd_tcon->open_list.remove(link);
+	smbd_tcon->num_open.fetch_sub(1, std::memory_order_relaxed);
+	x_smbd_sess_update_num_open(smbd_tcon->smbd_sess, -1);
+}
+
 static bool smbd_tcon_terminate(x_smbd_tcon_t *smbd_tcon, bool shutdown)
 {
 	std::unique_lock<std::mutex> lock(smbd_tcon->mutex);
@@ -191,7 +199,7 @@ static bool smbd_tcon_terminate(x_smbd_tcon_t *smbd_tcon, bool shutdown)
 	x_dlink_t *link;
 	lock.lock();
 	while ((link = smbd_tcon->open_list.get_front()) != nullptr) {
-		smbd_tcon->open_list.remove(link);
+		smbd_tcon_unlink_open(smbd_tcon, link);
 		lock.unlock();
 		x_smbd_open_unlinked(link, shutdown);
 		lock.lock();
@@ -221,6 +229,8 @@ bool x_smbd_tcon_link_open(x_smbd_tcon_t *smbd_tcon, x_dlink_t *link)
 	std::lock_guard<std::mutex> lock(smbd_tcon->mutex);
 	if (smbd_tcon->state == x_smbd_tcon_t::S_ACTIVE) {
 		smbd_tcon->open_list.push_back(link);
+		smbd_tcon->num_open.fetch_add(1, std::memory_order_relaxed);
+		x_smbd_sess_update_num_open(smbd_tcon->smbd_sess, 1);
 		return true;
 	} else {
 		return false;
@@ -231,7 +241,7 @@ bool x_smbd_tcon_unlink_open(x_smbd_tcon_t *smbd_tcon, x_dlink_t *link)
 {
 	std::lock_guard<std::mutex> lock(smbd_tcon->mutex);
 	if (link->is_valid()) {
-		smbd_tcon->open_list.remove(link);
+		smbd_tcon_unlink_open(smbd_tcon, link);
 		return true;
 	}
 	return false;
@@ -301,7 +311,7 @@ static inline void smbd_tcon_to_tcon_info(std::vector<idl::srvsvc_NetConnInfo1> 
 	array.push_back(idl::srvsvc_NetConnInfo1{
 			smbd_tcon->tid,
 			0x3, // conn_type
-			1, // TODO num_open
+			smbd_tcon->num_open.load(std::memory_order_relaxed),
 			1, // TODO num_users
 			x_convert<uint32_t>((now - smbd_tcon->tick_create) / X_NSEC_PER_SEC),
 			smbd_user->account_name,

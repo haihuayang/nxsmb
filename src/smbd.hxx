@@ -315,6 +315,7 @@ NTSTATUS x_smbd_sess_logoff(x_smbd_sess_t *smbd_sess);
 void x_smbd_sess_close_previous(const x_smbd_sess_t *smbd_sess, uint64_t previous_session_id);
 bool x_smbd_sess_link_tcon(x_smbd_sess_t *smbd_sess, x_dlink_t *link);
 bool x_smbd_sess_unlink_tcon(x_smbd_sess_t *smbd_sess, x_dlink_t *link);
+void x_smbd_sess_update_num_open(x_smbd_sess_t *smbd_sess, int opens);
 const x_smb2_key_t *x_smbd_sess_get_signing_key(const x_smbd_sess_t *smbd_sess);
 bool x_smbd_sess_post_user(x_smbd_sess_t *smbd_sess, x_fdevt_user_t *evt);
 #define X_SMBD_SESS_POST_USER(smbd_sess, evt) do { \
