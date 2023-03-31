@@ -115,6 +115,22 @@ enum {
 	X_SMB2_CAP_ENCRYPTION		= 0x00000040 /* only in dialect >= 0x222 */,
 };
 
+struct x_smb2_tf_header_t
+{
+	uint32_t protocol_id;
+	uint8_t signature[16];
+	uint8_t nonce[16];
+	uint32_t msgsize;
+	uint16_t unused0;
+	uint16_t flags;
+	uint32_t sess_id_low;
+	uint32_t sess_id_high;
+};
+
+enum {
+	X_SMB2_TF_FLAGS_ENCRYPTED		= 0x0001,
+};
+
 /* Types of SMB2 Negotiate Contexts - only in dialect >= 0x310 */
 enum {
 	X_SMB2_PREAUTH_INTEGRITY_CAPABILITIES	= 0x0001,
@@ -708,6 +724,20 @@ bool x_smb2_signing_check(uint16_t algo,
 void x_smb2_signing_sign(uint16_t algo,
 		const x_smb2_key_t *key,
 		x_bufref_t *buflist);
+
+int x_smb2_signing_decrypt(uint16_t algo,
+		const x_smb2_key_t *key,
+		const x_smb2_tf_header_t *tfhdr,
+		const void *cdata, size_t cdata_len,
+		void *pdata);
+
+int x_smb2_signing_encrypt(uint16_t algo,
+		const x_smb2_key_t *key,
+		x_smb2_tf_header_t *tfhdr,
+		x_bufref_t *buflist,
+		size_t length);
+
+int x_smb2_signing_get_nonce_size(uint16_t algo);
 
 #if 0
 struct x_nbt_t
