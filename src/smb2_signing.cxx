@@ -191,6 +191,103 @@ void x_smb2_signing_sign(uint16_t algo,
 	x_smb2_digest(algo, *key, buflist, signature);
 }
 
+static inline int aes128_ccm_signing_decrypt(const x_smb2_key_t &key,
+		const void *signature,
+		const void *aad, int aad_len,
+		const void *cdata, int cdata_len,
+		void *pdata)
+{
+	EVP_CIPHER_CTX *ctx = EVP_CIPHER_CTX_new();
+	X_ASSERT(ctx);
+
+	int rc, out_len;
+	int pdata_len = -1;
+
+	rc = EVP_DecryptInit_ex(ctx, EVP_aes_128_ccm(), NULL, NULL, NULL);
+	X_ASSERT(rc == 1);
+
+	rc = EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_CCM_SET_IVLEN, 11, NULL);
+	X_ASSERT(rc == 1);
+
+	rc = EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_CCM_SET_TAG, 16, (void *)signature);
+	X_ASSERT(rc == 1);
+
+	rc = EVP_DecryptInit_ex(ctx, NULL, NULL, key.data(), (uint8_t *)aad);
+	X_ASSERT(rc == 1);
+
+	rc = EVP_DecryptUpdate(ctx, nullptr, &out_len,
+			nullptr, cdata_len);
+	X_ASSERT(rc == 1);
+
+	rc = EVP_DecryptUpdate(ctx, nullptr, &out_len,
+			(const uint8_t *)aad, aad_len);
+	X_ASSERT(rc == 1);
+
+	rc = EVP_DecryptUpdate(ctx, (uint8_t *)pdata, &out_len,
+			(const uint8_t *)cdata, cdata_len);
+	X_ASSERT(rc == 1);
+
+	pdata_len = out_len;
+
+	rc = EVP_DecryptFinal_ex(ctx, (uint8_t *)pdata + pdata_len, &out_len);
+
+	EVP_CIPHER_CTX_free(ctx);
+	if (!rc) {
+		return -1;
+	}
+
+	return pdata_len + out_len;
+}
+
+static inline int aes128_ccm_signing_encrypt(const x_smb2_key_t &key,
+		void *signature,
+		const void *aad, int aad_len,
+		x_bufref_t *buflist, int length,
+		void *cdata)
+{
+	EVP_CIPHER_CTX *ctx = EVP_CIPHER_CTX_new();
+	X_ASSERT(ctx);
+
+	int rc, out_len;
+
+	rc = EVP_EncryptInit_ex(ctx, EVP_aes_128_ccm(), NULL, NULL, NULL);
+	X_ASSERT(rc == 1);
+
+	rc = EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_CCM_SET_IVLEN, 11, NULL);
+	X_ASSERT(rc == 1);
+
+	rc = EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_CCM_SET_TAG, 16, nullptr);
+	X_ASSERT(rc == 1);
+
+	rc = EVP_EncryptInit_ex(ctx, NULL, NULL, key.data(), (uint8_t *)aad);
+	X_ASSERT(rc == 1);
+
+	rc = EVP_EncryptUpdate(ctx, nullptr, &out_len,
+			NULL, length);
+	X_ASSERT(rc == 1);
+
+	rc = EVP_EncryptUpdate(ctx, nullptr, &out_len,
+			(const uint8_t *)aad, aad_len);
+	X_ASSERT(rc == 1);
+
+	uint8_t *cptr = (uint8_t *)cdata;
+	for (buflist = buflist; buflist; buflist = buflist->next) {
+		rc = EVP_EncryptUpdate(ctx, cptr, &out_len,
+				buflist->get_data(), buflist->length);
+		X_ASSERT(rc == 1);
+		cptr += out_len;
+	}
+
+	rc = EVP_EncryptFinal_ex(ctx, cptr, &out_len);
+	X_ASSERT(rc == 1);
+	cptr += out_len;
+
+	rc = EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_CCM_GET_TAG, 16, (void *)signature);
+	X_ASSERT(rc == 1);
+
+	return x_convert<int>(cptr - (uint8_t *)cdata);
+}
+
 static inline int aes128_gcm_signing_decrypt(const x_smb2_key_t &key,
 		const void *signature,
 		const void *aad, int aad_len,
@@ -291,6 +388,11 @@ int x_smb2_signing_decrypt(uint16_t algo,
 				tfhdr->nonce, a_total,
 				cdata, x_convert<int>(cdata_len),
 				pdata);
+	} else if (algo == X_SMB2_ENCRYPTION_AES128_CCM) {
+		return aes128_ccm_signing_decrypt(*key, tfhdr->signature,
+				tfhdr->nonce, a_total,
+				cdata, x_convert<int>(cdata_len),
+				pdata);
 	}
 	return -1;
 }
@@ -308,6 +410,11 @@ int x_smb2_signing_encrypt(uint16_t algo,
 		return aes128_gcm_signing_encrypt(*key, tfhdr->signature,
 				tfhdr->nonce, a_total,
 				buflist,
+				tfhdr + 1);
+	} else if (algo == X_SMB2_ENCRYPTION_AES128_CCM) {
+		return aes128_ccm_signing_encrypt(*key, tfhdr->signature,
+				tfhdr->nonce, a_total,
+				buflist, x_convert<int>(length),
 				tfhdr + 1);
 	}
 	return -1;
