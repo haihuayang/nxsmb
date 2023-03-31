@@ -253,10 +253,72 @@ static void x_smbd_requ_sign_if(x_smbd_conn_t *smbd_conn,
 	}
 }
 
+static int x_smbd_conn_create_smb2_tf(x_smbd_conn_t *smbd_conn,
+		x_smbd_requ_t *smbd_requ,
+		x_buf_t **out_buf)
+{
+	X_ASSERT(smbd_requ->out_length > 4);
+	uint32_t msgsize = smbd_requ->out_length;
+	x_smb2_tf_header_t *tf_hdr;
+	x_buf_t *buf = x_buf_alloc(4 + sizeof(*tf_hdr) + msgsize + 32);
+
+	tf_hdr = (x_smb2_tf_header_t *)(buf->data + 4);
+	uint64_t nonce_low, nonce_high;
+	const x_smb2_key_t *key = x_smbd_sess_get_encryption_key(
+			smbd_requ->smbd_sess,
+			&nonce_low, &nonce_high);
+
+	if (!key) {
+		return -1;
+	}
+
+	uint32_t *nonce_u32 = (uint32_t *)tf_hdr->nonce;
+	nonce_u32[0] = X_H2LE32(x_convert<uint32_t>(nonce_low & 0xffffffff));
+	nonce_u32[1] = X_H2LE32(x_convert<uint32_t>(nonce_low >> 32));
+	nonce_u32[2] = X_H2LE32(x_convert<uint32_t>(nonce_high & 0xffffffff));
+	nonce_u32[3] = X_H2LE32(x_convert<uint32_t>(nonce_high >> 32));
+	tf_hdr->msgsize = X_H2LE32(msgsize);
+	tf_hdr->unused0 = 0;
+	tf_hdr->flags = X_H2LE16(X_SMB2_TF_FLAGS_ENCRYPTED);
+	uint64_t sess_id = x_smbd_sess_get_id(smbd_requ->smbd_sess);
+	tf_hdr->sess_id_low = X_H2LE32(x_convert<uint32_t>(sess_id & 0xffffffff));
+	tf_hdr->sess_id_high = X_H2LE32(x_convert<uint32_t>(sess_id >> 32));
+
+	int clen = x_smb2_signing_encrypt(smbd_conn->encryption_algo,
+			key, tf_hdr,
+			smbd_requ->out_buf_head, smbd_requ->out_length);
+
+	if (clen < 0) {
+		return -1;
+	}
+
+	tf_hdr->protocol_id = X_H2BE32(X_SMB2_TF_MAGIC);
+	*out_buf = buf;
+	return x_convert<int>(clen + sizeof(*tf_hdr));
+}
+
 static void x_smbd_conn_queue(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 {
 	X_ASSERT(smbd_requ->out_buf_head);
 	X_ASSERT(smbd_requ->out_length > 0);
+
+	if (smbd_requ->encrypted) {
+		x_buf_t *out_buf;
+		int clen = x_smbd_conn_create_smb2_tf(smbd_conn, smbd_requ, &out_buf);
+		if (clen < 0) {
+			X_TODO;
+		}
+		x_bufref_t *bufref = new x_bufref_t{out_buf, 4, (uint32_t)clen};
+		x_bufref_t *out_buf_head = smbd_requ->out_buf_head;
+		while (out_buf_head) {
+			auto next = out_buf_head->next;
+			delete out_buf_head;
+			out_buf_head = next;
+		}
+
+		smbd_requ->out_buf_head = smbd_requ->out_buf_tail = bufref;
+		smbd_requ->out_length = clen;
+	}
 
 	x_smbd_conn_queue(smbd_conn, smbd_requ->out_buf_head, smbd_requ->out_buf_tail,
 			smbd_requ->out_length);
@@ -948,6 +1010,56 @@ static int x_smbd_conn_process_smb2(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smb
 	return 0;
 }
 
+static int x_smbd_conn_process_smb2_tf(x_smbd_conn_t *smbd_conn,
+		x_buf_t *buf, uint32_t total_size,
+		x_buf_t **out_buf)
+{
+	if (smbd_conn->dialect < X_SMB2_DIALECT_300) {
+		return -EBADMSG;
+	}
+
+	if (smbd_conn->encryption_algo == X_SMB2_ENCRYPTION_INVALID_ALGO) {
+		return -EBADMSG;
+	}
+
+	const x_smb2_tf_header_t *smb2_tf = (x_smb2_tf_header_t *)buf->data;
+	uint32_t msgsize = X_LE2H32(smb2_tf->msgsize);
+	if (msgsize + sizeof(x_smb2_tf_header_t) > total_size) {
+		return -EBADMSG;
+	}
+
+	uint16_t flags = X_LE2H16(smb2_tf->flags);
+	if (flags != X_SMB2_TF_FLAGS_ENCRYPTED) {
+		return -EBADMSG;
+	}
+
+	uint64_t sess_id = X_LE2H32(smb2_tf->sess_id_high);
+	sess_id = sess_id << 32 | X_LE2H32(smb2_tf->sess_id_low);
+
+	NTSTATUS status;
+	x_smbd_sess_t *smbd_sess = x_smbd_sess_lookup(status,
+				sess_id, smbd_conn->client_guid);
+	if (!smbd_sess) {
+		return -EBADMSG;
+	}
+
+	x_buf_t *pbuf = x_buf_alloc(msgsize);
+	int plen = x_smb2_signing_decrypt(smbd_conn->encryption_algo,
+			x_smbd_sess_get_decryption_key(smbd_sess),
+			smb2_tf, smb2_tf + 1, msgsize,
+			pbuf->data);
+
+	x_smbd_ref_dec(smbd_sess);
+
+	if (plen < 0) {
+		x_buf_release(pbuf);
+		return -EBADMSG;
+	}
+
+	*out_buf = pbuf;
+	return plen;
+}
+
 #define SMBnegprot    0x72   /* negotiate protocol */
 static int x_smbd_conn_process_smb(x_smbd_conn_t *smbd_conn, x_buf_t *buf, uint32_t msgsize)
 {
@@ -958,14 +1070,39 @@ static int x_smbd_conn_process_smb(x_smbd_conn_t *smbd_conn, x_buf_t *buf, uint3
 		return -EBADMSG;
 	}
 	int32_t smbhdr = x_get_be32(buf->data + offset);
+	bool encrypted = false;
 
-	x_smbd_ptr_t<x_smbd_requ_t> smbd_requ{x_smbd_requ_create(x_buf_get(buf), msgsize)};
+	if (smbhdr == X_SMB2_TF_MAGIC) {
+		if (len < sizeof(x_smb2_tf_header_t)) {
+			return -EBADMSG;
+		}
+		x_buf_t *pbuf;
+		int plen = x_smbd_conn_process_smb2_tf(smbd_conn, buf, msgsize,
+				&pbuf);
+		if (plen < 0) {
+			return plen;
+		}
+		if (len < 4) {
+			x_buf_release(pbuf);
+			return -EBADMSG;
+		}
+
+		buf = pbuf;
+		msgsize = plen;
+		smbhdr = x_get_be32(buf->data + offset);
+		encrypted = true;
+	}
+
+	x_smbd_ptr_t<x_smbd_requ_t> smbd_requ{x_smbd_requ_create(x_buf_get(buf),
+			msgsize, encrypted)};
 	
 	if (smbhdr == X_SMB2_MAGIC) {
 		if (len < sizeof(x_smb2_header_t)) {
 			return -EBADMSG;
 		}
 		return x_smbd_conn_process_smb2(smbd_conn, smbd_requ, 0);
+	} else if (smbhdr == X_SMB2_TF_MAGIC) {
+		return -EBADMSG;
 	} else if (smbhdr == X_SMB1_MAGIC) {
 		uint8_t cmd = buf->data[4];
 		if (/* TODO smbd_conn->is_negotiated || */cmd != SMBnegprot) {
@@ -1243,6 +1380,11 @@ const x_smb2_uuid_t &x_smbd_conn_curr_client_guid()
 uint16_t x_smbd_conn_curr_dialect()
 {
 	return g_smbd_conn_curr->dialect;
+}
+
+uint16_t x_smbd_conn_curr_get_cipher()
+{
+	return g_smbd_conn_curr->encryption_algo;
 }
 
 std::shared_ptr<std::u16string> x_smbd_conn_curr_name()

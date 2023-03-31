@@ -249,6 +249,7 @@ extern __thread x_smbd_conn_t *g_smbd_conn_curr;
 #define X_SMBD_CONN_ASSERT(smbd_conn) X_ASSERT((smbd_conn) == g_smbd_conn_curr)
 const x_smb2_uuid_t &x_smbd_conn_curr_client_guid();
 uint16_t x_smbd_conn_curr_dialect();
+uint16_t x_smbd_conn_curr_get_cipher();
 std::shared_ptr<std::u16string> x_smbd_conn_curr_name();
 
 int x_smbd_conn_negprot(x_smbd_conn_t *smbd_conn,
@@ -317,6 +318,10 @@ bool x_smbd_sess_link_tcon(x_smbd_sess_t *smbd_sess, x_dlink_t *link);
 bool x_smbd_sess_unlink_tcon(x_smbd_sess_t *smbd_sess, x_dlink_t *link);
 void x_smbd_sess_update_num_open(x_smbd_sess_t *smbd_sess, int opens);
 const x_smb2_key_t *x_smbd_sess_get_signing_key(const x_smbd_sess_t *smbd_sess);
+const x_smb2_key_t *x_smbd_sess_get_decryption_key(const x_smbd_sess_t *smbd_sess);
+const x_smb2_key_t *x_smbd_sess_get_encryption_key(x_smbd_sess_t *smbd_sess,
+		uint64_t *nonce_low, uint64_t *nonce_high);
+
 bool x_smbd_sess_post_user(x_smbd_sess_t *smbd_sess, x_fdevt_user_t *evt);
 #define X_SMBD_SESS_POST_USER(smbd_sess, evt) do { \
 	auto __evt = (evt); \
@@ -392,7 +397,7 @@ int x_smbd_ipc_init();
 
 struct x_smbd_requ_t
 {
-	explicit x_smbd_requ_t(x_buf_t *in_buf, uint32_t in_msgsize);
+	explicit x_smbd_requ_t(x_buf_t *in_buf, uint32_t in_msgsize, bool encrypted);
 	~x_smbd_requ_t();
 
 	const uint8_t *get_in_data() const {
@@ -442,6 +447,7 @@ struct x_smbd_requ_t
 
 	x_smb2_header_t in_smb2_hdr;
 	uint32_t in_msgsize, in_offset, in_requ_len;
+	bool encrypted;
 	bool async = false;
 	bool request_counters_updated = false;
 
@@ -465,7 +471,7 @@ X_DECLARE_MEMBER_TRAITS(requ_async_traits, x_smbd_requ_t, async_link)
 
 
 int x_smbd_requ_pool_init(uint32_t count);
-x_smbd_requ_t *x_smbd_requ_create(x_buf_t *in_buf, uint32_t in_msgsize);
+x_smbd_requ_t *x_smbd_requ_create(x_buf_t *in_buf, uint32_t in_msgsize, bool encrypted);
 uint64_t x_smbd_requ_get_async_id(const x_smbd_requ_t *smbd_requ);
 x_smbd_requ_t *x_smbd_requ_async_lookup(uint64_t id, const x_smbd_conn_t *smbd_conn, bool remove);
 void x_smbd_requ_async_insert(x_smbd_requ_t *smbd_requ,

@@ -10,10 +10,32 @@
 using smbd_sess_table_t = x_idtable_t<x_smbd_sess_t, x_idtable_64_traits_t>;
 static smbd_sess_table_t *g_smbd_sess_table;
 
+static inline uint64_t get_nonce_rand()
+{
+	uint64_t ret;
+	x_rand_bytes(&ret, sizeof ret);
+	return ret;
+}
+
+static inline uint64_t get_nonce_high_max()
+{
+	uint16_t cipher = x_smbd_conn_curr_get_cipher();
+	int nonce_size = x_smb2_signing_get_nonce_size(cipher);
+	if (nonce_size >= 16) {
+		return UINT64_MAX;
+	} else if (nonce_size <= 8) {
+		return 0;
+	} else {
+		return ((uint64_t)1 << ((nonce_size - 8) * 8)) -1;
+	}
+}
+
 struct x_smbd_sess_t
 {
 	enum { MAX_CHAN_COUNT = 32, };
 	x_smbd_sess_t() : tick_create(tick_now)
+		, nonce_high_random(get_nonce_rand())
+		, nonce_high_max(get_nonce_high_max())
 		, machine_name{x_smbd_conn_curr_name()}
 	{
 		X_SMBD_COUNTER_INC(sess_create, 1);
@@ -39,6 +61,8 @@ struct x_smbd_sess_t
 	x_ddlist_t tcon_list;
 
 	x_smbd_key_set_t keys;
+	std::atomic<uint64_t> nonce_low = 0, nonce_high = 0;
+	const uint64_t nonce_high_random, nonce_high_max;
 	uint64_t tick_expired;
 	std::atomic<uint32_t> num_open = 0;
 	const std::shared_ptr<std::u16string> machine_name;
@@ -114,6 +138,45 @@ const x_smb2_key_t *x_smbd_sess_get_signing_key(const x_smbd_sess_t *smbd_sess)
 		return &smbd_sess->keys.signing_key;
 	}
 	return nullptr;
+}
+
+const x_smb2_key_t *x_smbd_sess_get_decryption_key(const x_smbd_sess_t *smbd_sess)
+{
+	// TODO memory order
+	if (smbd_sess->key_is_valid) {
+		return &smbd_sess->keys.decryption_key;
+	}
+	return nullptr;
+}
+
+const x_smb2_key_t *x_smbd_sess_get_encryption_key(x_smbd_sess_t *smbd_sess,
+		uint64_t *nonce_low, uint64_t *nonce_high)
+{
+	// TODO memory order
+	if (!smbd_sess->key_is_valid) {
+		return nullptr;
+	}
+
+	uint64_t low = smbd_sess->nonce_low.fetch_add(1, std::memory_order_relaxed);
+	uint64_t high = smbd_sess->nonce_high.fetch_add(1, std::memory_order_relaxed);
+
+	/*
+	 * CCM and GCM algorithms must never have their
+	 * nonce wrap, or the security of the whole
+	 * communication and the keys is destroyed.
+	 * We must drop the connection once we have
+	 * transfered too much data.
+	 *
+	 * NOTE: We assume nonces greater than 8 bytes.
+	 */
+	++high;
+	if (high >= smbd_sess->nonce_high_max) {
+		return nullptr;
+	}
+
+	*nonce_high = smbd_sess->nonce_high_random + high;
+	*nonce_low = low + 1;
+	return &smbd_sess->keys.encryption_key;
 }
 
 bool x_smbd_sess_link_chan(x_smbd_sess_t *smbd_sess, x_dlink_t *link)
