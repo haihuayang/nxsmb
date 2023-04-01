@@ -227,6 +227,10 @@ static NTSTATUS parse_context(const uint8_t *in_context, uint32_t in_context_len
 					algos |= (1 << X_SMB2_ENCRYPTION_AES128_GCM);
 				} else if (algo == X_SMB2_ENCRYPTION_AES128_CCM) {
 					algos |= (1 << X_SMB2_ENCRYPTION_AES128_CCM);
+				} else if (algo == X_SMB2_ENCRYPTION_AES256_GCM) {
+					algos |= (1 << X_SMB2_ENCRYPTION_AES256_GCM);
+				} else if (algo == X_SMB2_ENCRYPTION_AES256_CCM) {
+					algos |= (1 << X_SMB2_ENCRYPTION_AES256_CCM);
 				}
 				offset += 2;
 			}
@@ -397,6 +401,10 @@ NTSTATUS x_smb2_process_negprot(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_re
 			negprot.out_encryption_algo = X_SMB2_ENCRYPTION_AES128_GCM;
 		} else if (encryption_algos & (1 << X_SMB2_ENCRYPTION_AES128_CCM)) {
 			negprot.out_encryption_algo = X_SMB2_ENCRYPTION_AES128_CCM;
+		} else if (encryption_algos & (1 << X_SMB2_ENCRYPTION_AES256_GCM)) {
+			negprot.out_encryption_algo = X_SMB2_ENCRYPTION_AES256_GCM;
+		} else if (encryption_algos & (1 << X_SMB2_ENCRYPTION_AES256_CCM)) {
+			negprot.out_encryption_algo = X_SMB2_ENCRYPTION_AES256_CCM;
 		} else {
 			negprot.out_encryption_algo = X_SMB2_ENCRYPTION_INVALID_ALGO;
 		}

@@ -8,12 +8,12 @@
 void x_smb2_key_derivation(const uint8_t *KI, size_t KI_len,
 		const x_array_const_t<char> &label,
 		const x_array_const_t<char> &context,
-		x_smb2_key_t &key)
+		uint8_t *key, uint32_t key_len)
 {
 	uint32_t buf1, buf2;
 	static const uint8_t zero = 0;
 	uint32_t i = 1;
-	uint32_t L = 128;
+	uint32_t L = key_len * 8;
 
 	buf1 = X_H2BE32(i);
 	buf2 = X_H2BE32(L);
@@ -26,9 +26,9 @@ void x_smb2_key_derivation(const uint8_t *KI, size_t KI_len,
 		{ &buf2, sizeof(buf2), },
 	};
 
-	unsigned ret = x_hmac(key.data(), 16, EVP_sha256(),
+	unsigned ret = x_hmac(key, key_len, EVP_sha256(),
 			KI, x_convert_assert<unsigned int>(KI_len), iov, 5);
-	X_ASSERT(ret == 16);
+	X_ASSERT(ret == key_len);
 }
 
 /*
@@ -191,7 +191,8 @@ void x_smb2_signing_sign(uint16_t algo,
 	x_smb2_digest(algo, *key, buflist, signature);
 }
 
-static inline int aes128_ccm_signing_decrypt(const x_smb2_key_t &key,
+static inline int aes_ccm_signing_decrypt(const EVP_CIPHER *evp_cipher,
+		const x_smb2_cryption_key_t &key,
 		const void *signature,
 		const void *aad, int aad_len,
 		const void *cdata, int cdata_len,
@@ -203,7 +204,7 @@ static inline int aes128_ccm_signing_decrypt(const x_smb2_key_t &key,
 	int rc, out_len;
 	int pdata_len = -1;
 
-	rc = EVP_DecryptInit_ex(ctx, EVP_aes_128_ccm(), NULL, NULL, NULL);
+	rc = EVP_DecryptInit_ex(ctx, evp_cipher, NULL, NULL, NULL);
 	X_ASSERT(rc == 1);
 
 	rc = EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_CCM_SET_IVLEN, 11, NULL);
@@ -239,7 +240,8 @@ static inline int aes128_ccm_signing_decrypt(const x_smb2_key_t &key,
 	return pdata_len + out_len;
 }
 
-static inline int aes128_ccm_signing_encrypt(const x_smb2_key_t &key,
+static inline int aes_ccm_signing_encrypt(const EVP_CIPHER *evp_cipher,
+		const x_smb2_cryption_key_t &key,
 		void *signature,
 		const void *aad, int aad_len,
 		x_bufref_t *buflist, int length,
@@ -250,7 +252,7 @@ static inline int aes128_ccm_signing_encrypt(const x_smb2_key_t &key,
 
 	int rc, out_len;
 
-	rc = EVP_EncryptInit_ex(ctx, EVP_aes_128_ccm(), NULL, NULL, NULL);
+	rc = EVP_EncryptInit_ex(ctx, evp_cipher, NULL, NULL, NULL);
 	X_ASSERT(rc == 1);
 
 	rc = EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_CCM_SET_IVLEN, 11, NULL);
@@ -288,7 +290,8 @@ static inline int aes128_ccm_signing_encrypt(const x_smb2_key_t &key,
 	return x_convert<int>(cptr - (uint8_t *)cdata);
 }
 
-static inline int aes128_gcm_signing_decrypt(const x_smb2_key_t &key,
+static inline int aes_gcm_signing_decrypt(const EVP_CIPHER *evp_cipher,
+		const x_smb2_cryption_key_t &key,
 		const void *signature,
 		const void *aad, int aad_len,
 		const void *cdata, int cdata_len,
@@ -300,7 +303,7 @@ static inline int aes128_gcm_signing_decrypt(const x_smb2_key_t &key,
 	int rc, out_len;
 	int pdata_len = -1;
 
-	rc = EVP_DecryptInit_ex(ctx, EVP_aes_128_gcm(), NULL, NULL, NULL);
+	rc = EVP_DecryptInit_ex(ctx, evp_cipher, NULL, NULL, NULL);
 	X_ASSERT(rc == 1);
 
 	rc = EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_SET_IVLEN, 12, NULL);
@@ -332,7 +335,8 @@ static inline int aes128_gcm_signing_decrypt(const x_smb2_key_t &key,
 	return pdata_len + out_len;
 }
 
-static inline int aes128_gcm_signing_encrypt(const x_smb2_key_t &key,
+static inline int aes_gcm_signing_encrypt(const EVP_CIPHER *evp_cipher,
+		const x_smb2_cryption_key_t &key,
 		void *signature,
 		const void *aad, int aad_len,
 		x_bufref_t *buflist,
@@ -343,7 +347,7 @@ static inline int aes128_gcm_signing_encrypt(const x_smb2_key_t &key,
 
 	int rc, out_len;
 
-	rc = EVP_EncryptInit_ex(ctx, EVP_aes_128_gcm(), NULL, NULL, NULL);
+	rc = EVP_EncryptInit_ex(ctx, evp_cipher, NULL, NULL, NULL);
 	X_ASSERT(rc == 1);
 
 	rc = EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_SET_IVLEN, 12, NULL);
@@ -375,7 +379,7 @@ static inline int aes128_gcm_signing_encrypt(const x_smb2_key_t &key,
 }
 
 int x_smb2_signing_decrypt(uint16_t algo,
-		const x_smb2_key_t *key,
+		const x_smb2_cryption_key_t *key,
 		const x_smb2_tf_header_t *tfhdr,
 		const void *cdata, size_t cdata_len,
 		void *pdata)
@@ -384,12 +388,26 @@ int x_smb2_signing_decrypt(uint16_t algo,
 			offsetof(x_smb2_tf_header_t, nonce));
 
 	if (algo == X_SMB2_ENCRYPTION_AES128_GCM) {
-		return aes128_gcm_signing_decrypt(*key, tfhdr->signature,
+		return aes_gcm_signing_decrypt(EVP_aes_128_gcm(),
+				*key, tfhdr->signature,
+				tfhdr->nonce, a_total,
+				cdata, x_convert<int>(cdata_len),
+				pdata);
+	} else if (algo == X_SMB2_ENCRYPTION_AES256_GCM) {
+		return aes_gcm_signing_decrypt(EVP_aes_256_gcm(),
+				*key, tfhdr->signature,
 				tfhdr->nonce, a_total,
 				cdata, x_convert<int>(cdata_len),
 				pdata);
 	} else if (algo == X_SMB2_ENCRYPTION_AES128_CCM) {
-		return aes128_ccm_signing_decrypt(*key, tfhdr->signature,
+		return aes_ccm_signing_decrypt(EVP_aes_128_ccm(),
+				*key, tfhdr->signature,
+				tfhdr->nonce, a_total,
+				cdata, x_convert<int>(cdata_len),
+				pdata);
+	} else if (algo == X_SMB2_ENCRYPTION_AES256_CCM) {
+		return aes_ccm_signing_decrypt(EVP_aes_256_ccm(),
+				*key, tfhdr->signature,
 				tfhdr->nonce, a_total,
 				cdata, x_convert<int>(cdata_len),
 				pdata);
@@ -398,7 +416,7 @@ int x_smb2_signing_decrypt(uint16_t algo,
 }
 
 int x_smb2_signing_encrypt(uint16_t algo,
-		const x_smb2_key_t *key,
+		const x_smb2_cryption_key_t *key,
 		x_smb2_tf_header_t *tfhdr,
 		x_bufref_t *buflist,
 		size_t length)
@@ -407,12 +425,26 @@ int x_smb2_signing_encrypt(uint16_t algo,
 			offsetof(x_smb2_tf_header_t, nonce));
 
 	if (algo == X_SMB2_ENCRYPTION_AES128_GCM) {
-		return aes128_gcm_signing_encrypt(*key, tfhdr->signature,
+		return aes_gcm_signing_encrypt(EVP_aes_128_gcm(),
+				*key, tfhdr->signature,
+				tfhdr->nonce, a_total,
+				buflist,
+				tfhdr + 1);
+	} else if (algo == X_SMB2_ENCRYPTION_AES256_GCM) {
+		return aes_gcm_signing_encrypt(EVP_aes_256_gcm(),
+				*key, tfhdr->signature,
 				tfhdr->nonce, a_total,
 				buflist,
 				tfhdr + 1);
 	} else if (algo == X_SMB2_ENCRYPTION_AES128_CCM) {
-		return aes128_ccm_signing_encrypt(*key, tfhdr->signature,
+		return aes_ccm_signing_encrypt(EVP_aes_128_ccm(),
+				*key, tfhdr->signature,
+				tfhdr->nonce, a_total,
+				buflist, x_convert<int>(length),
+				tfhdr + 1);
+	} else if (algo == X_SMB2_ENCRYPTION_AES256_CCM) {
+		return aes_ccm_signing_encrypt(EVP_aes_256_ccm(),
+				*key, tfhdr->signature,
 				tfhdr->nonce, a_total,
 				buflist, x_convert<int>(length),
 				tfhdr + 1);
@@ -422,12 +454,27 @@ int x_smb2_signing_encrypt(uint16_t algo,
 
 int x_smb2_signing_get_nonce_size(uint16_t algo)
 {
-	if (algo == X_SMB2_ENCRYPTION_AES128_GCM) {
+	switch (algo) {
+	case X_SMB2_ENCRYPTION_AES128_GCM:
+	case X_SMB2_ENCRYPTION_AES256_GCM:
 		return 12;
-	} else if (algo == X_SMB2_ENCRYPTION_AES128_CCM) {
+	case X_SMB2_ENCRYPTION_AES128_CCM:
+	case X_SMB2_ENCRYPTION_AES256_CCM:
 		return 11;
-	} else {
-		return 0;
 	}
+	return 0;
+}
+
+int x_smb2_signing_get_key_size(uint16_t algo)
+{
+	switch (algo) {
+	case X_SMB2_ENCRYPTION_AES128_GCM:
+	case X_SMB2_ENCRYPTION_AES128_CCM:
+		return 16;
+	case X_SMB2_ENCRYPTION_AES256_GCM:
+	case X_SMB2_ENCRYPTION_AES256_CCM:
+		return 32;
+	}
+	return 0;
 }
 

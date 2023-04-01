@@ -140,7 +140,7 @@ const x_smb2_key_t *x_smbd_sess_get_signing_key(const x_smbd_sess_t *smbd_sess)
 	return nullptr;
 }
 
-const x_smb2_key_t *x_smbd_sess_get_decryption_key(const x_smbd_sess_t *smbd_sess)
+const x_smb2_cryption_key_t *x_smbd_sess_get_decryption_key(const x_smbd_sess_t *smbd_sess)
 {
 	// TODO memory order
 	if (smbd_sess->key_is_valid) {
@@ -149,7 +149,7 @@ const x_smb2_key_t *x_smbd_sess_get_decryption_key(const x_smbd_sess_t *smbd_ses
 	return nullptr;
 }
 
-const x_smb2_key_t *x_smbd_sess_get_encryption_key(x_smbd_sess_t *smbd_sess,
+const x_smb2_cryption_key_t *x_smbd_sess_get_encryption_key(x_smbd_sess_t *smbd_sess,
 		uint64_t *nonce_low, uint64_t *nonce_high)
 {
 	// TODO memory order

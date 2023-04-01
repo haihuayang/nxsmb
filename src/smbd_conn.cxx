@@ -150,6 +150,11 @@ uint16_t x_smbd_conn_get_dialect(const x_smbd_conn_t *smbd_conn)
 	return smbd_conn->dialect;
 }
 
+uint16_t x_smbd_conn_get_cipher(const x_smbd_conn_t *smbd_conn)
+{
+	return smbd_conn->encryption_algo;
+}
+
 uint32_t x_smbd_conn_get_capabilities(const x_smbd_conn_t *smbd_conn)
 {
 	return smbd_conn->server_capabilities;
@@ -264,7 +269,7 @@ static int x_smbd_conn_create_smb2_tf(x_smbd_conn_t *smbd_conn,
 
 	tf_hdr = (x_smb2_tf_header_t *)(buf->data + 4);
 	uint64_t nonce_low, nonce_high;
-	const x_smb2_key_t *key = x_smbd_sess_get_encryption_key(
+	const x_smb2_cryption_key_t *key = x_smbd_sess_get_encryption_key(
 			smbd_requ->smbd_sess,
 			&nonce_low, &nonce_high);
 

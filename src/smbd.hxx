@@ -173,7 +173,8 @@ struct x_smbd_ptr_t
 
 struct x_smbd_key_set_t
 {
-	x_smb2_key_t signing_key, decryption_key, encryption_key, application_key;
+	x_smb2_key_t signing_key, application_key;
+	x_smb2_cryption_key_t decryption_key, encryption_key;
 };
 
 
@@ -263,6 +264,7 @@ int x_smbd_conn_negprot(x_smbd_conn_t *smbd_conn,
 		const x_smb2_uuid_t &client_guid);
 int x_smbd_conn_negprot_smb1(x_smbd_conn_t *smbd_conn);
 uint16_t x_smbd_conn_get_dialect(const x_smbd_conn_t *smbd_conn);
+uint16_t x_smbd_conn_get_cipher(const x_smbd_conn_t *smbd_conn);
 uint32_t x_smbd_conn_get_capabilities(const x_smbd_conn_t *smbd_conn);
 void x_smbd_conn_update_preauth(x_smbd_conn_t *smbd_conn,
 		const void *data, size_t length);
@@ -318,8 +320,8 @@ bool x_smbd_sess_link_tcon(x_smbd_sess_t *smbd_sess, x_dlink_t *link);
 bool x_smbd_sess_unlink_tcon(x_smbd_sess_t *smbd_sess, x_dlink_t *link);
 void x_smbd_sess_update_num_open(x_smbd_sess_t *smbd_sess, int opens);
 const x_smb2_key_t *x_smbd_sess_get_signing_key(const x_smbd_sess_t *smbd_sess);
-const x_smb2_key_t *x_smbd_sess_get_decryption_key(const x_smbd_sess_t *smbd_sess);
-const x_smb2_key_t *x_smbd_sess_get_encryption_key(x_smbd_sess_t *smbd_sess,
+const x_smb2_cryption_key_t *x_smbd_sess_get_decryption_key(const x_smbd_sess_t *smbd_sess);
+const x_smb2_cryption_key_t *x_smbd_sess_get_encryption_key(x_smbd_sess_t *smbd_sess,
 		uint64_t *nonce_low, uint64_t *nonce_high);
 
 bool x_smbd_sess_post_user(x_smbd_sess_t *smbd_sess, x_fdevt_user_t *evt);

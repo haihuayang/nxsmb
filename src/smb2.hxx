@@ -581,11 +581,12 @@ struct x_smb2_preauth_t
 };
 
 using x_smb2_key_t = std::array<uint8_t, 16>;
+using x_smb2_cryption_key_t = std::array<uint8_t, 32>;
 
 void x_smb2_key_derivation(const uint8_t *KI, size_t KI_len,
 		const x_array_const_t<char> &label,
 		const x_array_const_t<char> &context,
-		x_smb2_key_t &key);
+		uint8_t *key, uint32_t key_len);
 
 using x_smb2_lease_key_t = x_smb2_uuid_t;
 struct x_smb2_lease_t
@@ -726,18 +727,20 @@ void x_smb2_signing_sign(uint16_t algo,
 		x_bufref_t *buflist);
 
 int x_smb2_signing_decrypt(uint16_t algo,
-		const x_smb2_key_t *key,
+		const x_smb2_cryption_key_t *key,
 		const x_smb2_tf_header_t *tfhdr,
 		const void *cdata, size_t cdata_len,
 		void *pdata);
 
 int x_smb2_signing_encrypt(uint16_t algo,
-		const x_smb2_key_t *key,
+		const x_smb2_cryption_key_t *key,
 		x_smb2_tf_header_t *tfhdr,
 		x_bufref_t *buflist,
 		size_t length);
 
 int x_smb2_signing_get_nonce_size(uint16_t algo);
+
+int x_smb2_signing_get_key_size(uint16_t algo);
 
 #if 0
 struct x_nbt_t
