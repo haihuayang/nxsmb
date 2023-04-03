@@ -19,8 +19,8 @@ static inline uint64_t get_nonce_rand()
 
 static inline uint64_t get_nonce_high_max()
 {
-	uint16_t cipher = x_smbd_conn_curr_get_cipher();
-	int nonce_size = x_smb2_signing_get_nonce_size(cipher);
+	uint16_t cryption_algo = x_smbd_conn_curr_get_cryption_algo();
+	int nonce_size = x_smb2_signing_get_nonce_size(cryption_algo);
 	if (nonce_size >= 16) {
 		return UINT64_MAX;
 	} else if (nonce_size <= 8) {
@@ -34,6 +34,7 @@ struct x_smbd_sess_t
 {
 	enum { MAX_CHAN_COUNT = 32, };
 	x_smbd_sess_t() : tick_create(tick_now)
+		, connection_dialect(x_smbd_conn_curr_dialect())
 		, nonce_high_random(get_nonce_rand())
 		, nonce_high_max(get_nonce_high_max())
 		, machine_name{x_smbd_conn_curr_name()}
@@ -48,13 +49,13 @@ struct x_smbd_sess_t
 	std::mutex mutex;
 	std::shared_ptr<x_smbd_user_t> smbd_user;
 	uint64_t id;
+	const uint16_t connection_dialect;
 	enum {
 		S_INIT,
 		S_ACTIVE,
 		S_DONE,
 	} state = S_INIT;
-	// uint16_t security_mode = 0;
-	bool signing_required = false;
+	uint8_t security_mode = 0;
 	bool key_is_valid = false;
 	uint8_t chan_count = 0;
 	x_ddlist_t chan_list;
@@ -121,9 +122,14 @@ uint64_t x_smbd_sess_get_id(const x_smbd_sess_t *smbd_sess)
 	return smbd_sess->id;
 }
 
+uint16_t x_smbd_sess_get_dialect(const x_smbd_sess_t *smbd_sess)
+{
+	return smbd_sess->connection_dialect;
+}
+
 bool x_smbd_sess_is_signing_required(const x_smbd_sess_t *smbd_sess)
 {
-	return smbd_sess->signing_required;
+	return smbd_sess->security_mode & X_SMB2_NEGOTIATE_SIGNING_REQUIRED;
 }
 
 std::shared_ptr<x_smbd_user_t> x_smbd_sess_get_user(const x_smbd_sess_t *smbd_sess)
@@ -131,10 +137,12 @@ std::shared_ptr<x_smbd_user_t> x_smbd_sess_get_user(const x_smbd_sess_t *smbd_se
 	return smbd_sess->smbd_user;
 }
 
-const x_smb2_key_t *x_smbd_sess_get_signing_key(const x_smbd_sess_t *smbd_sess)
+const x_smb2_key_t *x_smbd_sess_get_signing_key(const x_smbd_sess_t *smbd_sess,
+		uint16_t *p_signing_algo)
 {
 	// TODO memory order
 	if (smbd_sess->key_is_valid) {
+		*p_signing_algo = smbd_sess->keys.signing_algo;
 		return &smbd_sess->keys.signing_key;
 	}
 	return nullptr;
@@ -147,6 +155,11 @@ const x_smb2_cryption_key_t *x_smbd_sess_get_decryption_key(const x_smbd_sess_t 
 		return &smbd_sess->keys.decryption_key;
 	}
 	return nullptr;
+}
+
+uint16_t x_smbd_sess_get_cryption_algo(const x_smbd_sess_t *smbd_sess)
+{
+	return smbd_sess->keys.cryption_algo;
 }
 
 const x_smb2_cryption_key_t *x_smbd_sess_get_encryption_key(x_smbd_sess_t *smbd_sess,
@@ -284,7 +297,7 @@ bool x_smbd_sess_unlink_tcon(x_smbd_sess_t *smbd_sess, x_dlink_t *link)
 }
 
 NTSTATUS x_smbd_sess_auth_succeeded(x_smbd_sess_t *smbd_sess,
-		bool is_bind,
+		bool is_bind, uint8_t security_mode,
 		std::shared_ptr<x_smbd_user_t> &smbd_user,
 		const x_smbd_key_set_t &keys,
 		uint32_t time_rec)
@@ -298,6 +311,7 @@ NTSTATUS x_smbd_sess_auth_succeeded(x_smbd_sess_t *smbd_sess,
 		}
 	} else {
 		smbd_sess->smbd_user = smbd_user;
+		smbd_sess->security_mode = security_mode;
 		if (!smbd_sess->key_is_valid) {
 			smbd_sess->keys = keys;
 			smbd_sess->key_is_valid = true;

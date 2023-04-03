@@ -29,6 +29,7 @@ struct x_smb2_sesssetup_resp_t
 struct x_smb2_state_sesssetup_t
 {
 	uint8_t in_flags;
+	uint8_t in_security_mode;
 	uint64_t in_previous_session_id;
 };
 
@@ -113,8 +114,6 @@ NTSTATUS x_smb2_process_sesssetup(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_
 	const uint8_t *in_hdr = smbd_requ->get_in_data();
 	x_smb2_sesssetup_requ_t *requ = (x_smb2_sesssetup_requ_t *)(in_hdr + sizeof(x_smb2_header_t));
 
-	uint8_t in_flags = requ->flags;
-	// Not used for now uint8_t in_security_mode = requ->security_mode;
 	uint16_t in_security_offset = X_LE2H16(requ->security_buffer_offset);
 	uint16_t in_security_length = X_LE2H16(requ->security_buffer_length);
 
@@ -123,7 +122,8 @@ NTSTATUS x_smb2_process_sesssetup(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_
 	}
 	
 	auto state = std::make_unique<x_smb2_state_sesssetup_t>();
-	state->in_flags = in_flags;
+	state->in_flags = requ->flags;
+	state->in_security_mode = requ->security_mode;
 	state->in_previous_session_id = X_LE2H64(requ->previous_session);
 
 	bool new_auth = false;
@@ -131,19 +131,40 @@ NTSTATUS x_smb2_process_sesssetup(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_
 	X_ASSERT(!smbd_requ->smbd_chan || smbd_requ->smbd_sess);
 	uint16_t dialect = x_smbd_conn_get_dialect(smbd_conn);
 
-	if (in_flags & X_SMB2_SESSION_FLAG_BINDING) {
+	if (state->in_flags & X_SMB2_SESSION_FLAG_BINDING) {
 		if (!smbd_requ->is_signed()) {
 			RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 		}
 		X_ASSERT(smbd_requ->smbd_sess);
 
-		/* TODO verify sign_algo */
+		uint16_t curr_signing_algo = x_smbd_conn_curr_get_signing_algo();
+		uint16_t sess_signing_algo;
+		X_ASSERT(x_smbd_sess_get_signing_key(smbd_requ->smbd_sess, &sess_signing_algo));
+		
+		if (sess_signing_algo >= X_SMB2_SIGNING_AES128_GMAC &&
+				curr_signing_algo != sess_signing_algo) {
+			RETURN_OP_STATUS(smbd_requ, NT_STATUS_REQUEST_OUT_OF_SEQUENCE);
+		}
+
+		if (curr_signing_algo >= X_SMB2_SIGNING_AES128_GMAC &&
+				curr_signing_algo != sess_signing_algo) {
+			RETURN_OP_STATUS(smbd_requ, NT_STATUS_NOT_SUPPORTED);
+		}
+
 		if (dialect < X_SMB2_DIALECT_300) {
 			RETURN_OP_STATUS(smbd_requ, NT_STATUS_REQUEST_NOT_ACCEPTED);
 		}
 
+		if (x_smbd_sess_get_cryption_algo(smbd_requ->smbd_sess) != x_smbd_conn_curr_get_cryption_algo()) {
+			RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
+		}
+
 		if (!(x_smbd_conn_get_capabilities(smbd_conn) & X_SMB2_CAP_MULTI_CHANNEL)) {
 			RETURN_OP_STATUS(smbd_requ, NT_STATUS_REQUEST_NOT_ACCEPTED);
+		}
+
+		if (x_smbd_sess_get_dialect(smbd_requ->smbd_sess) != x_smbd_conn_curr_dialect()) {
+			RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 		}
 
 		if (smbd_requ->smbd_chan) {
@@ -209,7 +230,8 @@ NTSTATUS x_smb2_process_sesssetup(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_
 	NTSTATUS status = x_smbd_chan_update_auth(smbd_requ->smbd_chan, smbd_requ,
 			in_hdr + in_security_offset, in_security_length,
 			out_security,
-			in_flags & X_SMB2_SESSION_FLAG_BINDING,
+			state->in_flags & X_SMB2_SESSION_FLAG_BINDING,
+			state->in_security_mode,
 			new_auth);
 	if (!NT_STATUS_EQUAL(status, X_NT_STATUS_INTERNAL_BLOCKED)) {
 		smb2_sesssetup_done(smbd_conn, smbd_requ, dialect, status,

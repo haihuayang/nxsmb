@@ -115,7 +115,8 @@ static void init_smbd()
 	if (spnego) {
 		std::vector<uint8_t> negprot_spnego;
 		std::shared_ptr<x_auth_info_t> auth_info;
-		NTSTATUS status = spnego->update(NULL, 0, false, negprot_spnego, NULL, auth_info);
+		NTSTATUS status = spnego->update(NULL, 0, false, 0,
+				negprot_spnego, NULL, auth_info);
 		X_ASSERT(NT_STATUS_IS_OK(status));
 		g_smbd.negprot_spnego.swap(negprot_spnego);
 		x_auth_destroy(spnego);

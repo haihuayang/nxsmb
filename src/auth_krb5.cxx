@@ -1196,7 +1196,7 @@ done:
 }
 
 static NTSTATUS auth_krb5_update(x_auth_t *auth, const uint8_t *in_buf, size_t in_len,
-		bool is_bind,
+		bool is_bind, uint8_t security_mode,
 		std::vector<uint8_t> &out, x_auth_upcall_t *auth_upcall,
 		std::shared_ptr<x_auth_info_t> &auth_info)
 {

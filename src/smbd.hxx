@@ -173,6 +173,10 @@ struct x_smbd_ptr_t
 
 struct x_smbd_key_set_t
 {
+	uint16_t signing_algo;
+	uint16_t cryption_algo;
+	uint32_t unused1 = 0;
+
 	x_smb2_key_t signing_key, application_key;
 	x_smb2_cryption_key_t decryption_key, encryption_key;
 };
@@ -250,7 +254,8 @@ extern __thread x_smbd_conn_t *g_smbd_conn_curr;
 #define X_SMBD_CONN_ASSERT(smbd_conn) X_ASSERT((smbd_conn) == g_smbd_conn_curr)
 const x_smb2_uuid_t &x_smbd_conn_curr_client_guid();
 uint16_t x_smbd_conn_curr_dialect();
-uint16_t x_smbd_conn_curr_get_cipher();
+uint16_t x_smbd_conn_curr_get_signing_algo();
+uint16_t x_smbd_conn_curr_get_cryption_algo();
 std::shared_ptr<std::u16string> x_smbd_conn_curr_name();
 
 int x_smbd_conn_negprot(x_smbd_conn_t *smbd_conn,
@@ -264,7 +269,7 @@ int x_smbd_conn_negprot(x_smbd_conn_t *smbd_conn,
 		const x_smb2_uuid_t &client_guid);
 int x_smbd_conn_negprot_smb1(x_smbd_conn_t *smbd_conn);
 uint16_t x_smbd_conn_get_dialect(const x_smbd_conn_t *smbd_conn);
-uint16_t x_smbd_conn_get_cipher(const x_smbd_conn_t *smbd_conn);
+uint16_t x_smbd_conn_get_cryption_algo(const x_smbd_conn_t *smbd_conn);
 uint32_t x_smbd_conn_get_capabilities(const x_smbd_conn_t *smbd_conn);
 void x_smbd_conn_update_preauth(x_smbd_conn_t *smbd_conn,
 		const void *data, size_t length);
@@ -301,11 +306,12 @@ x_smbd_sess_t *x_smbd_sess_create(uint64_t &id);
 x_smbd_sess_t *x_smbd_sess_lookup(NTSTATUS &status,
 		uint64_t id, const x_smb2_uuid_t &client_guid);
 NTSTATUS x_smbd_sess_auth_succeeded(x_smbd_sess_t *smbd_sess,
-		bool is_bind,
+		bool is_bind, uint8_t security_mode,
 		std::shared_ptr<x_smbd_user_t> &smbd_user,
 		const x_smbd_key_set_t &keys,
 		uint32_t time_rec);
 uint64_t x_smbd_sess_get_id(const x_smbd_sess_t *smbd_sess);
+uint16_t x_smbd_sess_get_dialect(const x_smbd_sess_t *smbd_sess);
 bool x_smbd_sess_is_signing_required(const x_smbd_sess_t *smbd_sess);
 x_smbd_chan_t *x_smbd_sess_lookup_chan(x_smbd_sess_t *smbd_sess, x_smbd_conn_t *smbd_conn);
 x_smbd_chan_t *x_smbd_sess_get_active_chan(x_smbd_sess_t *smbd_sess);
@@ -319,7 +325,9 @@ void x_smbd_sess_close_previous(const x_smbd_sess_t *smbd_sess, uint64_t previou
 bool x_smbd_sess_link_tcon(x_smbd_sess_t *smbd_sess, x_dlink_t *link);
 bool x_smbd_sess_unlink_tcon(x_smbd_sess_t *smbd_sess, x_dlink_t *link);
 void x_smbd_sess_update_num_open(x_smbd_sess_t *smbd_sess, int opens);
-const x_smb2_key_t *x_smbd_sess_get_signing_key(const x_smbd_sess_t *smbd_sess);
+const x_smb2_key_t *x_smbd_sess_get_signing_key(const x_smbd_sess_t *smbd_sess,
+		uint16_t *p_signing_algo);
+uint16_t x_smbd_sess_get_cryption_algo(const x_smbd_sess_t *smbd_sess);
 const x_smb2_cryption_key_t *x_smbd_sess_get_decryption_key(const x_smbd_sess_t *smbd_sess);
 const x_smb2_cryption_key_t *x_smbd_sess_get_encryption_key(x_smbd_sess_t *smbd_sess,
 		uint64_t *nonce_low, uint64_t *nonce_high);
@@ -337,7 +345,8 @@ bool x_smbd_sess_post_user(x_smbd_sess_t *smbd_sess, x_fdevt_user_t *evt);
 
 x_smbd_chan_t *x_smbd_chan_create(x_smbd_sess_t *smbd_sess,
 		x_smbd_conn_t *smbd_conn);
-const x_smb2_key_t *x_smbd_chan_get_signing_key(x_smbd_chan_t *smbd_chan);
+const x_smb2_key_t *x_smbd_chan_get_signing_key(x_smbd_chan_t *smbd_chan,
+		uint16_t *p_signing_algo);
 void x_smbd_chan_update_preauth(x_smbd_chan_t *smbd_chan,
 		const void *data, size_t length);
 x_smbd_conn_t *x_smbd_chan_get_conn(const x_smbd_chan_t *smbd_chan);
@@ -346,7 +355,7 @@ NTSTATUS x_smbd_chan_update_auth(x_smbd_chan_t *smbd_chan,
 		const uint8_t *in_security_data,
 		uint32_t in_security_length,
 		std::vector<uint8_t> &out_security,
-		bool is_bind,
+		bool is_bind, uint8_t security_mode,
 		bool new_auth);
 void x_smbd_chan_unlinked(x_dlink_t *conn_link, x_smbd_conn_t *smbd_conn);
 x_smbd_chan_t *x_smbd_chan_match(x_dlink_t *conn_link, x_smbd_conn_t *smbd_conn);

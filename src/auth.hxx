@@ -92,7 +92,7 @@ struct x_auth_upcall_t;
 struct x_auth_cbs_t
 {
 	void (*updated)(x_auth_upcall_t *upcall, NTSTATUS status,
-			bool is_bind,
+			bool is_bind, uint8_t security_mode,
 			std::vector<uint8_t> &out_security,
 			std::shared_ptr<x_auth_info_t> &auth_info);
 };
@@ -100,17 +100,19 @@ struct x_auth_cbs_t
 struct x_auth_upcall_t
 {
 	const x_auth_cbs_t *cbs;
-	void updated(NTSTATUS status, bool is_bind,
+	void updated(NTSTATUS status,
+			bool is_bind, uint8_t security_mode,
 			std::vector<uint8_t> &out_security,
 			std::shared_ptr<x_auth_info_t> auth_info) {
-		cbs->updated(this, status, is_bind, out_security, auth_info);
+		cbs->updated(this, status, is_bind, security_mode,
+				out_security, auth_info);
 	}
 };
 
 struct x_auth_ops_t
 {
 	NTSTATUS (*update)(x_auth_t *auth, const uint8_t *in_buf, size_t in_len,
-			bool is_bind,
+			bool is_bind, uint8_t security_mode,
 			std::vector<uint8_t> &out, x_auth_upcall_t *auth_upcall,
 			std::shared_ptr<x_auth_info_t> &auth_info);
 	void (*destroy)(x_auth_t *auth);
@@ -129,10 +131,11 @@ struct x_auth_t
 		: context(context), ops(ops) { }
 
 	NTSTATUS update(const uint8_t *in_buf, size_t in_len,
-			bool is_bind,
+			bool is_bind, uint8_t security_mode,
 			std::vector<uint8_t> &out, x_auth_upcall_t *upcall,
 			std::shared_ptr<x_auth_info_t> &auth_info) {
-		return ops->update(this, in_buf, in_len, is_bind, out, upcall, auth_info);
+		return ops->update(this, in_buf, in_len, is_bind, security_mode,
+				out, upcall, auth_info);
 	}
 
 	bool have_feature(uint32_t feature) {

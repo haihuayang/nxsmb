@@ -35,7 +35,7 @@ struct x_smbd_conn_t
 	const x_sockaddr_t saddr;
 	const std::shared_ptr<std::u16string> machine_name;
 	const x_tick_t tick_create;
-	uint16_t encryption_algo = X_SMB2_ENCRYPTION_INVALID_ALGO;
+	uint16_t cryption_algo = X_SMB2_ENCRYPTION_INVALID_ALGO;
 	uint16_t signing_algo = X_SMB2_SIGNING_INVALID_ALGO;
 	uint16_t dialect = X_SMB2_DIALECT_000;
 
@@ -150,9 +150,9 @@ uint16_t x_smbd_conn_get_dialect(const x_smbd_conn_t *smbd_conn)
 	return smbd_conn->dialect;
 }
 
-uint16_t x_smbd_conn_get_cipher(const x_smbd_conn_t *smbd_conn)
+uint16_t x_smbd_conn_get_cryption_algo(const x_smbd_conn_t *smbd_conn)
 {
-	return smbd_conn->encryption_algo;
+	return smbd_conn->cryption_algo;
 }
 
 uint32_t x_smbd_conn_get_capabilities(const x_smbd_conn_t *smbd_conn)
@@ -175,7 +175,7 @@ int x_smbd_conn_negprot(x_smbd_conn_t *smbd_conn,
 		return -EBADMSG;
 	}
 	smbd_conn->dialect = dialect;
-	smbd_conn->encryption_algo = encryption_algo;
+	smbd_conn->cryption_algo = encryption_algo;
 	if (signing_algo == X_SMB2_SIGNING_INVALID_ALGO) {
 		if (dialect >= X_SMB2_DIALECT_224) {
 			signing_algo = X_SMB2_SIGNING_AES128_CMAC;
@@ -226,14 +226,17 @@ static void x_smbd_conn_queue(x_smbd_conn_t *smbd_conn, x_bufref_t *buf_head,
 	}
 }
 
-static const x_smb2_key_t *get_signing_key(const x_smbd_requ_t *smbd_requ)
+static const x_smb2_key_t *get_signing_key(const x_smbd_requ_t *smbd_requ,
+		uint16_t *p_signing_algo)
 {
 	const x_smb2_key_t *signing_key = nullptr;
 	if (smbd_requ->smbd_chan) {
-		signing_key = x_smbd_chan_get_signing_key(smbd_requ->smbd_chan);
+		signing_key = x_smbd_chan_get_signing_key(smbd_requ->smbd_chan,
+				p_signing_algo);
 	}
 	if (!signing_key) {
-		signing_key = x_smbd_sess_get_signing_key(smbd_requ->smbd_sess);
+		signing_key = x_smbd_sess_get_signing_key(smbd_requ->smbd_sess,
+				p_signing_algo);
 		// TODO signing_key is null?
 	}
 	return signing_key;
@@ -247,8 +250,10 @@ static void x_smbd_requ_sign_if(x_smbd_conn_t *smbd_conn,
 	NTSTATUS status = { X_LE2H32(smb2_hdr->status) };
 	if (flags & X_SMB2_HDR_FLAG_SIGNED) {
 		if (smbd_requ->smbd_sess) {
-			const x_smb2_key_t *signing_key = get_signing_key(smbd_requ);
-			x_smb2_signing_sign(smbd_conn->signing_algo,
+			uint16_t signing_algo;
+			const x_smb2_key_t *signing_key = get_signing_key(smbd_requ,
+					&signing_algo);
+			x_smb2_signing_sign(signing_algo,
 					signing_key, buf_head);
 		} else {
 			X_ASSERT(!NT_STATUS_IS_OK(status));
@@ -289,7 +294,7 @@ static int x_smbd_conn_create_smb2_tf(x_smbd_conn_t *smbd_conn,
 	tf_hdr->sess_id_low = X_H2LE32(x_convert<uint32_t>(sess_id & 0xffffffff));
 	tf_hdr->sess_id_high = X_H2LE32(x_convert<uint32_t>(sess_id >> 32));
 
-	int clen = x_smb2_signing_encrypt(smbd_conn->encryption_algo,
+	int clen = x_smb2_signing_encrypt(smbd_conn->cryption_algo,
 			key, tf_hdr,
 			smbd_requ->out_buf_head, smbd_requ->out_length);
 
@@ -831,7 +836,7 @@ static NTSTATUS x_smbd_conn_process_smb2_intl(x_smbd_conn_t *smbd_conn, x_smbd_r
 	}
 
 	bool signing_required = false;
-	if (smbd_requ->smbd_sess) {
+	if (!smbd_requ->encrypted && smbd_requ->smbd_sess) {
 		signing_required = x_smbd_sess_is_signing_required(smbd_requ->smbd_sess);
 	}
 
@@ -847,8 +852,9 @@ static NTSTATUS x_smbd_conn_process_smb2_intl(x_smbd_conn_t *smbd_conn, x_smbd_r
 			smbd_requ->smbd_chan = x_smbd_sess_lookup_chan(smbd_requ->smbd_sess,
 				smbd_conn);
 		}
-		const x_smb2_key_t *signing_key = get_signing_key(smbd_requ);
-		if (!x_smb2_signing_check(smbd_conn->signing_algo, signing_key, &bufref)) {
+		uint16_t signing_algo;
+		const x_smb2_key_t *signing_key = get_signing_key(smbd_requ, &signing_algo);
+		if (!x_smb2_signing_check(signing_algo, signing_key, &bufref)) {
 			return NT_STATUS_ACCESS_DENIED;
 		}
 	} else if (signing_required) {
@@ -1023,7 +1029,7 @@ static int x_smbd_conn_process_smb2_tf(x_smbd_conn_t *smbd_conn,
 		return -EBADMSG;
 	}
 
-	if (smbd_conn->encryption_algo == X_SMB2_ENCRYPTION_INVALID_ALGO) {
+	if (smbd_conn->cryption_algo == X_SMB2_ENCRYPTION_INVALID_ALGO) {
 		return -EBADMSG;
 	}
 
@@ -1049,7 +1055,7 @@ static int x_smbd_conn_process_smb2_tf(x_smbd_conn_t *smbd_conn,
 	}
 
 	x_buf_t *pbuf = x_buf_alloc(msgsize);
-	int plen = x_smb2_signing_decrypt(smbd_conn->encryption_algo,
+	int plen = x_smb2_signing_decrypt(smbd_conn->cryption_algo,
 			x_smbd_sess_get_decryption_key(smbd_sess),
 			smb2_tf, smb2_tf + 1, msgsize,
 			pbuf->data);
@@ -1387,9 +1393,14 @@ uint16_t x_smbd_conn_curr_dialect()
 	return g_smbd_conn_curr->dialect;
 }
 
-uint16_t x_smbd_conn_curr_get_cipher()
+uint16_t x_smbd_conn_curr_get_signing_algo()
 {
-	return g_smbd_conn_curr->encryption_algo;
+	return g_smbd_conn_curr->signing_algo;
+}
+
+uint16_t x_smbd_conn_curr_get_cryption_algo()
+{
+	return g_smbd_conn_curr->cryption_algo;
 }
 
 std::shared_ptr<std::u16string> x_smbd_conn_curr_name()
