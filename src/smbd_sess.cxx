@@ -311,6 +311,11 @@ NTSTATUS x_smbd_sess_auth_succeeded(x_smbd_sess_t *smbd_sess,
 		}
 	} else {
 		smbd_sess->smbd_user = smbd_user;
+		/* anonymous */
+		if (smbd_user->domain_sid.num_auths == 0 && smbd_user->uid == 7) {
+			security_mode = x_convert<uint8_t>(security_mode &
+					~X_SMB2_NEGOTIATE_SIGNING_REQUIRED);
+		}
 		smbd_sess->security_mode = security_mode;
 		if (!smbd_sess->key_is_valid) {
 			smbd_sess->keys = keys;
