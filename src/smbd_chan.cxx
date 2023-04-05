@@ -182,6 +182,11 @@ static std::ostream &operator<<(std::ostream &os, const x_auth_info_t &auth_info
 static void smbd_chan_set_keys(x_smbd_chan_t *smbd_chan,
 		const std::vector<uint8_t> &auth_session_key)
 {
+	uint32_t auth_session_key_len =
+		x_convert_assert<uint32_t>(auth_session_key.size());
+	X_TODO_ASSERT(auth_session_key_len == 16 ||
+			auth_session_key_len == 32);
+
 	const x_array_const_t<char> *derivation_sign_label, *derivation_sign_context,
 	      *derivation_encryption_label, *derivation_encryption_context,
 	      *derivation_decryption_label, *derivation_decryption_context,
@@ -189,7 +194,7 @@ static void smbd_chan_set_keys(x_smbd_chan_t *smbd_chan,
 
 	uint16_t dialect = x_smbd_conn_get_dialect(smbd_chan->smbd_conn);
 	uint16_t cryption_algo = x_smbd_conn_get_cryption_algo(smbd_chan->smbd_conn);
-	uint32_t cryption_key_len = 16;
+	uint32_t out_cryption_key_len = 16;
 
 	const x_array_const_t<char> smb3_context{smbd_chan->preauth.data};
 	if (dialect >= X_SMB2_DIALECT_310) {
@@ -201,7 +206,7 @@ static void smbd_chan_set_keys(x_smbd_chan_t *smbd_chan,
 		derivation_decryption_context = &smb3_context;
 		derivation_application_label = &SMB3_10_application_label;
 		derivation_application_context = &smb3_context;
-		cryption_key_len = x_smb2_signing_get_key_size(cryption_algo);
+		out_cryption_key_len = x_smb2_signing_get_key_size(cryption_algo);
 
 	} else if (dialect >= X_SMB2_DIALECT_224) {
 		derivation_sign_label = &SMB2_24_signing_label;
@@ -214,31 +219,36 @@ static void smbd_chan_set_keys(x_smbd_chan_t *smbd_chan,
 		derivation_application_context = &SMB2_24_application_context;
 	}
 
-	std::array<uint8_t, 16> session_key;
-	memcpy(session_key.data(), auth_session_key.data(), std::min(session_key.size(), auth_session_key.size()));
-	X_LOG_DBG("session_key=\n%s", x_hex_dump(session_key.data(), session_key.size(), "    ").c_str());
+	X_LOG_DBG("session_key=\n%s", x_hex_dump(auth_session_key.data(), auth_session_key.size(), "    ").c_str());
 	smbd_chan->keys.signing_algo = x_smbd_conn_curr_get_signing_algo();
 	smbd_chan->keys.cryption_algo = x_smbd_conn_curr_get_cryption_algo();
+	uint32_t in_cryption_key_len = out_cryption_key_len;
+	if (in_cryption_key_len > auth_session_key_len) {
+		in_cryption_key_len = auth_session_key_len;
+	}
+
+	auto &keys = smbd_chan->keys;
 	if (dialect >= X_SMB2_DIALECT_224) {
-		x_smb2_key_derivation(session_key.data(), 16,
+		x_smb2_key_derivation(auth_session_key.data(), 16,
 				*derivation_sign_label,
 				*derivation_sign_context,
-				smbd_chan->keys.signing_key.data(), 16);
-		x_smb2_key_derivation(session_key.data(), 16,
+				keys.signing_key.data(), 16);
+		x_smb2_key_derivation(auth_session_key.data(), in_cryption_key_len,
 				*derivation_decryption_label,
 				*derivation_decryption_context,
-				smbd_chan->keys.decryption_key.data(), cryption_key_len);
-		x_smb2_key_derivation(session_key.data(), 16,
+				keys.decryption_key.data(), out_cryption_key_len);
+		x_smb2_key_derivation(auth_session_key.data(), in_cryption_key_len,
 				*derivation_encryption_label,
 				*derivation_encryption_context,
-				smbd_chan->keys.encryption_key.data(), cryption_key_len);
+				keys.encryption_key.data(), out_cryption_key_len);
 		/* TODO encryption nonce */
-		x_smb2_key_derivation(session_key.data(), 16,
+		x_smb2_key_derivation(auth_session_key.data(), 16,
 				*derivation_application_label,
 				*derivation_application_context,
 				smbd_chan->keys.application_key.data(), 16);
 	} else {
-		smbd_chan->keys.signing_key = session_key;
+		memcpy(keys.signing_key.data(), auth_session_key.data(), 
+				keys.signing_key.size());
 	}
 	X_LOG_DBG("signing_key=\n%s", x_hex_dump(smbd_chan->keys.signing_key.data(), smbd_chan->keys.signing_key.size(), "    ").c_str());
 }
