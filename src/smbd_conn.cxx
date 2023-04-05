@@ -796,6 +796,10 @@ static NTSTATUS x_smbd_conn_process_smb2_intl(x_smbd_conn_t *smbd_conn, x_smbd_r
 		if ((smbd_requ->in_smb2_hdr.flags & X_SMB2_HDR_FLAG_CHAINED) == 0) {
 			smbd_requ->sess_status = sess_status;
 		}
+		if (smbd_requ->smbd_sess && !smbd_requ->smbd_chan) {
+			smbd_requ->smbd_chan = x_smbd_sess_lookup_chan(
+					smbd_requ->smbd_sess, smbd_conn);
+		}
 	}
 	
 	if (smbd_requ->is_signed()) {
@@ -826,12 +830,8 @@ static NTSTATUS x_smbd_conn_process_smb2_intl(x_smbd_conn_t *smbd_conn, x_smbd_r
 		if (!smbd_requ->smbd_sess) {
 			return NT_STATUS_USER_SESSION_DELETED;
 		}
-		if (!smbd_requ->smbd_chan) {
-			smbd_requ->smbd_chan = x_smbd_sess_lookup_chan(smbd_requ->smbd_sess,
-					smbd_conn);
-			if (!smbd_requ->smbd_chan || !x_smbd_chan_is_active(smbd_requ->smbd_chan)) {
-				return NT_STATUS_USER_SESSION_DELETED;
-			}
+		if (!smbd_requ->smbd_chan ||  !x_smbd_chan_is_active(smbd_requ->smbd_chan)) {
+			return NT_STATUS_USER_SESSION_DELETED;
 		}
 	}
 
@@ -848,17 +848,23 @@ static NTSTATUS x_smbd_conn_process_smb2_intl(x_smbd_conn_t *smbd_conn, x_smbd_r
 			return NT_STATUS_USER_SESSION_DELETED;
 		}
 		x_bufref_t bufref{x_buf_get(smbd_requ->in_buf), smbd_requ->in_offset, smbd_requ->in_requ_len};
+#if 0
 		if (!smbd_requ->smbd_chan) {
 			smbd_requ->smbd_chan = x_smbd_sess_lookup_chan(smbd_requ->smbd_sess,
 				smbd_conn);
 		}
+#endif
 		uint16_t signing_algo;
 		const x_smb2_key_t *signing_key = get_signing_key(smbd_requ, &signing_algo);
 		if (!x_smb2_signing_check(signing_algo, signing_key, &bufref)) {
 			return NT_STATUS_ACCESS_DENIED;
 		}
 	} else if (signing_required) {
-		return NT_STATUS_ACCESS_DENIED;
+		if (smbd_requ->in_smb2_hdr.opcode != X_SMB2_OP_SESSSETUP ||
+				smbd_requ->smbd_chan ||
+				!NT_STATUS_IS_OK(sess_status)) {
+			return NT_STATUS_ACCESS_DENIED;
+		}
 	}
 
 	/* TODO signing/encryption */
