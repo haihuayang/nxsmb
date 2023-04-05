@@ -7,7 +7,7 @@ static constexpr x_array_const_t<char> SMB2_24_signing_context{"SmbSign"};
 static constexpr x_array_const_t<char> SMB2_24_decryption_label{"SMB2AESCCM"};
 static constexpr x_array_const_t<char> SMB2_24_decryption_context{"ServerIn "};
 static constexpr x_array_const_t<char> SMB2_24_encryption_label{"SMB2AESCCM"};
-static constexpr x_array_const_t<char> SMB2_24_encryption_context{"ServerOut "};
+static constexpr x_array_const_t<char> SMB2_24_encryption_context{"ServerOut"};
 static constexpr x_array_const_t<char> SMB2_24_application_label{"SMB2APP"};
 static constexpr x_array_const_t<char> SMB2_24_application_context{"SmbRpc"};
 

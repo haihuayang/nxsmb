@@ -424,6 +424,8 @@ NTSTATUS x_smb2_process_negprot(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_re
 
 		generate_context(negprot, negprot.out_encryption_algo,
 				negprot.out_signing_algo);
+	} else if (negprot.out_dialect >= X_SMB2_DIALECT_300) {
+		negprot.out_encryption_algo = X_SMB2_ENCRYPTION_AES128_CCM;
 	}
 
 	negprot.out_security_mode = smbd_conf->security_mode;
@@ -431,7 +433,7 @@ NTSTATUS x_smb2_process_negprot(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_re
 	negprot.out_capabilities = smbd_conf->capabilities;
 	if (negprot.out_dialect < X_SMB2_DIALECT_300) {
 		negprot.out_capabilities &= ~(X_SMB2_CAP_DIRECTORY_LEASING |
-				X_SMB2_CAP_MULTI_CHANNEL);
+				X_SMB2_CAP_MULTI_CHANNEL | X_SMB2_CAP_ENCRYPTION);
 	}
 	x_smbd_conn_negprot(smbd_conn, negprot.out_dialect,
 			negprot.out_encryption_algo,
