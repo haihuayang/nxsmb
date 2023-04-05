@@ -299,6 +299,8 @@ static int x_smbd_conn_create_smb2_tf(x_smbd_conn_t *smbd_conn,
 			smbd_requ->out_buf_head, smbd_requ->out_length);
 
 	if (clen < 0) {
+		X_LOG_DBG("x_smb2_signing_encrypt(%u) error %d",
+				smbd_conn->cryption_algo, clen);
 		return -1;
 	}
 
@@ -1069,6 +1071,8 @@ static int x_smbd_conn_process_smb2_tf(x_smbd_conn_t *smbd_conn,
 	x_smbd_ref_dec(smbd_sess);
 
 	if (plen < 0) {
+		X_LOG_DBG("x_smb2_signing_decrypt(%u) error %d",
+				smbd_conn->cryption_algo, plen);
 		x_buf_release(pbuf);
 		return -EBADMSG;
 	}

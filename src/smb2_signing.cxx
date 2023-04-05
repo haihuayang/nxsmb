@@ -273,12 +273,25 @@ static inline int aes_ccm_signing_encrypt(const EVP_CIPHER *evp_cipher,
 	X_ASSERT(rc == 1);
 
 	uint8_t *cptr = (uint8_t *)cdata;
-	for (buflist = buflist; buflist; buflist = buflist->next) {
+	/* looks like it has to encrypt all data once, so copy the
+	 * fragments into one and encrypt
+	 */
+	if (buflist->next) {
+		uint8_t *whole_data = (uint8_t *)malloc(length);
+		uint8_t *p = whole_data;
+		for (buflist = buflist; buflist; buflist = buflist->next) {
+			memcpy(p, buflist->get_data(), buflist->length);
+			p += buflist->length;
+		}
+		rc = EVP_EncryptUpdate(ctx, cptr, &out_len,
+				whole_data, length);
+		free(whole_data);
+	} else {
 		rc = EVP_EncryptUpdate(ctx, cptr, &out_len,
 				buflist->get_data(), buflist->length);
-		X_ASSERT(rc == 1);
-		cptr += out_len;
 	}
+	X_ASSERT(rc == 1);
+	cptr += out_len;
 
 	rc = EVP_EncryptFinal_ex(ctx, cptr, &out_len);
 	X_ASSERT(rc == 1);
