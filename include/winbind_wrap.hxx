@@ -6,6 +6,7 @@
 #error "Must be c++"
 #endif
 
+#include <stdlib.h>
 
 extern "C" {
 /* copy from samba/nsswitch/libwbclient/wbclient.h */
