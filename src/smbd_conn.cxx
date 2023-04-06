@@ -605,26 +605,27 @@ static const struct {
 	NTSTATUS (* const op_func)(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ);
 	bool const need_channel;
 	bool const need_tcon;
+	bool const allow_sess_expired;
 } x_smb2_op_table[] = {
-	{ x_smb2_process_negprot, false, false, },
-	{ x_smb2_process_sesssetup, false, false, },
-	{ x_smb2_process_logoff, true, false, },
-	{ x_smb2_process_tcon, true, false, },
-	{ x_smb2_process_tdis, true, true, },
-	{ x_smb2_process_create, true, true, },
-	{ x_smb2_process_close, true, true, },
-	{ x_smb2_process_flush, true, true, },
-	{ x_smb2_process_read, true, true, },
-	{ x_smb2_process_write, true, true, },
-	{ x_smb2_process_lock, true, true, },
-	{ x_smb2_process_ioctl, true, true, },
-	{ nullptr, false, false, }, // OP_CANCEL
-	{ x_smb2_process_keepalive, false, false, },
-	{ x_smb2_process_query_directory, true, true, },
-	{ x_smb2_process_notify, true, true, },
-	{ x_smb2_process_getinfo, true, true, },
-	{ x_smb2_process_setinfo, true, true, },
-	{ x_smb2_process_break, true, true, },
+	{ x_smb2_process_negprot, false, false, false, },
+	{ x_smb2_process_sesssetup, false, false, true, },
+	{ x_smb2_process_logoff, true, false, true, },
+	{ x_smb2_process_tcon, true, false, false, },
+	{ x_smb2_process_tdis, true, true, false, },
+	{ x_smb2_process_create, true, true, false, },
+	{ x_smb2_process_close, true, true, true, },
+	{ x_smb2_process_flush, true, true, false, },
+	{ x_smb2_process_read, true, true, false, },
+	{ x_smb2_process_write, true, true, false, },
+	{ x_smb2_process_lock, true, true, true, }, // only allow unlock
+	{ x_smb2_process_ioctl, true, true, false, },
+	{ nullptr, false, false, true, }, // OP_CANCEL
+	{ x_smb2_process_keepalive, false, false, false, },
+	{ x_smb2_process_query_directory, true, true, false, },
+	{ x_smb2_process_notify, true, true, false, },
+	{ x_smb2_process_getinfo, true, true, false, },
+	{ x_smb2_process_setinfo, true, true, false, },
+	{ x_smb2_process_break, true, true, false, },
 };
 
 /* Samba smbd_smb2_request_dispatch_update_counts */
@@ -829,11 +830,19 @@ static NTSTATUS x_smbd_conn_process_smb2_intl(x_smbd_conn_t *smbd_conn, x_smbd_r
 
 	const auto &op = x_smb2_op_table[smbd_requ->in_smb2_hdr.opcode];
 	if (op.need_channel) {
+		if (NT_STATUS_EQUAL(smbd_requ->sess_status,
+					NT_STATUS_NETWORK_SESSION_EXPIRED)) {
+			if (!op.allow_sess_expired) {
+				RETURN_OP_STATUS(smbd_requ, NT_STATUS_NETWORK_SESSION_EXPIRED);
+			}
+		} else if (!NT_STATUS_IS_OK(smbd_requ->sess_status)) {
+			RETURN_OP_STATUS(smbd_requ, smbd_requ->sess_status);
+		}
 		if (!smbd_requ->smbd_sess) {
-			return NT_STATUS_USER_SESSION_DELETED;
+			RETURN_OP_STATUS(smbd_requ, NT_STATUS_USER_SESSION_DELETED);
 		}
 		if (!smbd_requ->smbd_chan ||  !x_smbd_chan_is_active(smbd_requ->smbd_chan)) {
-			return NT_STATUS_USER_SESSION_DELETED;
+			RETURN_OP_STATUS(smbd_requ, NT_STATUS_USER_SESSION_DELETED);
 		}
 	}
 
@@ -844,10 +853,10 @@ static NTSTATUS x_smbd_conn_process_smb2_intl(x_smbd_conn_t *smbd_conn, x_smbd_r
 
 	if (smbd_requ->is_signed()) {
 		if (smbd_requ->in_smb2_hdr.opcode == X_SMB2_OP_NEGPROT) {
-			return NT_STATUS_INVALID_PARAMETER;
+			RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 		}
 		if (!smbd_requ->smbd_sess) {
-			return NT_STATUS_USER_SESSION_DELETED;
+			RETURN_OP_STATUS(smbd_requ, NT_STATUS_USER_SESSION_DELETED);
 		}
 		x_bufref_t bufref{x_buf_get(smbd_requ->in_buf), smbd_requ->in_offset, smbd_requ->in_requ_len};
 #if 0
@@ -865,7 +874,7 @@ static NTSTATUS x_smbd_conn_process_smb2_intl(x_smbd_conn_t *smbd_conn, x_smbd_r
 		if (smbd_requ->in_smb2_hdr.opcode != X_SMB2_OP_SESSSETUP ||
 				smbd_requ->smbd_chan ||
 				!NT_STATUS_IS_OK(sess_status)) {
-			return NT_STATUS_ACCESS_DENIED;
+			RETURN_OP_STATUS(smbd_requ, NT_STATUS_ACCESS_DENIED);
 		}
 	}
 

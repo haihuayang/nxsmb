@@ -303,6 +303,8 @@ NTSTATUS x_smbd_sess_auth_succeeded(x_smbd_sess_t *smbd_sess,
 		uint32_t time_rec)
 {
 	std::lock_guard<std::mutex> lock(smbd_sess->mutex);
+	X_LOG_DBG("bind %d, security_mode %x, time_rec %u",
+			is_bind, security_mode, time_rec);
 
 	if (is_bind) {
 		X_ASSERT(smbd_sess->smbd_user);
@@ -327,7 +329,7 @@ NTSTATUS x_smbd_sess_auth_succeeded(x_smbd_sess_t *smbd_sess,
 		if (time_rec == X_INFINITE) {
 			smbd_sess->tick_expired = UINT64_MAX;
 		} else {
-			smbd_sess->tick_expired = smbd_sess->tick_create + 
+			smbd_sess->tick_expired = tick_now +
 				(uint64_t(time_rec) * X_NSEC_PER_SEC);
 			if (smbd_sess->tick_expired < smbd_sess->tick_create) {
 				smbd_sess->tick_expired = UINT64_MAX;

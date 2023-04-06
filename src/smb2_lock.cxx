@@ -350,6 +350,11 @@ NTSTATUS x_smb2_process_lock(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 			state->in_file_id_persistent, state->in_file_id_volatile);
 
 	bool is_unlock = state->in_lock_elements[0].flags & X_SMB2_LOCK_FLAG_UNLOCK;
+	if (!is_unlock && NT_STATUS_EQUAL(smbd_requ->sess_status,
+				NT_STATUS_NETWORK_SESSION_EXPIRED)) {
+		RETURN_OP_STATUS(smbd_requ, NT_STATUS_NETWORK_SESSION_EXPIRED);
+	}
+
 	uint32_t async_count = 0;
 	if (is_unlock) {
 		uint32_t flags = ~(X_SMB2_LOCK_FLAG_UNLOCK|X_SMB2_LOCK_FLAG_FAIL_IMMEDIATELY);
