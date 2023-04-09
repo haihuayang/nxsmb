@@ -40,6 +40,7 @@ static bool decode_in_lock(x_smb2_state_lock_t &state,
 		elem.offset = X_LE2H64(in_elem->offset);
 		elem.length = X_LE2H64(in_elem->length);
 		elem.flags = X_LE2H32(in_elem->flags);
+		++in_elem;
 	}
 	return true;
 }
@@ -291,7 +292,8 @@ static NTSTATUS smbd_open_lock(
 
 	std::lock_guard<std::mutex> lock(smbd_object->mutex);
 
-	if (state->in_lock_elements[0].flags & X_SMB2_LOCK_FLAG_UNLOCK) {
+	auto first_flags = state->in_lock_elements[0].flags;
+	if (first_flags & X_SMB2_LOCK_FLAG_UNLOCK) {
 		for (auto &l1: state->in_lock_elements) {
 			auto it = smbd_open->locks.begin();
 			for (; it != smbd_open->locks.end(); ++it) {
@@ -314,7 +316,7 @@ static NTSTATUS smbd_open_lock(
 			smbd_open->locks.insert(smbd_open->locks.end(),
 					state->in_lock_elements.begin(),
 					state->in_lock_elements.end());
-		} else if (state->in_lock_elements[0].flags & X_SMB2_LOCK_FLAG_FAIL_IMMEDIATELY) {
+		} else if (first_flags & X_SMB2_LOCK_FLAG_FAIL_IMMEDIATELY) {
 			return NT_STATUS_LOCK_NOT_GRANTED;
 		} else {
 			X_ASSERT(state->in_lock_elements.size() == 1);
@@ -355,15 +357,35 @@ NTSTATUS x_smb2_process_lock(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 		RETURN_OP_STATUS(smbd_requ, NT_STATUS_NETWORK_SESSION_EXPIRED);
 	}
 
+	NTSTATUS status = x_smbd_requ_init_open(smbd_requ,
+			state->in_file_id_persistent,
+			state->in_file_id_volatile,
+			false);
+	if (!NT_STATUS_IS_OK(status)) {
+		RETURN_OP_STATUS(smbd_requ, status);
+	}
+
+	if (!x_smbd_open_is_data(smbd_requ->smbd_open)) {
+		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
+	}
+
 	uint32_t async_count = 0;
 	if (is_unlock) {
-		uint32_t flags = ~(X_SMB2_LOCK_FLAG_UNLOCK|X_SMB2_LOCK_FLAG_FAIL_IMMEDIATELY);
+		uint32_t flags = ~(X_SMB2_LOCK_FLAG_UNLOCK);
 		for (const auto &le: state->in_lock_elements) {
 			if ((le.flags & flags) != 0) {
 				RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 			}
 		}
 	} else {
+		if (state->in_lock_elements.size() > 1) {
+			for (auto &l1: state->in_lock_elements) {
+				if (!(l1.flags & X_SMB2_LOCK_FLAG_FAIL_IMMEDIATELY)) {
+					RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
+				}
+			}
+		}
+
 		for (const auto &le: state->in_lock_elements) {
 			if ((le.flags & X_SMB2_LOCK_FLAG_FAIL_IMMEDIATELY) == 0) {
 				if (++async_count > 0 && state->in_lock_elements.size() > 1) {
@@ -380,18 +402,6 @@ NTSTATUS x_smb2_process_lock(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 		}
 	}
 	
-	NTSTATUS status = x_smbd_requ_init_open(smbd_requ,
-			state->in_file_id_persistent,
-			state->in_file_id_volatile,
-			false);
-	if (!NT_STATUS_IS_OK(status)) {
-		RETURN_OP_STATUS(smbd_requ, status);
-	}
-
-	if (!x_smbd_open_is_data(smbd_requ->smbd_open)) {
-		return NT_STATUS_INVALID_PARAMETER;
-	}
-
 	smbd_requ->async_done_fn = x_smb2_lock_async_done;
 
 	status = smbd_open_lock(smbd_requ->smbd_open,

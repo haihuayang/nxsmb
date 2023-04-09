@@ -114,7 +114,7 @@ static void clear_replay_cache(x_smbd_open_state_t &open_state)
 	}
 }
 
-x_smbd_open_t *x_smbd_open_lookup(uint64_t id_presistent, uint64_t id_volatile,
+x_smbd_open_t *x_smbd_open_lookup(uint64_t id_persistent, uint64_t id_volatile,
 		const x_smbd_tcon_t *smbd_tcon)
 {
 	auto [found, smbd_open] = g_smbd_open_table->lookup(id_volatile);
@@ -122,7 +122,8 @@ x_smbd_open_t *x_smbd_open_lookup(uint64_t id_presistent, uint64_t id_volatile,
 		auto smbd_object = smbd_open->smbd_object;
 		{
 			auto lock = smbd_object_lock(smbd_object);
-			if (smbd_open->state == SMBD_OPEN_S_ACTIVE &&
+			if (smbd_open->id_persistent == id_persistent &&
+					smbd_open->state == SMBD_OPEN_S_ACTIVE &&
 					(smbd_open->smbd_tcon == smbd_tcon ||
 					 !smbd_tcon)) {
 				clear_replay_cache(smbd_open->open_state);
