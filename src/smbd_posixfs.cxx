@@ -3452,8 +3452,8 @@ NTSTATUS x_smbd_posixfs_create_object(x_smbd_object_t *smbd_object,
 	uint32_t create_count = 0;
 	if (!posixfs_object->exists()) {
 		status = posixfs_new_object(posixfs_object, smbd_user,
-				state, state.in_file_attributes,
-				state.in_allocation_size, psd);
+				state, file_attributes,
+				allocation_size, psd);
 		if (!NT_STATUS_IS_OK(status)) {
 			return status;
 		}
@@ -3572,6 +3572,25 @@ NTSTATUS x_smbd_posixfs_op_access_check(x_smbd_object_t *smbd_object,
 	return NT_STATUS_OK;
 }
 
+static uint32_t filter_attributes(uint32_t new_attr, uint32_t curr_attr)
+{
+	new_attr &= X_NXSMB_FILE_ATTRIBUTE_MASK;
+	new_attr &= ~(X_SMB2_FILE_ATTRIBUTE_NORMAL);
+	if ((curr_attr & X_SMB2_FILE_ATTRIBUTE_DIRECTORY) != 0) {
+		if (new_attr & (X_SMB2_FILE_ATTRIBUTE_ARCHIVE
+					| X_SMB2_FILE_ATTRIBUTE_TEMPORARY)) {
+			return 0;
+		}
+		new_attr |= X_SMB2_FILE_ATTRIBUTE_DIRECTORY;
+	} else {
+		if (new_attr & X_SMB2_FILE_ATTRIBUTE_DIRECTORY) {
+			return 0;
+		}
+		new_attr |= X_SMB2_FILE_ATTRIBUTE_ARCHIVE;
+	}
+	return new_attr;
+}
+
 /* smbd_object's mutex is locked */
 NTSTATUS x_smbd_posixfs_create_open(x_smbd_open_t **psmbd_open,
 		x_smbd_requ_t *smbd_requ,
@@ -3597,6 +3616,25 @@ NTSTATUS x_smbd_posixfs_create_open(x_smbd_open_t **psmbd_open,
 		// TODO DELETE_ALL_STREAM;
 		int err = ftruncate(posixfs_object->fd, 0);
 		X_TODO_ASSERT(err == 0);
+		uint32_t notify_actions = FILE_NOTIFY_CHANGE_SIZE;
+		if (state->in_file_attributes != 0) {
+			auto &meta = posixfs_object->get_meta();
+			auto curr_attr = meta.file_attributes;
+			auto file_attr = filter_attributes(state->in_file_attributes,
+					curr_attr);
+			if (file_attr != 0 && file_attr != curr_attr) {
+				dos_attr_t dos_attr = { 0 };
+				dos_attr.attr_mask = DOS_SET_FILE_ATTR;
+				dos_attr.file_attrs = file_attr;
+				dos_attr.create_time = x_nttime_to_timespec(meta.creation);
+				posixfs_dos_attr_set(posixfs_object->fd, &dos_attr);
+				notify_actions |= FILE_NOTIFY_CHANGE_ATTRIBUTES;
+			}
+		}
+		changes.push_back(x_smb2_change_t{NOTIFY_ACTION_MODIFIED,
+				notify_actions,
+				state->lease.parent_key,
+				posixfs_object->base.path, {}});
 		reload_meta = true;
 	} else if (create_action != x_smb2_create_action_t::WAS_CREATED
 			&& (state->in_contexts & X_SMB2_CONTEXT_FLAG_ALSI)) {
