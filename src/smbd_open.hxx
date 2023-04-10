@@ -64,9 +64,8 @@ struct x_smbd_open_t
 	uint8_t lock_sequency_array[64];
 	uint32_t mode = 0; // [MS-FSCC] 2.4.26
 	bool update_write_time = false;
-	/* notify_requ_list and notify_changes protected by posixfs_object->mutex */
-	x_tp_ddlist_t<requ_async_traits> notify_requ_list;
-	x_tp_ddlist_t<requ_async_traits> lock_requ_list;
+	/* pending_requ_list and notify_changes protected by posixfs_object->mutex */
+	x_tp_ddlist_t<requ_async_traits> pending_requ_list;
 	std::vector<std::pair<uint32_t, std::u16string>> notify_changes;
 	std::vector<x_smb2_lock_element_t> locks;
 

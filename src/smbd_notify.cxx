@@ -86,13 +86,20 @@ void x_smbd_object_notify_change(x_smbd_object_t *smbd_object,
 		       continue;
 		}
 
-		x_smbd_requ_t *smbd_requ = curr_open->notify_requ_list.get_front();
+		x_smbd_requ_t *smbd_requ;
+		for (smbd_requ = curr_open->pending_requ_list.get_front();
+				smbd_requ;
+				smbd_requ = curr_open->pending_requ_list.next(smbd_requ)) {
+			if (smbd_requ->in_smb2_hdr.opcode == X_SMB2_OP_NOTIFY) {
+				break;
+			}
+		}
 		if (!smbd_requ) {
 			continue;
 		}
 
 		auto notify_changes = std::move(curr_open->notify_changes);
-		curr_open->notify_requ_list.remove(smbd_requ);
+		curr_open->pending_requ_list.remove(smbd_requ);
 		lock.unlock();
 
 		X_SMBD_CHAN_POST_USER(smbd_requ->smbd_chan, 

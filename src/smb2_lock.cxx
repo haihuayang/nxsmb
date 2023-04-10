@@ -251,18 +251,20 @@ void x_smbd_lock_retry(x_smbd_sharemode_t *sharemode)
 	x_smbd_open_t *curr_open;
 	auto &open_list = sharemode->open_list;
 	for (curr_open = open_list.get_front(); curr_open; curr_open = open_list.next(curr_open)) {
-		x_smbd_requ_t *smbd_requ = curr_open->lock_requ_list.get_front();
+		x_smbd_requ_t *smbd_requ = curr_open->pending_requ_list.get_front();
 		/* TODO show it post retry to smbd_conn */
 		while (smbd_requ) {
-			x_smbd_requ_t *next_requ = curr_open->lock_requ_list.next(smbd_requ);
-			auto state = smbd_requ->get_state<x_smb2_state_lock_t>();
-			if (!brl_conflict(sharemode, curr_open, state->in_lock_elements)) {
-				curr_open->lock_requ_list.remove(smbd_requ);
-				curr_open->locks.insert(curr_open->locks.end(),
-						state->in_lock_elements.begin(),
-						state->in_lock_elements.end());
-				X_SMBD_CHAN_POST_USER(smbd_requ->smbd_chan, 
-						new lock_evt_t(smbd_requ));
+			x_smbd_requ_t *next_requ = curr_open->pending_requ_list.next(smbd_requ);
+			if (smbd_requ->in_smb2_hdr.opcode == X_SMB2_OP_LOCK) {
+				auto state = smbd_requ->get_state<x_smb2_state_lock_t>();
+				if (!brl_conflict(sharemode, curr_open, state->in_lock_elements)) {
+					curr_open->pending_requ_list.remove(smbd_requ);
+					curr_open->locks.insert(curr_open->locks.end(),
+							state->in_lock_elements.begin(),
+							state->in_lock_elements.end());
+					X_SMBD_CHAN_POST_USER(smbd_requ->smbd_chan, 
+							new lock_evt_t(smbd_requ));
+				}
 			}
 			smbd_requ = next_requ;
 		}
@@ -276,7 +278,7 @@ static void smbd_lock_cancel(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 
 	{
 		std::lock_guard<std::mutex> lock(smbd_object->mutex);
-		smbd_open->lock_requ_list.remove(smbd_requ);
+		smbd_open->pending_requ_list.remove(smbd_requ);
 	}
 	x_smbd_conn_post_cancel(smbd_conn, smbd_requ, NT_STATUS_CANCELLED);
 }
@@ -286,53 +288,98 @@ static NTSTATUS smbd_open_lock(
 		x_smbd_requ_t *smbd_requ,
 		std::unique_ptr<x_smb2_state_lock_t> &state)
 {
+	if (state->in_lock_elements.size() > 1) {
+		for (const auto &le: state->in_lock_elements) {
+			if (le.flags != (X_SMB2_LOCK_FLAG_SHARED | X_SMB2_LOCK_FLAG_FAIL_IMMEDIATELY) &&
+					le.flags != (X_SMB2_LOCK_FLAG_EXCLUSIVE | X_SMB2_LOCK_FLAG_FAIL_IMMEDIATELY)) {
+				RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
+			}
+			if (le.length != 0 && (le.offset + le.length - 1) < le.offset) {
+				RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_LOCK_RANGE);
+			}
+		}
+	} else {
+		for (const auto &le: state->in_lock_elements) {
+			if (le.flags != X_SMB2_LOCK_FLAG_SHARED &&
+					le.flags != X_SMB2_LOCK_FLAG_EXCLUSIVE &&
+					le.flags != (X_SMB2_LOCK_FLAG_SHARED | X_SMB2_LOCK_FLAG_FAIL_IMMEDIATELY) &&
+					le.flags != (X_SMB2_LOCK_FLAG_EXCLUSIVE | X_SMB2_LOCK_FLAG_FAIL_IMMEDIATELY)) {
+				RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
+			}
+			if (le.length != 0 && (le.offset + le.length - 1) < le.offset) {
+				RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_LOCK_RANGE);
+			}
+		}
+	}
+
 	x_smbd_sharemode_t *sharemode = x_smbd_open_get_sharemode(
 			smbd_open);
 	x_smbd_object_t *smbd_object = smbd_open->smbd_object;
+	auto first_flags = state->in_lock_elements[0].flags;
 
 	std::lock_guard<std::mutex> lock(smbd_object->mutex);
 
-	auto first_flags = state->in_lock_elements[0].flags;
-	if (first_flags & X_SMB2_LOCK_FLAG_UNLOCK) {
-		for (auto &l1: state->in_lock_elements) {
-			auto it = smbd_open->locks.begin();
-			for (; it != smbd_open->locks.end(); ++it) {
-				if (it->offset == l1.offset && it->length == l1.length) {
-					break;
-				}
-			}
-			if (it == smbd_open->locks.end()) {
-				X_LOG_NOTICE("failed to unlock");
-				return NT_STATUS_RANGE_NOT_LOCKED;
-			}
-			smbd_open->locks.erase(it);
-		}
-		x_smbd_lock_retry(sharemode);
-		return NT_STATUS_OK;
+	bool conflict = brl_conflict(sharemode, smbd_open,
+			state->in_lock_elements);
+	if (!conflict) {
+		smbd_open->locks.insert(smbd_open->locks.end(),
+				state->in_lock_elements.begin(),
+				state->in_lock_elements.end());
+	} else if (first_flags & X_SMB2_LOCK_FLAG_FAIL_IMMEDIATELY) {
+		return NT_STATUS_LOCK_NOT_GRANTED;
 	} else {
-		bool conflict = brl_conflict(sharemode, smbd_open,
-				state->in_lock_elements);
-		if (!conflict) {
-			smbd_open->locks.insert(smbd_open->locks.end(),
-					state->in_lock_elements.begin(),
-					state->in_lock_elements.end());
-		} else if (first_flags & X_SMB2_LOCK_FLAG_FAIL_IMMEDIATELY) {
-			return NT_STATUS_LOCK_NOT_GRANTED;
-		} else {
-			X_ASSERT(state->in_lock_elements.size() == 1);
-			X_LOG_DBG("lock conflict");
-			smbd_requ->save_state(state);
-			x_smbd_ref_inc(smbd_requ);
-			smbd_open->lock_requ_list.push_back(smbd_requ);
-			x_smbd_requ_async_insert(smbd_requ, smbd_lock_cancel);
-			return NT_STATUS_PENDING;
-		}
+		X_ASSERT(state->in_lock_elements.size() == 1);
+		X_LOG_DBG("lock conflict");
+		smbd_requ->save_state(state);
+		x_smbd_ref_inc(smbd_requ);
+		smbd_open->pending_requ_list.push_back(smbd_requ);
+		x_smbd_requ_async_insert(smbd_requ, smbd_lock_cancel);
+		return NT_STATUS_PENDING;
 	}
+
 	/* when lock success, it break oplock */
 	x_smbd_break_others_to_none(smbd_object, sharemode,
 			smbd_open->smbd_lease,
 			smbd_open->open_state.oplock_level);
 	return NT_STATUS_OK;
+}
+
+static NTSTATUS smbd_open_unlock(
+		x_smbd_open_t *smbd_open,
+		x_smbd_requ_t *smbd_requ,
+		std::unique_ptr<x_smb2_state_lock_t> &state)
+{
+	x_smbd_sharemode_t *sharemode = x_smbd_open_get_sharemode(
+			smbd_open);
+	x_smbd_object_t *smbd_object = smbd_open->smbd_object;
+	uint32_t unlocked = 0;
+	NTSTATUS status = NT_STATUS_OK;
+
+	std::lock_guard<std::mutex> lock(smbd_object->mutex);
+
+	for (auto &l1: state->in_lock_elements) {
+		if (l1.flags != X_SMB2_LOCK_FLAG_UNLOCK) {
+			status = NT_STATUS_INVALID_PARAMETER;
+			break;
+		}
+		auto it = smbd_open->locks.begin();
+		for (; it != smbd_open->locks.end(); ++it) {
+			if (it->offset == l1.offset && it->length == l1.length) {
+				break;
+			}
+		}
+		if (it == smbd_open->locks.end()) {
+			X_LOG_NOTICE("failed to unlock");
+			status = NT_STATUS_RANGE_NOT_LOCKED;
+			break;
+		}
+		smbd_open->locks.erase(it);
+		++unlocked;
+	}
+	if (unlocked > 0) {
+		x_smbd_lock_retry(sharemode);
+	}
+	return status;
 }
 
 NTSTATUS x_smb2_process_lock(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
@@ -351,7 +398,7 @@ NTSTATUS x_smb2_process_lock(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 	X_LOG_OP("%ld LOCK 0x%lx, 0x%lx", smbd_requ->in_smb2_hdr.mid,
 			state->in_file_id_persistent, state->in_file_id_volatile);
 
-	bool is_unlock = state->in_lock_elements[0].flags & X_SMB2_LOCK_FLAG_UNLOCK;
+	bool is_unlock = state->in_lock_elements[0].flags == X_SMB2_LOCK_FLAG_UNLOCK;
 	if (!is_unlock && NT_STATUS_EQUAL(smbd_requ->sess_status,
 				NT_STATUS_NETWORK_SESSION_EXPIRED)) {
 		RETURN_OP_STATUS(smbd_requ, NT_STATUS_NETWORK_SESSION_EXPIRED);
@@ -369,43 +416,16 @@ NTSTATUS x_smb2_process_lock(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
 
-	uint32_t async_count = 0;
 	if (is_unlock) {
-		uint32_t flags = ~(X_SMB2_LOCK_FLAG_UNLOCK);
-		for (const auto &le: state->in_lock_elements) {
-			if ((le.flags & flags) != 0) {
-				RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
-			}
-		}
+		status = smbd_open_unlock(smbd_requ->smbd_open,
+				smbd_requ, state);
 	} else {
-		if (state->in_lock_elements.size() > 1) {
-			for (auto &l1: state->in_lock_elements) {
-				if (!(l1.flags & X_SMB2_LOCK_FLAG_FAIL_IMMEDIATELY)) {
-					RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
-				}
-			}
-		}
-
-		for (const auto &le: state->in_lock_elements) {
-			if ((le.flags & X_SMB2_LOCK_FLAG_FAIL_IMMEDIATELY) == 0) {
-				if (++async_count > 0 && state->in_lock_elements.size() > 1) {
-					RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
-				}
-			}
-			auto f = le.flags & ~X_SMB2_LOCK_FLAG_FAIL_IMMEDIATELY;
-			if (f != X_SMB2_LOCK_FLAG_SHARED && f != X_SMB2_LOCK_FLAG_EXCLUSIVE) {
-				RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
-			}
-			if (le.length != 0 && (le.offset + le.length - 1) < le.offset) {
-				RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_LOCK_RANGE);
-			}
-		}
+		smbd_requ->status = NT_STATUS_RANGE_NOT_LOCKED;
+		smbd_requ->async_done_fn = x_smb2_lock_async_done;
+		status = smbd_open_lock(smbd_requ->smbd_open,
+				smbd_requ, state);
 	}
 	
-	smbd_requ->async_done_fn = x_smb2_lock_async_done;
-
-	status = smbd_open_lock(smbd_requ->smbd_open,
-			smbd_requ, state);
 	if (NT_STATUS_IS_OK(status)) {
 		x_smb2_reply_lock(smbd_conn, smbd_requ, *state);
 		return status;
