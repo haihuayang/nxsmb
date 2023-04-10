@@ -67,6 +67,17 @@ static void x_smb2_reply_lock(x_smbd_conn_t *smbd_conn,
 			sizeof(x_smb2_header_t) + sizeof(x_smb2_out_lock_t));
 }
 
+static void smb2_lock_set_sequence(x_smbd_open_t *smbd_open,
+		const x_smb2_state_lock_t &state)
+{
+	auto lock_sequence_bucket = state.in_lock_sequence_index >> 4;
+	if (lock_sequence_bucket > 0 &&
+			lock_sequence_bucket <= x_smbd_open_t::LOCK_SEQUENCE_MAX) {
+		smbd_open->lock_sequence_array[lock_sequence_bucket - 1] =
+			state.in_lock_sequence_index & 0xf;
+	}
+}
+
 static void x_smb2_lock_async_done(x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ,
 		NTSTATUS status)
@@ -76,7 +87,9 @@ static void x_smb2_lock_async_done(x_smbd_conn_t *smbd_conn,
 	if (!smbd_conn) {
 		return;
 	}
+	X_ASSERT(!NT_STATUS_EQUAL(status, NT_STATUS_PENDING));
 	if (NT_STATUS_IS_OK(status)) {
+		smb2_lock_set_sequence(smbd_requ->smbd_open, *state);
 		x_smb2_reply_lock(smbd_conn, smbd_requ, *state);
 	}
 	x_smbd_conn_requ_done(smbd_conn, smbd_requ, status);
@@ -412,8 +425,30 @@ NTSTATUS x_smb2_process_lock(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 		RETURN_OP_STATUS(smbd_requ, status);
 	}
 
-	if (!x_smbd_open_is_data(smbd_requ->smbd_open)) {
+	auto smbd_open = smbd_requ->smbd_open;
+
+	if (!x_smbd_open_is_data(smbd_open)) {
 		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
+	}
+
+	if (smbd_open->open_state.dhmode != x_smbd_dhmode_t::NONE ||
+			(x_smbd_conn_get_capabilities(smbd_conn) & X_SMB2_CAP_MULTI_CHANNEL)) {
+		auto lock_sequence_bucket = state->in_lock_sequence_index >> 4;
+		if (lock_sequence_bucket > 0 &&
+				lock_sequence_bucket <= x_smbd_open_t::LOCK_SEQUENCE_MAX) {
+			if (smbd_open->lock_sequence_array[lock_sequence_bucket - 1] ==
+					(state->in_lock_sequence_index & 0xf)) {
+				X_LOG_NOTICE("replayed smb2 lock request detected, sequence = 0x%x",
+						state->in_lock_sequence_index);
+				x_smb2_reply_lock(smbd_conn, smbd_requ, *state);
+				return NT_STATUS_OK;
+			}
+			/* not a replay, mark it invalid */
+			smbd_open->lock_sequence_array[lock_sequence_bucket - 1] = 0xff;
+		}
+	} else {
+		/* disable check_lock_sequence */
+		state->in_lock_sequence_index = 0;
 	}
 
 	if (is_unlock) {
@@ -426,7 +461,9 @@ NTSTATUS x_smb2_process_lock(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 				smbd_requ, state);
 	}
 	
+
 	if (NT_STATUS_IS_OK(status)) {
+		smb2_lock_set_sequence(smbd_requ->smbd_open, *state);
 		x_smb2_reply_lock(smbd_conn, smbd_requ, *state);
 		return status;
 	}

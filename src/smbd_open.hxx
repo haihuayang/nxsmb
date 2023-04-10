@@ -69,6 +69,9 @@ struct x_smbd_open_t
 	std::vector<std::pair<uint32_t, std::u16string>> notify_changes;
 	std::vector<x_smb2_lock_element_t> locks;
 
+	enum { LOCK_SEQUENCE_MAX = 64 };
+	uint8_t lock_sequence_array[LOCK_SEQUENCE_MAX] = { 0 };
+
 	/* TODO atomic */
 	uint64_t request_count = 0, pre_request_count = 0;
 };

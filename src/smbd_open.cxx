@@ -2023,6 +2023,7 @@ x_smbd_open_t::x_smbd_open_t(x_smbd_object_t *so,
 {
 	X_SMBD_COUNTER_INC(open_create, 1);
 	oplock_break_timer.func = oplock_break_timeout;
+	memset(lock_sequence_array, 0xff, LOCK_SEQUENCE_MAX);
 }
 
 x_smbd_open_t::~x_smbd_open_t()
