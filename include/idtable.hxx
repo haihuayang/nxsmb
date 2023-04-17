@@ -372,8 +372,10 @@ struct x_idtable_t
 						std::memory_order_release,
 						std::memory_order_relaxed)) {
 				if (refcnt == 1) {
-					deallocate(entry);
+					/* TODO atomic set data to null and deallcoated */
 					T *data = std::exchange(entry->data, nullptr);
+					deallocate(entry);
+
 					Delete()(data);
 					return true;
 				}
