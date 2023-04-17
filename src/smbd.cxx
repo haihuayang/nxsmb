@@ -173,7 +173,7 @@ int main(int argc, char **argv)
 	bool daemon = false;
 	int optind = 0;
 	for (;;) {
-		int c = getopt_long(argc, argv, "c:t:o:",
+		int c = getopt_long(argc, argv, "c:D:o:",
 				long_options, &optind);
 		if (c == -1) {
 			break;

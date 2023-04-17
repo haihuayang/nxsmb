@@ -283,10 +283,6 @@ static bool parse_global_param(x_smbd_conf_t &smbd_conf,
 		return parse_log_level(value, smbd_conf.log_level);
 	} else if (name == "log name") {
 		smbd_conf.log_name = value;
-	} else if (name == "client thread count") {
-		return parse_uint32(value, smbd_conf.client_thread_count);
-	} else if (name == "async thread count") {
-		return parse_uint32(value, smbd_conf.async_thread_count);
 	} else if (name == "netbios name") {
 		smbd_conf.netbios_name = value;
 	} else if (name == "dns domain") {
@@ -309,6 +305,20 @@ static bool parse_global_param(x_smbd_conf_t &smbd_conf,
 		smbd_conf.node = value;
 	} else if (name == "max session expiration") {
 		return parse_uint32(value, smbd_conf.max_session_expiration);
+	} else if (name == "interfaces") {
+		smbd_conf.interfaces = parse_stringlist(value);
+	} else if (name == "server multi channel support") {
+		bool server_multi_channel_support = parse_bool(value);
+		if (server_multi_channel_support) {
+			smbd_conf.capabilities |= X_SMB2_CAP_MULTI_CHANNEL;
+		} else {
+			smbd_conf.capabilities &= ~X_SMB2_CAP_MULTI_CHANNEL;
+		}
+
+	} else if (name == "my:client thread count") {
+		return parse_uint32(value, smbd_conf.client_thread_count);
+	} else if (name == "my:async thread count") {
+		return parse_uint32(value, smbd_conf.async_thread_count);
 	} else if (name == "my:max connections") {
 		return parse_uint32(value, smbd_conf.max_connections);
 	} else if (name == "my:max opens") {
@@ -319,15 +329,7 @@ static bool parse_global_param(x_smbd_conf_t &smbd_conf,
 		smbd_conf.nodes = parse_stringlist(value);
 	} else if (name == "my:volume map") {
 		return parse_volume_map(volume_specs, value);
-	} else if (name == "interfaces") {
-		smbd_conf.interfaces = parse_stringlist(value);
-	} else if (name == "server multi channel support") {
-		bool server_multi_channel_support = parse_bool(value);
-		if (server_multi_channel_support) {
-			smbd_conf.capabilities |= X_SMB2_CAP_MULTI_CHANNEL;
-		} else {
-			smbd_conf.capabilities &= ~X_SMB2_CAP_MULTI_CHANNEL;
-		}
+
 	} else {
 		X_LOG_WARN("unknown global param '%s' with value '%s'",
 				name.c_str(), value.c_str());

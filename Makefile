@@ -8,12 +8,24 @@ VERSION := 0.1
 include config.mk
 include functions.mk
 
-TARGET_PROJECT_CFLAGS := -g3 -Wall -DPROJECT=$(PROJECT) -fsanitize=address
+TARGET_BUILD_CFLAGS_dbg := -g3
+TARGET_BUILD_LDFLAGS_dbg := -g3
+TARGET_BUILD_CFLAGS_opt := -O2
+TARGET_BUILD_LDFLAGS_opt := -O2
+TARGET_BUILD_CFLAGS_dev := -g3 -fsanitize=address
+TARGET_BUILD_LDFLAGS_dev := -g3 -fsanitize=address
+
+BUILD ?= dbg
+
+TARGET_BUILD_CFLAGS := $(TARGET_BUILD_CFLAGS_$(BUILD))
+TARGET_BUILD_LDFLAGS := $(TARGET_BUILD_LDFLAGS_$(BUILD))
+
+TARGET_PROJECT_CFLAGS := -Wall -DPROJECT=$(PROJECT) $(TARGET_BUILD_CFLAGS)
 TARGET_CFLAGS = $(TARGET_PROJECT_CFLAGS) -Wstrict-prototypes -MT $@ -MMD -MP -MF $@.d
 TARGET_CXXFLAGS = $(TARGET_PROJECT_CFLAGS) -std=c++2a -Werror -Wunused -Wconversion -Wmissing-declarations -Wno-invalid-offsetof -Wno-multichar -MT $@ -MMD -MP -MF $@.d
-TARGET_LDFLAGS := $(TARGET_LDFLAGS) -fsanitize=address -g3
+TARGET_LDFLAGS := $(TARGET_LDFLAGS) $(TARGET_BUILD_LDFLAGS)
 
-TARGET_DIR_out := target.dbg.linux.x86_64
+TARGET_DIR_out := $(BUILD).linux.x86_64
 
 TARGET_SET_dir := bin lib lib/librpc librpc/idl lib/asn1 src tests
 
