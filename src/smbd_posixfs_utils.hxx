@@ -13,13 +13,11 @@
 #include <sys/stat.h>
 #include <stdint.h>
 #include <memory>
-extern "C" {
-}
 
 #ifdef NXSMBD_MINERVA
-extern "C" {
+
 #include "zfsdev.h"
-}
+
 #else
 
 /* Attr Mask */

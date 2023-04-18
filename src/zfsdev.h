@@ -8,14 +8,9 @@
 
 /* workaround a bug in sys/fs/zfs.h that { } does not match when __cplusplus is defined */
 #ifdef __cplusplus
-#define __cplusplus_save __cplusplus
-#undef __cplusplus
+extern "C" {
 #endif
 #include <sys/fs/zfs.h>
-#ifdef __cplusplus_save
-#define __cplusplus __cplusplus_save
-#undef __cplusplus_save
-#endif
 
 #include <sys/ioctl.h>
 
