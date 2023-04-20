@@ -1991,7 +1991,7 @@ NTSTATUS x_smbd_open_restore(
 
 	{
 		auto lock = smbd_object_lock(smbd_open->smbd_object);
-		X_ASSERT(smbd_open->state == SMBD_OPEN_S_ACTIVE);
+		X_ASSERT(smbd_open->state == SMBD_OPEN_S_INIT);
 		X_ASSERT(!smbd_open->smbd_tcon);
 		smbd_open->state = SMBD_OPEN_S_DISCONNECTED;
 		smbd_open->durable_timer.func = smbd_open_durable_timeout;
