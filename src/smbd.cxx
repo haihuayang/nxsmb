@@ -82,15 +82,26 @@ static void init_smbd()
 	/* durable db use rand() to pick slot */
 	srand((unsigned int)tick_now2);
 
+	uint32_t max_opens = std::max(smbd_conf->max_opens, 1024u);
+	/* reserver 80 fd for other purpose for now */
+	uint32_t max_fd = max_opens + smbd_conf->max_connections + 80;
+	struct rlimit rl_nofile;
+	X_ASSERT(getrlimit(RLIMIT_NOFILE, &rl_nofile) == 0);
+	X_LOG_DBG("RLIMIT_NOFILE max=%lu cur=%lu",
+			rl_nofile.rlim_max, rl_nofile.rlim_cur);
+	if (rl_nofile.rlim_cur < max_fd) {
+		rl_nofile.rlim_max = rl_nofile.rlim_cur = max_fd;
+		X_ASSERT(setrlimit(RLIMIT_NOFILE, &rl_nofile) == 0);
+	}
+
 	g_smbd.tpool_async = x_threadpool_create(smbd_conf->async_thread_count);
 	x_threadpool_t *tpool = x_threadpool_create(smbd_conf->client_thread_count);
 	g_smbd.tpool_evtmgmt = tpool;
 
-	g_evtmgmt = x_evtmgmt_create(tpool, 0);
+	g_evtmgmt = x_evtmgmt_create(tpool, 0, max_fd);
 	g_smbd.wbpool = x_wbpool_create(g_evtmgmt, 2,
 			smbd_conf->samba_locks_dir + "/winbindd_privileged/pipe");
 
-	uint32_t max_opens = std::max(smbd_conf->max_opens, 1024u);
 	x_smbd_open_table_init(max_opens);
 	x_smbd_tcon_table_init(X_SMBD_MAX_TCON);
 	x_smbd_sess_table_init(X_SMBD_MAX_SESSION);
@@ -128,17 +139,6 @@ static void init_smbd()
 	TIMERQ_INIT(x_smbd_timer_t::SESSSETUP, 40);
 	TIMERQ_INIT(x_smbd_timer_t::BREAK, 35);
 	TIMERQ_INIT(x_smbd_timer_t::DURABLE, X_SMBD_DURABLE_TIMEOUT_MAX);
-
-	/* reserver 80 fd for other purpose for now */
-	uint32_t max_fd = max_opens + smbd_conf->max_connections + 80;
-	struct rlimit rl_nofile;
-	X_ASSERT(getrlimit(RLIMIT_NOFILE, &rl_nofile) == 0);
-	X_LOG_DBG("RLIMIT_NOFILE max=%lu cur=%lu",
-			rl_nofile.rlim_max, rl_nofile.rlim_cur);
-	if (rl_nofile.rlim_cur < max_fd) {
-		rl_nofile.rlim_max = rl_nofile.rlim_cur = max_fd;
-		X_ASSERT(setrlimit(RLIMIT_NOFILE, &rl_nofile));
-	}
 
 	x_smbd_restore_durable(*smbd_conf);
 	x_smbd_conn_srv_init(smbd_conf->port);

@@ -91,27 +91,30 @@ X_DECLARE_MEMBER_TRAITS(epoll_entry_timer_traits, x_epoll_entry_t, timer_link)
 
 struct x_evtmgmt_t
 {
-	x_evtmgmt_t(x_threadpool_t *tp, int efd, int tfd, uint64_t entry_interval)
+	x_evtmgmt_t(x_threadpool_t *tp, int efd, int tfd, uint64_t entry_interval,
+			uint32_t max_fd)
 		: tpool{tp}, epfd(efd), timerfd(tfd)
-		, entry_interval{entry_interval} {
-		memset(epoll_job, 0, sizeof epoll_job);
-		for (auto &entry: epoll_job) {
-			entry.job.ops = &epoll_job_ops;
-			entry.job.private_data = this;
+		, entry_interval{entry_interval}
+       		, max_fd(max_fd)
+	{
+		memset(entries, 0, sizeof(x_epoll_entry_t) * max_fd);
+		for (uint32_t i = 0; i < max_fd; ++i) {
+			entries[i].job.ops = &epoll_job_ops;
+			entries[i].job.private_data = this;
 		}
 	}
 
 	x_epoll_entry_t *find_by_id(uint64_t id) {
 		uint32_t fd = x_convert<uint32_t>(id);
-		if (fd >= 1024) {
+		if (fd >= max_fd) {
 			return NULL;
 		}
-		x_epoll_entry_t *entry = &epoll_job[fd];
+		x_epoll_entry_t *entry = &entries[fd];
 		return entry->genref.try_get(id & 0xffffffff00000000) ? entry : NULL;
 	}
 
 	int get_entry_fd(x_epoll_entry_t *entry) const {
-		return x_convert<int>(entry - epoll_job);
+		return x_convert<int>(entry - entries);
 	}
 
 	void release(x_epoll_entry_t *entry) {
@@ -127,13 +130,14 @@ struct x_evtmgmt_t
 	const int epfd;
 	const int timerfd;
 	const uint64_t entry_interval;
+	const uint32_t max_fd;
 
 	std::priority_queue<x_timer_t *, std::vector<x_timer_t *>, timer_comp> timerq{timer_comp()};
 	std::mutex mutex; // protect unsorted_timers, TODO it can be lock-less?
 	x_tp_sdlist_t<timer_dlink_traits> unsorted_timers;
 	x_tp_ddlist_t<epoll_entry_timer_traits> epoll_timer_list;
 
-	x_epoll_entry_t epoll_job[1024];
+	x_epoll_entry_t entries[];
 };
 
 static x_job_t::retval_t epoll_job_run(x_job_t *job)
@@ -176,8 +180,8 @@ static void epoll_job_done(x_job_t *job)
 
 uint64_t x_evtmgmt_monitor(x_evtmgmt_t *ep, unsigned int fd, uint32_t poll_events, x_epoll_upcall_t * upcall)
 {
-	assert(fd < 1024);
-	x_epoll_entry_t *entry = &ep->epoll_job[fd];
+	X_ASSERT(fd < ep->max_fd);
+	x_epoll_entry_t *entry = &ep->entries[fd];
 	uint64_t gen = entry->init(upcall);
 
 	struct epoll_event ev;
@@ -358,7 +362,8 @@ void x_evtmgmt_dispatch(x_evtmgmt_t *ep)
 #define SYS_eventfd2	290
 #define eventfd(count, flags) syscall(SYS_eventfd2, (count), (flags))
 	
-x_evtmgmt_t *x_evtmgmt_create(x_threadpool_t *tpool, unsigned long entry_interval)
+x_evtmgmt_t *x_evtmgmt_create(x_threadpool_t *tpool, unsigned long entry_interval,
+		uint32_t max_fd)
 {
 	int epfd = epoll_create(16);
 	X_ASSERT(epfd >= 0);
@@ -372,7 +377,13 @@ x_evtmgmt_t *x_evtmgmt_create(x_threadpool_t *tpool, unsigned long entry_interva
 	int ret = epoll_ctl(epfd, EPOLL_CTL_ADD, timerfd, &ev);
 	X_ASSERT(ret == 0);
 
-	x_evtmgmt_t *ep = new x_evtmgmt_t(tpool, epfd, timerfd, entry_interval);
+	/* TODO to reduce the memory usage,
+	   the number of fd monitored could be much less than max_fd */
+	size_t alloc_size = sizeof(x_evtmgmt_t) + sizeof(x_epoll_entry_t) * max_fd;
+	void *mem = malloc(alloc_size);
+	X_ASSERT(mem);
+
+	x_evtmgmt_t *ep = new(mem) x_evtmgmt_t(tpool, epfd, timerfd, entry_interval, max_fd);
 	tick_now = x_tick_now();
 	return ep;
 }
