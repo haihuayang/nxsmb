@@ -29,6 +29,7 @@
 	X_SMBD_COUNTER_DECL(open_delete) \
 	X_SMBD_COUNTER_DECL(requ_create) \
 	X_SMBD_COUNTER_DECL(requ_delete) \
+	X_SMBD_COUNTER_DECL(sess_bind) \
 
 enum {
 #undef X_SMBD_COUNTER_DECL

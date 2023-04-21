@@ -633,6 +633,7 @@ NTSTATUS x_smbd_conn_dispatch_update_counts(
 		x_smbd_requ_t *smbd_requ,
 		bool modify_call)
 {
+	// X_ASSERT(smbd_requ->smbd_conn == g_smbd_conn_curr);
 	if (x_smbd_conn_curr_dialect() < X_SMB2_DIALECT_300) {
 		return NT_STATUS_OK;
 	}
@@ -642,6 +643,9 @@ NTSTATUS x_smbd_conn_dispatch_update_counts(
 	uint16_t channel_sequence = smbd_requ->in_smb2_hdr.channel_sequence;
 	x_smbd_open_t *smbd_open = smbd_requ->smbd_open;
 	auto &open_state = smbd_open->open_state;
+
+	auto lock = std::lock_guard(smbd_open->smbd_object->mutex);
+
 	int cmp = channel_sequence - open_state.channel_sequence;
 	if (cmp < 0) {
 		/*
@@ -740,6 +744,7 @@ static void smbd_conn_reply_update_counts(
 		x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ)
 {
+	X_ASSERT(smbd_conn == g_smbd_conn_curr);
 	if (!smbd_requ->request_counters_updated) {
 		return;
 	}
@@ -758,6 +763,7 @@ static void smbd_conn_reply_update_counts(
 	uint16_t channel_sequence = smbd_requ->in_smb2_hdr.channel_sequence;
 	auto &open_state = smbd_open->open_state;
 
+	auto lock = std::lock_guard(smbd_open->smbd_object->mutex);
 	if ((open_state.channel_sequence == channel_sequence) &&
 	    (open_state.channel_generation == smbd_requ->channel_generation)) {
 		X_ASSERT(smbd_open->request_count > 0);
