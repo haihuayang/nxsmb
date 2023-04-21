@@ -34,6 +34,8 @@ struct volume_spec_t
 				// so they cannot share the volume
 };
 
+static const char *g_configfile;
+static std::vector<std::pair<std::string, std::string>> g_cmdline_options;
 static std::shared_ptr<x_smbd_conf_t> g_smbd_conf;
 #if 0
 static int hex(char c)
@@ -471,9 +473,9 @@ static volume_spec_t *find_volume_spec(std::vector<volume_spec_t> &volume_specs,
 	return nullptr;
 }
 
-static int parse_smbconf(x_smbd_conf_t &smbd_conf, const char *path,
-		const std::vector<std::string> &cmdline_options)
+static int parse_smbconf(x_smbd_conf_t &smbd_conf, bool reload)
 {
+	const char *path = g_configfile;
 	X_LOG_DBG("Loading smbd_conf from %s", path);
 
 	std::vector<std::unique_ptr<share_spec_t>> share_specs;
@@ -524,16 +526,7 @@ static int parse_smbconf(x_smbd_conf_t &smbd_conf, const char *path,
 	}
 
 	// override global params by argv
-	for (auto &opt: cmdline_options) {
-		size_t pos = skip(opt, 0, opt.length());;
-		if (pos == opt.length() || opt.compare(pos, 1, "#") == 0) {
-			continue;
-		}
-		std::string name, value;
-		if (!split_option(opt, pos, name, value)) {
-			X_PANIC("No '=' at argv %s",
-					opt.c_str());
-		}
+	for (const auto &[name, value]: g_cmdline_options) {
 		parse_global_param(smbd_conf, volume_specs, name, value);
 	}
 
@@ -631,16 +624,42 @@ std::shared_ptr<x_smbd_share_t> x_smbd_find_share(const std::string &name,
 	/* TODO USER_SHARE */
 }
 
-int x_smbd_conf_parse(const char *configfile, const std::vector<std::string> &cmdline_options)
+static int smbd_conf_load(bool reload)
 {
 	auto ret = std::make_shared<x_smbd_conf_t>();
-	int err = parse_smbconf(*ret, configfile, cmdline_options);
+	int err = parse_smbconf(*ret, false);
 	if (err < 0) {
 		return err;
 	}
 
 	g_smbd_conf = ret;
 	return 0;
+}
+
+int x_smbd_conf_init(const char *configfile,
+		const std::vector<std::string> &cmdline_options)
+{
+	std::vector<std::pair<std::string, std::string>> pairs;
+	for (auto &opt: cmdline_options) {
+		size_t pos = skip(opt, 0, opt.length());;
+		if (pos == opt.length() || opt.compare(pos, 1, "#") == 0) {
+			continue;
+		}
+		std::string name, value;
+		if (!split_option(opt, pos, name, value)) {
+			X_PANIC("No '=' at argv %s",
+					opt.c_str());
+		}
+		pairs.emplace_back(std::move(name), std::move(value));
+	}
+	g_cmdline_options = std::move(pairs);
+	g_configfile = configfile;
+	return smbd_conf_load(false);
+}
+
+int x_smbd_conf_reload()
+{
+	return smbd_conf_load(true);
 }
 
 x_smbd_conf_t::x_smbd_conf_t()

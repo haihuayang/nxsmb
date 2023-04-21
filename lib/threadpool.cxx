@@ -1,7 +1,7 @@
 
 #include "include/threadpool.hxx"
+#include <pthread.h>
 #include <vector>
-#include <thread>
 #include <mutex>
 #include <condition_variable>
 
@@ -13,9 +13,10 @@ X_DECLARE_MEMBER_TRAITS(job_dlink_traits, x_job_t, dlink)
 struct x_threadpool_t
 {
 	x_threadpool_t(std::string &&name, unsigned int count)
-		: name{name}, threads{count} { }
+		: name{name}, threads(count) { }
 	const std::string name;
-	std::vector<std::thread> threads;
+	bool running = true;
+	std::vector<pthread_t> threads;
 	std::mutex mutex;
 	std::condition_variable cond;
 	x_tp_ddlist_t<job_dlink_traits> queue;
@@ -38,6 +39,9 @@ static inline x_job_t *__threadpool_get(x_threadpool_t *tp)
 	{
 		std::unique_lock<std::mutex> ul(tp->mutex);
 		while (tp->queue.empty()) {
+			if (!tp->running) {
+				return nullptr;
+			}
 			tp->cond.wait(ul);
 		}
 
@@ -48,14 +52,28 @@ static inline x_job_t *__threadpool_get(x_threadpool_t *tp)
 	return job;
 }
 
-/* TODO exit gracely */
-static void thread_func(x_threadpool_t *tpool, uint32_t no)
+struct x_threadpool_arg_t
 {
+	x_threadpool_t * const tpool;
+	uint32_t const no;
+};
+
+static void *thread_func(void *arg)
+{
+	x_threadpool_arg_t *tparg = (x_threadpool_arg_t *)arg;
+	x_threadpool_t *tpool = tparg->tpool;
+	uint32_t no = tparg->no;
+	delete tparg;
+
 	snprintf(task_name, sizeof task_name, "%s-%03d", tpool->name.c_str(),
 			no);
 	tick_now = x_tick_now();
+	X_LOG_NOTICE("%s started", task_name);
 	for (;;) {
 		x_job_t *job = __threadpool_get(tpool);
+		if (!job) {
+			break;
+		}
 		tick_now = x_tick_now();
 		x_job_t::retval_t status = job->ops->run(job);
 		X_DBG("%s run job %p %d", task_name, job, status);
@@ -94,22 +112,29 @@ static void thread_func(x_threadpool_t *tpool, uint32_t no)
 			__threadpool_schedule_job(tpool, job);
 		}
 	}
+	X_LOG_NOTICE("%s stopped", task_name);
+	return nullptr;
 }
 
 x_threadpool_t *x_threadpool_create(std::string name, unsigned int count)
 {
 	x_threadpool_t *tpool = new x_threadpool_t{std::move(name), count};
 	for (uint32_t i = 0; i < count; ++i) {
-		tpool->threads[i] = std::thread(thread_func, tpool, i);
+		x_threadpool_arg_t *tparg = new x_threadpool_arg_t{tpool, i};
+		int err = pthread_create(&tpool->threads[i], nullptr,
+				thread_func, tparg);
+		X_ASSERT(err == 0);
 	}
 	return tpool;
 }
 
 void x_threadpool_destroy(x_threadpool_t *tpool)
 {
-	// TODO
+	X_ASSERT(tpool->running);
+	tpool->running = false;
+	tpool->cond.notify_all();
 	for (uint32_t i = 0; i < tpool->threads.size(); ++i) {
-		tpool->threads[i].join();
+		X_ASSERT(pthread_join(tpool->threads[i], nullptr) == 0);
 	}
 	delete tpool;
 }

@@ -13,6 +13,7 @@
 #include <getopt.h>
 #include <openssl/crypto.h>
 #include <sys/resource.h>
+#include <pthread.h>
 
 #include "smbd_conf.hxx"
 #include "network.hxx"
@@ -25,13 +26,15 @@
 #include "smb2.hxx"
 
 static struct {
+	volatile bool stopped = false;
 	bool do_async = false;
-	x_threadpool_t *tpool_evtmgmt{}, *tpool_async;
+	x_threadpool_t *tpool_evtmgmt{}, *tpool_async{};
 	x_wbpool_t *wbpool;
 	x_auth_context_t *auth_context;
 	std::vector<uint8_t> negprot_spnego;
 	x_tick_t tick_start_mono, tick_start_real;
 	x_timerq_t timerq[static_cast<int>(x_smbd_timer_t::LAST)];
+	pthread_t signal_handler_thread;
 } g_smbd;
 
 static inline x_timerq_t &get_timerq(x_smbd_timer_t timer_id)
@@ -44,9 +47,10 @@ x_evtmgmt_t *g_evtmgmt = nullptr;
 static void main_loop()
 {
 	snprintf(task_name, sizeof task_name, "MAIN");
-	for (;;) {
+	while (!g_smbd.stopped) {
 		x_evtmgmt_dispatch(g_evtmgmt);
 	}
+	/* TODO clean up */
 }
 
 x_auth_t *x_smbd_create_auth(const void *sec_buf, size_t sec_len)
@@ -62,6 +66,32 @@ enum {
 	X_SMBD_MAX_TCON = 1024,
 	X_SMBD_MAX_REQUEST = 64 * 1024,
 };
+
+static void *signal_handler_func(void *arg)
+{
+	snprintf(task_name, sizeof task_name, "SIGHAND");
+	for (;;) {
+		sigset_t sigmask;
+		sigemptyset(&sigmask);
+		sigaddset(&sigmask, SIGTERM);
+		sigaddset(&sigmask, SIGHUP);
+
+		int signo = 0;
+		int ret = sigwait(&sigmask, &signo);
+		if (ret != 0) {
+			X_LOG_ERR("sigwait ret %d", ret);
+			continue;
+		}
+		if (signo == SIGHUP) {
+			x_smbd_conf_reload();
+		} else {
+			X_LOG_ERR("sigwait catch %d, exiting", signo);
+			break;
+		}
+	}
+	g_smbd.stopped = true;
+	return nullptr;
+}
 
 static void init_smbd()
 {
@@ -94,6 +124,18 @@ static void init_smbd()
 		X_ASSERT(setrlimit(RLIMIT_NOFILE, &rl_nofile) == 0);
 	}
 
+	signal(SIGPIPE, SIG_IGN);
+	sigset_t sigmask, osigmask;
+	sigemptyset(&sigmask);
+	sigaddset(&sigmask, SIGTERM);
+	sigaddset(&sigmask, SIGHUP);
+	/* block signals for threads */
+	X_ASSERT(pthread_sigmask(SIG_BLOCK, &sigmask, &osigmask) == 0);
+
+	int err = pthread_create(&g_smbd.signal_handler_thread, nullptr,
+			signal_handler_func, nullptr);
+	X_ASSERT(err == 0);
+
 	g_smbd.tpool_async = x_threadpool_create("ASYNC", smbd_conf->async_thread_count);
 	x_threadpool_t *tpool = x_threadpool_create("CLIENT", smbd_conf->client_thread_count);
 	g_smbd.tpool_evtmgmt = tpool;
@@ -113,7 +155,7 @@ static void init_smbd()
 	x_smbd_posixfs_init(max_opens);
 	x_smbd_ctrl_init(g_evtmgmt);
 
-	int err = x_smbd_secrets_init();
+	err = x_smbd_secrets_init();
 	X_ASSERT(err == 0);
 
 	g_smbd.auth_context = x_auth_create_context();
@@ -196,16 +238,15 @@ int main(int argc, char **argv)
 	if (!configfile) {
 		configfile = "/my/samba/etc/smb.conf";
 	}
-	int err = x_smbd_conf_parse(configfile, cmdline_options);
+	int err = x_smbd_conf_init(configfile, cmdline_options);
 	if (err < 0) {
-		fprintf(stderr, "x_smbd_conf_parse failed %d\n", err);
+		fprintf(stderr, "x_smbd_conf_init failed %d\n", err);
 		exit(1);
 	}
 
 	// TODO daemonize
 	(void)daemon;
 
-	signal(SIGPIPE, SIG_IGN);
 	OPENSSL_init();
 	FIPS_mode_set(0);
 
@@ -214,6 +255,8 @@ int main(int argc, char **argv)
 	main_loop();
 
 	x_threadpool_destroy(g_smbd.tpool_evtmgmt);
+	x_threadpool_destroy(g_smbd.tpool_async);
+	pthread_join(g_smbd.signal_handler_thread, nullptr);
 	return 0;
 }
 
