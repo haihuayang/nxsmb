@@ -5,14 +5,16 @@
 #include <mutex>
 #include <condition_variable>
 
-__thread char task_name[8] = "";
+__thread char task_name[16] = "";
 __thread x_tick_t tick_now;
 
 X_DECLARE_MEMBER_TRAITS(job_dlink_traits, x_job_t, dlink)
 
 struct x_threadpool_t
 {
-	x_threadpool_t(unsigned int count) : threads{count} { }
+	x_threadpool_t(std::string &&name, unsigned int count)
+		: name{name}, threads{count} { }
+	const std::string name;
 	std::vector<std::thread> threads;
 	std::mutex mutex;
 	std::condition_variable cond;
@@ -49,7 +51,8 @@ static inline x_job_t *__threadpool_get(x_threadpool_t *tp)
 /* TODO exit gracely */
 static void thread_func(x_threadpool_t *tpool, uint32_t no)
 {
-	snprintf(task_name, sizeof task_name, "T%03d", no);
+	snprintf(task_name, sizeof task_name, "%s-%03d", tpool->name.c_str(),
+			no);
 	tick_now = x_tick_now();
 	for (;;) {
 		x_job_t *job = __threadpool_get(tpool);
@@ -93,9 +96,9 @@ static void thread_func(x_threadpool_t *tpool, uint32_t no)
 	}
 }
 
-x_threadpool_t *x_threadpool_create(unsigned int count)
+x_threadpool_t *x_threadpool_create(std::string name, unsigned int count)
 {
-	x_threadpool_t *tpool = new x_threadpool_t{count};
+	x_threadpool_t *tpool = new x_threadpool_t{std::move(name), count};
 	for (uint32_t i = 0; i < count; ++i) {
 		tpool->threads[i] = std::thread(thread_func, tpool, i);
 	}

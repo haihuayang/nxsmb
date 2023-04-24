@@ -25,7 +25,7 @@ static const x_timer_upcall_cbs_t test_timer_cbs = {
 
 int main()
 {
-	x_threadpool_t *tpool = x_threadpool_create(2);
+	x_threadpool_t *tpool = x_threadpool_create("test", 2);
 	x_evtmgmt_t *evtmgmt = x_evtmgmt_create(tpool, 0, 1024);
 
 	test_timer_t test_timer;

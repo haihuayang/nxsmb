@@ -12,11 +12,11 @@
 #include <atomic>
 #include <string>
 
-extern __thread char task_name[8];
+extern __thread char task_name[16];
 extern __thread x_tick_t tick_now;
 
 struct x_threadpool_t;
-x_threadpool_t *x_threadpool_create(unsigned int count);
+x_threadpool_t *x_threadpool_create(std::string name, unsigned int count);
 void x_threadpool_destroy(x_threadpool_t *);
 
 struct x_job_ops_t;

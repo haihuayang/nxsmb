@@ -94,8 +94,8 @@ static void init_smbd()
 		X_ASSERT(setrlimit(RLIMIT_NOFILE, &rl_nofile) == 0);
 	}
 
-	g_smbd.tpool_async = x_threadpool_create(smbd_conf->async_thread_count);
-	x_threadpool_t *tpool = x_threadpool_create(smbd_conf->client_thread_count);
+	g_smbd.tpool_async = x_threadpool_create("ASYNC", smbd_conf->async_thread_count);
+	x_threadpool_t *tpool = x_threadpool_create("CLIENT", smbd_conf->client_thread_count);
 	g_smbd.tpool_evtmgmt = tpool;
 
 	g_evtmgmt = x_evtmgmt_create(tpool, 0, max_fd);
