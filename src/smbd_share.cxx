@@ -1,5 +1,6 @@
 
 #include "smbd_share.hxx"
+#include "smbd_volume.hxx"
 #include <fcntl.h>
 #include <unistd.h>
 #include <openssl/sha.h>
@@ -37,17 +38,10 @@ static int smbd_volume_read(int vol_fd,
 		uint16_t &vol_id,
 		int &rootdir_fd, x_smbd_durable_db_t *&durable_db)
 {
-	int fd = openat(vol_fd, "id", O_RDONLY);
-	if (fd < 0) {
-		X_LOG_ERR("cannot open volume id errno=%d", errno);
-		return -errno;
-	}
 	uint16_t id;
-	ssize_t ret = read(fd, &id, sizeof id);
-	close(fd);
-	if (ret != sizeof(id)) {
-		X_LOG_ERR("cannot read volume id ret=%ld, errno=%d", ret, errno);
-		return -errno;
+	int err = x_smbd_volume_read_id(vol_fd, id);
+	if (err) {
+		return err;
 	}
 
 	int rfd = openat(vol_fd, "root", O_RDONLY);
@@ -98,10 +92,10 @@ std::shared_ptr<x_smbd_volume_t> x_smbd_volume_create(
 		}
 	}
 
-	X_LOG_NOTICE("add volume %s with '%s', '%s', '%s', 0x%x",
-			name.c_str(), path.c_str(),
+	X_LOG_NOTICE("add volume '%s' with id=0x%x, node='%s', share='%s', path='%s'",
+			name.c_str(), vol_id,
 			owner_node.c_str(), owner_share.c_str(),
-			vol_id);
+			path.c_str());
 	return std::make_shared<x_smbd_volume_t>(name, path, owner_node,
 			owner_share, create_volume_id(name),
 			vol_id, rootdir_fd, durable_db);

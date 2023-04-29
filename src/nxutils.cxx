@@ -12,6 +12,7 @@
 #include "util_sid.hxx"
 #include "misc.hxx"
 #include <iostream>
+#include "smbd_volume.hxx"
 #include "smbd_share.hxx"
 
 static void usage(const char *progname)
@@ -131,10 +132,8 @@ static int make_volume(const char *path, uint16_t vol_id, bool dfs_root)
 	}
 	close(rootdir_fd);
 
-	int vol_id_fd = openat(vol_fd, "id", O_WRONLY | O_CREAT | O_TRUNC, 0644);
-	X_ASSERT(vol_id_fd >= 0);
-	write(vol_id_fd, &vol_id, sizeof vol_id);
-	close(vol_id_fd);
+	int err = x_smbd_volume_set_id(vol_fd, vol_id);
+	X_ASSERT(err == 0);
 
 	close(vol_fd);
 	return 0;

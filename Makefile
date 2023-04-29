@@ -63,6 +63,7 @@ all: $(TARGET_SET_tests:%=$(TARGET_DIR_out)/tests/%) \
 
 SET_src_smbd_nx := \
 	smbd_replay \
+	smbd_volume \
 	smbd_durable \
 	smbd_file_info \
 	smbd_access \
@@ -123,6 +124,7 @@ SET_src_nxutils := \
 	nxutils \
 	smbd_posixfs_utils \
 	smbd_ntacl \
+	smbd_volume \
 	smbd_durable \
 	util_sid \
 	misc \
