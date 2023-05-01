@@ -270,8 +270,7 @@ static NTSTATUS fsctl_dfs_get_refers_internal(
 	std::string volume;
 	std::shared_ptr<x_smbd_share_t> smbd_share = x_smbd_find_share(share, volume);
 	if (!smbd_share) {
-		X_TODO;
-		// find_service user_share
+		// TODO find_service user_share
 		return NT_STATUS_NOT_FOUND;
 	}
 
