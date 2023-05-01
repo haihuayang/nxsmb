@@ -1251,8 +1251,7 @@ static NTSTATUS auth_krb5_update(x_auth_t *auth, const uint8_t *in_buf, size_t i
 	case GSS_S_CONTINUE_NEEDED:
 		/* we will need a third leg */
 		out.assign((uint8_t *)out_data.value, (uint8_t *)out_data.value + out_data.length);
-		status = NT_STATUS_MORE_PROCESSING_REQUIRED;
-		break;
+		return NT_STATUS_MORE_PROCESSING_REQUIRED;
 	default:
 		DEBUG(1, ("gss_accept_sec_context failed with [%s]\n",
 			  gse_errstr(talloc_tos(), gss_maj, gss_min)));
