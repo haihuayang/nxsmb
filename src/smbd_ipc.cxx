@@ -68,9 +68,12 @@ struct named_pipe_t
 
 struct x_smbd_ipc_object_t
 {
-	x_smbd_ipc_object_t(const std::u16string &name, const x_dcerpc_iface_t *iface);
+	x_smbd_ipc_object_t(const std::u16string &name,
+			const x_dcerpc_iface_t *iface,
+			std::string secondary_address);
 	x_smbd_object_t base;
 	const x_dcerpc_iface_t * const iface;
+	const std::string secondary_address;
 };
 
 static const x_dcerpc_iface_t *find_iface_by_syntax(
@@ -228,7 +231,8 @@ static NTSTATUS process_dcerpc_bind(
 	} else {
 		bind_ack.assoc_group_id = 0x53f0;
 	}
-	bind_ack.secondary_address= "\\PIPE\\" + x_convert_utf16_to_utf8_assert(ipc_object->base.path);
+	bind_ack.secondary_address = ipc_object->secondary_address;
+		//"\\PIPE\\" + x_convert_utf16_to_utf8_assert(ipc_object->base.path);
 
 	x_ndr_push(bind_ack, body_output, ndr_flags);
 	resp_type = idl::DCERPC_PKT_BIND_ACK;
@@ -551,7 +555,7 @@ static void ipc_object_op_destroy(x_smbd_object_t *smbd_object,
 }
 
 #define USTR(x) u##x
-#define DECL_RPC(x) { USTR(#x), &x_smbd_dcerpc_##x }
+#define DECL_RPC(x) { USTR(#x), &x_smbd_dcerpc_##x, "\\PIPE\\" #x }
 static x_smbd_ipc_object_t ipc_object_tbl[] = {
 	DECL_RPC(srvsvc),
 	DECL_RPC(wkssvc),
@@ -749,8 +753,10 @@ static std::shared_ptr<x_smbd_volume_t> ipc_get_volume()
 }
 
 x_smbd_ipc_object_t::x_smbd_ipc_object_t(const std::u16string &path,
-		const x_dcerpc_iface_t *iface)
+		const x_dcerpc_iface_t *iface,
+		std::string secondary_address)
 	: base(ipc_get_volume(), 0, path), iface(iface)
+	, secondary_address(std::move(secondary_address))
 {
 	base.flags = x_smbd_object_t::flag_initialized;
 	base.type = x_smbd_object_t::type_pipe;
