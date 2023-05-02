@@ -737,7 +737,7 @@ static const x_smbd_object_ops_t x_smbd_ipc_object_ops = {
 static std::shared_ptr<x_smbd_volume_t> ipc_create_volume()
 {
 	std::shared_ptr<x_smbd_volume_t> smbd_volume = 
-		x_smbd_volume_create("IPC$", "", "", "IPC$");
+		x_smbd_volume_create({0, 0}, "IPC$", u"IPC$", "", "");
 	smbd_volume->set_ops(&x_smbd_ipc_object_ops);
 	return smbd_volume;
 }
@@ -761,7 +761,7 @@ x_smbd_ipc_object_t::x_smbd_ipc_object_t(const std::u16string &path,
 struct ipc_share_t : x_smbd_share_t
 {
 	ipc_share_t()
-		: x_smbd_share_t("ipc$", 0)
+		: x_smbd_share_t({0, 0}, "ipc$", u"IPC$", 0)
 		, smbd_volume(ipc_get_volume())
 	{
 	}
@@ -809,10 +809,3 @@ int x_smbd_ipc_init()
 {
 	return 0;
 }
-#if 0
-static std::unique_lock<std::mutex> ipc_lock_object(x_smbd_object_t *psmbd_object)
-{
-	return {};
-}
-#endif
-

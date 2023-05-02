@@ -2802,7 +2802,7 @@ NTSTATUS posixfs_object_op_ioctl(
 			x_smb2_file_object_id_buffer_t *data = (x_smb2_file_object_id_buffer_t *)state->out_buf->data;
 			data->object_id.data[0] = X_H2LE64(posixfs_object->get_meta().fsid);
 			data->object_id.data[1] = X_H2LE64(posixfs_object->get_meta().inode);
-			auto volume_uuid = smbd_object->smbd_volume->volume_uuid;
+			auto volume_uuid = smbd_object->smbd_volume->uuid;
 			data->birth_volume_id.data[0] = X_H2LE64(volume_uuid.data[0]); 
 			data->birth_volume_id.data[1] = X_H2LE64(volume_uuid.data[1]); 
 			data->birth_volume_id = data->object_id;

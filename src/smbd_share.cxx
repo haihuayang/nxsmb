@@ -6,6 +6,7 @@
 #include <openssl/sha.h>
 #include <sys/stat.h>
 
+#if 0
 static x_smb2_uuid_t create_volume_id(const std::string &name)
 {
 	x_smb2_uuid_t uuid[4];
@@ -15,15 +16,14 @@ static x_smb2_uuid_t create_volume_id(const std::string &name)
 	SHA512_Final((unsigned char *)&uuid[0], &sctx);
 	return uuid[0];
 }
-
-x_smbd_volume_t::x_smbd_volume_t(const std::string &n, const std::string &p,
-		const std::string &on, const std::string &os,
-		const x_smb2_uuid_t &vol_uuid,
-		uint16_t vol_id, int rfd,
-		x_smbd_durable_db_t *durable_db)
-	: name(n), path(p), owner_node(on), owner_share(os)
-	, volume_uuid(vol_uuid), volume_id(vol_id), rootdir_fd(rfd)
-	, smbd_durable_db(durable_db)
+#endif
+x_smbd_volume_t::x_smbd_volume_t(const x_smb2_uuid_t &uuid,
+		const std::string &name,
+		std::u16string &&name_u16,
+		const std::string &path,
+		const std::string &owner_node)
+	: uuid(uuid), name(name), name_u16(name_u16)
+	, path(path), owner_node(owner_node)
 {
 }
 
@@ -70,35 +70,48 @@ static int smbd_volume_read(int vol_fd,
 }
 
 std::shared_ptr<x_smbd_volume_t> x_smbd_volume_create(
-		const std::string &name, const std::string &path,
-		const std::string &owner_node, const std::string &owner_share)
+		const x_smb2_uuid_t &uuid,
+		const std::string &name, std::u16string &&name_u16,
+		const std::string &path, const std::string &owner_node)
+{
+	X_LOG_NOTICE("add volume '%s' node='%s', path='%s'",
+			name.c_str(),
+			owner_node.c_str(),
+			path.c_str());
+	return std::make_shared<x_smbd_volume_t>(uuid, name, std::move(name_u16),
+			path, owner_node);
+}
+
+int x_smbd_volume_init(x_smbd_volume_t &smbd_volume)
 {
 	uint16_t vol_id = 0xffffu;
 	int rootdir_fd = -1;
 	x_smbd_durable_db_t *durable_db;
 
-	if (!path.empty()) {
-		int vol_fd = open(path.c_str(), O_RDONLY);
+	if (!smbd_volume.path.empty()) {
+		int vol_fd = open(smbd_volume.path.c_str(), O_RDONLY);
 		if (vol_fd < 0) {
-			X_LOG_ERR("cannot open volume %s, %d", name.c_str(), errno);
-			return nullptr;
+			X_LOG_ERR("cannot open volume %s, %d",
+					smbd_volume.name.c_str(), errno);
+			return -1;
 		}
 
 		int ret = smbd_volume_read(vol_fd, vol_id, rootdir_fd, durable_db);
 		close(vol_fd);
 		if (ret < 0) {
-			X_LOG_ERR("cannot read volume %s, %d", name.c_str(), -ret);
-			return nullptr;
+			X_LOG_ERR("cannot read volume %s, %d",
+					smbd_volume.name.c_str(), -ret);
+			return -1;
 		}
 	}
 
-	X_LOG_NOTICE("add volume '%s' with id=0x%x, node='%s', share='%s', path='%s'",
-			name.c_str(), vol_id,
-			owner_node.c_str(), owner_share.c_str(),
-			path.c_str());
-	return std::make_shared<x_smbd_volume_t>(name, path, owner_node,
-			owner_share, create_volume_id(name),
-			vol_id, rootdir_fd, durable_db);
+	X_LOG_NOTICE("volume '%s' with id=0x%x",
+			smbd_volume.name.c_str(), vol_id);
+
+	smbd_volume.rootdir_fd = rootdir_fd;
+	smbd_volume.volume_id = vol_id;
+	smbd_volume.smbd_durable_db = durable_db;
+	return 0;
 }
 
 NTSTATUS x_smbd_volume_get_fd_path(std::string &path,

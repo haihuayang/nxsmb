@@ -130,7 +130,7 @@ SET_src_nxutils := \
 	misc \
 
 $(TARGET_DIR_out)/bin/smbd_nx: $(SET_src_smbd_nx:%=$(TARGET_DIR_out)/src/%.o) $(TARGET_SET_lib:%=$(TARGET_DIR_out)/lib%.a)
-	$(CXX) -g $(TARGET_LDFLAGS) -o $@ $^ $(TARGET_LDFLAGS_dependent) -ltdb -lcrypto -lz -lcom_err -lpthread -lresolv -ldl
+	$(CXX) -g $(TARGET_LDFLAGS) -o $@ $^ $(TARGET_LDFLAGS_dependent) -ltdb -lcrypto -lz -lcom_err -luuid -lpthread -lresolv -ldl
 
 $(TARGET_DIR_out)/bin/nxutils: $(SET_src_nxutils:%=$(TARGET_DIR_out)/src/%.o) $(TARGET_SET_lib:%=$(TARGET_DIR_out)/lib%.a)
 	$(CXX) -g $(TARGET_LDFLAGS) -o $@ $^ -lpthread -lresolv -ldl

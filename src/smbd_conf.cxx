@@ -4,6 +4,7 @@
 #include <fstream>
 #include <fcntl.h>
 #include <unistd.h>
+#include <uuid/uuid.h>
 
 #define PARSE_FATAL(fmt, ...) do { \
 	X_PANIC(fmt "\n", __VA_ARGS__); \
@@ -14,68 +15,46 @@ struct share_spec_t
 	static const uint32_t default_dfs_referral_ttl = 300;
 
 	share_spec_t(const std::string &name) : name(name) { }
-	std::string name;
+
+	x_smb2_uuid_t uuid;
+	const std::string name;
 	uint32_t share_flags = x_smbd_share_t::f_durable_handle;
 	bool dfs_test = false;
 	uint32_t dfs_referral_ttl = default_dfs_referral_ttl;
-	std::vector<std::string> volumes;
+	std::vector<x_smb2_uuid_t> volumes;
 };
 
 struct volume_spec_t
 {
-	volume_spec_t(std::string &&name, std::string &&path, std::string &&node)
-		: name(name), path(path), owner_node(node)
+	volume_spec_t(const x_smb2_uuid_t &uuid, std::string &&name,
+			std::string &&path, std::string &&node)
+		: uuid(uuid), name(name)
+		, path(path), owner_node(node)
 	{
 	}
 
-	const std::string name, path;
+	const x_smb2_uuid_t uuid;
+	const std::string name;
+	const std::string path;
 	const std::string owner_node;
-	std::string owner_share; // dfs share use the whole volume,
-				// so they cannot share the volume
+	std::string owner_share;
 };
 
 static const char *g_configfile;
 static std::vector<std::pair<std::string, std::string>> g_cmdline_options;
 static std::shared_ptr<x_smbd_conf_t> g_smbd_conf;
-#if 0
-static int hex(char c)
+
+static bool parse_uuid(x_smb2_uuid_t &uuid, const std::string &str)
 {
-	if (c >= '0' && c <= '9') {
-		return c - '0';
-	} else if (c >= 'a' && c <= 'f') {
-		return c - 'a' + 10;
-	} else if (c >= 'A' && c <= 'F') {
-		return c - 'A' + 10;
-	} else {
-		return -1;
+	uuid_t tmp;
+	int err = uuid_parse(str.c_str(), tmp);
+	if (err) {
+		return false;
 	}
+	memcpy(&uuid, tmp, sizeof uuid);
+	return true;
 }
 
-static int parse_uuid(const std::string &str, uuid_t &uuid)
-{
-	if (str.size() != 36) {
-		return -1;
-	}
-	const char *p = str.c_str();
-
-	for (auto &uv: uuid) {
-		if (*p == '-') {
-			++p;
-		}
-		int val = hex(*p);
-		if (val < 0) {
-			return -1;
-		}
-		++p;
-		int val2 = hex(*p);
-		if (val2 < 0) {
-			return -1;
-		}
-		uv = uint8_t((val << 4) | val2);
-	}
-	return 0;
-}
-#endif
 static bool parse_bool(const std::string &str)
 {
 	return str == "yes";
@@ -135,6 +114,21 @@ static std::vector<std::string> parse_stringlist(const std::string &str)
 	return split_string(str);
 }
 
+static bool parse_uuidlist(std::vector<x_smb2_uuid_t> &uuid_list,
+		const std::string &str)
+{
+	std::vector<x_smb2_uuid_t> ret;
+	for (auto s: split_string(str)) {
+		x_smb2_uuid_t uuid;
+		if (!parse_uuid(uuid, s)) {
+			return false;
+		}
+		ret.push_back(uuid);
+	}
+	uuid_list.swap(ret);
+	return true;
+}
+
 static bool parse_volume_map(std::vector<volume_spec_t> &volumes, const std::string &str)
 {
 	for (auto &token: split_string(str)) {
@@ -142,18 +136,29 @@ static bool parse_volume_map(std::vector<volume_spec_t> &volumes, const std::str
 		if (sep == std::string::npos) {
 			return false;
 		}
-		std::string volume = token.substr(0, sep);
-		++sep;
-		auto sep2 = token.find(':', sep);
-		if (sep2 == std::string::npos) {
+		std::string uuid_str = token.substr(0, sep);
+		x_smb2_uuid_t uuid;
+		if (!parse_uuid(uuid, uuid_str)) {
+			X_LOG_ERR("invalid uuid '%s'", uuid_str.c_str());
 			return false;
 		}
-		std::string node = token.substr(sep, sep2 - sep);
-		std::string path = token.substr(sep2 + 1);
 
-		volumes.emplace_back(std::move(volume),
-				token.substr(sep2 + 1),
-				token.substr(sep, sep2 - sep));
+		auto begin = ++sep;
+		sep = token.find(':', begin);
+		if (sep == std::string::npos) {
+			return false;
+		}
+		std::string name = token.substr(begin, sep - begin);
+
+		begin = ++sep;
+		sep = token.find(':', begin);
+		if (sep == std::string::npos) {
+			return false;
+		}
+
+		volumes.emplace_back(uuid, std::move(name),
+				token.substr(sep + 1),
+				token.substr(begin, sep - begin));
 	}
 	return true;
 }
@@ -177,7 +182,7 @@ static const std::shared_ptr<x_smbd_volume_t> smbd_volume_find(
 		const x_smbd_conf_t &smbd_conf,
 		const std::string volume_name)
 {
-	for (auto &volume: smbd_conf.volumes) {
+	for (auto &volume: smbd_conf.smbd_volumes) {
 		if (volume->name == volume_name) {
 			return volume;
 		}
@@ -192,32 +197,50 @@ static void add_share(x_smbd_conf_t &smbd_conf,
 	smbd_conf.shares[smbd_share->name] = smbd_share;
 }
 
-static void add_share(x_smbd_conf_t &smbd_conf,
-		const share_spec_t &share_spec)
+static bool add_share(x_smbd_conf_t &smbd_conf,
+		const share_spec_t &share_spec,
+		std::vector<std::shared_ptr<x_smbd_volume_t>> &smbd_volumes)
 {
+	std::u16string name_u16;
+	if (!x_convert_utf8_to_utf16_new(share_spec.name, name_u16)) {
+		X_LOG_ERR("Invalid share name '%s'", share_spec.name.c_str());
+	}
 	std::shared_ptr<x_smbd_share_t> share;
 	if (false) {
-	} else if (share_spec.volumes.size() > 1) {
-		std::vector<std::shared_ptr<x_smbd_volume_t>> volumes;
-		for (auto &vn: share_spec.volumes) {
-			auto smbd_volume = smbd_volume_find(smbd_conf,
-					vn);
-			X_ASSERT(smbd_volume);
-			volumes.push_back(std::move(smbd_volume));
-		}
-		share = x_smbd_dfs_share_create(smbd_conf, share_spec.name,
+	} else if (smbd_volumes.size() > 1) {
+		share = x_smbd_dfs_share_create(smbd_conf,
+				share_spec.uuid,
+				share_spec.name,
+				std::move(name_u16),
 				share_spec.share_flags,
-				volumes);
+				std::move(smbd_volumes));
 	} else {
-		auto smbd_volume = smbd_volume_find(smbd_conf,
-				share_spec.volumes[0]);
-		X_ASSERT(smbd_volume);
-		share = x_smbd_simplefs_share_create(share_spec.name,
+		share = x_smbd_simplefs_share_create(
+				share_spec.uuid,
+				share_spec.name,
+				std::move(name_u16),
 				share_spec.share_flags,
-				smbd_volume);
+				smbd_volumes[0]);
 	}
+	if (!share) {
+		X_LOG_ERR("Failed create share '%s'", share_spec.name.c_str());
+		return false;
+	}
+
+	for (auto &smbd_volume: smbd_volumes) {
+		if (smbd_volume->owner_share) {
+			X_LOG_ERR("Share '%s' cannot use volume '%s', owned by share '%s'",
+					share_spec.name.c_str(),
+					smbd_volume->name.c_str(),
+					smbd_volume->owner_share->name.c_str());
+			return false;
+		}
+		smbd_volume->owner_share = share;
+	}
+
 	share->dfs_referral_ttl = share_spec.dfs_referral_ttl;
 	add_share(smbd_conf, share);
+	return true;
 }
 
 static void load_ifaces(x_smbd_conf_t &smbd_conf)
@@ -356,13 +379,6 @@ static bool parse_share_param(share_spec_t &share_spec,
 			X_PANIC("Unknown share type %s",
 					value.c_str());
 		}
-	} else if (name == "uuid") {
-		uuid_t uuid;
-		int ret = parse_uuid(value, uuid);
-		if (ret < 0) {
-			X_PANIC("Invalid uuid %s", value.c_str());
-		}
-		smbd_share.uuid = uuid;
 	} else if (name == "msdfs proxy") {
 		smbd_share.msdfs_proxy = value;
 #endif
@@ -386,8 +402,16 @@ static bool parse_share_param(share_spec_t &share_spec,
 			X_PANIC("Unexpected boolean %s at %s:%u",
 					value.c_str(), path, lineno);
 		}
+	} else if (name == "my:uuid") {
+		if (!parse_uuid(share_spec.uuid, value)) {
+			X_PANIC("Share '%s' invalid uuid '%s'",
+					share_spec.name.c_str(), value.c_str());
+		}
 	} else if (name == "my:volumes") {
-		share_spec.volumes = parse_stringlist(value);
+		if (!parse_uuidlist(share_spec.volumes, value)) {
+			X_PANIC("Share '%s' invalid volumes",
+					share_spec.name.c_str(), value.c_str());
+		}
 	} else if (name == "dfs test") {
 		share_spec.dfs_test = parse_bool(value);
 	} else {
@@ -462,12 +486,13 @@ static std::string get_samba_path(const std::string &config_path)
 	return config_path.substr(0, sep);
 }
 
-static volume_spec_t *find_volume_spec(std::vector<volume_spec_t> &volume_specs,
-		const std::string &volume_name)
+static std::shared_ptr<x_smbd_volume_t> find_volume_by_uuid(
+		x_smbd_conf_t &smbd_conf,
+		const x_smb2_uuid_t &uuid)
 {
-	for (auto &vs: volume_specs) {
-		if (vs.name == volume_name) {
-			return &vs;
+	for (auto &smbd_volume: smbd_conf.smbd_volumes) {
+		if (smbd_volume->uuid == uuid) {
+			return smbd_volume;
 		}
 	}
 	return nullptr;
@@ -550,36 +575,43 @@ static int parse_smbconf(x_smbd_conf_t &smbd_conf, bool reload)
 
 	load_ifaces(smbd_conf);
 
+	for (auto &vs: volume_specs) {
+		std::u16string name_u16;
+		if (!x_convert_utf8_to_utf16_new(vs.name, name_u16)) {
+			X_LOG_ERR("invalid volume name '%s'", vs.name.c_str());
+			return -1;
+		}
+		smbd_conf.smbd_volumes.push_back(x_smbd_volume_create(vs.uuid,
+				       	vs.name, std::move(name_u16),
+					vs.path, vs.owner_node));
+	}
+
 	for (auto &ss: share_specs) {
 		X_ASSERT(!ss->volumes.empty());
-		for (auto &volume_name: ss->volumes) {
-			volume_spec_t *vs = find_volume_spec(volume_specs, volume_name);
-			if (!vs) {
+		std::vector<std::shared_ptr<x_smbd_volume_t>> smbd_volumes;
+		for (auto &volume_uuid: ss->volumes) {
+			std::shared_ptr<x_smbd_volume_t> smbd_volume = 
+				find_volume_by_uuid(smbd_conf, volume_uuid);
+			if (!smbd_volume) {
 				X_LOG_ERR("cannot find volume %s for share %s",
-						volume_name.c_str(),
+						smbd_volume->name.c_str(),
 						ss->name.c_str());
 				return -1;
 			}
-			if (!vs->owner_share.empty()) {
-				X_LOG_ERR("share %s cannot own volume %s, "
-						"already used by %s",
-						ss->name.c_str(),
-						volume_name.c_str(),
-						vs->owner_share.c_str());
-				return -1;
-			}
-			vs->owner_share = ss->name;
+			smbd_volumes.push_back(smbd_volume);
+		}
+		if (!add_share(smbd_conf, *ss, smbd_volumes)) {
+			return -1;
 		}
 	}
 
-	for (auto &vs: volume_specs) {
-		smbd_conf.volumes.push_back(x_smbd_volume_create(vs.name,
-					vs.path, vs.owner_node, vs.owner_share));
+	for (auto &smbd_volume: smbd_conf.smbd_volumes) {
+		int err = x_smbd_volume_init(*smbd_volume);
+		if (err != 0) {
+			return err;
+		}
 	}
 
-	for (auto &ss: share_specs) {
-		add_share(smbd_conf, *ss);
-	}
 	add_share(smbd_conf, x_smbd_ipc_share_create());
 	return 0;
 }
@@ -599,15 +631,10 @@ std::shared_ptr<x_smbd_share_t> x_smbd_find_share(const std::string &name,
 		if (*in_share_s == '-') {
 			std::string vol_tmp = in_share_s + 1;
 			auto smbd_volume = smbd_volume_find(*smbd_conf, vol_tmp);
-			if (!smbd_volume || smbd_volume->owner_share.empty()) {
+			if (!smbd_volume) {
 				return nullptr;
 			}
-			auto it = smbd_conf->shares.find(smbd_volume->owner_share);
-			if (it == smbd_conf->shares.end()) {
-				return nullptr;
-			}
-			volume = std::move(vol_tmp);
-			return it->second;
+			return smbd_volume->owner_share;
 		}
 	}
 
@@ -669,7 +696,7 @@ x_smbd_conf_t::x_smbd_conf_t()
 
 int x_smbd_restore_durable(const x_smbd_conf_t &smbd_conf)
 {
-	for (auto smbd_volume: smbd_conf.volumes) {
+	for (auto smbd_volume: smbd_conf.smbd_volumes) {
 		/* TODO only for local volume */
 		x_smbd_volume_restore_durable(smbd_volume);
 	}
@@ -683,9 +710,9 @@ x_smbd_durable_t *x_smbd_share_lookup_durable(
 {
 	uint64_t vol_id = id_persistent >> 48;
 	auto smbd_conf = x_smbd_conf_get();
-	for (auto &vol: smbd_conf->volumes) {
+	for (auto &vol: smbd_conf->smbd_volumes) {
 		if (vol->volume_id == vol_id &&
-				vol->owner_share == smbd_share->name) {
+				vol->owner_share == smbd_share) {
 			void *ret = x_smbd_durable_db_lookup(
 					vol->smbd_durable_db,
 					id_persistent);
@@ -703,7 +730,7 @@ x_smbd_durable_t *x_smbd_share_lookup_durable(
 std::shared_ptr<x_smbd_volume_t> x_smbd_find_volume(x_smbd_conf_t &smbd_conf,
 		const std::string &name)
 {
-	for (auto &vol: smbd_conf.volumes) {
+	for (auto &vol: smbd_conf.smbd_volumes) {
 		if (vol->name == name) {
 			return vol;
 		}

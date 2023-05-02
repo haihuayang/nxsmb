@@ -39,12 +39,11 @@ struct x_dfs_referral_resp_t
 struct x_smbd_object_ops_t;
 struct x_smbd_volume_t
 {
-	x_smbd_volume_t(const std::string &name, const std::string &path,
-			const std::string &owner_node,
-			const std::string &owner_share,
-			const x_smb2_uuid_t &vol_uuid,
-			uint16_t vol_id, int rootdir_fd,
-			x_smbd_durable_db_t *durable_db);
+	x_smbd_volume_t(const x_smb2_uuid_t &uuid,
+			const std::string &name,
+			std::u16string &&name_u16,
+			const std::string &path,
+			const std::string &owner_node);
 
 	~x_smbd_volume_t();
 
@@ -54,12 +53,15 @@ struct x_smbd_volume_t
 	}
 
 	const x_smbd_object_ops_t *ops = nullptr;
-	const std::string name, path;
+	const x_smb2_uuid_t uuid;
+	const std::string name;
+	const std::u16string name_u16;
+	const std::string path;
 	const std::string owner_node;
-	const std::string owner_share;
-	const x_smb2_uuid_t volume_uuid;
-	const uint16_t volume_id;
-	const int rootdir_fd;
+
+	std::shared_ptr<x_smbd_share_t> owner_share;
+	uint16_t volume_id;
+	int rootdir_fd;
 	std::atomic<uint32_t> watch_tree_cnt{0};
 
 	x_smbd_durable_db_t *smbd_durable_db;
@@ -74,8 +76,10 @@ struct x_smbd_share_t
 		f_abe = 8,
 	};
 
-	x_smbd_share_t(const std::string &name, uint32_t flags)
-		: name(name), flags(flags)
+	x_smbd_share_t(const x_smb2_uuid_t &uuid, const std::string &name,
+			std::u16string &&name_u16,
+			uint32_t flags)
+		: uuid(uuid), name(name), name_u16(name_u16), flags(flags)
 	{
 	}
 	virtual ~x_smbd_share_t() { }
@@ -113,17 +117,20 @@ struct x_smbd_share_t
 		return flags & f_abe;
 	}
 
+	const x_smb2_uuid_t uuid;
 	std::string name;
+	std::u16string name_u16;
 	uint32_t flags;
 	bool dfs_test = false;
 	uint32_t max_connections = 0;
 	uint32_t dfs_referral_ttl;
-	std::vector<std::string> vgs;
 };
 
 std::shared_ptr<x_smbd_volume_t> x_smbd_volume_create(
-		const std::string &name, const std::string &path,
-		const std::string &owner_node, const std::string &owner_share);
+		const x_smb2_uuid_t &uuid,
+		const std::string &name, std::u16string &&name_u16,
+		const std::string &path, const std::string &owner_node);
+int x_smbd_volume_init(x_smbd_volume_t &smbd_volume);
 
 NTSTATUS x_smbd_volume_get_fd_path(std::string &ret,
 		const x_smbd_volume_t &smbd_volumen,
@@ -136,11 +143,15 @@ int x_smbd_volume_set_durable_timeout(x_smbd_volume_t &smbd_volume,
 std::shared_ptr<x_smbd_share_t> x_smbd_ipc_share_create();
 std::shared_ptr<x_smbd_share_t> x_smbd_dfs_share_create(
 		const x_smbd_conf_t &smbd_conf,
+		const x_smb2_uuid_t &uuid,
 		const std::string &name,
+		std::u16string &&name_u16,
 		uint32_t share_flags,
-		const std::vector<std::shared_ptr<x_smbd_volume_t>> &smbd_volumes);
+		std::vector<std::shared_ptr<x_smbd_volume_t>> &&smbd_volumes);
 std::shared_ptr<x_smbd_share_t> x_smbd_simplefs_share_create(
+		const x_smb2_uuid_t &uuid,
 		const std::string &name,
+		std::u16string &&name_u16,
 		uint32_t share_flags,
 		const std::shared_ptr<x_smbd_volume_t> &smbd_volume);
 int x_smbd_simplefs_mktld(const std::shared_ptr<x_smbd_user_t> &smbd_user,

@@ -62,9 +62,11 @@ static std::pair<std::string, std::string> find_node_by_volume(const x_smbd_conf
 struct dfs_share_t : x_smbd_share_t
 {
 	dfs_share_t(const x_smbd_conf_t &smbd_conf,
+			const x_smb2_uuid_t &uuid,
 			const std::string &name,
+			std::u16string &&name_u16,
 			uint32_t share_flags,
-			const std::vector<std::shared_ptr<x_smbd_volume_t>> &volumes);
+			std::vector<std::shared_ptr<x_smbd_volume_t>> &&volumes);
 	uint8_t get_type() const override { return X_SMB2_SHARE_TYPE_DISK; }
 	bool is_dfs() const override { return true; }
 	NTSTATUS resolve_path(std::shared_ptr<x_smbd_volume_t> &smbd_volume,
@@ -1058,10 +1060,12 @@ NTSTATUS dfs_share_t::get_dfs_referral(x_dfs_referral_resp_t &dfs_referral_resp,
 }
 
 dfs_share_t::dfs_share_t(const x_smbd_conf_t &smbd_conf,
+		const x_smb2_uuid_t &uuid,
 		const std::string &name,
+		std::u16string &&name_u16,
 		uint32_t share_flags,
-		const std::vector<std::shared_ptr<x_smbd_volume_t>> &smbd_volumes)
-	: x_smbd_share_t(name, share_flags), volumes(smbd_volumes)
+		std::vector<std::shared_ptr<x_smbd_volume_t>> &&smbd_volumes)
+	: x_smbd_share_t(uuid, name, std::move(name_u16), share_flags), volumes(smbd_volumes)
 {
 	X_ASSERT(smbd_volumes.size() > 1);
 	bool first = true;
@@ -1081,11 +1085,14 @@ dfs_share_t::dfs_share_t(const x_smbd_conf_t &smbd_conf,
 
 std::shared_ptr<x_smbd_share_t> x_smbd_dfs_share_create(
 		const x_smbd_conf_t &smbd_conf,
+		const x_smb2_uuid_t &uuid,
 		const std::string &name,
+		std::u16string &&name_u16,
 		uint32_t share_flags,
-		const std::vector<std::shared_ptr<x_smbd_volume_t>> &smbd_volumes)
+		std::vector<std::shared_ptr<x_smbd_volume_t>> &&smbd_volumes)
 {
-	return std::make_shared<dfs_share_t>(smbd_conf, name, share_flags,
-			smbd_volumes);
+	return std::make_shared<dfs_share_t>(smbd_conf, uuid,
+			name, std::move(name_u16),
+			share_flags, std::move(smbd_volumes));
 }
 
