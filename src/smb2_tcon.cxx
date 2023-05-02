@@ -208,8 +208,7 @@ NTSTATUS x_smb2_process_tcon(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 
 	X_LOG_OP("%ld TCON %s", smbd_requ->in_smb2_hdr.mid, in_path.c_str());
 
-	std::string volume;
-	auto smbd_share = x_smbd_find_share(share, volume);
+	auto [smbd_share, smbd_volume] = x_smbd_find_share(share);
 	if (!smbd_share) {
 		RETURN_OP_STATUS(smbd_requ, NT_STATUS_BAD_NETWORK_NAME);
 	}
@@ -217,7 +216,7 @@ NTSTATUS x_smb2_process_tcon(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 	bool is_dfs = false;
 	if (smbd_share->is_dfs()) {
 		is_dfs = true;
-	} else if (volume.size()) {
+	} else if (!smbd_volume) {
 		RETURN_OP_STATUS(smbd_requ, NT_STATUS_BAD_NETWORK_NAME);
 	}
 
@@ -233,14 +232,16 @@ NTSTATUS x_smb2_process_tcon(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 		RETURN_OP_STATUS(smbd_requ, NT_STATUS_ACCESS_DENIED);
 	}
 
-	auto smbd_tcon = x_smbd_tcon_create(smbd_requ->smbd_sess, smbd_share, volume, share_access);
+	auto smbd_tcon = x_smbd_tcon_create(smbd_requ->smbd_sess, smbd_share,
+			std::move(smbd_volume), share_access);
 	if (!smbd_tcon) {
 		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INSUFFICIENT_RESOURCES);
 	}
 
 	uint32_t out_share_flags = 0;
 	uint32_t out_capabilities = 0;
-	if (is_dfs && (volume.size() == 0 || volume == "-")) {
+	/* TODO or dfs's root volume */
+	if (is_dfs && !smbd_volume) {
 		out_share_flags |= X_SMB2_SHAREFLAG_DFS|X_SMB2_SHAREFLAG_DFS_ROOT;
 		out_capabilities |= X_SMB2_SHARE_CAP_DFS;
 	}

@@ -267,8 +267,7 @@ static NTSTATUS fsctl_dfs_get_refers_internal(
 	if (!x_convert_utf16_to_utf8_new(in_share_begin, in_share_end, share, x_tolower)) {
 		return NT_STATUS_ILLEGAL_CHARACTER;
 	}
-	std::string volume;
-	std::shared_ptr<x_smbd_share_t> smbd_share = x_smbd_find_share(share, volume);
+	auto [smbd_share, smbd_volume] = x_smbd_find_share(share);
 	if (!smbd_share) {
 		// TODO find_service user_share
 		return NT_STATUS_NOT_FOUND;

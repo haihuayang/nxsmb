@@ -99,7 +99,8 @@ struct x_smbd_share_t
 			bool dfs,
 			const char16_t *in_path_begin,
 			const char16_t *in_path_end,
-			const std::string &volume) = 0;
+			const std::shared_ptr<x_smbd_volume_t> &tcon_volume) = 0;
+	virtual std::shared_ptr<x_smbd_volume_t> find_volume(const std::string &name) const = 0;
 
 	bool is_read_only() const {
 		return flags & f_read_only;

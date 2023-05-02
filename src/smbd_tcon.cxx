@@ -16,11 +16,11 @@ struct x_smbd_tcon_t
 { 
 	x_smbd_tcon_t(x_smbd_sess_t *smbd_sess,
 			const std::shared_ptr<x_smbd_share_t> &share,
-			const std::string &volume,
+			std::shared_ptr<x_smbd_volume_t> &&volume,
 			uint32_t share_access)
 		: tick_create(tick_now), share_access(share_access)
 		, smbd_sess(x_smbd_ref_inc(smbd_sess)), smbd_share(share)
-		, volume(volume)
+		, smbd_volume(volume)
        	{
 		X_SMBD_COUNTER_INC(tcon_create, 1);
 	}
@@ -41,7 +41,7 @@ struct x_smbd_tcon_t
 	std::atomic<uint32_t> num_open = 0;
 	x_smbd_sess_t * const smbd_sess;
 	const std::shared_ptr<x_smbd_share_t> smbd_share;
-	const std::string volume;
+	const std::shared_ptr<x_smbd_volume_t> smbd_volume;
 	std::mutex mutex;
 	x_ddlist_t open_list;
 };
@@ -61,10 +61,11 @@ void x_smbd_ref_dec(x_smbd_tcon_t *smbd_tcon)
 
 x_smbd_tcon_t *x_smbd_tcon_create(x_smbd_sess_t *smbd_sess, 
 		const std::shared_ptr<x_smbd_share_t> &smbshare,
-		const std::string &volume,
+		std::shared_ptr<x_smbd_volume_t> &&volume,
 		uint32_t share_access)
 {
-	x_smbd_tcon_t *smbd_tcon = new x_smbd_tcon_t(smbd_sess, smbshare, volume, share_access);
+	x_smbd_tcon_t *smbd_tcon = new x_smbd_tcon_t(smbd_sess, smbshare,
+			std::move(volume), share_access);
 	if (!g_smbd_tcon_table->store(smbd_tcon, smbd_tcon->tid)) {
 		delete smbd_tcon;
 		return nullptr;
@@ -167,7 +168,7 @@ NTSTATUS x_smbd_tcon_resolve_path(x_smbd_tcon_t *smbd_tcon,
 			dfs,
 			in_path.data(),
 			in_path.data() + in_path.length(),
-			smbd_tcon->volume);
+			smbd_tcon->smbd_volume);
 	if (NT_STATUS_IS_OK(status)) {
 		smbd_share = smbd_tcon->smbd_share;
 	}
@@ -255,10 +256,10 @@ int x_smbd_tcon_table_init(uint32_t count)
 
 std::string x_smbd_tcon_get_volume_label(const x_smbd_tcon_t *smbd_tcon)
 {
-	if (smbd_tcon->volume.empty()) {
-		return smbd_tcon->smbd_share->name;
+	if (smbd_tcon->smbd_volume) {
+		return smbd_tcon->smbd_volume->name;
 	} else {
-		return smbd_tcon->volume;
+		return smbd_tcon->smbd_share->name;
 	}
 }
 
@@ -327,7 +328,7 @@ static WERROR smbd_tcon_enum(idl::srvsvc_NetConnEnum &arg, std::vector<T> &array
 		std::string volume;
 		// TODO case
 		std::string share_name = x_convert_utf16_to_utf8_safe(*arg.path);
-		smbd_share = x_smbd_find_share(share_name, volume);
+		auto [smbd_share, smbd_volume] = x_smbd_find_share(share_name);
 		if (!smbd_share) {
 			X_LOG_WARN("fail to find share '%s'", share_name.c_str());
 			return WERR_INVALID_NAME;

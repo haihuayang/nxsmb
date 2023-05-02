@@ -76,7 +76,7 @@ struct dfs_share_t : x_smbd_share_t
 			bool dfs,
 			const char16_t *in_path_begin,
 			const char16_t *in_path_end,
-			const std::string &volume) override;
+			const std::shared_ptr<x_smbd_volume_t> &tcon_volume) override;
 	NTSTATUS get_dfs_referral(x_dfs_referral_resp_t &dfs_referral,
 			const char16_t *in_full_path_begin,
 			const char16_t *in_full_path_end,
@@ -84,6 +84,16 @@ struct dfs_share_t : x_smbd_share_t
 			const char16_t *in_server_end,
 			const char16_t *in_share_begin,
 			const char16_t *in_share_end) const override;
+	std::shared_ptr<x_smbd_volume_t> find_volume(const std::string &name) const override
+	{
+		if (name[0] == '-') {
+			return root_volume;
+		} else {
+			/* TODO */
+			return nullptr;
+		}
+	}
+
 
 	const std::vector<std::shared_ptr<x_smbd_volume_t>> volumes;
 	std::shared_ptr<x_smbd_volume_t> root_volume;
@@ -192,13 +202,14 @@ static NTSTATUS dfs_volume_resolve_path(
 		bool dfs,
 		const char16_t *in_path_begin,
 		const char16_t *in_path_end,
-		const std::string &volume)
+		const std::shared_ptr<x_smbd_volume_t> &tcon_volume)
 {
+#if 0
 	auto it = dfs_share.local_data_volume.find(volume);
 	if (it == dfs_share.local_data_volume.end()) {
 		return NT_STATUS_OBJECT_NAME_NOT_FOUND;
 	}
-
+#endif
 	const char16_t *path_start;
 	if (dfs) {
 		path_start = parse_dfs_path(in_path_begin, in_path_end);
@@ -225,7 +236,7 @@ static NTSTATUS dfs_volume_resolve_path(
 	}
 	open_priv_data = dfs_open_type_none;
 	path.assign(path_start, in_path_end);
-	smbd_volume = it->second;
+	smbd_volume = tcon_volume;
 	return NT_STATUS_OK;
 }
 
@@ -907,11 +918,11 @@ NTSTATUS dfs_share_t::resolve_path(std::shared_ptr<x_smbd_volume_t> &smbd_volume
 		bool dfs,
 		const char16_t *in_path_begin,
 		const char16_t *in_path_end,
-		const std::string &volume)
+		const std::shared_ptr<x_smbd_volume_t> &tcon_volume)
 {
-	if (volume.empty()) {
+	if (!tcon_volume) {
 		return NT_STATUS_PATH_NOT_COVERED;
-	} else if (volume == "-") {
+	} else if (tcon_volume == root_volume) {
 		return dfs_root_resolve_path(*this, smbd_volume, out_path,
 				path_priv_data, open_priv_data,
 				dfs, in_path_begin, in_path_end);
@@ -919,7 +930,7 @@ NTSTATUS dfs_share_t::resolve_path(std::shared_ptr<x_smbd_volume_t> &smbd_volume
 		return dfs_volume_resolve_path(*this, smbd_volume, out_path,
 				path_priv_data, open_priv_data,
 				dfs, in_path_begin, in_path_end,
-				volume);
+				tcon_volume);
 	}
 }
 

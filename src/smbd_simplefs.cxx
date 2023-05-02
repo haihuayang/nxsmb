@@ -119,7 +119,7 @@ struct simplefs_share_t : x_smbd_share_t
 			bool dfs,
 			const char16_t *in_path_begin,
 			const char16_t *in_path_end,
-			const std::string &volume) override;
+			const std::shared_ptr<x_smbd_volume_t> &tcon_volume) override;
 	NTSTATUS get_dfs_referral(x_dfs_referral_resp_t &dfs_referral,
 			const char16_t *in_full_path_begin,
 			const char16_t *in_full_path_end,
@@ -129,6 +129,13 @@ struct simplefs_share_t : x_smbd_share_t
 			const char16_t *in_share_end) const override
 	{
 		return NT_STATUS_FS_DRIVER_REQUIRED;
+	}
+	std::shared_ptr<x_smbd_volume_t> find_volume(const std::string &name) const override
+	{
+		if (name[0] == '-') {
+			return nullptr;
+		}
+		return smbd_volume;
 	}
 
 	std::shared_ptr<x_smbd_volume_t> smbd_volume;
@@ -142,7 +149,7 @@ NTSTATUS simplefs_share_t::resolve_path(
 		bool dfs,
 		const char16_t *in_path_begin,
 		const char16_t *in_path_end,
-		const std::string &volume)
+		const std::shared_ptr<x_smbd_volume_t> &tcon_volume)
 {
 	const char16_t *path_start;
 	if (dfs) {

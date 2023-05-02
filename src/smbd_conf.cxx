@@ -621,8 +621,8 @@ std::shared_ptr<x_smbd_conf_t> x_smbd_conf_get()
 	return g_smbd_conf;
 }
 
-std::shared_ptr<x_smbd_share_t> x_smbd_find_share(const std::string &name,
-		std::string &volume)
+std::pair<std::shared_ptr<x_smbd_share_t>, std::shared_ptr<x_smbd_volume_t>>
+x_smbd_find_share(const std::string &name)
 {
 	auto smbd_conf = x_smbd_conf_get();
 	const char *in_share_s = name.c_str();
@@ -632,21 +632,20 @@ std::shared_ptr<x_smbd_share_t> x_smbd_find_share(const std::string &name,
 			std::string vol_tmp = in_share_s + 1;
 			auto smbd_volume = smbd_volume_find(*smbd_conf, vol_tmp);
 			if (!smbd_volume) {
-				return nullptr;
+				return {nullptr, nullptr};
 			}
-			return smbd_volume->owner_share;
+			return {smbd_volume->owner_share, smbd_volume};
 		}
 	}
 
 	auto it = smbd_conf->shares.find(in_share_s);
 	if (it == smbd_conf->shares.end()) {
-		return nullptr;
+		return {nullptr, nullptr};
 	}
 
-	if (in_share_s != name.c_str()) {
-		volume = "-";
-	}
-	return it->second;
+	std::shared_ptr<x_smbd_share_t> smbd_share = it->second;
+	std::shared_ptr<x_smbd_volume_t> smbd_volume = smbd_share->find_volume(name);
+	return {smbd_share, smbd_volume};
 
 	/* TODO USER_SHARE */
 }
