@@ -777,8 +777,8 @@ static bool check_ads_share_access(x_smbd_object_t *smbd_object,
 				other_open = sharemode.open_list.next(other_open)) {
 			if (!(other_open->open_state.share_access & X_SMB2_FILE_SHARE_DELETE)) {
 				X_LOG_NOTICE("ads %s of %s share-access %d violate access 0x%x",
-						x_convert_utf16_to_utf8_safe(smbd_stream->name).c_str(),
-						x_convert_utf16_to_utf8_safe(smbd_object->path).c_str(),
+						x_str_todebug(smbd_stream->name).c_str(),
+						x_str_todebug(smbd_object->path).c_str(),
 						other_open->open_state.share_access,
 						granted);
 
@@ -1521,14 +1521,14 @@ static NTSTATUS smbd_open_create_intl(x_smbd_open_t **psmbd_open,
 					(state->in_desired_access & (idl::SEC_FILE_WRITE_DATA | idl::SEC_FILE_APPEND_DATA))) {
 				X_LOG_NOTICE("deny access 0x%x to '%s' due to readonly 0x%x",
 						state->in_desired_access,
-						x_convert_utf16_to_utf8_safe(smbd_object->path).c_str(),
+						x_str_todebug(smbd_object->path).c_str(),
 						smbd_object->meta.file_attributes);
 				return NT_STATUS_ACCESS_DENIED;
 			}
 
 			if (smbd_object->meta.file_attributes & X_SMB2_FILE_ATTRIBUTE_REPARSE_POINT) {
 				X_LOG_DBG("object '%s' is reparse_point",
-						x_convert_utf16_to_utf8_safe(smbd_object->path).c_str());
+						x_str_todebug(smbd_object->path).c_str());
 				return NT_STATUS_PATH_NOT_COVERED;
 			}
 		}
@@ -1768,9 +1768,9 @@ NTSTATUS x_smbd_open_op_create(x_smbd_requ_t *smbd_requ,
 		}
 
 		X_LOG_DBG("resolve_path(%s) to %s, %ld, %ld",
-			x_convert_utf16_to_utf8_safe(state->in_path).c_str(),
-			x_convert_utf16_to_utf8_safe(path).c_str(),
-			path_priv_data, open_priv_data);
+				x_str_todebug(state->in_path).c_str(),
+				x_str_todebug(path).c_str(),
+				path_priv_data, open_priv_data);
 
 		status = x_smbd_open_object(&state->smbd_object,
 				&state->smbd_stream,
@@ -2008,9 +2008,9 @@ static std::string x_smbd_open_get_path(const x_smbd_open_t *smbd_open)
 {
 	x_smbd_object_t *smbd_object = smbd_open->smbd_object;
 	if (!smbd_open->smbd_stream) {
-		return x_convert_utf16_to_utf8_safe(smbd_object->path);
+		return x_str_todebug(smbd_object->path);
 	} else {
-		return x_convert_utf16_to_utf8_safe(smbd_object->path + u":" + smbd_open->smbd_stream->name);
+		return x_str_todebug(smbd_object->path + u":" + smbd_open->smbd_stream->name);
 	}
 }
 
@@ -2109,7 +2109,8 @@ static inline void smbd_open_to_open_info(std::vector<idl::srvsvc_NetFileInfo3> 
 	if (smbd_user) {
 		user_name = smbd_user->account_name;
 	} else {
-		user_name = std::make_shared<std::u16string>(x_convert_utf8_to_utf16_assert(
+		user_name = std::make_shared<std::u16string>(
+				x_str_convert_assert<std::u16string>(
 					x_tostr(open_state.owner)));
 	}
 

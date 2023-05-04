@@ -869,7 +869,7 @@ static std::string safe_utf16_ptr_to_utf8(const std::shared_ptr<std::u16string> 
 {
 	std::string ret;
 	if (u16s) {
-		if (!x_convert_utf16_to_utf8_new(*u16s, ret)) {
+		if (!x_str_convert(ret, *u16s)) {
 			X_LOG_DBG("Invalid u16string");
 		}
 	}

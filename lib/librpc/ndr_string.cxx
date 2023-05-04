@@ -100,7 +100,7 @@ x_ndr_off_t x_ndr_scalars_string(const std::u16string &val, x_ndr_push_t &ndr, x
 {
 	if (flags & (LIBNDR_FLAG_STR_ASCII|LIBNDR_FLAG_STR_UTF8)) {
 		std::string utf8_val;
-		if (!x_convert_utf16_to_utf8_new(val, utf8_val)) {
+		if (!x_str_convert(utf8_val, val)) {
 			return -NDR_ERR_CHARCNV;
 		}
 		return x_ndr_scalars_string_intl(utf8_val, ndr, bpos, epos, flags, add_nul_empty);
@@ -117,7 +117,7 @@ x_ndr_off_t x_ndr_scalars_string(std::u16string &val, x_ndr_pull_t &ndr, x_ndr_o
 		if (bpos < 0) {
 			return bpos;
 		}
-		if (!x_convert_utf8_to_utf16_new(tmp, val)) {
+		if (!x_str_convert(val, tmp)) {
 			return -NDR_ERR_CHARCNV;
 		}
 		return bpos;
@@ -128,7 +128,7 @@ x_ndr_off_t x_ndr_scalars_string(std::u16string &val, x_ndr_pull_t &ndr, x_ndr_o
 
 void x_ndr_ostr_string(const std::u16string &val, x_ndr_ostr_t &ndr, uint32_t flags)
 {
-	ndr.os << "u\"" << x_convert_utf16_to_utf8_safe(val) << '"';
+	ndr.os << "u\"" << x_str_todebug(val) << '"';
 }
 
 x_ndr_off_t x_ndr_scalars_string(const std::string &val, x_ndr_push_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, bool add_nul_empty)
@@ -137,7 +137,7 @@ x_ndr_off_t x_ndr_scalars_string(const std::string &val, x_ndr_push_t &ndr, x_nd
 		return x_ndr_scalars_string_intl(val, ndr, bpos, epos, flags, add_nul_empty);
 	} else {
 		std::u16string tmp;
-		if (!x_convert_utf8_to_utf16_new(val, tmp)) {
+		if (!x_str_convert(tmp, val)) {
 			return -NDR_ERR_CHARCNV;
 		}
 		return x_ndr_scalars_string_intl(tmp, ndr, bpos, epos, flags, add_nul_empty);
@@ -154,7 +154,7 @@ x_ndr_off_t x_ndr_scalars_string(std::string &val, x_ndr_pull_t &ndr, x_ndr_off_
 		if (bpos < 0) {
 			return bpos;
 		}
-		if (!x_convert_utf16_to_utf8_new(tmp, val)) {
+		if (!x_str_convert(val, tmp)) {
 			return -NDR_ERR_CHARCNV;
 		}
 		return bpos;

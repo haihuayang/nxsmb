@@ -85,7 +85,7 @@ static std::u16string machine_name_from_saddr(const x_sockaddr_t &saddr)
 	} else {
 		X_ASSERT(false);
 	}
-	return x_convert_utf8_to_utf16_assert(buf);
+	return x_str_convert_assert<std::u16string>(std::string(buf));
 }
 
 x_smbd_conn_t::x_smbd_conn_t(int fd, const x_sockaddr_t &saddr,

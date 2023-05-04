@@ -388,7 +388,7 @@ bool x_smbd_tcon_link_open(x_smbd_tcon_t *smbd_tcon, x_dlink_t *link);
 bool x_smbd_tcon_unlink_open(x_smbd_tcon_t *smbd_tcon, x_dlink_t *link);
 bool x_smbd_tcon_disconnect(x_smbd_tcon_t *smbd_tcon);
 void x_smbd_tcon_unlinked(x_dlink_t *link, x_smbd_sess_t *smbd_sess, bool shutdown);
-std::string x_smbd_tcon_get_volume_label(const x_smbd_tcon_t *smbd_tcon);
+std::u16string x_smbd_tcon_get_volume_label(const x_smbd_tcon_t *smbd_tcon);
 NTSTATUS x_smbd_tcon_resolve_path(x_smbd_tcon_t *smbd_tcon,
 		const std::u16string &in_path,
 		bool dfs,

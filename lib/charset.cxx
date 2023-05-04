@@ -5,7 +5,7 @@ std::pair<bool, uint64_t> x_strcase_hash(const char16_t *begin, const char16_t *
 {
 	uint64_t hash = 0;
 	while (begin != end) {
-		auto [uc, next] = x_utf16_pull_unicode(begin, end);
+		auto [uc, next] = x_str_pull_unicode(begin, end);
 		if (!next) {
 			return { false, 0 };
 		}

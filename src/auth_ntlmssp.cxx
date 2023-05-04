@@ -911,8 +911,11 @@ static NTSTATUS ntlmssp_post_auth(x_auth_ntlmssp_t *ntlmssp, x_auth_info_t &auth
 	// wbc_create_auth_info
 	const auto &auth = wbresp.header.data.auth;
 	auth_info.user_flags = auth.info3.user_flgs;
-	auth_info.account_name = std::make_shared<std::u16string>(
-			x_convert_utf8_to_utf16_safe(auth.info3.user_name));
+	std::u16string user_name_u16;
+	if (!x_str_convert(user_name_u16, std::string(auth.info3.user_name))) {
+		X_LOG_WARN("invalid usesr_name '%s'", auth.info3.user_name);
+	}
+	auth_info.account_name = std::make_shared<std::u16string>(std::move(user_name_u16));
 	auth_info.full_name = auth.info3.full_name;
 	auth_info.logon_domain = auth.info3.logon_dom;
 	auth_info.acct_flags = auth.info3.acct_flags;
@@ -1531,7 +1534,11 @@ static inline NTSTATUS handle_negotiate(x_auth_ntlmssp_t &auth_ntlmssp,
 	}
 
 	/* TODO target_name illegal charset */
-	chal_msg.TargetName = std::make_shared<std::string>(x_convert_utf16_to_utf8_safe(target_name));
+	std::string target_name_u8;
+	if (!x_str_convert(target_name_u8, target_name)) {
+		X_LOG_WARN("Invalid target_name");
+	}
+	chal_msg.TargetName = std::make_shared<std::string>(std::move(target_name_u8));
 	chal_msg.NegotiateFlags = idl::NEGOTIATE(chal_flags);
 	chal_msg.ServerChallenge = cryptkey;
 

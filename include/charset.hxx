@@ -39,6 +39,22 @@ static inline char32_t x_tolower(char32_t val)
 	return x_lowcase_table[val];
 }
 
+struct x_toupper_t
+{
+	char32_t operator()(char32_t v) const noexcept
+	{
+		return x_toupper(v);
+	}
+};
+
+struct x_tolower_t
+{
+	char32_t operator()(char32_t v) const noexcept
+	{
+		return x_tolower(v);
+	}
+};
+
 struct x_identity_t
 {
 	char32_t operator()(char32_t v) const noexcept
@@ -47,7 +63,7 @@ struct x_identity_t
 	}
 };
 
-static inline std::pair<char32_t, const char16_t *> x_utf16_pull_unicode(
+static inline std::pair<char32_t, const char16_t *> x_str_pull_unicode(
 		const char16_t *str, const char16_t *end)
 {
 	char32_t uc0 = *str;
@@ -65,12 +81,15 @@ static inline std::pair<char32_t, const char16_t *> x_utf16_pull_unicode(
 	return {uc0, str + 1};
 }
 
-static inline std::pair<char32_t, const char8_t *> x_utf8_pull_unicode(
-		const char8_t *str, const char8_t *end)
+static inline std::pair<char32_t, const char *> x_str_pull_unicode(
+		const char *str_, const char *end_)
 {
+	const char8_t *str = (const char8_t *)str_;
+	const char8_t *end = (const char8_t *)end_;
+
 	char32_t uc0 = *str;
 	if ((uc0 & 0x80) == 0) {
-		return {uc0, str + 1};
+		return {uc0, (const char *)str + 1};
 	}
 
 	if ((uc0 & 0xe0) == 0xc0) {
@@ -86,7 +105,7 @@ static inline std::pair<char32_t, const char8_t *> x_utf8_pull_unicode(
 		if (uc0 < 0x80) {
 			return {x_unicode_invalid, nullptr};
 		}
-		return {uc0, str + 2};
+		return {uc0, (const char *)str + 2};
 	}
 
 	if ((uc0 & 0xf0) == 0xe0) {
@@ -105,7 +124,7 @@ static inline std::pair<char32_t, const char8_t *> x_utf8_pull_unicode(
 		if (uc0 < 0x800) {
 			return {x_unicode_invalid, nullptr};
 		}
-		return {uc0, str + 3};
+		return {uc0, (const char *)str + 3};
 	}
 
 	if ((uc0 & 0xf8) == 0xf0) {
@@ -129,14 +148,14 @@ static inline std::pair<char32_t, const char8_t *> x_utf8_pull_unicode(
 		if (uc0 < 0x10000) {
 			return {x_unicode_invalid, nullptr};
 		}
-		return {uc0, str + 4};
+		return {uc0, (const char *)str + 4};
 	}
 
 	/* not support 5 or 6 bytes */
 	return {x_unicode_invalid, nullptr};
 }
 
-static inline int x_unicode_push_utf16(char32_t uc, std::u16string &str)
+static inline int x_str_push_unicode(std::u16string &str, char32_t uc)
 {
 	if (uc > 0x10ffffu) {
 		str.push_back(0xfffd);
@@ -153,7 +172,7 @@ static inline int x_unicode_push_utf16(char32_t uc, std::u16string &str)
 	return 1;
 }
 
-static inline int x_unicode_push_utf8(char32_t uc, std::string &str)
+static inline int x_str_push_unicode(std::string &str, char32_t uc)
 {
 	if (uc < 0x80) {
 		str.push_back(x_convert<char>(uc));
@@ -224,114 +243,6 @@ static inline int x_unicode_push_utf8(char32_t uc, std::string &str)
 	return -1;
 }
 
-template <class UnaryOp = x_identity_t>
-bool x_convert_utf16_to_utf8_new(const char16_t *begin, const char16_t *end,
-		std::string &dst, UnaryOp op = {})
-{
-	size_t dst_orig_size = dst.size();
-	while (begin != end) {
-		auto [uc, next] = x_utf16_pull_unicode(begin, end);
-		if (!next) {
-			dst.resize(dst_orig_size);
-			return false;
-		}
-
-		uc = op(uc);
-		x_unicode_push_utf8(uc, dst);
-		begin = next;
-	}
-	return true;
-}
-
-template <class UnaryOp = x_identity_t>
-bool x_convert_utf16_to_utf8_new(const std::u16string &src,
-		std::string &dst, UnaryOp op = {})
-{
-	const char16_t *begin = src.data();
-	return x_convert_utf16_to_utf8_new(begin, begin + src.size(),
-			dst, std::forward<UnaryOp>(op));
-}
-
-template <class UnaryOp = x_identity_t>
-std::string x_convert_utf16_to_utf8_safe(const char16_t *begin, const char16_t *end,
-		UnaryOp op = {})
-{
-	std::string ret;
-	if (!x_convert_utf16_to_utf8_new(begin, end, ret, std::forward<UnaryOp>(op))) {
-		ret = "[INVALID_UTF8]";
-	}
-	return ret;
-}
-
-template <class UnaryOp = x_identity_t>
-std::string x_convert_utf16_to_utf8_safe(const std::u16string &src, UnaryOp op = {})
-{
-	std::string ret;
-	if (!x_convert_utf16_to_utf8_new(src, ret, std::forward<UnaryOp>(op))) {
-		ret = "[INVALID_UTF8]";
-	}
-	return ret;
-}
-
-template <class UnaryOp = x_identity_t>
-std::string x_convert_utf16_to_utf8_assert(const std::u16string &src, UnaryOp op = {})
-{
-	std::string ret;
-	const char16_t *begin = src.data();
-	X_ASSERT(x_convert_utf16_to_utf8_new(begin, begin + src.size(),
-				ret, std::forward<UnaryOp>(op)));
-	return ret;
-}
-
-template <class UnaryOp = x_identity_t>
-bool x_convert_utf8_to_utf16_new(const char8_t *begin, const char8_t *end,
-		std::u16string &dst, UnaryOp op = {})
-{
-	size_t dst_orig_size = dst.size();
-	while (begin != end) {
-		auto [uc, next] = x_utf8_pull_unicode(begin, end);
-		if (!next) {
-			dst.resize(dst_orig_size);
-			return false;
-		}
-
-		uc = op(uc);
-		x_unicode_push_utf16(uc, dst);
-		begin = next;
-	}
-	return true;
-}
-
-template <class UnaryOp = x_identity_t>
-bool x_convert_utf8_to_utf16_new(const std::string src,
-		std::u16string &dst, UnaryOp op = {})
-{
-	const char8_t *begin = (const char8_t *)src.data();
-	return x_convert_utf8_to_utf16_new(begin, begin + src.size(),
-			dst, std::forward<UnaryOp>(op));
-}
-
-template <class UnaryOp = x_identity_t>
-std::u16string x_convert_utf8_to_utf16_assert(const std::string src,
-		UnaryOp op = {})
-{
-	std::u16string ret;
-	const char8_t *begin = (const char8_t *)src.data();
-	X_ASSERT(x_convert_utf8_to_utf16_new(begin, begin + src.size(),
-				ret, std::forward<UnaryOp>(op)));
-	return ret;
-}
-
-template <class UnaryOp = x_identity_t>
-std::u16string x_convert_utf8_to_utf16_safe(const std::string &src, UnaryOp op = {})
-{
-	std::u16string ret;
-	if (!x_convert_utf8_to_utf16_new(src, ret, std::forward<UnaryOp>(op))) {
-		ret = u"[INVALID_UTF16]";
-	}
-	return ret;
-}
-
 static inline std::u16string x_utf16le_decode(const char16_t *begin,
 		const char16_t *end)
 {
@@ -383,12 +294,12 @@ static inline bool x_strcase_equal(const char16_t *s1, const char16_t *s2, size_
 	const char16_t *s1end = s1 + size;
 	const char16_t *s2end = s2 + size;
 	while (s1 != s1end) {
-		auto [uc1, next1] = x_utf16_pull_unicode(s1, s1end);
+		auto [uc1, next1] = x_str_pull_unicode(s1, s1end);
 		if (!next1) {
 			/* not valid utf16, failback the byte compare */
 			return memcmp(s1, s2, (s1end - s1) * sizeof(char16_t));
 		}
-		auto [uc2, next2] = x_utf16_pull_unicode(s2, s2end);
+		auto [uc2, next2] = x_str_pull_unicode(s2, s2end);
 		if (!next2) {
 			return false;
 		}
@@ -411,17 +322,17 @@ static inline bool x_strcase_equal(const std::u16string &s1, const std::u16strin
 	return x_strcase_equal(s1.data(), s2.data(), size);
 }
 
-static inline bool x_strcase_equal(const char8_t *s1, const char8_t *s2, size_t size)
+static inline bool x_strcase_equal(const char *s1, const char *s2, size_t size)
 {
-	const char8_t *s1end = s1 + size;
-	const char8_t *s2end = s2 + size;
+	const char *s1end = s1 + size;
+	const char *s2end = s2 + size;
 	while (s1 != s1end) {
-		auto [uc1, next1] = x_utf8_pull_unicode(s1, s1end);
+		auto [uc1, next1] = x_str_pull_unicode(s1, s1end);
 		if (!next1) {
 			/* not valid utf8, failback the byte compare */
 			return memcmp(s1, s2, (s1end - s1) * sizeof(char8_t));
 		}
-		auto [uc2, next2] = x_utf8_pull_unicode(s2, s2end);
+		auto [uc2, next2] = x_str_pull_unicode(s2, s2end);
 		if (!next2) {
 			return false;
 		}
@@ -441,53 +352,7 @@ static inline bool x_strcase_equal(const std::string &s1, const std::string &s2)
 	if (size != s2.size()) {
 		return false;
 	}
-	return x_strcase_equal((const char8_t *)s1.data(), (const char8_t *)s2.data(), size);
-}
-
-static inline std::string x_str_toupper(const std::string &s)
-{
-	std::string ret;
-	ret.reserve(s.size());
-	const char8_t *begin = (const char8_t *)s.data();
-	const char8_t *end = begin + s.size();
-	while (begin != end) {
-		auto [uc, next] = x_utf8_pull_unicode(begin, end);
-		if (!next) {
-			/* not valid utf8, failback byte toupper */
-			for ( ; begin != end; ++begin) {
-				ret.push_back((char)std::toupper(*begin));
-			}
-			break;
-		}
-
-		uc = x_toupper(uc);
-		x_unicode_push_utf8(uc, ret);
-		begin = next;
-	}
-	return ret;
-}
-
-static inline std::string x_str_tolower(const std::string &s)
-{
-	std::string ret;
-	ret.reserve(s.size());
-	const char8_t *begin = (const char8_t *)s.data();
-	const char8_t *end = begin + s.size();
-	while (begin != end) {
-		auto [uc, next] = x_utf8_pull_unicode(begin, end);
-		if (!next) {
-			/* not valid utf8, failback byte toupper */
-			for ( ; begin != end; ++begin) {
-				ret.push_back((char)std::toupper(*begin));
-			}
-			break;
-		}
-
-		uc = x_tolower(uc);
-		x_unicode_push_utf8(uc, ret);
-		begin = next;
-	}
-	return ret;
+	return x_strcase_equal(s1.data(), s2.data(), size);
 }
 
 static inline bool x_str_has_wild(const std::u16string &s)
@@ -524,6 +389,97 @@ static inline bool x_str_validate(const std::u16string &str,
 		}
 	}
 	return true;
+}
+
+template <class Dst, class Src, class UnaryOp = x_identity_t>
+bool x_str_convert(Dst &dst, const Src *begin, const Src *end,
+		UnaryOp op = {})
+{
+	size_t dst_orig_size = dst.size();
+	while (begin != end) {
+		auto [uc, next] = x_str_pull_unicode(begin, end);
+		if (!next) {
+			dst.resize(dst_orig_size);
+			return false;
+		}
+
+		uc = op(uc);
+		x_str_push_unicode(dst, uc);
+		begin = next;
+	}
+	return true;
+}
+
+template <class Dst, class Src, class UnaryOp = x_identity_t>
+bool x_str_convert(Dst &dst, const Src &src, UnaryOp op = {})
+{
+	return x_str_convert(dst, src.data(), src.data() + src.size(),
+			std::forward<UnaryOp>(op));
+}
+
+template <class Str>
+static inline bool x_str_toupper(Str &dst, const Str &src)
+{
+	return x_str_convert(dst, src.data(), src.data() + src.size(),
+			x_toupper_t());
+}
+
+template <class Str>
+static inline bool x_str_tolower(Str &dst, const Str &src)
+{
+	return x_str_convert(dst, src.data(), src.data() + src.size(),
+			x_tolower_t());
+}
+
+template <class Str>
+static inline bool x_str_toupper(Str &str)
+{
+	Str ret;
+	if (!x_str_convert(ret, str.data(), str.data() + str.size(),
+				x_toupper_t())) {
+		return false;
+	}
+	str.swap(ret);
+	return true;
+}
+
+template <class Str>
+static inline bool x_str_tolower(Str &str)
+{
+	Str ret;
+	if (!x_str_convert(ret, str.data(), str.data() + str.size(),
+				x_tolower_t())) {
+		return false;
+	}
+	str.swap(ret);
+	return true;
+}
+
+/* TODO return a partial string even it is invalid */
+template <class UnaryOp = x_identity_t>
+std::string x_str_todebug(const char16_t *begin, const char16_t *end,
+		UnaryOp op = {})
+{
+	std::string ret;
+	if (!x_str_convert(ret, begin, end, std::forward<UnaryOp>(op))) {
+		ret = "[INVALID_UTF16]";
+	}
+	return ret;
+}
+
+template <class UnaryOp = x_identity_t>
+std::string x_str_todebug(const std::u16string &str,
+		UnaryOp op = {})
+{
+	return x_str_todebug(str.data(), str.data() + str.size());
+}
+
+template <class Dst, class Src, class UnaryOp = x_identity_t>
+Dst x_str_convert_assert(const Src &src, UnaryOp op = {})
+{
+	Dst ret;
+	X_ASSERT(x_str_convert(ret, src, std::forward<UnaryOp>(op)));
+	return ret;
 }
 
 #endif /* __charset__hxx__ */

@@ -69,7 +69,7 @@ struct x_smbd_conf_t
 	std::vector<x_iface_t> local_ifaces;
 
 	std::vector<uint16_t> dialects{0x311, 0x310, 0x302, 0x210, 0x202};
-	std::map<std::string, std::shared_ptr<x_smbd_share_t>> shares;
+	std::map<std::u16string, std::shared_ptr<x_smbd_share_t>> shares;
 	std::u16string node_l16;
 	std::vector<std::string> nodes;
 	std::vector<std::shared_ptr<x_smbd_volume_t>> smbd_volumes;
@@ -79,7 +79,17 @@ int x_smbd_conf_init(const char *configfile, const std::vector<std::string> &cmd
 int x_smbd_conf_reload();
 std::shared_ptr<x_smbd_conf_t> x_smbd_conf_get();
 std::pair<std::shared_ptr<x_smbd_share_t>, std::shared_ptr<x_smbd_volume_t>>
-x_smbd_find_share(const std::string &name);
+x_smbd_resolve_share(const char16_t *in_share_s, const char16_t *in_share_e);
+
+std::shared_ptr<x_smbd_share_t> x_smbd_find_share(const x_smbd_conf_t &smbd_conf,
+		const char16_t *in_share_s, const char16_t *in_share_e);
+static inline std::shared_ptr<x_smbd_share_t> x_smbd_find_share(
+		const x_smbd_conf_t &smbd_conf,
+		const std::u16string &share_name)
+{
+	return x_smbd_find_share(smbd_conf, share_name.data(), share_name.data() + share_name.size());
+}
+
 std::shared_ptr<x_smbd_volume_t> x_smbd_find_volume(const x_smbd_conf_t &smbd_conf,
 		const x_smb2_uuid_t &volume_uuid);
 

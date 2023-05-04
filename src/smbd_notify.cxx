@@ -126,16 +126,16 @@ void x_smbd_simple_notify_change(
 	if (!NT_STATUS_IS_OK(status)) {
 		X_LOG_DBG("skip notify %d,x%x '%s', '%s'", notify_action,
 				notify_filter,
-				x_convert_utf16_to_utf8_safe(path).c_str(),
-				x_convert_utf16_to_utf8_safe(fullpath).c_str());
+				x_str_todebug(path).c_str(),
+				x_str_todebug(fullpath).c_str());
 		return;
 	}
 
 	X_ASSERT(smbd_object);
 	X_LOG_DBG("notify object %d,x%x '%s', '%s'", notify_action,
 			notify_filter,
-			x_convert_utf16_to_utf8_safe(path).c_str(),
-			x_convert_utf16_to_utf8_safe(fullpath).c_str());
+			x_str_todebug(path).c_str(),
+			x_str_todebug(fullpath).c_str());
 	x_smbd_object_notify_change(smbd_object, notify_action, notify_filter,
 			path.empty() ? 0: x_convert<uint32_t>(path.length() + 1),
 			fullpath, new_fullpath, ignore_lease_key, last_level, 0);

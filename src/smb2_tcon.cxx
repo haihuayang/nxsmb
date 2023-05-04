@@ -184,31 +184,26 @@ NTSTATUS x_smb2_process_tcon(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
 
-	std::string in_path;
-	if (!x_convert_utf16_to_utf8_new((char16_t *)(in_hdr + in_path_offset),
-				(char16_t *)(in_hdr + in_path_offset + in_path_length),
-				in_path, x_tolower)) {
-		RETURN_OP_STATUS(smbd_requ, NT_STATUS_ILLEGAL_CHARACTER);
+	const char16_t *in_path_s = (const char16_t *)(in_hdr + in_path_offset);
+	const char16_t *in_path_e = (const char16_t *)((char *)in_path_s + in_path_length);
+	const char16_t *in_host_s = in_path_s;
+	if (in_path_length >= 4 &&
+			in_host_s[0] == u'\\' && in_host_s[1] == u'\\') {
+		in_host_s += 2;
 	}
 
-	// smbd_smb2_tree_connect
-	const char *in_path_s = in_path.c_str();
-	if (strncmp(in_path_s, "\\\\", 2) == 0) {
-		in_path_s += 2;
-	}
-	const char *in_share_s = strchr(in_path_s, '\\');
-	if (!in_share_s) {
+	const char16_t *in_share_s = x_next_sep(in_host_s, in_path_e, u'\\');
+	if (in_share_s == in_path_e) {
 		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
 
-	std::string host{in_path_s, in_share_s};
+	std::u16string host{in_host_s, in_share_s};
 	++in_share_s;
 
-	std::string share{in_share_s};
+	X_LOG_OP("%ld TCON %s", smbd_requ->in_smb2_hdr.mid,
+			x_str_todebug(in_path_s, in_path_e).c_str());
 
-	X_LOG_OP("%ld TCON %s", smbd_requ->in_smb2_hdr.mid, in_path.c_str());
-
-	auto [smbd_share, smbd_volume] = x_smbd_find_share(share);
+	auto [smbd_share, smbd_volume] = x_smbd_resolve_share(in_share_s, in_path_e);
 	if (!smbd_share) {
 		RETURN_OP_STATUS(smbd_requ, NT_STATUS_BAD_NETWORK_NAME);
 	}

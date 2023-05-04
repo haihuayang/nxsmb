@@ -130,9 +130,9 @@ struct simplefs_share_t : x_smbd_share_t
 	{
 		return NT_STATUS_FS_DRIVER_REQUIRED;
 	}
-	std::shared_ptr<x_smbd_volume_t> find_volume(const std::string &name) const override
+	std::shared_ptr<x_smbd_volume_t> find_volume(const char16_t *in_share_s, const char16_t *in_share_e) const override
 	{
-		if (name[0] == '-') {
+		if (in_share_s[0] == u'-') {
 			return nullptr;
 		}
 		return smbd_volume;

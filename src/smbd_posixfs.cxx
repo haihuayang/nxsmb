@@ -336,7 +336,7 @@ static bool convert_to_unix(std::string &ret, const std::u16string &req_path)
 {
 	/* we suppose file system support case insenctive */
 	/* TODO does smb allow leading '/'? if so need to remove it */
-	return x_convert_utf16_to_utf8_new(req_path, ret, [](char32_t uc) {
+	return x_str_convert(ret, req_path, [](char32_t uc) {
 			return (uc == '\\') ? '/' : uc;
 		});
 }
@@ -345,7 +345,7 @@ static bool convert_from_unix(std::u16string &ret, const std::string &req_path)
 {
 	/* we suppose file system support case insenctive */
 	/* TODO does smb allow leading '/'? if so need to remove it */
-	return x_convert_utf8_to_utf16_new(req_path, ret, [](char32_t uc) {
+	return x_str_convert(ret, req_path, [](char32_t uc) {
 			return (uc == '/') ? '\\' : uc;
 		});
 }
@@ -819,7 +819,7 @@ static NTSTATUS rename_ads_intl(posixfs_object_t *posixfs_object,
 
 	bool collision = false;
 	std::string new_name_utf8;
-	if (!x_convert_utf16_to_utf8_new(new_stream_name, new_name_utf8)) {
+	if (!x_str_convert(new_name_utf8, new_stream_name)) {
 		return NT_STATUS_ILLEGAL_CHARACTER;
 	}
 	posixfs_ads_foreach_1(posixfs_object, [=, &collision] (const char *xattr_name,
@@ -1540,7 +1540,7 @@ static std::pair<bool, posixfs_ads_t *> posixfs_ads_open(
 	
 	if (posixfs_object->exists()) {
 		std::string utf8_name;
-		if (!x_convert_utf16_to_utf8_new(name, utf8_name)) {
+		if (!x_str_convert(utf8_name, name)) {
 			return { false, nullptr };
 		}
 		
@@ -2053,7 +2053,7 @@ static NTSTATUS getinfo_stream_info(const posixfs_object_t *posixfs_object,
 	posixfs_ads_foreach_2(posixfs_object,
 			[&marshall, &marshall_ret] (const char *stream_name, uint64_t eof, uint64_t alloc) {
 			std::u16string name = u":";
-			if (x_convert_utf8_to_utf16_new(stream_name, name)) {
+			if (x_str_convert(name, std::string(stream_name))) {
 				marshall_ret = marshall_stream_info(marshall, name, eof, alloc);
 			} else {
 				X_LOG_ERR("invalid stream_name '%s'", stream_name);
@@ -2482,15 +2482,13 @@ static NTSTATUS getinfo_fs(x_smbd_requ_t *smbd_requ,
 			return NT_STATUS_INFO_LENGTH_MISMATCH;
 		}
 
-		std::string netbios_name = x_smbd_conf_get()->netbios_name_l8;
-		std::string volume = x_smbd_tcon_get_volume_label(smbd_requ->smbd_tcon);
-		size_t hash = std::hash<std::string>{}(netbios_name + ":" + volume);
-		std::u16string u16_volume = x_convert_utf8_to_utf16_assert(volume);
+		std::u16string volume = x_smbd_tcon_get_volume_label(smbd_requ->smbd_tcon);
+		size_t hash = std::hash<std::u16string>{}(volume + u":" + *x_smbd_conf_get()->netbios_name_u16);
 
 		uint32_t output_buffer_length = state.in_output_buffer_length & ~1;
 		size_t buf_size = std::min(size_t(output_buffer_length),
 				offsetof(x_smb2_fs_volume_info_t, label) +
-				u16_volume.length() * 2);
+				volume.length() * 2);
 
 		state.out_data.resize(buf_size);
 		x_smb2_fs_volume_info_t *info =
@@ -2501,7 +2499,7 @@ static NTSTATUS getinfo_fs(x_smbd_requ_t *smbd_requ,
 		info->label_length = X_H2LE32(8);
 		char16_t *buf = info->label;
 		char16_t *buf_end = (char16_t *)((char *)info + buf_size);
-		buf = x_utf16le_encode(u16_volume, buf, buf_end);
+		buf = x_utf16le_encode(volume, buf, buf_end);
 		if (!buf) {
 			return NT_STATUS_BUFFER_OVERFLOW;
 		}
@@ -2511,13 +2509,12 @@ static NTSTATUS getinfo_fs(x_smbd_requ_t *smbd_requ,
 			return NT_STATUS_INFO_LENGTH_MISMATCH;
 		}
 
-		std::string volume = x_smbd_tcon_get_volume_label(smbd_requ->smbd_tcon);
-		std::u16string u16_volume = x_convert_utf8_to_utf16_assert(volume);
+		std::u16string volume = x_smbd_tcon_get_volume_label(smbd_requ->smbd_tcon);
 
 		uint32_t output_buffer_length = state.in_output_buffer_length & ~1;
 		size_t buf_size = std::min(size_t(output_buffer_length),
 				offsetof(x_smb2_fs_label_info_t, label) +
-				u16_volume.length() * 2);
+				volume.length() * 2);
 
 		state.out_data.resize(buf_size);
 		x_smb2_fs_label_info_t *info =
@@ -2525,7 +2522,7 @@ static NTSTATUS getinfo_fs(x_smbd_requ_t *smbd_requ,
 		info->label_length = X_H2LE32(8);
 		char16_t *buf = info->label;
 		char16_t *buf_end = (char16_t *)((char *)info + buf_size);
-		buf = x_utf16le_encode(u16_volume, buf, buf_end);
+		buf = x_utf16le_encode(volume, buf, buf_end);
 		if (!buf) {
 			return NT_STATUS_BUFFER_OVERFLOW;
 		}
@@ -2979,7 +2976,7 @@ static NTSTATUS posixfs_do_qdir(
 		}
 
 		std::u16string u16_name;
-		if (!x_convert_utf8_to_utf16_new(ent_name, u16_name)) {
+		if (!x_str_convert(u16_name, std::string(ent_name))) {
 			X_LOG_ERR("invalid character entry '%s'", ent_name);
 			continue;
 		}
@@ -3331,7 +3328,7 @@ NTSTATUS posixfs_op_object_delete(x_smbd_object_t *smbd_object,
 					const char *xattr_name,
 					const char *stream_name) {
 				std::u16string u16_name;
-				if (x_convert_utf8_to_utf16_new(stream_name, u16_name)) {
+				if (x_str_convert(u16_name, std::string(stream_name))) {
 					changes.push_back(x_smb2_change_t{
 							NOTIFY_ACTION_REMOVED_STREAM,
 							FILE_NOTIFY_CHANGE_STREAM_NAME,
@@ -3484,7 +3481,7 @@ NTSTATUS x_smbd_posixfs_create_object(x_smbd_object_t *smbd_object,
 				std::min(state.in_allocation_size, posixfs_ads_max_length));
 		posixfs_ads_t *posixfs_ads = posixfs_ads_from_smbd_stream(smbd_stream);
 		posixfs_ads->xattr_name = posixfs_get_ads_xattr_name(
-				x_convert_utf16_to_utf8_assert(smbd_stream->name));
+				x_str_convert_assert<std::string>(smbd_stream->name));
 		posixfs_ads_reset(posixfs_object, posixfs_ads, allocation_size);
 		/* TODO change notify */
 	}

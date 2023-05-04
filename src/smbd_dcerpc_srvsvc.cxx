@@ -28,7 +28,7 @@ template <>
 idl::srvsvc_NetShareInfo0 x_smbd_net_get_info<idl::srvsvc_NetShareInfo0>(const x_smbd_share_t &share)
 {
 	return idl::srvsvc_NetShareInfo0{
-		std::make_shared<std::u16string>(x_convert_utf8_to_utf16_assert(share.name)),
+		std::make_shared<std::u16string>(share.name_16),
 	};
 }
 
@@ -36,7 +36,7 @@ template <>
 idl::srvsvc_NetShareInfo1 x_smbd_net_get_info<idl::srvsvc_NetShareInfo1>(const x_smbd_share_t &share)
 {
 	return idl::srvsvc_NetShareInfo1{
-		std::make_shared<std::u16string>(x_convert_utf8_to_utf16_assert(share.name)),
+		std::make_shared<std::u16string>(share.name_16),
 		get_share_type(share),
 		std::make_shared<std::u16string>() // comment
 	};
@@ -46,13 +46,13 @@ template <>
 idl::srvsvc_NetShareInfo2 x_smbd_net_get_info<idl::srvsvc_NetShareInfo2>(const x_smbd_share_t &share)
 {
 	return idl::srvsvc_NetShareInfo2{
-		std::make_shared<std::u16string>(x_convert_utf8_to_utf16_assert(share.name)),
+		std::make_shared<std::u16string>(share.name_16),
 		get_share_type(share),
 		std::make_shared<std::u16string>(),
 		0, // permission
 		get_max_users(share),
 		get_share_current_users(share),
-		std::make_shared<std::u16string>(x_convert_utf8_to_utf16_assert("C:\\" + share.name)),
+		std::make_shared<std::u16string>(u"C:\\" + share.name_16),
 		std::make_shared<std::u16string>(), // password
 	};
 }
@@ -61,7 +61,7 @@ template <>
 idl::srvsvc_NetShareInfo501 x_smbd_net_get_info<idl::srvsvc_NetShareInfo501>(const x_smbd_share_t &share)
 {
 	return idl::srvsvc_NetShareInfo501{
-		std::make_shared<std::u16string>(x_convert_utf8_to_utf16_assert(share.name)),
+		std::make_shared<std::u16string>(share.name_16),
 		get_share_type(share),
 		std::make_shared<std::u16string>(), // comment
 		0
@@ -72,13 +72,13 @@ template <>
 idl::srvsvc_NetShareInfo502 x_smbd_net_get_info<idl::srvsvc_NetShareInfo502>(const x_smbd_share_t &share)
 {
 	return idl::srvsvc_NetShareInfo502{
-		std::make_shared<std::u16string>(x_convert_utf8_to_utf16_assert(share.name)),
+		std::make_shared<std::u16string>(share.name_16),
 		get_share_type(share),
 		std::make_shared<std::u16string>(),
 		0, // permission
 		get_max_users(share),
 		get_share_current_users(share),
-		std::make_shared<std::u16string>(x_convert_utf8_to_utf16_assert("C:\\" + share.name)),
+		std::make_shared<std::u16string>(u"C:\\" + share.name_16),
 		std::make_shared<std::u16string>(), // password
 		{ get_share_security(share.name) },
 	};
@@ -364,8 +364,9 @@ static bool x_smbd_dcerpc_impl_srvsvc_NetShareGetInfo(
 		x_smbd_sess_t *smbd_sess,
 		idl::srvsvc_NetShareGetInfo &arg)
 {
-	std::string share_name = x_convert_utf16_to_utf8_safe(arg.share_name, x_tolower);
-	auto [smbd_share, smbd_volume] = x_smbd_find_share(share_name);
+	const std::shared_ptr<x_smbd_conf_t> smbd_conf = x_smbd_conf_get();
+
+	auto smbd_share = x_smbd_find_share(*smbd_conf, arg.share_name);
 	if (!smbd_share) {
 		arg.__result = WERR_INVALID_NAME;
 		return true;

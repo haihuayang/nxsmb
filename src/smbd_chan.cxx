@@ -141,7 +141,7 @@ static std::ostream &operator<<(std::ostream &os, const x_auth_info_t &auth_info
 		<< ", acct_flags: " << auth_info.acct_flags << std::endl;
 	os << "account_name: \"";
 	if (auth_info.account_name) {
-		os << x_convert_utf16_to_utf8_safe(*auth_info.account_name);
+		os << x_str_todebug(*auth_info.account_name);
 	} else {
 		os << "<NULL>";
 	}

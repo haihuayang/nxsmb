@@ -262,12 +262,7 @@ static NTSTATUS fsctl_dfs_get_refers_internal(
 		return NT_STATUS_INVALID_PARAMETER;
 	}
 
-	auto smbd_conf = x_smbd_conf_get();
-	std::string share;
-	if (!x_convert_utf16_to_utf8_new(in_share_begin, in_share_end, share, x_tolower)) {
-		return NT_STATUS_ILLEGAL_CHARACTER;
-	}
-	auto [smbd_share, smbd_volume] = x_smbd_find_share(share);
+	auto [smbd_share, smbd_volume] = x_smbd_resolve_share(in_share_begin, in_share_end);
 	if (!smbd_share) {
 		// TODO find_service user_share
 		return NT_STATUS_NOT_FOUND;

@@ -254,12 +254,12 @@ int x_smbd_tcon_table_init(uint32_t count)
 	return 0;
 }
 
-std::string x_smbd_tcon_get_volume_label(const x_smbd_tcon_t *smbd_tcon)
+std::u16string x_smbd_tcon_get_volume_label(const x_smbd_tcon_t *smbd_tcon)
 {
 	if (smbd_tcon->smbd_volume) {
-		return smbd_tcon->smbd_volume->name_8;
+		return smbd_tcon->smbd_volume->name_l16;
 	} else {
-		return smbd_tcon->smbd_share->name;
+		return smbd_tcon->smbd_share->name_16;
 	}
 }
 
@@ -323,14 +323,13 @@ static inline void smbd_tcon_to_tcon_info(std::vector<idl::srvsvc_NetConnInfo1> 
 template <typename T>
 static WERROR smbd_tcon_enum(idl::srvsvc_NetConnEnum &arg, std::vector<T> &array)
 {
+	auto smbd_conf = x_smbd_conf_get();
 	std::shared_ptr<x_smbd_share_t> smbd_share;
 	if (arg.path) {
-		std::string volume;
-		// TODO case
-		std::string share_name = x_convert_utf16_to_utf8_safe(*arg.path);
-		auto [smbd_share, smbd_volume] = x_smbd_find_share(share_name);
+		smbd_share = x_smbd_find_share(*smbd_conf, *arg.path);
 		if (!smbd_share) {
-			X_LOG_WARN("fail to find share '%s'", share_name.c_str());
+			X_LOG_WARN("fail to find share '%s'",
+					x_str_todebug(*arg.path).c_str());
 			return WERR_INVALID_NAME;
 		}
 	}

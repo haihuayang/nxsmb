@@ -29,7 +29,7 @@ x_fnmatch_t *x_fnmatch_create(const std::u16string &pattern, bool icase)
 	const std::u16string escapes = u".^$+|[](){}\\";
 	std::string u8 = "^";
 	// TODO not support <>"
-	for (auto c: pattern) {
+	for (char16_t c: pattern) {
 		if (c == u'*') {
 			has_wildcard = true;
 			u8.push_back('.');
@@ -42,7 +42,7 @@ x_fnmatch_t *x_fnmatch_create(const std::u16string &pattern, bool icase)
 			// TODO multibytes
 			u8.push_back(x_convert_assert<char>(c));
 		} else {
-			if (!x_convert_utf16_to_utf8_new(&c, &c + 1, u8)) {
+			if (!x_str_convert(u8, (const char16_t *)&c, (const char16_t *)&c + 1)) {
 				X_TODO;
 				return nullptr;
 			}

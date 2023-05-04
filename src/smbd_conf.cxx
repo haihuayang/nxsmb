@@ -153,7 +153,7 @@ static bool parse_volume_map(std::vector<volume_spec_t> &volumes, const std::str
 		}
 		std::string name = token.substr(begin, sep - begin);
 		std::u16string name_l16;
-		if (!x_convert_utf8_to_utf16_new(name, name_l16, x_tolower)) {
+		if (!x_str_convert(name_l16, name, x_tolower_t())) {
 			X_LOG_ERR("invalid volume name '%s'", name.c_str());
 			return false;
 		}
@@ -165,7 +165,7 @@ static bool parse_volume_map(std::vector<volume_spec_t> &volumes, const std::str
 		}
 		std::string node = token.substr(begin, sep - begin);
 		std::u16string node_l16;
-		if (!x_convert_utf8_to_utf16_new(node, node_l16, x_tolower)) {
+		if (!x_str_convert(node_l16, node, x_tolower_t())) {
 			X_LOG_ERR("invalid node name '%s'", node.c_str());
 			return false;
 		}
@@ -195,10 +195,11 @@ static std::string::size_type rskip(const std::string &s, std::string::size_type
 
 static const std::shared_ptr<x_smbd_volume_t> smbd_volume_find(
 		const x_smbd_conf_t &smbd_conf,
-		const std::string volume_name)
+		const char16_t *vol_s, const char16_t *vol_e)
 {
 	std::u16string volume_name_l16;
-	if (!x_convert_utf8_to_utf16_new(volume_name, volume_name_l16)) {
+	volume_name_l16.reserve(vol_e - vol_s);
+	if (!x_str_convert(volume_name_l16, vol_s, vol_e, x_tolower_t())) {
 		return nullptr;
 	}
 	for (auto &volume: smbd_conf.smbd_volumes) {
@@ -210,10 +211,11 @@ static const std::shared_ptr<x_smbd_volume_t> smbd_volume_find(
 }
 
 static void add_share(x_smbd_conf_t &smbd_conf,
+		const std::u16string name_l16,
 		const std::shared_ptr<x_smbd_share_t> &smbd_share)
 {
 	X_LOG_DBG("add share section %s", smbd_share->name.c_str());
-	smbd_conf.shares[smbd_share->name] = smbd_share;
+	smbd_conf.shares[name_l16] = smbd_share;
 }
 
 static bool add_share(x_smbd_conf_t &smbd_conf,
@@ -221,9 +223,12 @@ static bool add_share(x_smbd_conf_t &smbd_conf,
 		std::vector<std::shared_ptr<x_smbd_volume_t>> &smbd_volumes)
 {
 	std::u16string name_16;
-	if (!x_convert_utf8_to_utf16_new(share_spec.name, name_16)) {
+	std::u16string name_l16;
+	if (!x_str_convert(name_16, share_spec.name)) {
 		X_LOG_ERR("Invalid share name '%s'", share_spec.name.c_str());
 	}
+	X_ASSERT(x_str_tolower(name_l16, name_16));
+
 	std::shared_ptr<x_smbd_share_t> share;
 	if (false) {
 	} else if (smbd_volumes.size() > 1) {
@@ -258,7 +263,7 @@ static bool add_share(x_smbd_conf_t &smbd_conf,
 	}
 
 	share->dfs_referral_ttl = share_spec.dfs_referral_ttl;
-	add_share(smbd_conf, share);
+	add_share(smbd_conf, name_l16, share);
 	return true;
 }
 
@@ -346,7 +351,7 @@ static bool parse_global_param(x_smbd_conf_t &smbd_conf,
 	} else if (name == "private dir") {
 		smbd_conf.private_dir = value;
 	} else if (name == "node") {
-		if (!x_convert_utf8_to_utf16_new(value, smbd_conf.node_l16, x_tolower)) {
+		if (!x_str_convert(smbd_conf.node_l16, value, x_tolower_t())) {
 			X_LOG_ERR("Invalid node '%s'", value.c_str());
 		}
 	} else if (name == "max session expiration") {
@@ -524,7 +529,7 @@ static std::shared_ptr<std::u16string> make_u16string_ptr(const std::string &str
 		UnaryOp &&op = {})
 {
 	std::u16string ustr;
-	if (!x_convert_utf8_to_utf16_new(str, ustr, std::forward<UnaryOp>(op))) {
+	if (!x_str_convert(ustr, str, std::forward<UnaryOp>(op))) {
 		return nullptr;
 	}
 	return std::make_shared<std::u16string>(std::move(ustr));
@@ -595,8 +600,8 @@ static int parse_smbconf(x_smbd_conf_t &smbd_conf, bool reload)
 		while (*end && *end != '.') {
 			++end;
 		}
-		if (!x_convert_utf8_to_utf16_new((char8_t *)hostname, (char8_t *)end, smbd_conf.node_l16,
-					x_tolower)) {
+		if (!x_str_convert(smbd_conf.node_l16, hostname, end,
+					x_tolower_t())) {
 			X_LOG_ERR("Invalid hostname '%s'\n", hostname);
 		}
 	}
@@ -605,21 +610,27 @@ static int parse_smbconf(x_smbd_conf_t &smbd_conf, bool reload)
 		smbd_conf.dns_domain_l8 = smbd_conf.realm;
 	}
 
-	smbd_conf.realm = x_str_toupper(smbd_conf.realm);
-	smbd_conf.dns_domain_l8 = x_str_tolower(smbd_conf.dns_domain_l8);
+	if (!x_str_toupper(smbd_conf.realm)) {
+		X_LOG_ERR("Invalid realm '%s'\n", smbd_conf.realm.c_str());
+	}
+
+	if (!x_str_tolower(smbd_conf.dns_domain_l8)) {
+		X_LOG_ERR("Invalid realm '%s'\n", smbd_conf.dns_domain_l8.c_str());
+	}
+
 	smbd_conf.dns_domain_l16 = make_u16string_ptr(smbd_conf.dns_domain_l8);
 	if (!smbd_conf.dns_domain_l16) {
 		X_LOG_ERR("Invalid dns_domain '%s'", smbd_conf.dns_domain_l8.c_str());
 		return -1;
 	}
 
-	smbd_conf.netbios_name_u16 = make_u16string_ptr(smbd_conf.netbios_name_l8, x_toupper);
+	smbd_conf.netbios_name_u16 = make_u16string_ptr(smbd_conf.netbios_name_l8, x_toupper_t());
 	if (!smbd_conf.netbios_name_u16) {
 		X_LOG_ERR("Invalid netbios_name '%s'", smbd_conf.netbios_name_l8.c_str());
 		return -1;
 	}
 
-	smbd_conf.workgroup_u16 = make_u16string_ptr(smbd_conf.workgroup_8, x_toupper);
+	smbd_conf.workgroup_u16 = make_u16string_ptr(smbd_conf.workgroup_8, x_toupper_t());
 	if (!smbd_conf.workgroup_u16) {
 		X_LOG_ERR("Invalid workgroup '%s'", smbd_conf.workgroup_8.c_str());
 		return -1;
@@ -659,7 +670,7 @@ static int parse_smbconf(x_smbd_conf_t &smbd_conf, bool reload)
 		}
 	}
 
-	add_share(smbd_conf, x_smbd_ipc_share_create());
+	add_share(smbd_conf, u"ipc$", x_smbd_ipc_share_create());
 	return 0;
 }
 
@@ -668,16 +679,39 @@ std::shared_ptr<x_smbd_conf_t> x_smbd_conf_get()
 	return g_smbd_conf;
 }
 
+std::shared_ptr<x_smbd_share_t>
+x_smbd_find_share(const x_smbd_conf_t &smbd_conf,
+		const char16_t *in_share_s, const char16_t *in_share_e)
+{
+	std::u16string share_name_l16;
+	if (!x_str_convert(share_name_l16, in_share_s, in_share_e, x_tolower_t())) {
+		return nullptr;
+	}
+
+	auto it = smbd_conf.shares.find(share_name_l16);
+	if (it == smbd_conf.shares.end()) {
+		return nullptr;
+	}
+
+	return it->second;
+	/* TODO USER_SHARE */
+}
+
 std::pair<std::shared_ptr<x_smbd_share_t>, std::shared_ptr<x_smbd_volume_t>>
-x_smbd_find_share(const std::string &name)
+x_smbd_resolve_share(const char16_t *in_share_s, const char16_t *in_share_e)
 {
 	auto smbd_conf = x_smbd_conf_get();
-	const char *in_share_s = name.c_str();
-	if (*in_share_s == '-') {
+	if (in_share_s == in_share_e) {
+		return {nullptr, nullptr};
+	}
+	if (*in_share_s == u'-') {
 		++in_share_s;
+		if (in_share_s == in_share_e) {
+			return {nullptr, nullptr};
+		}
+
 		if (*in_share_s == '-') {
-			std::string vol_tmp = in_share_s + 1;
-			auto smbd_volume = smbd_volume_find(*smbd_conf, vol_tmp);
+			auto smbd_volume = smbd_volume_find(*smbd_conf, in_share_s, in_share_e);
 			if (!smbd_volume) {
 				return {nullptr, nullptr};
 			}
@@ -685,13 +719,13 @@ x_smbd_find_share(const std::string &name)
 		}
 	}
 
-	auto it = smbd_conf->shares.find(in_share_s);
-	if (it == smbd_conf->shares.end()) {
+	std::shared_ptr<x_smbd_share_t> smbd_share = x_smbd_find_share(*smbd_conf,
+			in_share_s, in_share_e);
+	if (!smbd_share) {
 		return {nullptr, nullptr};
 	}
 
-	std::shared_ptr<x_smbd_share_t> smbd_share = it->second;
-	std::shared_ptr<x_smbd_volume_t> smbd_volume = smbd_share->find_volume(name);
+	std::shared_ptr<x_smbd_volume_t> smbd_volume = smbd_share->find_volume(in_share_s, in_share_e);
 	return {smbd_share, smbd_volume};
 
 	/* TODO USER_SHARE */
