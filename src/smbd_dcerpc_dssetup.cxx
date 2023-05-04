@@ -19,11 +19,12 @@ static bool x_smbd_dcerpc_impl_dssetup_DsRoleGetPrimaryDomainInformation(
 		// fill_dsrole_dominfo_basic
 		info->basic.role = idl::DS_ROLE_MEMBER_SERVER;
 		info->basic.flags = idl::DS_ROLE_PRIMARY_DOMAIN_GUID_PRESENT;
-		info->basic.domain = std::make_shared<std::u16string>(x_convert_utf8_to_utf16_assert(smbd_conf->workgroup));
-		info->basic.dns_domain = std::make_shared<std::u16string>(x_convert_utf8_to_utf16_assert(smbd_conf->realm));
+		info->basic.domain = smbd_conf->workgroup_u16;
+		/* TODO should make dns_domain upper case */
+		info->basic.dns_domain = smbd_conf->dns_domain_l16;
 		info->basic.forest = info->basic.dns_domain;
 		idl::GUID domain_guid;
-		x_smbd_secrets_fetch_domain_guid(smbd_conf->workgroup, domain_guid);
+		x_smbd_secrets_fetch_domain_guid(smbd_conf->workgroup_8, domain_guid);
 		memcpy(&info->basic.domain_guid, &domain_guid, sizeof(idl::GUID));
 		arg.__result = WERR_OK;
 		break;

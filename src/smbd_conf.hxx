@@ -60,7 +60,8 @@ struct x_smbd_conf_t
 	uint32_t max_connections = 512;
 	uint32_t max_opens = 1024;
 	std::string log_name = "stderr";
-	std::string netbios_name, workgroup, dns_domain, realm;
+	std::string netbios_name_l8, workgroup_8, dns_domain_l8, realm;
+	std::shared_ptr<std::u16string> netbios_name_u16, workgroup_u16, dns_domain_l16;
 	std::string private_dir;
 	std::string samba_locks_dir;
 	std::vector<std::string> cluster_nodes;
@@ -69,7 +70,7 @@ struct x_smbd_conf_t
 
 	std::vector<uint16_t> dialects{0x311, 0x310, 0x302, 0x210, 0x202};
 	std::map<std::string, std::shared_ptr<x_smbd_share_t>> shares;
-	std::string node;
+	std::u16string node_l16;
 	std::vector<std::string> nodes;
 	std::vector<std::shared_ptr<x_smbd_volume_t>> smbd_volumes;
 };
@@ -79,8 +80,8 @@ int x_smbd_conf_reload();
 std::shared_ptr<x_smbd_conf_t> x_smbd_conf_get();
 std::pair<std::shared_ptr<x_smbd_share_t>, std::shared_ptr<x_smbd_volume_t>>
 x_smbd_find_share(const std::string &name);
-std::shared_ptr<x_smbd_volume_t> x_smbd_find_volume(x_smbd_conf_t &smbd_conf,
-		const std::string &name);
+std::shared_ptr<x_smbd_volume_t> x_smbd_find_volume(const x_smbd_conf_t &smbd_conf,
+		const x_smb2_uuid_t &volume_uuid);
 
 #endif /* __smbconf__hxx__ */
 

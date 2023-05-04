@@ -257,7 +257,7 @@ int x_smbd_tcon_table_init(uint32_t count)
 std::string x_smbd_tcon_get_volume_label(const x_smbd_tcon_t *smbd_tcon)
 {
 	if (smbd_tcon->smbd_volume) {
-		return smbd_tcon->smbd_volume->name;
+		return smbd_tcon->smbd_volume->name_8;
 	} else {
 		return smbd_tcon->smbd_share->name;
 	}

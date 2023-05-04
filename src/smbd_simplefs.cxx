@@ -98,10 +98,10 @@ struct simplefs_share_t : x_smbd_share_t
 {
 	simplefs_share_t(const x_smb2_uuid_t &uuid,
 			const std::string &name,
-			std::u16string &&name_u16,
+			std::u16string &&name_16,
 			uint32_t share_flags,
 			const std::shared_ptr<x_smbd_volume_t> &smbd_volume)
-		: x_smbd_share_t(uuid, name, std::move(name_u16), share_flags)
+		: x_smbd_share_t(uuid, name, std::move(name_16), share_flags)
 		, smbd_volume(smbd_volume)
 	{
 		smbd_volume->set_ops(&simplefs_object_ops);
@@ -174,12 +174,12 @@ NTSTATUS simplefs_share_t::resolve_path(
 std::shared_ptr<x_smbd_share_t> x_smbd_simplefs_share_create(
 		const x_smb2_uuid_t &uuid,
 		const std::string &name,
-		std::u16string &&name_u16,
+		std::u16string &&name_16,
 		uint32_t share_flags,
 		const std::shared_ptr<x_smbd_volume_t> &smbd_volume)
 {
 	return std::make_shared<simplefs_share_t>(uuid, name,
-			std::move(name_u16), share_flags,
+			std::move(name_16), share_flags,
 			smbd_volume);
 }
 

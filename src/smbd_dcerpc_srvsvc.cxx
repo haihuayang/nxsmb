@@ -446,7 +446,7 @@ idl::srvsvc_NetSrvInfo100 x_smbd_net_get_info<idl::srvsvc_NetSrvInfo100>(
 {
 	return idl::srvsvc_NetSrvInfo100{
 		idl::PLATFORM_ID_NT,
-		std::make_shared<std::u16string>(x_convert_utf8_to_utf16_assert(smbd_conf.netbios_name)),
+		smbd_conf.netbios_name_u16,
 	};
 }
 
@@ -456,7 +456,7 @@ idl::srvsvc_NetSrvInfo101 x_smbd_net_get_info<idl::srvsvc_NetSrvInfo101>(
 {
 	return idl::srvsvc_NetSrvInfo101{
 		idl::PLATFORM_ID_NT,
-		std::make_shared<std::u16string>(x_convert_utf8_to_utf16_assert(smbd_conf.netbios_name)),
+		smbd_conf.netbios_name_u16,
 		0x06, // version_major
 		0x01, // version_minor
 		smbd_conf.get_default_server_announce(),
@@ -470,7 +470,7 @@ idl::srvsvc_NetSrvInfo102 x_smbd_net_get_info<idl::srvsvc_NetSrvInfo102>(
 {
 	return idl::srvsvc_NetSrvInfo102{
 		idl::PLATFORM_ID_NT,
-		std::make_shared<std::u16string>(x_convert_utf8_to_utf16_assert(smbd_conf.netbios_name)),
+		smbd_conf.netbios_name_u16,
 		0x06, // version_major
 		0x01, // version_minor
 		smbd_conf.get_default_server_announce(),

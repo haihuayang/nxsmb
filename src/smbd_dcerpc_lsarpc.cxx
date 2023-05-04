@@ -87,9 +87,9 @@ static bool x_smbd_dcerpc_impl_lsa_QueryInfoPolicy(
 		// check access, acc_required = idl::LSA_POLICY_VIEW_LOCAL_INFORMATION;
 		auto info = std::make_shared<idl::lsa_PolicyInformation>();
 		info->__init(arg.level);
-		info->domain.name.string = std::make_shared<std::u16string>(x_convert_utf8_to_utf16_assert(smbd_conf->workgroup));
+		info->domain.name.string = smbd_conf->workgroup_u16;
 		idl::dom_sid sid;
-		X_ASSERT(x_smbd_secrets_fetch_domain_sid(smbd_conf->workgroup, sid));
+		X_ASSERT(x_smbd_secrets_fetch_domain_sid(smbd_conf->workgroup_8, sid));
 		info->domain.sid = std::make_shared<idl::dom_sid>(sid);
 		arg.info = info;
 		arg.__result = NT_STATUS_OK;
@@ -104,8 +104,8 @@ static bool x_smbd_dcerpc_impl_lsa_QueryInfoPolicy(
 		// check access has idl::LSA_POLICY_VIEW_LOCAL_INFORMATION
 		auto info = std::make_shared<idl::lsa_PolicyInformation>();
 		info->__init(arg.level);
-		std::string name = x_str_toupper(smbd_conf->netbios_name);
-		info->account_domain.name.string = std::make_shared<std::u16string>(x_convert_utf8_to_utf16_assert(name));
+		std::string name = x_str_toupper(smbd_conf->netbios_name_l8);
+		info->account_domain.name.string = smbd_conf->netbios_name_u16;
 		idl::dom_sid sid;
 		X_ASSERT(x_smbd_secrets_fetch_domain_sid(name, sid));
 		info->account_domain.sid = std::make_shared<idl::dom_sid>(sid);

@@ -467,6 +467,29 @@ static inline std::string x_str_toupper(const std::string &s)
 	return ret;
 }
 
+static inline std::string x_str_tolower(const std::string &s)
+{
+	std::string ret;
+	ret.reserve(s.size());
+	const char8_t *begin = (const char8_t *)s.data();
+	const char8_t *end = begin + s.size();
+	while (begin != end) {
+		auto [uc, next] = x_utf8_pull_unicode(begin, end);
+		if (!next) {
+			/* not valid utf8, failback byte toupper */
+			for ( ; begin != end; ++begin) {
+				ret.push_back((char)std::toupper(*begin));
+			}
+			break;
+		}
+
+		uc = x_tolower(uc);
+		x_unicode_push_utf8(uc, ret);
+		begin = next;
+	}
+	return ret;
+}
+
 static inline bool x_str_has_wild(const std::u16string &s)
 {
 	for (auto c: s) {

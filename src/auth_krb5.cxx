@@ -1413,11 +1413,9 @@ static krb5_principal kerberos_fetch_salt_princ_for_host_princ(
 	}
 #endif
 	std::string salt_princ_s = "host/";
-	salt_princ_s += smbd_conf.netbios_name;
+	salt_princ_s += smbd_conf.netbios_name_l8;
 	salt_princ_s += '.';
-	for (auto c: smbd_conf.realm) {
-		salt_princ_s += x_convert_assert<char>(std::tolower(c));
-	}
+	salt_princ_s += smbd_conf.dns_domain_l8;
 	salt_princ_s += "@";
 	salt_princ_s += smbd_conf.realm;
 
@@ -1463,7 +1461,7 @@ static krb5_error_code get_alias_principals(
 		krb5_principals aliases)
 {
 	krb5_principal princ;
-	krb5_error_code kerr = create_principal(krbctx, &princ, smbd_conf.netbios_name,
+	krb5_error_code kerr = create_principal(krbctx, &princ, smbd_conf.netbios_name_l8,
                         std::string(), smbd_conf.realm);
 	if (kerr) {
 		return kerr;
@@ -1476,7 +1474,7 @@ static krb5_error_code get_alias_principals(
 
 	for (auto &node: smbd_conf.nodes) {
 		kerr = create_principal(krbctx, &princ, node,
-				smbd_conf.realm, smbd_conf.realm);
+				smbd_conf.dns_domain_l8, smbd_conf.realm);
 		if (kerr) {
 			return kerr;
 		}
@@ -1495,8 +1493,8 @@ static krb5_error_code get_host_principal(
 		krb5_context krbctx,
 		krb5_principal *princ)
 {
-	return create_principal(krbctx, princ, smbd_conf.netbios_name, smbd_conf.realm,
-			smbd_conf.realm);
+	return create_principal(krbctx, princ, smbd_conf.netbios_name_l8,
+			smbd_conf.dns_domain_l8, smbd_conf.realm);
 }
 
 static int kerberos_key_from_string(krb5_context context,
@@ -1608,7 +1606,7 @@ static krb5_error_code fill_mem_keytab_from_secrets(
 
 	auto smbd_conf = x_smbd_conf_get();
 
-	std::string pwd = x_smbd_secrets_fetch_machine_password(smbd_conf->workgroup);
+	std::string pwd = x_smbd_secrets_fetch_machine_password(smbd_conf->workgroup_8);
 	if (pwd.empty()) {
 		X_LOG_ERR("failed to fetch machine password");
 		return KRB5_LIBOS_CANTREADPWD;
@@ -1706,7 +1704,7 @@ static krb5_error_code fill_mem_keytab_from_secrets(
 		return kerr;
 	}
 
-	std::string pwd_old = x_smbd_secrets_fetch_prev_machine_password(smbd_conf->workgroup);
+	std::string pwd_old = x_smbd_secrets_fetch_prev_machine_password(smbd_conf->workgroup_8);
 	if (pwd_old.empty()) {
 		X_LOG_DBG("no prev machine password");
 	} else {

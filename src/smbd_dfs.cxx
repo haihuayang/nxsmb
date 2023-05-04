@@ -9,6 +9,7 @@
 #include "smbd_posixfs.hxx"
 #include "smbd_posixfs_utils.hxx"
 #include <sys/file.h>
+#include <uuid/uuid.h>
 
 static NTSTATUS todo_dfs_create_object(x_smbd_object_t *smbd_object,
 		x_smbd_stream_t *smbd_stream,
@@ -64,7 +65,7 @@ struct dfs_share_t : x_smbd_share_t
 	dfs_share_t(const x_smbd_conf_t &smbd_conf,
 			const x_smb2_uuid_t &uuid,
 			const std::string &name,
-			std::u16string &&name_u16,
+			std::u16string &&name_16,
 			uint32_t share_flags,
 			std::vector<std::shared_ptr<x_smbd_volume_t>> &&volumes);
 	uint8_t get_type() const override { return X_SMB2_SHARE_TYPE_DISK; }
@@ -97,7 +98,7 @@ struct dfs_share_t : x_smbd_share_t
 
 	const std::vector<std::shared_ptr<x_smbd_volume_t>> volumes;
 	std::shared_ptr<x_smbd_volume_t> root_volume;
-	std::map<std::string, std::shared_ptr<x_smbd_volume_t>> local_data_volume;
+	std::map<std::u16string, std::shared_ptr<x_smbd_volume_t>> local_data_volume;
 };
 
 static const char16_t *parse_dfs_path(const char16_t *in_path_begin,
@@ -240,43 +241,62 @@ static NTSTATUS dfs_volume_resolve_path(
 	return NT_STATUS_OK;
 }
 
-static void set_tld_target(int fd, const std::string &volume, const std::string &uuid)
+static void set_tld_target(int fd, const x_smb2_uuid_t &volume_uuid, const std::string &uuid)
 {
-	std::string val = volume + ':' + uuid;
-	ssize_t err = fsetxattr(fd, XATTR_TLD_PATH, val.c_str(), val.length() + 1, 0);
+	char buf[1024];
+	uuid_unparse_lower((uint8_t *)&volume_uuid, buf);
+	char *p = &buf[36];
+	*p++ = ':';
+	strcpy(p, uuid.c_str());
+	p += uuid.length();
+	ssize_t err = fsetxattr(fd, XATTR_TLD_PATH, buf, p + 1 - buf, 0);
 	X_ASSERT(err == 0);
 }
 
-static int get_tld_target(x_smbd_object_t *smbd_object, std::string &volume, std::string &uuid)
+static int parse_tld_target(char *buf, x_smb2_uuid_t &volume_uuid,
+		std::string &tld_uuid)
+{
+	char *sep = strchr(buf, ':');
+	if (!sep) {
+		X_LOG_ERR("Invalid tld attr '%s'", buf);
+		return -1;
+	}
+
+	*sep = '\0';
+	uuid_t uuid;
+	if (!uuid_parse(buf, uuid)) {
+		*sep = ':';
+		X_LOG_ERR("Invalid tld attr '%s'", buf);
+		return -1;
+	}
+	tld_uuid = sep + 1;
+	memcpy(&volume_uuid, uuid, sizeof(x_smb2_uuid_t));
+	return 0;
+}
+
+static int get_tld_target(x_smbd_object_t *smbd_object, x_smb2_uuid_t &volume_uuid,
+		std::string &tld_uuid)
 {
 	char buf[1024];
 	ssize_t err = posixfs_object_getxattr(smbd_object, XATTR_TLD_PATH, buf, sizeof buf - 1);
 	if (err < 0) {
 		return -1;
 	}
-
 	buf[err] = '\0';
-	const char *sep = strchr(buf, ':');
-	X_ASSERT(sep);
-	volume.assign(buf, sep - buf);
-	uuid = sep + 1;
-	return 0;
+
+	return parse_tld_target(buf, volume_uuid, tld_uuid);
 }
 
-static int get_tld_target(int fd, std::string &volume, std::string &uuid)
+static int get_tld_target(int fd, x_smb2_uuid_t &volume_uuid,
+		std::string &tld_uuid)
 {
 	char buf[1024];
 	ssize_t err = fgetxattr(fd, XATTR_TLD_PATH, buf, sizeof buf - 1);
 	if (err < 0) {
 		return -1;
 	}
-
 	buf[err] = '\0';
-	const char *sep = strchr(buf, ':');
-	X_ASSERT(sep);
-	volume.assign(buf, sep - buf);
-	uuid = sep + 1;
-	return 0;
+	return parse_tld_target(buf, volume_uuid, tld_uuid);
 }
 
 enum class top_level_object_state_t {
@@ -397,7 +417,7 @@ static inline void create_new_tld(dfs_share_t &dfs_share,
 	   the node hosting tld to create it
 	 */
 	auto smbd_conf = x_smbd_conf_get();
-	if (data_volume->owner_node == smbd_conf->node) {
+	if (data_volume->owner_node_l16 == smbd_conf->node_l16) {
 		posixfs_mktld(x_smbd_sess_get_user(smbd_requ->smbd_sess), *data_volume,
 				uuid_str, ntacl_blob);
 	} else {
@@ -412,7 +432,7 @@ static inline void create_new_tld(dfs_share_t &dfs_share,
 			&object_meta, &stream_meta, ntacl_blob);
 	close(fd);
 #endif
-	set_tld_target(fd, data_volume->name, uuid_str);
+	set_tld_target(fd, data_volume->uuid, uuid_str);
 }
 
 static NTSTATUS dfs_root_object_op_rename(x_smbd_object_t *smbd_object,
@@ -497,22 +517,23 @@ static NTSTATUS dfs_root_op_delete_object(x_smbd_object_t *smbd_object,
 	
 	X_ASSERT(smbd_object->type != x_smbd_object_t::type_not_exist);
 	if (smbd_object->type == x_smbd_object_t::type_dir && !smbd_stream) {
-		std::string volume, uuid;
-		int err = get_tld_target(smbd_object, volume, uuid);
+		x_smb2_uuid_t volume_uuid;
+		std::string tld_uuid;
+		int err = get_tld_target(smbd_object, volume_uuid, tld_uuid);
 		if (err != 0) {
 			return NT_STATUS_UNSUCCESSFUL;
 		}
 
 		auto smbd_conf = x_smbd_conf_get();
-		auto smbd_volume = x_smbd_find_volume(*smbd_conf, volume);
+		auto smbd_volume = x_smbd_find_volume(*smbd_conf, volume_uuid);
 		X_ASSERT(smbd_volume);
 
 		/* TODO first mark dir fd in deleting */
 		/* TODO single node from now, for multi node, it should send msg to
 		   the node hosting tld to delete it
 		 */
-		if (smbd_volume->owner_node == smbd_conf->node) {
-			err = unlinkat(smbd_volume->rootdir_fd, uuid.c_str(), AT_REMOVEDIR);
+		if (smbd_volume->owner_node_l16 == smbd_conf->node_l16) {
+			err = unlinkat(smbd_volume->rootdir_fd, tld_uuid.c_str(), AT_REMOVEDIR);
 			if (err != 0) {
 				if (errno == ENOTEMPTY) {
 					return NT_STATUS_DIRECTORY_NOT_EMPTY;
@@ -947,12 +968,11 @@ static NTSTATUS dfs_root_referral(const dfs_share_t &dfs_share,
 	const auto &first = dfs_share.volumes[0];
 
 	std::u16string alt_path(in_full_path_begin, in_share_end);
-	std::string node = "\\";
-	node += first->owner_node + "." + smbd_conf.dns_domain + "\\-";
-	std::u16string node16 = x_convert_utf8_to_utf16_assert(node);
-	node16.append(in_share_begin, in_share_end);
+	std::u16string node = u"\\";
+	node += first->owner_node_l16 + u"." + *smbd_conf.dns_domain_l16 + u"\\-";
+	node.append(in_share_begin, in_share_end);
 	dfs_referral_resp.referrals.push_back(x_referral_t{DFS_SERVER_ROOT, 0,
-			dfs_share.dfs_referral_ttl, alt_path, node16});
+			dfs_share.dfs_referral_ttl, alt_path, node});
 	dfs_referral_resp.header_flags = DFS_HEADER_FLAG_REFERAL_SVR | DFS_HEADER_FLAG_STORAGE_SVR;
 	dfs_referral_resp.path_consumed = x_convert_assert<uint16_t>(alt_path.length() * 2);
 	return NT_STATUS_OK;
@@ -968,17 +988,16 @@ static NTSTATUS dfs_volume_referral(const dfs_share_t &dfs_share,
 		const char16_t *in_share_begin,
 		const char16_t *in_share_end,
 		const char16_t *in_tld_end,
-		const std::string &volume,
-		const std::string &uuid)
+		const std::u16string &volume,
+		const std::u16string &tld_uuid)
 {
 	const auto &first_vol = dfs_share.volumes[0];
-	auto node_name = first_vol->owner_node;
+	auto node_name = first_vol->owner_node_l16;
 
 	std::u16string alt_path(in_full_path_begin, in_tld_end);
-	std::string node = "\\" + node_name + "." + smbd_conf.dns_domain + "\\--" + volume + "\\" + uuid;
-	std::u16string node16 = x_convert_utf8_to_utf16_assert(node);
+	std::u16string node = u"\\" + node_name + u"." + *smbd_conf.dns_domain_l16 + u"\\--" + volume + u"\\" + tld_uuid;
 	dfs_referral_resp.referrals.push_back(x_referral_t{0, 0,
-			dfs_share.dfs_referral_ttl, alt_path, node16});
+			dfs_share.dfs_referral_ttl, alt_path, node});
 	dfs_referral_resp.header_flags = DFS_HEADER_FLAG_STORAGE_SVR;
 	dfs_referral_resp.path_consumed = x_convert_assert<uint16_t>(alt_path.length() * 2);
 	return NT_STATUS_OK;
@@ -1025,16 +1044,27 @@ static NTSTATUS dfs_share_get_dfs_referral(const dfs_share_t &dfs_share,
 	}
 	
 	struct stat st;
-	std::string volume, uuid;
+	x_smb2_uuid_t volume_uuid;
+	std::string tld_uuid;
 	int err = fstat(fd, &st);
 	X_ASSERT(!err);
 
 	if (S_ISDIR(st.st_mode)) {
-		int err = get_tld_target(fd, volume, uuid);
+		int err = get_tld_target(fd, volume_uuid, tld_uuid);
 		X_ASSERT(err == 0);
 	}
 	close(fd);
+	auto smbd_volume = x_smbd_find_volume(smbd_conf, volume_uuid);
+	if (!smbd_volume) {
+		return NT_STATUS_NOT_FOUND;
+	}
 
+	std::u16string tld_uuid_l16;
+	if (!x_convert_utf8_to_utf16_new(tld_uuid, tld_uuid_l16, x_tolower)) {
+		return NT_STATUS_NOT_FOUND;
+	}
+
+#if 0
 	if (volume.size() == 0) {
 		return dfs_root_referral(dfs_share, smbd_conf,
 				dfs_referral_resp,
@@ -1042,13 +1072,13 @@ static NTSTATUS dfs_share_get_dfs_referral(const dfs_share_t &dfs_share,
 				in_server_begin, in_server_end,
 				in_share_begin, in_share_end);
 	}
-
+#endif
 	return dfs_volume_referral(dfs_share, smbd_conf,
 			dfs_referral_resp,
 			in_full_path_begin, in_full_path_end,
 			in_server_begin, in_server_end,
 			in_share_begin, in_share_end,
-			in_tld_end, volume, uuid);
+			in_tld_end, smbd_volume->name_l16, tld_uuid_l16);
 }
 
 NTSTATUS dfs_share_t::get_dfs_referral(x_dfs_referral_resp_t &dfs_referral_resp,
@@ -1073,21 +1103,21 @@ NTSTATUS dfs_share_t::get_dfs_referral(x_dfs_referral_resp_t &dfs_referral_resp,
 dfs_share_t::dfs_share_t(const x_smbd_conf_t &smbd_conf,
 		const x_smb2_uuid_t &uuid,
 		const std::string &name,
-		std::u16string &&name_u16,
+		std::u16string &&name_16,
 		uint32_t share_flags,
 		std::vector<std::shared_ptr<x_smbd_volume_t>> &&smbd_volumes)
-	: x_smbd_share_t(uuid, name, std::move(name_u16), share_flags), volumes(smbd_volumes)
+	: x_smbd_share_t(uuid, name, std::move(name_16), share_flags), volumes(smbd_volumes)
 {
 	X_ASSERT(smbd_volumes.size() > 1);
 	bool first = true;
 	for (const auto &smbd_volume: smbd_volumes) {
-		if (smbd_volume->owner_node == smbd_conf.node) {
+		if (smbd_volume->owner_node_l16 == smbd_conf.node_l16) {
 			if (first) {
 				smbd_volume->set_ops(&dfs_root_object_ops);
 				root_volume = smbd_volume;
 			} else {
 				smbd_volume->set_ops(&dfs_volume_object_ops);
-				local_data_volume[smbd_volume->name] = smbd_volume;
+				local_data_volume[smbd_volume->name_l16] = smbd_volume;
 			}
 		}
 		first = false;
@@ -1098,12 +1128,12 @@ std::shared_ptr<x_smbd_share_t> x_smbd_dfs_share_create(
 		const x_smbd_conf_t &smbd_conf,
 		const x_smb2_uuid_t &uuid,
 		const std::string &name,
-		std::u16string &&name_u16,
+		std::u16string &&name_16,
 		uint32_t share_flags,
 		std::vector<std::shared_ptr<x_smbd_volume_t>> &&smbd_volumes)
 {
 	return std::make_shared<dfs_share_t>(smbd_conf, uuid,
-			name, std::move(name_u16),
+			name, std::move(name_16),
 			share_flags, std::move(smbd_volumes));
 }
 

@@ -26,18 +26,21 @@ struct share_spec_t
 
 struct volume_spec_t
 {
-	volume_spec_t(const x_smb2_uuid_t &uuid, std::string &&name,
-			std::string &&path, std::string &&node)
-		: uuid(uuid), name(name)
-		, path(path), owner_node(node)
+	volume_spec_t(const x_smb2_uuid_t &uuid,
+			std::string &&name_8,
+			std::u16string &&name_l16,
+			std::u16string &&node_l16,
+			std::string &&path)
+		: uuid(uuid), name_8(name_8), name_l16(name_l16)
+		, owner_node_l16(node_l16), path(path)
 	{
 	}
 
 	const x_smb2_uuid_t uuid;
-	const std::string name;
+	const std::string name_8;
+	const std::u16string name_l16;
+	const std::u16string owner_node_l16;
 	const std::string path;
-	const std::string owner_node;
-	std::string owner_share;
 };
 
 static const char *g_configfile;
@@ -149,16 +152,28 @@ static bool parse_volume_map(std::vector<volume_spec_t> &volumes, const std::str
 			return false;
 		}
 		std::string name = token.substr(begin, sep - begin);
+		std::u16string name_l16;
+		if (!x_convert_utf8_to_utf16_new(name, name_l16, x_tolower)) {
+			X_LOG_ERR("invalid volume name '%s'", name.c_str());
+			return false;
+		}
 
 		begin = ++sep;
 		sep = token.find(':', begin);
 		if (sep == std::string::npos) {
 			return false;
 		}
+		std::string node = token.substr(begin, sep - begin);
+		std::u16string node_l16;
+		if (!x_convert_utf8_to_utf16_new(node, node_l16, x_tolower)) {
+			X_LOG_ERR("invalid node name '%s'", node.c_str());
+			return false;
+		}
 
 		volumes.emplace_back(uuid, std::move(name),
-				token.substr(sep + 1),
-				token.substr(begin, sep - begin));
+				std::move(name_l16),
+				std::move(node_l16),
+				token.substr(sep + 1));
 	}
 	return true;
 }
@@ -182,8 +197,12 @@ static const std::shared_ptr<x_smbd_volume_t> smbd_volume_find(
 		const x_smbd_conf_t &smbd_conf,
 		const std::string volume_name)
 {
+	std::u16string volume_name_l16;
+	if (!x_convert_utf8_to_utf16_new(volume_name, volume_name_l16)) {
+		return nullptr;
+	}
 	for (auto &volume: smbd_conf.smbd_volumes) {
-		if (volume->name == volume_name) {
+		if (volume->name_l16 == volume_name_l16) {
 			return volume;
 		}
 	}
@@ -201,8 +220,8 @@ static bool add_share(x_smbd_conf_t &smbd_conf,
 		const share_spec_t &share_spec,
 		std::vector<std::shared_ptr<x_smbd_volume_t>> &smbd_volumes)
 {
-	std::u16string name_u16;
-	if (!x_convert_utf8_to_utf16_new(share_spec.name, name_u16)) {
+	std::u16string name_16;
+	if (!x_convert_utf8_to_utf16_new(share_spec.name, name_16)) {
 		X_LOG_ERR("Invalid share name '%s'", share_spec.name.c_str());
 	}
 	std::shared_ptr<x_smbd_share_t> share;
@@ -211,14 +230,14 @@ static bool add_share(x_smbd_conf_t &smbd_conf,
 		share = x_smbd_dfs_share_create(smbd_conf,
 				share_spec.uuid,
 				share_spec.name,
-				std::move(name_u16),
+				std::move(name_16),
 				share_spec.share_flags,
 				std::move(smbd_volumes));
 	} else {
 		share = x_smbd_simplefs_share_create(
 				share_spec.uuid,
 				share_spec.name,
-				std::move(name_u16),
+				std::move(name_16),
 				share_spec.share_flags,
 				smbd_volumes[0]);
 	}
@@ -231,7 +250,7 @@ static bool add_share(x_smbd_conf_t &smbd_conf,
 		if (smbd_volume->owner_share) {
 			X_LOG_ERR("Share '%s' cannot use volume '%s', owned by share '%s'",
 					share_spec.name.c_str(),
-					smbd_volume->name.c_str(),
+					smbd_volume->name_8.c_str(),
 					smbd_volume->owner_share->name.c_str());
 			return false;
 		}
@@ -309,13 +328,13 @@ static bool parse_global_param(x_smbd_conf_t &smbd_conf,
 	} else if (name == "log name") {
 		smbd_conf.log_name = value;
 	} else if (name == "netbios name") {
-		smbd_conf.netbios_name = value;
+		smbd_conf.netbios_name_l8 = value;
 	} else if (name == "dns domain") {
-		smbd_conf.dns_domain = value;
+		smbd_conf.dns_domain_l8 = value;
 	} else if (name == "realm") {
 		smbd_conf.realm = value;
 	} else if (name == "workgroup") {
-		smbd_conf.workgroup = value;
+		smbd_conf.workgroup_8 = value;
 	} else if (name == "lanman auth") {
 		smbd_conf.lanman_auth = parse_bool(value);
 	} else if (name == "server signing") {
@@ -327,7 +346,9 @@ static bool parse_global_param(x_smbd_conf_t &smbd_conf,
 	} else if (name == "private dir") {
 		smbd_conf.private_dir = value;
 	} else if (name == "node") {
-		smbd_conf.node = value;
+		if (!x_convert_utf8_to_utf16_new(value, smbd_conf.node_l16, x_tolower)) {
+			X_LOG_ERR("Invalid node '%s'", value.c_str());
+		}
 	} else if (name == "max session expiration") {
 		return parse_uint32(value, smbd_conf.max_session_expiration);
 	} else if (name == "interfaces") {
@@ -498,6 +519,17 @@ static std::shared_ptr<x_smbd_volume_t> find_volume_by_uuid(
 	return nullptr;
 }
 
+template <class UnaryOp = x_identity_t>
+static std::shared_ptr<std::u16string> make_u16string_ptr(const std::string &str,
+		UnaryOp &&op = {})
+{
+	std::u16string ustr;
+	if (!x_convert_utf8_to_utf16_new(str, ustr, std::forward<UnaryOp>(op))) {
+		return nullptr;
+	}
+	return std::make_shared<std::u16string>(std::move(ustr));
+}
+
 static int parse_smbconf(x_smbd_conf_t &smbd_conf, bool reload)
 {
 	const char *path = g_configfile;
@@ -555,35 +587,50 @@ static int parse_smbconf(x_smbd_conf_t &smbd_conf, bool reload)
 		parse_global_param(smbd_conf, volume_specs, name, value);
 	}
 
-	if (smbd_conf.node.empty()) {
+	if (smbd_conf.node_l16.empty()) {
 		char hostname[1024];
 		int err = gethostname(hostname, sizeof hostname);
 		X_ASSERT(err == 0);
-		char *sep = strchr(hostname, '.');
-		if (sep) {
-			smbd_conf.node.assign(hostname, sep);
-		} else {
-			smbd_conf.node = hostname;
+		char *end = hostname;
+		while (*end && *end != '.') {
+			++end;
+		}
+		if (!x_convert_utf8_to_utf16_new((char8_t *)hostname, (char8_t *)end, smbd_conf.node_l16,
+					x_tolower)) {
+			X_LOG_ERR("Invalid hostname '%s'\n", hostname);
 		}
 	}
 
-	if (smbd_conf.dns_domain.empty()) {
-		smbd_conf.dns_domain = smbd_conf.realm;
+	if (smbd_conf.dns_domain_l8.empty()) {
+		smbd_conf.dns_domain_l8 = smbd_conf.realm;
 	}
 
 	smbd_conf.realm = x_str_toupper(smbd_conf.realm);
+	smbd_conf.dns_domain_l8 = x_str_tolower(smbd_conf.dns_domain_l8);
+	smbd_conf.dns_domain_l16 = make_u16string_ptr(smbd_conf.dns_domain_l8);
+	if (!smbd_conf.dns_domain_l16) {
+		X_LOG_ERR("Invalid dns_domain '%s'", smbd_conf.dns_domain_l8.c_str());
+		return -1;
+	}
+
+	smbd_conf.netbios_name_u16 = make_u16string_ptr(smbd_conf.netbios_name_l8, x_toupper);
+	if (!smbd_conf.netbios_name_u16) {
+		X_LOG_ERR("Invalid netbios_name '%s'", smbd_conf.netbios_name_l8.c_str());
+		return -1;
+	}
+
+	smbd_conf.workgroup_u16 = make_u16string_ptr(smbd_conf.workgroup_8, x_toupper);
+	if (!smbd_conf.workgroup_u16) {
+		X_LOG_ERR("Invalid workgroup '%s'", smbd_conf.workgroup_8.c_str());
+		return -1;
+	}
 
 	load_ifaces(smbd_conf);
 
 	for (auto &vs: volume_specs) {
-		std::u16string name_u16;
-		if (!x_convert_utf8_to_utf16_new(vs.name, name_u16)) {
-			X_LOG_ERR("invalid volume name '%s'", vs.name.c_str());
-			return -1;
-		}
 		smbd_conf.smbd_volumes.push_back(x_smbd_volume_create(vs.uuid,
-				       	vs.name, std::move(name_u16),
-					vs.path, vs.owner_node));
+				       	vs.name_8, vs.name_l16,
+					vs.owner_node_l16, vs.path));
 	}
 
 	for (auto &ss: share_specs) {
@@ -594,7 +641,7 @@ static int parse_smbconf(x_smbd_conf_t &smbd_conf, bool reload)
 				find_volume_by_uuid(smbd_conf, volume_uuid);
 			if (!smbd_volume) {
 				X_LOG_ERR("cannot find volume %s for share %s",
-						smbd_volume->name.c_str(),
+						smbd_volume->name_8.c_str(),
 						ss->name.c_str());
 				return -1;
 			}
@@ -726,11 +773,11 @@ x_smbd_durable_t *x_smbd_share_lookup_durable(
 	return nullptr;
 }
 
-std::shared_ptr<x_smbd_volume_t> x_smbd_find_volume(x_smbd_conf_t &smbd_conf,
-		const std::string &name)
+std::shared_ptr<x_smbd_volume_t> x_smbd_find_volume(const x_smbd_conf_t &smbd_conf,
+		const x_smb2_uuid_t &volume_uuid)
 {
 	for (auto &vol: smbd_conf.smbd_volumes) {
-		if (vol->name == name) {
+		if (vol->uuid == volume_uuid) {
 			return vol;
 		}
 	}

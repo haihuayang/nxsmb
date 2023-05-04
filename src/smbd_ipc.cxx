@@ -741,7 +741,7 @@ static const x_smbd_object_ops_t x_smbd_ipc_object_ops = {
 static std::shared_ptr<x_smbd_volume_t> ipc_create_volume()
 {
 	std::shared_ptr<x_smbd_volume_t> smbd_volume = 
-		x_smbd_volume_create({0, 0}, "IPC$", u"IPC$", "", "");
+		x_smbd_volume_create({0, 0}, "IPC$", u"IPC$", {}, {});
 	smbd_volume->set_ops(&x_smbd_ipc_object_ops);
 	return smbd_volume;
 }

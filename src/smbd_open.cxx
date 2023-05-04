@@ -2074,7 +2074,7 @@ static std::u16string get_path(const x_smbd_open_t *smbd_open)
 {
 	auto smbd_object = smbd_open->smbd_object;
 	std::u16string ret =  u"C:\\"
-		+ x_convert_utf8_to_utf16_assert(smbd_object->smbd_volume->name)
+		+ smbd_object->smbd_volume->name_l16
 		+ u"\\" + smbd_object->path;
 	if (smbd_open->smbd_stream) {
 		ret += u":" + smbd_open->smbd_stream->name;

@@ -18,12 +18,12 @@ static x_smb2_uuid_t create_volume_id(const std::string &name)
 }
 #endif
 x_smbd_volume_t::x_smbd_volume_t(const x_smb2_uuid_t &uuid,
-		const std::string &name,
-		std::u16string &&name_u16,
-		const std::string &path,
-		const std::string &owner_node)
-	: uuid(uuid), name(name), name_u16(name_u16)
-	, path(path), owner_node(owner_node)
+		const std::string &name_8,
+		const std::u16string &name_l16,
+		const std::u16string &owner_node,
+		const std::string &path)
+	: uuid(uuid), name_8(name_8), name_l16(name_l16)
+	, owner_node_l16(owner_node), path(path)
 {
 }
 
@@ -71,15 +71,14 @@ static int smbd_volume_read(int vol_fd,
 
 std::shared_ptr<x_smbd_volume_t> x_smbd_volume_create(
 		const x_smb2_uuid_t &uuid,
-		const std::string &name, std::u16string &&name_u16,
-		const std::string &path, const std::string &owner_node)
+		const std::string &name_8, const std::u16string &name_l16,
+		const std::u16string &owner_node_l16,
+		const std::string &path)
 {
-	X_LOG_NOTICE("add volume '%s' node='%s', path='%s'",
-			name.c_str(),
-			owner_node.c_str(),
-			path.c_str());
-	return std::make_shared<x_smbd_volume_t>(uuid, name, std::move(name_u16),
-			path, owner_node);
+	X_LOG_NOTICE("add volume '%s', path='%s'",
+			name_8.c_str(), path.c_str());
+	return std::make_shared<x_smbd_volume_t>(uuid, name_8, name_l16,
+			owner_node_l16, path);
 }
 
 int x_smbd_volume_init(x_smbd_volume_t &smbd_volume)
@@ -92,7 +91,7 @@ int x_smbd_volume_init(x_smbd_volume_t &smbd_volume)
 		int vol_fd = open(smbd_volume.path.c_str(), O_RDONLY);
 		if (vol_fd < 0) {
 			X_LOG_ERR("cannot open volume %s, %d",
-					smbd_volume.name.c_str(), errno);
+					smbd_volume.name_8.c_str(), errno);
 			return -1;
 		}
 
@@ -100,13 +99,13 @@ int x_smbd_volume_init(x_smbd_volume_t &smbd_volume)
 		close(vol_fd);
 		if (ret < 0) {
 			X_LOG_ERR("cannot read volume %s, %d",
-					smbd_volume.name.c_str(), -ret);
+					smbd_volume.name_8.c_str(), -ret);
 			return -1;
 		}
 	}
 
 	X_LOG_NOTICE("volume '%s' with id=0x%x",
-			smbd_volume.name.c_str(), vol_id);
+			smbd_volume.name_8.c_str(), vol_id);
 
 	smbd_volume.rootdir_fd = rootdir_fd;
 	smbd_volume.volume_id = vol_id;

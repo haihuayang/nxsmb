@@ -1072,7 +1072,7 @@ static bool check_domain_match(const std::string &user, const std::string &domai
 	}
 
 	/* we do not check if domain is local name */
-	if (domain.empty() || x_strcase_equal(domain, smbd_conf->workgroup)) {
+	if (domain.empty() || x_strcase_equal(domain, smbd_conf->workgroup_8)) {
 		return true;
 	}
 	return false;
@@ -1322,10 +1322,10 @@ x_auth_ntlmssp_t::x_auth_ntlmssp_t(x_auth_context_t *context, const x_auth_ops_t
 	   }
 	   */
 	is_standalone = false;
-	netbios_name = x_convert_utf8_to_utf16_assert(smbd_conf->netbios_name);
-	netbios_domain = x_convert_utf8_to_utf16_assert(smbd_conf->workgroup);
+	netbios_name = *smbd_conf->netbios_name_u16;
+	netbios_domain = *smbd_conf->workgroup_u16;
+	dns_domain = *smbd_conf->dns_domain_l16;
 
-	dns_domain = x_convert_utf8_to_utf16_assert(smbd_conf->dns_domain);
 	std::u16string tmp_dns_name = netbios_name;
 	if (dns_domain.size()) {
 		tmp_dns_name += u".";

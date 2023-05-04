@@ -2482,7 +2482,7 @@ static NTSTATUS getinfo_fs(x_smbd_requ_t *smbd_requ,
 			return NT_STATUS_INFO_LENGTH_MISMATCH;
 		}
 
-		std::string netbios_name = x_smbd_conf_get()->netbios_name;
+		std::string netbios_name = x_smbd_conf_get()->netbios_name_l8;
 		std::string volume = x_smbd_tcon_get_volume_label(smbd_requ->smbd_tcon);
 		size_t hash = std::hash<std::string>{}(netbios_name + ":" + volume);
 		std::u16string u16_volume = x_convert_utf8_to_utf16_assert(volume);
@@ -2511,7 +2511,6 @@ static NTSTATUS getinfo_fs(x_smbd_requ_t *smbd_requ,
 			return NT_STATUS_INFO_LENGTH_MISMATCH;
 		}
 
-		std::string netbios_name = x_smbd_conf_get()->netbios_name;
 		std::string volume = x_smbd_tcon_get_volume_label(smbd_requ->smbd_tcon);
 		std::u16string u16_volume = x_convert_utf8_to_utf16_assert(volume);
 
