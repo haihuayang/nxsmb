@@ -41,6 +41,7 @@ TARGET_SET_tests := \
 	test-iface \
 	test-idtable \
 	test-sid \
+	test-signing \
 
 TARGET_SET_lib := nxsmb
 
@@ -129,17 +130,23 @@ SET_src_nxutils := \
 	util_sid \
 	misc \
 
+COMMON_LIBS := -lpthread -lresolv -ldl
+
 $(TARGET_DIR_out)/bin/smbd_nx: $(SET_src_smbd_nx:%=$(TARGET_DIR_out)/src/%.o) $(TARGET_SET_lib:%=$(TARGET_DIR_out)/lib%.a)
-	$(CXX) -g $(TARGET_LDFLAGS) -o $@ $^ $(TARGET_LDFLAGS_dependent) -ltdb -lcrypto -lz -lcom_err -luuid -lpthread -lresolv -ldl
+	$(CXX) -g $(TARGET_LDFLAGS) -o $@ $^ $(TARGET_LDFLAGS_dependent) -ltdb -lcrypto -lz -lcom_err -luuid $(COMMON_LIBS)
 
 $(TARGET_DIR_out)/bin/nxutils: $(SET_src_nxutils:%=$(TARGET_DIR_out)/src/%.o) $(TARGET_SET_lib:%=$(TARGET_DIR_out)/lib%.a)
-	$(CXX) -g $(TARGET_LDFLAGS) -o $@ $^ -lpthread -lresolv -ldl
+	$(CXX) -g $(TARGET_LDFLAGS) -o $@ $^ $(COMMON_LIBS)
 
 $(TARGET_DIR_out)/src/%.o: src/%.cxx | target_mkdir target_gen
 	$(CXX) -c $(TARGET_CXXFLAGS) $(TARGET_CFLAGS_EXTRA) $(TARGET_CFLAGS_dependent) -o $@ $<
 
-$(TARGET_SET_tests:%=$(TARGET_DIR_out)/tests/%) : %: %.o $(TARGET_SET_lib:%=$(TARGET_DIR_out)/lib%.a)
-	$(CXX) -g $(TARGET_LDFLAGS) -o $@ $^ -lpthread -lresolv -ldl
+$(TARGET_SET_tests:%=$(TARGET_DIR_out)/tests/%) : %: %.o
+	$(CXX) -g $(TARGET_LDFLAGS) -o $@ $^ $(TESTS_LDFLAGS_$(basename $(notdir $@)))
+
+$(TARGET_DIR_out)/tests/test-signing : $(TARGET_DIR_out)/src/smb2_signing.o
+TESTS_LDFLAGS_test-signing := -lcrypto
+$(TARGET_SET_tests:%=$(TARGET_DIR_out)/tests/%) : $(TARGET_SET_lib:%=$(TARGET_DIR_out)/lib%.a) $(COMMON_LIBS)
 
 TARGET_SET_asn1 := spnego gssapi
 

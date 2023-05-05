@@ -191,6 +191,7 @@ void x_smb2_signing_sign(uint16_t algo,
 	x_smb2_digest(algo, *key, buflist, signature);
 }
 
+/* TODO aes_ccm does not work on centos 7.9 with openssl-libs-1.0.2k-26 */
 static inline int aes_ccm_signing_decrypt(const EVP_CIPHER *evp_cipher,
 		const x_smb2_cryption_key_t &key,
 		const void *signature,
