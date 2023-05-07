@@ -243,6 +243,12 @@ static inline int x_str_push_unicode(std::string &str, char32_t uc)
 	return -1;
 }
 
+static inline int x_str_push_unicode(std::u32string &str, char32_t uc)
+{
+	str.push_back(uc);
+	return 1;
+}
+
 static inline std::u16string x_utf16le_decode(const char16_t *begin,
 		const char16_t *end)
 {
