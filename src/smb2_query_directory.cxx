@@ -60,24 +60,29 @@ static void encode_out_qdir(const x_smb2_state_qdir_t &state,
 
 	out_qdir->struct_size = X_H2LE16(sizeof(x_smb2_out_qdir_t) + 1);
 	out_qdir->offset = X_H2LE16(sizeof(x_smb2_header_t) + sizeof(x_smb2_out_qdir_t));
-	out_qdir->length = X_H2LE32(x_convert_assert<uint32_t>(state.out_data.size()));
-	memcpy(out_qdir + 1, state.out_data.data(), state.out_data.size());
+	out_qdir->length = X_H2LE32(x_convert_assert<uint32_t>(state.out_buf_length));
 }
 
 static void x_smb2_reply_qdir(x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ,
-		const x_smb2_state_qdir_t &state)
+		x_smb2_state_qdir_t &state)
 {
 	X_LOG_OP("%ld RESP SUCCESS", smbd_requ->in_smb2_hdr.mid);
 
-	x_bufref_t *bufref = x_bufref_alloc(sizeof(x_smb2_out_qdir_t) +
-			state.out_data.size());
+	x_bufref_t *bufref = x_bufref_alloc(sizeof(x_smb2_out_qdir_t));
+	if (state.out_buf_length) {
+		bufref->next = new x_bufref_t(state.out_buf, 0, state.out_buf_length);
+		state.out_buf = nullptr;
+	}
 
 	uint8_t *out_hdr = bufref->get_data();
 	encode_out_qdir(state, out_hdr);
-	x_smb2_reply(smbd_conn, smbd_requ, bufref, bufref, NT_STATUS_OK, 
-			sizeof(x_smb2_header_t) + sizeof(x_smb2_out_qdir_t) + state.out_data.size());
+
+	x_smb2_reply(smbd_conn, smbd_requ, bufref,
+			bufref->next ? bufref->next : bufref, NT_STATUS_OK, 
+			sizeof(x_smb2_header_t) + sizeof(x_smb2_out_qdir_t) + state.out_buf_length);
 }
+
 
 static void x_smb2_qdir_async_done(x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ,

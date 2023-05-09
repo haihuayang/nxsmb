@@ -127,8 +127,8 @@ struct x_smb2_state_qdir_t
 	uint64_t in_file_id_persistent;
 	uint64_t in_file_id_volatile;
 	std::u16string in_name;
-
-	std::vector<uint8_t> out_data;
+	x_buf_t *out_buf{};
+	uint32_t out_buf_length{0};
 };
 
 struct x_smb2_state_ioctl_t

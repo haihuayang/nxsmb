@@ -2939,10 +2939,11 @@ static NTSTATUS posixfs_do_qdir(
 	}
 
 	qdir_t *qdir = posixfs_open->qdir;
-	state.out_data.resize(state.in_output_buffer_length);
+	state.out_buf = x_buf_alloc(state.in_output_buffer_length);
 	uint32_t num = 0, matched_count = 0;
 
-	x_smb2_chain_marshall_t marshall{state.out_data.data(), state.out_data.data() + state.out_data.size(), 8};
+	x_smb2_chain_marshall_t marshall{state.out_buf->data,
+		state.out_buf->data + state.out_buf->size, 8};
 	x_fnmatch_t *fnmatch = x_fnmatch_create(state.in_name, true);
 	while (num < max_count) {
 		qdir_pos_t qdir_pos;
@@ -2996,11 +2997,12 @@ static NTSTATUS posixfs_do_qdir(
 	}
 
 	if (num > 0) {
-		state.out_data.resize(marshall.get_size());
+		state.out_buf_length = marshall.get_size();
 		return NT_STATUS_OK;
 	}
 	
-	state.out_data.resize(0);
+	x_buf_release(state.out_buf);
+	state.out_buf = nullptr;
 	if (matched_count > 0) {
 		return NT_STATUS_INFO_LENGTH_MISMATCH;
 	} else {
