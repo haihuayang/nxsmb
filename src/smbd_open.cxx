@@ -586,7 +586,7 @@ struct defer_open_evt_t
 		if (x_smbd_requ_async_remove(smbd_requ) && smbd_conn) {
 			NTSTATUS status = x_smbd_open_op_create(smbd_requ, state);
 			if (!NT_STATUS_EQUAL(status, NT_STATUS_PENDING)) {
-				smbd_requ->save_state(state);
+				smbd_requ->save_requ_state(state);
 				smbd_requ->async_done_fn(smbd_conn, smbd_requ, status);
 			}
 		} else {
@@ -626,7 +626,7 @@ struct defer_rename_evt_t
 		if (x_smbd_requ_async_remove(smbd_requ) && smbd_conn) {
 			NTSTATUS status = x_smbd_open_op_rename(smbd_requ, state);
 			if (!NT_STATUS_EQUAL(status, NT_STATUS_PENDING)) {
-				smbd_requ->save_state(state);
+				smbd_requ->save_requ_state(state);
 				smbd_requ->async_done_fn(smbd_conn, smbd_requ, status);
 			}
 		}
@@ -879,7 +879,7 @@ static bool open_mode_check(x_smbd_object_t *smbd_object,
 
 static void smbd_create_cancel(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 {
-	auto state = smbd_requ->get_state<x_smb2_state_create_t>();
+	auto state = smbd_requ->get_requ_state<x_smb2_state_create_t>();
 	x_smbd_sharemode_t *sharemode = get_sharemode(state->smbd_object,
 			state->smbd_stream);
 
@@ -894,7 +894,7 @@ static void defer_open(x_smbd_sharemode_t *sharemode,
 		x_smbd_requ_t *smbd_requ,
 		std::unique_ptr<x_smb2_state_create_t> &state)
 {
-	smbd_requ->save_state(state);
+	smbd_requ->save_requ_state(state);
 	/* TODO does it need a timer? can break timer always wake up it? */
 	x_smbd_ref_inc(smbd_requ);
 	sharemode->defer_open_list.push_back(smbd_requ);

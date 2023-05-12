@@ -105,6 +105,7 @@ static void x_smb2_qdir_async_done(x_smbd_conn_t *smbd_conn,
 static bool smbd_qdir_queue_req(x_smbd_qdir_t *smbd_qdir, x_smbd_requ_t *smbd_requ)
 {
 	auto &requ_list = smbd_qdir->requ_list;
+	x_smbd_ref_inc(smbd_requ);
 	for (auto curr_requ = requ_list.get_back(); curr_requ;
 			curr_requ = requ_list.prev(curr_requ)) {
 		X_ASSERT(smbd_requ->compound_id != curr_requ->compound_id);
@@ -129,7 +130,7 @@ static NTSTATUS smbd_qdir_process_requ(x_smbd_qdir_t *smbd_qdir, x_smbd_requ_t *
 	if (delay_ms) {
 		usleep(delay_ms * 1000);
 	}
-	auto state = smbd_requ->get_state<x_smb2_state_qdir_t>();
+	auto state = smbd_requ->get_requ_state<x_smb2_state_qdir_t>();
 	if (state->in_flags & (X_SMB2_CONTINUE_FLAG_REOPEN | X_SMB2_CONTINUE_FLAG_RESTART)) {
 		smbd_qdir->error_status = NT_STATUS_OK;
 		smbd_qdir->pos = {};
@@ -367,7 +368,7 @@ NTSTATUS x_smb2_process_query_directory(x_smbd_conn_t *smbd_conn, x_smbd_requ_t 
 			smbd_open->smbd_qdir->base.ops = &smbd_qdir_job_ops;
 		}
 
-		smbd_requ->save_state(state);
+		smbd_requ->save_requ_state(state);
 		x_smbd_requ_async_insert(smbd_requ, smbd_qdir_cancel);
 
 		smbd_qdir_queue_req(smbd_open->smbd_qdir, smbd_requ);

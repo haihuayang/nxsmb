@@ -235,7 +235,7 @@ NTSTATUS x_smb2_process_sesssetup(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_
 		smb2_sesssetup_done(smbd_conn, smbd_requ, dialect, status,
 				*state, out_security);
 	} else {
-		smbd_requ->save_state(state);
+		smbd_requ->save_requ_state(state);
 	}
 	return status;
 }

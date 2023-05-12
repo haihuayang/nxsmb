@@ -567,6 +567,14 @@ static void x_smbd_conn_cancel(x_smbd_conn_t *smbd_conn,
 		return;
 	}
 
+	if (!smbd_requ->set_cancelled()) {
+		X_LOG_DBG("cannot cancel requ %p async_id=x%lx, mid=%lu",
+				smbd_requ, smb2_hdr.async_id, smb2_hdr.mid);
+		return;
+	}
+
+	X_LOG_DBG("cancel requ %p async_id=x%lx, mid=%lu",
+			smbd_requ, smb2_hdr.async_id, smb2_hdr.mid);
 	auto cancel_fn = smbd_requ->cancel_fn;
 	smbd_requ->cancel_fn = nullptr;
 	smbd_conn->pending_requ_list.remove(smbd_requ);
@@ -901,6 +909,7 @@ static NTSTATUS x_smbd_conn_process_smb2_intl(x_smbd_conn_t *smbd_conn, x_smbd_r
 	}
 
 	smbd_requ->async = false;
+	smbd_requ->async_state = x_smbd_requ_t::S_INIT;
 
 	return op.op_func(smbd_conn, smbd_requ);
 }

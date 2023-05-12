@@ -81,7 +81,7 @@ static x_job_t::retval_t copychunk_job_run(x_job_t *job)
 	x_smbd_requ_t *smbd_requ = copychunk_job->smbd_requ;
 	copychunk_job->smbd_requ = nullptr;
 
-	auto state = smbd_requ->get_state<x_smb2_state_ioctl_t>();
+	auto state = smbd_requ->get_requ_state<x_smb2_state_ioctl_t>();
 
 	NTSTATUS status = NT_STATUS_OK;
 	uint32_t total_count = 0;
@@ -290,7 +290,7 @@ NTSTATUS x_smb2_ioctl_copychunk(
 
 	copychunk_job_t *copychunk_job = new copychunk_job_t(x_smbd_ref_inc(smbd_requ),
 			src_open, std::move(chunks));
-	smbd_requ->save_state(state);
+	smbd_requ->save_requ_state(state);
 	x_smbd_requ_async_insert(smbd_requ, copychunk_cancel);
 	x_smbd_schedule_async(&copychunk_job->base);
 	return NT_STATUS_PENDING;

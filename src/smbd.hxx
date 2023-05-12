@@ -409,6 +409,12 @@ int x_smbd_ipc_init();
 
 struct x_smbd_requ_t
 {
+	enum {
+		S_INIT,
+		S_PROCESSING,
+		S_CANCELLED,
+	};
+
 	explicit x_smbd_requ_t(x_buf_t *in_buf, uint32_t in_msgsize, bool encrypted);
 	~x_smbd_requ_t();
 
@@ -437,15 +443,27 @@ struct x_smbd_requ_t
 	}
 
 	template <class T>
-	T *get_state() const {
+	T *get_requ_state() const {
 		X_ASSERT(requ_state);
 		return (T *)requ_state;
 	}
 
 	template <class T>
-	void save_state(std::unique_ptr<T> &state) {
+	void save_requ_state(std::unique_ptr<T> &state) {
 		X_ASSERT(!requ_state);
 		requ_state = state.release();
+	}
+
+	bool set_processing() {
+		uint32_t old_val = S_INIT;
+		return std::atomic_compare_exchange_strong(&async_state,
+				&old_val, S_PROCESSING);
+	}
+
+	bool set_cancelled() {
+		uint32_t old_val = S_INIT;
+		return std::atomic_compare_exchange_strong(&async_state,
+				&old_val, S_CANCELLED);
 	}
 
 	x_job_t job;
@@ -460,6 +478,7 @@ struct x_smbd_requ_t
 
 	x_smb2_header_t in_smb2_hdr;
 	uint32_t in_msgsize, in_offset, in_requ_len;
+	std::atomic<uint32_t> async_state = S_INIT;
 	bool encrypted;
 	bool async = false;
 	bool request_counters_updated = false;

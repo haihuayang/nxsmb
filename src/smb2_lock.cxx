@@ -269,7 +269,7 @@ void x_smbd_lock_retry(x_smbd_sharemode_t *sharemode)
 		while (smbd_requ) {
 			x_smbd_requ_t *next_requ = curr_open->pending_requ_list.next(smbd_requ);
 			if (smbd_requ->in_smb2_hdr.opcode == X_SMB2_OP_LOCK) {
-				auto state = smbd_requ->get_state<x_smb2_state_lock_t>();
+				auto state = smbd_requ->get_requ_state<x_smb2_state_lock_t>();
 				if (!brl_conflict(sharemode, curr_open, state->in_lock_elements)) {
 					curr_open->pending_requ_list.remove(smbd_requ);
 					curr_open->locks.insert(curr_open->locks.end(),
@@ -343,7 +343,7 @@ static NTSTATUS smbd_open_lock(
 	} else {
 		X_ASSERT(state->in_lock_elements.size() == 1);
 		X_LOG_DBG("lock conflict");
-		smbd_requ->save_state(state);
+		smbd_requ->save_requ_state(state);
 		x_smbd_ref_inc(smbd_requ);
 		smbd_open->pending_requ_list.push_back(smbd_requ);
 		x_smbd_requ_async_insert(smbd_requ, smbd_lock_cancel);

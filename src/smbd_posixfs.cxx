@@ -705,7 +705,7 @@ struct posixfs_defer_rename_evt_t
 		if (x_smbd_requ_async_remove(smbd_requ) && smbd_conn) {
 			NTSTATUS status = x_smbd_open_op_rename(smbd_requ, state);
 			if (!NT_STATUS_EQUAL(status, NT_STATUS_PENDING)) {
-				smbd_requ->save_state(state);
+				smbd_requ->save_requ_state(state);
 				smbd_requ->async_done_fn(smbd_conn, smbd_requ, status);
 			}
 		}
@@ -959,7 +959,7 @@ NTSTATUS posixfs_object_op_rename(x_smbd_object_t *smbd_object,
 	auto lock = std::lock_guard(posixfs_object->base.mutex);
 
 	if (delay_rename_for_lease_break(posixfs_object, sharemode, posixfs_open)) {
-		smbd_requ->save_state(state);
+		smbd_requ->save_requ_state(state);
 		/* TODO does it need a timer? can break timer always wake up it? */
 		x_smbd_ref_inc(smbd_requ);
 		sharemode->defer_rename_list.push_back(smbd_requ);
@@ -1674,7 +1674,7 @@ static x_job_t::retval_t posixfs_read_job_run(x_job_t *job)
 	posixfs_read_job->smbd_requ = nullptr;
 	posixfs_read_job->posixfs_object = nullptr;
 
-	auto state = smbd_requ->get_state<x_smb2_state_read_t>();
+	auto state = smbd_requ->get_requ_state<x_smb2_state_read_t>();
 
 	NTSTATUS status = posixfs_do_read(posixfs_object, *state);
 
@@ -1820,7 +1820,7 @@ NTSTATUS posixfs_object_op_read(
 	posixfs_object_incref(posixfs_object);
 	x_smbd_ref_inc(smbd_requ);
 	posixfs_read_job_t *read_job = new posixfs_read_job_t(posixfs_object, smbd_requ);
-	smbd_requ->save_state(state);
+	smbd_requ->save_requ_state(state);
 	x_smbd_requ_async_insert(smbd_requ, posixfs_read_cancel);
 	x_smbd_schedule_async(&read_job->base);
 	return NT_STATUS_PENDING;
@@ -1901,7 +1901,7 @@ static x_job_t::retval_t posixfs_write_job_run(x_job_t *job)
 	posixfs_write_job->smbd_requ = nullptr;
 	posixfs_write_job->posixfs_object = nullptr;
 
-	auto state = smbd_requ->get_state<x_smb2_state_write_t>();
+	auto state = smbd_requ->get_requ_state<x_smb2_state_write_t>();
 	NTSTATUS status = posixfs_do_write(posixfs_object, posixfs_open, *state);
 
 	posixfs_object_release(posixfs_object);
@@ -1970,7 +1970,7 @@ NTSTATUS posixfs_object_op_write(
 	posixfs_object_incref(posixfs_object);
 	x_smbd_ref_inc(smbd_requ);
 	posixfs_write_job_t *write_job = new posixfs_write_job_t(posixfs_object, smbd_requ);
-	smbd_requ->save_state(state);
+	smbd_requ->save_requ_state(state);
 	x_smbd_requ_async_insert(smbd_requ, posixfs_write_cancel);
 	x_smbd_schedule_async(&write_job->base);
 	return NT_STATUS_PENDING;
