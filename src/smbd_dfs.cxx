@@ -603,6 +603,45 @@ static bool dfs_tld_process_entry(
 	return ret == 0;
 }
 
+static bool dfs_root_qdir_op_get_entry(x_smbd_qdir_t *smbd_qdir,
+		x_smbd_qdir_pos_t &qdir_pos,
+		std::u16string &name,
+		x_smbd_object_meta_t &object_meta,
+		x_smbd_stream_meta_t &stream_meta,
+		std::shared_ptr<idl::security_descriptor> *ppsd)
+{
+	auto smbd_open = smbd_qdir->smbd_open;
+	if (smbd_open->open_state.priv_data == dfs_open_type_dfs_root) {
+		return posixfs_qdir_get_entry(smbd_qdir, qdir_pos, name,
+				object_meta, stream_meta, ppsd,
+				pseudo_entries, PSEUDO_ENTRIES_COUNT,
+				dfs_root_process_entry);
+	} else if (smbd_open->open_state.priv_data == dfs_open_type_tld_manager) {
+		return posixfs_qdir_get_entry(smbd_qdir, qdir_pos, name,
+				object_meta, stream_meta, ppsd,
+				pseudo_entries, PSEUDO_ENTRIES_COUNT,
+				dfs_tld_manager_process_entry);
+	} else if (smbd_open->open_state.priv_data == dfs_open_type_under_tld_manager) {
+		return posixfs_qdir_get_entry(smbd_qdir, qdir_pos, name,
+				object_meta, stream_meta, ppsd,
+				pseudo_entries, PSEUDO_ENTRIES_COUNT,
+				dfs_tld_process_entry);
+	} else {
+		return false;
+	}
+}
+
+static const x_smbd_qdir_ops_t dfs_root_qdir_ops = {
+	dfs_root_qdir_op_get_entry,
+	posixfs_qdir_destroy,
+};
+
+static x_smbd_qdir_t *dfs_root_op_qdir_create(x_smbd_open_t *smbd_open)
+{
+	return posixfs_qdir_create(smbd_open, &dfs_root_qdir_ops); 
+}
+
+#if 0
 static NTSTATUS dfs_root_object_op_qdir(
 		x_smbd_object_t *smbd_object,
 		x_smbd_open_t *smbd_open,
@@ -626,7 +665,7 @@ static NTSTATUS dfs_root_object_op_qdir(
 		return NT_STATUS_INVALID_DEVICE_REQUEST;
 	}
 }
-
+#endif
 static NTSTATUS dfs_root_object_op_set_delete_on_close(
 		x_smbd_object_t *smbd_object,
 		x_smbd_open_t *smbd_open,
@@ -809,7 +848,7 @@ static const x_smbd_object_ops_t dfs_root_object_ops = {
 	posixfs_object_op_getinfo,
 	posixfs_object_op_setinfo,
 	posixfs_object_op_ioctl,
-	dfs_root_object_op_qdir,
+	dfs_root_op_qdir_create,
 	dfs_root_object_op_rename,
 	dfs_root_object_op_set_delete_on_close,
 	dfs_root_notify_change,
@@ -855,17 +894,29 @@ static bool dfs_volume_process_entry(
 	return ret == 0;
 }
 
-static NTSTATUS dfs_volume_object_op_qdir(
-		x_smbd_object_t *smbd_object,
-		x_smbd_open_t *smbd_open,
-		x_smbd_conn_t *smbd_conn,
-		x_smbd_requ_t *smbd_requ,
-		std::unique_ptr<x_smb2_state_qdir_t> &state)
+static bool dfs_volume_qdir_op_get_entry(x_smbd_qdir_t *smbd_qdir,
+		x_smbd_qdir_pos_t &qdir_pos,
+		std::u16string &name,
+		x_smbd_object_meta_t &object_meta,
+		x_smbd_stream_meta_t &stream_meta,
+		std::shared_ptr<idl::security_descriptor> *ppsd)
 {
-	return posixfs_object_qdir(smbd_object, smbd_conn, smbd_requ, state,
-			pseudo_entries, X_ARRAY_SIZE(pseudo_entries),
+	return posixfs_qdir_get_entry(smbd_qdir, qdir_pos, name,
+			object_meta, stream_meta, ppsd,
+			pseudo_entries, PSEUDO_ENTRIES_COUNT,
 			dfs_volume_process_entry);
 }
+
+static const x_smbd_qdir_ops_t dfs_volume_qdir_ops = {
+	dfs_volume_qdir_op_get_entry,
+	posixfs_qdir_destroy,
+};
+
+static x_smbd_qdir_t *dfs_volume_op_qdir_create(x_smbd_open_t *smbd_open)
+{
+	return posixfs_qdir_create(smbd_open, &dfs_volume_qdir_ops); 
+}
+
 
 static NTSTATUS dfs_volume_op_create_open(x_smbd_open_t **psmbd_open,
 		x_smbd_requ_t *smbd_requ,
@@ -922,7 +973,7 @@ static const x_smbd_object_ops_t dfs_volume_object_ops = {
 	posixfs_object_op_getinfo,
 	posixfs_object_op_setinfo,
 	posixfs_object_op_ioctl,
-	dfs_volume_object_op_qdir,
+	dfs_volume_op_qdir_create,
 	dfs_volume_object_op_rename,
 	posixfs_object_op_set_delete_on_close,
 	x_smbd_simple_notify_change,

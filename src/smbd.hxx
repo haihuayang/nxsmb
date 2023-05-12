@@ -66,6 +66,7 @@ struct x_smbd_sess_t;
 struct x_smbd_chan_t;
 struct x_smbd_tcon_t;
 struct x_smbd_open_t;
+struct x_smbd_qdir_t;
 struct x_smbd_lease_t;
 struct x_smbd_object_t;
 struct x_smbd_stream_t;
@@ -455,6 +456,7 @@ struct x_smbd_requ_t
 	x_buf_t *in_buf;
 	uint64_t id = 0;
 	uint64_t channel_generation;
+	const uint64_t compound_id;
 
 	x_smb2_header_t in_smb2_hdr;
 	uint32_t in_msgsize, in_offset, in_requ_len;

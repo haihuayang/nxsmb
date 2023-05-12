@@ -45,6 +45,32 @@ static bool simplefs_process_entry(
 	return ret == 0;
 }
 
+static bool simplefs_qdir_op_get_entry(x_smbd_qdir_t *smbd_qdir,
+		x_smbd_qdir_pos_t &qdir_pos,
+		std::u16string &name,
+		x_smbd_object_meta_t &object_meta,
+		x_smbd_stream_meta_t &stream_meta,
+		std::shared_ptr<idl::security_descriptor> *ppsd)
+{
+	return posixfs_qdir_get_entry(smbd_qdir, qdir_pos, name,
+			object_meta, stream_meta, ppsd,
+			pseudo_entries, PSEUDO_ENTRIES_COUNT,
+			simplefs_process_entry);
+}
+
+static const x_smbd_qdir_ops_t simplefs_qdir_ops = {
+	simplefs_qdir_op_get_entry,
+	posixfs_qdir_destroy,
+};
+
+static x_smbd_qdir_t *simplefs_op_qdir_create(x_smbd_open_t *smbd_open)
+{
+	return posixfs_qdir_create(smbd_open, &simplefs_qdir_ops); 
+}
+
+
+
+#if 0
 static NTSTATUS simplefs_object_op_qdir(
 		x_smbd_object_t *smbd_object,
 		x_smbd_open_t *smbd_open,
@@ -56,7 +82,7 @@ static NTSTATUS simplefs_object_op_qdir(
 			pseudo_entries, PSEUDO_ENTRIES_COUNT,
 			simplefs_process_entry);
 }
-
+#endif
 static NTSTATUS simplefs_op_create_open(x_smbd_open_t **psmbd_open,
 		x_smbd_requ_t *smbd_requ,
 		x_smbd_share_t &smbd_share,
@@ -70,7 +96,6 @@ static NTSTATUS simplefs_op_create_open(x_smbd_open_t **psmbd_open,
 			state, overwrite, create_action, oplock_level, changes);
 }
 
-
 static const x_smbd_object_ops_t simplefs_object_ops = {
 	x_smbd_posixfs_open_object,
 	x_smbd_posixfs_create_object,
@@ -82,7 +107,7 @@ static const x_smbd_object_ops_t simplefs_object_ops = {
 	posixfs_object_op_getinfo,
 	posixfs_object_op_setinfo,
 	posixfs_object_op_ioctl,
-	simplefs_object_op_qdir,
+	simplefs_op_qdir_create,
 	posixfs_object_op_rename,
 	posixfs_object_op_set_delete_on_close,
 	x_smbd_simple_notify_change,

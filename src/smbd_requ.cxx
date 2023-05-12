@@ -10,11 +10,12 @@ static smbd_requ_table_t *g_smbd_requ_table;
 
 x_smbd_requ_t::x_smbd_requ_t(x_buf_t *in_buf, uint32_t in_msgsize,
 		bool encrypted)
-	: in_buf(in_buf), in_msgsize(in_msgsize)
+	: in_buf(in_buf)
+	, compound_id(X_SMBD_COUNTER_INC(requ_create, 1) + 1)
+	, in_msgsize(in_msgsize)
 	, encrypted(encrypted)
 {
 	X_LOG_DBG("create %p", this);
-	X_SMBD_COUNTER_INC(requ_create, 1);
 }
 
 x_smbd_requ_t::~x_smbd_requ_t()

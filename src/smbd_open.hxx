@@ -13,6 +13,42 @@
 #include "smbd_share.hxx"
 #include "smbd_file.hxx"
 
+/* TODO make it general */
+struct x_smbd_qdir_pos_t
+{
+	uint32_t file_number = 0;
+	uint32_t offset_in_block = 0;
+	uint64_t filepos = 0;
+};
+
+struct x_smbd_qdir_ops_t
+{
+	bool (*get_entry)(x_smbd_qdir_t *smbd_qdir,
+			x_smbd_qdir_pos_t &qdir_pos,
+			std::u16string &name,
+			x_smbd_object_meta_t &object_meta,
+			x_smbd_stream_meta_t &stream_meta,
+			std::shared_ptr<idl::security_descriptor> *ppsd);
+	void (*destroy)(x_smbd_qdir_t *smbd_qdir);
+};
+
+struct x_smbd_qdir_t
+{
+	x_smbd_qdir_t(x_smbd_open_t *smbd_open, const x_smbd_qdir_ops_t *ops);
+	~x_smbd_qdir_t();
+
+	x_job_t base;
+	const x_smbd_qdir_ops_t *const ops;
+	x_smbd_open_t * const smbd_open;
+	x_tp_ddlist_t<requ_async_traits> requ_list;
+	x_smbd_qdir_pos_t pos;
+	uint64_t compound_id_blocking = 0;
+	NTSTATUS error_status = NT_STATUS_OK;
+	uint32_t total_count = 0;
+	std::atomic<bool> closed = false;
+	x_fnmatch_t *fnmatch = nullptr;
+};
+
 struct x_smbd_open_t
 {
 	x_smbd_open_t(x_smbd_object_t *so, x_smbd_stream_t *ss,
@@ -60,6 +96,8 @@ struct x_smbd_open_t
 	uint32_t notify_filter = 0;
 	uint32_t notify_buffer_length;
 	x_smbd_lease_t *smbd_lease{};
+
+	x_smbd_qdir_t *smbd_qdir{};
 
 	uint8_t lock_sequency_array[64];
 	uint32_t mode = 0; // [MS-FSCC] 2.4.26
@@ -130,11 +168,22 @@ struct x_smbd_object_ops_t
 	NTSTATUS (*ioctl)(x_smbd_object_t *smbd_object,
 			x_smbd_requ_t *smbd_requ,
 			std::unique_ptr<x_smb2_state_ioctl_t> &state);
+	x_smbd_qdir_t *(*qdir_create)(x_smbd_open_t *smbd_open);
+#if 0
+	bool (*qdir_get_entry)(x_smbd_qdir_t *smbd_qdir,
+			x_smbd_qdir_pos_t &qdir_pos,
+			std::u16string &name,
+			x_smbd_object_meta_t &object_meta,
+			x_smbd_stream_meta_t &stream_meta,
+			std::shared_ptr<idl::security_descriptor> *ppsd);
+	void (*qdir_unget_entry)(x_smbd_qdir_t *smbd_qdir,
+			const x_smbd_qdir_pos_t &qdir_pos);
 	NTSTATUS (*qdir)(x_smbd_object_t *smbd_object,
 			x_smbd_open_t *smbd_open,
 			x_smbd_conn_t *smbd_conn,
 			x_smbd_requ_t *smbd_requ,
 			std::unique_ptr<x_smb2_state_qdir_t> &state);
+#endif
 	NTSTATUS (*rename)(x_smbd_object_t *smbd_object,
 			x_smbd_open_t *smbd_open,
 			x_smbd_requ_t *smbd_requ,
@@ -361,7 +410,7 @@ static inline NTSTATUS x_smbd_open_op_ioctl(
 	}
 	return op_fn(smbd_object, smbd_requ, state);
 }
-
+#if 0
 static inline NTSTATUS x_smbd_open_op_qdir(
 		x_smbd_open_t *smbd_open,
 		x_smbd_conn_t *smbd_conn,
@@ -369,13 +418,9 @@ static inline NTSTATUS x_smbd_open_op_qdir(
 		std::unique_ptr<x_smb2_state_qdir_t> &state)
 {
 	x_smbd_object_t *smbd_object = smbd_open->smbd_object;
-	auto op_fn = smbd_object->smbd_volume->ops->qdir;
-	if (!op_fn) {
-		return NT_STATUS_INVALID_DEVICE_REQUEST;
-	}
 	return op_fn(smbd_object, smbd_open, smbd_conn, smbd_requ, state);
 }
-
+#endif
 static inline NTSTATUS x_smbd_open_op_rename(
 		x_smbd_requ_t *smbd_requ,
 		std::unique_ptr<x_smb2_state_rename_t> &state)
@@ -526,6 +571,20 @@ void x_smbd_lock_retry(x_smbd_sharemode_t *sharemode);
 
 bool x_smbd_open_match_get_lease(const x_smbd_open_t *smbd_open,
 		x_smb2_lease_t &lease);
+
+static inline x_smbd_qdir_t *x_smbd_qdir_create(x_smbd_open_t *smbd_open)
+{
+	return smbd_open->smbd_object->smbd_volume->ops->qdir_create(smbd_open);
+}
+
+static inline void x_smbd_qdir_unget_entry(x_smbd_qdir_t *smbd_qdir,
+			const x_smbd_qdir_pos_t &qdir_pos)
+{
+	X_ASSERT(smbd_qdir->pos.file_number == qdir_pos.file_number + 1);
+	smbd_qdir->pos = qdir_pos;
+}
+
+void x_smbd_qdir_close(x_smbd_qdir_t *smbd_qdir);
 
 #if 0
 	uint32_t (*get_attributes)(const x_smbd_object_t *smbd_object);

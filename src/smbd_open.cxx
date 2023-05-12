@@ -278,6 +278,11 @@ static void smbd_close_open_intl(
        	smbd_lease = smbd_open->smbd_lease;
 	smbd_open->smbd_lease = nullptr;
 
+	if (smbd_open->smbd_qdir) {
+		x_smbd_qdir_close(smbd_open->smbd_qdir);
+		smbd_open->smbd_qdir = nullptr;
+	}
+
 	/* Windows server send NT_STATUS_NOTIFY_CLEANUP
 	   when tree disconect.
 	   while samba not send.

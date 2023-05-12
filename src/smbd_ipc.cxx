@@ -523,7 +523,7 @@ static NTSTATUS ipc_object_op_ioctl(
 		return NT_STATUS_NOT_SUPPORTED;
 	}
 }
-
+#if 0
 static NTSTATUS ipc_object_op_qdir(
 		x_smbd_object_t *smbd_object,
 		x_smbd_open_t *smbd_open,
@@ -533,7 +533,7 @@ static NTSTATUS ipc_object_op_qdir(
 {
 	return NT_STATUS_INVALID_PARAMETER;
 }
-#if 0
+
 static NTSTATUS ipc_object_op_close(
 		x_smbd_object_t *smbd_object,
 		x_smbd_open_t *smbd_open,
@@ -727,7 +727,7 @@ static const x_smbd_object_ops_t x_smbd_ipc_object_ops = {
 	ipc_object_op_getinfo,
 	ipc_object_op_setinfo,
 	ipc_object_op_ioctl,
-	ipc_object_op_qdir,
+	nullptr, // op_qdir_create
 	nullptr, // op_rename
 	nullptr, // op_set_delete_on_close
 	nullptr, // notify_fname

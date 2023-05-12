@@ -29,6 +29,8 @@
 	X_SMBD_COUNTER_DECL(open_delete) \
 	X_SMBD_COUNTER_DECL(requ_create) \
 	X_SMBD_COUNTER_DECL(requ_delete) \
+	X_SMBD_COUNTER_DECL(qdir_create) \
+	X_SMBD_COUNTER_DECL(qdir_delete) \
 	X_SMBD_COUNTER_DECL(sess_bind) \
 
 enum {
@@ -45,9 +47,9 @@ struct x_smbd_stats_t
 
 extern x_smbd_stats_t g_smbd_stats;
 
-#define X_SMBD_COUNTER_INC(id, num) do { \
-	g_smbd_stats.counters[X_SMBD_COUNTER_ID_ ## id].fetch_add(num, std::memory_order_acq_rel); \
-} while (0)
+#define X_SMBD_COUNTER_INC(id, num) ( \
+	g_smbd_stats.counters[X_SMBD_COUNTER_ID_ ## id].fetch_add(num, std::memory_order_relaxed) \
+)
 
 int x_smbd_stats_init();
 
