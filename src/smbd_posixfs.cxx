@@ -1634,6 +1634,10 @@ struct posixfs_read_evt_t
 static NTSTATUS posixfs_do_read(posixfs_object_t *posixfs_object,
 		x_smb2_state_read_t &state)
 {
+	uint32_t delay_ms = x_smbd_conf_get()->my_dev_delay_read_ms;
+	if (delay_ms) {
+		usleep(delay_ms * 1000);
+	}
 	uint32_t length = std::min(state.in_length, 1024u * 1024);
 	state.out_buf = x_buf_alloc(length);
 	ssize_t ret = pread(posixfs_object->fd, state.out_buf->data,
@@ -1826,6 +1830,10 @@ static NTSTATUS posixfs_do_write(posixfs_object_t *posixfs_object,
 		posixfs_open_t *posixfs_open,
 		x_smb2_state_write_t &state)
 {
+	uint32_t delay_ms = x_smbd_conf_get()->my_dev_delay_write_ms;
+	if (delay_ms) {
+		usleep(delay_ms * 1000);
+	}
 	ssize_t ret = pwrite(posixfs_object->fd,
 			state.in_buf->data + state.in_buf_offset,
 			state.in_buf_length, state.in_offset);

@@ -380,6 +380,12 @@ static bool parse_global_param(x_smbd_conf_t &smbd_conf,
 		smbd_conf.nodes = parse_stringlist(value);
 	} else if (name == "my:volume map") {
 		return parse_volume_map(volume_specs, value);
+	} else if (name == "my:dev delay read ms") {
+		return parse_uint32(value, smbd_conf.my_dev_delay_read_ms);
+	} else if (name == "my:dev delay write ms") {
+		return parse_uint32(value, smbd_conf.my_dev_delay_write_ms);
+	} else if (name == "my:dev delay qdir ms") {
+		return parse_uint32(value, smbd_conf.my_dev_delay_qdir_ms);
 
 	} else {
 		X_LOG_WARN("unknown global param '%s' with value '%s'",

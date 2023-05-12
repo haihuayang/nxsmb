@@ -125,6 +125,10 @@ static bool smbd_qdir_queue_req(x_smbd_qdir_t *smbd_qdir, x_smbd_requ_t *smbd_re
 
 static NTSTATUS smbd_qdir_process_requ(x_smbd_qdir_t *smbd_qdir, x_smbd_requ_t *smbd_requ)
 {
+	uint32_t delay_ms = x_smbd_conf_get()->my_dev_delay_qdir_ms;
+	if (delay_ms) {
+		usleep(delay_ms * 1000);
+	}
 	auto state = smbd_requ->get_state<x_smb2_state_qdir_t>();
 	if (state->in_flags & (X_SMB2_CONTINUE_FLAG_REOPEN | X_SMB2_CONTINUE_FLAG_RESTART)) {
 		smbd_qdir->error_status = NT_STATUS_OK;

@@ -59,6 +59,11 @@ struct x_smbd_conf_t
 	unsigned int log_level = X_LOG_LEVEL_DBG;
 	uint32_t max_connections = 512;
 	uint32_t max_opens = 1024;
+
+	uint32_t my_dev_delay_read_ms = 0;
+	uint32_t my_dev_delay_write_ms = 0;
+	uint32_t my_dev_delay_qdir_ms = 0;
+
 	std::string log_name = "stderr";
 	std::string netbios_name_l8, workgroup_8, dns_domain_l8, realm;
 	std::shared_ptr<std::u16string> netbios_name_u16, workgroup_u16, dns_domain_l16;
