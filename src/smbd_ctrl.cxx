@@ -162,22 +162,9 @@ static bool x_smbd_ctrl_conn_do_send(x_smbd_ctrl_conn_t *smbd_ctrl_conn, x_fdeve
 	return false;
 }
 
-static bool x_smbd_ctrl_conn_do_timer(x_smbd_ctrl_conn_t *smbd_ctrl_conn, x_fdevents_t &fdevents)
-{
-	X_LOG_DBG("%s %p x%lx", task_name, smbd_ctrl_conn, fdevents);
-	fdevents = x_fdevents_consume(fdevents, FDEVT_TIMER);
-	return false;
-}
-
 static bool x_smbd_ctrl_conn_handle_events(x_smbd_ctrl_conn_t *smbd_ctrl_conn, x_fdevents_t &fdevents)
 {
 	uint32_t events = x_fdevents_processable(fdevents);
-	if (events & FDEVT_TIMER) {
-		if (x_smbd_ctrl_conn_do_timer(smbd_ctrl_conn, fdevents)) {
-			return true;
-		}
-		events = x_fdevents_processable(fdevents);
-	}
 	if (events & FDEVT_IN) {
 		if (x_smbd_ctrl_conn_do_recv(smbd_ctrl_conn, fdevents)) {
 			return true;
@@ -220,7 +207,7 @@ static void x_smbd_ctrl_accepted(int fd)
 	smbd_ctrl_conn->upcall.cbs = &x_smbd_ctrl_conn_upcall_cbs;
 	smbd_ctrl_conn->ep_id = x_evtmgmt_monitor(g_evtmgmt, fd, FDEVT_IN | FDEVT_OUT, &smbd_ctrl_conn->upcall);
 	x_evtmgmt_enable_events(g_evtmgmt, smbd_ctrl_conn->ep_id,
-			FDEVT_IN | FDEVT_ERR | FDEVT_SHUTDOWN | FDEVT_TIMER | FDEVT_USER);
+			FDEVT_IN | FDEVT_ERR | FDEVT_SHUTDOWN | FDEVT_USER);
 }
 
 static inline x_smbd_ctrl_t *x_smbd_ctrl_from_upcall(x_epoll_upcall_t *upcall)

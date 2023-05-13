@@ -13,8 +13,7 @@ enum {
 	FDEVT_IN = EPOLLIN,
 	FDEVT_OUT = EPOLLOUT,
 	FDEVT_ERR = EPOLLERR,
-	FDEVT_USER = (1u << 29),
-	FDEVT_TIMER = (1u << 30),
+	FDEVT_USER = (1u << 30),
 	FDEVT_SHUTDOWN = (1u << 31),
 };
 
@@ -91,7 +90,7 @@ struct x_timer_t
 };
 
 struct x_evtmgmt_t;
-x_evtmgmt_t *x_evtmgmt_create(x_threadpool_t *tpool, unsigned long entry_interval, uint32_t max_fd);
+x_evtmgmt_t *x_evtmgmt_create(x_threadpool_t *tpool, uint32_t max_fd);
 void x_evtmgmt_dispatch(x_evtmgmt_t *ep);
 
 uint64_t x_evtmgmt_monitor(x_evtmgmt_t *ep, unsigned int fd, uint32_t poll_events, x_epoll_upcall_t * upcall);
