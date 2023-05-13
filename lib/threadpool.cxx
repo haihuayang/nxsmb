@@ -76,11 +76,9 @@ static void *thread_func(void *arg)
 			break;
 		}
 		tick_now = x_tick_now();
-		x_job_t::retval_t status = job->ops->run(job, tpool->private_data);
+		x_job_t::retval_t status = job->run(job, tpool->private_data);
 		X_DBG("%s run job %p %d", task_name, job, status);
 		if (status == x_job_t::JOB_DONE) {
-			job->state = x_job_t::STATE_DONE;
-			job->ops->done(job, tpool->private_data);
 			continue;
 		}
 

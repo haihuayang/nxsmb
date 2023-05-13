@@ -1681,24 +1681,12 @@ static x_job_t::retval_t posixfs_read_job_run(x_job_t *job, void *sche)
 	posixfs_object_release(posixfs_object);
 	X_SMBD_CHAN_POST_USER(smbd_requ->smbd_chan,
 			new posixfs_read_evt_t(smbd_requ, status));
+	delete posixfs_read_job;
 	return x_job_t::JOB_DONE;
 }
 
-static void posixfs_read_job_done(x_job_t *job, void *sche)
-{
-	posixfs_read_job_t *posixfs_read_job = X_CONTAINER_OF(job, posixfs_read_job_t, base);
-	X_ASSERT(!posixfs_read_job->posixfs_object);
-	X_ASSERT(!posixfs_read_job->smbd_requ);
-	delete posixfs_read_job;
-}
-
-static const x_job_ops_t posixfs_read_job_ops = {
-	posixfs_read_job_run,
-	posixfs_read_job_done,
-};
-
 inline posixfs_read_job_t::posixfs_read_job_t(posixfs_object_t *po, x_smbd_requ_t *r)
-	: base(&posixfs_read_job_ops), posixfs_object(po), smbd_requ(r)
+	: base(posixfs_read_job_run), posixfs_object(po), smbd_requ(r)
 {
 }
 
@@ -1906,24 +1894,12 @@ static x_job_t::retval_t posixfs_write_job_run(x_job_t *job, void *data)
 	posixfs_object_release(posixfs_object);
 	X_SMBD_CHAN_POST_USER(smbd_requ->smbd_chan,
 			new posixfs_write_evt_t(smbd_requ, status));
+	delete posixfs_write_job;
 	return x_job_t::JOB_DONE;
 }
 
-static void posixfs_write_job_done(x_job_t *job, void *data)
-{
-	posixfs_write_job_t *posixfs_write_job = X_CONTAINER_OF(job, posixfs_write_job_t, base);
-	X_ASSERT(!posixfs_write_job->posixfs_object);
-	X_ASSERT(!posixfs_write_job->smbd_requ);
-	delete posixfs_write_job;
-}
-
-static const x_job_ops_t posixfs_write_job_ops = {
-	posixfs_write_job_run,
-	posixfs_write_job_done,
-};
-
 inline posixfs_write_job_t::posixfs_write_job_t(posixfs_object_t *po, x_smbd_requ_t *r)
-	: base(&posixfs_write_job_ops), posixfs_object(po), smbd_requ(r)
+	: base(posixfs_write_job_run), posixfs_object(po), smbd_requ(r)
 {
 }
 

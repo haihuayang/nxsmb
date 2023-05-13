@@ -11,12 +11,6 @@
 #define EVENT_LOG(...) do { } while (0)
 
 static x_job_t::retval_t epoll_job_run(x_job_t *job, void *data);
-static void epoll_job_done(x_job_t *job, void *data);
-
-static const x_job_ops_t epoll_job_ops = {
-	epoll_job_run,
-	epoll_job_done,
-};
 
 struct x_epoll_entry_t
 {
@@ -61,20 +55,12 @@ struct x_epoll_entry_t
 		}
 	}
 
-	x_job_t job{&epoll_job_ops};
+	x_job_t job{epoll_job_run};
 
 	x_genref_t genref;
 	std::atomic<x_fdevents_t> fdevents;
 
 	x_epoll_upcall_t *upcall;
-};
-
-static x_job_t::retval_t timer_job_run(x_job_t *job, void *data);
-static void timer_job_done(x_job_t *job, void *data);
-
-const x_job_ops_t x_timer_job_ops = {
-	timer_job_run,
-	timer_job_done,
 };
 
 struct timer_comp
@@ -141,6 +127,7 @@ static x_job_t::retval_t epoll_job_run(x_job_t *job, void *data)
 	if (x_fdevents_processable(fdevents)) {
 		if (entry->upcall->on_getevents(fdevents)) {
 			evtmgmt->release(entry);
+			entry->put();
 			return x_job_t::JOB_DONE;
 		}
 	} else {
@@ -156,13 +143,6 @@ static x_job_t::retval_t epoll_job_run(x_job_t *job, void *data)
 	} else {
 		return x_job_t::JOB_CONTINUE;
 	}
-}
-
-static void epoll_job_done(x_job_t *job, void *data)
-{
-	x_epoll_entry_t *entry = X_CONTAINER_OF(job, x_epoll_entry_t, job);
-	X_DBG("%p", entry);
-	entry->put();
 }
 
 uint64_t x_evtmgmt_monitor(x_evtmgmt_t *ep, unsigned int fd, uint32_t poll_events, x_epoll_upcall_t * upcall)
@@ -224,32 +204,23 @@ static void __evtmgmt_add_timer(x_evtmgmt_t *ep, x_timer_t *timer)
 	X_ASSERT(ret == sizeof(c));
 }
 
-static x_job_t::retval_t timer_job_run(x_job_t *job, void *data)
+x_job_t::retval_t x_timer_job_run(x_job_t *job, void *data)
 {
 	x_timer_t *timer = X_CONTAINER_OF(job, x_timer_t, job);
+	x_evtmgmt_t *evtmgmt = (x_evtmgmt_t *)data;
 	long ret = timer->on_time();
 	if (ret < 0) {
-		timer->timeout = 0;
+		timer->on_unmonitored();
 		return x_job_t::JOB_DONE;
 	}
 
 	if (ret == 0) {
 		return x_job_t::JOB_CONTINUE;
 	}
-	timer->timeout = x_tick_add(tick_now, ret);
-	return x_job_t::JOB_DONE;
-}
 
-static void timer_job_done(x_job_t *job, void *data)
-{
-	x_timer_t *timer = X_CONTAINER_OF(job, x_timer_t, job);
-	X_DBG("%p", timer);
-	x_evtmgmt_t *evtmgmt = (x_evtmgmt_t *)data;
-	if (timer->timeout != 0) {
-		__evtmgmt_add_timer(evtmgmt, timer);
-	} else {
-		timer->on_unmonitored();
-	}
+	timer->timeout = x_tick_add(tick_now, ret);
+	__evtmgmt_add_timer(evtmgmt, timer);
+	return x_job_t::JOB_DONE;
 }
 
 static void post_fd_event(x_evtmgmt_t *ep, uint64_t id, uint32_t events)
@@ -339,6 +310,7 @@ x_evtmgmt_t *x_evtmgmt_create(x_threadpool_t *tpool, uint32_t max_fd)
 	X_ASSERT(mem);
 
 	x_evtmgmt_t *ep = new(mem) x_evtmgmt_t(tpool, epfd, timerfd, max_fd);
+	x_threadpool_set_private_data(tpool, ep);
 	tick_now = x_tick_now();
 	return ep;
 }

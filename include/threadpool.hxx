@@ -20,10 +20,8 @@ x_threadpool_t *x_threadpool_create(std::string name, unsigned int count);
 void x_threadpool_set_private_data(x_threadpool_t *tpool, void *data);
 void x_threadpool_destroy(x_threadpool_t *);
 
-struct x_job_ops_t;
 struct x_job_t
 {
-	x_job_t(const x_job_ops_t *ops) : ops(ops) { }
 	enum retval_t {
 		JOB_BLOCKED,
 		JOB_CONTINUE,
@@ -36,16 +34,11 @@ struct x_job_t
 		STATE_RUNNING = 2,
 		STATE_DONE,
 	};
+	x_job_t(retval_t (*run)(x_job_t *job, void *data)) : run(run) { }
 
 	x_dlink_t dlink;
-	const x_job_ops_t * const ops;
+	retval_t (*run)(x_job_t *job, void *data);
 	std::atomic<uint32_t> state{STATE_NONE};
-};
-
-struct x_job_ops_t
-{
-	x_job_t::retval_t (*run)(x_job_t *job, void *data);
-	void (*done)(x_job_t *job, void *data);
 };
 
 bool x_threadpool_schedule(x_threadpool_t *tpool, x_job_t *x_job);

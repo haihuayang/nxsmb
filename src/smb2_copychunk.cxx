@@ -126,24 +126,13 @@ static x_job_t::retval_t copychunk_job_run(x_job_t *job, void *data)
 
 	X_SMBD_CHAN_POST_USER(smbd_requ->smbd_chan,
 			new copychunk_evt_t(smbd_requ, status));
+	delete copychunk_job;
 	return x_job_t::JOB_DONE;
 }
 
-static void copychunk_job_done(x_job_t *job, void *data)
-{
-	copychunk_job_t *copychunk_job = X_CONTAINER_OF(job, copychunk_job_t, base);
-	X_ASSERT(!copychunk_job->smbd_requ);
-	delete copychunk_job;
-}
-
-static const x_job_ops_t copychunk_job_ops = {
-	copychunk_job_run,
-	copychunk_job_done,
-};
-
 inline copychunk_job_t::copychunk_job_t(x_smbd_requ_t *smbd_requ, x_smbd_open_t *src_open,
 			std::vector<x_smb2_copychunk_t> &&chunks)
-	: base(&copychunk_job_ops), smbd_requ(smbd_requ), src_open(src_open), chunks(chunks)
+	: base(copychunk_job_run), smbd_requ(smbd_requ), src_open(src_open), chunks(chunks)
 {
 }
 

@@ -76,7 +76,8 @@ struct x_timer_upcall_cbs_t
 	void (*cb_unmonitored)(x_timer_t *timer);
 };
 
-extern const x_job_ops_t x_timer_job_ops;
+extern x_job_t::retval_t x_timer_job_run(x_job_t *job, void *data);
+
 struct x_timer_t
 {
 	long on_time() {
@@ -85,7 +86,7 @@ struct x_timer_t
 	void on_unmonitored() {
 		cbs->cb_unmonitored(this);
 	}
-	x_job_t job{&x_timer_job_ops};
+	x_job_t job{x_timer_job_run};
 	const x_timer_upcall_cbs_t *cbs;
 	x_tick_t timeout;
 };

@@ -237,45 +237,40 @@ static x_job_t::retval_t smbd_qdir_job_run(x_job_t *job, void *sche)
 {
 	x_smbd_qdir_t *smbd_qdir = X_CONTAINER_OF(job, x_smbd_qdir_t, base);
 	x_smbd_object_t *smbd_object = smbd_qdir->smbd_open->smbd_object;
-	auto lock = std::unique_lock(smbd_object->mutex);
-	for (;;) {
-		x_smbd_requ_t *smbd_requ = smbd_qdir->requ_list.get_front();
-		if (!smbd_requ) {
-			break;
-		}
-		if (smbd_qdir->compound_id_blocking != 0 &&
-				smbd_qdir->compound_id_blocking != smbd_requ->compound_id) {
-			break;
-		}
-		smbd_qdir->requ_list.remove(smbd_requ);
-		lock.unlock();
+	{
+		auto lock = std::unique_lock(smbd_object->mutex);
+		for (;;) {
+			x_smbd_requ_t *smbd_requ = smbd_qdir->requ_list.get_front();
+			if (!smbd_requ) {
+				break;
+			}
+			if (smbd_qdir->compound_id_blocking != 0 &&
+					smbd_qdir->compound_id_blocking != smbd_requ->compound_id) {
+				break;
+			}
+			smbd_qdir->requ_list.remove(smbd_requ);
+			lock.unlock();
 
+			if (!smbd_qdir->closed) {
+				NTSTATUS status = smbd_qdir_process_requ(smbd_qdir, smbd_requ);
+				X_SMBD_CHAN_POST_USER(smbd_requ->smbd_chan,
+						new smbd_qdir_evt_t(smbd_requ, status));
+			} else {
+				X_SMBD_CHAN_POST_USER(smbd_requ->smbd_chan,
+						new smbd_qdir_evt_t(smbd_requ, NT_STATUS_FILE_CLOSED));
+			}
+			lock.lock();
+		}
 		if (!smbd_qdir->closed) {
-			NTSTATUS status = smbd_qdir_process_requ(smbd_qdir, smbd_requ);
-			X_SMBD_CHAN_POST_USER(smbd_requ->smbd_chan,
-					new smbd_qdir_evt_t(smbd_requ, status));
-		} else {
-			X_SMBD_CHAN_POST_USER(smbd_requ->smbd_chan,
-					new smbd_qdir_evt_t(smbd_requ, NT_STATUS_FILE_CLOSED));
+			return  x_job_t::JOB_BLOCKED;
 		}
-		lock.lock();
 	}
-	return smbd_qdir->closed ? x_job_t::JOB_DONE : x_job_t::JOB_BLOCKED;
-}
-
-static void smbd_qdir_job_done(x_job_t *job, void *sche)
-{
-	x_smbd_qdir_t *smbd_qdir = X_CONTAINER_OF(job, x_smbd_qdir_t, base);
 	smbd_qdir->ops->destroy(smbd_qdir);
+	return x_job_t::JOB_DONE;
 }
-
-static const x_job_ops_t smbd_qdir_job_ops = {
-	smbd_qdir_job_run,
-	smbd_qdir_job_done,
-};
 
 x_smbd_qdir_t::x_smbd_qdir_t(x_smbd_open_t *smbd_open, const x_smbd_qdir_ops_t *ops)
-	: base(&smbd_qdir_job_ops), ops(ops), smbd_open(x_smbd_ref_inc(smbd_open))
+	: base(smbd_qdir_job_run), ops(ops), smbd_open(x_smbd_ref_inc(smbd_open))
 {
 	X_SMBD_COUNTER_INC(qdir_create, 1);
 }
