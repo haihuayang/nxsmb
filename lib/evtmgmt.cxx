@@ -75,9 +75,9 @@ X_DECLARE_MEMBER_TRAITS(timer_dlink_traits, x_timer_t, job.dlink)
 struct x_evtmgmt_t
 {
 	x_evtmgmt_t(x_threadpool_t *tp, int efd, int tfd,
-			uint32_t max_fd)
+			uint32_t max_fd, uint32_t max_wait_ms)
 		: tpool{tp}, epfd(efd), timerfd(tfd)
-       		, max_fd(max_fd)
+		, max_fd(max_fd), max_wait_ms(max_wait_ms)
 	{
 		for (uint32_t i = 0; i < max_fd; ++i) {
 			new (&entries[i])x_epoll_entry_t;
@@ -110,6 +110,7 @@ struct x_evtmgmt_t
 	const int epfd;
 	const int timerfd;
 	const uint32_t max_fd;
+	const int max_wait_ms;
 
 	std::priority_queue<x_timer_t *, std::vector<x_timer_t *>, timer_comp> timerq{timer_comp()};
 	std::mutex mutex; // protect unsorted_timers, TODO it can be lock-less?
@@ -258,11 +259,17 @@ void x_evtmgmt_dispatch(x_evtmgmt_t *ep)
 	}
 
 	tick_now = x_tick_now();
-	long wait_ns = 60 * 1000000000l;
+	int wait_ms = ep->max_wait_ms;
 	while (!ep->timerq.empty()) {
 		x_timer_t *timer = ep->timerq.top();
-		wait_ns = x_tick_cmp(timer->timeout, tick_now);
+		long wait_ns = x_tick_cmp(timer->timeout, tick_now);
 		if (wait_ns > 0) {
+			long tmp_wait_ms = wait_ns / 1000000;
+			if (tmp_wait_ms == 0) {
+				wait_ms = 1;
+			} else if (tmp_wait_ms < wait_ms) {
+				wait_ms = x_convert<int>(tmp_wait_ms);
+			}
 			break;
 		}
 		ep->timerq.pop();
@@ -271,7 +278,7 @@ void x_evtmgmt_dispatch(x_evtmgmt_t *ep)
 	}
 
 	struct epoll_event ev;
-	int err = epoll_wait(ep->epfd, &ev, 1, std::max(x_convert<int>(wait_ns / 1000000), 1));
+	int err = epoll_wait(ep->epfd, &ev, 1, wait_ms);
 	if (err > 0) {
 		if (ev.data.u64 == (uint64_t)ep->timerfd) {
 			uint64_t c;
@@ -293,7 +300,8 @@ void x_evtmgmt_dispatch(x_evtmgmt_t *ep)
 #define SYS_eventfd2	290
 #define eventfd(count, flags) syscall(SYS_eventfd2, (count), (flags))
 	
-x_evtmgmt_t *x_evtmgmt_create(x_threadpool_t *tpool, uint32_t max_fd)
+x_evtmgmt_t *x_evtmgmt_create(x_threadpool_t *tpool, uint32_t max_fd,
+		int max_wait_ms)
 {
 	int epfd = epoll_create(16);
 	X_ASSERT(epfd >= 0);
@@ -313,7 +321,7 @@ x_evtmgmt_t *x_evtmgmt_create(x_threadpool_t *tpool, uint32_t max_fd)
 	void *mem = malloc(alloc_size);
 	X_ASSERT(mem);
 
-	x_evtmgmt_t *ep = new(mem) x_evtmgmt_t(tpool, epfd, timerfd, max_fd);
+	x_evtmgmt_t *ep = new(mem) x_evtmgmt_t(tpool, epfd, timerfd, max_fd, max_wait_ms);
 	x_threadpool_set_private_data(tpool, ep);
 	tick_now = x_tick_now();
 	return ep;

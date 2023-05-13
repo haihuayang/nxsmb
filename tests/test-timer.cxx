@@ -23,7 +23,7 @@ static long test_timer_func(x_timer_t *timer)
 int main()
 {
 	x_threadpool_t *tpool = x_threadpool_create("test", 2);
-	x_evtmgmt_t *evtmgmt = x_evtmgmt_create(tpool, 1024);
+	x_evtmgmt_t *evtmgmt = x_evtmgmt_create(tpool, 1024, 1);
 
 	test_timer_t test_timer{test_timer_func};
 

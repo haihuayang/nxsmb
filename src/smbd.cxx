@@ -140,7 +140,7 @@ static void init_smbd()
 	x_threadpool_t *tpool = x_threadpool_create("CLIENT", smbd_conf->client_thread_count);
 	g_smbd.tpool_evtmgmt = tpool;
 
-	g_evtmgmt = x_evtmgmt_create(tpool, max_fd);
+	g_evtmgmt = x_evtmgmt_create(tpool, max_fd, 1000);
 
 	g_smbd.wbpool = x_wbpool_create(g_evtmgmt, 2,
 			smbd_conf->samba_locks_dir + "/winbindd_privileged/pipe");
