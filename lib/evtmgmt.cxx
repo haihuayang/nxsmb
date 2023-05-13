@@ -204,13 +204,12 @@ static void __evtmgmt_add_timer(x_evtmgmt_t *ep, x_timer_t *timer)
 	X_ASSERT(ret == sizeof(c));
 }
 
-x_job_t::retval_t x_timer_job_run(x_job_t *job, void *data)
+static x_job_t::retval_t timer_job_run(x_job_t *job, void *data)
 {
 	x_timer_t *timer = X_CONTAINER_OF(job, x_timer_t, job);
 	x_evtmgmt_t *evtmgmt = (x_evtmgmt_t *)data;
-	long ret = timer->on_time();
+	long ret = timer->run(timer);
 	if (ret < 0) {
-		timer->on_unmonitored();
 		return x_job_t::JOB_DONE;
 	}
 
@@ -221,6 +220,11 @@ x_job_t::retval_t x_timer_job_run(x_job_t *job, void *data)
 	timer->timeout = x_tick_add(tick_now, ret);
 	__evtmgmt_add_timer(evtmgmt, timer);
 	return x_job_t::JOB_DONE;
+}
+
+x_timer_t::x_timer_t(long (*run)(x_timer_t *timer))
+	: job(timer_job_run), run(run)
+{
 }
 
 static void post_fd_event(x_evtmgmt_t *ep, uint64_t id, uint32_t events)

@@ -62,16 +62,6 @@ static long get_domain_info_timer_func(x_timer_t *timer)
 	return 3000;
 }
 
-static void get_domain_info_timer_done(x_timer_t *timer)
-{
-	X_DBG("");
-}
-
-static const x_timer_upcall_cbs_t get_domain_info_timer_cbs = {
-	get_domain_info_timer_func,
-	get_domain_info_timer_done,
-};
-
 int main(int argc, char **argv)
 {
 	workgroup = argv[1];
@@ -80,8 +70,7 @@ int main(int argc, char **argv)
 	x_evtmgmt_t *evtmgmt = x_evtmgmt_create(tpool, 1024);
 	wbpool = x_wbpool_create(evtmgmt, 2, wbpipe);
 
-	x_timer_t timer;
-	timer.cbs = &get_domain_info_timer_cbs;
+	x_timer_t timer{get_domain_info_timer_func};
 
 	x_evtmgmt_add_timer(evtmgmt, &timer, 0);
 

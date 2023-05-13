@@ -27,6 +27,7 @@ X_DECLARE_MEMBER_TRAITS(timerq_link_traits, x_timerq_entry_t, link)
 
 struct x_timerq_t
 {
+	x_timerq_t();
 	x_timer_t timer;
 	uint64_t timeout;
 	std::mutex mutex;

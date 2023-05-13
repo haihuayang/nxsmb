@@ -45,22 +45,13 @@ static long timerq_timer_func(x_timer_t *timer)
 	return std::max(wait_ns, 1l);
 };
 
-static void timerq_timer_done(x_timer_t *timer)
+x_timerq_t::x_timerq_t() : timer(timerq_timer_func)
 {
-	x_timerq_t *timerq = X_CONTAINER_OF(timer, x_timerq_t, timer);
-	X_LOG_DBG("timerq %p at %f", timerq, double(tick_now) / 1000000000.0);
-	// what should we do to the remain entries?
 }
-
-static const x_timer_upcall_cbs_t timerq_timer_cbs = {
-	timerq_timer_func,
-	timerq_timer_done,
-};
 
 void x_timerq_init(x_timerq_t &timerq, x_evtmgmt_t *evtmgmt, uint64_t timeout_ns)
 {
 	timerq.timeout = timeout_ns;
-	timerq.timer.cbs = &timerq_timer_cbs;
 	x_evtmgmt_add_timer(evtmgmt, &timerq.timer, timeout_ns);
 }
 

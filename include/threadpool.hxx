@@ -37,7 +37,7 @@ struct x_job_t
 	x_job_t(retval_t (*run)(x_job_t *job, void *data)) : run(run) { }
 
 	x_dlink_t dlink;
-	retval_t (*run)(x_job_t *job, void *data);
+	retval_t (*const run)(x_job_t *job, void *data);
 	std::atomic<uint32_t> state{STATE_NONE};
 };
 

@@ -270,21 +270,9 @@ static long wbpool_timer_func(x_timer_t *timer)
 	return TIMER_INTERVAL;
 }
 
-static void wbpool_timer_done(x_timer_t *timer)
-{
-	x_wbpool_t *wbpool = X_CONTAINER_OF(timer, x_wbpool_t, timer);
-	X_LOG_DBG("%p", wbpool);
-}
-
-static const x_timer_upcall_cbs_t wbpool_timer_cbs = {
-	wbpool_timer_func,
-	wbpool_timer_done,
-};
-
 x_wbpool_t::x_wbpool_t(x_evtmgmt_t *ep, unsigned int count, const std::string &wbpipe)
-	: evtmgmt{ep}, wbconns{count}, wbpipe{wbpipe}
+	: timer(wbpool_timer_func), evtmgmt{ep}, wbconns{count}, wbpipe{wbpipe}
 {
-	timer.cbs = &wbpool_timer_cbs;
 }
 
 static int wbconn_dosend(wbconn_t &wbconn)
