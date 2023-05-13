@@ -233,7 +233,7 @@ struct smbd_qdir_evt_t
 	NTSTATUS const status;
 };
 
-static x_job_t::retval_t smbd_qdir_job_run(x_job_t *job)
+static x_job_t::retval_t smbd_qdir_job_run(x_job_t *job, void *sche)
 {
 	x_smbd_qdir_t *smbd_qdir = X_CONTAINER_OF(job, x_smbd_qdir_t, base);
 	x_smbd_object_t *smbd_object = smbd_qdir->smbd_open->smbd_object;
@@ -263,7 +263,7 @@ static x_job_t::retval_t smbd_qdir_job_run(x_job_t *job)
 	return smbd_qdir->closed ? x_job_t::JOB_DONE : x_job_t::JOB_BLOCKED;
 }
 
-static void smbd_qdir_job_done(x_job_t *job)
+static void smbd_qdir_job_done(x_job_t *job, void *sche)
 {
 	x_smbd_qdir_t *smbd_qdir = X_CONTAINER_OF(job, x_smbd_qdir_t, base);
 	smbd_qdir->ops->destroy(smbd_qdir);
@@ -275,7 +275,7 @@ static const x_job_ops_t smbd_qdir_job_ops = {
 };
 
 x_smbd_qdir_t::x_smbd_qdir_t(x_smbd_open_t *smbd_open, const x_smbd_qdir_ops_t *ops)
-	: ops(ops), smbd_open(x_smbd_ref_inc(smbd_open))
+	: base(&smbd_qdir_job_ops), ops(ops), smbd_open(x_smbd_ref_inc(smbd_open))
 {
 	X_SMBD_COUNTER_INC(qdir_create, 1);
 }
@@ -365,7 +365,6 @@ NTSTATUS x_smb2_process_query_directory(x_smbd_conn_t *smbd_conn, x_smbd_requ_t 
 			if (!smbd_open->smbd_qdir) {
 				return NT_STATUS_INSUFFICIENT_RESOURCES;
 			}
-			smbd_open->smbd_qdir->base.ops = &smbd_qdir_job_ops;
 		}
 
 		smbd_requ->save_requ_state(state);

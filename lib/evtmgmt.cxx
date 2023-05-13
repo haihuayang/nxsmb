@@ -10,8 +10,8 @@
 
 #define EVENT_LOG(...) do { } while (0)
 
-static x_job_t::retval_t epoll_job_run(x_job_t *job);
-static void epoll_job_done(x_job_t *job);
+static x_job_t::retval_t epoll_job_run(x_job_t *job, void *data);
+static void epoll_job_done(x_job_t *job, void *data);
 
 static const x_job_ops_t epoll_job_ops = {
 	epoll_job_run,
@@ -61,7 +61,7 @@ struct x_epoll_entry_t
 		}
 	}
 
-	x_job_t job;
+	x_job_t job{&epoll_job_ops};
 
 	x_genref_t genref;
 	std::atomic<x_fdevents_t> fdevents;
@@ -69,10 +69,10 @@ struct x_epoll_entry_t
 	x_epoll_upcall_t *upcall;
 };
 
-static x_job_t::retval_t timer_job_run(x_job_t *job);
-static void timer_job_done(x_job_t *job);
+static x_job_t::retval_t timer_job_run(x_job_t *job, void *data);
+static void timer_job_done(x_job_t *job, void *data);
 
-static const x_job_ops_t timer_job_ops = {
+const x_job_ops_t x_timer_job_ops = {
 	timer_job_run,
 	timer_job_done,
 };
@@ -93,10 +93,8 @@ struct x_evtmgmt_t
 		: tpool{tp}, epfd(efd), timerfd(tfd)
        		, max_fd(max_fd)
 	{
-		memset(entries, 0, sizeof(x_epoll_entry_t) * max_fd);
 		for (uint32_t i = 0; i < max_fd; ++i) {
-			entries[i].job.ops = &epoll_job_ops;
-			entries[i].job.private_data = this;
+			new (&entries[i])x_epoll_entry_t;
 		}
 	}
 
@@ -134,11 +132,11 @@ struct x_evtmgmt_t
 	x_epoll_entry_t entries[];
 };
 
-static x_job_t::retval_t epoll_job_run(x_job_t *job)
+static x_job_t::retval_t epoll_job_run(x_job_t *job, void *data)
 {
 	x_epoll_entry_t *entry = X_CONTAINER_OF(job, x_epoll_entry_t, job);
 	x_fdevents_t fdevents = entry->get_fdevents();
-	x_evtmgmt_t *evtmgmt = (x_evtmgmt_t *)entry->job.private_data;
+	x_evtmgmt_t *evtmgmt = (x_evtmgmt_t *)data;
 	X_DBG("%s %d fdevents=%llx", task_name, evtmgmt->get_entry_fd(entry), fdevents);
 	if (x_fdevents_processable(fdevents)) {
 		if (entry->upcall->on_getevents(fdevents)) {
@@ -160,7 +158,7 @@ static x_job_t::retval_t epoll_job_run(x_job_t *job)
 	}
 }
 
-static void epoll_job_done(x_job_t *job)
+static void epoll_job_done(x_job_t *job, void *data)
 {
 	x_epoll_entry_t *entry = X_CONTAINER_OF(job, x_epoll_entry_t, job);
 	X_DBG("%p", entry);
@@ -215,8 +213,6 @@ bool x_evtmgmt_post_events(x_evtmgmt_t *ep, uint64_t id, uint32_t events)
 
 static void __evtmgmt_add_timer(x_evtmgmt_t *ep, x_timer_t *timer)
 {
-	timer->job.ops = &timer_job_ops;
-	timer->job.private_data = ep;
 	timer->job.state = x_job_t::STATE_NONE;
 	{
 		std::unique_lock<std::mutex> lock(ep->mutex);
@@ -228,7 +224,7 @@ static void __evtmgmt_add_timer(x_evtmgmt_t *ep, x_timer_t *timer)
 	X_ASSERT(ret == sizeof(c));
 }
 
-static x_job_t::retval_t timer_job_run(x_job_t *job)
+static x_job_t::retval_t timer_job_run(x_job_t *job, void *data)
 {
 	x_timer_t *timer = X_CONTAINER_OF(job, x_timer_t, job);
 	long ret = timer->on_time();
@@ -244,11 +240,11 @@ static x_job_t::retval_t timer_job_run(x_job_t *job)
 	return x_job_t::JOB_DONE;
 }
 
-static void timer_job_done(x_job_t *job)
+static void timer_job_done(x_job_t *job, void *data)
 {
 	x_timer_t *timer = X_CONTAINER_OF(job, x_timer_t, job);
 	X_DBG("%p", timer);
-	x_evtmgmt_t *evtmgmt = (x_evtmgmt_t *)job->private_data;
+	x_evtmgmt_t *evtmgmt = (x_evtmgmt_t *)data;
 	if (timer->timeout != 0) {
 		__evtmgmt_add_timer(evtmgmt, timer);
 	} else {

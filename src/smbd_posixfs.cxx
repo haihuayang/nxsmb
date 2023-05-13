@@ -1665,7 +1665,7 @@ struct posixfs_read_job_t
 	x_smbd_requ_t *smbd_requ;
 };
 
-static x_job_t::retval_t posixfs_read_job_run(x_job_t *job)
+static x_job_t::retval_t posixfs_read_job_run(x_job_t *job, void *sche)
 {
 	posixfs_read_job_t *posixfs_read_job = X_CONTAINER_OF(job, posixfs_read_job_t, base);
 
@@ -1684,7 +1684,7 @@ static x_job_t::retval_t posixfs_read_job_run(x_job_t *job)
 	return x_job_t::JOB_DONE;
 }
 
-static void posixfs_read_job_done(x_job_t *job)
+static void posixfs_read_job_done(x_job_t *job, void *sche)
 {
 	posixfs_read_job_t *posixfs_read_job = X_CONTAINER_OF(job, posixfs_read_job_t, base);
 	X_ASSERT(!posixfs_read_job->posixfs_object);
@@ -1698,9 +1698,8 @@ static const x_job_ops_t posixfs_read_job_ops = {
 };
 
 inline posixfs_read_job_t::posixfs_read_job_t(posixfs_object_t *po, x_smbd_requ_t *r)
-	: posixfs_object(po), smbd_requ(r)
+	: base(&posixfs_read_job_ops), posixfs_object(po), smbd_requ(r)
 {
-	base.ops = &posixfs_read_job_ops;
 }
 
 static void posixfs_read_cancel(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
@@ -1891,7 +1890,7 @@ struct posixfs_write_job_t
 	x_smbd_requ_t *smbd_requ;
 };
 
-static x_job_t::retval_t posixfs_write_job_run(x_job_t *job)
+static x_job_t::retval_t posixfs_write_job_run(x_job_t *job, void *data)
 {
 	posixfs_write_job_t *posixfs_write_job = X_CONTAINER_OF(job, posixfs_write_job_t, base);
 
@@ -1910,7 +1909,7 @@ static x_job_t::retval_t posixfs_write_job_run(x_job_t *job)
 	return x_job_t::JOB_DONE;
 }
 
-static void posixfs_write_job_done(x_job_t *job)
+static void posixfs_write_job_done(x_job_t *job, void *data)
 {
 	posixfs_write_job_t *posixfs_write_job = X_CONTAINER_OF(job, posixfs_write_job_t, base);
 	X_ASSERT(!posixfs_write_job->posixfs_object);
@@ -1924,9 +1923,8 @@ static const x_job_ops_t posixfs_write_job_ops = {
 };
 
 inline posixfs_write_job_t::posixfs_write_job_t(posixfs_object_t *po, x_smbd_requ_t *r)
-	: posixfs_object(po), smbd_requ(r)
+	: base(&posixfs_write_job_ops), posixfs_object(po), smbd_requ(r)
 {
-	base.ops = &posixfs_write_job_ops;
 }
 
 static void posixfs_write_cancel(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)

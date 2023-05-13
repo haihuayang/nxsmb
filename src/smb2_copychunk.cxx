@@ -74,7 +74,7 @@ struct copychunk_job_t
 	const std::vector<x_smb2_copychunk_t> chunks;
 };
 
-static x_job_t::retval_t copychunk_job_run(x_job_t *job)
+static x_job_t::retval_t copychunk_job_run(x_job_t *job, void *data)
 {
 	copychunk_job_t *copychunk_job = X_CONTAINER_OF(job, copychunk_job_t, base);
 
@@ -129,7 +129,7 @@ static x_job_t::retval_t copychunk_job_run(x_job_t *job)
 	return x_job_t::JOB_DONE;
 }
 
-static void copychunk_job_done(x_job_t *job)
+static void copychunk_job_done(x_job_t *job, void *data)
 {
 	copychunk_job_t *copychunk_job = X_CONTAINER_OF(job, copychunk_job_t, base);
 	X_ASSERT(!copychunk_job->smbd_requ);
@@ -143,9 +143,8 @@ static const x_job_ops_t copychunk_job_ops = {
 
 inline copychunk_job_t::copychunk_job_t(x_smbd_requ_t *smbd_requ, x_smbd_open_t *src_open,
 			std::vector<x_smb2_copychunk_t> &&chunks)
-	: smbd_requ(smbd_requ), src_open(src_open), chunks(chunks)
+	: base(&copychunk_job_ops), smbd_requ(smbd_requ), src_open(src_open), chunks(chunks)
 {
-	base.ops = &copychunk_job_ops;
 }
 
 static void copychunk_cancel(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)

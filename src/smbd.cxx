@@ -141,6 +141,8 @@ static void init_smbd()
 	g_smbd.tpool_evtmgmt = tpool;
 
 	g_evtmgmt = x_evtmgmt_create(tpool, max_fd);
+	x_threadpool_set_private_data(tpool, g_evtmgmt);
+
 	g_smbd.wbpool = x_wbpool_create(g_evtmgmt, 2,
 			smbd_conf->samba_locks_dir + "/winbindd_privileged/pipe");
 

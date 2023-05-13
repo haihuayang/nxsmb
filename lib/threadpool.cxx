@@ -15,6 +15,7 @@ struct x_threadpool_t
 	x_threadpool_t(std::string &&name, unsigned int count)
 		: name{name}, threads(count) { }
 	const std::string name;
+	void *private_data = nullptr;
 	bool running = true;
 	std::vector<pthread_t> threads;
 	std::mutex mutex;
@@ -75,11 +76,11 @@ static void *thread_func(void *arg)
 			break;
 		}
 		tick_now = x_tick_now();
-		x_job_t::retval_t status = job->ops->run(job);
+		x_job_t::retval_t status = job->ops->run(job, tpool->private_data);
 		X_DBG("%s run job %p %d", task_name, job, status);
 		if (status == x_job_t::JOB_DONE) {
 			job->state = x_job_t::STATE_DONE;
-			job->ops->done(job);
+			job->ops->done(job, tpool->private_data);
 			continue;
 		}
 
@@ -126,6 +127,12 @@ x_threadpool_t *x_threadpool_create(std::string name, unsigned int count)
 		X_ASSERT(err == 0);
 	}
 	return tpool;
+}
+
+void x_threadpool_set_private_data(x_threadpool_t *tpool, void *data)
+{
+	X_ASSERT(!tpool->private_data);
+	tpool->private_data = data;
 }
 
 void x_threadpool_destroy(x_threadpool_t *tpool)
