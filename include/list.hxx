@@ -165,6 +165,16 @@ struct x_ddlist_t
 		prev->next = link;
 		link->prev = prev;
 	}
+	void concat(x_ddlist_t &other) {
+		if (!front) {
+			front = other.front;
+			back = other.back;
+		} else if (other.front) {
+			back->next = other.front;
+			back = other.back;
+		}
+		other.front = other.back = nullptr;
+	}
 
 	x_dlink_t *front, *back;
 };
@@ -241,6 +251,9 @@ struct x_tp_ddlist_t
 	}
 	item_type *next(const item_type *t) const {
 		return link_2_item(LinkTraits::member(t)->get_next());
+	}
+	void concat(x_tp_ddlist_t &other) {
+		list.concat(other.list);
 	}
 
 	x_ddlist_t list;
