@@ -635,32 +635,3 @@ TIMEOUT_PUBLIC bool timeout_expired(x_timer_t *to) {
 } /* timeout_expired() */
 
 
-/*
- * V E R S I O N  I N T E R F A C E S
- *
- * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
-
-TIMEOUT_PUBLIC int timeout_version(void) {
-	return TIMEOUT_VERSION;
-} /* timeout_version() */
-
-
-TIMEOUT_PUBLIC const char *timeout_vendor(void) {
-	return TIMEOUT_VENDOR;
-} /* timeout_version() */
-
-
-TIMEOUT_PUBLIC int timeout_v_rel(void) {
-	return TIMEOUT_V_REL;
-} /* timeout_version() */
-
-
-TIMEOUT_PUBLIC int timeout_v_abi(void) {
-	return TIMEOUT_V_ABI;
-} /* timeout_version() */
-
-
-TIMEOUT_PUBLIC int timeout_v_api(void) {
-	return TIMEOUT_V_API;
-} /* timeout_version() */
-
