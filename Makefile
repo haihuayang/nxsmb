@@ -286,4 +286,5 @@ test: $(TARGET_SET_tests:%=$(TARGET_DIR_out)/tests/%)
 	$(TARGET_DIR_out)/tests/test-krb5pac
 	$(TARGET_DIR_out)/tests/test-security
 	$(TARGET_DIR_out)/tests/test-ntlmssp
+	$(TARGET_DIR_out)/tests/test-timeout
 	

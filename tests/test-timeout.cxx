@@ -436,7 +436,7 @@ main(int argc, char **argv)
 		.start_at = 100,
 		.end_at = ((uint64_t)1) << 49,
 		.n_timeouts = 1000,
-		.max_step = ((uint64_t)1) << 31,
+		.max_step = ((uint64_t)1) << 43,
 		.relative = 0,
 		.try_removing = 0,
 		.finalize = 2,
