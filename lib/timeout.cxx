@@ -35,8 +35,6 @@
 
 #include <errno.h>     /* errno */
 
-#include <sys/queue.h> /* TAILQ(3) */
-
 #include "include/timeout.hxx"
 
 #if TIMEOUT_DEBUG - 0
@@ -55,34 +53,12 @@
 #define countof(a) (sizeof (a) / sizeof *(a))
 #endif
 
-#if !defined endof
-#define endof(a) (&(a)[countof(a)])
-#endif
-
 #if !defined MIN
 #define MIN(a, b) (((a) < (b))? (a) : (b))
 #endif
 
 #if !defined MAX
 #define MAX(a, b) (((a) > (b))? (a) : (b))
-#endif
-
-#if !defined TAILQ_CONCAT
-#define TAILQ_CONCAT(head1, head2, field) do {                          \
-	if (!TAILQ_EMPTY(head2)) {                                      \
-		*(head1)->tqh_last = (head2)->tqh_first;                \
-		(head2)->tqh_first->field.tqe_prev = (head1)->tqh_last; \
-		(head1)->tqh_last = (head2)->tqh_last;                  \
-		TAILQ_INIT((head2));                                    \
-	}                                                               \
-} while (0)
-#endif
-
-#if !defined TAILQ_FOREACH_SAFE
-#define TAILQ_FOREACH_SAFE(var, head, field, tvar)                      \
-	for ((var) = TAILQ_FIRST(head);                                 \
-	    (var) && ((tvar) = TAILQ_NEXT(var, field), 1);              \
-	    (var) = (tvar))
 #endif
 
 
@@ -203,38 +179,16 @@ using timeout_list = x_tp_ddlist_t<timer_link_traits>;
 struct timeouts {
 	timeout_list wheel[WHEEL_NUM * WHEEL_LEN + 1];
 
-	wheel_t pending[WHEEL_NUM];
+	wheel_t pending[WHEEL_NUM]{};
 
-	timeout_t curtime;
-	timeout_t hertz;
+	timeout_t curtime{};
 }; /* struct timeouts */
 
 #define EXPIRED(T) ((T)->wheel[WHEEL_NUM * WHEEL_LEN])
 #define INVALID_BUCKET ((unsigned int)-1)
 
-static struct timeouts *timeouts_init(struct timeouts *T, timeout_t hz) {
-	unsigned i;
-
-	for (i = 0; i < countof(T->pending); i++) {
-		T->pending[i] = 0;
-	}
-
-	T->curtime = 0;
-	T->hertz = (hz)? hz : TIMEOUT_mHZ;
-
-	return T;
-} /* timeouts_init() */
-
-
-TIMEOUT_PUBLIC struct timeouts *timeouts_open(timeout_t hz, int *error) {
-	struct timeouts *T;
-
-	if ((T = new timeouts))
-		return timeouts_init(T, hz);
-
-	*error = errno;
-
-	return NULL;
+TIMEOUT_PUBLIC struct timeouts *timeouts_open() {
+	return new timeouts;
 } /* timeouts_open() */
 
 
@@ -263,10 +217,6 @@ TIMEOUT_PUBLIC void timeouts_close(struct timeouts *T) {
 	delete T;
 } /* timeouts_close() */
 
-
-TIMEOUT_PUBLIC timeout_t timeouts_hz(struct timeouts *T) {
-	return T->hertz;
-} /* timeouts_hz() */
 
 
 TIMEOUT_PUBLIC void timeouts_del(struct timeouts *T, x_timer_t *to) {

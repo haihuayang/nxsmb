@@ -22,14 +22,9 @@ static int check_misc(void) {
 	return 0;
 }
 
-static int check_open_close(timeout_t hz_set, timeout_t hz_expect) {
-	int err=0;
-	struct timeouts *tos = timeouts_open(hz_set, &err);
+static int check_open_close() {
+	struct timeouts *tos = timeouts_open();
 	if (!tos)
-		return 1;
-	if (err)
-		return 1;
-	if (hz_expect != timeouts_hz(tos))
 		return 1;
 	timeouts_close(tos);
 	return 0;
@@ -76,14 +71,13 @@ static int check_randomized(const struct rand_cfg *cfg)
 	} while (0)
 
 	long i;
-	int err;
 	int rv = 1;
 	x_timer_t *t = new x_timer_t[cfg->n_timeouts];
 	timeout_t *timeouts = (timeout_t *)calloc(cfg->n_timeouts, sizeof(timeout_t));
 	uint8_t *fired = (uint8_t *)calloc(cfg->n_timeouts, sizeof(uint8_t));
         uint8_t *found = (uint8_t *)calloc(cfg->n_timeouts, sizeof(uint8_t));
 	uint8_t *deleted = (uint8_t *)calloc(cfg->n_timeouts, sizeof(uint8_t));
-	struct timeouts *tos = timeouts_open(0, &err);
+	struct timeouts *tos = timeouts_open();
 	timeout_t now = cfg->start_at;
 	int n_added_pending = 0, cnt_added_pending = 0;
 	int n_added_expired = 0, cnt_added_expired = 0;
@@ -283,12 +277,11 @@ static int
 check_intervals(struct intervals_cfg *cfg)
 {
 	long i;
-	int err;
 	int rv = 1;
 	x_timer_t *to;
 	x_timer_t *t = new x_timer_t[cfg->n_timeouts];
 	unsigned *fired = (unsigned *)calloc(cfg->n_timeouts, sizeof(unsigned));
-	struct timeouts *tos = timeouts_open(0, &err);
+	struct timeouts *tos = timeouts_open();
 	timeout_t duration;
 
 	timeout_t now = cfg->start_at;
@@ -375,8 +368,7 @@ main(int argc, char **argv)
 	} while (0)
 
         DO(check_misc());
-	DO(check_open_close(1000, 1000));
-	DO(check_open_close(0, TIMEOUT_mHZ));
+	DO(check_open_close());
 
 	struct rand_cfg cfg1 = {
 		.min_timeout = 1,

@@ -71,13 +71,7 @@ TIMEOUT_PUBLIC int timeout_v_api(void);
 #define TIMEOUT_PRIx PRIx64
 #define TIMEOUT_PRIX PRIX64
 
-#define TIMEOUT_mHZ TIMEOUT_C(1000)
-#define TIMEOUT_uHZ TIMEOUT_C(1000000)
-#define TIMEOUT_nHZ TIMEOUT_C(1000000000)
-
 typedef uint64_t timeout_t;
-
-#define timeout_error_t int /* for documentation purposes */
 
 
 /*
@@ -151,14 +145,11 @@ TIMEOUT_PUBLIC bool timeout_expired(x_timer_t *);
 
 struct timeouts;
 
-TIMEOUT_PUBLIC struct timeouts *timeouts_open(timeout_t, timeout_error_t *);
+TIMEOUT_PUBLIC struct timeouts *timeouts_open();
 /* open a new timing wheel, setting optional HZ (for float conversions) */
 
 TIMEOUT_PUBLIC void timeouts_close(struct timeouts *);
 /* destroy timing wheel */
-
-TIMEOUT_PUBLIC timeout_t timeouts_hz(struct timeouts *);
-/* return HZ setting (for float conversions) */
 
 TIMEOUT_PUBLIC void timeouts_update(struct timeouts *, timeout_t);
 /* update timing wheel with current absolute time */
@@ -215,28 +206,5 @@ TIMEOUT_PUBLIC x_timer_t *timeouts_next(struct timeouts *, struct timeouts_it *)
 #define TIMEOUTS_FOREACH(var, T, flags)                                 \
 	struct timeouts_it _it = TIMEOUTS_IT_INITIALIZER((flags));      \
 	while (((var) = timeouts_next((T), &_it)))
-
-
-/*
- * B O N U S  W H E E L  I N T E R F A C E S
- *
- * I usually use floating point timeouts in all my code, but it's cleaner to
- * separate it to keep the core algorithmic code simple.
- *
- * Using macros instead of static inline routines where <math.h> routines
- * might be used to keep -lm linking optional.
- *
- * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
-
-#include <math.h> /* ceil(3) */
-
-#define timeouts_f2i(T, f) \
-	((timeout_t)ceil((f) * timeouts_hz((T)))) /* prefer late expiration over early */
-
-#define timeouts_i2f(T, i) \
-	((double)(i) / timeouts_hz((T)))
-
-#define timeouts_addf(T, to, timeout) \
-	timeouts_add((T), (to), timeouts_f2i((T), (timeout)))
 
 #endif /* __timeout__hxx__ */
