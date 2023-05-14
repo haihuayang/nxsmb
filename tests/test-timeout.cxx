@@ -49,6 +49,11 @@ struct rand_cfg {
 	int finalize;
 };
 
+static void report_func(void *arg, const char *msg)
+{
+	fprintf(stderr, "%s", msg);
+}
+
 static int check_randomized(const struct rand_cfg *cfg)
 {
 #define FAIL() do {					\
@@ -207,7 +212,7 @@ static int check_randomized(const struct rand_cfg *cfg)
 			FAIL(); /* first_at should've been earlier */
 		if (another)
 			FAIL(); /* Huh? We think there are more? */
-		if (!timeouts_check(tos, stderr))
+		if (!timeouts_check(tos, report_func, nullptr))
 			FAIL();
 	}
 
@@ -309,7 +314,7 @@ check_intervals(struct intervals_cfg *cfg)
 			if (to->expires > now + cfg->timeouts[i])
 				FAIL();
 		}
-		if (!timeouts_check(tos, stderr))
+		if (!timeouts_check(tos, report_func, nullptr))
 			FAIL();
 	}
 

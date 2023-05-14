@@ -28,9 +28,6 @@
 
 #include "list.hxx"
 
-#include <stdbool.h>    /* bool */
-#include <stdio.h>      /* FILE */
-
 #include <inttypes.h>   /* PRIu64 PRIx64 PRIX64 uint64_t */
 
 
@@ -153,7 +150,9 @@ TIMEOUT_PUBLIC bool timeouts_pending(struct timeouts *);
 TIMEOUT_PUBLIC bool timeouts_expired(struct timeouts *);
 /* return true if any timeouts on expired queue */
 
-TIMEOUT_PUBLIC bool timeouts_check(struct timeouts *, FILE *);
+TIMEOUT_PUBLIC bool timeouts_check(struct timeouts *,
+		void (*report_func)(void *arg, const char *msg),
+		void *report_arg);
 /* return true if invariants hold. describes failures to optional file handle. */
 
 #define TIMEOUTS_PENDING 0x10

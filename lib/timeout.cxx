@@ -23,19 +23,11 @@
  * USE OR OTHER DEALINGS IN THE SOFTWARE.
  * ==========================================================================
  */
+#include "include/timeout.hxx"
+
 #include <limits.h>    /* CHAR_BIT */
 
 #include <stddef.h>    /* NULL */
-#include <stdlib.h>    /* malloc(3) free(3) */
-#include <stdio.h>     /* FILE fprintf(3) */
-
-#include <inttypes.h>  /* UINT64_C uint64_t */
-
-#include <string.h>    /* memset(3) */
-
-#include <errno.h>     /* errno */
-
-#include "include/timeout.hxx"
 
 #if TIMEOUT_DEBUG - 0
 #include "timeout-debug.h"
@@ -514,8 +506,11 @@ static x_timer_t *timeouts_min(struct timeouts *T) {
  * something is definitely broken.
  */
 #define report(...) do { \
-	if ((fp)) \
-		fprintf(fp, __VA_ARGS__); \
+	if ((report_func)) { \
+		char buf[1024]; \
+		snprintf(buf, sizeof buf, __VA_ARGS__); \
+		report_func(report_arg, buf); \
+	} \
 } while (0)
 
 #define check(expr, ...) do { \
@@ -525,7 +520,10 @@ static x_timer_t *timeouts_min(struct timeouts *T) {
 	} \
 } while (0)
 
-TIMEOUT_PUBLIC bool timeouts_check(struct timeouts *T, FILE *fp) {
+TIMEOUT_PUBLIC bool timeouts_check(struct timeouts *T,
+		void (*report_func)(void *arg, const char *msg),
+		void *report_arg)
+{
 	timeout_t timeout;
 	x_timer_t *to;
 
