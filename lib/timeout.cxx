@@ -203,10 +203,11 @@ static inline wheel_t rotr(const wheel_t v, int c) {
  *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
-TAILQ_HEAD(timeout_list, x_timer_t);
+X_DECLARE_MEMBER_TRAITS(timer_link_traits, x_timer_t, link)
+using timeout_list = x_tp_ddlist_t<timer_link_traits>;
 
 struct timeouts {
-	struct timeout_list wheel[WHEEL_NUM * WHEEL_LEN + 1];
+	timeout_list wheel[WHEEL_NUM * WHEEL_LEN + 1];
 
 	wheel_t pending[WHEEL_NUM];
 
@@ -219,10 +220,6 @@ struct timeouts {
 
 static struct timeouts *timeouts_init(struct timeouts *T, timeout_t hz) {
 	unsigned i;
-
-	for (i = 0; i < countof(T->wheel); i++) {
-		TAILQ_INIT(&T->wheel[i]);
-	}
 
 	for (i = 0; i < countof(T->pending); i++) {
 		T->pending[i] = 0;
@@ -238,7 +235,7 @@ static struct timeouts *timeouts_init(struct timeouts *T, timeout_t hz) {
 TIMEOUT_PUBLIC struct timeouts *timeouts_open(timeout_t hz, int *error) {
 	struct timeouts *T;
 
-	if ((T = (struct timeouts *)malloc(sizeof *T)))
+	if ((T = new timeouts))
 		return timeouts_init(T, hz);
 
 	*error = errno;
@@ -248,17 +245,15 @@ TIMEOUT_PUBLIC struct timeouts *timeouts_open(timeout_t hz, int *error) {
 
 
 static void timeouts_reset(struct timeouts *T) {
-	struct timeout_list reset;
+	timeout_list reset;
 	x_timer_t *to;
 	unsigned i;
 
-	TAILQ_INIT(&reset);
-
 	for (i = 0; i < countof(T->wheel); i++) {
-		TAILQ_CONCAT(&reset, &T->wheel[i], tqe);
+		reset.concat(T->wheel[i]);
 	}
 
-	TAILQ_FOREACH(to, &reset, tqe) {
+	for (to = reset.get_front(); to; to = reset.next(to)) {
 		to->bucket = INVALID_BUCKET;
 		TO_SET_TIMEOUTS(to, NULL);
 	}
@@ -272,7 +267,7 @@ TIMEOUT_PUBLIC void timeouts_close(struct timeouts *T) {
 	 */
 	timeouts_reset(T);
 
-	free(T);
+	delete T;
 } /* timeouts_close() */
 
 
@@ -283,10 +278,10 @@ TIMEOUT_PUBLIC timeout_t timeouts_hz(struct timeouts *T) {
 
 TIMEOUT_PUBLIC void timeouts_del(struct timeouts *T, x_timer_t *to) {
 	if (to->bucket != INVALID_BUCKET) {
-		struct timeout_list *pending = &T->wheel[to->bucket];
-		TAILQ_REMOVE(pending, to, tqe);
+		timeout_list *pending = &T->wheel[to->bucket];
+		pending->remove(to);
 
-		if (to->bucket != WHEEL_NUM * WHEEL_LEN && TAILQ_EMPTY(pending)) {
+		if (to->bucket != WHEEL_NUM * WHEEL_LEN && pending->empty()) {
 			ptrdiff_t index = pending - &T->wheel[0];
 			long wheel = index / WHEEL_LEN;
 			long slot = index % WHEEL_LEN;
@@ -338,13 +333,13 @@ static void timeouts_sched(struct timeouts *T, x_timer_t *to, timeout_t expires)
 		slot = timeout_slot(wheel, to->expires);
 
 		to->bucket = wheel * WHEEL_LEN + slot;
-		struct timeout_list *pending = &T->wheel[to->bucket];
-		TAILQ_INSERT_TAIL(pending, to, tqe);
+		timeout_list *pending = &T->wheel[to->bucket];
+		pending->push_back(to);
 
 		T->pending[wheel] |= WHEEL_C(1) << slot;
 	} else {
 		to->bucket = WHEEL_NUM * WHEEL_LEN;
-		TAILQ_INSERT_TAIL(&EXPIRED(T), to, tqe);
+		EXPIRED(T).push_back(to);
 	}
 } /* timeouts_sched() */
 
@@ -383,10 +378,8 @@ TIMEOUT_PUBLIC void timeouts_add(struct timeouts *T, x_timer_t *to, timeout_t ti
 
 TIMEOUT_PUBLIC void timeouts_update(struct timeouts *T, abstime_t curtime) {
 	timeout_t elapsed = curtime - T->curtime;
-	struct timeout_list todo;
+	timeout_list todo;
 	int wheel;
-
-	TAILQ_INIT(&todo);
 
 	/*
 	 * There's no avoiding looping over every wheel. It's best to keep
@@ -431,7 +424,7 @@ TIMEOUT_PUBLIC void timeouts_update(struct timeouts *T, abstime_t curtime) {
 		while (pending & T->pending[wheel]) {
 			/* ctz input cannot be zero: loop condition. */
 			int slot = ctz(pending & T->pending[wheel]);
-			TAILQ_CONCAT(&todo, &T->wheel[wheel * WHEEL_LEN + slot], tqe);
+			todo.concat(T->wheel[wheel * WHEEL_LEN + slot]);
 			T->pending[wheel] &= ~(UINT64_C(1) << slot);
 		}
 
@@ -444,10 +437,10 @@ TIMEOUT_PUBLIC void timeouts_update(struct timeouts *T, abstime_t curtime) {
 
 	T->curtime = curtime;
 
-	while (!TAILQ_EMPTY(&todo)) {
-		x_timer_t *to = TAILQ_FIRST(&todo);
+	while (!todo.empty()) {
+		x_timer_t *to = todo.get_front();
 
-		TAILQ_REMOVE(&todo, to, tqe);
+		todo.remove(to);
 		to->bucket = INVALID_BUCKET;
 
 		timeouts_sched(T, to, to->expires);
@@ -475,7 +468,7 @@ TIMEOUT_PUBLIC bool timeouts_pending(struct timeouts *T) {
 
 
 TIMEOUT_PUBLIC bool timeouts_expired(struct timeouts *T) {
-	return !TAILQ_EMPTY(&EXPIRED(T));
+	return !EXPIRED(T).empty();
 } /* timeouts_expired() */
 
 
@@ -530,7 +523,7 @@ static timeout_t timeouts_int(struct timeouts *T) {
  * events.
  */
 TIMEOUT_PUBLIC timeout_t timeouts_timeout(struct timeouts *T) {
-	if (!TAILQ_EMPTY(&EXPIRED(T)))
+	if (!EXPIRED(T).empty())
 		return 0;
 
 	return timeouts_int(T);
@@ -538,10 +531,10 @@ TIMEOUT_PUBLIC timeout_t timeouts_timeout(struct timeouts *T) {
 
 
 TIMEOUT_PUBLIC x_timer_t *timeouts_get(struct timeouts *T) {
-	if (!TAILQ_EMPTY(&EXPIRED(T))) {
-		x_timer_t *to = TAILQ_FIRST(&EXPIRED(T));
-
-		TAILQ_REMOVE(&EXPIRED(T), to, tqe);
+	timeout_list &expired = EXPIRED(T);
+	x_timer_t *to = expired.get_front();
+	if (to) {
+		expired.remove(to);
 		to->bucket = INVALID_BUCKET;
 		TO_SET_TIMEOUTS(to, NULL);
 
@@ -552,7 +545,7 @@ TIMEOUT_PUBLIC x_timer_t *timeouts_get(struct timeouts *T) {
 
 		return to;
 	} else {
-		return 0;
+		return nullptr;
 	}
 } /* timeouts_get() */
 
@@ -566,7 +559,8 @@ static x_timer_t *timeouts_min(struct timeouts *T) {
 	unsigned i;
 
 	for (i = 0; i < WHEEL_NUM * WHEEL_LEN; i++) {
-		TAILQ_FOREACH(to, &T->wheel[i], tqe) {
+		auto &wheel = T->wheel[i];
+		for (to = wheel.get_front(); to; to = wheel.next(to)) {
 			if (!min || to->expires < min->expires)
 				min = to;
 		}
@@ -607,7 +601,7 @@ TIMEOUT_PUBLIC bool timeouts_check(struct timeouts *T, FILE *fp) {
 	} else {
 		timeout = timeouts_timeout(T);
 
-		if (!TAILQ_EMPTY(&EXPIRED(T)))
+		if (!EXPIRED(T).empty())
 			check(timeout == 0, "wrong soft timeout (soft:%" TIMEOUT_PRIu " != hard:%" TIMEOUT_PRIu ")\n", timeout, TIMEOUT_C(0));
 		else
 			check(timeout == ~TIMEOUT_C(0), "wrong soft timeout (soft:%" TIMEOUT_PRIu " != hard:%" TIMEOUT_PRIu ")\n", timeout, ~TIMEOUT_C(0));
@@ -649,7 +643,8 @@ TIMEOUT_PUBLIC x_timer_t *timeouts_next(struct timeouts *T, struct timeouts_it *
 				YIELD(to);
 			}
 		} else {
-			TAILQ_FOREACH_SAFE(to, &EXPIRED(T), tqe, it->to) {
+			for (to = EXPIRED(T).get_front(); to; to = it->to) {
+				it->to = EXPIRED(T).next(to);
 				YIELD(to);
 			}
 		}
@@ -658,7 +653,9 @@ TIMEOUT_PUBLIC x_timer_t *timeouts_next(struct timeouts *T, struct timeouts_it *
 	if (it->flags & TIMEOUTS_PENDING) {
 		for (it->i = 0; it->i < WHEEL_NUM; it->i++) {
 			for (it->j = 0; it->j < WHEEL_LEN; it->j++) {
-				TAILQ_FOREACH_SAFE(to, &T->wheel[it->i * WHEEL_LEN + it->j], tqe, it->to) {
+				for (to = T->wheel[it->i * WHEEL_LEN + it->j].get_front();
+						to; to = it->to) {
+					it->to = T->wheel[it->i * WHEEL_LEN + it->j].next(to);
 					YIELD(to);
 				}
 			}
@@ -682,8 +679,6 @@ TIMEOUT_PUBLIC x_timer_t *timeouts_next(struct timeouts *T, struct timeouts_it *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
 TIMEOUT_PUBLIC x_timer_t *timeout_init(x_timer_t *to, int flags) {
-	memset(to, 0, sizeof *to);
-
 	to->flags = flags;
 	to->bucket = INVALID_BUCKET;
 

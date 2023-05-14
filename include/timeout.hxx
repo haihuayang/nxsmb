@@ -26,12 +26,12 @@
 #ifndef __timeout__hxx__
 #define __timeout__hxx__
 
+#include "list.hxx"
+
 #include <stdbool.h>    /* bool */
 #include <stdio.h>      /* FILE */
 
 #include <inttypes.h>   /* PRIu64 PRIx64 PRIX64 uint64_t */
-
-#include <sys/queue.h>  /* TAILQ(3) */
 
 
 /*
@@ -120,7 +120,7 @@ struct x_timer_t {
 	timeout_t expires;
 	/* absolute expiration time */
 
-	TAILQ_ENTRY(x_timer_t) tqe;
+	x_dlink_t link;
 	/* entry member for struct timeout_list lists */
 
 #ifndef TIMEOUT_DISABLE_CALLBACKS
