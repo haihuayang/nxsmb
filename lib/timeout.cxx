@@ -177,7 +177,6 @@ struct timeouts {
 }; /* struct timeouts */
 
 #define EXPIRED(T) ((T)->wheel[WHEEL_NUM * WHEEL_LEN])
-#define INVALID_BUCKET ((unsigned int)-1)
 
 TIMEOUT_PUBLIC struct timeouts *timeouts_open() {
 	return new timeouts;
@@ -194,7 +193,7 @@ static void timeouts_reset(struct timeouts *T) {
 	}
 
 	for (to = reset.get_front(); to; to = reset.next(to)) {
-		to->bucket = INVALID_BUCKET;
+		to->bucket = x_timer_t::INVALID;
 	}
 } /* timeouts_reset() */
 
@@ -212,7 +211,7 @@ TIMEOUT_PUBLIC void timeouts_close(struct timeouts *T) {
 
 
 TIMEOUT_PUBLIC void timeouts_del(struct timeouts *T, x_timer_t *to) {
-	if (to->bucket != INVALID_BUCKET) {
+	if (to->bucket != x_timer_t::INVALID) {
 		timeout_list *pending = &T->wheel[to->bucket];
 		pending->remove(to);
 
@@ -224,7 +223,7 @@ TIMEOUT_PUBLIC void timeouts_del(struct timeouts *T, x_timer_t *to) {
 			T->pending[wheel] &= ~(WHEEL_C(1) << slot);
 		}
 
-		to->bucket = INVALID_BUCKET;
+		to->bucket = x_timer_t::INVALID;
 	}
 } /* timeouts_del() */
 
@@ -278,10 +277,7 @@ static void timeouts_sched(struct timeouts *T, x_timer_t *to, timeout_t expires)
 
 
 TIMEOUT_PUBLIC void timeouts_add(struct timeouts *T, x_timer_t *to, timeout_t timeout) {
-	if (to->flags & TIMEOUT_ABS)
-		timeouts_sched(T, to, timeout);
-	else
-		timeouts_sched(T, to, T->curtime + timeout);
+	timeouts_sched(T, to, timeout);
 } /* timeouts_add() */
 
 
@@ -350,18 +346,13 @@ TIMEOUT_PUBLIC void timeouts_update(struct timeouts *T, abstime_t curtime) {
 		x_timer_t *to = todo.get_front();
 
 		todo.remove(to);
-		to->bucket = INVALID_BUCKET;
+		to->bucket = x_timer_t::INVALID;
 
 		timeouts_sched(T, to, to->expires);
 	}
 
 	return;
 } /* timeouts_update() */
-
-
-TIMEOUT_PUBLIC void timeouts_step(struct timeouts *T, reltime_t elapsed) {
-	timeouts_update(T, T->curtime + elapsed);
-} /* timeouts_step() */
 
 
 TIMEOUT_PUBLIC bool timeouts_pending(struct timeouts *T) {
@@ -444,7 +435,7 @@ TIMEOUT_PUBLIC x_timer_t *timeouts_get(struct timeouts *T) {
 	x_timer_t *to = expired.get_front();
 	if (to) {
 		expired.remove(to);
-		to->bucket = INVALID_BUCKET;
+		to->bucket = x_timer_t::INVALID;
 
 		return to;
 	} else {
@@ -586,14 +577,6 @@ TIMEOUT_PUBLIC x_timer_t *timeouts_next(struct timeouts *T, struct timeouts_it *
  * T I M E O U T  R O U T I N E S
  *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
-
-TIMEOUT_PUBLIC x_timer_t *timeout_init(x_timer_t *to, int flags) {
-	to->flags = flags;
-	to->bucket = INVALID_BUCKET;
-
-	return to;
-} /* timeout_init() */
-
 
 TIMEOUT_PUBLIC bool timeout_pending(x_timer_t *to) {
 	return to->bucket < WHEEL_NUM * WHEEL_LEN;

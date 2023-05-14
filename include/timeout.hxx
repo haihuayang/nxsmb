@@ -69,18 +69,15 @@ struct timeout_cb {
  *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
-#define TIMEOUT_ABS 0x02 /* treat timeout values as absolute */
-
-#define TIMEOUT_INITIALIZER(flags) { (flags) }
-
 #define timeout_setcb(to, fn, arg) do { \
 	(to)->callback.fn = (fn);       \
 	(to)->callback.arg = (arg);     \
 } while (0)
 
 struct x_timer_t {
-	int flags;
-	unsigned int bucket;
+	enum { INVALID = (unsigned int)-1, };
+	int flags{};
+	unsigned int bucket{INVALID};
 	/* index to timeout list if pending on wheel or expiry queue */
 
 	timeout_t expires;
@@ -95,9 +92,6 @@ struct x_timer_t {
 #endif
 }; /* struct x_timer_t */
 
-
-TIMEOUT_PUBLIC x_timer_t *timeout_init(x_timer_t *, int);
-/* initialize timeout structure (same as TIMEOUT_INITIALIZER) */
 
 TIMEOUT_PUBLIC bool timeout_pending(x_timer_t *);
 /* true if on timing wheel, false otherwise */
@@ -120,9 +114,6 @@ TIMEOUT_PUBLIC void timeouts_close(struct timeouts *);
 
 TIMEOUT_PUBLIC void timeouts_update(struct timeouts *, timeout_t);
 /* update timing wheel with current absolute time */
-
-TIMEOUT_PUBLIC void timeouts_step(struct timeouts *, timeout_t);
-/* step timing wheel by relative time */
 
 TIMEOUT_PUBLIC timeout_t timeouts_timeout(struct timeouts *);
 /* return interval to next required update */

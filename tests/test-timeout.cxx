@@ -40,8 +40,6 @@ struct rand_cfg {
 	int n_timeouts;
 	/* Advance the clock by no more than this each step. */
 	timeout_t max_step;
-	/* Use relative timers and stepping */
-	int relative;
 	/* Every time the clock ticks, try removing this many timeouts at
 	 * random. */
 	int try_removing;
@@ -75,15 +73,12 @@ static int check_randomized(const struct rand_cfg *cfg)
         struct timeouts_it it_p, it_e, it_all;
         int p_done = 0, e_done = 0, all_done = 0;
 	x_timer_t *to = NULL;
-	const int rel = cfg->relative;
 
 	if (!t || !timeouts || !tos || !fired || !found || !deleted)
 		FAIL();
 	timeouts_update(tos, cfg->start_at);
 
 	for (i = 0; i < cfg->n_timeouts; ++i) {
-		if (&t[i] != timeout_init(&t[i], rel ? 0 : TIMEOUT_ABS))
-			FAIL();
 		if (timeout_pending(&t[i]))
 			FAIL();
 		if (timeout_expired(&t[i]))
@@ -91,7 +86,7 @@ static int check_randomized(const struct rand_cfg *cfg)
 
 		timeouts[i] = random_to(cfg->min_timeout, cfg->max_timeout);
 
-		timeouts_add(tos, &t[i], timeouts[i] - (rel ? now : 0));
+		timeouts_add(tos, &t[i], timeouts[i]);
 		if (timeouts[i] <= cfg->start_at) {
 			if (timeout_pending(&t[i]))
 				FAIL();
@@ -178,10 +173,7 @@ static int check_randomized(const struct rand_cfg *cfg)
 		timeout_t step = random_to(1, cfg->max_step);
 		int another;
 		now += step;
-		if (rel)
-			timeouts_step(tos, step);
-		else
-			timeouts_update(tos, now);
+		timeouts_update(tos, now);
 
 		for (i = 0; i < cfg->try_removing; ++i) {
 			long idx = random() % cfg->n_timeouts;
@@ -284,7 +276,6 @@ main(int argc, char **argv)
 		.end_at = 1000,
 		.n_timeouts = 1,
 		.max_step = 10,
-		.relative = 0,
 		.try_removing = 0,
 		.finalize = 2,
 		};
@@ -297,7 +288,6 @@ main(int argc, char **argv)
 		.end_at = 100,
 		.n_timeouts = 1000,
 		.max_step = 5,
-		.relative = 1,
 		.try_removing = 0,
 		.finalize = 2,
 		};
@@ -310,7 +300,6 @@ main(int argc, char **argv)
 		.end_at = 100,
 		.n_timeouts = 1000,
 		.max_step = 5,
-		.relative = 1,
 		.try_removing = 0,
 		.finalize = 1,
 		};
@@ -323,7 +312,6 @@ main(int argc, char **argv)
 		.end_at = 100,
 		.n_timeouts = 1000,
 		.max_step = 5,
-		.relative = 1,
 		.try_removing = 0,
 		.finalize = 0,
 		};
@@ -336,7 +324,6 @@ main(int argc, char **argv)
 		.end_at = ((uint64_t)1) << 49,
 		.n_timeouts = 1000,
 		.max_step = ((uint64_t)1) << 43,
-		.relative = 0,
 		.try_removing = 0,
 		.finalize = 2,
 		};
@@ -349,7 +336,6 @@ main(int argc, char **argv)
 		.end_at = ((uint64_t)1) << 53,
 		.n_timeouts = 1000,
 		.max_step = ((uint64_t)1)<<48,
-		.relative = 0,
 		.try_removing = 0,
 		.finalize = 2,
 		};
@@ -362,7 +348,6 @@ main(int argc, char **argv)
 		.end_at = ((uint64_t)1) << 26,
 		.n_timeouts = 10000,
 		.max_step = 1<<16,
-		.relative = 0,
 		.try_removing = 3,
 		.finalize = 2,
 		};
