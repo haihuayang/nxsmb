@@ -10,7 +10,7 @@ static void timerq_check(const char *where, const x_timerq_t &timerq)
 	for (entry = timerq.entry_list.get_front(); entry;
 			entry = timerq.entry_list.next(entry)) {
 		X_LOG_DBG("entry %p %f", entry,
-				double(entry->queue_time) / 1000000000.0);
+				double(entry->queue_time.val) / 1000000000.0);
 	}
 }
 
@@ -23,16 +23,16 @@ static void timerq_check(const char *where, const x_timerq_t &timerq)
 static long timerq_timer_func(x_timer_t *timer)
 {
 	x_timerq_t *timerq = X_CONTAINER_OF(timer, x_timerq_t, timer);
-	long wait_ns = timerq->timeout;
-	uint64_t expire = tick_now - timerq->timeout;
+	x_tick_diff_t wait_ns = timerq->timeout;
+	x_tick_t expire = tick_now - timerq->timeout;
 	x_timerq_entry_t *entry;
 	std::unique_lock<std::mutex> lock(timerq->mutex);
 	while ((entry = timerq->entry_list.get_front()) != nullptr) {
-		wait_ns = x_tick_cmp(entry->queue_time, expire);
+		wait_ns = entry->queue_time - expire;
 		if (wait_ns > 0) {
 			break;
 		}
-		X_LOG_DBG("entry %p at %f", entry, double(tick_now) / 1000000000.0);
+		X_LOG_DBG("entry %p at %f", entry, double(tick_now.val) / 1000000000.0);
 		X_ASSERT(entry->state == x_timerq_entry_t::S_QUEUED);
 		entry->state = x_timerq_entry_t::S_FIRED;
 		timerq->entry_list.remove(entry);
@@ -57,7 +57,7 @@ void x_timerq_init(x_timerq_t &timerq, x_evtmgmt_t *evtmgmt, uint64_t timeout_ns
 
 void x_timerq_add(x_timerq_t &timerq, x_timerq_entry_t *entry)
 {
-	X_LOG_DBG("entry %p at %f", entry, double(tick_now) / 1000000000.0);
+	X_LOG_DBG("entry %p at %f", entry, double(tick_now.val) / 1000000000.0);
 	X_ASSERT(entry->state != x_timerq_entry_t::S_QUEUED);
 	entry->queue_time = tick_now;
 	std::lock_guard<std::mutex> lock(timerq.mutex);
@@ -68,7 +68,7 @@ void x_timerq_add(x_timerq_t &timerq, x_timerq_entry_t *entry)
 
 bool x_timerq_cancel(x_timerq_t &timerq, x_timerq_entry_t *entry)
 {
-	X_LOG_DBG("entry %p at %f", entry, double(tick_now) / 1000000000.0);
+	X_LOG_DBG("entry %p at %f", entry, double(tick_now.val) / 1000000000.0);
 	std::lock_guard<std::mutex> lock(timerq.mutex);
 	if (entry->state != x_timerq_entry_t::S_QUEUED) {
 		return false;
@@ -81,7 +81,7 @@ bool x_timerq_cancel(x_timerq_t &timerq, x_timerq_entry_t *entry)
 
 bool x_timerq_reset(x_timerq_t &timerq, x_timerq_entry_t *entry)
 {
-	X_LOG_DBG("entry %p at %f", entry, double(tick_now) / 1000000000.0);
+	X_LOG_DBG("entry %p at %f", entry, double(tick_now.val) / 1000000000.0);
 	std::lock_guard<std::mutex> lock(timerq.mutex);
 	if (entry->state != x_timerq_entry_t::S_QUEUED) {
 		return false;

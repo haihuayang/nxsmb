@@ -25,7 +25,7 @@ static inline idl::NTTIME x_unix_to_nttime(time_t t)
 
 static inline idl::NTTIME x_tick_to_nttime(x_tick_t tick)
 {
-	return idl::NTTIME{(tick / 100) + idl::NTTIME::TIME_FIXUP_CONSTANT * 1000 * 1000 * 10};
+	return idl::NTTIME{(tick.val / 100) + idl::NTTIME::TIME_FIXUP_CONSTANT * 1000 * 1000 * 10};
 }
 
 static inline idl::NTTIME x_timespec_to_nttime(const struct timespec &ts)

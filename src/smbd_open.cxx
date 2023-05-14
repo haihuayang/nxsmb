@@ -457,8 +457,8 @@ static bool smbd_open_set_durable(x_smbd_open_t *smbd_open)
 	 */
 	smbd_open->durable_timer.func = smbd_open_durable_timeout;
 	durable_sec = (smbd_open->open_state.durable_timeout_msec + 999) / 1000;
-	smbd_open->durable_expire_tick = x_tick_add(tick_now,
-			smbd_open->open_state.durable_timeout_msec * 1000000u);
+	smbd_open->durable_expire_tick = tick_now +
+		smbd_open->open_state.durable_timeout_msec * 1000000u;
 	x_smbd_add_timer(x_smbd_timer_t::DURABLE, &smbd_open->durable_timer);
 
 	int ret = x_smbd_volume_set_durable_timeout(
@@ -2000,8 +2000,8 @@ NTSTATUS x_smbd_open_restore(
 		X_ASSERT(!smbd_open->smbd_tcon);
 		smbd_open->state = SMBD_OPEN_S_DISCONNECTED;
 		smbd_open->durable_timer.func = smbd_open_durable_timeout;
-		smbd_open->durable_expire_tick = x_tick_add(tick_now,
-				smbd_open->open_state.durable_timeout_msec * 1000000u);
+		smbd_open->durable_expire_tick = tick_now +
+			smbd_open->open_state.durable_timeout_msec * 1000000u;
 		x_smbd_add_timer(x_smbd_timer_t::DURABLE, &smbd_open->durable_timer);
 	}
 

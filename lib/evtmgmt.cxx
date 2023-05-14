@@ -66,7 +66,7 @@ struct x_epoll_entry_t
 struct timer_comp
 {
 	bool operator()(const x_timer_t *t1, const x_timer_t *t2) const {
-		return x_tick_cmp(t1->timeout, t2->timeout) > 0;
+		return t1->timeout > t2->timeout;
 	}
 };
 
@@ -192,17 +192,20 @@ bool x_evtmgmt_post_events(x_evtmgmt_t *ep, uint64_t id, uint32_t events)
 	return x_evtmgmt_modify_fdevents(ep, id, x_fdevents_init(events, 0));
 }
 
-static void __evtmgmt_add_timer(x_evtmgmt_t *ep, x_timer_t *timer)
+static void __evtmgmt_add_timer(x_evtmgmt_t *ep, x_timer_t *timer, x_tick_diff_t ns)
 {
+	timer->timeout = tick_now + ns;
 	timer->job.state = x_job_t::STATE_NONE;
 	{
 		std::unique_lock<std::mutex> lock(ep->mutex);
 		ep->unsorted_timers.push_front(timer);
 	}
 
-	const uint64_t c = 1;
-	ssize_t ret = write(ep->timerfd, &c, sizeof(c));
-	X_ASSERT(ret == sizeof(c));
+	if (ns < ep->max_wait_ms * 1000000l) {
+		const uint64_t c = 1;
+		ssize_t ret = write(ep->timerfd, &c, sizeof(c));
+		X_ASSERT(ret == sizeof(c));
+	}
 }
 
 static x_job_t::retval_t timer_job_run(x_job_t *job, void *data)
@@ -218,8 +221,7 @@ static x_job_t::retval_t timer_job_run(x_job_t *job, void *data)
 		return x_job_t::JOB_CONTINUE;
 	}
 
-	timer->timeout = x_tick_add(tick_now, ret);
-	__evtmgmt_add_timer(evtmgmt, timer);
+	__evtmgmt_add_timer(evtmgmt, timer, ret);
 	return x_job_t::JOB_DONE;
 }
 
@@ -240,10 +242,9 @@ static void post_fd_event(x_evtmgmt_t *ep, uint64_t id, uint32_t events)
 }
 
 /* TODO, cancel timer */
-void x_evtmgmt_add_timer(x_evtmgmt_t *ep, x_timer_t *timer, unsigned long ms)
+void x_evtmgmt_add_timer(x_evtmgmt_t *ep, x_timer_t *timer, x_tick_diff_t ns)
 {
-	timer->timeout = x_tick_add(tick_now, ms);
-	__evtmgmt_add_timer(ep, timer);
+	__evtmgmt_add_timer(ep, timer, std::max(ns, 0l));
 }
 
 void x_evtmgmt_dispatch(x_evtmgmt_t *ep)
@@ -262,7 +263,7 @@ void x_evtmgmt_dispatch(x_evtmgmt_t *ep)
 	int wait_ms = ep->max_wait_ms;
 	while (!ep->timerq.empty()) {
 		x_timer_t *timer = ep->timerq.top();
-		long wait_ns = x_tick_cmp(timer->timeout, tick_now);
+		x_tick_diff_t wait_ns = timer->timeout - tick_now;
 		if (wait_ns > 0) {
 			long tmp_wait_ms = wait_ns / 1000000;
 			if (tmp_wait_ms == 0) {

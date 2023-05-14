@@ -106,11 +106,11 @@ static void init_smbd()
 	clock_gettime(CLOCK_REALTIME, &ts_now);
 	x_tick_t tick_now2 = x_tick_now();
 
-	g_smbd.tick_start_mono = (tick_now1 + tick_now2) / 2;
+	g_smbd.tick_start_mono = tick_now1 + (tick_now2 - tick_now1) / 2;
 	g_smbd.tick_start_real = x_tick_from_timespec(ts_now);
 
 	/* durable db use rand() to pick slot */
-	srand((unsigned int)tick_now2);
+	srand((unsigned int)tick_now2.val);
 
 	uint32_t max_opens = std::max(smbd_conf->max_opens, 1024u);
 	/* reserver 80 fd for other purpose for now */
@@ -274,6 +274,7 @@ void x_smbd_schedule_async(x_job_t *job)
 
 std::array<x_tick_t, 2> x_smbd_get_time()
 {
-	return { g_smbd.tick_start_real, tick_now - g_smbd.tick_start_mono + g_smbd.tick_start_real };
+	return { g_smbd.tick_start_real,
+		g_smbd.tick_start_real + (tick_now - g_smbd.tick_start_mono)};
 }
 

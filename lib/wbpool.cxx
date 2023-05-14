@@ -46,7 +46,7 @@ struct wbconn_t
 	x_wbpool_t *wbpool;
 	x_wbcli_t *wbcli{nullptr};
 	unsigned int requ_off, resp_off;
-	uint64_t timeout;
+	x_tick_t timeout;
 
 	simple_wbcli_t simple_wbcli;
 };
@@ -195,7 +195,7 @@ static int wb_connect(x_wbpool_t *wbpool, wbconn_t *wbconn)
 static void wb_connect_or_schedule(x_wbpool_t *wbpool, wbconn_t *wbconn)
 {
 	if (wb_connect(wbpool, wbconn) != 0) {
-		wbconn->timeout = x_tick_add(tick_now, RECONNECT_INTERVAL);
+		wbconn->timeout = tick_now + RECONNECT_INTERVAL;
 		std::unique_lock<std::mutex> lock(wbpool->mutex);
 		X_ASSERT(wbpool->state == x_wbpool_t::S_CONNECTING);
 		wbpool->disconnected_list.push_back(wbconn);
@@ -246,14 +246,14 @@ static long wbpool_timer_func(x_timer_t *timer)
 		}
 
 		wbconn_ready = wbpool->ready_list.get_front();
-		if (wbconn_ready && x_tick_cmp(wbconn_ready->timeout, tick_now) < 0) {
+		if (wbconn_ready && tick_now > wbconn_ready->timeout) {
 			wbpool->ready_list.remove(wbconn_ready);
 		} else {
 			wbconn_ready = nullptr;
 		}
 
 		x_wbcli_t *wbcli = wbpool->queue.get_front();
-		if (wbcli && x_tick_cmp(tick_now, wbcli->timeout) > 0) {
+		if (wbcli && tick_now > wbcli->timeout) {
 			wbpool->queue.remove(wbcli);
 			wbcli->on_reply(-1); // TODO timeout error
 		}
@@ -395,7 +395,7 @@ static bool wbconn_upcall_cb_getevents(x_epoll_upcall_t *upcall,
 					std::unique_lock<std::mutex> lock(wbpool->mutex);
 					wbcli = wbpool->queue.get_front();
 					if (wbcli == nullptr) {
-						wbconn->timeout = x_tick_add(tick_now, PING_INTERVAL);
+						wbconn->timeout = tick_now + PING_INTERVAL;
 						wbpool->ready_list.push_back(wbconn);
 					} else {
 						wbpool->queue.remove(wbcli);
@@ -497,7 +497,7 @@ int x_wbpool_request(x_wbpool_t *wbpool, x_wbcli_t *wbcli)
 		std::unique_lock<std::mutex> lock(wbpool->mutex);
 		wbconn = wbpool->ready_list.get_front();
 		if (!wbconn) {
-			wbcli->timeout = x_tick_add(tick_now, WBCLI_TIMEOUT);
+			wbcli->timeout = tick_now + WBCLI_TIMEOUT;
 			wbpool->queue.push_back(wbcli);
 		} else {
 			wbpool->ready_list.remove(wbconn);

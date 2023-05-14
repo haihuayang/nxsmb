@@ -237,7 +237,7 @@ struct posixfs_object_t
 	bool exists() const { return base.type != x_smbd_object_t::type_not_exist; }
 	x_dqlink_t hash_link;
 	uint64_t hash;
-	uint64_t unused_timestamp{0};
+	x_tick_t unused_timestamp{0};
 	std::atomic<uint32_t> use_count{1}; // protected by bucket mutex
 	// std::atomic<uint32_t> children_count{};
 	int fd = -1;
@@ -417,8 +417,8 @@ static posixfs_object_t *posixfs_object_lookup(
 		if (!create_if) {
 			return nullptr;
 		}
-		if (elem && elem->use_count == 0 &&
-				elem->unused_timestamp + posixfs_object_pool_t::cache_time < tick_now) {
+		if (elem && elem->use_count == 0 && tick_now >
+				(elem->unused_timestamp + posixfs_object_pool_t::cache_time)) {
 			elem->~posixfs_object_t();
 			new (elem)posixfs_object_t(hash, smbd_volume, path, path_data);
 			matched_object = elem;

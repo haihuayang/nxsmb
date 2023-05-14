@@ -20,7 +20,7 @@ struct x_timerq_entry_t
 		S_CANCELLED,
 		S_FIRED,
 	} state = S_NONE;
-	uint64_t queue_time;
+	x_tick_t queue_time;
 	void (*func)(x_timerq_entry_t *entry);
 };
 X_DECLARE_MEMBER_TRAITS(timerq_link_traits, x_timerq_entry_t, link)
@@ -29,7 +29,7 @@ struct x_timerq_t
 {
 	x_timerq_t();
 	x_timer_t timer;
-	uint64_t timeout;
+	x_tick_diff_t timeout;
 	std::mutex mutex;
 	x_tp_ddlist_t<timerq_link_traits> entry_list;
 };

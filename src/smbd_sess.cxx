@@ -45,7 +45,7 @@ struct x_smbd_sess_t
 		X_SMBD_COUNTER_INC(sess_delete, 1);
 	}
 
-	const uint64_t tick_create;
+	const x_tick_t tick_create;
 	std::mutex mutex;
 	std::shared_ptr<x_smbd_user_t> smbd_user;
 	uint64_t id;
@@ -64,7 +64,7 @@ struct x_smbd_sess_t
 	x_smbd_key_set_t keys;
 	std::atomic<uint64_t> nonce_low = 0, nonce_high = 0;
 	const uint64_t nonce_high_random, nonce_high_max;
-	uint64_t tick_expired;
+	x_tick_t tick_expired;
 	std::atomic<uint32_t> num_open = 0;
 	const std::shared_ptr<std::u16string> machine_name;
 };
@@ -327,12 +327,12 @@ NTSTATUS x_smbd_sess_auth_succeeded(x_smbd_sess_t *smbd_sess,
 		auto smbd_conf = x_smbd_conf_get();
 		time_rec = std::min(time_rec, smbd_conf->max_session_expiration);
 		if (time_rec == X_INFINITE) {
-			smbd_sess->tick_expired = UINT64_MAX;
+			smbd_sess->tick_expired = tick_now + x_tick_diff_max;
 		} else {
 			smbd_sess->tick_expired = tick_now +
 				(uint64_t(time_rec) * X_NSEC_PER_SEC);
-			if (smbd_sess->tick_expired < smbd_sess->tick_create) {
-				smbd_sess->tick_expired = UINT64_MAX;
+			if (smbd_sess->tick_create > smbd_sess->tick_expired) {
+				smbd_sess->tick_expired = tick_now + x_tick_diff_max;
 			}
 		}
 	}

@@ -12,11 +12,36 @@
 #include <sstream>
 
 /* unit is nsec */
-typedef uint64_t x_tick_t;
+
+typedef int64_t x_tick_diff_t;
+
+struct x_tick_t
+{
+	bool operator>(x_tick_t other) const {
+		return int64_t(val - other.val) > 0;
+	}
+	x_tick_diff_t operator-(x_tick_t other) const {
+		return int64_t(val - other.val);
+	}
+	x_tick_t operator+(x_tick_diff_t diff) const {
+		return x_tick_t{val + diff};
+	}
+	x_tick_t operator-(x_tick_diff_t diff) const {
+		return x_tick_t{val - diff};
+	}
+	uint64_t val;
+};
+
+static constexpr x_tick_diff_t x_tick_diff_max = INT64_MAX / 2;
+
+static inline x_tick_diff_t x_tick_diff_from_ms(int ms)
+{
+	return {ms * 1000000l};
+}
 
 static inline x_tick_t x_tick_from_timespec(const struct timespec &ts)
 {
-	return ts.tv_sec * 1000000000ul + ts.tv_nsec;
+	return x_tick_t{ts.tv_sec * 1000000000ul + ts.tv_nsec};
 }
 
 static inline x_tick_t x_tick_now(void)
@@ -25,16 +50,6 @@ static inline x_tick_t x_tick_now(void)
 	clock_gettime(CLOCK_MONOTONIC, &ts);
 	return x_tick_from_timespec(ts);
 	// auto now_ms = std::chrono::time_point_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now());
-}
-
-static inline x_tick_t x_tick_add(x_tick_t t, long delta)
-{
-	return t + delta;
-}
-
-static inline long x_tick_cmp(x_tick_t t1, x_tick_t t2)
-{
-	return t1 - t2;
 }
 
 template <typename T>
