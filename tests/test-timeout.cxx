@@ -78,7 +78,7 @@ static int check_randomized(const struct rand_cfg *cfg)
 	long i;
 	int err;
 	int rv = 1;
-	struct timeout *t = (struct timeout *)calloc(cfg->n_timeouts, sizeof(struct timeout));
+	x_timer_t *t = (x_timer_t *)calloc(cfg->n_timeouts, sizeof(x_timer_t));
 	timeout_t *timeouts = (timeout_t *)calloc(cfg->n_timeouts, sizeof(timeout_t));
 	uint8_t *fired = (uint8_t *)calloc(cfg->n_timeouts, sizeof(uint8_t));
         uint8_t *found = (uint8_t *)calloc(cfg->n_timeouts, sizeof(uint8_t));
@@ -89,7 +89,7 @@ static int check_randomized(const struct rand_cfg *cfg)
 	int n_added_expired = 0, cnt_added_expired = 0;
         struct timeouts_it it_p, it_e, it_all;
         int p_done = 0, e_done = 0, all_done = 0;
-	struct timeout *to = NULL;
+	x_timer_t *to = NULL;
 	const int rel = cfg->relative;
 
 	if (!t || !timeouts || !tos || !fired || !found || !deleted)
@@ -285,8 +285,8 @@ check_intervals(struct intervals_cfg *cfg)
 	long i;
 	int err;
 	int rv = 1;
-	struct timeout *to;
-	struct timeout *t = (struct timeout *)calloc(cfg->n_timeouts, sizeof(struct timeout));
+	x_timer_t *to;
+	x_timer_t *t = (x_timer_t *)calloc(cfg->n_timeouts, sizeof(x_timer_t));
 	unsigned *fired = (unsigned *)calloc(cfg->n_timeouts, sizeof(unsigned));
 	struct timeouts *tos = timeouts_open(0, &err);
 	timeout_t duration;

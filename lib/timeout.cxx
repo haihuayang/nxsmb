@@ -203,7 +203,7 @@ static inline wheel_t rotr(const wheel_t v, int c) {
  *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
-TAILQ_HEAD(timeout_list, timeout);
+TAILQ_HEAD(timeout_list, x_timer_t);
 
 struct timeouts {
 	struct timeout_list wheel[WHEEL_NUM][WHEEL_LEN], expired;
@@ -251,7 +251,7 @@ TIMEOUT_PUBLIC struct timeouts *timeouts_open(timeout_t hz, int *error) {
 
 static void timeouts_reset(struct timeouts *T) {
 	struct timeout_list reset;
-	struct timeout *to;
+	x_timer_t *to;
 	unsigned i, j;
 
 	TAILQ_INIT(&reset);
@@ -287,7 +287,7 @@ TIMEOUT_PUBLIC timeout_t timeouts_hz(struct timeouts *T) {
 } /* timeouts_hz() */
 
 
-TIMEOUT_PUBLIC void timeouts_del(struct timeouts *T, struct timeout *to) {
+TIMEOUT_PUBLIC void timeouts_del(struct timeouts *T, x_timer_t *to) {
 	if (to->pending) {
 		TAILQ_REMOVE(to->pending, to, tqe);
 
@@ -305,7 +305,7 @@ TIMEOUT_PUBLIC void timeouts_del(struct timeouts *T, struct timeout *to) {
 } /* timeouts_del() */
 
 
-static inline reltime_t timeout_rem(struct timeouts *T, struct timeout *to) {
+static inline reltime_t timeout_rem(struct timeouts *T, x_timer_t *to) {
 	return to->expires - T->curtime;
 } /* timeout_rem() */
 
@@ -321,7 +321,7 @@ static inline int timeout_slot(int wheel, timeout_t expires) {
 } /* timeout_slot() */
 
 
-static void timeouts_sched(struct timeouts *T, struct timeout *to, timeout_t expires) {
+static void timeouts_sched(struct timeouts *T, x_timer_t *to, timeout_t expires) {
 	timeout_t rem;
 	int wheel, slot;
 
@@ -354,7 +354,7 @@ static void timeouts_sched(struct timeouts *T, struct timeout *to, timeout_t exp
 
 
 #ifndef TIMEOUT_DISABLE_INTERVALS
-static void timeouts_readd(struct timeouts *T, struct timeout *to) {
+static void timeouts_readd(struct timeouts *T, x_timer_t *to) {
 	to->expires += to->interval;
 
 	if (to->expires <= T->curtime) {
@@ -372,7 +372,7 @@ static void timeouts_readd(struct timeouts *T, struct timeout *to) {
 #endif
 
 
-TIMEOUT_PUBLIC void timeouts_add(struct timeouts *T, struct timeout *to, timeout_t timeout) {
+TIMEOUT_PUBLIC void timeouts_add(struct timeouts *T, x_timer_t *to, timeout_t timeout) {
 #ifndef TIMEOUT_DISABLE_INTERVALS
 	if (to->flags & TIMEOUT_INT)
 		to->interval = MAX(1, timeout);
@@ -449,7 +449,7 @@ TIMEOUT_PUBLIC void timeouts_update(struct timeouts *T, abstime_t curtime) {
 	T->curtime = curtime;
 
 	while (!TAILQ_EMPTY(&todo)) {
-		struct timeout *to = TAILQ_FIRST(&todo);
+		x_timer_t *to = TAILQ_FIRST(&todo);
 
 		TAILQ_REMOVE(&todo, to, tqe);
 		to->pending = NULL;
@@ -541,9 +541,9 @@ TIMEOUT_PUBLIC timeout_t timeouts_timeout(struct timeouts *T) {
 } /* timeouts_timeout() */
 
 
-TIMEOUT_PUBLIC struct timeout *timeouts_get(struct timeouts *T) {
+TIMEOUT_PUBLIC x_timer_t *timeouts_get(struct timeouts *T) {
 	if (!TAILQ_EMPTY(&T->expired)) {
-		struct timeout *to = TAILQ_FIRST(&T->expired);
+		x_timer_t *to = TAILQ_FIRST(&T->expired);
 
 		TAILQ_REMOVE(&T->expired, to, tqe);
 		to->pending = NULL;
@@ -565,8 +565,8 @@ TIMEOUT_PUBLIC struct timeout *timeouts_get(struct timeouts *T) {
  * Use dumb looping to locate the earliest timeout pending on the wheel so
  * our invariant assertions can check the result of our optimized code.
  */
-static struct timeout *timeouts_min(struct timeouts *T) {
-	struct timeout *to, *min = NULL;
+static x_timer_t *timeouts_min(struct timeouts *T) {
+	x_timer_t *to, *min = NULL;
 	unsigned i, j;
 
 	for (i = 0; i < countof(T->wheel); i++) {
@@ -600,7 +600,7 @@ static struct timeout *timeouts_min(struct timeouts *T) {
 
 TIMEOUT_PUBLIC bool timeouts_check(struct timeouts *T, FILE *fp) {
 	timeout_t timeout;
-	struct timeout *to;
+	x_timer_t *to;
 
 	if ((to = timeouts_min(T))) {
 		check(to->expires > T->curtime, "missed timeout (expires:%" TIMEOUT_PRIu " <= curtime:%" TIMEOUT_PRIu ")\n", to->expires, T->curtime);
@@ -644,8 +644,8 @@ TIMEOUT_PUBLIC bool timeouts_check(struct timeouts *T, FILE *fp) {
 	}                                                               \
 	} while (0)
 
-TIMEOUT_PUBLIC struct timeout *timeouts_next(struct timeouts *T, struct timeouts_it *it) {
-	struct timeout *to;
+TIMEOUT_PUBLIC x_timer_t *timeouts_next(struct timeouts *T, struct timeouts_it *it) {
+	x_timer_t *to;
 
 	ENTER;
 
@@ -687,7 +687,7 @@ TIMEOUT_PUBLIC struct timeout *timeouts_next(struct timeouts *T, struct timeouts
  *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
-TIMEOUT_PUBLIC struct timeout *timeout_init(struct timeout *to, int flags) {
+TIMEOUT_PUBLIC x_timer_t *timeout_init(x_timer_t *to, int flags) {
 	memset(to, 0, sizeof *to);
 
 	to->flags = flags;
@@ -697,17 +697,17 @@ TIMEOUT_PUBLIC struct timeout *timeout_init(struct timeout *to, int flags) {
 
 
 #ifndef TIMEOUT_DISABLE_RELATIVE_ACCESS
-TIMEOUT_PUBLIC bool timeout_pending(struct timeout *to) {
+TIMEOUT_PUBLIC bool timeout_pending(x_timer_t *to) {
 	return to->pending && to->pending != &to->timeouts->expired;
 } /* timeout_pending() */
 
 
-TIMEOUT_PUBLIC bool timeout_expired(struct timeout *to) {
+TIMEOUT_PUBLIC bool timeout_expired(x_timer_t *to) {
 	return to->pending && to->pending == &to->timeouts->expired;
 } /* timeout_expired() */
 
 
-TIMEOUT_PUBLIC void timeout_del(struct timeout *to) {
+TIMEOUT_PUBLIC void timeout_del(x_timer_t *to) {
 	timeouts_del(to->timeouts, to);
 } /* timeout_del() */
 #endif

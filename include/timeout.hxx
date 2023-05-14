@@ -112,7 +112,7 @@ struct timeout_cb {
 	(to)->callback.arg = (arg);     \
 } while (0)
 
-struct timeout {
+struct x_timer_t {
 	int flags;
 
 	timeout_t expires;
@@ -121,7 +121,7 @@ struct timeout {
 	struct timeout_list *pending;
 	/* timeout list if pending on wheel or expiry queue */
 
-	TAILQ_ENTRY(timeout) tqe;
+	TAILQ_ENTRY(x_timer_t) tqe;
 	/* entry member for struct timeout_list lists */
 
 #ifndef TIMEOUT_DISABLE_CALLBACKS
@@ -138,20 +138,20 @@ struct timeout {
 	struct timeouts *timeouts;
 	/* timeouts collection if member of */
 #endif
-}; /* struct timeout */
+}; /* struct x_timer_t */
 
 
-TIMEOUT_PUBLIC struct timeout *timeout_init(struct timeout *, int);
+TIMEOUT_PUBLIC x_timer_t *timeout_init(x_timer_t *, int);
 /* initialize timeout structure (same as TIMEOUT_INITIALIZER) */
 
 #ifndef TIMEOUT_DISABLE_RELATIVE_ACCESS
-TIMEOUT_PUBLIC bool timeout_pending(struct timeout *);
+TIMEOUT_PUBLIC bool timeout_pending(x_timer_t *);
 /* true if on timing wheel, false otherwise */
  
-TIMEOUT_PUBLIC bool timeout_expired(struct timeout *);
+TIMEOUT_PUBLIC bool timeout_expired(x_timer_t *);
 /* true if on expired queue, false otherwise */
 
-TIMEOUT_PUBLIC void timeout_del(struct timeout *);
+TIMEOUT_PUBLIC void timeout_del(x_timer_t *);
 /* remove timeout from any timing wheel (okay if not member of any) */
 #endif
 
@@ -180,13 +180,13 @@ TIMEOUT_PUBLIC void timeouts_step(struct timeouts *, timeout_t);
 TIMEOUT_PUBLIC timeout_t timeouts_timeout(struct timeouts *);
 /* return interval to next required update */
 
-TIMEOUT_PUBLIC void timeouts_add(struct timeouts *, struct timeout *, timeout_t);
+TIMEOUT_PUBLIC void timeouts_add(struct timeouts *, x_timer_t *, timeout_t);
 /* add timeout to timing wheel */
 
-TIMEOUT_PUBLIC void timeouts_del(struct timeouts *, struct timeout *);
+TIMEOUT_PUBLIC void timeouts_del(struct timeouts *, x_timer_t *);
 /* remove timeout from any timing wheel or expired queue (okay if on neither) */
 
-TIMEOUT_PUBLIC struct timeout *timeouts_get(struct timeouts *);
+TIMEOUT_PUBLIC x_timer_t *timeouts_get(struct timeouts *);
 /* return any expired timeout (caller should loop until NULL-return) */
 
 TIMEOUT_PUBLIC bool timeouts_pending(struct timeouts *);
@@ -213,10 +213,10 @@ TIMEOUT_PUBLIC bool timeouts_check(struct timeouts *, FILE *);
 struct timeouts_it {
 	int flags;
 	unsigned pc, i, j;
-	struct timeout *to;
+	x_timer_t *to;
 }; /* struct timeouts_it */
 
-TIMEOUT_PUBLIC struct timeout *timeouts_next(struct timeouts *, struct timeouts_it *);
+TIMEOUT_PUBLIC x_timer_t *timeouts_next(struct timeouts *, struct timeouts_it *);
 /* return next timeout in pending wheel or expired queue. caller can delete
  * the returned timeout, but should not otherwise manipulate the timing
  * wheel. in particular, caller SHOULD NOT delete any other timeout as that
