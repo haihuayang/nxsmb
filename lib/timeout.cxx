@@ -43,12 +43,6 @@
 #include "timeout-debug.h"
 #endif
 
-#ifdef TIMEOUT_DISABLE_RELATIVE_ACCESS
-#define TO_SET_TIMEOUTS(to, T) ((void)0)
-#else
-#define TO_SET_TIMEOUTS(to, T) ((to)->timeouts = (T))
-#endif
-
 /*
  * A N C I L L A R Y  R O U T I N E S
  *
@@ -255,7 +249,6 @@ static void timeouts_reset(struct timeouts *T) {
 
 	for (to = reset.get_front(); to; to = reset.next(to)) {
 		to->bucket = INVALID_BUCKET;
-		TO_SET_TIMEOUTS(to, NULL);
 	}
 } /* timeouts_reset() */
 
@@ -290,7 +283,6 @@ TIMEOUT_PUBLIC void timeouts_del(struct timeouts *T, x_timer_t *to) {
 		}
 
 		to->bucket = INVALID_BUCKET;
-		TO_SET_TIMEOUTS(to, NULL);
 	}
 } /* timeouts_del() */
 
@@ -318,8 +310,6 @@ static void timeouts_sched(struct timeouts *T, x_timer_t *to, timeout_t expires)
 	timeouts_del(T, to);
 
 	to->expires = expires;
-
-	TO_SET_TIMEOUTS(to, T);
 
 	if (expires > T->curtime) {
 		rem = timeout_rem(T, to);
@@ -536,7 +526,6 @@ TIMEOUT_PUBLIC x_timer_t *timeouts_get(struct timeouts *T) {
 	if (to) {
 		expired.remove(to);
 		to->bucket = INVALID_BUCKET;
-		TO_SET_TIMEOUTS(to, NULL);
 
 #ifndef TIMEOUT_DISABLE_INTERVALS
 		if ((to->flags & TIMEOUT_INT) && to->interval > 0)
@@ -686,7 +675,6 @@ TIMEOUT_PUBLIC x_timer_t *timeout_init(x_timer_t *to, int flags) {
 } /* timeout_init() */
 
 
-#ifndef TIMEOUT_DISABLE_RELATIVE_ACCESS
 TIMEOUT_PUBLIC bool timeout_pending(x_timer_t *to) {
 	return to->bucket < WHEEL_NUM * WHEEL_LEN;
 } /* timeout_pending() */
@@ -695,12 +683,6 @@ TIMEOUT_PUBLIC bool timeout_pending(x_timer_t *to) {
 TIMEOUT_PUBLIC bool timeout_expired(x_timer_t *to) {
 	return to->bucket == WHEEL_NUM * WHEEL_LEN;
 } /* timeout_expired() */
-
-
-TIMEOUT_PUBLIC void timeout_del(x_timer_t *to) {
-	timeouts_del(to->timeouts, to);
-} /* timeout_del() */
-#endif
 
 
 /*

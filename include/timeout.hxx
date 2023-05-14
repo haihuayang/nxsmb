@@ -132,27 +132,17 @@ struct x_timer_t {
 	timeout_t interval;
 	/* timeout interval if periodic */
 #endif
-
-#ifndef TIMEOUT_DISABLE_RELATIVE_ACCESS
-	struct timeouts *timeouts;
-	/* timeouts collection if member of */
-#endif
 }; /* struct x_timer_t */
 
 
 TIMEOUT_PUBLIC x_timer_t *timeout_init(x_timer_t *, int);
 /* initialize timeout structure (same as TIMEOUT_INITIALIZER) */
 
-#ifndef TIMEOUT_DISABLE_RELATIVE_ACCESS
 TIMEOUT_PUBLIC bool timeout_pending(x_timer_t *);
 /* true if on timing wheel, false otherwise */
  
 TIMEOUT_PUBLIC bool timeout_expired(x_timer_t *);
 /* true if on expired queue, false otherwise */
-
-TIMEOUT_PUBLIC void timeout_del(x_timer_t *);
-/* remove timeout from any timing wheel (okay if not member of any) */
-#endif
 
 /*
  * T I M I N G  W H E E L  I N T E R F A C E S

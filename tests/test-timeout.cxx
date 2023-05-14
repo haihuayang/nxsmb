@@ -201,7 +201,7 @@ static int check_randomized(const struct rand_cfg *cfg)
 		for (i = 0; i < cfg->try_removing; ++i) {
 			long idx = random() % cfg->n_timeouts;
 			if (! fired[idx]) {
-				timeout_del(&t[idx]);
+				timeouts_del(tos, &t[idx]);
 				++deleted[idx];
 			}
 		}
@@ -245,7 +245,7 @@ static int check_randomized(const struct rand_cfg *cfg)
 			FAIL();
 		if (cfg->finalize > 1) {
 			if (!fired[i])
-				timeout_del(&t[i]);
+				timeouts_del(tos, &t[i]);
 		}
 	}
 
