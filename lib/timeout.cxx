@@ -276,31 +276,8 @@ static void timeouts_sched(struct timeouts *T, x_timer_t *to, timeout_t expires)
 } /* timeouts_sched() */
 
 
-#ifndef TIMEOUT_DISABLE_INTERVALS
-static void timeouts_readd(struct timeouts *T, x_timer_t *to) {
-	to->expires += to->interval;
-
-	if (to->expires <= T->curtime) {
-		/* If we've missed the next firing of this timeout, reschedule
-		 * it to occur at the next multiple of its interval after
-		 * the last time that it fired.
-		 */
-		timeout_t n = T->curtime - to->expires;
-		timeout_t r = n % to->interval;
-		to->expires = T->curtime + (to->interval - r);
-	}
-
-	timeouts_sched(T, to, to->expires);
-} /* timeouts_readd() */
-#endif
-
 
 TIMEOUT_PUBLIC void timeouts_add(struct timeouts *T, x_timer_t *to, timeout_t timeout) {
-#ifndef TIMEOUT_DISABLE_INTERVALS
-	if (to->flags & TIMEOUT_INT)
-		to->interval = MAX(1, timeout);
-#endif
-
 	if (to->flags & TIMEOUT_ABS)
 		timeouts_sched(T, to, timeout);
 	else
@@ -468,11 +445,6 @@ TIMEOUT_PUBLIC x_timer_t *timeouts_get(struct timeouts *T) {
 	if (to) {
 		expired.remove(to);
 		to->bucket = INVALID_BUCKET;
-
-#ifndef TIMEOUT_DISABLE_INTERVALS
-		if ((to->flags & TIMEOUT_INT) && to->interval > 0)
-			timeouts_readd(T, to);
-#endif
 
 		return to;
 	} else {

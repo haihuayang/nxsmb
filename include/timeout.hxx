@@ -69,9 +69,6 @@ struct timeout_cb {
  *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
-#ifndef TIMEOUT_DISABLE_INTERVALS
-#define TIMEOUT_INT 0x01 /* interval (repeating) timeout */
-#endif
 #define TIMEOUT_ABS 0x02 /* treat timeout values as absolute */
 
 #define TIMEOUT_INITIALIZER(flags) { (flags) }
@@ -95,11 +92,6 @@ struct x_timer_t {
 #ifndef TIMEOUT_DISABLE_CALLBACKS
 	struct timeout_cb callback;
 	/* optional callback information */
-#endif
-
-#ifndef TIMEOUT_DISABLE_INTERVALS
-	timeout_t interval;
-	/* timeout interval if periodic */
 #endif
 }; /* struct x_timer_t */
 
