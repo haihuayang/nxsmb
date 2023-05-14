@@ -42,6 +42,7 @@ TARGET_SET_tests := \
 	test-idtable \
 	test-sid \
 	test-signing \
+	test-timeout \
 
 TARGET_SET_lib := nxsmb
 
@@ -197,6 +198,7 @@ TARGET_SRC_libnxsmb := \
 		lib/xutils \
 		lib/threadpool \
 		lib/evtmgmt \
+		lib/timeout \
 		lib/timerq \
 		lib/wbpool \
 		lib/kerberos_pac \

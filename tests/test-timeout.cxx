@@ -4,7 +4,7 @@
 #include <assert.h>
 #include <limits.h>
 
-#include "timeout.h"
+#include "include/timeout.hxx"
 
 #define THE_END_OF_TIME ((timeout_t)-1)
 
@@ -75,13 +75,14 @@ static int check_randomized(const struct rand_cfg *cfg)
 		goto done;					\
 	} while (0)
 
-	int i, err;
+	long i;
+	int err;
 	int rv = 1;
-	struct timeout *t = calloc(cfg->n_timeouts, sizeof(struct timeout));
-	timeout_t *timeouts = calloc(cfg->n_timeouts, sizeof(timeout_t));
-	uint8_t *fired = calloc(cfg->n_timeouts, sizeof(uint8_t));
-        uint8_t *found = calloc(cfg->n_timeouts, sizeof(uint8_t));
-	uint8_t *deleted = calloc(cfg->n_timeouts, sizeof(uint8_t));
+	struct timeout *t = (struct timeout *)calloc(cfg->n_timeouts, sizeof(struct timeout));
+	timeout_t *timeouts = (timeout_t *)calloc(cfg->n_timeouts, sizeof(timeout_t));
+	uint8_t *fired = (uint8_t *)calloc(cfg->n_timeouts, sizeof(uint8_t));
+        uint8_t *found = (uint8_t *)calloc(cfg->n_timeouts, sizeof(uint8_t));
+	uint8_t *deleted = (uint8_t *)calloc(cfg->n_timeouts, sizeof(uint8_t));
 	struct timeouts *tos = timeouts_open(0, &err);
 	timeout_t now = cfg->start_at;
 	int n_added_pending = 0, cnt_added_pending = 0;
@@ -198,7 +199,7 @@ static int check_randomized(const struct rand_cfg *cfg)
 			timeouts_update(tos, now);
 
 		for (i = 0; i < cfg->try_removing; ++i) {
-			int idx = random() % cfg->n_timeouts;
+			long idx = random() % cfg->n_timeouts;
 			if (! fired[idx]) {
 				timeout_del(&t[idx]);
 				++deleted[idx];
@@ -278,15 +279,17 @@ struct intervals_cfg {
 	timeout_t skip;
 };
 
-int
+static int
 check_intervals(struct intervals_cfg *cfg)
 {
-	int i, err;
+	long i;
+	int err;
 	int rv = 1;
 	struct timeout *to;
-	struct timeout *t = calloc(cfg->n_timeouts, sizeof(struct timeout));
-	unsigned *fired = calloc(cfg->n_timeouts, sizeof(unsigned));
+	struct timeout *t = (struct timeout *)calloc(cfg->n_timeouts, sizeof(struct timeout));
+	unsigned *fired = (unsigned *)calloc(cfg->n_timeouts, sizeof(unsigned));
 	struct timeouts *tos = timeouts_open(0, &err);
+	timeout_t duration;
 
 	timeout_t now = cfg->start_at;
 	if (!t || !tos || !fired)
@@ -331,7 +334,7 @@ check_intervals(struct intervals_cfg *cfg)
 			FAIL();
 	}
 
-	timeout_t duration = now - cfg->start_at;
+	duration = now - cfg->start_at;
 	for (i = 0; i < cfg->n_timeouts; ++i) {
 		if (cfg->skip) {
 			if (fired[i] > duration / cfg->timeouts[i])

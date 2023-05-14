@@ -37,7 +37,7 @@
 
 #include <sys/queue.h> /* TAILQ(3) */
 
-#include "timeout.h"
+#include "include/timeout.hxx"
 
 #if TIMEOUT_DEBUG - 0
 #include "timeout-debug.h"
@@ -240,7 +240,7 @@ static struct timeouts *timeouts_init(struct timeouts *T, timeout_t hz) {
 TIMEOUT_PUBLIC struct timeouts *timeouts_open(timeout_t hz, int *error) {
 	struct timeouts *T;
 
-	if ((T = malloc(sizeof *T)))
+	if ((T = (struct timeouts *)malloc(sizeof *T)))
 		return timeouts_init(T, hz);
 
 	*error = errno;
@@ -293,8 +293,8 @@ TIMEOUT_PUBLIC void timeouts_del(struct timeouts *T, struct timeout *to) {
 
 		if (to->pending != &T->expired && TAILQ_EMPTY(to->pending)) {
 			ptrdiff_t index = to->pending - &T->wheel[0][0];
-			int wheel = index / WHEEL_LEN;
-			int slot = index % WHEEL_LEN;
+			long wheel = index / WHEEL_LEN;
+			long slot = index % WHEEL_LEN;
 
 			T->pending[wheel] &= ~(WHEEL_C(1) << slot);
 		}
@@ -428,7 +428,7 @@ TIMEOUT_PUBLIC void timeouts_update(struct timeouts *T, abstime_t curtime) {
 			pending = rotl(((UINT64_C(1) << _elapsed) - 1), oslot);
 
 			nslot = WHEEL_MASK & (curtime >> (wheel * WHEEL_BIT));
-			pending |= rotr(rotl(((WHEEL_C(1) << _elapsed) - 1), nslot), _elapsed);
+			pending |= rotr(rotl(((WHEEL_C(1) << _elapsed) - 1), nslot), int(_elapsed));
 			pending |= WHEEL_C(1) << nslot;
 		}
 
