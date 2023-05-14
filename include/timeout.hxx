@@ -23,8 +23,8 @@
  * USE OR OTHER DEALINGS IN THE SOFTWARE.
  * ==========================================================================
  */
-#ifndef TIMEOUT_H
-#define TIMEOUT_H
+#ifndef __timeout__hxx__
+#define __timeout__hxx__
 
 #include <stdbool.h>    /* bool */
 #include <stdio.h>      /* FILE */
@@ -114,12 +114,11 @@ struct timeout_cb {
 
 struct x_timer_t {
 	int flags;
+	unsigned int bucket;
+	/* index to timeout list if pending on wheel or expiry queue */
 
 	timeout_t expires;
 	/* absolute expiration time */
-
-	struct timeout_list *pending;
-	/* timeout list if pending on wheel or expiry queue */
 
 	TAILQ_ENTRY(x_timer_t) tqe;
 	/* entry member for struct timeout_list lists */
@@ -250,4 +249,4 @@ TIMEOUT_PUBLIC x_timer_t *timeouts_next(struct timeouts *, struct timeouts_it *)
 #define timeouts_addf(T, to, timeout) \
 	timeouts_add((T), (to), timeouts_f2i((T), (timeout)))
 
-#endif /* TIMEOUT_H */
+#endif /* __timeout__hxx__ */
