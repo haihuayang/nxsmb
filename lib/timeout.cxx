@@ -38,12 +38,8 @@
  *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
-#define abstime_t timeout_t /* for documentation purposes */
-#define reltime_t timeout_t /* "" */
-
-#if !defined countof
-#define countof(a) (sizeof (a) / sizeof *(a))
-#endif
+using abstime_t = x_timer_t::val_t; /* for documentation purposes */
+using reltime_t = x_timer_t::val_t; /* "" */
 
 #if !defined MIN
 #define MIN(a, b) (((a) < (b))? (a) : (b))
@@ -168,28 +164,27 @@ static inline wheel_t rotr(const wheel_t v, int c) {
 X_DECLARE_MEMBER_TRAITS(timer_link_traits, x_timer_t, link)
 using timeout_list = x_tp_ddlist_t<timer_link_traits>;
 
-struct timeouts {
+struct x_timer_wheel_t {
 	timeout_list wheel[WHEEL_NUM * WHEEL_LEN + 1];
 
 	wheel_t pending[WHEEL_NUM]{};
 
-	timeout_t curtime{};
-}; /* struct timeouts */
+	x_timer_t::val_t curtime{};
+}; /* struct x_timer_wheel_t */
 
 #define EXPIRED(T) ((T)->wheel[WHEEL_NUM * WHEEL_LEN])
 
-TIMEOUT_PUBLIC struct timeouts *timeouts_open() {
-	return new timeouts;
-} /* timeouts_open() */
+TIMEOUT_PUBLIC x_timer_wheel_t *x_timer_wheel_create() {
+	return new x_timer_wheel_t;
+} /* x_timer_wheel_create() */
 
 
-static void timeouts_reset(struct timeouts *T) {
+static void timeouts_reset(x_timer_wheel_t *T) {
 	timeout_list reset;
 	x_timer_t *to;
-	unsigned i;
 
-	for (i = 0; i < countof(T->wheel); i++) {
-		reset.concat(T->wheel[i]);
+	for (auto &w: T->wheel) {
+		reset.concat(w);
 	}
 
 	for (to = reset.get_front(); to; to = reset.next(to)) {
@@ -198,7 +193,7 @@ static void timeouts_reset(struct timeouts *T) {
 } /* timeouts_reset() */
 
 
-TIMEOUT_PUBLIC void timeouts_close(struct timeouts *T) {
+TIMEOUT_PUBLIC void x_timer_wheel_free(x_timer_wheel_t *T) {
 	/*
 	 * NOTE: Delete installed timeouts so timeout_pending() and
 	 * timeout_expired() worked as expected.
@@ -206,11 +201,11 @@ TIMEOUT_PUBLIC void timeouts_close(struct timeouts *T) {
 	timeouts_reset(T);
 
 	delete T;
-} /* timeouts_close() */
+} /* x_timer_wheel_free() */
 
 
 
-TIMEOUT_PUBLIC void timeouts_del(struct timeouts *T, x_timer_t *to) {
+TIMEOUT_PUBLIC void x_timer_wheel_del(x_timer_wheel_t *T, x_timer_t *to) {
 	if (to->bucket != x_timer_t::INVALID) {
 		timeout_list *pending = &T->wheel[to->bucket];
 		pending->remove(to);
@@ -228,27 +223,27 @@ TIMEOUT_PUBLIC void timeouts_del(struct timeouts *T, x_timer_t *to) {
 } /* timeouts_del() */
 
 
-static inline reltime_t timeout_rem(struct timeouts *T, x_timer_t *to) {
+static inline reltime_t timeout_rem(x_timer_wheel_t *T, x_timer_t *to) {
 	return to->expires - T->curtime;
 } /* timeout_rem() */
 
 
-static inline int timeout_wheel(timeout_t timeout) {
+static inline int timeout_wheel(x_timer_t::val_t timeout) {
 	/* must be called with timeout != 0, so fls input is nonzero */
 	return (fls(MIN(timeout, TIMEOUT_MAX)) - 1) / WHEEL_BIT;
 } /* timeout_wheel() */
 
 
-static inline int timeout_slot(int wheel, timeout_t expires) {
+static inline int timeout_slot(int wheel, x_timer_t::val_t expires) {
 	return WHEEL_MASK & ((expires >> (wheel * WHEEL_BIT)) - !!wheel);
 } /* timeout_slot() */
 
 
-static void timeouts_sched(struct timeouts *T, x_timer_t *to, timeout_t expires) {
-	timeout_t rem;
+static void timeouts_sched(x_timer_wheel_t *T, x_timer_t *to, x_timer_t::val_t expires) {
+	x_timer_t::val_t rem;
 	int wheel, slot;
 
-	timeouts_del(T, to);
+	x_timer_wheel_del(T, to);
 
 	to->expires = expires;
 
@@ -276,13 +271,15 @@ static void timeouts_sched(struct timeouts *T, x_timer_t *to, timeout_t expires)
 
 
 
-TIMEOUT_PUBLIC void timeouts_add(struct timeouts *T, x_timer_t *to, timeout_t timeout) {
+TIMEOUT_PUBLIC void x_timer_wheel_add(x_timer_wheel_t *T, x_timer_t *to,
+		x_timer_t::val_t timeout)
+{
 	timeouts_sched(T, to, timeout);
 } /* timeouts_add() */
 
 
-TIMEOUT_PUBLIC void timeouts_update(struct timeouts *T, abstime_t curtime) {
-	timeout_t elapsed = curtime - T->curtime;
+TIMEOUT_PUBLIC void x_timer_wheel_update(x_timer_wheel_t *T, abstime_t curtime) {
+	x_timer_t::val_t elapsed = curtime - T->curtime;
 	timeout_list todo;
 	int wheel;
 
@@ -355,7 +352,7 @@ TIMEOUT_PUBLIC void timeouts_update(struct timeouts *T, abstime_t curtime) {
 } /* timeouts_update() */
 
 
-TIMEOUT_PUBLIC bool timeouts_pending(struct timeouts *T) {
+TIMEOUT_PUBLIC bool x_timer_wheel_pending(x_timer_wheel_t *T) {
 	wheel_t pending = 0;
 	int wheel;
 
@@ -364,12 +361,12 @@ TIMEOUT_PUBLIC bool timeouts_pending(struct timeouts *T) {
 	}
 
 	return !!pending;
-} /* timeouts_pending() */
+} /* x_timer_wheel_pending() */
 
 
-TIMEOUT_PUBLIC bool timeouts_expired(struct timeouts *T) {
+TIMEOUT_PUBLIC bool x_timer_wheel_expired(x_timer_wheel_t *T) {
 	return !EXPIRED(T).empty();
-} /* timeouts_expired() */
+} /* x_timer_wheel_expired() */
 
 
 /*
@@ -388,9 +385,9 @@ TIMEOUT_PUBLIC bool timeouts_expired(struct timeouts *T) {
  *
  * We should never return a timeout larger than the lowest actual timeout.
  */
-static timeout_t timeouts_int(struct timeouts *T) {
-	timeout_t timeout = ~TIMEOUT_C(0), _timeout;
-	timeout_t relmask;
+static x_timer_t::val_t timeouts_int(x_timer_wheel_t *T) {
+	x_timer_t::val_t timeout = ~TIMEOUT_C(0), _timeout;
+	x_timer_t::val_t relmask;
 	int wheel, slot;
 
 	relmask = 0;
@@ -422,15 +419,15 @@ static timeout_t timeouts_int(struct timeouts *T) {
  * Calculate the interval our caller can wait before needing to process
  * events.
  */
-TIMEOUT_PUBLIC timeout_t timeouts_timeout(struct timeouts *T) {
+TIMEOUT_PUBLIC x_timer_t::val_t x_timer_wheel_timeout(x_timer_wheel_t *T) {
 	if (!EXPIRED(T).empty())
 		return 0;
 
 	return timeouts_int(T);
-} /* timeouts_timeout() */
+} /* x_timer_wheel_timeout() */
 
 
-TIMEOUT_PUBLIC x_timer_t *timeouts_get(struct timeouts *T) {
+TIMEOUT_PUBLIC x_timer_t *x_timer_wheel_get(x_timer_wheel_t *T) {
 	timeout_list &expired = EXPIRED(T);
 	x_timer_t *to = expired.get_front();
 	if (to) {
@@ -441,14 +438,14 @@ TIMEOUT_PUBLIC x_timer_t *timeouts_get(struct timeouts *T) {
 	} else {
 		return nullptr;
 	}
-} /* timeouts_get() */
+} /* x_timer_wheel_get() */
 
 
 /*
  * Use dumb looping to locate the earliest timeout pending on the wheel so
  * our invariant assertions can check the result of our optimized code.
  */
-static x_timer_t *timeouts_min(struct timeouts *T) {
+static x_timer_t *timeouts_min(x_timer_wheel_t *T) {
 	x_timer_t *to, *min = NULL;
 	unsigned i;
 
@@ -483,11 +480,11 @@ static x_timer_t *timeouts_min(struct timeouts *T) {
 	} \
 } while (0)
 
-TIMEOUT_PUBLIC bool timeouts_check(struct timeouts *T,
+TIMEOUT_PUBLIC bool x_timer_wheel_check(x_timer_wheel_t *T,
 		void (*report_func)(void *arg, const char *msg),
 		void *report_arg)
 {
-	timeout_t timeout;
+	x_timer_t::val_t timeout;
 	x_timer_t *to;
 
 	if ((to = timeouts_min(T))) {
@@ -496,10 +493,10 @@ TIMEOUT_PUBLIC bool timeouts_check(struct timeouts *T,
 		timeout = timeouts_int(T);
 		check(timeout <= to->expires - T->curtime, "wrong soft timeout (soft:%" TIMEOUT_PRIu " > hard:%" TIMEOUT_PRIu ") (expires:%" TIMEOUT_PRIu "; curtime:%" TIMEOUT_PRIu ")\n", timeout, (to->expires - T->curtime), to->expires, T->curtime);
 
-		timeout = timeouts_timeout(T);
+		timeout = x_timer_wheel_timeout(T);
 		check(timeout <= to->expires - T->curtime, "wrong soft timeout (soft:%" TIMEOUT_PRIu " > hard:%" TIMEOUT_PRIu ") (expires:%" TIMEOUT_PRIu "; curtime:%" TIMEOUT_PRIu ")\n", timeout, (to->expires - T->curtime), to->expires, T->curtime);
 	} else {
-		timeout = timeouts_timeout(T);
+		timeout = x_timer_wheel_timeout(T);
 
 		if (!EXPIRED(T).empty())
 			check(timeout == 0, "wrong soft timeout (soft:%" TIMEOUT_PRIu " != hard:%" TIMEOUT_PRIu ")\n", timeout, TIMEOUT_C(0));
@@ -508,7 +505,7 @@ TIMEOUT_PUBLIC bool timeouts_check(struct timeouts *T,
 	}
 
 	return 1;
-} /* timeouts_check() */
+} /* x_timer_wheel_check() */
 
 
 #define ENTER                                                           \
@@ -532,14 +529,16 @@ TIMEOUT_PUBLIC bool timeouts_check(struct timeouts *T,
 	}                                                               \
 	} while (0)
 
-TIMEOUT_PUBLIC x_timer_t *timeouts_next(struct timeouts *T, struct timeouts_it *it) {
+TIMEOUT_PUBLIC x_timer_t *x_timer_wheel_next(x_timer_wheel_t *T,
+		x_timer_wheel_it_t *it)
+{
 	x_timer_t *to;
 
 	ENTER;
 
-	if (it->flags & TIMEOUTS_EXPIRED) {
-		if (it->flags & TIMEOUTS_CLEAR) {
-			while ((to = timeouts_get(T))) {
+	if (it->flags & x_timer_wheel_it_t::F_EXPIRED) {
+		if (it->flags & x_timer_wheel_it_t::F_CLEAR) {
+			while ((to = x_timer_wheel_get(T))) {
 				YIELD(to);
 			}
 		} else {
@@ -550,14 +549,12 @@ TIMEOUT_PUBLIC x_timer_t *timeouts_next(struct timeouts *T, struct timeouts_it *
 		}
 	}
 
-	if (it->flags & TIMEOUTS_PENDING) {
-		for (it->i = 0; it->i < WHEEL_NUM; it->i++) {
-			for (it->j = 0; it->j < WHEEL_LEN; it->j++) {
-				for (to = T->wheel[it->i * WHEEL_LEN + it->j].get_front();
-						to; to = it->to) {
-					it->to = T->wheel[it->i * WHEEL_LEN + it->j].next(to);
-					YIELD(to);
-				}
+	if (it->flags & x_timer_wheel_it_t::F_PENDING) {
+		for (it->i = 0; it->i < WHEEL_NUM * WHEEL_LEN; it->i++) {
+			for (to = T->wheel[it->i].get_front();
+					to; to = it->to) {
+				it->to = T->wheel[it->i].next(to);
+				YIELD(to);
 			}
 		}
 	}
@@ -565,7 +562,7 @@ TIMEOUT_PUBLIC x_timer_t *timeouts_next(struct timeouts *T, struct timeouts_it *
 	LEAVE;
 
 	return NULL;
-} /* timeouts_next */
+} /* x_timer_wheel_next */
 
 #undef LEAVE
 #undef YIELD
@@ -578,13 +575,13 @@ TIMEOUT_PUBLIC x_timer_t *timeouts_next(struct timeouts *T, struct timeouts_it *
  *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
-TIMEOUT_PUBLIC bool timeout_pending(x_timer_t *to) {
+TIMEOUT_PUBLIC bool x_timer_pending(const x_timer_t *to) {
 	return to->bucket < WHEEL_NUM * WHEEL_LEN;
-} /* timeout_pending() */
+} /* x_timer_pending() */
 
 
-TIMEOUT_PUBLIC bool timeout_expired(x_timer_t *to) {
+TIMEOUT_PUBLIC bool x_timer_expired(const x_timer_t *to) {
 	return to->bucket == WHEEL_NUM * WHEEL_LEN;
-} /* timeout_expired() */
+} /* x_timer_expired() */
 
 

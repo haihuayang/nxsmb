@@ -46,57 +46,30 @@
 #define TIMEOUT_PRIx PRIx64
 #define TIMEOUT_PRIX PRIX64
 
-typedef uint64_t timeout_t;
-
-
-/*
- * C A L L B A C K  I N T E R F A C E
- *
- * Callback function parameters unspecified to make embedding into existing
- * applications easier.
- *
- * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
-
-#ifndef TIMEOUT_CB_OVERRIDE
-struct timeout_cb {
-	void (*fn)();
-	void *arg;
-}; /* struct timeout_cb */
-#endif
 
 /*
  * T I M E O U T  I N T E R F A C E S
  *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
-#define timeout_setcb(to, fn, arg) do { \
-	(to)->callback.fn = (fn);       \
-	(to)->callback.arg = (arg);     \
-} while (0)
-
 struct x_timer_t {
+	using val_t = uint64_t;
 	enum { INVALID = (unsigned int)-1, };
-	int flags{};
 	unsigned int bucket{INVALID};
 	/* index to timeout list if pending on wheel or expiry queue */
 
-	timeout_t expires;
+	val_t expires;
 	/* absolute expiration time */
 
 	x_dlink_t link;
 	/* entry member for struct timeout_list lists */
-
-#ifndef TIMEOUT_DISABLE_CALLBACKS
-	struct timeout_cb callback;
-	/* optional callback information */
-#endif
 }; /* struct x_timer_t */
 
 
-TIMEOUT_PUBLIC bool timeout_pending(x_timer_t *);
+TIMEOUT_PUBLIC bool x_timer_pending(const x_timer_t *);
 /* true if on timing wheel, false otherwise */
  
-TIMEOUT_PUBLIC bool timeout_expired(x_timer_t *);
+TIMEOUT_PUBLIC bool x_timer_expired(const x_timer_t *);
 /* true if on expired queue, false otherwise */
 
 /*
@@ -104,67 +77,64 @@ TIMEOUT_PUBLIC bool timeout_expired(x_timer_t *);
  *
  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
-struct timeouts;
+struct x_timer_wheel_t;
 
-TIMEOUT_PUBLIC struct timeouts *timeouts_open();
+TIMEOUT_PUBLIC x_timer_wheel_t *x_timer_wheel_create();
 /* open a new timing wheel, setting optional HZ (for float conversions) */
 
-TIMEOUT_PUBLIC void timeouts_close(struct timeouts *);
+TIMEOUT_PUBLIC void x_timer_wheel_free(x_timer_wheel_t *);
 /* destroy timing wheel */
 
-TIMEOUT_PUBLIC void timeouts_update(struct timeouts *, timeout_t);
+TIMEOUT_PUBLIC void x_timer_wheel_update(x_timer_wheel_t *, x_timer_t::val_t);
 /* update timing wheel with current absolute time */
 
-TIMEOUT_PUBLIC timeout_t timeouts_timeout(struct timeouts *);
+TIMEOUT_PUBLIC x_timer_t::val_t x_timer_wheel_timeout(x_timer_wheel_t *);
 /* return interval to next required update */
 
-TIMEOUT_PUBLIC void timeouts_add(struct timeouts *, x_timer_t *, timeout_t);
+TIMEOUT_PUBLIC void x_timer_wheel_add(x_timer_wheel_t *, x_timer_t *, x_timer_t::val_t);
 /* add timeout to timing wheel */
 
-TIMEOUT_PUBLIC void timeouts_del(struct timeouts *, x_timer_t *);
+TIMEOUT_PUBLIC void x_timer_wheel_del(x_timer_wheel_t *, x_timer_t *);
 /* remove timeout from any timing wheel or expired queue (okay if on neither) */
 
-TIMEOUT_PUBLIC x_timer_t *timeouts_get(struct timeouts *);
+TIMEOUT_PUBLIC x_timer_t *x_timer_wheel_get(x_timer_wheel_t *);
 /* return any expired timeout (caller should loop until NULL-return) */
 
-TIMEOUT_PUBLIC bool timeouts_pending(struct timeouts *);
+TIMEOUT_PUBLIC bool x_timer_wheel_pending(x_timer_wheel_t *);
 /* return true if any timeouts pending on timing wheel */
 
-TIMEOUT_PUBLIC bool timeouts_expired(struct timeouts *);
+TIMEOUT_PUBLIC bool x_timer_wheel_expired(x_timer_wheel_t *);
 /* return true if any timeouts on expired queue */
 
-TIMEOUT_PUBLIC bool timeouts_check(struct timeouts *,
+TIMEOUT_PUBLIC bool x_timer_wheel_check(x_timer_wheel_t *,
 		void (*report_func)(void *arg, const char *msg),
 		void *report_arg);
 /* return true if invariants hold. describes failures to optional file handle. */
 
-#define TIMEOUTS_PENDING 0x10
-#define TIMEOUTS_EXPIRED 0x20
-#define TIMEOUTS_ALL     (TIMEOUTS_PENDING|TIMEOUTS_EXPIRED)
-#define TIMEOUTS_CLEAR   0x40
+struct x_timer_wheel_it_t {
+	enum flag_t {
+		F_PENDING = 0x10,
+		F_EXPIRED = 0x20,
+		F_ALL = F_PENDING | F_EXPIRED,
+		F_CLEAR = 0x40,
+	} flags;
+	void init(flag_t f) {
+		flags = f;
+		pc = 0;
+	}
+	unsigned pc = 0, i = 0;
+	x_timer_t *to = nullptr;
+}; /* struct x_timer_wheel_it_t */
 
-#define TIMEOUTS_IT_INITIALIZER(flags) { (flags), 0, 0, 0, 0 }
-
-#define TIMEOUTS_IT_INIT(cur, _flags) do {                              \
-	(cur)->flags = (_flags);                                        \
-	(cur)->pc = 0;                                                  \
-} while (0)
-
-struct timeouts_it {
-	int flags;
-	unsigned pc, i, j;
-	x_timer_t *to;
-}; /* struct timeouts_it */
-
-TIMEOUT_PUBLIC x_timer_t *timeouts_next(struct timeouts *, struct timeouts_it *);
+TIMEOUT_PUBLIC x_timer_t *x_timer_wheel_next(x_timer_wheel_t *, x_timer_wheel_it_t *);
 /* return next timeout in pending wheel or expired queue. caller can delete
  * the returned timeout, but should not otherwise manipulate the timing
  * wheel. in particular, caller SHOULD NOT delete any other timeout as that
  * could invalidate cursor state and trigger a use-after-free.
  */
 
-#define TIMEOUTS_FOREACH(var, T, flags)                                 \
-	struct timeouts_it _it = TIMEOUTS_IT_INITIALIZER((flags));      \
-	while (((var) = timeouts_next((T), &_it)))
+#define X_TIMER_WHEEL_FOREACH(var, T, flags)                                 \
+	x_timer_wheel_it_t _it{(flags)};      \
+	while (((var) = x_timer_wheel_next((T), &_it)))
 
 #endif /* __timeout__hxx__ */

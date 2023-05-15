@@ -6,40 +6,40 @@
 
 #include "include/timeout.hxx"
 
-#define THE_END_OF_TIME ((timeout_t)-1)
+#define THE_END_OF_TIME ((x_timer_t::val_t)-1)
 
 static int check_open_close() {
-	struct timeouts *tos = timeouts_open();
+	x_timer_wheel_t *tos = x_timer_wheel_create();
 	if (!tos)
 		return 1;
-	timeouts_close(tos);
+	x_timer_wheel_free(tos);
 	return 0;
 }
 
 /* Not very random */
-static timeout_t random_to(timeout_t min, timeout_t max)
+static x_timer_t::val_t random_to(x_timer_t::val_t min, x_timer_t::val_t max)
 {
 	if (max <= min)
 		return min;
 	/* Not actually all that random, but should exercise the code. */
-	timeout_t rand64 = random() * (timeout_t)INT_MAX + random();
+	x_timer_t::val_t rand64 = random() * (x_timer_t::val_t)INT_MAX + random();
 	return min + (rand64 % (max-min));
 }
 
 /* configuration for check_randomized */
 struct rand_cfg {
 	/* When creating timeouts, smallest possible delay */
-	timeout_t min_timeout;
+	x_timer_t::val_t min_timeout;
 	/* When creating timeouts, largest possible delay */
-	timeout_t max_timeout;
+	x_timer_t::val_t max_timeout;
 	/* First time to start the clock at. */
-	timeout_t start_at;
+	x_timer_t::val_t start_at;
 	/* Do not advance the clock past this time. */
-	timeout_t end_at;
+	x_timer_t::val_t end_at;
 	/* Number of timeouts to create and monitor. */
 	int n_timeouts;
 	/* Advance the clock by no more than this each step. */
-	timeout_t max_step;
+	x_timer_t::val_t max_step;
 	/* Every time the clock ticks, try removing this many timeouts at
 	 * random. */
 	int try_removing;
@@ -62,58 +62,58 @@ static int check_randomized(const struct rand_cfg *cfg)
 	long i;
 	int rv = 1;
 	x_timer_t *t = new x_timer_t[cfg->n_timeouts];
-	timeout_t *timeouts = (timeout_t *)calloc(cfg->n_timeouts, sizeof(timeout_t));
+	x_timer_t::val_t *timeouts = (x_timer_t::val_t *)calloc(cfg->n_timeouts, sizeof(x_timer_t::val_t));
 	uint8_t *fired = (uint8_t *)calloc(cfg->n_timeouts, sizeof(uint8_t));
         uint8_t *found = (uint8_t *)calloc(cfg->n_timeouts, sizeof(uint8_t));
 	uint8_t *deleted = (uint8_t *)calloc(cfg->n_timeouts, sizeof(uint8_t));
-	struct timeouts *tos = timeouts_open();
-	timeout_t now = cfg->start_at;
+	x_timer_wheel_t *tos = x_timer_wheel_create();
+	x_timer_t::val_t now = cfg->start_at;
 	int n_added_pending = 0, cnt_added_pending = 0;
 	int n_added_expired = 0, cnt_added_expired = 0;
-        struct timeouts_it it_p, it_e, it_all;
+        x_timer_wheel_it_t it_p, it_e, it_all;
         int p_done = 0, e_done = 0, all_done = 0;
 	x_timer_t *to = NULL;
 
 	if (!t || !timeouts || !tos || !fired || !found || !deleted)
 		FAIL();
-	timeouts_update(tos, cfg->start_at);
+	x_timer_wheel_update(tos, cfg->start_at);
 
 	for (i = 0; i < cfg->n_timeouts; ++i) {
-		if (timeout_pending(&t[i]))
+		if (x_timer_pending(&t[i]))
 			FAIL();
-		if (timeout_expired(&t[i]))
+		if (x_timer_expired(&t[i]))
 			FAIL();
 
 		timeouts[i] = random_to(cfg->min_timeout, cfg->max_timeout);
 
-		timeouts_add(tos, &t[i], timeouts[i]);
+		x_timer_wheel_add(tos, &t[i], timeouts[i]);
 		if (timeouts[i] <= cfg->start_at) {
-			if (timeout_pending(&t[i]))
+			if (x_timer_pending(&t[i]))
 				FAIL();
-			if (! timeout_expired(&t[i]))
+			if (! x_timer_expired(&t[i]))
 				FAIL();
 			++n_added_expired;
 		} else {
-			if (! timeout_pending(&t[i]))
+			if (! x_timer_pending(&t[i]))
 				FAIL();
-			if (timeout_expired(&t[i]))
+			if (x_timer_expired(&t[i]))
 				FAIL();
 			++n_added_pending;
 		}
 	}
 
-	if (!!n_added_pending != timeouts_pending(tos))
+	if (!!n_added_pending != x_timer_wheel_pending(tos))
 		FAIL();
-	if (!!n_added_expired != timeouts_expired(tos))
+	if (!!n_added_expired != x_timer_wheel_expired(tos))
 		FAIL();
 
         /* Test foreach, interleaving a few iterators. */
-        TIMEOUTS_IT_INIT(&it_p, TIMEOUTS_PENDING);
-        TIMEOUTS_IT_INIT(&it_e, TIMEOUTS_EXPIRED);
-        TIMEOUTS_IT_INIT(&it_all, TIMEOUTS_ALL);
+        it_p.init(x_timer_wheel_it_t::F_PENDING);
+        it_e.init(x_timer_wheel_it_t::F_EXPIRED);
+        it_all.init(x_timer_wheel_it_t::F_ALL);
         while (! (p_done && e_done && all_done)) {
 		if (!p_done) {
-			to = timeouts_next(tos, &it_p);
+			to = x_timer_wheel_next(tos, &it_p);
 			if (to) {
 				i = to - &t[0];
 				++found[i];
@@ -123,7 +123,7 @@ static int check_randomized(const struct rand_cfg *cfg)
 			}
 		}
 		if (!e_done) {
-			to = timeouts_next(tos, &it_e);
+			to = x_timer_wheel_next(tos, &it_e);
 			if (to) {
 				i = to - &t[0];
 				++found[i];
@@ -133,7 +133,7 @@ static int check_randomized(const struct rand_cfg *cfg)
 			}
 		}
 		if (!all_done) {
-			to = timeouts_next(tos, &it_all);
+			to = x_timer_wheel_next(tos, &it_all);
 			if (to) {
 				i = to - &t[0];
 				++found[i];
@@ -152,7 +152,7 @@ static int check_randomized(const struct rand_cfg *cfg)
 	if (cnt_added_pending != n_added_pending)
 		FAIL();
 
-	while (NULL != (to = timeouts_get(tos))) {
+	while (NULL != (to = x_timer_wheel_get(tos))) {
 		i = to - &t[0];
 		assert(&t[i] == to);
 		if (timeouts[i] > cfg->start_at)
@@ -167,25 +167,25 @@ static int check_randomized(const struct rand_cfg *cfg)
 
 	while (now < cfg->end_at) {
 		int n_fired_this_time = 0;
-		timeout_t first_at = timeouts_timeout(tos) + now;
+		x_timer_t::val_t first_at = x_timer_wheel_timeout(tos) + now;
 
-		timeout_t oldtime = now;
-		timeout_t step = random_to(1, cfg->max_step);
+		x_timer_t::val_t oldtime = now;
+		x_timer_t::val_t step = random_to(1, cfg->max_step);
 		int another;
 		now += step;
-		timeouts_update(tos, now);
+		x_timer_wheel_update(tos, now);
 
 		for (i = 0; i < cfg->try_removing; ++i) {
 			long idx = random() % cfg->n_timeouts;
 			if (! fired[idx]) {
-				timeouts_del(tos, &t[idx]);
+				x_timer_wheel_del(tos, &t[idx]);
 				++deleted[idx];
 			}
 		}
 
-		another = (timeouts_timeout(tos) == 0);
+		another = (x_timer_wheel_timeout(tos) == 0);
 
-		while (NULL != (to = timeouts_get(tos))) {
+		while (NULL != (to = x_timer_wheel_get(tos))) {
 			if (! another)
 				FAIL(); /* Thought we saw the last one! */
 			i = to - &t[0];
@@ -198,13 +198,13 @@ static int check_randomized(const struct rand_cfg *cfg)
 				FAIL(); /* first_at should've been earlier */
 			fired[i]++;
 			n_fired_this_time++;
-			another = (timeouts_timeout(tos) == 0);
+			another = (x_timer_wheel_timeout(tos) == 0);
 		}
 		if (n_fired_this_time && first_at > now)
 			FAIL(); /* first_at should've been earlier */
 		if (another)
 			FAIL(); /* Huh? We think there are more? */
-		if (!timeouts_check(tos, report_func, nullptr))
+		if (!x_timer_wheel_check(tos, report_func, nullptr))
 			FAIL();
 	}
 
@@ -222,24 +222,24 @@ static int check_randomized(const struct rand_cfg *cfg)
 			FAIL();
 		if (cfg->finalize > 1) {
 			if (!fired[i])
-				timeouts_del(tos, &t[i]);
+				x_timer_wheel_del(tos, &t[i]);
 		}
 	}
 
 	/* Now nothing more should fire between now and the end of time. */
 	if (cfg->finalize) {
-		timeouts_update(tos, THE_END_OF_TIME);
+		x_timer_wheel_update(tos, THE_END_OF_TIME);
 		if (cfg->finalize > 1) {
-			if (timeouts_get(tos))
+			if (x_timer_wheel_get(tos))
 				FAIL();
-			TIMEOUTS_FOREACH(to, tos, TIMEOUTS_ALL)
+			X_TIMER_WHEEL_FOREACH(to, tos, x_timer_wheel_it_t::F_ALL)
 				FAIL();
 		}
 	}
 	rv = 0;
 
  done:
-	if (tos) timeouts_close(tos);
+	if (tos) x_timer_wheel_free(tos);
 	if (t) delete[] t;
 	if (timeouts) free(timeouts);
 	if (fired) free(fired);

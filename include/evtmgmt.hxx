@@ -68,13 +68,11 @@ struct x_epoll_upcall_t
 	const x_epoll_upcall_cbs_t *cbs;
 };
 
-struct x_timer_t;
-
-struct x_timer_t
+struct x_timer_job_t
 {
-	x_timer_t(long (*run)(x_timer_t *timer));
+	x_timer_job_t(long (*run)(x_timer_job_t *timer_job));
 	x_job_t job;
-	long (*const run)(x_timer_t *timer);
+	long (*const run)(x_timer_job_t *timer_job);
 	x_tick_t timeout;
 };
 
@@ -87,8 +85,8 @@ uint64_t x_evtmgmt_monitor(x_evtmgmt_t *ep, unsigned int fd, uint32_t poll_event
 bool x_evtmgmt_enable_events(x_evtmgmt_t *ep, uint64_t id, uint32_t events);
 bool x_evtmgmt_post_events(x_evtmgmt_t *ep, uint64_t id, uint32_t events);
 
-void x_evtmgmt_add_timer(x_evtmgmt_t *ep, x_timer_t *timer, x_tick_diff_t ns);
-/* TODO bool x_evtmgmt_cancel_timer(x_evtmgmt_t *ep, x_timer_t *timer); */
+void x_evtmgmt_add_timer(x_evtmgmt_t *ep, x_timer_job_t *timer_job, x_tick_diff_t ns);
+/* TODO bool x_evtmgmt_cancel_timer(x_evtmgmt_t *ep, x_timer_job_t *timer_job); */
 
 #endif /* __evtmgmt__hxx__ */
 

@@ -58,7 +58,7 @@ X_DECLARE_MEMBER_TRAITS(wbconn_dlink_traits, wbconn_t, dlink)
 struct x_wbpool_t
 {
 	x_wbpool_t(x_evtmgmt_t *ep, unsigned int count, const std::string &wbpipe);
-	x_timer_t timer; // reconnect timer
+	x_timer_job_t timer_job; // reconnect timer
 	x_evtmgmt_t *evtmgmt;
 	std::mutex mutex;
 	enum {
@@ -231,9 +231,9 @@ static void handshake_wbcli_cb_reply(x_wbcli_t *wbcli, int err)
 	}
 }
 
-static long wbpool_timer_func(x_timer_t *timer)
+static long wbpool_timer_job_func(x_timer_job_t *timer_job)
 {
-	x_wbpool_t *wbpool = X_CONTAINER_OF(timer, x_wbpool_t, timer);
+	x_wbpool_t *wbpool = X_CONTAINER_OF(timer_job, x_wbpool_t, timer_job);
 	wbconn_t *wbconn_disconnected = nullptr, *wbconn_ready = nullptr;
 	{
 		std::unique_lock<std::mutex> lock(wbpool->mutex);
@@ -271,7 +271,7 @@ static long wbpool_timer_func(x_timer_t *timer)
 }
 
 x_wbpool_t::x_wbpool_t(x_evtmgmt_t *ep, unsigned int count, const std::string &wbpipe)
-	: timer(wbpool_timer_func), evtmgmt{ep}, wbconns{count}, wbpipe{wbpipe}
+	: timer_job(wbpool_timer_job_func), evtmgmt{ep}, wbconns{count}, wbpipe{wbpipe}
 {
 }
 
@@ -484,7 +484,7 @@ x_wbpool_t *x_wbpool_create(x_evtmgmt_t *evtmgmt, unsigned int count,
 		wbpool->disconnected_list.push_back(wbconn);
 	}
 
-	x_evtmgmt_add_timer(wbpool->evtmgmt, &wbpool->timer, 0);
+	x_evtmgmt_add_timer(wbpool->evtmgmt, &wbpool->timer_job, 0);
 	return wbpool;
 }
 

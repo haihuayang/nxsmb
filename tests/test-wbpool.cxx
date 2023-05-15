@@ -56,7 +56,7 @@ static void get_domain_info(x_wbpool_t *wbpool, const char *dom_name)
 static x_wbpool_t *wbpool;
 static const char *workgroup;
 
-static long get_domain_info_timer_func(x_timer_t *timer)
+static long get_domain_info_timer_job_func(x_timer_job_t *timer_job)
 {
 	get_domain_info(wbpool, workgroup);
 	return 3000;
@@ -70,9 +70,9 @@ int main(int argc, char **argv)
 	x_evtmgmt_t *evtmgmt = x_evtmgmt_create(tpool, 1024, 100);
 	wbpool = x_wbpool_create(evtmgmt, 2, wbpipe);
 
-	x_timer_t timer{get_domain_info_timer_func};
+	x_timer_job_t timer_job{get_domain_info_timer_job_func};
 
-	x_evtmgmt_add_timer(evtmgmt, &timer, 0);
+	x_evtmgmt_add_timer(evtmgmt, &timer_job, 0);
 
 	for (;;) {
 		x_evtmgmt_dispatch(evtmgmt);

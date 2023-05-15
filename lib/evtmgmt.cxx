@@ -63,14 +63,14 @@ struct x_epoll_entry_t
 	x_epoll_upcall_t *upcall;
 };
 
-struct timer_comp
+struct timer_job_comp
 {
-	bool operator()(const x_timer_t *t1, const x_timer_t *t2) const {
+	bool operator()(const x_timer_job_t *t1, const x_timer_job_t *t2) const {
 		return t1->timeout > t2->timeout;
 	}
 };
 
-X_DECLARE_MEMBER_TRAITS(timer_dlink_traits, x_timer_t, job.dlink)
+X_DECLARE_MEMBER_TRAITS(timer_job_dlink_traits, x_timer_job_t, job.dlink)
 
 struct x_evtmgmt_t
 {
@@ -112,9 +112,9 @@ struct x_evtmgmt_t
 	const uint32_t max_fd;
 	const int max_wait_ms;
 
-	std::priority_queue<x_timer_t *, std::vector<x_timer_t *>, timer_comp> timerq{timer_comp()};
+	std::priority_queue<x_timer_job_t *, std::vector<x_timer_job_t *>, timer_job_comp> timerq{timer_job_comp()};
 	std::mutex mutex; // protect unsorted_timers, TODO it can be lock-less?
-	x_tp_sdlist_t<timer_dlink_traits> unsorted_timers;
+	x_tp_sdlist_t<timer_job_dlink_traits> unsorted_timers;
 
 	x_epoll_entry_t entries[];
 };
@@ -192,13 +192,13 @@ bool x_evtmgmt_post_events(x_evtmgmt_t *ep, uint64_t id, uint32_t events)
 	return x_evtmgmt_modify_fdevents(ep, id, x_fdevents_init(events, 0));
 }
 
-static void __evtmgmt_add_timer(x_evtmgmt_t *ep, x_timer_t *timer, x_tick_diff_t ns)
+static void __evtmgmt_add_timer_job(x_evtmgmt_t *ep, x_timer_job_t *timer_job, x_tick_diff_t ns)
 {
-	timer->timeout = tick_now + ns;
-	timer->job.state = x_job_t::STATE_NONE;
+	timer_job->timeout = tick_now + ns;
+	timer_job->job.state = x_job_t::STATE_NONE;
 	{
 		std::unique_lock<std::mutex> lock(ep->mutex);
-		ep->unsorted_timers.push_front(timer);
+		ep->unsorted_timers.push_front(timer_job);
 	}
 
 	if (ns < ep->max_wait_ms * 1000000l) {
@@ -210,9 +210,9 @@ static void __evtmgmt_add_timer(x_evtmgmt_t *ep, x_timer_t *timer, x_tick_diff_t
 
 static x_job_t::retval_t timer_job_run(x_job_t *job, void *data)
 {
-	x_timer_t *timer = X_CONTAINER_OF(job, x_timer_t, job);
+	x_timer_job_t *timer_job = X_CONTAINER_OF(job, x_timer_job_t, job);
 	x_evtmgmt_t *evtmgmt = (x_evtmgmt_t *)data;
-	long ret = timer->run(timer);
+	long ret = timer_job->run(timer_job);
 	if (ret < 0) {
 		return x_job_t::JOB_DONE;
 	}
@@ -221,11 +221,11 @@ static x_job_t::retval_t timer_job_run(x_job_t *job, void *data)
 		return x_job_t::JOB_CONTINUE;
 	}
 
-	__evtmgmt_add_timer(evtmgmt, timer, ret);
+	__evtmgmt_add_timer_job(evtmgmt, timer_job, ret);
 	return x_job_t::JOB_DONE;
 }
 
-x_timer_t::x_timer_t(long (*run)(x_timer_t *timer))
+x_timer_job_t::x_timer_job_t(long (*run)(x_timer_job_t *timer_job))
 	: job(timer_job_run), run(run)
 {
 }
@@ -241,29 +241,29 @@ static void post_fd_event(x_evtmgmt_t *ep, uint64_t id, uint32_t events)
 	x_evtmgmt_modify_fdevents(ep, id, x_fdevents_init(events, 0));
 }
 
-/* TODO, cancel timer */
-void x_evtmgmt_add_timer(x_evtmgmt_t *ep, x_timer_t *timer, x_tick_diff_t ns)
+/* TODO, cancel timer_job */
+void x_evtmgmt_add_timer(x_evtmgmt_t *ep, x_timer_job_t *timer_job, x_tick_diff_t ns)
 {
-	__evtmgmt_add_timer(ep, timer, std::max(ns, 0l));
+	__evtmgmt_add_timer_job(ep, timer_job, std::max(ns, 0l));
 }
 
 void x_evtmgmt_dispatch(x_evtmgmt_t *ep)
 {
-	x_tp_sdlist_t<timer_dlink_traits> unsorted_list;
+	x_tp_sdlist_t<timer_job_dlink_traits> unsorted_list;
 	{
 		std::unique_lock<std::mutex> lock(ep->mutex);
 		unsorted_list = std::move(ep->unsorted_timers);
 	}
 
-	for (x_timer_t *timer = unsorted_list.get_front(); timer; timer = unsorted_list.next(timer)) {
-		ep->timerq.push(timer);
+	for (x_timer_job_t *timer_job = unsorted_list.get_front(); timer_job; timer_job = unsorted_list.next(timer_job)) {
+		ep->timerq.push(timer_job);
 	}
 
 	tick_now = x_tick_now();
 	int wait_ms = ep->max_wait_ms;
 	while (!ep->timerq.empty()) {
-		x_timer_t *timer = ep->timerq.top();
-		x_tick_diff_t wait_ns = timer->timeout - tick_now;
+		x_timer_job_t *timer_job = ep->timerq.top();
+		x_tick_diff_t wait_ns = timer_job->timeout - tick_now;
 		if (wait_ns > 0) {
 			long tmp_wait_ms = wait_ns / 1000000;
 			if (tmp_wait_ms == 0) {
@@ -274,8 +274,8 @@ void x_evtmgmt_dispatch(x_evtmgmt_t *ep)
 			break;
 		}
 		ep->timerq.pop();
-		/* run timer */
-		x_threadpool_schedule(ep->tpool, &timer->job);
+		/* run timer_job */
+		x_threadpool_schedule(ep->tpool, &timer_job->job);
 	}
 
 	struct epoll_event ev;

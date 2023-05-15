@@ -20,9 +20,9 @@ static void timerq_check(const char *where, const x_timerq_t &timerq)
 #define TIMERQ_CHECK(x) do { } while(0)
 #endif
 
-static long timerq_timer_func(x_timer_t *timer)
+static long timerq_timer_func(x_timer_job_t *timer_job)
 {
-	x_timerq_t *timerq = X_CONTAINER_OF(timer, x_timerq_t, timer);
+	x_timerq_t *timerq = X_CONTAINER_OF(timer_job, x_timerq_t, timer_job);
 	x_tick_diff_t wait_ns = timerq->timeout;
 	x_tick_t expire = tick_now - timerq->timeout;
 	x_timerq_entry_t *entry;
@@ -45,14 +45,14 @@ static long timerq_timer_func(x_timer_t *timer)
 	return std::max(wait_ns, 1l);
 };
 
-x_timerq_t::x_timerq_t() : timer(timerq_timer_func)
+x_timerq_t::x_timerq_t() : timer_job(timerq_timer_func)
 {
 }
 
 void x_timerq_init(x_timerq_t &timerq, x_evtmgmt_t *evtmgmt, uint64_t timeout_ns)
 {
 	timerq.timeout = timeout_ns;
-	x_evtmgmt_add_timer(evtmgmt, &timerq.timer, timeout_ns);
+	x_evtmgmt_add_timer(evtmgmt, &timerq.timer_job, timeout_ns);
 }
 
 void x_timerq_add(x_timerq_t &timerq, x_timerq_entry_t *entry)
