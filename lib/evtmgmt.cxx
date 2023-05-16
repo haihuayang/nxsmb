@@ -114,7 +114,7 @@ struct x_evtmgmt_t
 
 	std::priority_queue<x_timer_job_t *, std::vector<x_timer_job_t *>, timer_job_comp> timerq{timer_job_comp()};
 	std::mutex mutex; // protect unsorted_timers, TODO it can be lock-less?
-	x_tp_sdlist_t<timer_job_dlink_traits> unsorted_timers;
+	x_tp_ddlist_t<timer_job_dlink_traits> unsorted_timers;
 
 	x_epoll_entry_t entries[];
 };
@@ -198,7 +198,7 @@ static void __evtmgmt_add_timer_job(x_evtmgmt_t *ep, x_timer_job_t *timer_job, x
 	timer_job->job.state = x_job_t::STATE_NONE;
 	{
 		std::unique_lock<std::mutex> lock(ep->mutex);
-		ep->unsorted_timers.push_front(timer_job);
+		ep->unsorted_timers.push_back(timer_job);
 	}
 
 	if (ns < ep->max_wait_ms * 1000000l) {
@@ -249,7 +249,7 @@ void x_evtmgmt_add_timer(x_evtmgmt_t *ep, x_timer_job_t *timer_job, x_tick_diff_
 
 void x_evtmgmt_dispatch(x_evtmgmt_t *ep)
 {
-	x_tp_sdlist_t<timer_job_dlink_traits> unsorted_list;
+	x_tp_ddlist_t<timer_job_dlink_traits> unsorted_list;
 	{
 		std::unique_lock<std::mutex> lock(ep->mutex);
 		unsorted_list = std::move(ep->unsorted_timers);
