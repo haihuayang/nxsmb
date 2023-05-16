@@ -7,6 +7,7 @@
 #endif
 
 #include "threadpool.hxx"
+#include "timeout.hxx"
 #include <sys/epoll.h>
 
 enum {
@@ -71,14 +72,14 @@ struct x_epoll_upcall_t
 struct x_timer_job_t
 {
 	x_timer_job_t(long (*run)(x_timer_job_t *timer_job));
+	x_timer_t base;
 	x_job_t job;
 	long (*const run)(x_timer_job_t *timer_job);
-	x_tick_t timeout;
 };
 
 struct x_evtmgmt_t;
 x_evtmgmt_t *x_evtmgmt_create(x_threadpool_t *tpool, uint32_t max_fd,
-		int max_wait_ms);
+		int max_wait_ms, uint32_t timer_unit_ms);
 void x_evtmgmt_dispatch(x_evtmgmt_t *ep);
 
 uint64_t x_evtmgmt_monitor(x_evtmgmt_t *ep, unsigned int fd, uint32_t poll_events, x_epoll_upcall_t * upcall);

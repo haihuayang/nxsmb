@@ -63,21 +63,18 @@ struct x_epoll_entry_t
 	x_epoll_upcall_t *upcall;
 };
 
-struct timer_job_comp
-{
-	bool operator()(const x_timer_job_t *t1, const x_timer_job_t *t2) const {
-		return t1->timeout > t2->timeout;
-	}
-};
-
 X_DECLARE_MEMBER_TRAITS(timer_job_dlink_traits, x_timer_job_t, job.dlink)
 
 struct x_evtmgmt_t
 {
 	x_evtmgmt_t(x_threadpool_t *tp, int efd, int tfd,
-			uint32_t max_fd, uint32_t max_wait_ms)
+			uint32_t max_fd, uint32_t max_wait_ms,
+			x_timer_wheel_t *timer_wheel,
+			uint32_t timer_unit_ms)
 		: tpool{tp}, epfd(efd), timerfd(tfd)
 		, max_fd(max_fd), max_wait_ms(max_wait_ms)
+		, timer_unit_ms(timer_unit_ms)
+		, timer_wheel(timer_wheel)
 	{
 		for (uint32_t i = 0; i < max_fd; ++i) {
 			new (&entries[i])x_epoll_entry_t;
@@ -111,8 +108,9 @@ struct x_evtmgmt_t
 	const int timerfd;
 	const uint32_t max_fd;
 	const int max_wait_ms;
+	const uint64_t timer_unit_ms;
 
-	std::priority_queue<x_timer_job_t *, std::vector<x_timer_job_t *>, timer_job_comp> timerq{timer_job_comp()};
+	x_timer_wheel_t *const timer_wheel;
 	std::mutex mutex; // protect unsorted_timers, TODO it can be lock-less?
 	x_tp_ddlist_t<timer_job_dlink_traits> unsorted_timers;
 
@@ -194,7 +192,7 @@ bool x_evtmgmt_post_events(x_evtmgmt_t *ep, uint64_t id, uint32_t events)
 
 static void __evtmgmt_add_timer_job(x_evtmgmt_t *ep, x_timer_job_t *timer_job, x_tick_diff_t ns)
 {
-	timer_job->timeout = tick_now + ns;
+	timer_job->base.expires = (tick_now + ns).val / (ep->timer_unit_ms * 1000000ul);
 	timer_job->job.state = x_job_t::STATE_NONE;
 	{
 		std::unique_lock<std::mutex> lock(ep->mutex);
@@ -256,26 +254,28 @@ void x_evtmgmt_dispatch(x_evtmgmt_t *ep)
 	}
 
 	for (x_timer_job_t *timer_job = unsorted_list.get_front(); timer_job; timer_job = unsorted_list.next(timer_job)) {
-		ep->timerq.push(timer_job);
+		x_timer_wheel_add(ep->timer_wheel, &timer_job->base,
+				timer_job->base.expires);
 	}
 
 	tick_now = x_tick_now();
-	int wait_ms = ep->max_wait_ms;
-	while (!ep->timerq.empty()) {
-		x_timer_job_t *timer_job = ep->timerq.top();
-		x_tick_diff_t wait_ns = timer_job->timeout - tick_now;
-		if (wait_ns > 0) {
-			long tmp_wait_ms = wait_ns / 1000000;
-			if (tmp_wait_ms == 0) {
-				wait_ms = 1;
-			} else if (tmp_wait_ms < wait_ms) {
-				wait_ms = x_convert<int>(tmp_wait_ms);
-			}
-			break;
-		}
-		ep->timerq.pop();
-		/* run timer_job */
+	x_timer_wheel_update(ep->timer_wheel, tick_now.val / (ep->timer_unit_ms * 1000000ul));
+	x_timer_t *timer;
+	while ((timer = x_timer_wheel_get(ep->timer_wheel))) {
+		x_timer_job_t *timer_job = X_CONTAINER_OF(timer, x_timer_job_t, base);
 		x_threadpool_schedule(ep->tpool, &timer_job->job);
+	}
+
+	int wait_ms = ep->max_wait_ms;
+	auto timeout = x_timer_wheel_timeout(ep->timer_wheel);
+	if (timeout != x_timer_t::val_t(-1)) {
+		long tmp_wait_ms = timeout * ep->timer_unit_ms;
+		if (tmp_wait_ms == 0) {
+			X_ASSERT(false); // should not happen
+			wait_ms = 1;
+		} else if (tmp_wait_ms < wait_ms) {
+			wait_ms = x_convert<int>(tmp_wait_ms);
+		}
 	}
 
 	struct epoll_event ev;
@@ -302,7 +302,7 @@ void x_evtmgmt_dispatch(x_evtmgmt_t *ep)
 #define eventfd(count, flags) syscall(SYS_eventfd2, (count), (flags))
 	
 x_evtmgmt_t *x_evtmgmt_create(x_threadpool_t *tpool, uint32_t max_fd,
-		int max_wait_ms)
+		int max_wait_ms, uint32_t timer_unit_ms)
 {
 	int epfd = epoll_create(16);
 	X_ASSERT(epfd >= 0);
@@ -322,7 +322,11 @@ x_evtmgmt_t *x_evtmgmt_create(x_threadpool_t *tpool, uint32_t max_fd,
 	void *mem = malloc(alloc_size);
 	X_ASSERT(mem);
 
-	x_evtmgmt_t *ep = new(mem) x_evtmgmt_t(tpool, epfd, timerfd, max_fd, max_wait_ms);
+	x_timer_wheel_t *timer_wheel = x_timer_wheel_create();
+	X_ASSERT(timer_wheel);
+
+	x_evtmgmt_t *ep = new(mem) x_evtmgmt_t(tpool, epfd, timerfd, max_fd,
+			max_wait_ms, timer_wheel, timer_unit_ms);
 	x_threadpool_set_private_data(tpool, ep);
 	tick_now = x_tick_now();
 	return ep;

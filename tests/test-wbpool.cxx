@@ -67,7 +67,7 @@ int main(int argc, char **argv)
 	workgroup = argv[1];
 	const char *wbpipe = argv[2];
 	x_threadpool_t *tpool = x_threadpool_create("wbpool", 2);
-	x_evtmgmt_t *evtmgmt = x_evtmgmt_create(tpool, 1024, 100);
+	x_evtmgmt_t *evtmgmt = x_evtmgmt_create(tpool, 1024, 100, 100);
 	wbpool = x_wbpool_create(evtmgmt, 2, wbpipe);
 
 	x_timer_job_t timer_job{get_domain_info_timer_job_func};
