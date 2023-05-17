@@ -362,7 +362,7 @@ NTSTATUS x_smb2_process_negprot(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_re
 	uint32_t in_capabilities = x_get_le32(in_body + 0x08);
 
 	x_smb2_uuid_t in_client_guid;
-	memcpy(&in_client_guid, &in_requ->client_guid, sizeof in_client_guid);
+	in_client_guid.from_bytes(in_requ->client_guid);
 #if 0
 	const uint8_t *in_dyn = in_body + X_SMB2_NEGPROT_REQU_BODY_LEN;
 	

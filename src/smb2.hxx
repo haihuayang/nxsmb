@@ -561,6 +561,8 @@ enum {
 	X_SMB2_CREATE_TAG_AAPL = 'AAPL',
 };
 
+using x_smb2_uuid_bytes_t = std::array<uint8_t, 16>;
+
 struct x_smb2_uuid_t
 {
 	bool is_valid() const {
@@ -569,10 +571,11 @@ struct x_smb2_uuid_t
 	bool operator==(const x_smb2_uuid_t &other) const {
 		return data[0] == other.data[0] && data[1] == other.data[1];
 	}
-	uint64_t data[2];
+	uint64_t data[2]{0,0};
+	void from_bytes(const x_smb2_uuid_bytes_t &bytes) {
+		memcpy(data, bytes.data(), sizeof data);
+	}
 };
-
-using x_smb2_uuid_bytes_t = std::array<uint8_t, 16>;
 
 struct x_smb2_preauth_t
 {

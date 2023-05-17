@@ -413,7 +413,7 @@ static NTSTATUS x_smb2_fsctl_validate_negotiate_info(
 	const x_smb2_fsctl_validate_negotiate_info_in_t *in = (x_smb2_fsctl_validate_negotiate_info_in_t *)(state.in_buf->data + state.in_buf_offset);
 
 	fsctl_state.in_capabilities = X_LE2H32(in->capabilities);
-	memcpy(&fsctl_state.in_guid, &in->client_guid, sizeof(in->client_guid));
+	fsctl_state.in_guid.from_bytes(in->client_guid);
 	fsctl_state.in_security_mode = X_LE2H16(in->security_mode);
 	uint16_t in_num_dialects = X_LE2H16(in->num_dialects);
 	if (in_input_size < (sizeof(x_smb2_fsctl_validate_negotiate_info_in_t)
