@@ -1402,6 +1402,7 @@ static NTSTATUS smbd_open_create_intl(x_smbd_open_t **psmbd_open,
 	/* check lease first */
 	if (state->smbd_lease && !x_smbd_lease_match(state->smbd_lease,
 				smbd_object, smbd_stream)) {
+		X_TRACE_REPORT(X_LOG_LEVEL_OP, "failed match lease");
 		return NT_STATUS_INVALID_PARAMETER;
 	}
 
@@ -1748,6 +1749,7 @@ static bool smbd_save_durable(x_smbd_open_t *smbd_open,
 NTSTATUS x_smbd_open_op_create(x_smbd_requ_t *smbd_requ,
 		std::unique_ptr<x_smb2_state_create_t> &state)
 {
+	X_TRACE_LOC;
 	if (!x_smbd_open_has_space()) {
 		X_LOG_WARN("too many opens, cannot allocate new");
 		return NT_STATUS_INSUFFICIENT_RESOURCES;

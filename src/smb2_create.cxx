@@ -743,6 +743,7 @@ static NTSTATUS smb2_process_create(x_smbd_requ_t *smbd_requ,
 
 NTSTATUS x_smb2_process_create(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 {
+	X_TRACE_LOC;
 	X_ASSERT(smbd_requ->smbd_chan && smbd_requ->smbd_sess);
 	X_ASSERT(!smbd_requ->smbd_open);
 

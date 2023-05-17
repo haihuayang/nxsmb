@@ -1222,6 +1222,7 @@ static int x_smbd_conn_check_nbt_hdr(x_smbd_conn_t *smbd_conn)
 
 static bool x_smbd_conn_do_recv(x_smbd_conn_t *smbd_conn, x_fdevents_t &fdevents)
 {
+	X_TRACE_LOC;
 	ssize_t err;
 	X_LOG_DBG("%s %p x%lx x%lx", task_name, smbd_conn, smbd_conn->ep_id, fdevents);
 	if (smbd_conn->recv_buf == NULL) {
