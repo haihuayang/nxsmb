@@ -6,6 +6,7 @@
 #error "Must be c++"
 #endif
 
+#include "xdefines.h"
 #include <string>
 #include <array>
 #include <cstring>
@@ -147,6 +148,40 @@ std::string x_tostr(const T &v)
 	os << v;
 	return os.str();
 }
+
+struct x_trace_t
+{
+	enum { DEPTH_MAX = 32, };
+	unsigned int depth = 0;
+	const char *stack[DEPTH_MAX];
+};
+
+extern thread_local x_trace_t g_trace;
+
+struct x_trace_loc_t
+{
+	x_trace_loc_t(const char *location)
+	{
+		X_ASSERT(g_trace.depth < x_trace_t::DEPTH_MAX);
+		g_trace.stack[g_trace.depth++] = location;
+	}
+	~x_trace_loc_t()
+	{
+		--g_trace.depth;
+	}
+};
+
+#define X_TRACE_LOC x_trace_loc_t _x_trace_loc_##__LINE__{__location__}
+
+#define X_TRACE_REPORT(level, fmt, ...) do { \
+	if ((level) <= x_loglevel) { \
+		x_log((level), "[%s:%d:%s] " fmt ", TRACE%s", \
+				__FILE__, __LINE__, __FUNCTION__, ##__VA_ARGS__, \
+				x_trace_string()); \
+	} \
+} while (0)
+
+const char *x_trace_string();
 
 void x_rand_bytes(void *buf, size_t size);
 

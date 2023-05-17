@@ -197,6 +197,7 @@ TARGET_SRC_libnxsmb := \
 		lib/librpc/srvsvc \
 		lib/librpc/ntlmssp \
 		lib/xutils \
+		lib/trace \
 		lib/threadpool \
 		lib/evtmgmt \
 		lib/timeout \
