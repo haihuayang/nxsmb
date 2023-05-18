@@ -239,10 +239,15 @@ static void post_fd_event(x_evtmgmt_t *ep, uint64_t id, uint32_t events)
 	x_evtmgmt_modify_fdevents(ep, id, x_fdevents_init(events, 0));
 }
 
-/* TODO, cancel timer_job */
 void x_evtmgmt_add_timer(x_evtmgmt_t *ep, x_timer_job_t *timer_job, x_tick_diff_t ns)
 {
 	__evtmgmt_add_timer_job(ep, timer_job, std::max(ns, 0l));
+}
+
+bool x_evtmgmt_del_timer(x_evtmgmt_t *ep, x_timer_job_t *timer_job)
+{
+	auto lock = std::lock_guard(ep->mutex);
+	return x_timer_wheel_del(ep->timer_wheel, &timer_job->base);
 }
 
 static int evtmgmt_dispatch_timer(x_evtmgmt_t *ep)

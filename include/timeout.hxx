@@ -94,7 +94,7 @@ TIMEOUT_PUBLIC x_timer_t::val_t x_timer_wheel_timeout(x_timer_wheel_t *);
 TIMEOUT_PUBLIC void x_timer_wheel_add(x_timer_wheel_t *, x_timer_t *, x_timer_t::val_t);
 /* add timeout to timing wheel */
 
-TIMEOUT_PUBLIC void x_timer_wheel_del(x_timer_wheel_t *, x_timer_t *);
+TIMEOUT_PUBLIC bool x_timer_wheel_del(x_timer_wheel_t *, x_timer_t *);
 /* remove timeout from any timing wheel or expired queue (okay if on neither) */
 
 TIMEOUT_PUBLIC x_timer_t *x_timer_wheel_get(x_timer_wheel_t *);

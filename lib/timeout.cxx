@@ -205,7 +205,7 @@ TIMEOUT_PUBLIC void x_timer_wheel_free(x_timer_wheel_t *T) {
 
 
 
-TIMEOUT_PUBLIC void x_timer_wheel_del(x_timer_wheel_t *T, x_timer_t *to) {
+TIMEOUT_PUBLIC bool x_timer_wheel_del(x_timer_wheel_t *T, x_timer_t *to) {
 	if (to->bucket != x_timer_t::INVALID) {
 		timeout_list *pending = &T->wheel[to->bucket];
 		pending->remove(to);
@@ -219,7 +219,9 @@ TIMEOUT_PUBLIC void x_timer_wheel_del(x_timer_wheel_t *T, x_timer_t *to) {
 		}
 
 		to->bucket = x_timer_t::INVALID;
+		return true;
 	}
+	return false;
 } /* timeouts_del() */
 
 
