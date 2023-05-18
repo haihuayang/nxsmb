@@ -110,9 +110,8 @@ struct x_evtmgmt_t
 	const int max_wait_ms;
 	const uint64_t timer_unit_ms;
 
+	std::mutex mutex; // protect timer_wheel, TODO reduce contention
 	x_timer_wheel_t *const timer_wheel;
-	std::mutex mutex; // protect unsorted_timers, TODO it can be lock-less?
-	x_tp_ddlist_t<timer_job_dlink_traits> unsorted_timers;
 
 	x_epoll_entry_t entries[];
 };
@@ -195,8 +194,9 @@ static void __evtmgmt_add_timer_job(x_evtmgmt_t *ep, x_timer_job_t *timer_job, x
 	timer_job->base.expires = (tick_now + ns).val / (ep->timer_unit_ms * 1000000ul);
 	timer_job->job.state = x_job_t::STATE_NONE;
 	{
-		std::unique_lock<std::mutex> lock(ep->mutex);
-		ep->unsorted_timers.push_back(timer_job);
+		auto lock = std::lock_guard(ep->mutex);
+		x_timer_wheel_add(ep->timer_wheel, &timer_job->base,
+				timer_job->base.expires);
 	}
 
 	if (ns < ep->max_wait_ms * 1000000l) {
@@ -245,22 +245,14 @@ void x_evtmgmt_add_timer(x_evtmgmt_t *ep, x_timer_job_t *timer_job, x_tick_diff_
 	__evtmgmt_add_timer_job(ep, timer_job, std::max(ns, 0l));
 }
 
-void x_evtmgmt_dispatch(x_evtmgmt_t *ep)
+static int evtmgmt_dispatch_timer(x_evtmgmt_t *ep)
 {
-	x_tp_ddlist_t<timer_job_dlink_traits> unsorted_list;
-	{
-		std::unique_lock<std::mutex> lock(ep->mutex);
-		unsorted_list = std::move(ep->unsorted_timers);
-	}
-
-	for (x_timer_job_t *timer_job = unsorted_list.get_front(); timer_job; timer_job = unsorted_list.next(timer_job)) {
-		x_timer_wheel_add(ep->timer_wheel, &timer_job->base,
-				timer_job->base.expires);
-	}
-
-	tick_now = x_tick_now();
-	x_timer_wheel_update(ep->timer_wheel, tick_now.val / (ep->timer_unit_ms * 1000000ul));
+	auto time = tick_now.val / (ep->timer_unit_ms * 1000000ul);
 	x_timer_t *timer;
+
+	/* TODO reduce the work under lock */
+	auto lock = std::lock_guard(ep->mutex);
+	x_timer_wheel_update(ep->timer_wheel, time);
 	while ((timer = x_timer_wheel_get(ep->timer_wheel))) {
 		x_timer_job_t *timer_job = X_CONTAINER_OF(timer, x_timer_job_t, base);
 		x_threadpool_schedule(ep->tpool, &timer_job->job);
@@ -277,6 +269,13 @@ void x_evtmgmt_dispatch(x_evtmgmt_t *ep)
 			wait_ms = x_convert<int>(tmp_wait_ms);
 		}
 	}
+	return wait_ms;
+}
+
+void x_evtmgmt_dispatch(x_evtmgmt_t *ep)
+{
+	tick_now = x_tick_now();
+	auto wait_ms = evtmgmt_dispatch_timer(ep);
 
 	struct epoll_event ev;
 	int err = epoll_wait(ep->epfd, &ev, 1, wait_ms);
