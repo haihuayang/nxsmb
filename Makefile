@@ -201,7 +201,6 @@ TARGET_SRC_libnxsmb := \
 		lib/threadpool \
 		lib/evtmgmt \
 		lib/timeout \
-		lib/timerq \
 		lib/wbpool \
 		lib/kerberos_pac \
 		lib/charset \

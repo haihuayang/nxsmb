@@ -16,6 +16,8 @@ static constexpr x_array_const_t<char> SMB3_10_decryption_label{"SMBC2SCipherKey
 static constexpr x_array_const_t<char> SMB3_10_encryption_label{"SMBS2CCipherKey"};
 static constexpr x_array_const_t<char> SMB3_10_application_label{"SMBAppKey"};
 
+static long smbd_chan_auth_input_timeout(x_timer_job_t *timer);
+
 struct x_smbd_chan_t
 {
 	/* smbd_chan must hold the ref of smbd_conn through its life,
@@ -47,7 +49,7 @@ struct x_smbd_chan_t
 	x_dlink_t conn_link;
 	x_dlink_t sess_link;
 	x_auth_upcall_t auth_upcall;
-	x_timerq_entry_t timer;
+	x_timer_job_t timer{smbd_chan_auth_input_timeout};
 	const x_tick_t tick_create;
 
 	std::atomic<int> refcnt{1};
@@ -323,7 +325,7 @@ static inline bool smbd_chan_set_state(x_smbd_chan_t *smbd_chan,
 
 static bool smbd_chan_cancel_timer(x_smbd_chan_t *smbd_chan)
 {
-	if (x_smbd_cancel_timer(x_smbd_timer_t::SESSSETUP, &smbd_chan->timer)) {
+	if (x_smbd_del_timer(&smbd_chan->timer)) {
 		x_smbd_ref_dec(smbd_chan);
 		return true;
 	}
@@ -364,12 +366,13 @@ struct smbd_chan_auth_timeout_evt_t
 	x_smbd_chan_t *smbd_chan;
 };
 
-static void smbd_chan_auth_input_timeout(x_timerq_entry_t *timerq_entry)
+static long smbd_chan_auth_input_timeout(x_timer_job_t *timer)
 {
 	/* we already have a ref on smbd_chan when adding timer */
-	x_smbd_chan_t *smbd_chan = X_CONTAINER_OF(timerq_entry, x_smbd_chan_t, timer);
+	x_smbd_chan_t *smbd_chan = X_CONTAINER_OF(timer, x_smbd_chan_t, timer);
 	X_SMBD_CHAN_POST_USER(smbd_chan, 
 			new smbd_chan_auth_timeout_evt_t(smbd_chan));
+	return -1;
 }
 
 /* this function is in context of smbd_conn */
@@ -384,7 +387,7 @@ static NTSTATUS smbd_chan_auth_updated(x_smbd_chan_t *smbd_chan, x_smbd_requ_t *
 		// hold ref for timer, will be dec in timer func
 		x_smbd_ref_inc(smbd_chan);
 		smbd_chan->state = x_smbd_chan_t::S_WAIT_INPUT;
-		x_smbd_add_timer(x_smbd_timer_t::SESSSETUP, &smbd_chan->timer);
+		x_smbd_add_timer(&smbd_chan->timer, x_smbd_timer_id_t::SESSSETUP);
 		return status;
 	} else if (NT_STATUS_EQUAL(status, X_NT_STATUS_INTERNAL_BLOCKED)) {
 		return status;
@@ -532,7 +535,6 @@ x_smbd_chan_t *x_smbd_chan_create(x_smbd_sess_t *smbd_sess, x_smbd_conn_t *smbd_
 	x_smbd_ref_inc(smbd_chan); // ref by smbd_sess
 
 	smbd_chan->auth_upcall.cbs = &smbd_chan_auth_upcall_cbs;
-	smbd_chan->timer.func = smbd_chan_auth_input_timeout;
 	const x_smb2_preauth_t *preauth = x_smbd_conn_get_preauth(smbd_conn);
 	if (preauth) {
 		smbd_chan->preauth = *preauth;

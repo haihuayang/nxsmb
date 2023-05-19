@@ -7,7 +7,6 @@
 #endif
 
 #include "include/evtmgmt.hxx"
-#include "include/timerq.hxx"
 #include "include/wbpool.hxx"
 #include <vector>
 #include <list>
@@ -42,14 +41,15 @@ enum {
 	X_SMBD_DURABLE_TIMEOUT_MAX = (5 * 60),
 };
 
-enum class x_smbd_timer_t {
+enum class x_smbd_timer_id_t {
 	SESSSETUP,
 	BREAK,
-	DURABLE,
 	LAST,
 };
-void x_smbd_add_timer(x_smbd_timer_t timer_id, x_timerq_entry_t *entry);
-bool x_smbd_cancel_timer(x_smbd_timer_t timer_id, x_timerq_entry_t *entry);
+
+void x_smbd_add_timer(x_timer_job_t *entry, x_smbd_timer_id_t timer_id);
+void x_smbd_add_timer(x_timer_job_t *entry, x_tick_diff_t expires);
+bool x_smbd_del_timer(x_timer_job_t *entry);
 
 std::array<x_tick_t, 2> x_smbd_get_time();
 

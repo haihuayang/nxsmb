@@ -33,14 +33,10 @@ static struct {
 	x_auth_context_t *auth_context;
 	std::vector<uint8_t> negprot_spnego;
 	x_tick_t tick_start_mono, tick_start_real;
-	x_timerq_t timerq[static_cast<int>(x_smbd_timer_t::LAST)];
+	x_tick_diff_t timers[static_cast<int>(x_smbd_timer_id_t::LAST)];
 	pthread_t signal_handler_thread;
 } g_smbd;
 
-static inline x_timerq_t &get_timerq(x_smbd_timer_t timer_id)
-{
-	return g_smbd.timerq[static_cast<int>(timer_id)];
-}
 
 x_evtmgmt_t *g_evtmgmt = nullptr;
 
@@ -176,12 +172,9 @@ static void init_smbd()
 		x_auth_destroy(spnego);
 	}
 
-#define TIMERQ_INIT(id, sec) \
-	x_timerq_init(get_timerq(id), g_evtmgmt, X_SEC_TO_NSEC(sec))
-
-	TIMERQ_INIT(x_smbd_timer_t::SESSSETUP, 40);
-	TIMERQ_INIT(x_smbd_timer_t::BREAK, 35);
-	TIMERQ_INIT(x_smbd_timer_t::DURABLE, X_SMBD_DURABLE_TIMEOUT_MAX);
+#define TIMER_INIT(id, sec) g_smbd.timers[static_cast<int>(id)] = X_SEC_TO_NSEC(sec)
+	TIMER_INIT(x_smbd_timer_id_t::SESSSETUP, 40);
+	TIMER_INIT(x_smbd_timer_id_t::BREAK, 35);
 
 	x_smbd_restore_durable(*smbd_conf);
 	x_smbd_conn_srv_init(smbd_conf->port);
@@ -192,14 +185,20 @@ const std::vector<uint8_t> &x_smbd_get_negprot_spnego()
 	return g_smbd.negprot_spnego;
 }
 
-void x_smbd_add_timer(x_smbd_timer_t timer_id, x_timerq_entry_t *entry)
+void x_smbd_add_timer(x_timer_job_t *entry, x_smbd_timer_id_t timer_id)
 {
-	x_timerq_add(get_timerq(timer_id), entry);
+	x_evtmgmt_add_timer(g_evtmgmt, entry,
+			g_smbd.timers[static_cast<int>(timer_id)]);
 }
 
-bool x_smbd_cancel_timer(x_smbd_timer_t timer_id, x_timerq_entry_t *entry)
+void x_smbd_add_timer(x_timer_job_t *entry, x_tick_diff_t expires)
 {
-	return x_timerq_cancel(get_timerq(timer_id), entry);
+	x_evtmgmt_add_timer(g_evtmgmt, entry, expires);
+}
+
+bool x_smbd_del_timer(x_timer_job_t *entry)
+{
+	return x_evtmgmt_del_timer(g_evtmgmt, entry);
 }
 
 int main(int argc, char **argv)

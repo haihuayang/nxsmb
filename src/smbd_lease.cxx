@@ -5,13 +5,14 @@
 #include "smbd_open.hxx"
 #include "smbd_ctrl.hxx"
 
+static long smbd_lease_break_timeout(x_timer_job_t *timer);
 struct x_smbd_lease_t
 {
 	x_smbd_lease_t(const x_smb2_uuid_t &client_guid,
 			const x_smb2_lease_key_t &lease_key,
 			uint32_t hash, uint8_t version);
 	x_dqlink_t hash_link;
-	x_timerq_entry_t timer;
+	x_timer_job_t timer{smbd_lease_break_timeout};
 	const x_smb2_uuid_t client_guid;
 	const x_smb2_lease_key_t lease_key;
 	x_smbd_object_t * smbd_object{}; // protected by bucket mutex
@@ -134,7 +135,7 @@ void x_smbd_lease_release(x_smbd_lease_t *smbd_lease)
 
 static inline void smbd_lease_cancel_timer(x_smbd_lease_t *smbd_lease)
 {
-	if (x_smbd_cancel_timer(x_smbd_timer_t::BREAK, &smbd_lease->timer)) {
+	if (x_smbd_del_timer(&smbd_lease->timer)) {
 		X_ASSERT(--smbd_lease->refcnt > 0);
 	}
 }
@@ -292,7 +293,7 @@ static void require_break(x_smbd_lease_t *smbd_lease,
 		smbd_lease->breaking_to_requested = break_to;
 		smbd_lease_incref(smbd_lease);
 		flags = X_SMB2_NOTIFY_BREAK_LEASE_FLAG_ACK_REQUIRED;
-		x_smbd_add_timer(x_smbd_timer_t::BREAK, &smbd_lease->timer);
+		x_smbd_add_timer(&smbd_lease->timer, x_smbd_timer_id_t::BREAK);
 	}
 	epoch = (smbd_lease->version > 1) ? smbd_lease->epoch : 0;
 }
@@ -444,10 +445,10 @@ NTSTATUS x_smbd_lease_process_break(x_smb2_state_lease_break_t &state)
 	return status;
 }
 
-static void smbd_lease_break_timeout(x_timerq_entry_t *timerq_entry)
+static long smbd_lease_break_timeout(x_timer_job_t *timer)
 {
 	/* we already have a ref on smbd_chan when adding timer */
-	x_smbd_lease_t *smbd_lease = X_CONTAINER_OF(timerq_entry, x_smbd_lease_t, timer);
+	x_smbd_lease_t *smbd_lease = X_CONTAINER_OF(timer, x_smbd_lease_t, timer);
 	bool modified = false;
 	{
 		auto lock = smbd_lease_lock(smbd_lease);
@@ -465,6 +466,7 @@ static void smbd_lease_break_timeout(x_timerq_entry_t *timerq_entry)
 				smbd_lease->smbd_stream);
 	}
 	smbd_lease_decref(smbd_lease);
+	return -1;
 }
 
 inline x_smbd_lease_t::x_smbd_lease_t(const x_smb2_uuid_t &client_guid,
@@ -473,7 +475,6 @@ inline x_smbd_lease_t::x_smbd_lease_t(const x_smb2_uuid_t &client_guid,
 	: client_guid(client_guid), lease_key(lease_key)
 	, hash(hash), version(version)
 {
-	timer.func = smbd_lease_break_timeout;
 	X_SMBD_COUNTER_INC(lease_create, 1);
 }
 

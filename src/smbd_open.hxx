@@ -76,12 +76,7 @@ struct x_smbd_open_t
 	x_smbd_tcon_t * smbd_tcon = nullptr;
 	uint64_t id_persistent = 0xfffffffeu; // resolve id for non durable
 	uint64_t id_volatile;
-	x_timerq_entry_t durable_timer;
-	/* ideally it should not use timerq for durable timer because opens'
-	 * timeout are not same. so it also check durable_timeout_tick
-	 * if it is really expired
-	 */
-	x_tick_t durable_expire_tick;
+	x_timer_job_t durable_timer;
 
 	uint32_t state;
 
@@ -90,7 +85,7 @@ struct x_smbd_open_t
 		OPLOCK_BREAK_TO_NONE_SENT,
 		OPLOCK_BREAK_TO_LEVEL_II_SENT,
 	} oplock_break_sent = OPLOCK_BREAK_NOT_SENT;
-	x_timerq_entry_t oplock_break_timer;
+	x_timer_job_t oplock_break_timer;
 
 	x_smbd_open_state_t open_state;
 	uint32_t notify_filter = 0;

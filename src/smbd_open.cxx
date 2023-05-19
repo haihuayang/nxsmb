@@ -269,7 +269,7 @@ static void smbd_close_open_intl(
 	clear_replay_cache(smbd_open->open_state);
 
 	if (smbd_open->oplock_break_sent != x_smbd_open_t::OPLOCK_BREAK_NOT_SENT) {
-		if (x_smbd_cancel_timer(x_smbd_timer_t::BREAK, &smbd_open->oplock_break_timer)) {
+		if (x_smbd_del_timer(&smbd_open->oplock_break_timer)) {
 			x_smbd_ref_dec(smbd_open);
 		}
 		smbd_open->oplock_break_sent = x_smbd_open_t::OPLOCK_BREAK_NOT_SENT;
@@ -330,7 +330,7 @@ static bool smbd_open_close_disconnected_if(
 		return false;
 	}
 
-	if (!x_smbd_cancel_timer(x_smbd_timer_t::DURABLE, &smbd_open->durable_timer)) {
+	if (!x_smbd_del_timer(&smbd_open->durable_timer)) {
 		return false;
 	}
 	smbd_open->state = SMBD_OPEN_S_DONE;
@@ -412,9 +412,9 @@ static void smbd_open_close(
 	}
 }
 
-static void smbd_open_durable_timeout(x_timerq_entry_t *timerq_entry)
+static long smbd_open_durable_timeout(x_timer_job_t *timer)
 {
-	x_smbd_open_t *smbd_open = X_CONTAINER_OF(timerq_entry,
+	x_smbd_open_t *smbd_open = X_CONTAINER_OF(timer,
 			x_smbd_open_t, durable_timer);
 	X_LOG_DBG("durable_timeout %lx,%lx", smbd_open->id_persistent,
 			smbd_open->id_volatile);
@@ -441,6 +441,7 @@ static void smbd_open_durable_timeout(x_timerq_entry_t *timerq_entry)
 	}
 
 	x_smbd_ref_dec(smbd_open); // ref by timer
+	return -1;
 }
 
 static bool smbd_open_set_durable(x_smbd_open_t *smbd_open)
@@ -450,16 +451,13 @@ static bool smbd_open_set_durable(x_smbd_open_t *smbd_open)
 	auto smbd_object = smbd_open->smbd_object;
 	X_ASSERT(smbd_object);
 	smbd_open->state = SMBD_OPEN_S_DISCONNECTED;
-	uint32_t durable_sec;
 
 	/* TODO save durable info to volume so it can restore open
 	 * when new smbd take over
 	 */
-	smbd_open->durable_timer.func = smbd_open_durable_timeout;
-	durable_sec = (smbd_open->open_state.durable_timeout_msec + 999) / 1000;
-	smbd_open->durable_expire_tick = tick_now +
-		smbd_open->open_state.durable_timeout_msec * 1000000u;
-	x_smbd_add_timer(x_smbd_timer_t::DURABLE, &smbd_open->durable_timer);
+	uint32_t durable_sec = (smbd_open->open_state.durable_timeout_msec + 999) / 1000;
+	x_smbd_add_timer(&smbd_open->durable_timer,
+			smbd_open->open_state.durable_timeout_msec * 1000000u);
 
 	int ret = x_smbd_volume_set_durable_timeout(
 			*smbd_object->smbd_volume,
@@ -666,10 +664,10 @@ static void sharemode_modified(x_smbd_object_t *smbd_object,
 	}
 }
 
-static void oplock_break_timeout(x_timerq_entry_t *timerq_entry)
+static long oplock_break_timeout(x_timer_job_t *timer)
 {
 	/* we already have a ref on smbd_chan when adding timer */
-	x_smbd_open_t *smbd_open = X_CONTAINER_OF(timerq_entry,
+	x_smbd_open_t *smbd_open = X_CONTAINER_OF(timer,
 			x_smbd_open_t, oplock_break_timer);
 	x_smbd_object_t *smbd_object = smbd_open->smbd_object;
 	bool modified = true;
@@ -689,6 +687,7 @@ static void oplock_break_timeout(x_timerq_entry_t *timerq_entry)
 		}
 	}
 	x_smbd_ref_dec(smbd_open);
+	return -1;
 }
 
 struct send_lease_break_evt_t
@@ -1131,7 +1130,7 @@ void x_smbd_open_break_oplock(x_smbd_object_t *smbd_object,
 				x_smbd_open_t::OPLOCK_BREAK_TO_NONE_SENT);
 	}
 	x_smbd_ref_inc(smbd_open);
-	x_smbd_add_timer(x_smbd_timer_t::BREAK, &smbd_open->oplock_break_timer);
+	x_smbd_add_timer(&smbd_open->oplock_break_timer, x_smbd_timer_id_t::BREAK);
 }
 
 static bool delay_for_oplock(x_smbd_object_t *smbd_object,
@@ -1637,7 +1636,7 @@ NTSTATUS x_smbd_break_oplock(
 
 	if (smbd_open->oplock_break_sent == x_smbd_open_t::OPLOCK_BREAK_NOT_SENT) {
 		return NT_STATUS_INVALID_OPLOCK_PROTOCOL;
-	} else if (x_smbd_cancel_timer(x_smbd_timer_t::BREAK, &smbd_open->oplock_break_timer)) {
+	} else if (x_smbd_del_timer(&smbd_open->oplock_break_timer)) {
 		x_smbd_ref_dec(smbd_open);
 	}
 
@@ -1905,7 +1904,7 @@ static NTSTATUS smbd_open_reconnect(x_smbd_open_t *smbd_open,
 		X_LOG_NOTICE("user sid not match");
 		return NT_STATUS_OBJECT_NAME_NOT_FOUND;
 	}
-	if (!x_smbd_cancel_timer(x_smbd_timer_t::DURABLE, &smbd_open->durable_timer)) {
+	if (!x_smbd_del_timer(&smbd_open->durable_timer)) {
 		return NT_STATUS_OBJECT_NAME_NOT_FOUND;
 	}
 
@@ -2001,10 +2000,8 @@ NTSTATUS x_smbd_open_restore(
 		X_ASSERT(smbd_open->state == SMBD_OPEN_S_INIT);
 		X_ASSERT(!smbd_open->smbd_tcon);
 		smbd_open->state = SMBD_OPEN_S_DISCONNECTED;
-		smbd_open->durable_timer.func = smbd_open_durable_timeout;
-		smbd_open->durable_expire_tick = tick_now +
-			smbd_open->open_state.durable_timeout_msec * 1000000u;
-		x_smbd_add_timer(x_smbd_timer_t::DURABLE, &smbd_open->durable_timer);
+		x_smbd_add_timer(&smbd_open->durable_timer,
+				smbd_open->open_state.durable_timeout_msec * 1000000u);
 	}
 
 	smbd_durable.id_volatile = smbd_open->id_volatile;
@@ -2026,10 +2023,12 @@ x_smbd_open_t::x_smbd_open_t(x_smbd_object_t *so,
 		x_smbd_tcon_t *st,
 		const x_smbd_open_state_t &open_state)
 	: tick_create(tick_now), smbd_object(so), smbd_stream(strm)
-	, state(SMBD_OPEN_S_INIT), open_state(open_state)
+	, durable_timer(smbd_open_durable_timeout)
+	, state(SMBD_OPEN_S_INIT)
+	, oplock_break_timer(oplock_break_timeout)
+	, open_state(open_state)
 {
 	X_SMBD_COUNTER_INC(open_create, 1);
-	oplock_break_timer.func = oplock_break_timeout;
 	memset(lock_sequence_array, 0xff, LOCK_SEQUENCE_MAX);
 }
 
