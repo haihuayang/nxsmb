@@ -11,8 +11,8 @@ static void __wkssvc_NetWkstaGetInfo(std::shared_ptr<T> &info)
 
 	info = std::make_shared<T>();
 	info->platform_id = idl::PLATFORM_ID_NT;
-	info->version_major = 0x06;
-	info->version_minor = 0x01;
+	info->version_major = std::get<0>(smbd_conf->my_nbt_version);
+	info->version_minor = std::get<1>(smbd_conf->my_nbt_version);
 	info->server_name = smbd_conf->netbios_name_u16;
 	info->domain_name = smbd_conf->workgroup_u16;
 }

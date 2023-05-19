@@ -64,6 +64,8 @@ struct x_smbd_conf_t
 	uint32_t my_dev_delay_write_ms = 0;
 	uint32_t my_dev_delay_qdir_ms = 0;
 
+	std::tuple<uint8_t, uint8_t, uint16_t> my_nbt_version{10, 0, 17763};
+
 	std::string log_name = "stderr";
 	std::string netbios_name_l8, workgroup_8, dns_domain_l8, realm;
 	std::shared_ptr<std::u16string> netbios_name_u16, workgroup_u16, dns_domain_l16;

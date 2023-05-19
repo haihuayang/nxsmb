@@ -1464,6 +1464,7 @@ static inline NTSTATUS handle_negotiate(x_auth_ntlmssp_t &auth_ntlmssp,
 		const uint8_t *in_buf, size_t in_len, std::vector<uint8_t> &out,
 		x_auth_upcall_t *auth_upcall)
 {
+	auto smbd_conf = x_smbd_conf_get();
 	// samba gensec_ntlmssp_server_negotiate
 	idl::NEGOTIATE_MESSAGE nego_msg;
 	idl::x_ndr_off_t ret = idl::x_ndr_pull(nego_msg, in_buf, in_len, 0);
@@ -1541,6 +1542,14 @@ static inline NTSTATUS handle_negotiate(x_auth_ntlmssp_t &auth_ntlmssp,
 	chal_msg.TargetName = std::make_shared<std::string>(std::move(target_name_u8));
 	chal_msg.NegotiateFlags = idl::NEGOTIATE(chal_flags);
 	chal_msg.ServerChallenge = cryptkey;
+	auto &version = chal_msg.Version.version;
+	version.ProductMajorVersion = idl::ntlmssp_WindowsMajorVersion(
+			std::get<0>(smbd_conf->my_nbt_version));
+	version.ProductMinorVersion = idl::ntlmssp_WindowsMinorVersion(
+			std::get<1>(smbd_conf->my_nbt_version));
+	version.ProductBuild = std::get<2>(smbd_conf->my_nbt_version);
+	version.Reserved = { 0, 0, 0 };
+	version.NTLMRevisionCurrent = idl::NTLMSSP_REVISION_W2K3;
 
 	ret = idl::x_ndr_push(chal_msg, out, 0);
 #if 0

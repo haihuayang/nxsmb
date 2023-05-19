@@ -132,6 +132,30 @@ static bool parse_uuidlist(std::vector<x_smb2_uuid_t> &uuid_list,
 	return true;
 }
 
+static bool parse_version(std::tuple<uint8_t, uint8_t, uint16_t> &ver,
+		const std::string &str)
+{
+	const char *p = str.c_str();
+	char *sep;
+	unsigned long v1 = strtoul(p, &sep, 0);
+	unsigned long v2 = 0;
+	unsigned long v3 = 0;
+	if (*sep == '.') {
+		v2 = strtoul(sep + 1, &sep, 0);
+	}
+	if (*sep == '.') {
+		v3 = strtoul(sep + 1, &sep, 0);
+	}
+	if (*sep) {
+		return false;
+	}
+	if (v1 >= UINT8_MAX || v2 >= UINT8_MAX || v3 >= UINT16_MAX) {
+		return false;
+	}
+	ver = { uint8_t(v1), uint8_t(v2), uint16_t(v3) };
+	return true;
+}
+
 static bool parse_volume_map(std::vector<volume_spec_t> &volumes, const std::string &str)
 {
 	for (auto &token: split_string(str)) {
@@ -366,6 +390,8 @@ static bool parse_global_param(x_smbd_conf_t &smbd_conf,
 			smbd_conf.capabilities &= ~X_SMB2_CAP_MULTI_CHANNEL;
 		}
 
+	} else if (name == "my:nbt version") {
+		return parse_version(smbd_conf.my_nbt_version, value);
 	} else if (name == "my:client thread count") {
 		return parse_uint32(value, smbd_conf.client_thread_count);
 	} else if (name == "my:async thread count") {
