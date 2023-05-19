@@ -3,6 +3,11 @@
 #include "include/librpc/lsa.hxx"
 #include "smbd_conf.hxx"
 #include "smbd_secrets.hxx"
+#include "smbd_ntacl.hxx"
+
+#ifndef MAX_OPEN_POLS
+#define MAX_OPEN_POLS 2048
+#endif
 
 enum lsa_handle_type_t {
 	LSA_HANDLE_POLICY_TYPE = 1,
@@ -38,6 +43,62 @@ static std::shared_ptr<void> get_handle_data(x_dcerpc_pipe_t &rpc_pipe, const id
 	return nullptr;
 }
 
+static std::atomic<uint64_t> pol_hnd{0};
+static std::atomic<uint64_t> pol_hnd_random{0}; // TODO samba use time(), and pid()
+
+static const generic_mapping_t lsa_policy_mapping = {
+	idl::LSA_POLICY_READ,
+	idl::LSA_POLICY_WRITE,
+	idl::LSA_POLICY_EXECUTE,
+	idl::LSA_POLICY_ALL_ACCESS
+};
+
+template <class Arg>
+static bool lsa_OpenPolicy2(
+		x_dcerpc_pipe_t &rpc_pipe,
+		x_smbd_sess_t *smbd_sess,
+		Arg &arg)
+{
+	// _lsa_OpenPolicy2
+	// TODO only allow LOCAL INFORMATION for now
+
+	auto smbd_user = x_smbd_sess_get_user(smbd_sess);
+	uint32_t access_mask = se_rpc_map_maximal_access(
+			*smbd_user, arg.access_mask);
+
+	access_mask = se_map_generic(access_mask, lsa_policy_mapping);
+
+#if 0
+	TODO disable access check for now
+	if ((access_mask & ~(idl::LSA_POLICY_VIEW_LOCAL_INFORMATION)) != 0) {
+		X_LOG_ERR("not supported access_mask 0x%x", arg.access_mask);
+		arg.__result = NT_STATUS_ACCESS_DENIED;
+		return true;
+	}
+#endif
+
+	if (rpc_pipe.handles.size() >= MAX_OPEN_POLS) {
+		// samba return NOT_FOUND for any error
+		arg.__result = NT_STATUS_OBJECT_NAME_NOT_FOUND;
+		return true;
+	}
+
+	rpc_pipe.handles.resize(rpc_pipe.handles.size() + 1);
+	auto &handle = rpc_pipe.handles.back();
+	handle.wire_handle.handle_type = 0;
+	*(uint64_t *)&handle.wire_handle.uuid = ++pol_hnd;
+	*((uint64_t *)&handle.wire_handle.uuid + 1) = ++pol_hnd_random;
+	auto info = std::make_shared<lsa_info_t>();
+	info->type = LSA_HANDLE_POLICY_TYPE;
+	info->access = arg.access_mask;
+	handle.data = info;
+
+	arg.handle = handle.wire_handle;
+	arg.__result = NT_STATUS_OK;
+	return true;
+}
+
+
 static bool x_smbd_dcerpc_impl_lsa_Close(
 		x_dcerpc_pipe_t &rpc_pipe,
 		x_smbd_sess_t *smbd_sess,
@@ -58,7 +119,15 @@ X_SMBD_DCERPC_IMPL_TODO(lsa_EnumPrivs)
 X_SMBD_DCERPC_IMPL_TODO(lsa_QuerySecurity)
 X_SMBD_DCERPC_IMPL_TODO(lsa_SetSecObj)
 X_SMBD_DCERPC_IMPL_TODO(lsa_ChangePassword)
-X_SMBD_DCERPC_IMPL_TODO(lsa_OpenPolicy)
+
+static bool x_smbd_dcerpc_impl_lsa_OpenPolicy(
+		x_dcerpc_pipe_t &rpc_pipe,
+		x_smbd_sess_t *smbd_sess,
+		idl::lsa_OpenPolicy &arg)
+{
+	return lsa_OpenPolicy2(rpc_pipe, smbd_sess, arg);
+}
+
 
 /* _lsa_QueryInfoPolicy */
 static bool x_smbd_dcerpc_impl_lsa_QueryInfoPolicy(
@@ -106,8 +175,7 @@ static bool x_smbd_dcerpc_impl_lsa_QueryInfoPolicy(
 		info->__init(arg.level);
 		info->account_domain.name.string = smbd_conf->netbios_name_u16;
 		idl::dom_sid sid;
-		/* TODO should be make netbios_name upcase */
-		X_ASSERT(x_smbd_secrets_fetch_domain_sid(smbd_conf->netbios_name_l8, sid));
+		X_ASSERT(x_smbd_secrets_fetch_domain_sid(smbd_conf->netbios_name_u8, sid));
 		info->account_domain.sid = std::make_shared<idl::dom_sid>(sid);
 		arg.info = info;
 		arg.__result = NT_STATUS_OK;
@@ -179,45 +247,12 @@ X_SMBD_DCERPC_IMPL_TODO(lsa_DeleteTrustedDomain)
 X_SMBD_DCERPC_IMPL_TODO(lsa_StorePrivateData)
 X_SMBD_DCERPC_IMPL_TODO(lsa_RetrievePrivateData)
 
-#ifndef MAX_OPEN_POLS
-#define MAX_OPEN_POLS 2048
-#endif
-
-static std::atomic<uint64_t> pol_hnd{0};
-static std::atomic<uint64_t> pol_hnd_random{0}; // TODO samba use time(), and pid()
-
 static bool x_smbd_dcerpc_impl_lsa_OpenPolicy2(
 		x_dcerpc_pipe_t &rpc_pipe,
 		x_smbd_sess_t *smbd_sess,
 		idl::lsa_OpenPolicy2 &arg)
 {
-	// _lsa_OpenPolicy2
-	// TODO only allow LOCAL INFORMATION for now
-	if ((arg.access_mask & ~(idl::LSA_POLICY_VIEW_LOCAL_INFORMATION)) != 0) {
-		X_LOG_ERR("not supported access_mask 0x%x", arg.access_mask);
-		arg.__result = NT_STATUS_ACCESS_DENIED;
-		return true;
-	}
-
-	if (rpc_pipe.handles.size() >= MAX_OPEN_POLS) {
-		// samba return NOT_FOUND for any error
-		arg.__result = NT_STATUS_OBJECT_NAME_NOT_FOUND;
-		return true;
-	}
-
-	rpc_pipe.handles.resize(rpc_pipe.handles.size() + 1);
-	auto &handle = rpc_pipe.handles.back();
-	handle.wire_handle.handle_type = 0;
-	*(uint64_t *)&handle.wire_handle.uuid = ++pol_hnd;
-	*((uint64_t *)&handle.wire_handle.uuid + 1) = ++pol_hnd_random;
-	auto info = std::make_shared<lsa_info_t>();
-	info->type = LSA_HANDLE_POLICY_TYPE;
-	info->access = arg.access_mask;
-	handle.data = info;
-
-	arg.handle = handle.wire_handle;
-	arg.__result = NT_STATUS_OK;
-	return true;
+	return lsa_OpenPolicy2(rpc_pipe, smbd_sess, arg);
 }
 
 X_SMBD_DCERPC_IMPL_TODO(lsa_GetUserName)

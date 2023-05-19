@@ -76,14 +76,6 @@ NTSTATUS create_acl_blob(std::vector<uint8_t> &blob,
 	return NT_STATUS_OK;
 }
 
-struct generic_mapping_t
-{
-	uint32_t generic_read;
-	uint32_t generic_write;
-	uint32_t generic_execute;
-	uint32_t generic_all;
-};
-
 static const generic_mapping_t file_generic_mapping = {
 	FILE_GENERIC_READ,
 	FILE_GENERIC_WRITE,
@@ -100,7 +92,7 @@ static inline uint32_t se_map(uint32_t access_mask, uint32_t map_from, uint32_t 
 	return access_mask;
 }
 
-static uint32_t se_map_generic(uint32_t access_mask, const generic_mapping_t &mapping)
+uint32_t se_map_generic(uint32_t access_mask, const generic_mapping_t &mapping)
 {
 	uint32_t old_mask = access_mask;
 
@@ -1049,3 +1041,42 @@ NTSTATUS se_file_access_check(const idl::security_descriptor &sd,
 #endif
 }
 
+/* map_max_allowed_access */
+uint32_t se_rpc_map_maximal_access(const x_smbd_user_t &smbd_user,
+		uint32_t acc_requested)
+{
+	if (!(acc_requested & idl::SEC_FLAG_MAXIMUM_ALLOWED)) {
+		return acc_requested;;
+	}
+	acc_requested &= ~idl::SEC_FLAG_MAXIMUM_ALLOWED;
+
+	/* At least try for generic read|execute - Everyone gets that. */
+	acc_requested |= idl::SEC_GENERIC_READ | idl::SEC_GENERIC_EXECUTE;
+#if 0
+	/* root gets anything. */
+	if (unix_token->uid == sec_initial_uid()) {
+		*pacc_requested |= GENERIC_ALL_ACCESS;
+		return;
+	}
+#endif
+	/* Full Access for 'BUILTIN\Administrators' and 'BUILTIN\Account Operators */
+
+	if (user_token_has_sid(smbd_user, global_sid_Builtin_Administrators) ||
+			user_token_has_sid(smbd_user, global_sid_Builtin_Account_Operators)) {
+		acc_requested |= idl::SEC_GENERIC_ALL;
+	}
+#if 0
+	/* Full access for DOMAIN\Domain Admins. */
+	if ( IS_DC ) {
+		struct dom_sid domadmin_sid;
+		sid_compose(&domadmin_sid, get_global_sam_sid(),
+				DOMAIN_RID_ADMINS);
+		if (security_token_has_sid(nt_token, &domadmin_sid)) {
+			*pacc_requested |= GENERIC_ALL_ACCESS;
+			return;
+		}
+	}
+#endif
+	/* TODO ! Check privileges. */
+	return acc_requested;
+}

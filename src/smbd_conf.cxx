@@ -656,6 +656,16 @@ static int parse_smbconf(x_smbd_conf_t &smbd_conf, bool reload)
 		return -1;
 	}
 
+	bool ret = x_str_convert(smbd_conf.netbios_name_u8, smbd_conf.netbios_name_l8,
+			x_toupper_t());
+	if (!ret) {
+		X_LOG_ERR("Invalid netbios_name '%s'", smbd_conf.netbios_name_l8.c_str());
+		return -1;
+	}
+	smbd_conf.netbios_name_l8.clear();
+	x_str_convert(smbd_conf.netbios_name_l8, smbd_conf.netbios_name_u8,
+			x_tolower_t());
+
 	smbd_conf.netbios_name_u16 = make_u16string_ptr(smbd_conf.netbios_name_l8, x_toupper_t());
 	if (!smbd_conf.netbios_name_u16) {
 		X_LOG_ERR("Invalid netbios_name '%s'", smbd_conf.netbios_name_l8.c_str());

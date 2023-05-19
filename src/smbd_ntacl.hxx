@@ -11,6 +11,16 @@
 
 struct x_smbd_user_t;
 
+struct generic_mapping_t
+{
+	uint32_t generic_read;
+	uint32_t generic_write;
+	uint32_t generic_execute;
+	uint32_t generic_all;
+};
+
+uint32_t se_map_generic(uint32_t access_mask, const generic_mapping_t &mapping);
+
 NTSTATUS parse_acl_blob(const std::vector<uint8_t> &blob,
 		std::shared_ptr<idl::security_descriptor> &psd,
 		uint16_t *p_hash_type,
@@ -64,6 +74,9 @@ NTSTATUS se_file_access_check(const idl::security_descriptor &sd,
 		bool priv_open_requested,
 		uint32_t access_desired,
 		uint32_t *access_granted);
+
+uint32_t se_rpc_map_maximal_access(const x_smbd_user_t &smbd_user,
+		uint32_t acc_requested);
 
 #endif /* __smbd_ntacl__hxx__ */
 
