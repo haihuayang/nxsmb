@@ -324,22 +324,25 @@ template <> struct ndr_traits_t<uint3264>
 
 	x_ndr_off_t scalars(uint3264 val, x_ndr_push_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, x_ndr_switch_t level) const {
 		X_ASSERT(level == X_NDR_SWITCH_NONE);
-		if (x_unlikely(flags & LIBNDR_FLAG_NDR64)) {
+		if ((flags & LIBNDR_FLAG_NDR64) != 0) {
 			return x_ndr_push_uint64_align(val.val, ndr, bpos, epos, flags, 8);
+		} else {
+			return x_ndr_push_uint32(x_convert_assert<uint32_t>(val.val),
+					ndr, bpos, epos, flags);
 		}
-		return x_ndr_push_uint32(val.val, ndr, bpos, epos, flags);
 	}
 	x_ndr_off_t scalars(uint3264 &val, x_ndr_pull_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, x_ndr_switch_t level) const {
 		X_ASSERT(level == X_NDR_SWITCH_NONE);
-		if (x_unlikely(flags & LIBNDR_FLAG_NDR64)) {
-			uint64_t tmp;
-			x_ndr_off_t ret = x_ndr_pull_uint64_align(tmp, ndr, bpos, epos, flags, 8);
-			if (ret == 0) {
-				val.val = x_convert_assert<uint32_t>(tmp); // TODO we not support 64 bit ndr
+		if ((flags & LIBNDR_FLAG_NDR64) != 0) {
+			return x_ndr_pull_uint64_align(val.val, ndr, bpos, epos, flags, 8);
+		} else {
+			uint32_t tmp;
+			x_ndr_off_t ret = x_ndr_pull_uint32(tmp, ndr, bpos, epos, flags);
+			if (ret >= 0) {
+				val.val = tmp;
 			}
 			return ret;
 		}
-		return x_ndr_pull_uint32(val.val, ndr, bpos, epos, flags);
 	}
 	void ostr(uint3264 val, x_ndr_ostr_t &ndr, uint32_t flags, x_ndr_switch_t level) const {
 		X_ASSERT(level == X_NDR_SWITCH_NONE);

@@ -187,12 +187,11 @@ x_ndr_off_t x_ndr_scalars_size_length_string(std::u16string &val, x_ndr_pull_t &
 	if (offset.val != 0) {
 		return -NDR_ERR_LENGTH;
 	}
-	uint32_t len = length.val;
-	if (len > size.val) {
+	if (length.val > size.val) {
 		return -NDR_ERR_LENGTH;
 	}
 
-	epos = X_NDR_CHECK_POS(bpos + 2 * len, bpos, epos);
+	epos = X_NDR_CHECK_POS(bpos + 2 * length.val, bpos, epos);
 	return x_ndr_scalars_string(val, ndr, bpos, epos, flags, false);
 }
 

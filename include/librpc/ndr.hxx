@@ -291,14 +291,14 @@ typedef uint64_t hyper;
 typedef uint64_t uint64;
 typedef uint32_t boolean32;
 struct uint3264 {
-	uint3264(uint64_t v = 0) : val(x_convert_assert<uint32_t>(v)) { }
+	uint3264(uint64_t v = 0) : val(v) { }
 	bool operator==(uint3264 o) const {
 		return val == o.val;
 	}
 	bool operator==(unsigned long o) const {
 		return val == o;
 	}
-	uint32_t val;
+	uint64_t val;
 };
 
 template <typename T>
