@@ -94,6 +94,8 @@ int posixfs_statex_get(int fd, x_smbd_object_meta_t *object_meta,
 	dos_attr_t dos_attr;
 	uint64_t fsid;
 	posixfs_statex_get_(fd, kst, dos_attr, fsid);
+	X_LOG_DBG("posixfs_statex_get(%d) blocks=%llu size=%lu",
+			fd, kst.blocks, kst.size);
 	fill_statex(object_meta, stream_meta, kst, dos_attr, fsid);
 	return 0;
 }
@@ -200,6 +202,8 @@ int posixfs_statex_get(int fd, x_smbd_object_meta_t *object_meta,
 	struct stat stat;
 	int err = fstat(fd, &stat);
 	X_ASSERT(err == 0);
+	X_LOG_DBG("posixfs_statex_get(%d) blocks=%lu size=%lu",
+			fd, stat.st_blocks, stat.st_size);
 	dos_attr_t dos_attr;
 	posixfs_dos_attr_get(fd, &dos_attr);
 

@@ -2042,6 +2042,17 @@ static NTSTATUS getinfo_stream_info(const posixfs_object_t *posixfs_object,
 	return NT_STATUS_OK;
 }
 
+static void reload_statex_if(posixfs_object_t *posixfs_object)
+{
+	if (posixfs_object->statex_modified) {
+		int err = posixfs_statex_get(posixfs_object->fd,
+				&posixfs_object->get_meta(),
+				&posixfs_object->base.sharemode.meta);
+		X_TODO_ASSERT(err == 0);
+		posixfs_object->statex_modified = false;
+	}
+}
+
 static NTSTATUS getinfo_file(posixfs_object_t *posixfs_object,
 		x_smbd_open_t *smbd_open,
 		x_smb2_state_getinfo_t &state)
@@ -2066,6 +2077,7 @@ static NTSTATUS getinfo_file(posixfs_object_t *posixfs_object,
 		x_smb2_file_basic_info_t *info =
 			(x_smb2_file_basic_info_t *)state.out_data.data();
 
+		reload_statex_if(posixfs_object);
 		x_smbd_get_file_info(*info, posixfs_object->get_meta());
 
 	} else if (state.in_info_level == x_smb2_info_level_t::FILE_STANDARD_INFORMATION) {
@@ -2076,6 +2088,7 @@ static NTSTATUS getinfo_file(posixfs_object_t *posixfs_object,
 		x_smb2_file_standard_info_t *info =
 			(x_smb2_file_standard_info_t *)state.out_data.data();
 
+		reload_statex_if(posixfs_object);
 		x_smbd_get_file_info(*info, posixfs_object->get_meta(),
 				sharemode->meta,
 				smbd_open->open_state.access_mask,
@@ -2120,6 +2133,7 @@ static NTSTATUS getinfo_file(posixfs_object_t *posixfs_object,
 		x_smb2_file_all_info_t *info =
 			(x_smb2_file_all_info_t *)state.out_data.data();
 
+		reload_statex_if(posixfs_object);
 		x_smbd_get_file_info(*info, posixfs_object->get_meta(),
 				sharemode->meta,
 				smbd_open->open_state.access_mask,
@@ -2166,6 +2180,7 @@ static NTSTATUS getinfo_file(posixfs_object_t *posixfs_object,
 		x_smb2_file_network_open_info_t *info =
 			(x_smb2_file_network_open_info_t *)state.out_data.data();
 		
+		reload_statex_if(posixfs_object);
 		x_smbd_get_file_info(*info, posixfs_object->get_meta(),
 				sharemode->meta);
 
