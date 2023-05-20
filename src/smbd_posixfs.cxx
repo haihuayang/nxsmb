@@ -2854,7 +2854,7 @@ static const char *posixfs_qdir_get_fs_entry(
 
 bool posixfs_qdir_get_entry(x_smbd_qdir_t *smbd_qdir,
 		x_smbd_qdir_pos_t &qdir_pos,
-		std::u16string &name,
+		std::u16string &ret_name,
 		x_smbd_object_meta_t &object_meta,
 		x_smbd_stream_meta_t &stream_meta,
 		std::shared_ptr<idl::security_descriptor> *ppsd,
@@ -2879,7 +2879,9 @@ bool posixfs_qdir_get_entry(x_smbd_qdir_t *smbd_qdir,
 			qdir_pos = smbd_qdir->pos;
 			++smbd_qdir->pos.file_number;
 		}
+		X_LOG_DBG("get_entry ent_name '%s'", ent_name);
 
+		std::u16string name;
 		if (!x_str_convert(name, std::string(ent_name))) {
 			X_LOG_WARN("qdir_process_entry invalid name '%s'",
 					ent_name);
@@ -2897,6 +2899,7 @@ bool posixfs_qdir_get_entry(x_smbd_qdir_t *smbd_qdir,
 					qdir_pos.offset_in_block, errno);
 			continue;
 		}
+		std::swap(ret_name, name);
 		break;
 
 	}
@@ -2907,6 +2910,15 @@ x_smbd_qdir_t *posixfs_qdir_create(x_smbd_open_t *smbd_open, const x_smbd_qdir_o
 {
 	posixfs_qdir_t *posixfs_qdir = new posixfs_qdir_t(smbd_open, ops);
 	return &posixfs_qdir->base;
+}
+
+void posixfs_qdir_rewind(x_smbd_qdir_t *smbd_qdir)
+{
+	posixfs_qdir_t *posixfs_qdir = X_CONTAINER_OF(smbd_qdir, posixfs_qdir_t,
+			base);
+	posixfs_qdir->data_length = 0;
+	posixfs_qdir->save_errno = 0;
+	smbd_qdir->pos = { };
 }
 
 void posixfs_qdir_destroy(x_smbd_qdir_t *smbd_qdir)

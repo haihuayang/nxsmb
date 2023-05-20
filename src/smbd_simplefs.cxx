@@ -60,6 +60,7 @@ static bool simplefs_qdir_op_get_entry(x_smbd_qdir_t *smbd_qdir,
 
 static const x_smbd_qdir_ops_t simplefs_qdir_ops = {
 	simplefs_qdir_op_get_entry,
+	posixfs_qdir_rewind,
 	posixfs_qdir_destroy,
 };
 

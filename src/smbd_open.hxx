@@ -29,6 +29,7 @@ struct x_smbd_qdir_ops_t
 			x_smbd_object_meta_t &object_meta,
 			x_smbd_stream_meta_t &stream_meta,
 			std::shared_ptr<idl::security_descriptor> *ppsd);
+	void (*rewind)(x_smbd_qdir_t *smbd_qdir);
 	void (*destroy)(x_smbd_qdir_t *smbd_qdir);
 };
 

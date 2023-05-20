@@ -133,11 +133,11 @@ static NTSTATUS smbd_qdir_process_requ(x_smbd_qdir_t *smbd_qdir, x_smbd_requ_t *
 	auto state = smbd_requ->get_requ_state<x_smb2_state_qdir_t>();
 	if (state->in_flags & (X_SMB2_CONTINUE_FLAG_REOPEN | X_SMB2_CONTINUE_FLAG_RESTART)) {
 		smbd_qdir->error_status = NT_STATUS_OK;
-		smbd_qdir->pos = {};
 		if (smbd_qdir->fnmatch) {
 			x_fnmatch_destroy(smbd_qdir->fnmatch);
 		}
 		smbd_qdir->fnmatch = x_fnmatch_create(state->in_name, true);
+		smbd_qdir->ops->rewind(smbd_qdir);
 
 	} else if (!NT_STATUS_IS_OK(smbd_qdir->error_status)) {
 		return smbd_qdir->error_status;

@@ -633,6 +633,7 @@ static bool dfs_root_qdir_op_get_entry(x_smbd_qdir_t *smbd_qdir,
 
 static const x_smbd_qdir_ops_t dfs_root_qdir_ops = {
 	dfs_root_qdir_op_get_entry,
+	posixfs_qdir_rewind,
 	posixfs_qdir_destroy,
 };
 
@@ -909,6 +910,7 @@ static bool dfs_volume_qdir_op_get_entry(x_smbd_qdir_t *smbd_qdir,
 
 static const x_smbd_qdir_ops_t dfs_volume_qdir_ops = {
 	dfs_volume_qdir_op_get_entry,
+	posixfs_qdir_rewind,
 	posixfs_qdir_destroy,
 };
 
