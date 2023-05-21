@@ -183,11 +183,11 @@ bool x_fnmatch_match(const x_fnmatch_t &fnmatch, const char *name)
 
 	std::u32string n;
 	if (fnmatch.icase) {
-		if (!x_str_convert(n, std::string(name), x_tolower_t())) {
+		if (!x_str_convert(n, std::string_view(name), x_tolower_t())) {
 			return false;
 		}
 	} else {
-		if (!x_str_convert(n, std::string(name))) {
+		if (!x_str_convert(n, std::string_view(name))) {
 			return false;
 		}
 	}

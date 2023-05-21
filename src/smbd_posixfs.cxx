@@ -330,7 +330,7 @@ static bool convert_to_unix(std::string &ret, const std::u16string &req_path)
 	/* we suppose file system support case insenctive */
 	/* TODO does smb allow leading '/'? if so need to remove it */
 	return x_str_convert(ret, req_path, [](char32_t uc) {
-			return (uc == '\\') ? '/' : uc;
+			return (uc == '\\') ? U'/' : uc;
 		});
 }
 
@@ -339,7 +339,7 @@ static bool convert_from_unix(std::u16string &ret, const std::string &req_path)
 	/* we suppose file system support case insenctive */
 	/* TODO does smb allow leading '/'? if so need to remove it */
 	return x_str_convert(ret, req_path, [](char32_t uc) {
-			return (uc == '/') ? '\\' : uc;
+			return (uc == '/') ? U'\\' : uc;
 		});
 }
 
@@ -2028,7 +2028,7 @@ static NTSTATUS getinfo_stream_info(const posixfs_object_t *posixfs_object,
 	posixfs_ads_foreach_2(posixfs_object,
 			[&marshall, &marshall_ret] (const char *stream_name, uint64_t eof, uint64_t alloc) {
 			std::u16string name = u":";
-			if (x_str_convert(name, std::string(stream_name))) {
+			if (x_str_convert(name, std::string_view(stream_name))) {
 				marshall_ret = marshall_stream_info(marshall, name, eof, alloc);
 			} else {
 				X_LOG_ERR("invalid stream_name '%s'", stream_name);
@@ -2882,7 +2882,7 @@ bool posixfs_qdir_get_entry(x_smbd_qdir_t *smbd_qdir,
 		X_LOG_DBG("get_entry ent_name '%s'", ent_name);
 
 		std::u16string name;
-		if (!x_str_convert(name, std::string(ent_name))) {
+		if (!x_str_convert(name, std::string_view(ent_name))) {
 			X_LOG_WARN("qdir_process_entry invalid name '%s'",
 					ent_name);
 			continue;
@@ -3151,7 +3151,7 @@ NTSTATUS posixfs_op_object_delete(x_smbd_object_t *smbd_object,
 					const char *xattr_name,
 					const char *stream_name) {
 				std::u16string u16_name;
-				if (x_str_convert(u16_name, std::string(stream_name))) {
+				if (x_str_convert(u16_name, std::string_view(stream_name))) {
 					changes.push_back(x_smb2_change_t{
 							NOTIFY_ACTION_REMOVED_STREAM,
 							FILE_NOTIFY_CHANGE_STREAM_NAME,

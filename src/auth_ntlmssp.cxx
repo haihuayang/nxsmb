@@ -912,7 +912,7 @@ static NTSTATUS ntlmssp_post_auth(x_auth_ntlmssp_t *ntlmssp, x_auth_info_t &auth
 	const auto &auth = wbresp.header.data.auth;
 	auth_info.user_flags = auth.info3.user_flgs;
 	std::u16string user_name_u16;
-	if (!x_str_convert(user_name_u16, std::string(auth.info3.user_name))) {
+	if (!x_str_convert(user_name_u16, std::string_view(auth.info3.user_name))) {
 		X_LOG_WARN("invalid usesr_name '%s'", auth.info3.user_name);
 	}
 	auth_info.account_name = std::make_shared<std::u16string>(std::move(user_name_u16));
