@@ -11,6 +11,7 @@
 #include <string>
 #include <stdint.h>
 #include <string.h>
+#include <type_traits>
 
 static const char32_t x_unicode_invalid = char32_t(-1);
 
@@ -397,7 +398,11 @@ static inline bool x_str_validate(const std::u16string &str,
 	return true;
 }
 
-template <class Dst, class Src, class UnaryOp = x_identity_t>
+template <class UnaryOp>
+using x_str_op_enable_if_t = std::enable_if_t<std::is_invocable_r_v<char32_t, UnaryOp, char32_t>, UnaryOp>;
+
+template <class Dst, class Src, class UnaryOp = x_identity_t,
+	typename = x_str_op_enable_if_t<UnaryOp>>
 bool x_str_convert(Dst &dst, const Src *begin, const Src *end,
 		UnaryOp op = {})
 {
@@ -416,7 +421,8 @@ bool x_str_convert(Dst &dst, const Src *begin, const Src *end,
 	return true;
 }
 
-template <class Dst, class Src, class UnaryOp = x_identity_t>
+template <class Dst, class Src, class UnaryOp = x_identity_t,
+	typename = x_str_op_enable_if_t<UnaryOp>>
 bool x_str_convert(Dst &dst, const Src &src, UnaryOp op = {})
 {
 	return x_str_convert(dst, src.data(), src.data() + src.size(),
@@ -480,7 +486,8 @@ std::string x_str_todebug(const std::u16string &str,
 	return x_str_todebug(str.data(), str.data() + str.size());
 }
 
-template <class Dst, class Src, class UnaryOp = x_identity_t>
+template <class Dst, class Src, class UnaryOp = x_identity_t,
+	typename = x_str_op_enable_if_t<UnaryOp>>
 Dst x_str_convert_assert(const Src &src, UnaryOp op = {})
 {
 	Dst ret;
