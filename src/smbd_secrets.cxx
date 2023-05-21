@@ -45,7 +45,6 @@
 #define SECRETS_AUTH_DOMAIN      "SECRETS/AUTH_DOMAIN"
 #define SECRETS_AUTH_PASSWORD  "SECRETS/AUTH_PASSWORD"
 
-static struct tdb_context *g_secrets_db_ctx;
 
 struct secrets_fetch_state_t
 {
@@ -64,14 +63,15 @@ static int secrets_fetch_parser(TDB_DATA key, TDB_DATA data,
 /* read a entry from the secrets database - the caller must free the result
    if size is non-null then the size of the entry is put in there
  */
-static int secrets_fetch(const std::string &key, std::vector<uint8_t> &data)
+static int secrets_fetch(struct tdb_context *db_ctx,
+		const std::string &key, std::vector<uint8_t> &data)
 {
 	secrets_fetch_state_t state{&data};
 
 	TDB_DATA tdb_key;
 	tdb_key.dptr = (unsigned char *)key.data();
 	tdb_key.dsize = key.size();
-	int err = tdb_parse_record(g_secrets_db_ctx, tdb_key,
+	int err = tdb_parse_record(db_ctx, tdb_key,
 			secrets_fetch_parser, &state);
 	return err;
 }
@@ -97,14 +97,15 @@ static int secrets_fetch_string_parser(TDB_DATA key, TDB_DATA data,
 /* read a entry from the secrets database - the caller must free the result
    if size is non-null then the size of the entry is put in there
  */
-static int secrets_fetch_string(const std::string &key, std::string &data)
+static int secrets_fetch_string(struct tdb_context *db_ctx,
+		const std::string &key, std::string &data)
 {
 	secrets_fetch_string_state_t state{&data};
 
 	TDB_DATA tdb_key;
 	tdb_key.dptr = (unsigned char *)key.data();
 	tdb_key.dsize = key.size();
-	int err = tdb_parse_record(g_secrets_db_ctx, tdb_key,
+	int err = tdb_parse_record(db_ctx, tdb_key,
 			secrets_fetch_string_parser, &state);
 	return err;
 }
@@ -139,63 +140,98 @@ static std::string machine_password_keystr(const std::string &domain)
 	return ret;
 }
 
-const std::string x_smbd_secrets_fetch_machine_password(const std::string &domain)
+static inline int smbd_secrets_fetch_machine_password(
+		struct tdb_context *db_ctx,
+		const std::string &domain,
+		std::string &password)
 	//				     time_t *pass_last_set_time,
 	//				     enum netr_SchannelType *channel)
 {
-	std::string data;
-	int ret = secrets_fetch_string(machine_password_keystr(domain), data);
-	if (ret == 0) {
-		return data;
-	} else {
-		return "";
-	}
-	// return "nxsmb12345";
+	return secrets_fetch_string(db_ctx, machine_password_keystr(domain), password);
 }
 
-const std::string x_smbd_secrets_fetch_prev_machine_password(const std::string &domain)
+static inline int smbd_secrets_fetch_prev_machine_password(
+		struct tdb_context *db_ctx,
+		const std::string &domain,
+		std::string &password)
 {
-	std::string data;
-	int ret = secrets_fetch_string(machine_prev_password_keystr(domain), data);
-	if (ret == 0) {
-		return data;
-	} else {
-		return "";
-	}
+	return secrets_fetch_string(db_ctx, machine_prev_password_keystr(domain), password);
 }
 
-bool x_smbd_secrets_fetch_domain_guid(const std::string &domain, idl::GUID &guid)
+static bool smbd_secrets_fetch_domain_guid(
+		struct tdb_context *db_ctx,
+		const std::string &domain,
+		idl::GUID &guid)
 {
 	std::vector<uint8_t> data;
-	int ret = secrets_fetch(SECRETS_DOMAIN_GUID "/" + domain, data);
-	X_ASSERT(ret == 0);
+	int ret = secrets_fetch(db_ctx, SECRETS_DOMAIN_GUID "/" + domain, data);
+	if (ret != 0) {
+		return false;
+	}
+
 	X_ASSERT(data.size() == sizeof guid);
 	memcpy(&guid, data.data(), sizeof guid);
 	return true;
 }
 
-bool x_smbd_secrets_fetch_domain_sid(const std::string &domain, idl::dom_sid &sid)
+static bool smbd_secrets_fetch_domain_sid(
+		struct tdb_context *db_ctx,
+		const std::string &domain,
+		idl::dom_sid &sid)
 {
 	std::vector<uint8_t> data;
-	int ret = secrets_fetch(SECRETS_DOMAIN_SID "/" + domain, data);
+	int ret = secrets_fetch(db_ctx, SECRETS_DOMAIN_SID "/" + domain, data);
 	X_ASSERT(ret == 0);
 	X_ASSERT(data.size() == sizeof sid);
 	memcpy(&sid, data.data(), sizeof sid);
 	return true;
 }
 
-int x_smbd_secrets_init()
+static int smbd_secrets_load(struct tdb_context *db_ctx,
+		x_smbd_secrets_t &secrets,
+		const std::string &workgroup,
+		const std::string &netbios_name)
 {
-	const auto smbd_conf = x_smbd_conf_get();
-	std::string path = smbd_conf->private_dir + "/secrets.tdb";
+	if (!smbd_secrets_fetch_domain_sid(db_ctx, netbios_name, secrets.sid)) {
+		return -1;
+	}
+	if (!smbd_secrets_fetch_domain_sid(db_ctx, workgroup, secrets.domain_sid)) {
+		return -1;
+	}
+	if (!smbd_secrets_fetch_domain_guid(db_ctx, workgroup, secrets.domain_guid)) {
+		/* TODO old samba does not create it */
+		memset(&secrets.domain_guid, 0, sizeof secrets.domain_guid);
+	}
+
+	int ret = smbd_secrets_fetch_machine_password(db_ctx, workgroup,
+			secrets.machine_password);
+	if (ret != 0) {
+		return -1;
+	}
+	ret = smbd_secrets_fetch_prev_machine_password(db_ctx, workgroup,
+			secrets.prev_machine_password);
+	if (ret != 0) {
+		secrets.prev_machine_password.clear();
+	}
+
+	return 0;
+}
+
+int x_smbd_secrets_load(x_smbd_secrets_t &secrets,
+		const std::string &private_dir,
+		const std::string &workgroup,
+		const std::string &netbios_name)
+{
+	std::string path = private_dir + "/secrets.tdb";
 
 	struct tdb_context *ctx = tdb_open(path.c_str(), 0, TDB_DEFAULT, O_RDONLY, 0600);
 	if (ctx) {
-		g_secrets_db_ctx = ctx;
-		return 0;
+		int ret = smbd_secrets_load(ctx, secrets, workgroup, netbios_name);
+		tdb_close(ctx);
+		return ret;
 	}
 
 	return -1;
-}
 
+}
 

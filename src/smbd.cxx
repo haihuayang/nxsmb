@@ -152,9 +152,6 @@ static void init_smbd()
 	x_smbd_posixfs_init(max_opens);
 	x_smbd_ctrl_init(g_evtmgmt);
 
-	err = x_smbd_secrets_init();
-	X_ASSERT(err == 0);
-
 	g_smbd.auth_context = x_auth_create_context();
 	x_auth_krb5_init(g_smbd.auth_context);
 	x_auth_ntlmssp_init(g_smbd.auth_context);

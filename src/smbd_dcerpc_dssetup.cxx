@@ -23,9 +23,7 @@ static bool x_smbd_dcerpc_impl_dssetup_DsRoleGetPrimaryDomainInformation(
 		/* TODO should make dns_domain upper case */
 		info->basic.dns_domain = smbd_conf->dns_domain_l16;
 		info->basic.forest = info->basic.dns_domain;
-		idl::GUID domain_guid;
-		x_smbd_secrets_fetch_domain_guid(smbd_conf->workgroup_8, domain_guid);
-		memcpy(&info->basic.domain_guid, &domain_guid, sizeof(idl::GUID));
+		info->basic.domain_guid = smbd_conf->secrets.domain_guid;
 		arg.__result = WERR_OK;
 		break;
 	}

@@ -11,11 +11,17 @@
 #include "include/librpc/misc.hxx"
 #include "include/librpc/security.hxx"
 
-int x_smbd_secrets_init();
-const std::string x_smbd_secrets_fetch_machine_password(const std::string &domain);
-const std::string x_smbd_secrets_fetch_prev_machine_password(const std::string &domain);
-bool x_smbd_secrets_fetch_domain_guid(const std::string &domain, idl::GUID &guid);
-bool x_smbd_secrets_fetch_domain_sid(const std::string &domain, idl::dom_sid &sid);
+struct x_smbd_secrets_t
+{
+	idl::dom_sid sid, domain_sid;
+	idl::GUID domain_guid;
+	std::string machine_password, prev_machine_password;
+};
+
+int x_smbd_secrets_load(x_smbd_secrets_t &secrets,
+		const std::string &private_dir,
+		const std::string &workgroup,
+		const std::string &netbios_name);
 
 
 #endif /* __smbd_secrets__hxx__ */

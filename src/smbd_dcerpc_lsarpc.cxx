@@ -157,9 +157,8 @@ static bool x_smbd_dcerpc_impl_lsa_QueryInfoPolicy(
 		auto info = std::make_shared<idl::lsa_PolicyInformation>();
 		info->__init(arg.level);
 		info->domain.name.string = smbd_conf->workgroup_u16;
-		idl::dom_sid sid;
-		X_ASSERT(x_smbd_secrets_fetch_domain_sid(smbd_conf->workgroup_8, sid));
-		info->domain.sid = std::make_shared<idl::dom_sid>(sid);
+		info->domain.sid = std::make_shared<idl::dom_sid>(
+				smbd_conf->secrets.domain_sid);
 		arg.info = info;
 		arg.__result = NT_STATUS_OK;
 						  }
@@ -174,9 +173,8 @@ static bool x_smbd_dcerpc_impl_lsa_QueryInfoPolicy(
 		auto info = std::make_shared<idl::lsa_PolicyInformation>();
 		info->__init(arg.level);
 		info->account_domain.name.string = smbd_conf->netbios_name_u16;
-		idl::dom_sid sid;
-		X_ASSERT(x_smbd_secrets_fetch_domain_sid(smbd_conf->netbios_name_u8, sid));
-		info->account_domain.sid = std::make_shared<idl::dom_sid>(sid);
+		info->account_domain.sid = std::make_shared<idl::dom_sid>(
+				smbd_conf->secrets.sid);
 		arg.info = info;
 		arg.__result = NT_STATUS_OK;
 						  }

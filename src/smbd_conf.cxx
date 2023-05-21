@@ -678,6 +678,15 @@ static int parse_smbconf(x_smbd_conf_t &smbd_conf, bool reload)
 		return -1;
 	}
 
+	int err = x_smbd_secrets_load(smbd_conf.secrets,
+			smbd_conf.private_dir,
+			smbd_conf.workgroup_8,
+			smbd_conf.netbios_name_u8);
+	if (err != 0) {
+		X_LOG_ERR("Fail loading secrets");
+		return err;
+	}
+
 	load_ifaces(smbd_conf);
 
 	for (auto &vs: volume_specs) {

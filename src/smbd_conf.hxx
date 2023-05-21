@@ -11,6 +11,7 @@
 #include "include/networking.hxx"
 #include "include/librpc/misc.hxx"
 #include "smbd_share.hxx"
+#include "smbd_secrets.hxx"
 #include <map>
 #include <atomic>
 
@@ -80,6 +81,8 @@ struct x_smbd_conf_t
 	std::u16string node_l16;
 	std::vector<std::string> nodes;
 	std::vector<std::shared_ptr<x_smbd_volume_t>> smbd_volumes;
+
+	x_smbd_secrets_t secrets;
 };
 
 int x_smbd_conf_init(const char *configfile, const std::vector<std::string> &cmdline_options);

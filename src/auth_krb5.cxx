@@ -1606,7 +1606,7 @@ static krb5_error_code fill_mem_keytab_from_secrets(
 
 	auto smbd_conf = x_smbd_conf_get();
 
-	std::string pwd = x_smbd_secrets_fetch_machine_password(smbd_conf->workgroup_8);
+	std::string pwd = smbd_conf->secrets.machine_password;
 	if (pwd.empty()) {
 		X_LOG_ERR("failed to fetch machine password");
 		return KRB5_LIBOS_CANTREADPWD;
@@ -1704,7 +1704,7 @@ static krb5_error_code fill_mem_keytab_from_secrets(
 		return kerr;
 	}
 
-	std::string pwd_old = x_smbd_secrets_fetch_prev_machine_password(smbd_conf->workgroup_8);
+	std::string pwd_old = smbd_conf->secrets.prev_machine_password;
 	if (pwd_old.empty()) {
 		X_LOG_DBG("no prev machine password");
 	} else {
