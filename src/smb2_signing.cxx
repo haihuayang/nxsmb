@@ -389,6 +389,8 @@ static inline int aes_gcm_signing_encrypt(const EVP_CIPHER *evp_cipher,
 	rc = EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_GET_TAG, 16, (void *)signature);
 	X_ASSERT(rc == 1);
 
+	EVP_CIPHER_CTX_free(ctx);
+
 	return x_convert<int>(cptr - (uint8_t *)cdata);
 }
 

@@ -30,6 +30,10 @@ struct x_smbd_chan_t
 		X_SMBD_COUNTER_INC(chan_create, 1);
 	}
 	~x_smbd_chan_t() {
+		if (auth) {
+			x_auth_destroy(auth);
+		}
+
 		x_smbd_ref_dec(smbd_sess);
 		x_smbd_ref_dec(smbd_conn);
 		X_SMBD_COUNTER_INC(chan_delete, 1);
@@ -293,9 +297,6 @@ static NTSTATUS smbd_chan_auth_succeeded(x_smbd_chan_t *smbd_chan,
 		smbd_chan_set_keys(smbd_chan, auth_info.session_key);
 	}
 
-	x_auth_destroy(smbd_chan->auth);
-	smbd_chan->auth = nullptr;
-
 	NTSTATUS status = x_smbd_sess_auth_succeeded(smbd_chan->smbd_sess,
 			is_bind, security_mode,
 			smbd_user, smbd_chan->keys, auth_info.time_rec);
@@ -406,6 +407,9 @@ static NTSTATUS smbd_chan_auth_updated(x_smbd_chan_t *smbd_chan, x_smbd_requ_t *
 		smbd_chan_unlink_conn(smbd_chan, g_smbd_conn_curr);
 		smbd_chan_unlink_sess(smbd_chan, smbd_chan->smbd_sess, false);
 	}
+
+	x_auth_destroy(smbd_chan->auth);
+	smbd_chan->auth = nullptr;
 
 	return status;
 }

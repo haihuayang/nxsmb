@@ -1132,13 +1132,14 @@ static int x_smbd_conn_process_smb(x_smbd_conn_t *smbd_conn, x_buf_t *buf, uint3
 			return -EBADMSG;
 		}
 
+		x_buf_release(buf);
 		buf = pbuf;
 		msgsize = plen;
 		smbhdr = x_get_be32(buf->data + offset);
 		encrypted = true;
 	}
 
-	x_smbd_ptr_t<x_smbd_requ_t> smbd_requ{x_smbd_requ_create(x_buf_get(buf),
+	x_smbd_ptr_t<x_smbd_requ_t> smbd_requ{x_smbd_requ_create(buf,
 			msgsize, encrypted)};
 	
 	if (smbhdr == X_SMB2_MAGIC) {
@@ -1181,7 +1182,6 @@ static int x_smbd_conn_process_nbt(x_smbd_conn_t *smbd_conn)
 		x_buf_t *buf = smbd_conn->recv_buf;
 		smbd_conn->recv_buf = nullptr;
 		err = x_smbd_conn_process_smb(smbd_conn, buf, smbd_conn->recv_msgsize);
-		x_buf_release(buf);
 	} else {
 		X_TODO;
 		err = -EINVAL;

@@ -1243,24 +1243,15 @@ static NTSTATUS auth_krb5_update(x_auth_t *auth, const uint8_t *in_buf, size_t i
 		 * see gss_accept_sec_context->_gsskrb5_accept_sec_context->gsskrb5_acceptor_start
 		 */
 		status = auth_krb5_accepted(*auth_krb5, gssapi_context, client_name, auth_upcall, auth_info, time_rec);
-		if (NT_STATUS_IS_OK(status)) {
-			out.assign((uint8_t *)out_data.value, (uint8_t *)out_data.value + out_data.length);
-		}
-		return status;
+		break;
 
 	case GSS_S_CONTINUE_NEEDED:
 		/* we will need a third leg */
-		out.assign((uint8_t *)out_data.value, (uint8_t *)out_data.value + out_data.length);
-		return NT_STATUS_MORE_PROCESSING_REQUIRED;
+		status = NT_STATUS_MORE_PROCESSING_REQUIRED;
+		break;
 	default:
 		DEBUG(1, ("gss_accept_sec_context failed with [%s]\n",
 			  gse_errstr(talloc_tos(), gss_maj, gss_min)));
-
-		if (gssapi_context) {
-			gss_delete_sec_context(&gss_min,
-						&gssapi_context,
-						GSS_C_NO_BUFFER);
-		}
 
 		/*
 		 * If we got an output token, make Windows aware of it
@@ -1270,21 +1261,28 @@ static NTSTATUS auth_krb5_update(x_auth_t *auth, const uint8_t *in_buf, size_t i
 			status = NT_STATUS_MORE_PROCESSING_REQUIRED;
 			/* Fall through to handle the out token */
 		} else {
-			return NT_STATUS_LOGON_FAILURE;
+			status = NT_STATUS_LOGON_FAILURE;
 		}
 	}
 
-	X_TODO;
-	return NT_STATUS_LOGON_FAILURE;
-	/* we may be told to return nothing */
 	if (out_data.length) {
-		const uint8_t *p = (const uint8_t *)out_data.value;
-		out.assign(p, p + out_data.length);
+		out.assign((uint8_t *)out_data.value, (uint8_t *)out_data.value + out_data.length);
 		gss_maj = gss_release_buffer(&gss_min, &out_data);
 	}
+	
+	if (client_name) {
+		gss_release_name(&gss_min, &client_name);
+	}
 
+	if (gssapi_context) {
+		gss_delete_sec_context(&gss_min,
+				&gssapi_context,
+				GSS_C_NO_BUFFER);
+	}
 
-	return X_NT_STATUS_INTERNAL_BLOCKED;
+	gss_release_cred(&gss_min, &creds);
+
+	return status;
 }
 
 static void auth_krb5_destroy(x_auth_t *auth)
