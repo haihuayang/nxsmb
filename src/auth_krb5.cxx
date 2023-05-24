@@ -8,6 +8,7 @@
 #include "smbd.hxx"
 #include "smbd_conf.hxx"
 #include "smbd_secrets.hxx"
+#include "smbd_stats.hxx"
 #include <cctype>
 #include <algorithm>
 #include "include/asn1_wrap.hxx"
@@ -29,6 +30,10 @@ using x_gss_buffer_set_ptr_t = std::unique_ptr<gss_buffer_set_desc, std::functio
 struct x_auth_krb5_t
 {
 	x_auth_krb5_t(x_auth_context_t *context, const x_auth_ops_t *ops);
+	~x_auth_krb5_t()
+	{
+		X_SMBD_COUNTER_INC(auth_krb5_delete, 1);
+	}
 	x_wbcli_t wbcli;
 	x_wbrequ_t wbrequ;
 	x_wbresp_t wbresp;
@@ -297,6 +302,7 @@ static void x_ntlmssp_is_trusted_domain(x_auth_krb5_t &ntlmssp)
 x_auth_krb5_t::x_auth_krb5_t(x_auth_context_t *context, const x_auth_ops_t *ops)
 	: auth{context, ops}
 {
+	X_SMBD_COUNTER_INC(auth_krb5_create, 1);
 	wbcli.requ = &wbrequ;
 	wbcli.resp = &wbresp;
 #if 0

@@ -31,6 +31,10 @@
 	X_SMBD_COUNTER_DECL(requ_delete) \
 	X_SMBD_COUNTER_DECL(qdir_create) \
 	X_SMBD_COUNTER_DECL(qdir_delete) \
+	X_SMBD_COUNTER_DECL(auth_krb5_create) \
+	X_SMBD_COUNTER_DECL(auth_krb5_delete) \
+	X_SMBD_COUNTER_DECL(auth_ntlmssp_create) \
+	X_SMBD_COUNTER_DECL(auth_ntlmssp_delete) \
 	X_SMBD_COUNTER_DECL(sess_bind) \
 
 enum {

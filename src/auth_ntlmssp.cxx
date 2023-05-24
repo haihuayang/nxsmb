@@ -7,6 +7,7 @@
 
 #include "smbd.hxx"
 #include "smbd_conf.hxx"
+#include "smbd_stats.hxx"
 #include <cctype>
 #include <algorithm>
 #include "include/asn1_wrap.hxx"
@@ -54,6 +55,11 @@ struct x_ntlmssp_crypt_direction_t
 struct x_auth_ntlmssp_t
 {
 	x_auth_ntlmssp_t(x_auth_context_t *context, const x_auth_ops_t *ops);
+	~x_auth_ntlmssp_t()
+	{
+		X_SMBD_COUNTER_INC(auth_ntlmssp_delete, 1);
+	}
+
 	// only server side for now
 	bool is_server() const { return true; }
 
@@ -1261,6 +1267,7 @@ static void x_ntlmssp_is_trusted_domain(x_auth_ntlmssp_t &ntlmssp, x_auth_upcall
 x_auth_ntlmssp_t::x_auth_ntlmssp_t(x_auth_context_t *context, const x_auth_ops_t *ops)
 	: auth{context, ops}
 {
+	X_SMBD_COUNTER_INC(auth_ntlmssp_create, 1);
 	wbcli.requ = &wbrequ;
 	wbcli.resp = &wbresp;
 
