@@ -135,10 +135,10 @@ SET_src_nxutils := \
 COMMON_LIBS := -lpthread -lresolv -ldl
 
 $(TARGET_DIR_out)/bin/smbd_nx: $(SET_src_smbd_nx:%=$(TARGET_DIR_out)/src/%.o) $(TARGET_SET_lib:%=$(TARGET_DIR_out)/lib%.a)
-	$(CXX) -g $(TARGET_LDFLAGS) -o $@ $^ $(TARGET_LDFLAGS_dependent) -ltdb -lcrypto -lz -lcom_err -luuid $(COMMON_LIBS)
+	$(CXX) -g $(TARGET_LDFLAGS) -o $@ $^ $(TARGET_LDFLAGS_dependent) -ltdb -lcrypto -lz -lcom_err -luuid $(COMMON_LIBS) -ljemalloc
 
 $(TARGET_DIR_out)/bin/nxutils: $(SET_src_nxutils:%=$(TARGET_DIR_out)/src/%.o) $(TARGET_SET_lib:%=$(TARGET_DIR_out)/lib%.a)
-	$(CXX) -g $(TARGET_LDFLAGS) -o $@ $^ $(COMMON_LIBS)
+	$(CXX) -g $(TARGET_LDFLAGS) -o $@ $^ $(COMMON_LIBS) -ljemalloc
 
 $(TARGET_DIR_out)/src/%.o: src/%.cxx | target_mkdir target_gen
 	$(CXX) -c $(TARGET_CXXFLAGS) $(TARGET_CFLAGS_EXTRA) $(TARGET_CFLAGS_dependent) -o $@ $<
