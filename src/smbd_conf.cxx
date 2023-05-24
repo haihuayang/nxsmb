@@ -656,14 +656,15 @@ static int parse_smbconf(x_smbd_conf_t &smbd_conf, bool reload)
 		return -1;
 	}
 
-	bool ret = x_str_convert(smbd_conf.netbios_name_u8, smbd_conf.netbios_name_l8,
+	std::string netbios_name_u8;
+	bool ret = x_str_convert(netbios_name_u8, smbd_conf.netbios_name_l8,
 			x_toupper_t());
 	if (!ret) {
 		X_LOG_ERR("Invalid netbios_name '%s'", smbd_conf.netbios_name_l8.c_str());
 		return -1;
 	}
 	smbd_conf.netbios_name_l8.clear();
-	x_str_convert(smbd_conf.netbios_name_l8, smbd_conf.netbios_name_u8,
+	x_str_convert(smbd_conf.netbios_name_l8, netbios_name_u8,
 			x_tolower_t());
 
 	smbd_conf.netbios_name_u16 = make_u16string_ptr(smbd_conf.netbios_name_l8, x_toupper_t());
@@ -681,7 +682,7 @@ static int parse_smbconf(x_smbd_conf_t &smbd_conf, bool reload)
 	int err = x_smbd_secrets_load(smbd_conf.secrets,
 			smbd_conf.private_dir,
 			smbd_conf.workgroup_8,
-			smbd_conf.netbios_name_u8);
+			netbios_name_u8);
 	if (err != 0) {
 		X_LOG_ERR("Fail loading secrets");
 		return err;
