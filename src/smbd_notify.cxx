@@ -194,24 +194,22 @@ static void notify_change(std::shared_ptr<x_smbd_volume_t> &smbd_volume,
 			true);
 }
 
-static bool is_same_parent(const std::u16string &old_path, const std::u16string &new_path)
-{
-	auto old_sep = old_path.rfind(u'\\');
-	auto new_sep = new_path.rfind(u'\\');
-	if (old_sep != new_sep) {
-	       return false;
-	}
-	return old_sep == std::u16string::npos || old_path.compare(0, old_sep,
-			new_path, 0, new_sep) == 0;
-}
-
 void x_smbd_notify_change(std::shared_ptr<x_smbd_volume_t> &smbd_volume,
 		const std::vector<x_smb2_change_t> &changes)
 {
 	for (const auto &change: changes) {
 		if (change.action == NOTIFY_ACTION_OLD_NAME) {
 			X_ASSERT(!change.new_path.empty());
-			if (is_same_parent(change.path, change.new_path)) {
+
+			auto old_sep = change.path.rfind(u'\\');
+			auto new_sep = change.new_path.rfind(u'\\');
+
+			bool same_parent = (old_sep == new_sep) &&
+				(old_sep == std::u16string::npos ||
+				 change.path.compare(0, old_sep, change.new_path,
+					 0, new_sep) == 0);
+
+			if (same_parent) {
 				notify_change(smbd_volume, change.action, change.filter,
 						change.path, &change.new_path,
 						change.ignore_lease_key);
@@ -222,6 +220,13 @@ void x_smbd_notify_change(std::shared_ptr<x_smbd_volume_t> &smbd_volume,
 				notify_change(smbd_volume, NOTIFY_ACTION_ADDED, change.filter,
 						change.new_path, nullptr,
 						change.ignore_lease_key);
+			}
+			if (new_sep != std::u16string::npos) {
+				/* Windows server also notify dest parent dir modified */
+				notify_change(smbd_volume, NOTIFY_ACTION_MODIFIED,
+						FILE_NOTIFY_CHANGE_LAST_WRITE,
+						change.new_path.substr(0, new_sep),
+						nullptr, x_smb2_lease_key_t{});
 			}
 		} else {
 			notify_change(smbd_volume, change.action, change.filter,
