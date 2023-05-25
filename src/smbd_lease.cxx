@@ -27,15 +27,6 @@ struct x_smbd_lease_t
 	uint8_t breaking_to_requested{0}, breaking_to_required{0};
 };
 
-std::ostream &operator<<(std::ostream &os, const x_smb2_uuid_t &val);
-
-std::ostream &operator<<(std::ostream &os, const x_smb2_uuid_t &val)
-{
-	char buf[80];
-	snprintf(buf, sizeof buf, "%016lx-%016lx", val.data[0], val.data[1]);
-	return os << buf;
-}
-
 X_DECLARE_MEMBER_TRAITS(smbd_lease_hash_traits, x_smbd_lease_t, hash_link)
 
 static uint32_t lease_hash(const x_smb2_uuid_t &client_guid, const x_smb2_lease_key_t &lease_key)

@@ -162,4 +162,11 @@ uint16_t x_smb2_dialect_match(const std::vector<uint16_t> &sdialects,
 	return X_SMB2_DIALECT_000;
 }
 
+std::ostream &operator<<(std::ostream &os, const x_smb2_uuid_t &val)
+{
+	char buf[80];
+	snprintf(buf, sizeof buf, "%016lx-%016lx", val.data[0], val.data[1]);
+	return os << buf;
+}
+
 

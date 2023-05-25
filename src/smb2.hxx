@@ -576,6 +576,7 @@ struct x_smb2_uuid_t
 		memcpy(data, bytes.data(), sizeof data);
 	}
 };
+std::ostream &operator<<(std::ostream &os, const x_smb2_uuid_t &val);
 
 struct x_smb2_preauth_t
 {
