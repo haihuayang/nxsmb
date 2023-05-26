@@ -47,7 +47,9 @@ void x_smbd_object_notify_change(x_smbd_object_t *smbd_object,
 	std::unique_lock<std::mutex> lock(smbd_object->mutex);
 	auto &open_list = smbd_object->sharemode.open_list;
 	x_smbd_open_t *curr_open;
+	int count = 0;
 	for (curr_open = open_list.get_front(); curr_open; curr_open = open_list.next(curr_open)) {
+		++count;
 		if (curr_open->open_state.priv_data != open_priv_data) {
 			continue;
 		}

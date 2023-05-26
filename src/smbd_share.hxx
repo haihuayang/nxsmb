@@ -78,8 +78,10 @@ struct x_smbd_share_t
 
 	x_smbd_share_t(const x_smb2_uuid_t &uuid, const std::string &name,
 			std::u16string &&name_16,
+			std::u16string &&name_l16,
 			uint32_t flags)
-		: uuid(uuid), name(name), name_16(name_16), flags(flags)
+		: uuid(uuid), name(name)
+		, name_16(name_16), name_l16(name_l16), flags(flags)
 	{
 	}
 	virtual ~x_smbd_share_t() { }
@@ -122,7 +124,8 @@ struct x_smbd_share_t
 
 	const x_smb2_uuid_t uuid;
 	std::string name;
-	std::u16string name_16;
+	std::u16string name_16, name_l16;
+
 	uint32_t flags;
 	bool dfs_test = false;
 	uint32_t max_connections = 0;
@@ -150,12 +153,14 @@ std::shared_ptr<x_smbd_share_t> x_smbd_dfs_share_create(
 		const x_smb2_uuid_t &uuid,
 		const std::string &name,
 		std::u16string &&name_16,
+		std::u16string &&name_l16,
 		uint32_t share_flags,
 		std::vector<std::shared_ptr<x_smbd_volume_t>> &&smbd_volumes);
 std::shared_ptr<x_smbd_share_t> x_smbd_simplefs_share_create(
 		const x_smb2_uuid_t &uuid,
 		const std::string &name,
 		std::u16string &&name_16,
+		std::u16string &&name_l16,
 		uint32_t share_flags,
 		const std::shared_ptr<x_smbd_volume_t> &smbd_volume);
 int x_smbd_simplefs_mktld(const std::shared_ptr<x_smbd_user_t> &smbd_user,

@@ -130,8 +130,8 @@ static WERROR x_smbd_net_enum(Arg &arg,
 		std::vector<T> &array)
 {
 	const std::shared_ptr<x_smbd_conf_t> smbd_conf = x_smbd_conf_get();
-	for (auto &it: smbd_conf->shares) {
-		array.push_back(x_smbd_net_get_info<T>(*it.second));
+	for (auto &smbd_share: smbd_conf->smbd_shares) {
+		array.push_back(x_smbd_net_get_info<T>(*smbd_share));
 	}
 	return WERR_OK;
 }

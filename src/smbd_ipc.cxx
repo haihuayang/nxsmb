@@ -817,7 +817,7 @@ x_smbd_ipc_object_t::x_smbd_ipc_object_t(const std::u16string &path,
 struct ipc_share_t : x_smbd_share_t
 {
 	ipc_share_t()
-		: x_smbd_share_t({0, 0}, "ipc$", u"IPC$", 0)
+		: x_smbd_share_t({0, 0}, "ipc$", u"IPC$", u"ipc$", 0)
 		, smbd_volume(ipc_get_volume())
 	{
 	}
