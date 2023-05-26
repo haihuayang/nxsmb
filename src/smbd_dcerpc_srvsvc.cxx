@@ -125,61 +125,16 @@ idl::sec_desc_buf x_smbd_net_get_info<idl::sec_desc_buf>(const x_smbd_share_t &s
 	};
 }
 
-template <class Arg>
+template <class Arg, class T>
 static WERROR x_smbd_net_enum(Arg &arg,
-		std::vector<idl::srvsvc_NetShareInfo0> &array)
+		std::vector<T> &array)
 {
 	const std::shared_ptr<x_smbd_conf_t> smbd_conf = x_smbd_conf_get();
 	for (auto &it: smbd_conf->shares) {
-		array.push_back(x_smbd_net_get_info<idl::srvsvc_NetShareInfo0>(*it.second));
+		array.push_back(x_smbd_net_get_info<T>(*it.second));
 	}
 	return WERR_OK;
 }
-
-template <class Arg>
-static WERROR x_smbd_net_enum(Arg &arg,
-		std::vector<idl::srvsvc_NetShareInfo1> &array)
-{
-	const std::shared_ptr<x_smbd_conf_t> smbd_conf = x_smbd_conf_get();
-	for (auto &it: smbd_conf->shares) {
-		array.push_back(x_smbd_net_get_info<idl::srvsvc_NetShareInfo1>(*it.second));
-	}
-	return WERR_OK;
-}
-
-template <class Arg>
-static WERROR x_smbd_net_enum(Arg &arg,
-		std::vector<idl::srvsvc_NetShareInfo2> &array)
-{
-	const std::shared_ptr<x_smbd_conf_t> smbd_conf = x_smbd_conf_get();
-	for (auto &it: smbd_conf->shares) {
-		array.push_back(x_smbd_net_get_info<idl::srvsvc_NetShareInfo2>(*it.second));
-	}
-	return WERR_OK;
-}
-
-template <class Arg>
-static WERROR x_smbd_net_enum(Arg &arg,
-		std::vector<idl::srvsvc_NetShareInfo501> &array)
-{
-	const std::shared_ptr<x_smbd_conf_t> smbd_conf = x_smbd_conf_get();
-	for (auto &it: smbd_conf->shares) {
-		array.push_back(x_smbd_net_get_info<idl::srvsvc_NetShareInfo501>(*it.second));
-	}
-	return WERR_OK;
-}
-
-template <class Arg>
-static WERROR x_smbd_net_enum(Arg &arg,
-		std::vector<idl::srvsvc_NetShareInfo502> &array)
-{
-	const std::shared_ptr<x_smbd_conf_t> smbd_conf = x_smbd_conf_get();
-	for (auto &it: smbd_conf->shares) {
-		array.push_back(x_smbd_net_get_info<idl::srvsvc_NetShareInfo502>(*it.second));
-	}
-	return WERR_OK;
-}
-
 
 template <class Arg, class Info>
 static void net_enum(Arg &arg, std::shared_ptr<std::vector<Info>> &array)
