@@ -402,7 +402,7 @@ static posixfs_object_t *posixfs_object_lookup(
 	posixfs_object_t *matched_object = nullptr;
 	posixfs_object_t *elem = nullptr;
 
-	std::unique_lock<std::mutex> lock(bucket.mutex);
+	auto lock = std::lock_guard(bucket.mutex);
 
 	for (x_dqlink_t *link = bucket.head.get_front(); link; link = link->get_next()) {
 		elem = X_CONTAINER_OF(link, posixfs_object_t, hash_link);
@@ -678,7 +678,7 @@ static void posixfs_object_release(posixfs_object_t *posixfs_object)
 
 	{
 		/* TODO optimize when use_count > 1 */
-		std::unique_lock<std::mutex> lock(bucket.mutex);
+		auto lock = std::lock_guard(bucket.mutex);
 
 		X_ASSERT(posixfs_object->use_count > 0);
 		if (--posixfs_object->use_count == 0) {
@@ -1023,7 +1023,7 @@ static posixfs_object_t *posixfs_object_open_by_fd(
 		return nullptr;
 	}
 
-	std::unique_lock<std::mutex> lock(posixfs_object->base.mutex);
+	auto lock = std::lock_guard(posixfs_object->base.mutex);
 	if (!(posixfs_object->base.flags & x_smbd_object_t::flag_initialized)) {
 		posixfs_statex_get(fd, &posixfs_object->get_meta(),
 				&posixfs_object->base.sharemode.meta);
@@ -1072,7 +1072,7 @@ static posixfs_object_t *posixfs_object_open(
 		return nullptr;
 	}
 
-	std::unique_lock<std::mutex> lock(posixfs_object->base.mutex);
+	auto lock = std::lock_guard(posixfs_object->base.mutex);
 	if (!(posixfs_object->base.flags & x_smbd_object_t::flag_initialized)) {
 		std::string unix_path;
 		X_ASSERT(convert_to_unix(unix_path, path));
@@ -1127,7 +1127,7 @@ static NTSTATUS posixfs_object_get_sd__(posixfs_object_t *posixfs_object,
 static NTSTATUS posixfs_object_get_sd(posixfs_object_t *posixfs_object,
 		std::shared_ptr<idl::security_descriptor> &psd)
 {
-	std::unique_lock<std::mutex> lock(posixfs_object->base.mutex);
+	auto lock = std::lock_guard(posixfs_object->base.mutex);
 	return posixfs_object_get_sd__(posixfs_object, psd);
 }
 
@@ -2945,7 +2945,7 @@ static void posixfs_object_release_stream(posixfs_object_t *posixfs_object,
 {
 	if (smbd_stream) {
 		posixfs_ads_t *posixfs_ads = posixfs_ads_from_smbd_stream(smbd_stream);
-		std::unique_lock<std::mutex> lock(posixfs_object->base.mutex);
+		auto lock = std::lock_guard(posixfs_object->base.mutex);
 		posixfs_ads_release(posixfs_object, posixfs_ads);
 	}
 }

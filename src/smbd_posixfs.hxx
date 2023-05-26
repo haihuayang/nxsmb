@@ -150,7 +150,6 @@ NTSTATUS x_smbd_posixfs_object_init(x_smbd_object_t *smbd_object,
 		int fd, bool is_dir,
 		const std::string &unix_path,
 		const std::vector<uint8_t> &ntacl_blob);
-std::unique_lock<std::mutex> x_smbd_posixfs_lock_object(x_smbd_object_t *smbd_object);
 
 x_smbd_object_t *x_smbd_posixfs_object_open_parent(const x_smbd_object_t *child_object);
 

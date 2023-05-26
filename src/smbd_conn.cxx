@@ -1364,7 +1364,7 @@ static bool x_smbd_conn_do_send(x_smbd_conn_t *smbd_conn, x_fdevents_t &fdevents
 static bool x_smbd_conn_do_user(x_smbd_conn_t *smbd_conn, x_fdevents_t &fdevents)
 {
 	X_LOG_DBG("%s %p x%lx x%lx", task_name, smbd_conn, smbd_conn->ep_id, fdevents);
-	std::unique_lock<std::mutex> lock(smbd_conn->mutex);
+	auto lock = std::unique_lock(smbd_conn->mutex);
 	for (;;) {
 		x_fdevt_user_t *fdevt_user = smbd_conn->fdevt_user_list.get_front();
 		if (!fdevt_user) {
@@ -1469,7 +1469,7 @@ static void x_smbd_conn_upcall_cb_unmonitor(x_epoll_upcall_t *upcall)
 	}
 
 	{
-		std::unique_lock<std::mutex> lock(smbd_conn->mutex);
+		auto lock = std::lock_guard(smbd_conn->mutex);
 		smbd_conn->state = x_smbd_conn_t::STATE_DONE;
 		for (;;) {
 			x_fdevt_user_t *fdevt_user = smbd_conn->fdevt_user_list.get_front();
@@ -1531,14 +1531,16 @@ static bool x_smbd_srv_do_recv(x_smbd_srv_t *smbd_srv, x_fdevents_t &fdevents)
 static bool x_smbd_srv_do_user(x_smbd_srv_t *smbd_srv, x_fdevents_t &fdevents)
 {
 	X_LOG_DBG("%s %p x%lx x%lx", task_name, smbd_srv, smbd_srv->ep_id, fdevents);
-	std::unique_lock<std::mutex> lock(smbd_srv->mutex);
-	for (;;) {
-		x_fdevt_user_t *fdevt_user = smbd_srv->fdevt_user_list.get_front();
-		if (!fdevt_user) {
-			break;
+	{
+		auto lock = std::lock_guard(smbd_srv->mutex);
+		for (;;) {
+			x_fdevt_user_t *fdevt_user = smbd_srv->fdevt_user_list.get_front();
+			if (!fdevt_user) {
+				break;
+			}
+			smbd_srv->fdevt_user_list.remove(fdevt_user);
+			fdevt_user->func(nullptr, fdevt_user);
 		}
-		smbd_srv->fdevt_user_list.remove(fdevt_user);
-		fdevt_user->func(nullptr, fdevt_user);
 	}
 
 	fdevents = x_fdevents_consume(fdevents, FDEVT_USER);

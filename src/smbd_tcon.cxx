@@ -184,7 +184,7 @@ static inline void smbd_tcon_unlink_open(x_smbd_tcon_t *smbd_tcon, x_dlink_t *li
 
 static bool smbd_tcon_terminate(x_smbd_tcon_t *smbd_tcon, bool shutdown)
 {
-	std::unique_lock<std::mutex> lock(smbd_tcon->mutex);
+	auto lock = std::unique_lock(smbd_tcon->mutex);
 	if (smbd_tcon->state == x_smbd_tcon_t::S_DONE) {
 		/* this can happen if client logoff on one channel and
 		 * tdis on another

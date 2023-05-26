@@ -235,7 +235,7 @@ static void smbd_sess_terminate(x_smbd_sess_t *smbd_sess, L &lock, bool shutdown
 bool x_smbd_sess_unlink_chan(x_smbd_sess_t *smbd_sess, x_dlink_t *link,
 		bool shutdown)
 {
-	std::unique_lock<std::mutex> lock(smbd_sess->mutex);
+	auto lock = std::unique_lock(smbd_sess->mutex);
 	if (!link->is_valid()) {
 		return false;
 	}
@@ -265,7 +265,7 @@ x_smbd_chan_t *x_smbd_sess_lookup_chan(x_smbd_sess_t *smbd_sess, x_smbd_conn_t *
 x_smbd_chan_t *x_smbd_sess_get_active_chan(x_smbd_sess_t *smbd_sess)
 {
 	x_dlink_t *link;
-	std::lock_guard<std::mutex> lock(smbd_sess->mutex);
+	auto lock = std::lock_guard(smbd_sess->mutex);
 	for (link = smbd_sess->chan_list.get_front(); link; link = link->get_next()) {
 		x_smbd_chan_t *smbd_chan = x_smbd_chan_get_active(link);
 		if (smbd_chan) {
@@ -341,7 +341,7 @@ NTSTATUS x_smbd_sess_auth_succeeded(x_smbd_sess_t *smbd_sess,
 
 static NTSTATUS smbd_sess_logoff(x_smbd_sess_t *smbd_sess, bool shutdown)
 {
-	std::unique_lock<std::mutex> lock(smbd_sess->mutex);
+	auto lock = std::unique_lock(smbd_sess->mutex);
 	if (smbd_sess->state != x_smbd_sess_t::S_ACTIVE) {
 		return NT_STATUS_USER_SESSION_DELETED;
 	}
