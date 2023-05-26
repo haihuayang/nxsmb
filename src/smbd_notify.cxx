@@ -44,7 +44,7 @@ void x_smbd_object_notify_change(x_smbd_object_t *smbd_object,
 	std::u16string subpath;
 	std::u16string new_subpath;
 	/* TODO change to read lock */
-	std::unique_lock<std::mutex> lock(smbd_object->mutex);
+	auto lock = std::lock_guard(smbd_object->mutex);
 	auto &open_list = smbd_object->sharemode.open_list;
 	x_smbd_open_t *curr_open;
 	int count = 0;
@@ -102,12 +102,10 @@ void x_smbd_object_notify_change(x_smbd_object_t *smbd_object,
 
 		auto notify_changes = std::move(curr_open->notify_changes);
 		curr_open->pending_requ_list.remove(smbd_requ);
-		lock.unlock();
 
 		X_SMBD_CHAN_POST_USER(smbd_requ->smbd_chan, 
 				new smd_notify_evt_t(smbd_requ,
 					std::move(notify_changes)));
-		lock.lock();
 	}
 }
 
