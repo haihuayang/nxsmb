@@ -1976,7 +1976,7 @@ x_ndr_off_t ndr_{in_out_name}_traits_t<{self.get_ctype()}>::scalars({constness}{
 			if field.has_buffers():
 				stmts.append(f'__ndr.pos_index = __tmp_pos_index_{field.order};')
 				stmts += field.buffers_body(upfunc)
-				stmts += [f'__ndr.pos_index = __tmp_pos_index_{field.order};']
+				stmts += [f'X_NDR_RESET_POS(__ndr, __tmp_pos_index_{field.order});']
 
 			for stmt in stmts:
 				out(f'''

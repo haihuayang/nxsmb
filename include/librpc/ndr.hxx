@@ -155,6 +155,12 @@ struct x_ndr_push_t {
 		return pos;
 	}
 
+	void reset_pos(uint32_t pi) {
+		X_ASSERT(pi <= pos_index);
+		pos_array.resize(pi);
+		pos_index = pi;
+	}
+
 	uint32_t pos_index = 0;
 	std::vector<x_ndr_off_t> pos_array;
 };
@@ -194,6 +200,12 @@ struct x_ndr_pull_t {
 		x_ndr_off_t pos = pos_array[pos_index];
 		++pos_index;
 		return pos;
+	}
+
+	void reset_pos(uint32_t pi) {
+		X_ASSERT(pi <= pos_index);
+		pos_array.resize(pi);
+		pos_index = pi;
 	}
 
 	uint32_t pos_index = 0;
@@ -533,6 +545,8 @@ inline x_ndr_off_t x_ndr_save_pos(NDR &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, 
 
 #define X_NDR_SAVE_POS(type, ndr, bpos, epos, flags) \
 	X_NDR_VERIFY(bpos, x_ndr_save_pos<type>(ndr, bpos, epos, flags))
+
+#define X_NDR_RESET_POS(ndr, pos) ((ndr).reset_pos(pos))
 
 #define X_NDR_SUBNDR_DECL(subndr, ndr, bpos) \
 	decltype(ndr) (subndr){(ndr).buff, (bpos)}
