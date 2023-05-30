@@ -32,7 +32,7 @@ TARGET_SET_dir := bin lib lib/librpc librpc/idl lib/asn1 src tests
 .PHONY: all target_mkdir target_gen tags
 TARGET_SET_tests := \
 	test-list \
-	test-srvsvc \
+	test-dcerpc \
 	test-timer \
 	test-wbcli \
 	test-wbpool \
@@ -284,7 +284,7 @@ tags:
 
 test: $(TARGET_SET_tests:%=$(TARGET_DIR_out)/tests/%)
 	$(TARGET_DIR_out)/tests/test-list
-	$(TARGET_DIR_out)/tests/test-srvsvc
+	$(TARGET_DIR_out)/tests/test-dcerpc
 	$(TARGET_DIR_out)/tests/test-krb5pac
 	$(TARGET_DIR_out)/tests/test-security
 	$(TARGET_DIR_out)/tests/test-ntlmssp
