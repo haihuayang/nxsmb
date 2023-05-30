@@ -316,6 +316,40 @@ static inline size_t vector_ptr_get_size(const std::shared_ptr<std::vector<T>> &
 	}
 }
 
+template <> struct ndr_traits_t<uint1632>
+{
+	using has_buffers = std::false_type;
+	using ndr_data_type = x_ndr_type_primary;
+	using ndr_base_type = uint1632;
+
+	x_ndr_off_t scalars(uint1632 val, x_ndr_push_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, x_ndr_switch_t level) const {
+		X_ASSERT(level == X_NDR_SWITCH_NONE);
+		if ((flags & LIBNDR_FLAG_NDR64) != 0) {
+			return x_ndr_push_uint32(val.val, ndr, bpos, epos, flags);
+		} else {
+			return x_ndr_push_uint16(x_convert_assert<uint16_t>(val.val),
+					ndr, bpos, epos, flags);
+		}
+	}
+	x_ndr_off_t scalars(uint1632 &val, x_ndr_pull_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, x_ndr_switch_t level) const {
+		X_ASSERT(level == X_NDR_SWITCH_NONE);
+		if ((flags & LIBNDR_FLAG_NDR64) != 0) {
+			return x_ndr_pull_uint32(val.val, ndr, bpos, epos, flags);
+		} else {
+			uint16_t tmp;
+			x_ndr_off_t ret = x_ndr_pull_uint16(tmp, ndr, bpos, epos, flags);
+			if (ret >= 0) {
+				val.val = tmp;
+			}
+			return ret;
+		}
+	}
+	void ostr(uint1632 val, x_ndr_ostr_t &ndr, uint32_t flags, x_ndr_switch_t level) const {
+		X_ASSERT(level == X_NDR_SWITCH_NONE);
+		ndr.os << val.val;
+	}
+};
+
 template <> struct ndr_traits_t<uint3264>
 {
 	using has_buffers = std::false_type;

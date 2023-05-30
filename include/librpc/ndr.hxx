@@ -290,6 +290,17 @@ typedef uint8_t uint8;
 typedef uint64_t hyper;
 typedef uint64_t uint64;
 typedef uint32_t boolean32;
+struct uint1632 {
+	uint1632(uint32_t v = 0) : val(v) { }
+	bool operator==(uint1632 o) const {
+		return val == o.val;
+	}
+	bool operator==(unsigned long o) const {
+		return val == o;
+	}
+	uint32_t val;
+};
+
 struct uint3264 {
 	uint3264(uint64_t v = 0) : val(v) { }
 	bool operator==(uint3264 o) const {
@@ -303,6 +314,9 @@ struct uint3264 {
 
 template <typename T>
 inline auto int_val(T t) { return t; }
+
+template <>
+inline auto int_val(uint1632 t) { return t.val; }
 
 template <>
 inline auto int_val(uint3264 t) { return t.val; }
@@ -413,7 +427,7 @@ template <> struct ndr_traits_t<name> \
 	x_ndr_off_t scalars(name &__val, x_ndr_pull_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level) const { \
 		base_type v; \
 		__bpos = ndr_traits_t<base_type>().scalars(v, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE); \
-		__val = name(v); \
+		__val = name(int_val(v)); \
 		return __bpos; \
 	} \
  \

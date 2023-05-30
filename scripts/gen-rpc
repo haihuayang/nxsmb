@@ -1086,15 +1086,15 @@ class IdlTypeEnum(TypedefBase):
 
 		# for typedef enum { } we need to check $enum->{PARENT}
 		if self.has_property("enum8bit"):
-			self.etype, self.alignment = "uint8", 1
+			self.etype, self.ndrtype, self.alignment = "uint8", "uint8", 1
 		elif self.has_property("enum16bit"):
-			self.etype, self.alignment = "uint16", 2
+			self.etype, self.ndrtype, self.alignment = "uint16", "uint16", 2
 		elif self.has_property("v1_enum"):
-			self.etype, self.alignment = "uint32", 4
+			self.etype, self.ndrtype, self.alignment = "uint32", "uint32", 4
 		else:
 			warn(f'at {jsobj["FILE"]}:{jsobj["LINE"]} unknown enum properties {jsobj["DATA"].get("PROPERTIES", None)}')
 			# should be uint16? TODO
-			self.etype, self.alignment = "uint16", 3
+			self.etype, self.ndrtype, self.alignment = "uint16", "uint1632", 3
 
 	def is_trivial(self):
 		return True
@@ -1114,7 +1114,7 @@ enum {self.get_ctype()} : {self.etype} {{
 		out(f'''
 }}{self.tostring_properties()};
 
-X_NDR_DECLARE_TRAITS_ENUM({self.get_ctype()}, {self.etype}, {len(self.elements)}, x_ndr_type_enum)
+X_NDR_DECLARE_TRAITS_ENUM({self.get_ctype()}, {self.ndrtype}, {len(self.elements)}, x_ndr_type_enum)
 
 ''')
 
@@ -1122,12 +1122,12 @@ X_NDR_DECLARE_TRAITS_ENUM({self.get_ctype()}, {self.etype}, {len(self.elements)}
 		#if not "ELEMENTS" in tdata:
 		#	return
 		out(f'''
-const std::array<std::pair<{self.etype}, const char *>, {len(self.elements)}> ndr_traits_t<{self.get_ctype()}>::value_name_map = {{ {{
+const std::array<std::pair<{self.ndrtype}, const char *>, {len(self.elements)}> ndr_traits_t<{self.get_ctype()}>::value_name_map = {{ {{
 ''')
 		for elem in self.elements:
 			ev = elem.split('=')[0]
 			out(f'''
-	{{ {ev}, "{ev}" }},
+	{{ {self.ndrtype}{{{ev}}}, "{ev}" }},
 ''')
 		out('''
 } };
