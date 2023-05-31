@@ -130,10 +130,11 @@ static bool x_smbd_dcerpc_impl_lsa_OpenPolicy(
 
 
 /* _lsa_QueryInfoPolicy */
-static bool x_smbd_dcerpc_impl_lsa_QueryInfoPolicy(
+template <class Arg>
+static inline bool lsa_QueryInfoPolicy(
 		x_dcerpc_pipe_t &rpc_pipe,
 		x_smbd_sess_t *smbd_sess,
-		idl::lsa_QueryInfoPolicy &arg)
+		Arg &arg)
 {
 	auto handle_data = get_handle_data(rpc_pipe, arg.handle);
 	if (!handle_data) {
@@ -201,11 +202,19 @@ static bool x_smbd_dcerpc_impl_lsa_QueryInfoPolicy(
 			acc_required = idl::LSA_POLICY_VIEW_LOCAL_INFORMATION;
 			break;
 #endif
-		default:
-			X_TODO;
-			break;
+	default:
+		arg.__result = NT_STATUS_INVALID_INFO_CLASS;
+		break;
 	}
 	return true;
+}
+
+static bool x_smbd_dcerpc_impl_lsa_QueryInfoPolicy(
+		x_dcerpc_pipe_t &rpc_pipe,
+		x_smbd_sess_t *smbd_sess,
+		idl::lsa_QueryInfoPolicy &arg)
+{
+	return lsa_QueryInfoPolicy(rpc_pipe, smbd_sess, arg);
 }
 
 X_SMBD_DCERPC_IMPL_TODO(lsa_SetInfoPolicy)
@@ -254,7 +263,15 @@ static bool x_smbd_dcerpc_impl_lsa_OpenPolicy2(
 }
 
 X_SMBD_DCERPC_IMPL_TODO(lsa_GetUserName)
-X_SMBD_DCERPC_IMPL_TODO(lsa_QueryInfoPolicy2)
+
+static bool x_smbd_dcerpc_impl_lsa_QueryInfoPolicy2(
+		x_dcerpc_pipe_t &rpc_pipe,
+		x_smbd_sess_t *smbd_sess,
+		idl::lsa_QueryInfoPolicy2 &arg)
+{
+	return lsa_QueryInfoPolicy(rpc_pipe, smbd_sess, arg);
+}
+
 X_SMBD_DCERPC_IMPL_TODO(lsa_SetInfoPolicy2)
 X_SMBD_DCERPC_IMPL_TODO(lsa_QueryTrustedDomainInfoByName)
 X_SMBD_DCERPC_IMPL_TODO(lsa_SetTrustedDomainInfoByName)
