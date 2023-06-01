@@ -323,7 +323,7 @@ static bool smbd_open_close_disconnected_if(
 		std::vector<x_smb2_change_t> &changes)
 {
 	x_smbd_lease_t *smbd_lease = nullptr;
-	x_tp_ddlist_t<requ_async_traits> tmp_notify_requ_list;
+	x_tp_ddlist_t<requ_async_traits> tmp_requ_list;
 	std::unique_ptr<x_smb2_state_close_t> state;
 
 	if (smbd_open->state != SMBD_OPEN_S_DISCONNECTED) {
@@ -335,7 +335,7 @@ static bool smbd_open_close_disconnected_if(
 	}
 	smbd_open->state = SMBD_OPEN_S_DONE;
 	smbd_close_open_intl(smbd_object, smbd_open, nullptr, state,
-			smbd_lease, tmp_notify_requ_list, changes);
+			smbd_lease, tmp_requ_list, changes);
 
 	x_smbd_ref_dec(smbd_open); // durable timer ref
 
@@ -345,11 +345,7 @@ static bool smbd_open_close_disconnected_if(
 		smbd_leases.push_back(smbd_lease);
 	}
 
-	x_smbd_requ_t *requ_notify;
-	while ((requ_notify = tmp_notify_requ_list.get_front()) != nullptr) {
-		tmp_notify_requ_list.remove(requ_notify);
-		pending_requ_list.push_back(requ_notify);
-	}
+	pending_requ_list.concat(tmp_requ_list);
 	return true;
 }
 
