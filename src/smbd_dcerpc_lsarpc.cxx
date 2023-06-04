@@ -54,7 +54,7 @@ static const generic_mapping_t lsa_policy_mapping = {
 };
 
 template <class Arg>
-static bool lsa_OpenPolicy2(
+static idl::dcerpc_nca_status lsa_OpenPolicy2(
 		x_dcerpc_pipe_t &rpc_pipe,
 		x_smbd_sess_t *smbd_sess,
 		Arg &arg)
@@ -80,7 +80,7 @@ static bool lsa_OpenPolicy2(
 	if (rpc_pipe.handles.size() >= MAX_OPEN_POLS) {
 		// samba return NOT_FOUND for any error
 		arg.__result = NT_STATUS_OBJECT_NAME_NOT_FOUND;
-		return true;
+		return X_SMBD_DCERPC_NCA_STATUS_OK;
 	}
 
 	rpc_pipe.handles.resize(rpc_pipe.handles.size() + 1);
@@ -95,11 +95,11 @@ static bool lsa_OpenPolicy2(
 
 	arg.handle = handle.wire_handle;
 	arg.__result = NT_STATUS_OK;
-	return true;
+	return X_SMBD_DCERPC_NCA_STATUS_OK;
 }
 
 
-static bool x_smbd_dcerpc_impl_lsa_Close(
+static idl::dcerpc_nca_status x_smbd_dcerpc_impl_lsa_Close(
 		x_dcerpc_pipe_t &rpc_pipe,
 		x_smbd_sess_t *smbd_sess,
 		idl::lsa_Close &arg)
@@ -111,7 +111,7 @@ static bool x_smbd_dcerpc_impl_lsa_Close(
 	} else {
 		arg.__result = NT_STATUS_INVALID_HANDLE;
 	}
-	return true;
+	return X_SMBD_DCERPC_NCA_STATUS_OK;
 }
 
 X_SMBD_DCERPC_IMPL_TODO(lsa_Delete)
@@ -120,7 +120,7 @@ X_SMBD_DCERPC_IMPL_TODO(lsa_QuerySecurity)
 X_SMBD_DCERPC_IMPL_TODO(lsa_SetSecObj)
 X_SMBD_DCERPC_IMPL_TODO(lsa_ChangePassword)
 
-static bool x_smbd_dcerpc_impl_lsa_OpenPolicy(
+static idl::dcerpc_nca_status x_smbd_dcerpc_impl_lsa_OpenPolicy(
 		x_dcerpc_pipe_t &rpc_pipe,
 		x_smbd_sess_t *smbd_sess,
 		idl::lsa_OpenPolicy &arg)
@@ -131,7 +131,7 @@ static bool x_smbd_dcerpc_impl_lsa_OpenPolicy(
 
 /* _lsa_QueryInfoPolicy */
 template <class Arg>
-static inline bool lsa_QueryInfoPolicy(
+static inline idl::dcerpc_nca_status lsa_QueryInfoPolicy(
 		x_dcerpc_pipe_t &rpc_pipe,
 		x_smbd_sess_t *smbd_sess,
 		Arg &arg)
@@ -139,7 +139,7 @@ static inline bool lsa_QueryInfoPolicy(
 	auto handle_data = get_handle_data(rpc_pipe, arg.handle);
 	if (!handle_data) {
 		arg.__result = NT_STATUS_INVALID_HANDLE;
-		return true;
+		return X_SMBD_DCERPC_NCA_STATUS_OK;
 	}
 
 	auto lsa_info = std::static_pointer_cast<lsa_info_t>(handle_data);
@@ -206,10 +206,10 @@ static inline bool lsa_QueryInfoPolicy(
 		arg.__result = NT_STATUS_INVALID_INFO_CLASS;
 		break;
 	}
-	return true;
+	return X_SMBD_DCERPC_NCA_STATUS_OK;
 }
 
-static bool x_smbd_dcerpc_impl_lsa_QueryInfoPolicy(
+static idl::dcerpc_nca_status x_smbd_dcerpc_impl_lsa_QueryInfoPolicy(
 		x_dcerpc_pipe_t &rpc_pipe,
 		x_smbd_sess_t *smbd_sess,
 		idl::lsa_QueryInfoPolicy &arg)
@@ -254,7 +254,7 @@ X_SMBD_DCERPC_IMPL_TODO(lsa_DeleteTrustedDomain)
 X_SMBD_DCERPC_IMPL_TODO(lsa_StorePrivateData)
 X_SMBD_DCERPC_IMPL_TODO(lsa_RetrievePrivateData)
 
-static bool x_smbd_dcerpc_impl_lsa_OpenPolicy2(
+static idl::dcerpc_nca_status x_smbd_dcerpc_impl_lsa_OpenPolicy2(
 		x_dcerpc_pipe_t &rpc_pipe,
 		x_smbd_sess_t *smbd_sess,
 		idl::lsa_OpenPolicy2 &arg)
@@ -264,7 +264,7 @@ static bool x_smbd_dcerpc_impl_lsa_OpenPolicy2(
 
 X_SMBD_DCERPC_IMPL_TODO(lsa_GetUserName)
 
-static bool x_smbd_dcerpc_impl_lsa_QueryInfoPolicy2(
+static idl::dcerpc_nca_status x_smbd_dcerpc_impl_lsa_QueryInfoPolicy2(
 		x_dcerpc_pipe_t &rpc_pipe,
 		x_smbd_sess_t *smbd_sess,
 		idl::lsa_QueryInfoPolicy2 &arg)

@@ -337,24 +337,35 @@ static NTSTATUS process_dcerpc_request(
 
 	uint32_t opnum = request.opnum;
 	const auto iface = ctx->iface;
-	if (opnum >= iface->n_cmd) {
-		x_smbd_dcerpc_fault(resp_type, body_output, ndr_flags);
-	} else {
+	idl::dcerpc_nca_status dce_status = idl::DCERPC_NCA_S_OP_RNG_ERROR;
+	if (opnum < iface->n_cmd) {
 		ndr_flags |= ctx->ndr_flags;
 		std::vector<uint8_t> output;
-		idl::dcerpc_nca_status dce_status = iface->cmds[opnum](
+		dce_status = iface->cmds[opnum](
 				named_pipe->rpc_pipe, smbd_sess,
 				request, resp_type, output, ndr_flags);
-		X_TODO_ASSERT(resp_type == idl::DCERPC_PKT_RESPONSE);
-		X_TODO_ASSERT(dce_status == 0);
-		idl::dcerpc_response response;
-		response.alloc_hint = x_convert_assert<uint32_t>(output.size());
-		response.context_id = 0;
-		response.cancel_count = 0;
-		response.stub_and_verifier.val.swap(output);
+		if (dce_status == X_SMBD_DCERPC_NCA_STATUS_OK) {
+			X_TODO_ASSERT(resp_type == idl::DCERPC_PKT_RESPONSE);
+			idl::dcerpc_response response;
+			response.alloc_hint = x_convert_assert<uint32_t>(output.size());
+			response.context_id = 0;
+			response.cancel_count = 0;
+			response.stub_and_verifier.val.swap(output);
 
-		x_ndr_push(response, body_output, ndr_flags);
+			x_ndr_push(response, body_output, ndr_flags);
+		}
 	}
+
+	if (dce_status != X_SMBD_DCERPC_NCA_STATUS_OK) {
+		idl::dcerpc_fault fault;
+		fault.alloc_hint = 0;
+		fault.context_id = 0;
+		fault.cancel_count = 0;
+		fault.status = dce_status;
+		x_ndr_push(fault, body_output, ndr_flags);
+		resp_type = idl::DCERPC_PKT_FAULT;
+	}
+
 	return NT_STATUS_OK;
 }
 

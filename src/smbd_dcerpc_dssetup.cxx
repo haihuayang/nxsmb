@@ -4,7 +4,7 @@
 #include "smbd_conf.hxx"
 #include "smbd_secrets.hxx"
 
-static bool x_smbd_dcerpc_impl_dssetup_DsRoleGetPrimaryDomainInformation(
+static idl::dcerpc_nca_status x_smbd_dcerpc_impl_dssetup_DsRoleGetPrimaryDomainInformation(
 		x_dcerpc_pipe_t &rpc_pipe,
 		x_smbd_sess_t *smbd_sess,
 		idl::dssetup_DsRoleGetPrimaryDomainInformation &arg)
@@ -31,7 +31,7 @@ static bool x_smbd_dcerpc_impl_dssetup_DsRoleGetPrimaryDomainInformation(
 	default:
 		arg.__result = WERR_INVALID_LEVEL;
 	}
-	return true;
+	return X_SMBD_DCERPC_NCA_STATUS_OK;
 }
 
 X_SMBD_DCERPC_IMPL_TODO(dssetup_DsRoleDnsNameToFlatName)

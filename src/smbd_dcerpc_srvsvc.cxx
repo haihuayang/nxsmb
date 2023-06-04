@@ -161,7 +161,7 @@ X_SMBD_DCERPC_IMPL_NOT_SUPPORTED(srvsvc_NetCharDevQSetInfo)
 X_SMBD_DCERPC_IMPL_NOT_SUPPORTED(srvsvc_NetCharDevQPurge)
 X_SMBD_DCERPC_IMPL_NOT_SUPPORTED(srvsvc_NetCharDevQPurgeSelf)
 
-static bool x_smbd_dcerpc_impl_srvsvc_NetConnEnum(
+static idl::dcerpc_nca_status x_smbd_dcerpc_impl_srvsvc_NetConnEnum(
 		x_dcerpc_pipe_t &rpc_pipe,
 		x_smbd_sess_t *smbd_sess,
 		idl::srvsvc_NetConnEnum &arg)
@@ -183,10 +183,10 @@ static bool x_smbd_dcerpc_impl_srvsvc_NetConnEnum(
 		break;
 	}
 
-	return true;
+	return X_SMBD_DCERPC_NCA_STATUS_OK;
 }
 
-static bool x_smbd_dcerpc_impl_srvsvc_NetFileEnum(
+static idl::dcerpc_nca_status x_smbd_dcerpc_impl_srvsvc_NetFileEnum(
 		x_dcerpc_pipe_t &rpc_pipe,
 		x_smbd_sess_t *smbd_sess,
 		idl::srvsvc_NetFileEnum &arg)
@@ -208,12 +208,12 @@ static bool x_smbd_dcerpc_impl_srvsvc_NetFileEnum(
 		break;
 	}
 
-	return true;
+	return X_SMBD_DCERPC_NCA_STATUS_OK;
 }
 
 X_SMBD_DCERPC_IMPL_NOT_SUPPORTED(srvsvc_NetFileGetInfo)
 
-static bool x_smbd_dcerpc_impl_srvsvc_NetFileClose(
+static idl::dcerpc_nca_status x_smbd_dcerpc_impl_srvsvc_NetFileClose(
 		x_dcerpc_pipe_t &rpc_pipe,
 		x_smbd_sess_t *smbd_sess,
 		idl::srvsvc_NetFileClose &arg)
@@ -222,10 +222,10 @@ static bool x_smbd_dcerpc_impl_srvsvc_NetFileClose(
 
 	x_smbd_net_file_close(arg.fid);
 	arg.__result = WERR_OK;
-	return true;
+	return X_SMBD_DCERPC_NCA_STATUS_OK;
 }
 
-static bool x_smbd_dcerpc_impl_srvsvc_NetSessEnum(
+static idl::dcerpc_nca_status x_smbd_dcerpc_impl_srvsvc_NetSessEnum(
 		x_dcerpc_pipe_t &rpc_pipe,
 		x_smbd_sess_t *smbd_sess,
 		idl::srvsvc_NetSessEnum &arg)
@@ -259,10 +259,10 @@ static bool x_smbd_dcerpc_impl_srvsvc_NetSessEnum(
 		break;
 	}
 
-	return true;
+	return X_SMBD_DCERPC_NCA_STATUS_OK;
 }
 
-static bool x_smbd_dcerpc_impl_srvsvc_NetSessDel(
+static idl::dcerpc_nca_status x_smbd_dcerpc_impl_srvsvc_NetSessDel(
 		x_dcerpc_pipe_t &rpc_pipe,
 		x_smbd_sess_t *smbd_sess,
 		idl::srvsvc_NetSessDel &arg)
@@ -272,12 +272,12 @@ static bool x_smbd_dcerpc_impl_srvsvc_NetSessDel(
 	x_smbd_net_sess_del(arg.user.get(), arg.client.get());
 
 	arg.__result = WERR_OK;
-	return true;
+	return X_SMBD_DCERPC_NCA_STATUS_OK;
 }
 
 X_SMBD_DCERPC_IMPL_NOT_SUPPORTED(srvsvc_NetShareAdd)
 
-static bool x_smbd_dcerpc_impl_srvsvc_NetShareEnumAll(
+static idl::dcerpc_nca_status x_smbd_dcerpc_impl_srvsvc_NetShareEnumAll(
 		x_dcerpc_pipe_t &rpc_pipe,
 		x_smbd_sess_t *smbd_sess,
 		idl::srvsvc_NetShareEnumAll &arg)
@@ -311,10 +311,10 @@ static bool x_smbd_dcerpc_impl_srvsvc_NetShareEnumAll(
 		arg.__result = WERR_INVALID_LEVEL;
 		break;
 	}
-	return true;
+	return X_SMBD_DCERPC_NCA_STATUS_OK;
 }
 
-static bool x_smbd_dcerpc_impl_srvsvc_NetShareGetInfo(
+static idl::dcerpc_nca_status x_smbd_dcerpc_impl_srvsvc_NetShareGetInfo(
 		x_dcerpc_pipe_t &rpc_pipe,
 		x_smbd_sess_t *smbd_sess,
 		idl::srvsvc_NetShareGetInfo &arg)
@@ -324,7 +324,7 @@ static bool x_smbd_dcerpc_impl_srvsvc_NetShareGetInfo(
 	auto smbd_share = x_smbd_find_share(*smbd_conf, arg.share_name);
 	if (!smbd_share) {
 		arg.__result = WERR_INVALID_NAME;
-		return true;
+		return X_SMBD_DCERPC_NCA_STATUS_OK;
 	}
 
 	switch (arg.level) {
@@ -373,14 +373,14 @@ static bool x_smbd_dcerpc_impl_srvsvc_NetShareGetInfo(
 	default:
 		arg.__result = WERR_INVALID_LEVEL;
 	}
-	return true;
+	return X_SMBD_DCERPC_NCA_STATUS_OK;
 }
 
 X_SMBD_DCERPC_IMPL_NOT_SUPPORTED(srvsvc_NetShareSetInfo)
 X_SMBD_DCERPC_IMPL_NOT_SUPPORTED(srvsvc_NetShareDel)
 X_SMBD_DCERPC_IMPL_NOT_SUPPORTED(srvsvc_NetShareDelSticky)
 
-static bool x_smbd_dcerpc_impl_srvsvc_NetShareCheck(
+static idl::dcerpc_nca_status x_smbd_dcerpc_impl_srvsvc_NetShareCheck(
 		x_dcerpc_pipe_t &rpc_pipe,
 		x_smbd_sess_t *smbd_sess,
 		idl::srvsvc_NetShareCheck &arg)
@@ -393,7 +393,7 @@ static bool x_smbd_dcerpc_impl_srvsvc_NetShareCheck(
 	}
 
 	arg.__result = WERR_OK;
-	return true;
+	return X_SMBD_DCERPC_NCA_STATUS_OK;
 }
 
 template <>
@@ -442,7 +442,7 @@ idl::srvsvc_NetSrvInfo102 x_smbd_net_get_info<idl::srvsvc_NetSrvInfo102>(
 	};
 }
 
-static bool x_smbd_dcerpc_impl_srvsvc_NetSrvGetInfo(
+static idl::dcerpc_nca_status x_smbd_dcerpc_impl_srvsvc_NetSrvGetInfo(
 		x_dcerpc_pipe_t &rpc_pipe,
 		x_smbd_sess_t *smbd_sess,
 		idl::srvsvc_NetSrvGetInfo &arg)
@@ -465,12 +465,12 @@ static bool x_smbd_dcerpc_impl_srvsvc_NetSrvGetInfo(
 	default:
 		arg.__result = WERR_INVALID_LEVEL;
 	}
-	return true;
+	return X_SMBD_DCERPC_NCA_STATUS_OK;
 }
 
 X_SMBD_DCERPC_IMPL_NOT_SUPPORTED(srvsvc_NetSrvSetInfo)
 
-static bool x_smbd_dcerpc_impl_srvsvc_NetDiskEnum(
+static idl::dcerpc_nca_status x_smbd_dcerpc_impl_srvsvc_NetDiskEnum(
 		x_dcerpc_pipe_t &rpc_pipe,
 		x_smbd_sess_t *smbd_sess,
 		idl::srvsvc_NetDiskEnum &arg)
@@ -485,7 +485,7 @@ static bool x_smbd_dcerpc_impl_srvsvc_NetDiskEnum(
 		});
 	arg.totalentries = 1;
 	arg.__result = WERR_OK;
-	return true;
+	return X_SMBD_DCERPC_NCA_STATUS_OK;
 }
 
 X_SMBD_DCERPC_IMPL_NOT_SUPPORTED(srvsvc_NetServerStatisticsGet)
@@ -493,7 +493,7 @@ X_SMBD_DCERPC_IMPL_NOT_SUPPORTED(srvsvc_NetTransportAdd)
 X_SMBD_DCERPC_IMPL_NOT_SUPPORTED(srvsvc_NetTransportEnum)
 X_SMBD_DCERPC_IMPL_NOT_SUPPORTED(srvsvc_NetTransportDel)
 
-static bool x_smbd_dcerpc_impl_srvsvc_NetRemoteTOD(
+static idl::dcerpc_nca_status x_smbd_dcerpc_impl_srvsvc_NetRemoteTOD(
 		x_dcerpc_pipe_t &rpc_pipe,
 		x_smbd_sess_t *smbd_sess,
 		idl::srvsvc_NetRemoteTOD &arg)
@@ -524,7 +524,7 @@ static bool x_smbd_dcerpc_impl_srvsvc_NetRemoteTOD(
 	arg.info = std::move(info);
 	arg.__result = WERR_OK;
 
-	return true;
+	return X_SMBD_DCERPC_NCA_STATUS_OK;
 }
 
 X_SMBD_DCERPC_IMPL_NOT_SUPPORTED(srvsvc_NetSetServiceBits)
@@ -535,7 +535,7 @@ X_SMBD_DCERPC_IMPL_NOT_SUPPORTED(srvsvc_NetPathCompare)
 /* Characters we disallow in sharenames. */
 #define INVALID_SHARENAME_CHARS u"%<>*?|/\\+=;:\","
 
-static bool x_smbd_dcerpc_impl_srvsvc_NetNameValidate(
+static idl::dcerpc_nca_status x_smbd_dcerpc_impl_srvsvc_NetNameValidate(
 		x_dcerpc_pipe_t &rpc_pipe,
 		x_smbd_sess_t *smbd_sess,
 		idl::srvsvc_NetNameValidate &arg)
@@ -550,13 +550,13 @@ static bool x_smbd_dcerpc_impl_srvsvc_NetNameValidate(
 		arg.__result = WERR_INVALID_LEVEL;
 	}
 
-	return true;
+	return X_SMBD_DCERPC_NCA_STATUS_OK;
 }
 
 X_SMBD_DCERPC_IMPL_NOT_SUPPORTED(srvsvc_NETRPRNAMECANONICALIZE)
 X_SMBD_DCERPC_IMPL_NOT_SUPPORTED(srvsvc_NetPRNameCompare)
 
-static bool x_smbd_dcerpc_impl_srvsvc_NetShareEnum(
+static idl::dcerpc_nca_status x_smbd_dcerpc_impl_srvsvc_NetShareEnum(
 		x_dcerpc_pipe_t &rpc_pipe,
 		x_smbd_sess_t *smbd_sess,
 		idl::srvsvc_NetShareEnum &arg)
@@ -585,7 +585,7 @@ static bool x_smbd_dcerpc_impl_srvsvc_NetShareEnum(
 		arg.__result = WERR_INVALID_LEVEL;
 		break;
 	}
-	return true;
+	return X_SMBD_DCERPC_NCA_STATUS_OK;
 }
 
 X_SMBD_DCERPC_IMPL_NOT_SUPPORTED(srvsvc_NetShareDelStart)

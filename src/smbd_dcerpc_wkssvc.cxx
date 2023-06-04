@@ -17,7 +17,7 @@ static void __wkssvc_NetWkstaGetInfo(std::shared_ptr<T> &info)
 	info->domain_name = smbd_conf->workgroup_u16;
 }
 
-static bool x_smbd_dcerpc_impl_wkssvc_NetWkstaGetInfo(
+static idl::dcerpc_nca_status x_smbd_dcerpc_impl_wkssvc_NetWkstaGetInfo(
 		x_dcerpc_pipe_t &rpc_pipe,
 		x_smbd_sess_t *smbd_sess,
 		idl::wkssvc_NetWkstaGetInfo &arg)
@@ -45,7 +45,7 @@ static bool x_smbd_dcerpc_impl_wkssvc_NetWkstaGetInfo(
 	default:
 		arg.__result = WERR_INVALID_LEVEL;
 	}
-	return true;
+	return X_SMBD_DCERPC_NCA_STATUS_OK;
 }
 
 

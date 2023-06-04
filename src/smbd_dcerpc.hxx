@@ -40,6 +40,8 @@ idl::dcerpc_nca_status x_smbd_dcerpc_fault(
 		std::vector<uint8_t> &body_output,
 		uint32_t ndr_flags);
 
+#define X_SMBD_DCERPC_NCA_STATUS_OK (idl::dcerpc_nca_status(0))
+
 #define X_SMBD_DCERPC_FUNCTION(Arg) \
 static idl::dcerpc_nca_status x_smbd_dcerpc_fn_##Arg( \
 		x_dcerpc_pipe_t &rpc_pipe, \
@@ -58,14 +60,13 @@ static idl::dcerpc_nca_status x_smbd_dcerpc_fn_##Arg( \
 		return idl::DCERPC_NCA_S_PROTO_ERROR; \
 	} \
 	X_DEVEL_ASSERT(ret == (long)request.stub_and_verifier.val.size()); \
-	if (x_smbd_dcerpc_impl_##Arg(rpc_pipe, smbd_sess, arg)) { \
+	idl::dcerpc_nca_status status = x_smbd_dcerpc_impl_##Arg(rpc_pipe, smbd_sess, arg); \
+	if (status == X_SMBD_DCERPC_NCA_STATUS_OK) { \
 		ret = idl::x_ndr_resp_push(arg, body_output, ndr_flags); \
 		X_ASSERT(ret > 0); \
 		resp_type = idl::DCERPC_PKT_RESPONSE; \
-		return idl::dcerpc_nca_status(0); \
-	} else { \
-		return x_smbd_dcerpc_fault(resp_type, body_output, ndr_flags); \
 	} \
+	return status; \
 }
 
 extern const x_dcerpc_iface_t x_smbd_dcerpc_srvsvc;
@@ -78,23 +79,23 @@ bool x_smbd_dcerpc_is_admin(const x_smbd_sess_t *smbd_sess);
 #define X_SMBD_DCERPC_CHECK_ADMIN_ACCESS(smbd_sess, arg) do { \
 	if (!x_smbd_dcerpc_is_admin(smbd_sess)) { \
 		arg.__result = WERR_ACCESS_DENIED; \
-		return true; \
+		return X_SMBD_DCERPC_NCA_STATUS_OK; \
 	} \
 } while (0)
 
 
 #define X_SMBD_DCERPC_IMPL_TODO(Arg) \
-static bool x_smbd_dcerpc_impl_##Arg(x_dcerpc_pipe_t &rpc_pipe, x_smbd_sess_t *smbd_sess, idl::Arg &arg) \
+static idl::dcerpc_nca_status x_smbd_dcerpc_impl_##Arg(x_dcerpc_pipe_t &rpc_pipe, x_smbd_sess_t *smbd_sess, idl::Arg &arg) \
 { \
 	X_TODO; \
-	return false; \
+	return idl::DCERPC_NCA_S_FAULT_UNSPEC; \
 }
 
 #define X_SMBD_DCERPC_IMPL_NOT_SUPPORTED(Arg) \
-static bool x_smbd_dcerpc_impl_##Arg(x_dcerpc_pipe_t &rpc_pipe, x_smbd_sess_t *smbd_sess, idl::Arg &arg) \
+static idl::dcerpc_nca_status x_smbd_dcerpc_impl_##Arg(x_dcerpc_pipe_t &rpc_pipe, x_smbd_sess_t *smbd_sess, idl::Arg &arg) \
 { \
 	(arg).__result = WERR_NOT_SUPPORTED; \
-	return true; \
+	return X_SMBD_DCERPC_NCA_STATUS_OK; \
 }
 
 #endif /* __smbd_dcerpc__hxx__ */
