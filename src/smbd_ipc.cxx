@@ -66,6 +66,10 @@ struct named_pipe_t
 	NTSTATUS return_status{NT_STATUS_OK};
 	bool is_transceive = false;
 	bool got_first = false;
+
+	bool allow_bind = true;
+	bool allow_alter = false;
+
 	uint32_t packet_read = 0;
 	uint32_t offset = 0;
 	std::vector<uint8_t> input;
@@ -159,10 +163,6 @@ smbd_named_pipe_match_ctx(named_pipe_t *named_pipe,
 		idl::dcerpc_ack_ctx &ack_ctx)
 {
 	// api_pipe_bind_req
-	if (ctx.transfer_syntaxes.size() == 0) {
-		return {nullptr, 0, idl::DCERPC_BIND_ACK_REASON_NOT_SPECIFIED};
-	}
-
 	unsigned int weight = 0;
 	for (auto &transfer_syntax: ctx.transfer_syntaxes) {
 		if (transfer_syntax == ndr_transfer_syntax_ndr64) {
@@ -175,18 +175,6 @@ smbd_named_pipe_match_ctx(named_pipe_t *named_pipe,
 
 	if (weight == 0) {
 		return {nullptr, 0, idl::DCERPC_BIND_ACK_REASON_TRANSFER_SYNTAXES_NOT_SUPPORTED};
-	}
-
-	for (auto &bc: named_pipe->bind_contexts) {
-		if (ctx.context_id != bc.context_id) {
-			continue;
-		}
-		if (ctx.abstract_syntax == bc.iface->syntax_id) {
-			X_TODO; // should insert context_id??
-		}
-
-		// not support change abstract syntax
-		return {nullptr, 0, idl::DCERPC_BIND_ACK_REASON_NOT_SPECIFIED};
 	}
 
 	/* rpc_srv_pipe_exists_by_id,
@@ -202,13 +190,81 @@ smbd_named_pipe_match_ctx(named_pipe_t *named_pipe,
 	return {iface, weight, idl::DCERPC_BIND_ACK_REASON_NOT_SPECIFIED};
 }
 
-static void name_pipe_bind(named_pipe_t *named_pipe,
+static const x_bind_context_t *find_context(named_pipe_t *named_pipe, uint32_t context_id)
+{
+	for (auto &ctx: named_pipe->bind_contexts) {
+		if (ctx.context_id == context_id) {
+			return &ctx;
+		}
+	}
+	return nullptr;
+}
+
+static bool pull_dcerpc_bind(named_pipe_t *named_pipe,
+		idl::dcerpc_bind &bind)
+{
+	uint32_t ndr_flags = named_pipe->pkt.little_endian() ? 0 : LIBNDR_FLAG_BIGENDIAN;
+	idl::x_ndr_off_t ndr_ret = x_ndr_pull(bind, named_pipe->input.data(), named_pipe->input.size(), ndr_flags);
+	if (ndr_ret < 0) {
+		return false;
+	}
+	if (bind.ctx_list.size() == 0) {
+		return false;
+	}
+
+	for (const auto &ctx: bind.ctx_list) {
+		if (ctx.transfer_syntaxes.empty()) {
+			return false;
+		}
+	}
+
+	return true;
+}
+
+/* looks like windows client only expect 1 ctx accepted, otherwise it report rpc
+ * protocol error
+ */
+static bool dcesrv_negotiate_contexts(named_pipe_t *named_pipe,
 		const idl::dcerpc_bind &bind,
 		idl::dcerpc_bind_ack &bind_ack)
 {
+	size_t matched_idx = bind.ctx_list.size();
+	bool syntax_match = false;
+	for (size_t i = 0; i < bind.ctx_list.size(); ++i) {
+		auto &ctx = bind.ctx_list[i];
+		auto bc = find_context(named_pipe, ctx.context_id);
+		if (bc) {
+			matched_idx = i;
+			syntax_match = ctx.abstract_syntax == bc->iface->syntax_id;
+			if (!syntax_match) {
+				return false;
+			}
+			break;
+		}
+	}
+
 	bind_ack.ctx_list.resize(bind.ctx_list.size());
-	std::vector<int> matches;
-	matches.resize(bind.ctx_list.size());
+
+	if (matched_idx < bind.ctx_list.size()) {
+		for (size_t i = 0; i < bind.ctx_list.size(); ++i) {
+			auto &ctx = bind.ctx_list[i];
+			auto &ack_ctx = bind_ack.ctx_list[i];
+			if (i != matched_idx) {
+				ack_ctx.result = idl::DCERPC_BIND_ACK_RESULT_PROVIDER_REJECTION;
+				ack_ctx.reason.value = idl::DCERPC_BIND_ACK_REASON_ABSTRACT_SYNTAX_NOT_SUPPORTED;
+				ack_ctx.syntax = PNIO;
+			} else if (syntax_match) {
+				ack_ctx.result = idl::DCERPC_BIND_ACK_RESULT_ACCEPTANCE;
+				ack_ctx.reason.value = idl::DCERPC_BIND_ACK_REASON_NOT_SPECIFIED;
+				ack_ctx.syntax = ctx.transfer_syntaxes[0];
+			} else {
+				ack_ctx.result = idl::DCERPC_BIND_ACK_RESULT_PROVIDER_REJECTION;
+				ack_ctx.reason.value = idl::DCERPC_BIND_ACK_REASON_ABSTRACT_SYNTAX_NOT_SUPPORTED;
+				ack_ctx.syntax = PNIO;
+			}
+		}
+		return true;
+	}
 
 	size_t id_max = 0;
 	unsigned int weight_max = 0;
@@ -217,18 +273,19 @@ static void name_pipe_bind(named_pipe_t *named_pipe,
 		auto [iface, weight, reason] = smbd_named_pipe_match_ctx(
 				named_pipe, bind.ctx_list[i], bind_ack.ctx_list[i]);
 		if (weight > weight_max) {
-			auto &ack_ctx = bind_ack.ctx_list[id_max];
-			ack_ctx.result = idl::DCERPC_BIND_ACK_RESULT_PROVIDER_REJECTION;
-			ack_ctx.reason.value = idl::DCERPC_BIND_ACK_REASON_TRANSFER_SYNTAXES_NOT_SUPPORTED;
-			ack_ctx.syntax = PNIO;
-
+			if (weight_max != 0) {
+				auto &ack_ctx = bind_ack.ctx_list[id_max];
+				ack_ctx.result = idl::DCERPC_BIND_ACK_RESULT_PROVIDER_REJECTION;
+				ack_ctx.reason.value = idl::DCERPC_BIND_ACK_REASON_TRANSFER_SYNTAXES_NOT_SUPPORTED;
+				ack_ctx.syntax = PNIO;
+			}
 			weight_max = weight;
 			id_max = i;
 			iface_max = iface;
 		} else if (weight == 0) {
 			auto &ack_ctx = bind_ack.ctx_list[i];
-			ack_ctx.result = idl::DCERPC_BIND_ACK_RESULT_NEGOTIATE_ACK;
-			ack_ctx.reason.value = idl::DCERPC_BIND_ACK_REASON_LOCAL_LIMIT_EXCEEDED;
+			ack_ctx.result = idl::DCERPC_BIND_ACK_RESULT_PROVIDER_REJECTION;
+			ack_ctx.reason.value = idl::DCERPC_BIND_ACK_REASON_TRANSFER_SYNTAXES_NOT_SUPPORTED;
 			ack_ctx.syntax = PNIO;
 		} else {
 			auto &ack_ctx = bind_ack.ctx_list[i];
@@ -237,40 +294,46 @@ static void name_pipe_bind(named_pipe_t *named_pipe,
 			ack_ctx.syntax = PNIO;
 		}
 	}
-	if (weight_max) {
-		auto &ack_ctx = bind_ack.ctx_list[id_max];
-		auto &ctx = bind.ctx_list[id_max];
-		ack_ctx.result = idl::DCERPC_BIND_ACK_RESULT_ACCEPTANCE;
-		ack_ctx.reason.value = idl::DCERPC_BIND_ACK_REASON_NOT_SPECIFIED;
-		uint32_t ndr_flags = 0;
-		if (weight_max == 2) {
-			ack_ctx.syntax = ndr_transfer_syntax_ndr64;
-			ndr_flags = LIBNDR_FLAG_NDR64;
-		} else {
-			ack_ctx.syntax = ndr_transfer_syntax_ndr;
-			ndr_flags = 0;
-		}
-		named_pipe->bind_contexts.push_back(x_bind_context_t{ctx.context_id, ndr_flags, iface_max});
+	if (weight_max == 0) {
+		return true;
 	}
+
+	auto &ack_ctx = bind_ack.ctx_list[id_max];
+	auto &ctx = bind.ctx_list[id_max];
+	ack_ctx.result = idl::DCERPC_BIND_ACK_RESULT_ACCEPTANCE;
+	ack_ctx.reason.value = idl::DCERPC_BIND_ACK_REASON_NOT_SPECIFIED;
+	uint32_t ndr_flags = 0;
+	if (weight_max == 2) {
+		ack_ctx.syntax = ndr_transfer_syntax_ndr64;
+		ndr_flags = LIBNDR_FLAG_NDR64;
+	} else {
+		ack_ctx.syntax = ndr_transfer_syntax_ndr;
+		ndr_flags = 0;
+	}
+	named_pipe->bind_contexts.push_back(x_bind_context_t{ctx.context_id, ndr_flags, iface_max});
+	return true;
 }
 
-static NTSTATUS process_dcerpc_bind(
+static bool process_dcerpc_bind_intl(
 		const x_smbd_ipc_object_t *ipc_object,
 		named_pipe_t *named_pipe,
 		uint8_t &resp_type, std::vector<uint8_t> &body_output)
 {
-	idl::dcerpc_bind bind;
-	uint32_t ndr_flags = named_pipe->pkt.little_endian() ? 0 : LIBNDR_FLAG_BIGENDIAN;
-	idl::x_ndr_off_t ndr_ret = x_ndr_pull(bind, named_pipe->input.data(), named_pipe->input.size(), ndr_flags);
-	if (ndr_ret < 0) {
-		return NT_STATUS_INVALID_PARAMETER;
+	if (!named_pipe->allow_bind) {
+		return false;
 	}
-	if (bind.ctx_list.size() == 0) {
-		return NT_STATUS_INVALID_PARAMETER;
+
+	named_pipe->allow_bind = false;
+
+	idl::dcerpc_bind bind;
+	if (!pull_dcerpc_bind(named_pipe, bind)) {
+		return false;
 	}
 
 	idl::dcerpc_bind_ack bind_ack;
-	name_pipe_bind(named_pipe, bind, bind_ack);
+	dcesrv_negotiate_contexts(named_pipe, bind, bind_ack);
+
+	// TODO handle auth
 
 	bind_ack.max_xmit_frag = 4280;
 	bind_ack.max_recv_frag = 4280;
@@ -282,37 +345,108 @@ static NTSTATUS process_dcerpc_bind(
 	bind_ack.secondary_address = ipc_object->secondary_address;
 		//"\\PIPE\\" + x_convert_utf16_to_utf8_assert(ipc_object->base.path);
 
+	uint32_t ndr_flags = named_pipe->pkt.little_endian() ? 0 : LIBNDR_FLAG_BIGENDIAN;
 	x_ndr_push(bind_ack, body_output, ndr_flags);
 	resp_type = idl::DCERPC_PKT_BIND_ACK;
-	
-#if 0
-	std::vector<uint8_t> body_output;
-	x_ndr_push(bind_ack, body_output, ndr_flags);
-	x_ncacn_packet_t resp_header = named_pipe->pkt;
-	resp_header.type = idl::DCERPC_PKT_BIND_ACK;
-	resp_header.pfc_flags = idl::DCERPC_PFC_FLAG_FIRST | idl::DCERPC_PFC_FLAG_LAST;
-	resp_header.frag_length = sizeof(x_ncacn_packet_t) + body_output.size();
-	resp_header.auth_length = 0;
 
-	named_pipe->output.resize(resp_header.frag_length);
+	named_pipe->allow_alter = true;
+	return true;
+}
 
-	if (!named_pipe->pkt.little_endian()) {
-		resp_header.frag_length = htons(resp_header.frag_length);
-	}
-	memcpy(named_pipe->output.data(), &resp_header, sizeof(resp_header));
-	memcpy(named_pipe->output.data() + sizeof(resp_header), body_output.data(), body_output.size());
-#endif
+static NTSTATUS setup_bind_nak(named_pipe_t *named_pipe,
+		uint8_t &resp_type, std::vector<uint8_t> &body_output)
+{
+	uint32_t ndr_flags = named_pipe->pkt.little_endian() ? 0 : LIBNDR_FLAG_BIGENDIAN;
+	idl::dcerpc_bind_nak bind_nak;
+	bind_nak.reject_reason = idl::DCERPC_BIND_NAK_REASON_NOT_SPECIFIED;
+	x_ndr_push(bind_nak, body_output, ndr_flags);
+	resp_type = idl::DCERPC_PKT_BIND_NAK;
 	return NT_STATUS_OK;
 }
 
-static const x_bind_context_t *find_context(named_pipe_t *named_pipe, uint32_t context_id)
+static NTSTATUS process_dcerpc_bind(
+		const x_smbd_ipc_object_t *ipc_object,
+		named_pipe_t *named_pipe,
+		uint8_t &resp_type, std::vector<uint8_t> &body_output)
 {
-	for (auto &ctx: named_pipe->bind_contexts) {
-		if (ctx.context_id == context_id) {
-			return &ctx;
-		}
+	if (!process_dcerpc_bind_intl(ipc_object, named_pipe, resp_type, body_output)) {
+		setup_bind_nak(named_pipe, resp_type, body_output);
 	}
-	return nullptr;
+	return NT_STATUS_OK;
+}
+
+static void dcesrv_reply_fault(named_pipe_t *named_pipe,
+		idl::dcerpc_nca_status nca_status,
+		uint8_t &resp_type, std::vector<uint8_t> &body_output)
+{
+	uint32_t ndr_flags = named_pipe->pkt.little_endian() ? 0 : LIBNDR_FLAG_BIGENDIAN;
+	idl::dcerpc_fault fault;
+	fault.alloc_hint = 0;
+	fault.context_id = 0;
+	fault.cancel_count = 0;
+	fault.status = nca_status;
+	x_ndr_push(fault, body_output, ndr_flags);
+	resp_type = idl::DCERPC_PKT_FAULT;
+}
+
+static NTSTATUS dcesrv_fault_disconnect(
+		named_pipe_t *named_pipe,
+		idl::dcerpc_nca_status nca_status,
+		uint8_t &resp_type, std::vector<uint8_t> &body_output)
+{
+	named_pipe->allow_bind = false;
+	named_pipe->allow_alter = false;
+
+	dcesrv_reply_fault(named_pipe, nca_status, resp_type, body_output);
+	return NT_STATUS_CONNECTION_DISCONNECTED;
+}
+
+/* samba dcesrv_alter */
+static NTSTATUS process_dcerpc_alter(
+		const x_smbd_ipc_object_t *ipc_object,
+		named_pipe_t *named_pipe,
+		x_smbd_sess_t *smbd_sess,
+		uint8_t &resp_type, std::vector<uint8_t> &body_output)
+{
+	if (!named_pipe->allow_alter) {
+		return dcesrv_fault_disconnect(named_pipe, idl::DCERPC_NCA_S_PROTO_ERROR,
+				resp_type, body_output);
+	}
+
+	idl::dcerpc_bind bind;
+	if (!pull_dcerpc_bind(named_pipe, bind)) {
+		return dcesrv_fault_disconnect(named_pipe, idl::DCERPC_NCA_S_PROTO_ERROR,
+				resp_type, body_output);
+	}
+
+	// TODO auth
+	
+	idl::dcerpc_bind_ack bind_ack;
+#if 0
+	NTSTATUS status = dcesrv_negotiate_contexts(named_pipe, bind, bind_ack);
+	if (NT_STATUS_EQUAL(status, NT_STATUS_RPC_PROTOCOL_ERROR)) {
+		return dcesrv_fault_disconnect(call, DCERPC_NCA_S_PROTO_ERROR);
+	}
+#endif
+	if (!dcesrv_negotiate_contexts(named_pipe, bind, bind_ack)) {
+		return dcesrv_fault_disconnect(named_pipe, idl::DCERPC_NCA_S_PROTO_ERROR,
+				resp_type, body_output);
+	}
+
+	bind_ack.max_xmit_frag = 4280;
+	bind_ack.max_recv_frag = 4280;
+	if (bind.assoc_group_id != 0) {
+		bind_ack.assoc_group_id = bind.assoc_group_id;
+	} else {
+		bind_ack.assoc_group_id = 0x53f0;
+	}
+	bind_ack.secondary_address = "";
+
+	uint32_t ndr_flags = named_pipe->pkt.little_endian() ? 0 : LIBNDR_FLAG_BIGENDIAN;
+	x_ndr_push(bind_ack, body_output, ndr_flags);
+	resp_type = idl::DCERPC_PKT_ALTER_RESP;
+
+	return NT_STATUS_OK;
 }
 
 static NTSTATUS process_dcerpc_request(
@@ -384,26 +518,28 @@ static inline NTSTATUS process_ncacn_pdu(
 		case idl::DCERPC_PKT_REQUEST:
 			status = process_dcerpc_request(ipc_object, named_pipe, smbd_sess, resp_type, body_output);
 			break;
+		case idl::DCERPC_PKT_ALTER:
+			status = process_dcerpc_alter(ipc_object, named_pipe, smbd_sess, resp_type, body_output);
+			break;
 		default:
 			X_TODO;
 	}
 
-	if (NT_STATUS_IS_OK(status)) {
-		x_ncacn_packet_t resp_header = named_pipe->pkt;
-		resp_header.type = resp_type;
-		resp_header.pfc_flags = idl::DCERPC_PFC_FLAG_FIRST | idl::DCERPC_PFC_FLAG_LAST;
-		resp_header.frag_length = x_convert_assert<uint16_t>(sizeof(x_ncacn_packet_t) + body_output.size());
-		resp_header.auth_length = 0;
+	x_ncacn_packet_t resp_header = named_pipe->pkt;
+	resp_header.type = resp_type;
+	resp_header.pfc_flags = idl::DCERPC_PFC_FLAG_FIRST | idl::DCERPC_PFC_FLAG_LAST;
+	resp_header.frag_length = x_convert_assert<uint16_t>(sizeof(x_ncacn_packet_t) + body_output.size());
+	resp_header.auth_length = 0;
 
-		named_pipe->output.resize(resp_header.frag_length);
+	named_pipe->output.resize(resp_header.frag_length);
 
-		if (!named_pipe->pkt.little_endian()) {
-			resp_header.frag_length = htons(resp_header.frag_length);
-		}
-		memcpy(named_pipe->output.data(), &resp_header, sizeof(resp_header));
-		memcpy(named_pipe->output.data() + sizeof(resp_header), body_output.data(), body_output.size());
-		/* TODO */
+	if (!named_pipe->pkt.little_endian()) {
+		resp_header.frag_length = htons(resp_header.frag_length);
 	}
+	memcpy(named_pipe->output.data(), &resp_header, sizeof(resp_header));
+	memcpy(named_pipe->output.data() + sizeof(resp_header), body_output.data(), body_output.size());
+	/* TODO */
+
 	named_pipe->packet_read = 0;
 	named_pipe->input.clear();
 	return status;
@@ -501,8 +637,13 @@ static NTSTATUS ipc_object_op_write(
 		x_smbd_requ_t *smbd_requ,
 		std::unique_ptr<x_smb2_state_write_t> &state)
 {
+	named_pipe_t *named_pipe = from_smbd_open(smbd_requ->smbd_open);
+	if (!NT_STATUS_IS_OK(named_pipe->return_status)) {
+		return named_pipe->return_status;
+	}
+
 	int ret = named_pipe_write(from_smbd_object(smbd_object),
-			from_smbd_open(smbd_requ->smbd_open),
+			named_pipe,
 			smbd_requ->smbd_sess,
 			state->in_buf->data + state->in_buf_offset,
 			state->in_buf_length);
@@ -568,6 +709,10 @@ static NTSTATUS ipc_object_op_ioctl(
 {
 	x_smbd_ipc_object_t *ipc_object = from_smbd_object(smbd_object);
 	named_pipe_t *named_pipe = from_smbd_open(smbd_requ->smbd_open);
+	if (!NT_STATUS_IS_OK(named_pipe->return_status)) {
+		return named_pipe->return_status;
+	}
+
 	switch (state->ctl_code) {
 	case X_SMB2_FSCTL_PIPE_TRANSCEIVE:
 		named_pipe->is_transceive = true;
