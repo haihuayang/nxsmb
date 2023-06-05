@@ -105,12 +105,12 @@ static idl::dcerpc_nca_status x_smbd_dcerpc_impl_lsa_Close(
 		idl::lsa_Close &arg)
 {
 	auto it = find_handle(rpc_pipe, arg.handle);
-	if (it != std::end(rpc_pipe.handles)) {
-		rpc_pipe.handles.erase(it);
-		arg.__result = NT_STATUS_OK;
-	} else {
-		arg.__result = NT_STATUS_INVALID_HANDLE;
+	if (it == std::end(rpc_pipe.handles)) {
+		return idl::DCERPC_NCA_S_FAULT_CONTEXT_MISMATCH;
 	}
+
+	rpc_pipe.handles.erase(it);
+	arg.__result = NT_STATUS_OK;
 	return X_SMBD_DCERPC_NCA_STATUS_OK;
 }
 
