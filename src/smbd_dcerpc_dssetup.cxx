@@ -4,18 +4,26 @@
 #include "smbd_conf.hxx"
 #include "smbd_secrets.hxx"
 
+static std::shared_ptr<idl::dssetup_DsRoleInfo> &make_dssetup_DsRoleInfo(
+		idl::dssetup_DsRoleGetPrimaryDomainInformation &arg)
+{
+	auto &info = arg.info;
+	X_ASSERT(!info);
+	info = std::make_shared<idl::dssetup_DsRoleInfo>();
+	info->__init(arg.level);
+	return info;
+}
+
 static idl::dcerpc_nca_status x_smbd_dcerpc_impl_dssetup_DsRoleGetPrimaryDomainInformation(
 		x_dcerpc_pipe_t &rpc_pipe,
 		x_smbd_sess_t *smbd_sess,
 		idl::dssetup_DsRoleGetPrimaryDomainInformation &arg)
 {
 	const std::shared_ptr<x_smbd_conf_t> smbd_conf = x_smbd_conf_get();
+
 	switch (arg.level) {
 	case idl::DS_ROLE_BASIC_INFORMATION: {
-		auto &info = arg.info;
-		X_ASSERT(!info);
-		info = std::make_shared<idl::dssetup_DsRoleInfo>();
-		info->__init(arg.level);
+		auto &info = make_dssetup_DsRoleInfo(arg);
 		// fill_dsrole_dominfo_basic
 		info->basic.role = idl::DS_ROLE_MEMBER_SERVER;
 		info->basic.flags = idl::DS_ROLE_PRIMARY_DOMAIN_GUID_PRESENT;
@@ -24,6 +32,23 @@ static idl::dcerpc_nca_status x_smbd_dcerpc_impl_dssetup_DsRoleGetPrimaryDomainI
 		info->basic.dns_domain = smbd_conf->dns_domain_l16;
 		info->basic.forest = info->basic.dns_domain;
 		info->basic.domain_guid = smbd_conf->secrets.domain_guid;
+		arg.__result = WERR_OK;
+		break;
+	}
+
+	case idl::DS_ROLE_UPGRADE_STATUS: {
+		auto &info = make_dssetup_DsRoleInfo(arg);
+		/* TODO */
+		info->upgrade.upgrading = idl::DS_ROLE_NOT_UPGRADING;
+		info->upgrade.previous_role = idl::DS_ROLE_PREVIOUS_UNKNOWN;
+		arg.__result = WERR_OK;
+		break;
+	}
+
+	case idl::DS_ROLE_OP_STATUS: {
+		auto &info = make_dssetup_DsRoleInfo(arg);
+		/* TODO */
+		info->opstatus.status = idl::DS_ROLE_OP_IDLE;
 		arg.__result = WERR_OK;
 		break;
 	}
