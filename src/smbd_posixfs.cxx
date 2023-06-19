@@ -971,7 +971,7 @@ NTSTATUS posixfs_object_op_rename(x_smbd_object_t *smbd_object,
 		posixfs_ads_t *posixfs_ads = posixfs_ads_from_smbd_stream(
 				posixfs_open->base.smbd_stream);
 
-		if (smbd_open->smbd_stream->name == state->in_stream_name) { // TODO case insensitive
+		if (x_strcase_equal(smbd_open->smbd_stream->name, state->in_stream_name)) {
 			return NT_STATUS_OK;
 		}
 		return rename_ads_intl(posixfs_object, posixfs_ads,
