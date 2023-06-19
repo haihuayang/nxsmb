@@ -355,14 +355,14 @@ static NTSTATUS smbd_lease_process_break(x_smbd_lease_t *smbd_lease,
 		return NT_STATUS_UNSUCCESSFUL;
 	}
 
-	smbd_lease_cancel_timer(smbd_lease);
-
 	if ((state.in_state & smbd_lease->breaking_to_requested) != state.in_state) {
 		X_LOG_DBG("Attempt to upgrade from %d to %d - expected %d\n",
 				(int)smbd_lease->lease_state, (int)state.in_state,
 				(int)smbd_lease->breaking_to_requested);
 		return NT_STATUS_REQUEST_NOT_ACCEPTED;
 	}
+
+	smbd_lease_cancel_timer(smbd_lease);
 
 	if (smbd_lease->lease_state != state.in_state) {
 		/* TODO should not assert with invalid client in_state */
