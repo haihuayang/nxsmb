@@ -111,7 +111,8 @@ static NTSTATUS smbd_open_notify(x_smbd_open_t *smbd_open,
 		smbd_requ->save_requ_state(state);
 		x_smbd_ref_inc(smbd_requ);
 		smbd_open->pending_requ_list.push_back(smbd_requ);
-		x_smbd_requ_async_insert(smbd_requ, posixfs_notify_cancel);
+		/* send interim immediately */
+		x_smbd_requ_async_insert(smbd_requ, posixfs_notify_cancel, 0);
 		return NT_STATUS_PENDING;
 	} else {
 		return NT_STATUS_INTERNAL_ERROR;

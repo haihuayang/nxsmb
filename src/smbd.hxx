@@ -299,6 +299,7 @@ void x_smb2_reply(x_smbd_conn_t *smbd_conn,
 NTSTATUS x_smbd_conn_dispatch_update_counts(
 		x_smbd_requ_t *smbd_requ,
 		bool modify_call);
+void x_smbd_conn_post_interim(x_smbd_requ_t *smbd_requ);
 
 
 int x_smbd_sess_table_init(uint32_t count);
@@ -415,6 +416,13 @@ struct x_smbd_requ_t
 		S_CANCELLED,
 	};
 
+	enum {
+		INTERIM_S_NONE,
+		INTERIM_S_IMMEDIATE,
+		INTERIM_S_SCHEDULED,
+		INTERIM_S_SENT,
+	};
+
 	explicit x_smbd_requ_t(x_buf_t *in_buf, uint32_t in_msgsize, bool encrypted);
 	~x_smbd_requ_t();
 
@@ -468,6 +476,7 @@ struct x_smbd_requ_t
 
 	x_dlink_t async_link; // link into open
 	x_dlink_t conn_link; // link into conn
+	x_timer_job_t interim_timer;
 	void *requ_state = nullptr;
 
 	x_buf_t *in_buf;
@@ -478,8 +487,8 @@ struct x_smbd_requ_t
 	x_smb2_header_t in_smb2_hdr;
 	uint32_t in_msgsize, in_offset, in_requ_len;
 	std::atomic<uint32_t> async_state = S_INIT;
+	uint8_t interim_state = INTERIM_S_NONE;
 	bool encrypted;
-	bool async = false;
 	bool request_counters_updated = false;
 
 	NTSTATUS status{NT_STATUS_OK};
@@ -506,7 +515,8 @@ x_smbd_requ_t *x_smbd_requ_create(x_buf_t *in_buf, uint32_t in_msgsize, bool enc
 uint64_t x_smbd_requ_get_async_id(const x_smbd_requ_t *smbd_requ);
 x_smbd_requ_t *x_smbd_requ_async_lookup(uint64_t id, const x_smbd_conn_t *smbd_conn, bool remove);
 void x_smbd_requ_async_insert(x_smbd_requ_t *smbd_requ,
-		void (*cancel_fn)(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ));
+		void (*cancel_fn)(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ),
+		int64_t interim_timeout_ns);
 bool x_smbd_requ_async_remove(x_smbd_requ_t *smbd_requ);
 void x_smbd_requ_async_done(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ,
 		NTSTATUS status);

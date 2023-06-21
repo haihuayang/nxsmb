@@ -346,7 +346,7 @@ static NTSTATUS smbd_open_lock(
 		smbd_requ->save_requ_state(state);
 		x_smbd_ref_inc(smbd_requ);
 		smbd_open->pending_requ_list.push_back(smbd_requ);
-		x_smbd_requ_async_insert(smbd_requ, smbd_lock_cancel);
+		x_smbd_requ_async_insert(smbd_requ, smbd_lock_cancel, 0);
 		return NT_STATUS_PENDING;
 	}
 

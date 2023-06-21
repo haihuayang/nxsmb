@@ -279,7 +279,7 @@ NTSTATUS x_smb2_ioctl_copychunk(
 	copychunk_job_t *copychunk_job = new copychunk_job_t(x_smbd_ref_inc(smbd_requ),
 			src_open, std::move(chunks));
 	smbd_requ->save_requ_state(state);
-	x_smbd_requ_async_insert(smbd_requ, copychunk_cancel);
+	x_smbd_requ_async_insert(smbd_requ, copychunk_cancel, X_NSEC_PER_SEC);
 	x_smbd_schedule_async(&copychunk_job->base);
 	return NT_STATUS_PENDING;
 }

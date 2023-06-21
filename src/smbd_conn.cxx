@@ -404,7 +404,7 @@ static void x_smb2_reply_msg(x_smbd_conn_t *smbd_conn,
 	smb2_hdr->credit = X_H2LE16(smbd_requ->out_credit_granted);
 	smb2_hdr->next_command = 0;
 	smb2_hdr->mid = X_H2LE64(smbd_requ->in_smb2_hdr.mid);
-	if (smbd_requ->async) {
+	if (smbd_requ->interim_state == x_smbd_requ_t::INTERIM_S_SENT) {
 		smb2_hdr->flags = X_H2LE32(smbd_requ->out_hdr_flags |
 				X_SMB2_HDR_FLAG_REDIRECT | X_SMB2_HDR_FLAG_ASYNC);
 		smb2_hdr->async_id = X_H2LE64(x_smbd_requ_get_async_id(smbd_requ));
@@ -461,14 +461,19 @@ void x_smb2_reply(x_smbd_conn_t *smbd_conn,
 		NTSTATUS status,
 		size_t reply_size)
 {
-	if (!smbd_requ->async) {
+	if (smbd_requ->interim_state != x_smbd_requ_t::INTERIM_S_SENT) {
 		smbd_requ->out_credit_granted = x_smb2_calculate_credit(smbd_conn, smbd_requ, status);
 	} else {
 		smbd_requ->out_credit_granted = 0;
 	}
 
 	smbd_conn_reply_update_counts(smbd_conn, smbd_requ);
+	if (smbd_requ->interim_state == x_smbd_requ_t::INTERIM_S_SCHEDULED &&
+			x_smbd_del_timer(&smbd_requ->interim_timer)) {
+		x_smbd_ref_dec(smbd_requ);
+	}
 	x_smb2_reply_msg(smbd_conn, smbd_requ, buf_head, buf_tail, status, reply_size);
+	smbd_requ->interim_state = x_smbd_requ_t::INTERIM_S_NONE;
 }
 
 static int x_smbd_reply_error(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ,
@@ -511,10 +516,10 @@ static int x_smbd_reply_interim(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_re
 	memset(out_body, 0, 8);
 	x_put_le16(out_body, 0x9);
 
-	smbd_requ->async = true;
-
 	x_bufref_t *bufref = new x_bufref_t{out_buf, 8, sizeof(x_smb2_header_t) + 8};
+	smbd_requ->interim_state = x_smbd_requ_t::INTERIM_S_SENT;
 	x_smb2_reply_msg(smbd_conn, smbd_requ, bufref, bufref, NT_STATUS_PENDING, sizeof(x_smb2_header_t) + 8);
+
 	return 0;
 }
 
@@ -523,19 +528,30 @@ static int x_smbd_reply_interim(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_re
 
 /* must be in context of smbd_conn */
 void x_smbd_requ_async_insert(x_smbd_requ_t *smbd_requ,
-		void (*cancel_fn)(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ))
+		void (*cancel_fn)(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ),
+		int64_t interim_timeout_ns)
 {
+	X_LOG_DBG("smbd_requ %p timeout=%ld", smbd_requ, interim_timeout_ns);
 	X_ASSERT(!smbd_requ->cancel_fn);
 	smbd_requ->cancel_fn = cancel_fn;
-	smbd_requ->async = true;
 	g_smbd_conn_curr->pending_requ_list.push_back(smbd_requ);
 	x_smbd_ref_inc(smbd_requ);
+	if (smbd_requ->interim_state == x_smbd_requ_t::INTERIM_S_NONE) {
+		if (interim_timeout_ns == 0) {
+			smbd_requ->interim_state = x_smbd_requ_t::INTERIM_S_IMMEDIATE;
+		} else if (interim_timeout_ns > 0 && !smbd_requ->is_compound_followed()) {
+			x_smbd_ref_inc(smbd_requ);
+			x_smbd_add_timer(&smbd_requ->interim_timer, interim_timeout_ns);
+			smbd_requ->interim_state = x_smbd_requ_t::INTERIM_S_SCHEDULED;
+		}
+	}
 }
 
 /* must be in context of smbd_conn */
 bool x_smbd_requ_async_remove(x_smbd_requ_t *smbd_requ)
 {
-	X_ASSERT(smbd_requ->async);
+	X_LOG_DBG("smbd_requ %p interim_state %d", smbd_requ,
+			smbd_requ->interim_state);
 	if (!smbd_requ->cancel_fn) {
 		return false;
 	}
@@ -908,7 +924,7 @@ static NTSTATUS x_smbd_conn_process_smb2_intl(x_smbd_conn_t *smbd_conn, x_smbd_r
 		}
 	}
 
-	smbd_requ->async = false;
+	X_ASSERT(smbd_requ->interim_state == x_smbd_requ_t::INTERIM_S_NONE);
 	smbd_requ->async_state = x_smbd_requ_t::S_INIT;
 
 	return op.op_func(smbd_conn, smbd_requ);
@@ -1031,7 +1047,9 @@ static int x_smbd_conn_process_smb2(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smb
 		NTSTATUS status = x_smbd_conn_process_smb2_intl(
 				smbd_conn, smbd_requ);
 		if (NT_STATUS_EQUAL(status, NT_STATUS_PENDING)) {
-			X_SMBD_REPLY_INTERIM(smbd_conn, smbd_requ);
+			if (smbd_requ->interim_state == x_smbd_requ_t::INTERIM_S_IMMEDIATE) {
+				X_SMBD_REPLY_INTERIM(smbd_conn, smbd_requ);
+			}
 			break;
 		} else if (NT_STATUS_EQUAL(status, X_NT_STATUS_INTERNAL_TERMINATE)) {
 			return -EBADMSG;
@@ -1751,5 +1769,42 @@ NTSTATUS x_smbd_conn_validate_negotiate_info(const x_smbd_conn_t *smbd_conn,
 	fsctl_state.out_dialect = smbd_conn->dialect;
 
 	return NT_STATUS_OK;
+}
+
+struct send_interim_evt_t
+{
+	static void func(x_smbd_conn_t *smbd_conn, x_fdevt_user_t *fdevt_user)
+	{
+		send_interim_evt_t *evt = X_CONTAINER_OF(fdevt_user,
+				send_interim_evt_t, base);
+		x_smbd_requ_t *smbd_requ = evt->smbd_requ;
+		X_LOG_DBG("evt=%p, requ=%p, smbd_conn=%p", evt, smbd_requ, smbd_conn);
+		if (smbd_requ->interim_state == x_smbd_requ_t::INTERIM_S_SCHEDULED) {
+			X_SMBD_REPLY_INTERIM(smbd_conn, smbd_requ);
+			x_smbd_conn_queue(smbd_conn, smbd_requ);
+		} else {
+			X_ASSERT(smbd_requ->interim_state != x_smbd_requ_t::INTERIM_S_SENT);
+		}
+		delete evt;
+	}
+
+	explicit send_interim_evt_t(x_smbd_requ_t *smbd_requ)
+		: base(func), smbd_requ(smbd_requ)
+	{
+	}
+
+	~send_interim_evt_t()
+	{
+		x_smbd_ref_dec(smbd_requ);
+	}
+
+	x_fdevt_user_t base;
+	x_smbd_requ_t * const smbd_requ;
+};
+
+void x_smbd_conn_post_interim(x_smbd_requ_t *smbd_requ)
+{
+	send_interim_evt_t *evt = new send_interim_evt_t(smbd_requ);
+	X_SMBD_CHAN_POST_USER(smbd_requ->smbd_chan, evt);
 }
 

@@ -574,7 +574,8 @@ struct defer_open_evt_t
 		defer_open_evt_t *evt = X_CONTAINER_OF(fdevt_user,
 				defer_open_evt_t, base);
 		x_smbd_requ_t *smbd_requ = evt->smbd_requ;
-		X_LOG_DBG("evt=%p, requ=%p, smbd_conn=%p", evt, smbd_requ, smbd_conn);
+		X_LOG_DBG("defer_open_evt=%p, requ=%p, smbd_conn=%p",
+				evt, smbd_requ, smbd_conn);
 
 		auto state = smbd_requ->release_state<x_smb2_state_create_t>();
 		if (x_smbd_requ_async_remove(smbd_requ) && smbd_conn) {
@@ -614,7 +615,8 @@ struct defer_rename_evt_t
 		defer_rename_evt_t *evt = X_CONTAINER_OF(fdevt_user,
 				defer_rename_evt_t, base);
 		x_smbd_requ_t *smbd_requ = evt->smbd_requ;
-		X_LOG_DBG("evt=%p, requ=%p, smbd_conn=%p", evt, smbd_requ, smbd_conn);
+		X_LOG_DBG("defer_rename_evt=%p, requ=%p, smbd_conn=%p",
+				evt, smbd_requ, smbd_conn);
 
 		auto state = smbd_requ->release_state<x_smb2_state_rename_t>();
 		if (x_smbd_requ_async_remove(smbd_requ) && smbd_conn) {
@@ -893,7 +895,9 @@ static void defer_open(x_smbd_sharemode_t *sharemode,
 	/* TODO does it need a timer? can break timer always wake up it? */
 	x_smbd_ref_inc(smbd_requ);
 	sharemode->defer_open_list.push_back(smbd_requ);
-	x_smbd_requ_async_insert(smbd_requ, smbd_create_cancel);
+	X_LOG_DBG("smbd_requ %p interim_state %d", smbd_requ,
+			smbd_requ->interim_state);
+	x_smbd_requ_async_insert(smbd_requ, smbd_create_cancel, 0);
 }
 
 static inline uint8_t get_lease_type(const x_smbd_open_t *smbd_open)

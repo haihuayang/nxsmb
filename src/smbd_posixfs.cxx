@@ -963,7 +963,8 @@ NTSTATUS posixfs_object_op_rename(x_smbd_object_t *smbd_object,
 		/* TODO does it need a timer? can break timer always wake up it? */
 		x_smbd_ref_inc(smbd_requ);
 		sharemode->defer_rename_list.push_back(smbd_requ);
-		x_smbd_requ_async_insert(smbd_requ, posixfs_rename_cancel);
+		/* windows server do not send interim response in renaming */
+		x_smbd_requ_async_insert(smbd_requ, posixfs_rename_cancel, -1);
 		return NT_STATUS_PENDING;
 	}
 
@@ -1831,7 +1832,7 @@ NTSTATUS posixfs_object_op_read(
 	x_smbd_ref_inc(smbd_requ);
 	posixfs_read_job_t *read_job = new posixfs_read_job_t(posixfs_object, smbd_requ);
 	smbd_requ->save_requ_state(state);
-	x_smbd_requ_async_insert(smbd_requ, posixfs_read_cancel);
+	x_smbd_requ_async_insert(smbd_requ, posixfs_read_cancel, X_NSEC_PER_SEC);
 	x_smbd_schedule_async(&read_job->base);
 	return NT_STATUS_PENDING;
 }
@@ -1968,7 +1969,7 @@ NTSTATUS posixfs_object_op_write(
 	x_smbd_ref_inc(smbd_requ);
 	posixfs_write_job_t *write_job = new posixfs_write_job_t(posixfs_object, smbd_requ);
 	smbd_requ->save_requ_state(state);
-	x_smbd_requ_async_insert(smbd_requ, posixfs_write_cancel);
+	x_smbd_requ_async_insert(smbd_requ, posixfs_write_cancel, X_NSEC_PER_SEC);
 	x_smbd_schedule_async(&write_job->base);
 	return NT_STATUS_PENDING;
 }

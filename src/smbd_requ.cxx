@@ -8,9 +8,18 @@
 using smbd_requ_table_t = x_idtable_t<x_smbd_requ_t, x_idtable_64_traits_t>;
 static smbd_requ_table_t *g_smbd_requ_table;
 
+static long interim_timeout_func(x_timer_job_t *timer)
+{
+	/* we already have a ref on smbd_chan when adding timer */
+	x_smbd_requ_t *smbd_requ = X_CONTAINER_OF(timer,
+			x_smbd_requ_t, interim_timer);
+	x_smbd_conn_post_interim(smbd_requ);
+	return -1;
+}
+
 x_smbd_requ_t::x_smbd_requ_t(x_buf_t *in_buf, uint32_t in_msgsize,
 		bool encrypted)
-	: in_buf(in_buf)
+	: interim_timer(interim_timeout_func), in_buf(in_buf)
 	, compound_id(X_SMBD_COUNTER_INC(requ_create, 1) + 1)
 	, in_msgsize(in_msgsize)
 	, encrypted(encrypted)
@@ -64,9 +73,7 @@ x_smbd_requ_t *x_smbd_requ_create(x_buf_t *in_buf, uint32_t in_msgsize,
 
 uint64_t x_smbd_requ_get_async_id(const x_smbd_requ_t *smbd_requ)
 {
-	if (!smbd_requ->async) {
-		return 0;
-	}
+	X_ASSERT(smbd_requ->interim_state == x_smbd_requ_t::INTERIM_S_SENT);
 	return smbd_requ->id;
 }
 
