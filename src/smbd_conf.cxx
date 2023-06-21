@@ -866,7 +866,7 @@ static int reload_volumes(x_smbd_conf_t &smbd_conf,
 	for (auto &spec: volume_specs) {
 		int cmp = 1;
 		for ( ; curr_it != curr_end; ++curr_it) {
-			int cmp = comp_uuid((*curr_it)->uuid, spec->uuid);
+			cmp = comp_uuid((*curr_it)->uuid, spec->uuid);
 			if (cmp >= 0) {
 				break;
 			}
@@ -876,6 +876,7 @@ static int reload_volumes(x_smbd_conf_t &smbd_conf,
 		if (cmp == 0) {
 			/* TODO we suppose path not changed */
 			smbd_conf.smbd_volumes.push_back(*curr_it);
+			++curr_it;
 		} else {
 			/* new volume */
 			smbd_conf.smbd_volumes.push_back(x_smbd_volume_create(spec->uuid,
@@ -904,7 +905,7 @@ static int reload_shares(x_smbd_conf_t &smbd_conf,
 	for (auto &spec: share_specs) {
 		int cmp = 1;
 		for ( ; curr_it != curr_end; ++curr_it) {
-			int cmp = comp_uuid((*curr_it)->uuid, spec->uuid);
+			cmp = comp_uuid((*curr_it)->uuid, spec->uuid);
 			if (cmp >= 0) {
 				break;
 			}
@@ -929,6 +930,7 @@ static int reload_shares(x_smbd_conf_t &smbd_conf,
 			smbd_share->name_l16 = std::move(name_l16);
 			smbd_share->flags = spec->share_flags;
 			smbd_conf.smbd_shares.push_back(smbd_share);
+			++curr_it;
 		} else {
 			if (!smbd_conf_add_share(smbd_conf, *spec)) {
 				return -1;
