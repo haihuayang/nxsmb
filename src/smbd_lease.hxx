@@ -26,8 +26,7 @@ void x_smbd_send_break(const x_smbd_open_t &open, uint32_t break_to);
 #endif
 x_smbd_lease_t *x_smbd_lease_find(
 		const x_smb2_uuid_t &client_guid,
-		const x_smb2_lease_key_t &lease_key,
-		uint8_t version,
+		const x_smb2_lease_t &smb2_lease,
 		bool create_if);
 bool x_smbd_lease_match_get(const x_smbd_lease_t *smbd_lease,
 		const x_smb2_uuid_t &client_guid,

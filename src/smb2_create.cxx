@@ -72,6 +72,7 @@ static uint32_t encode_smb2_lease(const x_smb2_lease_t &lease,
 		out_lease->parent_key = lease.parent_key;
 		out_lease->epoch = X_H2LE16(lease.epoch);
 		out_lease->version = 0;
+		out_lease->unused = 0;
 		return 52;
 	} else {
 		return 32;
@@ -735,7 +736,7 @@ static NTSTATUS smb2_process_create(x_smbd_requ_t *smbd_requ,
 	smbd_requ->async_done_fn = x_smb2_create_async_done;
 	if (state->in_oplock_level == X_SMB2_OPLOCK_LEVEL_LEASE) {
 		state->smbd_lease = x_smbd_lease_find(x_smbd_conn_curr_client_guid(),
-				state->lease.key, state->lease.version, true);
+				state->lease, true);
 	}
 
 	return x_smbd_open_op_create(smbd_requ, state);

@@ -694,7 +694,10 @@ struct send_lease_break_evt_t
 	{
 		send_lease_break_evt_t *evt = X_CONTAINER_OF(fdevt_user,
 				send_lease_break_evt_t, base);
-		X_LOG_DBG("evt=%p", evt);
+		X_LOG_DBG("send_lease_break_evt=%p curr_state=%d new_state=%d "
+				"new_epoch=%u flags=0x%x",
+				evt, evt->curr_state, evt->new_state, evt->new_epoch,
+				evt->flags);
 
 		if (smbd_conn) {
 			x_smb2_send_lease_break(smbd_conn,
