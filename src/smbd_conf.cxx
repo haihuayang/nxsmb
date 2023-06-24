@@ -108,6 +108,30 @@ static bool parse_uint32(const std::string &str, uint32_t &ret)
 	return true;
 }
 
+static bool parse_size(const std::string &str, uint64_t &ret)
+{
+	char *end;
+	unsigned long long val = strtoull(str.c_str(), &end, 0);
+	if (*end) {
+		if (strcasecmp(end, "G") == 0) {
+			val *= 1024 * 1024 * 1024;
+		} else if (strcasecmp(end, "M") == 0) {
+			val *= 1024 * 1024;
+		} else if (strcasecmp(end, "K") == 0) {
+			val *= 1024;
+		} else if (strcasecmp(end, "B") == 0) {
+		} else {
+			return false;
+		}
+	}
+	uint64_t v = uint64_t(val);
+	if (v != val) {
+		return false;
+	}
+	ret = v;
+	return true;
+}
+
 /* unlike str_list_make_v3, we suppose the config file is utf8 */
 static std::vector<std::string> split_string(const std::string &str)
 {
@@ -378,6 +402,8 @@ static bool parse_global_param(x_smbd_conf_t &smbd_conf,
 		return parse_log_level(value, smbd_conf.log_level);
 	} else if (name == "log name") {
 		smbd_conf.log_name = value;
+	} else if (name == "log file size") {
+		return parse_size(value, smbd_conf.log_file_size);
 	} else if (name == "netbios name") {
 		smbd_conf.netbios_name_l8 = value;
 	} else if (name == "dns domain") {
@@ -953,6 +979,16 @@ int x_smbd_conf_reload()
 	int err = parse_smbconf(*smbd_conf, share_specs, volume_specs);
 	if (err) {
 		return err;
+	}
+
+	if (smbd_conf->log_name != g_smbd_conf->log_name) {
+		x_log_init(smbd_conf->log_name.c_str(),
+				smbd_conf->log_level,
+				smbd_conf->log_file_size);
+	} else if (smbd_conf->log_level != g_smbd_conf->log_level ||
+			smbd_conf->log_file_size != g_smbd_conf->log_file_size) {
+		x_log_init(nullptr, smbd_conf->log_level,
+				smbd_conf->log_file_size);
 	}
 
 	if (smbd_conf->interfaces != g_smbd_conf->interfaces) {

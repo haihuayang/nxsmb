@@ -217,7 +217,8 @@ enum {
 
 extern unsigned int x_loglevel;
 void x_log(int level, const char *fmt, ...) __attribute__((format(printf, 2,3)));
-int x_log_init(unsigned int log_level, const char *log_name);
+int x_log_init(const char *log_name, unsigned int loglevel, uint64_t filesize);
+void x_log_check_size();
 
 #define X_LOG_L(level, fmt, ...) do { \
 	if ((level) <= x_loglevel) { \

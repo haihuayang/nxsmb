@@ -71,16 +71,17 @@ static void *signal_handler_func(void *arg)
 		sigaddset(&sigmask, SIGTERM);
 		sigaddset(&sigmask, SIGHUP);
 
-		int signo = 0;
-		int ret = sigwait(&sigmask, &signo);
-		if (ret != 0) {
-			X_LOG_ERR("sigwait ret %d", ret);
-			continue;
-		}
-		if (signo == SIGHUP) {
+		siginfo_t siginfo;
+		struct timespec timeout = { 60, 0 };
+		int ret = sigtimedwait(&sigmask, &siginfo, &timeout);
+		if (ret == -1) {
+			if (errno == EAGAIN) {
+				x_log_check_size();
+			}
+		} else if (ret == SIGHUP) {
 			x_smbd_conf_reload();
 		} else {
-			X_LOG_ERR("sigwait catch %d, exiting", signo);
+			X_LOG_ERR("sigtimedwait ret %d, errno=%d", ret, errno);
 			break;
 		}
 	}
@@ -92,7 +93,8 @@ static void init_smbd()
 {
 	auto smbd_conf = x_smbd_conf_get();
 
-	x_log_init(smbd_conf->log_level, smbd_conf->log_name.c_str());
+	x_log_init(smbd_conf->log_name.c_str(), smbd_conf->log_level,
+			smbd_conf->log_file_size);
 
 	x_smbd_stats_init();
 

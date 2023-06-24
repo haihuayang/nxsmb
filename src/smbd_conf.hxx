@@ -68,6 +68,7 @@ struct x_smbd_conf_t
 	std::tuple<uint8_t, uint8_t, uint16_t> my_nbt_version{10, 0, 17763};
 
 	std::string log_name = "stderr";
+	uint64_t log_file_size = 2048 * 1024;
 	std::string netbios_name_l8, workgroup_8, dns_domain_l8, realm;
 	std::shared_ptr<std::u16string> netbios_name_u16, workgroup_u16, dns_domain_l16;
 	std::string private_dir;
