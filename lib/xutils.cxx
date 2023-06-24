@@ -1,5 +1,5 @@
 
-#include "include/xdefines.h"
+#include "include/utils.hxx"
 #include <stdlib.h>
 #include <stdarg.h>
 #include <unistd.h>
@@ -28,13 +28,11 @@ static void vlog(const char *name, const char *fmt, va_list ap)
 	assert(len < max);
 	p += len; max -= len;
 
-	if (name) {
-		len = snprintf(p, max - 1, "%s ", name);
-		if (len > max - 1) {
-			len = max - 1;
-		}
-		p += len; max -= len;
+	len = snprintf(p, max - 1, "%s ", name);
+	if (len > max - 1) {
+		len = max - 1;
 	}
+	p += len; max -= len;
 
 	len = vsnprintf(p, max - 1, fmt, ap);
 	if (len > max - 1) {
@@ -50,7 +48,7 @@ void x_dbg(const char *fmt, ...)
 	return;
 	va_list ap;
 	va_start(ap, fmt);
-	vlog(nullptr, fmt, ap);
+	vlog("DBG", fmt, ap);
 	va_end(ap);
 }
 
@@ -58,7 +56,7 @@ void x_panic(const char *fmt, ...)
 {
 	va_list ap;
 	va_start(ap, fmt);
-	vlog(nullptr, fmt, ap);
+	vlog("PANIC", fmt, ap);
 	va_end(ap);
 	abort();
 }
@@ -96,7 +94,7 @@ int x_log_init(unsigned int loglevel, const char *log_name)
 	}
 	x_logfd = logfd;
 	x_loglevel = loglevel;
-	x_log(X_LOG_LEVEL_NOTICE, "init log %s:%s logfd %d",
+	X_LOG_NOTICE("init log %s:%s logfd %d",
 			log_name, x_loglevel_names[loglevel],
 			logfd);
 	return 0;

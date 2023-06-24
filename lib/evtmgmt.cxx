@@ -121,7 +121,7 @@ static x_job_t::retval_t epoll_job_run(x_job_t *job, void *data)
 	x_epoll_entry_t *entry = X_CONTAINER_OF(job, x_epoll_entry_t, job);
 	x_fdevents_t fdevents = entry->get_fdevents();
 	x_evtmgmt_t *evtmgmt = (x_evtmgmt_t *)data;
-	X_DBG("%s %d fdevents=%llx", task_name, evtmgmt->get_entry_fd(entry), fdevents);
+	X_LOG_DBG("%d fdevents=0x%lx", evtmgmt->get_entry_fd(entry), fdevents);
 	if (x_fdevents_processable(fdevents)) {
 		if (entry->upcall->on_getevents(fdevents)) {
 			evtmgmt->release(entry);
@@ -134,7 +134,7 @@ static x_job_t::retval_t epoll_job_run(x_job_t *job, void *data)
 
 	x_fdevents_t oval, nval;
 	entry->modify_fdevents(fdevents, &oval, &nval);
-	X_DBG("%s fdevents=%llx, oval=%llx, nval=%llx", task_name, fdevents, oval, nval);
+	X_LOG_DBG("fdevents=0x%lx, oval=0x%lx, nval=0x%lx", fdevents, oval, nval);
 	uint32_t ret = x_fdevents_processable(nval);
 	if (ret == 0) {
 		return x_job_t::JOB_BLOCKED;
@@ -230,7 +230,7 @@ x_timer_job_t::x_timer_job_t(long (*run)(x_timer_job_t *timer_job))
 
 static void post_fd_event(x_evtmgmt_t *ep, uint64_t id, uint32_t events)
 {
-	X_DBG("%s id=x%llx evt=x%x", task_name, id, events);
+	X_LOG_DBG("id=x%lx evt=x%x", id, events);
 	/* TODO convert POLLHUP to POLLIN, the POLLIN event may be disable ... */
 	if (events & EPOLLHUP) {
 		events &= ~EPOLLHUP;

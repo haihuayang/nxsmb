@@ -6,7 +6,7 @@
 #error "Must be c++"
 #endif
 
-#include "xdefines.h"
+#include "utils.hxx"
 #include <sys/param.h>
 #include <stdint.h>
 #include <type_traits>

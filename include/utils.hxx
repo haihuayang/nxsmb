@@ -149,6 +149,92 @@ std::string x_tostr(const T &v)
 	return os.str();
 }
 
+extern __thread char task_name[16];
+extern __thread x_tick_t tick_now;
+
+#define X_LOG_AT_FMT "[%s:%s:%d:%s]"
+#define X_LOG_AT_ARGS task_name, __FILE__, __LINE__, __FUNCTION__
+
+#define X_PANIC(fmt, ...) do { \
+	x_panic(X_LOG_AT_FMT " " fmt, X_LOG_AT_ARGS, ##__VA_ARGS__); \
+} while (0)
+
+#define X_ASSERT(cond) do { \
+	if (x_likely(cond)) { \
+	} else { \
+		X_PANIC("!(%s)", #cond); \
+	} \
+} while (0)
+
+#ifdef __X_DEVELOPER__
+#define X_DEVEL_ASSERT X_ASSERT
+#else
+#define X_DEVEL_ASSERT(...)
+#endif
+
+#define X_TODO_ASSERT(cond) do { \
+	if (x_likely(cond)) { \
+	} else { \
+		X_PANIC("TODO !(%s)", #cond); \
+	} \
+} while (0)
+
+#define X_TODO X_PANIC("TODO")
+
+#define X_ASSERT_SYSCALL(call) do { \
+	int __err = call; \
+	if (x_likely(__err == 0)) { \
+	} else { \
+		X_PANIC("%s = %d,%d", #call, __err, errno); \
+	} \
+} while (0)
+
+void x_panic(const char *fmt, ...);
+
+#define X_DBG(fmt, ...) do { \
+	x_dbg(X_LOG_AT_FMT " " fmt, X_LOG_AT_ARGS, ##__VA_ARGS__); \
+} while (0)
+
+#define X_NODBG(...) do { } while (0)
+
+void x_dbg(const char *fmt, ...);
+
+#define X_LOG_ENUM \
+	X_LOG_DECL(ERR) \
+	X_LOG_DECL(WARN) \
+	X_LOG_DECL(NOTICE) \
+	X_LOG_DECL(CONN) \
+	X_LOG_DECL(OP) \
+	X_LOG_DECL(DBG) \
+	X_LOG_DECL(VERB) \
+
+enum {
+#define X_LOG_DECL(x) X_LOG_LEVEL_##x,
+	X_LOG_ENUM
+#undef X_LOG_DECL
+	X_LOG_LEVEL_MAX
+};
+
+extern unsigned int x_loglevel;
+void x_log(int level, const char *fmt, ...) __attribute__((format(printf, 2,3)));
+int x_log_init(unsigned int log_level, const char *log_name);
+
+#define X_LOG_L(level, fmt, ...) do { \
+	if ((level) <= x_loglevel) { \
+		x_log((level), X_LOG_AT_FMT " " fmt, X_LOG_AT_ARGS, ##__VA_ARGS__); \
+	} \
+} while (0)
+
+#define X_LOG_ERR(...) X_LOG_L(X_LOG_LEVEL_ERR, __VA_ARGS__)
+#define X_LOG_WARN(...) X_LOG_L(X_LOG_LEVEL_WARN, __VA_ARGS__)
+#define X_LOG_NOTICE(...) X_LOG_L(X_LOG_LEVEL_NOTICE, __VA_ARGS__)
+#define X_LOG_CONN(...) X_LOG_L(X_LOG_LEVEL_CONN, __VA_ARGS__)
+#define X_LOG_OP(...) X_LOG_L(X_LOG_LEVEL_OP, __VA_ARGS__)
+#define X_LOG_DBG(...) X_LOG_L(X_LOG_LEVEL_DBG, __VA_ARGS__)
+#define X_LOG_VERB(...) X_LOG_L(X_LOG_LEVEL_VERB, __VA_ARGS__)
+
+
+
 struct x_trace_t
 {
 	enum { DEPTH_MAX = 32, };
@@ -175,8 +261,8 @@ struct x_trace_loc_t
 
 #define X_TRACE_REPORT(level, fmt, ...) do { \
 	if ((level) <= x_loglevel) { \
-		x_log((level), "[%s:%d:%s] " fmt ", TRACE%s", \
-				__FILE__, __LINE__, __FUNCTION__, ##__VA_ARGS__, \
+		x_log((level), X_LOG_AT_FMT " " fmt ", TRACE%s", \
+				X_LOG_AT_ARGS, ##__VA_ARGS__, \
 				x_trace_string()); \
 	} \
 } while (0)

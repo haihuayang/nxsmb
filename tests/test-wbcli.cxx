@@ -2,7 +2,7 @@
 #define WINBINDD_SOCKET_DIR "/var/run/winbindd"
 #define WINBINDD_SOCKET_PATH "/var/run/winbindd/pipe"
 
-#include "include/xdefines.h"
+#include "include/utils.hxx"
 #include <sys/types.h>
 #include <unistd.h>
 #include <stdint.h>

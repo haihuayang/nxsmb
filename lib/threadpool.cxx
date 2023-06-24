@@ -4,9 +4,18 @@
 #include <vector>
 #include <mutex>
 #include <condition_variable>
+#include <stdarg.h>
 
-__thread char task_name[16] = "";
+__thread char task_name[16] = "NONAME";
 __thread x_tick_t tick_now;
+
+void x_thread_init(const char *fmt, ...)
+{
+	va_list ap;
+	va_start(ap, fmt);
+	vsnprintf(task_name, sizeof task_name, fmt, ap);
+	va_end(ap);
+}
 
 X_DECLARE_MEMBER_TRAITS(job_dlink_traits, x_job_t, dlink)
 
@@ -66,10 +75,10 @@ static void *thread_func(void *arg)
 	uint32_t no = tparg->no;
 	delete tparg;
 
-	snprintf(task_name, sizeof task_name, "%s-%03d", tpool->name.c_str(),
-			no);
+	x_thread_init("%s-%03d", tpool->name.c_str(), no);
+
 	tick_now = x_tick_now();
-	X_LOG_NOTICE("%s started", task_name);
+	X_LOG_NOTICE("started");
 	for (;;) {
 		x_job_t *job = __threadpool_get(tpool);
 		if (!job) {
@@ -77,7 +86,7 @@ static void *thread_func(void *arg)
 		}
 		tick_now = x_tick_now();
 		x_job_t::retval_t status = job->run(job, tpool->private_data);
-		X_DBG("%s run job %p %d", task_name, job, status);
+		X_LOG_DBG("run job %p %d", job, status);
 		if (status == x_job_t::JOB_DONE) {
 			continue;
 		}
@@ -111,7 +120,7 @@ static void *thread_func(void *arg)
 			__threadpool_schedule_job(tpool, job);
 		}
 	}
-	X_LOG_NOTICE("%s stopped", task_name);
+	X_LOG_NOTICE("stopped");
 	return nullptr;
 }
 
@@ -146,7 +155,7 @@ void x_threadpool_destroy(x_threadpool_t *tpool)
 
 bool x_threadpool_schedule(x_threadpool_t *tpool, x_job_t *job)
 {
-	X_DBG("%s schedule %p", task_name, job);
+	X_LOG_DBG("schedule %p", job);
 	uint32_t oval = job->state.load(std::memory_order_relaxed);
 	uint32_t nval;
 

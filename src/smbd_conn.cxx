@@ -1242,7 +1242,7 @@ static bool x_smbd_conn_do_recv(x_smbd_conn_t *smbd_conn, x_fdevents_t &fdevents
 {
 	X_TRACE_LOC;
 	ssize_t err;
-	X_LOG_DBG("%s %p x%lx x%lx", task_name, smbd_conn, smbd_conn->ep_id, fdevents);
+	X_LOG_DBG("%p x%lx x%lx", smbd_conn, smbd_conn->ep_id, fdevents);
 	if (smbd_conn->recv_buf == NULL) {
 		X_ASSERT(smbd_conn->recv_len < sizeof(smbd_conn->nbt_hdr));
 		err = read(smbd_conn->fd, (char *)&smbd_conn->nbt_hdr + smbd_conn->recv_len,
@@ -1251,15 +1251,15 @@ static bool x_smbd_conn_do_recv(x_smbd_conn_t *smbd_conn, x_fdevents_t &fdevents
 			smbd_conn->recv_len = x_convert_assert<uint32_t>(smbd_conn->recv_len + err);
 			err = x_smbd_conn_check_nbt_hdr(smbd_conn);
 			if (err < 0) {
-				X_LOG_ERR("%s %p x%lx x_smbd_conn_check_nbt_hdr %ld",
-						task_name, smbd_conn, smbd_conn->ep_id, err);
+				X_LOG_ERR("%p x%lx x_smbd_conn_check_nbt_hdr %ld",
+						smbd_conn, smbd_conn->ep_id, err);
 				return true;
 			} else if (err == 0) {
 				return false;
 			}
 			smbd_conn->recv_msgsize = x_convert_assert<uint32_t>(err);
 		} else if (err == 0) {
-			X_LOG_CONN("%s %p x%lx recv nbt_hdr EOF", task_name, smbd_conn, smbd_conn->ep_id);
+			X_LOG_CONN("%p x%lx recv nbt_hdr EOF", smbd_conn, smbd_conn->ep_id);
 			return true;
 		} else if (errno == EAGAIN) {
 			fdevents = x_fdevents_consume(fdevents, FDEVT_IN);
@@ -1267,7 +1267,7 @@ static bool x_smbd_conn_do_recv(x_smbd_conn_t *smbd_conn, x_fdevents_t &fdevents
 		} else if (errno == EINTR) {
 			return false;
 		} else {
-			X_LOG_ERR("%s %p x%lx do_recv errno=%d", task_name,
+			X_LOG_ERR("%p x%lx do_recv errno=%d",
 					smbd_conn, smbd_conn->ep_id, errno);
 			return true;
 		}
@@ -1286,8 +1286,8 @@ static bool x_smbd_conn_do_recv(x_smbd_conn_t *smbd_conn, x_fdevents_t &fdevents
 			smbd_conn->recv_len -= smbd_conn->recv_msgsize;
 			int ret = x_smbd_conn_process_nbt(smbd_conn);
 			if (ret) {
-				X_LOG_ERR("%s %p x%lx x_smbd_conn_process_nbt %d",
-						task_name, smbd_conn, smbd_conn->ep_id, ret);
+				X_LOG_ERR("%p x%lx x_smbd_conn_process_nbt %d",
+						smbd_conn, smbd_conn->ep_id, ret);
 				return true;
 			}
 
@@ -1296,8 +1296,8 @@ static bool x_smbd_conn_do_recv(x_smbd_conn_t *smbd_conn, x_fdevents_t &fdevents
 
 			err = x_smbd_conn_check_nbt_hdr(smbd_conn);
 			if (err < 0) {
-				X_LOG_ERR("%s %p x%lx x_smbd_conn_check_nbt_hdr piggyback %ld",
-						task_name, smbd_conn, smbd_conn->ep_id, err);
+				X_LOG_ERR("%p x%lx x_smbd_conn_check_nbt_hdr piggyback %ld",
+						smbd_conn, smbd_conn->ep_id, err);
 				return true;
 			} else if (err == 0) {
 				return false;
@@ -1305,13 +1305,13 @@ static bool x_smbd_conn_do_recv(x_smbd_conn_t *smbd_conn, x_fdevents_t &fdevents
 			smbd_conn->recv_msgsize = x_convert_assert<uint32_t>(err);
 		}
 	} else if (err == 0) {
-		X_LOG_CONN("%s %p x%lx recv nbt_body EOF", task_name, smbd_conn, smbd_conn->ep_id);
+		X_LOG_CONN("%p x%lx recv nbt_body EOF", smbd_conn, smbd_conn->ep_id);
 		return true;
 	} else if (errno == EAGAIN) {
 		fdevents = x_fdevents_consume(fdevents, FDEVT_IN);
 	} else if (errno == EINTR) {
 	} else {
-		X_LOG_ERR("%s %p x%lx do_recv errno=%d", task_name,
+		X_LOG_ERR("%p x%lx do_recv errno=%d",
 				smbd_conn, smbd_conn->ep_id, errno);
 		return true;
 	}
@@ -1320,7 +1320,7 @@ static bool x_smbd_conn_do_recv(x_smbd_conn_t *smbd_conn, x_fdevents_t &fdevents
 
 static bool x_smbd_conn_do_send(x_smbd_conn_t *smbd_conn, x_fdevents_t &fdevents)
 {
-	X_LOG_DBG("%s %p x%lx x%lx", task_name, smbd_conn, smbd_conn->ep_id, fdevents);
+	X_LOG_DBG("%p x%lx x%lx", smbd_conn, smbd_conn->ep_id, fdevents);
 	for (;;) {
 		struct iovec iov[8];
 		uint32_t niov = 0;
@@ -1381,7 +1381,7 @@ static bool x_smbd_conn_do_send(x_smbd_conn_t *smbd_conn, x_fdevents_t &fdevents
 
 static bool x_smbd_conn_do_user(x_smbd_conn_t *smbd_conn, x_fdevents_t &fdevents)
 {
-	X_LOG_DBG("%s %p x%lx x%lx", task_name, smbd_conn, smbd_conn->ep_id, fdevents);
+	X_LOG_DBG("%p x%lx x%lx", smbd_conn, smbd_conn->ep_id, fdevents);
 	auto lock = std::unique_lock(smbd_conn->mutex);
 	for (;;) {
 		x_fdevt_user_t *fdevt_user = smbd_conn->fdevt_user_list.get_front();
@@ -1465,7 +1465,7 @@ std::shared_ptr<std::u16string> x_smbd_conn_curr_name()
 static bool x_smbd_conn_upcall_cb_getevents(x_epoll_upcall_t *upcall, x_fdevents_t &fdevents)
 {
 	x_smbd_conn_t *smbd_conn = x_smbd_conn_from_upcall(upcall);
-	X_LOG_DBG("%s %p x%lx", task_name, smbd_conn, fdevents);
+	X_LOG_DBG("%p x%lx", smbd_conn, fdevents);
 
 	g_smbd_conn_curr = x_smbd_ref_inc(smbd_conn);
 	bool ret = x_smbd_conn_handle_events(smbd_conn, fdevents);
@@ -1476,7 +1476,7 @@ static bool x_smbd_conn_upcall_cb_getevents(x_epoll_upcall_t *upcall, x_fdevents
 static void x_smbd_conn_upcall_cb_unmonitor(x_epoll_upcall_t *upcall)
 {
 	x_smbd_conn_t *smbd_conn = x_smbd_conn_from_upcall(upcall);
-	X_LOG_CONN("%s %p", task_name, smbd_conn);
+	X_LOG_CONN("%p", smbd_conn);
 	X_ASSERT_SYSCALL(close(smbd_conn->fd));
 	smbd_conn->fd = -1;
 	g_smbd_conn_curr = x_smbd_ref_inc(smbd_conn);
@@ -1532,7 +1532,7 @@ static bool x_smbd_srv_do_recv(x_smbd_srv_t *smbd_srv, x_fdevents_t &fdevents)
 	x_sockaddr_t saddr;
 	socklen_t slen = sizeof(saddr);
 	int fd = accept(smbd_srv->fd, &saddr.sa, &slen);
-	X_LOG_DBG("%s accept %d, %d", task_name, fd, errno);
+	X_LOG_DBG("accept %d, %d", fd, errno);
 	if (fd >= 0) {
 		x_smbd_srv_accepted(smbd_srv, fd, saddr);
 	} else if (errno == EINTR) {
@@ -1548,7 +1548,7 @@ static bool x_smbd_srv_do_recv(x_smbd_srv_t *smbd_srv, x_fdevents_t &fdevents)
 
 static bool x_smbd_srv_do_user(x_smbd_srv_t *smbd_srv, x_fdevents_t &fdevents)
 {
-	X_LOG_DBG("%s %p x%lx x%lx", task_name, smbd_srv, smbd_srv->ep_id, fdevents);
+	X_LOG_DBG("%p x%lx x%lx", smbd_srv, smbd_srv->ep_id, fdevents);
 	{
 		auto lock = std::lock_guard(smbd_srv->mutex);
 		for (;;) {
@@ -1569,7 +1569,7 @@ static bool x_smbd_srv_do_user(x_smbd_srv_t *smbd_srv, x_fdevents_t &fdevents)
 static bool x_smbd_srv_upcall_cb_getevents(x_epoll_upcall_t *upcall, x_fdevents_t &fdevents)
 {
 	x_smbd_srv_t *smbd_srv = x_smbd_from_upcall(upcall);
-	X_LOG_DBG("%s %p x%lx", task_name, smbd_srv, fdevents);
+	X_LOG_DBG("%p x%lx", smbd_srv, fdevents);
 	uint32_t events = x_fdevents_processable(fdevents);
 	if (events & FDEVT_USER) {
 		if (x_smbd_srv_do_user(smbd_srv, fdevents)) {
@@ -1586,7 +1586,7 @@ static bool x_smbd_srv_upcall_cb_getevents(x_epoll_upcall_t *upcall, x_fdevents_
 static void x_smbd_srv_upcall_cb_unmonitor(x_epoll_upcall_t *upcall)
 {
 	x_smbd_srv_t *smbd_srv = x_smbd_from_upcall(upcall);
-	X_LOG_CONN("%s %p", task_name, smbd_srv);
+	X_LOG_CONN("%p", smbd_srv);
 	X_ASSERT_SYSCALL(close(smbd_srv->fd));
 	smbd_srv->fd = -1;
 	/* TODO may close all accepted client, and notify it is freed */

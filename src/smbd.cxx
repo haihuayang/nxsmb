@@ -42,7 +42,6 @@ x_evtmgmt_t *g_evtmgmt = nullptr;
 
 static void main_loop()
 {
-	snprintf(task_name, sizeof task_name, "MAIN");
 	while (!g_smbd.stopped) {
 		x_evtmgmt_dispatch(g_evtmgmt);
 	}
@@ -65,7 +64,7 @@ enum {
 
 static void *signal_handler_func(void *arg)
 {
-	snprintf(task_name, sizeof task_name, "SIGHAND");
+	x_thread_init("SIGHAND");
 	for (;;) {
 		sigset_t sigmask;
 		sigemptyset(&sigmask);
@@ -200,6 +199,8 @@ bool x_smbd_del_timer(x_timer_job_t *entry)
 
 int main(int argc, char **argv)
 {
+	x_thread_init("MAIN");
+
 	const char *configfile = nullptr;
 
 	const struct option long_options[] = {

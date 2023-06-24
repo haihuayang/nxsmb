@@ -43,6 +43,7 @@ struct x_job_t
 
 bool x_threadpool_schedule(x_threadpool_t *tpool, x_job_t *x_job);
 
+void x_thread_init(const char *fmt, ...);
 
 
 #endif /* __threadpool__hxx__ */

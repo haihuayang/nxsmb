@@ -6,6 +6,7 @@
 #error "Must be c++"
 #endif
 
+#include "include/utils.hxx"
 #include <string>
 #include <memory>
 #include <arpa/inet.h>

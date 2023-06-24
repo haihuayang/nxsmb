@@ -6,7 +6,7 @@
 #error "Must be c++"
 #endif
 
-#include "include/xdefines.h"
+#include "include/utils.hxx"
 #include <stdint.h>
 
 int x_smbd_volume_read_id(int vol_fd, uint16_t &vol_id);
