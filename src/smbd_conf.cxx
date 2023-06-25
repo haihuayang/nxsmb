@@ -346,6 +346,7 @@ static void load_ifaces(x_smbd_conf_t &smbd_conf)
 	X_ASSERT(!err);
 	X_ASSERT(probed_ifaces.size() > 0);
 
+	std::vector<x_iface_t> ret_ifaces;
 	/* if we don't have a interfaces line then use all broadcast capable
 	   interfaces except loopback */
 	if (smbd_conf.interfaces.size() == 0) {
@@ -356,19 +357,18 @@ static void load_ifaces(x_smbd_conf_t &smbd_conf)
 			}
 		}
 #endif
-		smbd_conf.local_ifaces = probed_ifaces;
-		return;
-	}
-
-	std::vector<x_iface_t> ret_ifaces;
-	for (auto const &iface_name: smbd_conf.interfaces) {
-		x_interpret_iface(ret_ifaces, iface_name, probed_ifaces);
+		ret_ifaces = std::move(probed_ifaces);
+	} else {
+		for (auto const &iface_name: smbd_conf.interfaces) {
+			x_interpret_iface(ret_ifaces, iface_name, probed_ifaces);
+		}
 	}
 
 	if (ret_ifaces.size() == 0) {
 		X_LOG_ERR("WARNING: no network interfaces found");
 	}
-	smbd_conf.local_ifaces = ret_ifaces;
+
+	smbd_conf.local_ifaces = std::make_shared<std::vector<x_iface_t>>(std::move(ret_ifaces));
 }
 
 static bool parse_log_level(const std::string &value, unsigned int &loglevel)
@@ -993,6 +993,8 @@ int x_smbd_conf_reload()
 
 	if (smbd_conf->interfaces != g_smbd_conf->interfaces) {
 		load_ifaces(*smbd_conf);
+	} else {
+		smbd_conf->local_ifaces = g_smbd_conf->local_ifaces;
 	}
 
 	reload_volumes(*smbd_conf, volume_specs);

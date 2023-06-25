@@ -75,7 +75,7 @@ struct x_smbd_conf_t
 	std::string samba_locks_dir;
 	std::vector<std::string> cluster_nodes;
 	std::vector<std::string> interfaces;
-	std::vector<x_iface_t> local_ifaces;
+	std::shared_ptr<const std::vector<x_iface_t>> local_ifaces;
 
 	std::vector<uint16_t> dialects{0x311, 0x310, 0x302, 0x210, 0x202};
 	std::u16string node_l16;
