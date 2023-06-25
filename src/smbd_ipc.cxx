@@ -760,20 +760,13 @@ static void ipc_object_op_destroy(x_smbd_object_t *smbd_object,
 	delete named_pipe;
 }
 
-#define USTR(x) u##x
-#define DECL_RPC(x) { USTR(#x), &x_smbd_dcerpc_##x, "\\PIPE\\" #x }
-static x_smbd_ipc_object_t ipc_object_tbl[] = {
-	DECL_RPC(srvsvc),
-	DECL_RPC(wkssvc),
-	DECL_RPC(dssetup),
-	DECL_RPC(lsarpc),
-};
+static std::array<x_smbd_ipc_object_t *, 4> ipc_object_tbl;
 
 static x_smbd_ipc_object_t *find_ipc_object_by_name(const std::u16string &path)
 {
-	for (auto &ipc: ipc_object_tbl) {
-		if (path == ipc.base.path) {
-			return &ipc;
+	for (auto ipc: ipc_object_tbl) {
+		if (path == ipc->base.path) {
+			return ipc;
 		}
 	}
 	return nullptr;
@@ -782,9 +775,9 @@ static x_smbd_ipc_object_t *find_ipc_object_by_name(const std::u16string &path)
 static const x_dcerpc_iface_t *find_iface_by_syntax(
 		const idl::ndr_syntax_id &syntax)
 {
-	for (const auto &ipc: ipc_object_tbl) {
-		if (ipc.iface->syntax_id == syntax) {
-			return ipc.iface;
+	for (const auto ipc: ipc_object_tbl) {
+		if (ipc->iface->syntax_id == syntax) {
+			return ipc->iface;
 		}
 	}
 	return nullptr;
@@ -1027,5 +1020,13 @@ std::shared_ptr<x_smbd_share_t> x_smbd_ipc_share_create()
 
 int x_smbd_ipc_init()
 {
+	ipc_object_tbl = {
+#define USTR(x) u##x
+#define DECL_RPC(x) new x_smbd_ipc_object_t{ USTR(#x), &x_smbd_dcerpc_##x, "\\PIPE\\" #x }
+		DECL_RPC(srvsvc),
+		DECL_RPC(wkssvc),
+		DECL_RPC(dssetup),
+		DECL_RPC(lsarpc),
+	};
 	return 0;
 }
