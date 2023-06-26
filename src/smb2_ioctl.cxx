@@ -519,6 +519,33 @@ static void ioctl_async_done(x_smbd_conn_t *smbd_conn,
 	x_smbd_conn_requ_done(smbd_conn, smbd_requ, status);
 }
 
+static NTSTATUS x_smb2_ioctl_get_compression(
+		x_smbd_requ_t *smbd_requ,
+		x_smb2_state_ioctl_t &state)
+{
+	if (state.in_max_output_length < 2) {
+		return NT_STATUS_BUFFER_TOO_SMALL;
+	}
+	state.out_buf = x_buf_alloc(2);
+	state.out_buf_length = 2;
+	uint16_t *data = (uint16_t *)state.out_buf->data;
+	*data = 0; // TODO not support compression yet
+	return NT_STATUS_OK;
+}
+
+static NTSTATUS x_smb2_ioctl_set_compression(
+		x_smbd_requ_t *smbd_requ,
+		x_smb2_state_ioctl_t &state)
+{
+	if (state.in_buf_length < 2) {
+		return NT_STATUS_INVALID_PARAMETER;
+	}
+
+	const uint8_t *in_data = state.in_buf->data + state.in_buf_offset;
+	uint16_t compression_format = x_get_le16(in_data);
+	return compression_format == 0 ? NT_STATUS_OK : NT_STATUS_NOT_SUPPORTED;
+}
+
 static NTSTATUS x_smbd_open_ioctl(x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ,
 		std::unique_ptr<x_smb2_state_ioctl_t> &state)
@@ -537,6 +564,10 @@ static NTSTATUS x_smbd_open_ioctl(x_smbd_conn_t *smbd_conn,
 		return x_smb2_ioctl_copychunk(smbd_conn, smbd_requ, state);
 	case X_SMB2_FSCTL_SRV_REQUEST_RESUME_KEY:
 		return x_smb2_ioctl_request_resume_key(smbd_requ, *state);
+	case X_SMB2_FSCTL_GET_COMPRESSION:
+		return x_smb2_ioctl_get_compression(smbd_requ, *state);
+	case X_SMB2_FSCTL_SET_COMPRESSION:
+		return x_smb2_ioctl_set_compression(smbd_requ, *state);
 	default:
 		return x_smbd_open_op_ioctl(smbd_requ->smbd_open,
 				smbd_requ, state);
