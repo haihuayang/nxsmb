@@ -512,7 +512,7 @@ static void ioctl_async_done(x_smbd_conn_t *smbd_conn,
 	if (!smbd_conn) {
 		return;
 	}
-	if (state->out_buf_length) {
+	if (NT_STATUS_IS_OK(status) || state->out_buf_length) {
 		x_smb2_reply_ioctl(smbd_conn, smbd_requ, status, *state);
 		status = NT_STATUS_OK;
 	}
@@ -595,7 +595,7 @@ NTSTATUS x_smb2_process_ioctl(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ
 		break;
 	}
 
-	if (state && state->out_buf_length) {
+	if (NT_STATUS_IS_OK(status) || (state && state->out_buf_length)) {
 		x_smb2_reply_ioctl(smbd_conn, smbd_requ, status, *state);
 		return NT_STATUS_OK;
 	}
