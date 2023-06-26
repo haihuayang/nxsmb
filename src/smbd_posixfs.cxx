@@ -2094,7 +2094,7 @@ static NTSTATUS getinfo_file(posixfs_object_t *posixfs_object,
 		if (state.in_output_buffer_length < sizeof(x_smb2_file_basic_info_t)) {
 			RETURN_STATUS(NT_STATUS_INFO_LENGTH_MISMATCH);
 		}
-		if (!smbd_open->check_access(idl::SEC_FILE_READ_ATTRIBUTE)) {
+		if (!smbd_open->check_access_any(idl::SEC_FILE_READ_ATTRIBUTE)) {
 			RETURN_STATUS(NT_STATUS_ACCESS_DENIED);
 		}
 		state.out_data.resize(sizeof(x_smb2_file_basic_info_t));
@@ -2150,7 +2150,7 @@ static NTSTATUS getinfo_file(posixfs_object_t *posixfs_object,
 		if (state.in_output_buffer_length < sizeof(x_smb2_file_all_info_t)) {
 			RETURN_STATUS(NT_STATUS_INFO_LENGTH_MISMATCH);
 		}
-		if (!smbd_open->check_access(idl::SEC_FILE_READ_ATTRIBUTE)) {
+		if (!smbd_open->check_access_any(idl::SEC_FILE_READ_ATTRIBUTE)) {
 			RETURN_STATUS(NT_STATUS_ACCESS_DENIED);
 		}
 		state.out_data.resize(sizeof(x_smb2_file_all_info_t));
@@ -2197,7 +2197,7 @@ static NTSTATUS getinfo_file(posixfs_object_t *posixfs_object,
 		if (state.in_output_buffer_length < sizeof(x_smb2_file_network_open_info_t)) {
 			RETURN_STATUS(NT_STATUS_INFO_LENGTH_MISMATCH);
 		}
-		if (!smbd_open->check_access(idl::SEC_FILE_READ_ATTRIBUTE)) {
+		if (!smbd_open->check_access_any(idl::SEC_FILE_READ_ATTRIBUTE)) {
 			RETURN_STATUS(NT_STATUS_ACCESS_DENIED);
 		}
 		state.out_data.resize(sizeof(x_smb2_file_network_open_info_t));
@@ -2345,7 +2345,7 @@ static NTSTATUS posixfs_set_ea(posixfs_object_t *posixfs_object,
 		}
 	}
 
-	if (!smbd_open->check_access(idl::SEC_FILE_WRITE_EA)) {
+	if (!smbd_open->check_access_any(idl::SEC_FILE_WRITE_EA)) {
 		return NT_STATUS_ACCESS_DENIED;
 	}
 
@@ -2392,7 +2392,7 @@ static NTSTATUS setinfo_file(posixfs_object_t *posixfs_object,
 	posixfs_open_t *posixfs_open = posixfs_open_from_base_t::container(smbd_open);
 
 	if (state.in_info_level == x_smb2_info_level_t::FILE_BASIC_INFORMATION) {
-		if (!smbd_open->check_access(idl::SEC_FILE_WRITE_ATTRIBUTE)) {
+		if (!smbd_open->check_access_any(idl::SEC_FILE_WRITE_ATTRIBUTE)) {
 			return NT_STATUS_ACCESS_DENIED;
 		}
 
@@ -2417,7 +2417,7 @@ static NTSTATUS setinfo_file(posixfs_object_t *posixfs_object,
 			return status;
 		}
 	} else if (state.in_info_level == x_smb2_info_level_t::FILE_ALLOCATION_INFORMATION) {
-		if (!smbd_open->check_access(idl::SEC_FILE_WRITE_DATA)) {
+		if (!smbd_open->check_access_any(idl::SEC_FILE_WRITE_DATA)) {
 			return NT_STATUS_ACCESS_DENIED;
 		}
 
@@ -2434,7 +2434,7 @@ static NTSTATUS setinfo_file(posixfs_object_t *posixfs_object,
 				smbd_open, new_size);
 
 	} else if (state.in_info_level == x_smb2_info_level_t::FILE_END_OF_FILE_INFORMATION) {
-		if (!smbd_open->check_access(idl::SEC_FILE_WRITE_DATA)) {
+		if (!smbd_open->check_access_any(idl::SEC_FILE_WRITE_DATA)) {
 			return NT_STATUS_ACCESS_DENIED;
 		}
 
@@ -2651,12 +2651,12 @@ static NTSTATUS getinfo_security(posixfs_object_t *posixfs_object,
 		x_smb2_state_getinfo_t &state)
 {
 	if ((state.in_additional & idl::SECINFO_SACL) &&
-			!smbd_open->check_access(idl::SEC_FLAG_SYSTEM_SECURITY)) {
+			!smbd_open->check_access_any(idl::SEC_FLAG_SYSTEM_SECURITY)) {
 		return NT_STATUS_ACCESS_DENIED;
 	}
 
 	if ((state.in_additional & (idl::SECINFO_DACL|idl::SECINFO_OWNER|idl::SECINFO_GROUP)) &&
-			!smbd_open->check_access(idl::SEC_STD_READ_CONTROL)) {
+			!smbd_open->check_access_any(idl::SEC_STD_READ_CONTROL)) {
 		return NT_STATUS_ACCESS_DENIED;
 	}
 

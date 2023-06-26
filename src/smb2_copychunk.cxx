@@ -185,7 +185,7 @@ static NTSTATUS copychunk_check_access(uint32_t fsctl,
 	 *
 	 * A non writable dst handle also doesn't make sense for other fsctls.
 	 */
-	if (!dst_open->check_access(idl::SEC_FILE_WRITE_DATA | idl::SEC_FILE_APPEND_DATA)) {
+	if (!dst_open->check_access_any(idl::SEC_FILE_WRITE_DATA | idl::SEC_FILE_APPEND_DATA)) {
 		X_LOG_NOTICE("copy chunk dst not writable");
 		return NT_STATUS_ACCESS_DENIED;
 	}
@@ -193,7 +193,7 @@ static NTSTATUS copychunk_check_access(uint32_t fsctl,
 	 * - The Open.GrantedAccess of the destination file does not include
 	 *   FILE_READ_DATA, and the CtlCode is FSCTL_SRV_COPYCHUNK.
 	 */
-	if (fsctl == X_SMB2_FSCTL_SRV_COPYCHUNK && !dst_open->check_access(idl::SEC_FILE_READ_DATA)) {
+	if (fsctl == X_SMB2_FSCTL_SRV_COPYCHUNK && !dst_open->check_access_any(idl::SEC_FILE_READ_DATA)) {
 		X_LOG_NOTICE("copy chunk dst not readable");
 		return NT_STATUS_ACCESS_DENIED;
 	}
@@ -201,7 +201,8 @@ static NTSTATUS copychunk_check_access(uint32_t fsctl,
 	 * - The Open.GrantedAccess of the source file does not include
 	 *   FILE_READ_DATA access.
 	 */
-	if (!src_open->check_access(idl::SEC_FILE_READ_DATA)) {
+	if (!src_open->check_access_any(idl::SEC_FILE_READ_DATA |
+				idl::SEC_FILE_EXECUTE)) {
 		X_LOG_NOTICE("copy chunk src not readable");
 		return NT_STATUS_ACCESS_DENIED;
 	}

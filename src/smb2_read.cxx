@@ -126,8 +126,8 @@ NTSTATUS x_smb2_process_read(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 		RETURN_OP_STATUS(smbd_requ, status);
 	}
 
-	if (!smbd_requ->smbd_open->check_access(idl::SEC_FILE_READ_DATA) &&
-			!smbd_requ->smbd_open->check_access(idl::SEC_FILE_EXECUTE)) {
+	if (!smbd_requ->smbd_open->check_access_any(idl::SEC_FILE_READ_DATA |
+				idl::SEC_FILE_EXECUTE)) {
 		RETURN_OP_STATUS(smbd_requ, NT_STATUS_ACCESS_DENIED);
 	}
 

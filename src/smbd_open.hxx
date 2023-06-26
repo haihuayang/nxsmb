@@ -61,8 +61,12 @@ struct x_smbd_open_t
 	x_smbd_open_t &operator=(const x_smbd_open_t &) = delete;
 	x_smbd_open_t &operator=(x_smbd_open_t &&) = delete;
 
-	bool check_access(uint32_t access) const {
+	bool check_access_any(uint32_t access) const {
 		return (open_state.access_mask & access);
+	}
+
+	bool check_access_all(uint32_t access) const {
+		return (open_state.access_mask & access) == access;
 	}
 
 	bool is_disconnected() const {
