@@ -1787,7 +1787,8 @@ NTSTATUS posixfs_object_op_read(
 		x_smbd_object_t *smbd_object,
 		x_smbd_open_t *smbd_open,
 		x_smbd_requ_t *smbd_requ,
-		std::unique_ptr<x_smb2_state_read_t> &state)
+		std::unique_ptr<x_smb2_state_read_t> &state,
+		bool all)
 {
 	posixfs_object_t *posixfs_object = posixfs_object_from_base_t::container(smbd_object);
 
@@ -1819,6 +1820,19 @@ NTSTATUS posixfs_object_op_read(
 
 	if (state->in_offset == posixfs_object->base.sharemode.meta.end_of_file) {
 		return NT_STATUS_END_OF_FILE;
+	}
+
+	/*
+	 * [MS-SMB2] 3.3.5.15.6 Handling a Server-Side Data Copy Request
+	 *   If the SourceOffset or SourceOffset + Length extends beyond
+	 *   the end of file, the server SHOULD<240> treat this as a
+	 *   STATUS_END_OF_FILE error.
+	 * ...
+	 *   <240> Section 3.3.5.15.6: Windows servers will return
+	 *   STATUS_INVALID_VIEW_SIZE instead of STATUS_END_OF_FILE.
+	 */
+	if (all && state->in_offset + state->in_length > posixfs_object->base.sharemode.meta.end_of_file) {
+		return NT_STATUS_INVALID_VIEW_SIZE;
 	}
 
 	/* TODO it should be able to do async if it is the last requ in compound,

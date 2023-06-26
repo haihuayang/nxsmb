@@ -95,7 +95,7 @@ static x_job_t::retval_t copychunk_job_run(x_job_t *job, void *data)
 		read_state->in_offset = chunk.source_offset;
 		read_state->in_minimum_count = 0;
 		status = x_smbd_open_op_read(copychunk_job->src_open, nullptr,
-				read_state);
+				read_state, true);
 		if (!NT_STATUS_IS_OK(status)) {
 			break;
 		}

@@ -623,7 +623,8 @@ static NTSTATUS ipc_object_op_read(
 		x_smbd_object_t *smbd_object,
 		x_smbd_open_t *smbd_open,
 		x_smbd_requ_t *smbd_requ,
-		std::unique_ptr<x_smb2_state_read_t> &state)
+		std::unique_ptr<x_smb2_state_read_t> &state,
+		bool all)
 {
 	return named_pipe_read(from_smbd_object(smbd_object),
 			from_smbd_open(smbd_requ->smbd_open),

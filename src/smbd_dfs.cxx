@@ -563,12 +563,13 @@ static NTSTATUS dfs_root_object_op_read(
 		x_smbd_object_t *smbd_object,
 		x_smbd_open_t *smbd_open,
 		x_smbd_requ_t *smbd_requ,
-		std::unique_ptr<x_smb2_state_read_t> &state)
+		std::unique_ptr<x_smb2_state_read_t> &state,
+		bool all)
 {
 	if (smbd_open->open_state.priv_data != dfs_open_type_normal) {
 		return NT_STATUS_INVALID_DEVICE_REQUEST;
 	}
-	return posixfs_object_op_read(smbd_object, smbd_open, smbd_requ, state);
+	return posixfs_object_op_read(smbd_object, smbd_open, smbd_requ, state, all);
 }
 
 static NTSTATUS dfs_root_object_op_write(
