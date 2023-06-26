@@ -85,6 +85,7 @@ static x_job_t::retval_t copychunk_job_run(x_job_t *job, void *data)
 
 	NTSTATUS status = NT_STATUS_OK;
 	uint32_t total_count = 0;
+	uint32_t chunks_written = 0;
 	for (auto &chunk : copychunk_job->chunks) {
 		/* do sync read write because we have in async job */
 		/* TODO use copy_file_range to avoid copying */
@@ -96,7 +97,6 @@ static x_job_t::retval_t copychunk_job_run(x_job_t *job, void *data)
 		status = x_smbd_open_op_read(copychunk_job->src_open, nullptr,
 				read_state);
 		if (!NT_STATUS_IS_OK(status)) {
-			X_TODO;
 			break;
 		}
 
@@ -110,16 +110,16 @@ static x_job_t::retval_t copychunk_job_run(x_job_t *job, void *data)
 		status = x_smbd_open_op_write(smbd_requ->smbd_open, nullptr,
 				write_state);
 		if (!NT_STATUS_IS_OK(status)) {
-			X_TODO;
 			break;
 		}
 		total_count += read_state->out_buf_length;
+		++chunks_written;
 	}
 
 	/* TODO handle io failure */
 	state->out_buf = x_buf_alloc(sizeof(x_smb2_fsctl_srv_copychunk_out_t));
 	x_smb2_fsctl_srv_copychunk_out_t *out = (x_smb2_fsctl_srv_copychunk_out_t *)state->out_buf->data;
-	out->chunks_written = X_H2LE32(x_convert_assert<uint32_t>(copychunk_job->chunks.size()));
+	out->chunks_written = chunks_written;
 	out->chunk_bytes_written = 0;
 	out->total_bytes_writen = X_H2LE32(total_count);
 	state->out_buf_length = x_convert_assert<uint32_t>(sizeof(x_smb2_fsctl_srv_copychunk_out_t));
