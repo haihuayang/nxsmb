@@ -95,7 +95,7 @@ static x_job_t::retval_t copychunk_job_run(x_job_t *job, void *data)
 		read_state->in_offset = chunk.source_offset;
 		read_state->in_minimum_count = 0;
 		status = x_smbd_open_op_read(copychunk_job->src_open, nullptr,
-				read_state, true);
+				read_state, 0, true);
 		if (!NT_STATUS_IS_OK(status)) {
 			break;
 		}
@@ -108,7 +108,7 @@ static x_job_t::retval_t copychunk_job_run(x_job_t *job, void *data)
 		write_state->in_buf_offset = 0;
 		write_state->in_buf_length = read_state->out_buf_length;
 		status = x_smbd_open_op_write(smbd_requ->smbd_open, nullptr,
-				write_state);
+				write_state, 0);
 		if (!NT_STATUS_IS_OK(status)) {
 			break;
 		}

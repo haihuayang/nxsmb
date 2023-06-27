@@ -797,7 +797,8 @@ x_smbd_find_share(const x_smbd_conf_t &smbd_conf,
 std::pair<std::shared_ptr<x_smbd_share_t>, std::shared_ptr<x_smbd_volume_t>>
 x_smbd_resolve_share(const char16_t *in_share_s, const char16_t *in_share_e)
 {
-	auto smbd_conf = x_smbd_conf_get();
+	const x_smbd_conf_t &smbd_conf = x_smbd_conf_get_curr();
+
 	if (in_share_s == in_share_e) {
 		return {nullptr, nullptr};
 	}
@@ -808,7 +809,7 @@ x_smbd_resolve_share(const char16_t *in_share_s, const char16_t *in_share_e)
 		}
 
 		if (*in_share_s == '-') {
-			auto smbd_volume = smbd_volume_find(*smbd_conf, in_share_s, in_share_e);
+			auto smbd_volume = smbd_volume_find(smbd_conf, in_share_s, in_share_e);
 			if (!smbd_volume) {
 				return {nullptr, nullptr};
 			}
@@ -816,7 +817,7 @@ x_smbd_resolve_share(const char16_t *in_share_s, const char16_t *in_share_e)
 		}
 	}
 
-	std::shared_ptr<x_smbd_share_t> smbd_share = x_smbd_find_share(*smbd_conf,
+	std::shared_ptr<x_smbd_share_t> smbd_share = x_smbd_find_share(smbd_conf,
 			in_share_s, in_share_e);
 	if (!smbd_share) {
 		return {nullptr, nullptr};
@@ -1024,8 +1025,9 @@ x_smbd_durable_t *x_smbd_share_lookup_durable(
 		uint64_t id_persistent)
 {
 	uint64_t vol_id = id_persistent >> 48;
-	auto smbd_conf = x_smbd_conf_get();
-	for (auto &vol: smbd_conf->smbd_volumes) {
+	const x_smbd_conf_t &smbd_conf = x_smbd_conf_get_curr();
+
+	for (auto &vol: smbd_conf.smbd_volumes) {
 		if (vol->volume_id == vol_id &&
 				vol->owner_share == smbd_share) {
 			void *ret = x_smbd_durable_db_lookup(
@@ -1052,4 +1054,13 @@ std::shared_ptr<x_smbd_volume_t> x_smbd_find_volume(const x_smbd_conf_t &smbd_co
 	}
 	return nullptr;
 }
+
+thread_local std::shared_ptr<x_smbd_conf_t> x_smbd_conf_curr;
+
+void x_smbd_conf_pin()
+{
+	X_ASSERT(!x_smbd_conf_curr);
+	x_smbd_conf_curr = g_smbd_conf;
+}
+
 

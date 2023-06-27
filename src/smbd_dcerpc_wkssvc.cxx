@@ -7,14 +7,14 @@ template <class T>
 static void __wkssvc_NetWkstaGetInfo(std::shared_ptr<T> &info)
 {
 	X_ASSERT(!info);
-	const std::shared_ptr<x_smbd_conf_t> smbd_conf = x_smbd_conf_get();
+	const x_smbd_conf_t &smbd_conf = x_smbd_conf_get_curr();
 
 	info = std::make_shared<T>();
 	info->platform_id = idl::PLATFORM_ID_NT;
-	info->version_major = std::get<0>(smbd_conf->my_nbt_version);
-	info->version_minor = std::get<1>(smbd_conf->my_nbt_version);
-	info->server_name = smbd_conf->netbios_name_u16;
-	info->domain_name = smbd_conf->workgroup_u16;
+	info->version_major = std::get<0>(smbd_conf.my_nbt_version);
+	info->version_minor = std::get<1>(smbd_conf.my_nbt_version);
+	info->server_name = smbd_conf.netbios_name_u16;
+	info->domain_name = smbd_conf.workgroup_u16;
 }
 
 static idl::dcerpc_nca_status x_smbd_dcerpc_impl_wkssvc_NetWkstaGetInfo(

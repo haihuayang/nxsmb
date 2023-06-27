@@ -323,10 +323,11 @@ static inline void smbd_tcon_to_tcon_info(std::vector<idl::srvsvc_NetConnInfo1> 
 template <typename T>
 static WERROR smbd_tcon_enum(idl::srvsvc_NetConnEnum &arg, std::vector<T> &array)
 {
-	auto smbd_conf = x_smbd_conf_get();
+	const x_smbd_conf_t &smbd_conf = x_smbd_conf_get_curr();
+
 	std::shared_ptr<x_smbd_share_t> smbd_share;
 	if (arg.path) {
-		smbd_share = x_smbd_find_share(*smbd_conf, *arg.path);
+		smbd_share = x_smbd_find_share(smbd_conf, *arg.path);
 		if (!smbd_share) {
 			X_LOG_WARN("fail to find share '%s'",
 					x_str_todebug(*arg.path).c_str());

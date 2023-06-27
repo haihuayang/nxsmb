@@ -19,7 +19,7 @@ static idl::dcerpc_nca_status x_smbd_dcerpc_impl_dssetup_DsRoleGetPrimaryDomainI
 		x_smbd_sess_t *smbd_sess,
 		idl::dssetup_DsRoleGetPrimaryDomainInformation &arg)
 {
-	const std::shared_ptr<x_smbd_conf_t> smbd_conf = x_smbd_conf_get();
+	const x_smbd_conf_t &smbd_conf = x_smbd_conf_get_curr();
 
 	switch (arg.level) {
 	case idl::DS_ROLE_BASIC_INFORMATION: {
@@ -27,11 +27,11 @@ static idl::dcerpc_nca_status x_smbd_dcerpc_impl_dssetup_DsRoleGetPrimaryDomainI
 		// fill_dsrole_dominfo_basic
 		info->basic.role = idl::DS_ROLE_MEMBER_SERVER;
 		info->basic.flags = idl::DS_ROLE_PRIMARY_DOMAIN_GUID_PRESENT;
-		info->basic.domain = smbd_conf->workgroup_u16;
+		info->basic.domain = smbd_conf.workgroup_u16;
 		/* TODO should make dns_domain upper case */
-		info->basic.dns_domain = smbd_conf->dns_domain_l16;
+		info->basic.dns_domain = smbd_conf.dns_domain_l16;
 		info->basic.forest = info->basic.dns_domain;
-		info->basic.domain_guid = smbd_conf->secrets.domain_guid;
+		info->basic.domain_guid = smbd_conf.secrets.domain_guid;
 		arg.__result = WERR_OK;
 		break;
 	}

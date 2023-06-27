@@ -126,9 +126,8 @@ static bool smbd_qdir_queue_req(x_smbd_qdir_t *smbd_qdir, x_smbd_requ_t *smbd_re
 
 static NTSTATUS smbd_qdir_process_requ(x_smbd_qdir_t *smbd_qdir, x_smbd_requ_t *smbd_requ)
 {
-	uint32_t delay_ms = x_smbd_conf_get()->my_dev_delay_qdir_ms;
-	if (delay_ms) {
-		usleep(delay_ms * 1000);
+	if (smbd_qdir->delay_ms) {
+		usleep(smbd_qdir->delay_ms * 1000);
 	}
 	auto state = smbd_requ->get_requ_state<x_smb2_state_qdir_t>();
 	if (state->in_flags & (X_SMB2_CONTINUE_FLAG_REOPEN | X_SMB2_CONTINUE_FLAG_RESTART)) {
@@ -271,6 +270,7 @@ static x_job_t::retval_t smbd_qdir_job_run(x_job_t *job, void *sche)
 
 x_smbd_qdir_t::x_smbd_qdir_t(x_smbd_open_t *smbd_open, const x_smbd_qdir_ops_t *ops)
 	: base(smbd_qdir_job_run), ops(ops), smbd_open(x_smbd_ref_inc(smbd_open))
+	, delay_ms(x_smbd_conf_get_curr().my_dev_delay_qdir_ms)
 {
 	X_SMBD_COUNTER_INC(qdir_create, 1);
 }

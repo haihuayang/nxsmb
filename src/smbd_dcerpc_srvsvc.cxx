@@ -129,8 +129,9 @@ template <class Arg, class T>
 static WERROR x_smbd_net_enum(Arg &arg,
 		std::vector<T> &array)
 {
-	const std::shared_ptr<x_smbd_conf_t> smbd_conf = x_smbd_conf_get();
-	for (auto &smbd_share: smbd_conf->smbd_shares) {
+	const x_smbd_conf_t &smbd_conf = x_smbd_conf_get_curr();
+
+	for (auto &smbd_share: smbd_conf.smbd_shares) {
 		array.push_back(x_smbd_net_get_info<T>(*smbd_share));
 	}
 	return WERR_OK;
@@ -319,9 +320,9 @@ static idl::dcerpc_nca_status x_smbd_dcerpc_impl_srvsvc_NetShareGetInfo(
 		x_smbd_sess_t *smbd_sess,
 		idl::srvsvc_NetShareGetInfo &arg)
 {
-	const std::shared_ptr<x_smbd_conf_t> smbd_conf = x_smbd_conf_get();
+	const x_smbd_conf_t &smbd_conf = x_smbd_conf_get_curr();
 
-	auto smbd_share = x_smbd_find_share(*smbd_conf, arg.share_name);
+	auto smbd_share = x_smbd_find_share(smbd_conf, arg.share_name);
 	if (!smbd_share) {
 		arg.__result = WERR_INVALID_NAME;
 		return X_SMBD_DCERPC_NCA_STATUS_OK;
@@ -447,19 +448,19 @@ static idl::dcerpc_nca_status x_smbd_dcerpc_impl_srvsvc_NetSrvGetInfo(
 		x_smbd_sess_t *smbd_sess,
 		idl::srvsvc_NetSrvGetInfo &arg)
 {
-	const std::shared_ptr<x_smbd_conf_t> smbd_conf = x_smbd_conf_get();
+	const x_smbd_conf_t &smbd_conf = x_smbd_conf_get_curr();
 
 	switch (arg.level) {
 	case 100:
-		net_get_info(arg, arg.info.info100, *smbd_conf);
+		net_get_info(arg, arg.info.info100, smbd_conf);
 		break;
 
 	case 101:
-		net_get_info(arg, arg.info.info101, *smbd_conf);
+		net_get_info(arg, arg.info.info101, smbd_conf);
 		break;
 
 	case 102:
-		net_get_info(arg, arg.info.info102, *smbd_conf);
+		net_get_info(arg, arg.info.info102, smbd_conf);
 		break;
 
 	default:

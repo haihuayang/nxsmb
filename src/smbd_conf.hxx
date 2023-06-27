@@ -104,5 +104,20 @@ static inline std::shared_ptr<x_smbd_share_t> x_smbd_find_share(
 std::shared_ptr<x_smbd_volume_t> x_smbd_find_volume(const x_smbd_conf_t &smbd_conf,
 		const x_smb2_uuid_t &volume_uuid);
 
+extern thread_local std::shared_ptr<x_smbd_conf_t> x_smbd_conf_curr;
+static inline const x_smbd_conf_t &x_smbd_conf_get_curr()
+{
+	X_ASSERT(x_smbd_conf_curr);
+	return *x_smbd_conf_curr;
+}
+
+void x_smbd_conf_pin();
+
+static inline void x_smbd_conf_unpin()
+{
+	X_ASSERT(x_smbd_conf_curr);
+	x_smbd_conf_curr = nullptr;
+}
+
 #endif /* __smbconf__hxx__ */
 

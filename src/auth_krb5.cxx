@@ -29,7 +29,8 @@ using x_gss_buffer_set_ptr_t = std::unique_ptr<gss_buffer_set_desc, std::functio
 
 struct x_auth_krb5_t
 {
-	x_auth_krb5_t(x_auth_context_t *context, const x_auth_ops_t *ops);
+	x_auth_krb5_t(x_auth_context_t *context, const x_auth_ops_t *ops,
+			const x_smbd_conf_t &smbd_conf);
 	~x_auth_krb5_t()
 	{
 		X_SMBD_COUNTER_INC(auth_krb5_delete, 1);
@@ -75,7 +76,11 @@ struct x_auth_krb5_t
 	std::shared_ptr<idl::blob_t> client_nt_resp;
 	std::vector<uint8_t> encrypted_session_key;
 #endif
+	const bool allow_trusted_domains;
+	const bool gensec_require_pac;
+	const uint32_t max_session_expiration;
 
+	const std::string conf_realm;
 };
 
 static void auth_krb5_post_domain_info(x_auth_krb5_t &auth)
@@ -299,8 +304,13 @@ static void x_ntlmssp_is_trusted_domain(x_auth_krb5_t &ntlmssp)
 }
 #endif
 
-x_auth_krb5_t::x_auth_krb5_t(x_auth_context_t *context, const x_auth_ops_t *ops)
+x_auth_krb5_t::x_auth_krb5_t(x_auth_context_t *context, const x_auth_ops_t *ops,
+		const x_smbd_conf_t &smbd_conf)
 	: auth{context, ops}
+	, allow_trusted_domains(smbd_conf.allow_trusted_domains)
+	, gensec_require_pac(smbd_conf.gensec_require_pac)
+	, max_session_expiration(smbd_conf.max_session_expiration)
+	, conf_realm(smbd_conf.realm)
 {
 	X_SMBD_COUNTER_INC(auth_krb5_create, 1);
 	wbcli.requ = &wbrequ;
@@ -957,13 +967,12 @@ static NTSTATUS auth_krb5_accepted(x_auth_krb5_t &auth, gss_ctx_id_t gss_ctx,
 			gss_release_buffer_set(&min_stat, &p);
 		});
 
-	const auto smbd_conf = x_smbd_conf_get();
 	std::shared_ptr<idl::PAC_LOGON_INFO> logon_info;
 	/* IF we have the PAC - otherwise we need to get this
 	 * data from elsewere
 	 */
 	if (pac_buffer_set == GSS_C_NO_BUFFER_SET) {
-		if (smbd_conf->gensec_require_pac) {
+		if (auth.gensec_require_pac) {
 			DEBUG(1, ("Unable to find PAC in ticket from %s, failing to allow access\n",
 				  principal_string));
 			return NT_STATUS_ACCESS_DENIED;
@@ -1001,8 +1010,8 @@ static NTSTATUS auth_krb5_accepted(x_auth_krb5_t &auth, gss_ctx_id_t gss_ctx,
 		return NT_STATUS_LOGON_FAILURE;
 	}
 	auth.realm = auth.principal_string.substr(pos + 1);
-	if (auth.realm != smbd_conf->realm) { // TODO multibyte comparing
-		if (!smbd_conf->allow_trusted_domains) {
+	if (auth.realm != auth.conf_realm) { // TODO multibyte comparing
+		if (!auth.allow_trusted_domains) {
 			return NT_STATUS_LOGON_FAILURE;
 		}
 	}
@@ -1017,7 +1026,7 @@ static NTSTATUS auth_krb5_accepted(x_auth_krb5_t &auth, gss_ctx_id_t gss_ctx,
 		auth_info = std::make_shared<x_auth_info_t>();
 		auth_info_from_pac_logon_info(*auth_info, *logon_info);
 		std::swap(auth_info->session_key, session_key);
-		auth_info->time_rec = time_rec;
+		auth_info->time_rec = std::min(time_rec, auth.max_session_expiration);
 	}
 	return status;
 
@@ -1329,7 +1338,8 @@ static const x_auth_ops_t auth_krb5_ops = {
 
 x_auth_t *x_auth_create_krb5(x_auth_context_t *context)
 {
-	x_auth_krb5_t *auth_krb5 = new x_auth_krb5_t(context, &auth_krb5_ops);
+	x_auth_krb5_t *auth_krb5 = new x_auth_krb5_t(context, &auth_krb5_ops,
+			x_smbd_conf_get_curr());
 	return &auth_krb5->auth;
 }
 #if 0
@@ -1608,6 +1618,7 @@ static krb5_error_code fill_mem_keytab_from_secrets(
 	krb5_keytab_entry kt_entry;
 	krb5_kvno kvno = 0; /* FIXME: fetch current vno from KDC ? */
 
+	/* TODO recreate keytab after updating password */
 	auto smbd_conf = x_smbd_conf_get();
 
 	std::string pwd = smbd_conf->secrets.machine_password;

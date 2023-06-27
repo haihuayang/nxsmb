@@ -1656,9 +1656,8 @@ struct posixfs_read_evt_t
 };
 
 static NTSTATUS posixfs_do_read(posixfs_object_t *posixfs_object,
-		x_smb2_state_read_t &state)
+		x_smb2_state_read_t &state, uint32_t delay_ms)
 {
-	uint32_t delay_ms = x_smbd_conf_get()->my_dev_delay_read_ms;
 	if (delay_ms) {
 		usleep(delay_ms * 1000);
 	}
@@ -1683,10 +1682,12 @@ static NTSTATUS posixfs_do_read(posixfs_object_t *posixfs_object,
  */
 struct posixfs_read_job_t
 {
-	posixfs_read_job_t(posixfs_object_t *po, x_smbd_requ_t *r);
+	posixfs_read_job_t(posixfs_object_t *po, x_smbd_requ_t *r,
+			uint32_t delay_ms);
 	x_job_t base;
 	posixfs_object_t *posixfs_object;
 	x_smbd_requ_t *smbd_requ;
+	const uint32_t delay_ms;
 };
 
 static x_job_t::retval_t posixfs_read_job_run(x_job_t *job, void *sche)
@@ -1700,7 +1701,7 @@ static x_job_t::retval_t posixfs_read_job_run(x_job_t *job, void *sche)
 
 	auto state = smbd_requ->get_requ_state<x_smb2_state_read_t>();
 
-	NTSTATUS status = posixfs_do_read(posixfs_object, *state);
+	NTSTATUS status = posixfs_do_read(posixfs_object, *state, posixfs_read_job->delay_ms);
 
 	posixfs_object_release(posixfs_object);
 	X_SMBD_CHAN_POST_USER(smbd_requ->smbd_chan,
@@ -1709,8 +1710,10 @@ static x_job_t::retval_t posixfs_read_job_run(x_job_t *job, void *sche)
 	return x_job_t::JOB_DONE;
 }
 
-inline posixfs_read_job_t::posixfs_read_job_t(posixfs_object_t *po, x_smbd_requ_t *r)
+inline posixfs_read_job_t::posixfs_read_job_t(posixfs_object_t *po, x_smbd_requ_t *r,
+		uint32_t delay_ms)
 	: base(posixfs_read_job_run), posixfs_object(po), smbd_requ(r)
+	, delay_ms(delay_ms)
 {
 }
 
@@ -1788,6 +1791,7 @@ NTSTATUS posixfs_object_op_read(
 		x_smbd_open_t *smbd_open,
 		x_smbd_requ_t *smbd_requ,
 		std::unique_ptr<x_smb2_state_read_t> &state,
+		uint32_t delay_ms,
 		bool all)
 {
 	posixfs_object_t *posixfs_object = posixfs_object_from_base_t::container(smbd_object);
@@ -1840,11 +1844,13 @@ NTSTATUS posixfs_object_op_read(
 	 * so disable async for now
 	 */
 	if (!smbd_requ || smbd_requ->is_compound_followed() || smbd_requ->out_buf_head) {
-		return posixfs_do_read(posixfs_object, *state);
+		return posixfs_do_read(posixfs_object, *state,
+				delay_ms);
 	}
 	posixfs_object_incref(posixfs_object);
 	x_smbd_ref_inc(smbd_requ);
-	posixfs_read_job_t *read_job = new posixfs_read_job_t(posixfs_object, smbd_requ);
+	posixfs_read_job_t *read_job = new posixfs_read_job_t(posixfs_object, smbd_requ,
+			delay_ms);
 	smbd_requ->save_requ_state(state);
 	x_smbd_requ_async_insert(smbd_requ, posixfs_read_cancel, X_NSEC_PER_SEC);
 	x_smbd_schedule_async(&read_job->base);
@@ -1853,9 +1859,9 @@ NTSTATUS posixfs_object_op_read(
 
 static NTSTATUS posixfs_do_write(posixfs_object_t *posixfs_object,
 		posixfs_open_t *posixfs_open,
-		x_smb2_state_write_t &state)
+		x_smb2_state_write_t &state,
+		uint32_t delay_ms)
 {
-	uint32_t delay_ms = x_smbd_conf_get()->my_dev_delay_write_ms;
 	if (delay_ms) {
 		usleep(delay_ms * 1000);
 	}
@@ -1910,10 +1916,12 @@ struct posixfs_write_evt_t
 
 struct posixfs_write_job_t
 {
-	posixfs_write_job_t(posixfs_object_t *po, x_smbd_requ_t *r);
+	posixfs_write_job_t(posixfs_object_t *po, x_smbd_requ_t *r,
+			uint32_t delay_ms);
 	x_job_t base;
 	posixfs_object_t *posixfs_object;
 	x_smbd_requ_t *smbd_requ;
+	const uint32_t delay_ms;
 };
 
 static x_job_t::retval_t posixfs_write_job_run(x_job_t *job, void *data)
@@ -1927,7 +1935,8 @@ static x_job_t::retval_t posixfs_write_job_run(x_job_t *job, void *data)
 	posixfs_write_job->posixfs_object = nullptr;
 
 	auto state = smbd_requ->get_requ_state<x_smb2_state_write_t>();
-	NTSTATUS status = posixfs_do_write(posixfs_object, posixfs_open, *state);
+	NTSTATUS status = posixfs_do_write(posixfs_object, posixfs_open, *state,
+			posixfs_write_job->delay_ms);
 
 	posixfs_object_release(posixfs_object);
 	X_SMBD_CHAN_POST_USER(smbd_requ->smbd_chan,
@@ -1936,8 +1945,10 @@ static x_job_t::retval_t posixfs_write_job_run(x_job_t *job, void *data)
 	return x_job_t::JOB_DONE;
 }
 
-inline posixfs_write_job_t::posixfs_write_job_t(posixfs_object_t *po, x_smbd_requ_t *r)
+inline posixfs_write_job_t::posixfs_write_job_t(posixfs_object_t *po, x_smbd_requ_t *r,
+		uint32_t delay_ms)
 	: base(posixfs_write_job_run), posixfs_object(po), smbd_requ(r)
+	, delay_ms(delay_ms)
 {
 }
 
@@ -1950,7 +1961,8 @@ NTSTATUS posixfs_object_op_write(
 		x_smbd_object_t *smbd_object,
 		x_smbd_open_t *smbd_open,
 		x_smbd_requ_t *smbd_requ,
-		std::unique_ptr<x_smb2_state_write_t> &state)
+		std::unique_ptr<x_smb2_state_write_t> &state,
+		uint32_t delay_ms)
 {
 	posixfs_object_t *posixfs_object = posixfs_object_from_base_t::container(smbd_object);
 	posixfs_open_t *posixfs_open = posixfs_open_from_base_t::container(smbd_open);
@@ -1977,11 +1989,13 @@ NTSTATUS posixfs_object_op_write(
 	}
 
 	if (!smbd_requ || smbd_requ->is_compound_followed()) {
-		return posixfs_do_write(posixfs_object, posixfs_open, *state);
+		return posixfs_do_write(posixfs_object, posixfs_open, *state,
+				delay_ms);
 	}
 	posixfs_object_incref(posixfs_object);
 	x_smbd_ref_inc(smbd_requ);
-	posixfs_write_job_t *write_job = new posixfs_write_job_t(posixfs_object, smbd_requ);
+	posixfs_write_job_t *write_job = new posixfs_write_job_t(posixfs_object, smbd_requ,
+			delay_ms);
 	smbd_requ->save_requ_state(state);
 	x_smbd_requ_async_insert(smbd_requ, posixfs_write_cancel, X_NSEC_PER_SEC);
 	x_smbd_schedule_async(&write_job->base);
@@ -2505,13 +2519,14 @@ static NTSTATUS getinfo_fs(x_smbd_requ_t *smbd_requ,
 		posixfs_object_t *posixfs_object,
 		x_smb2_state_getinfo_t &state)
 {
+	const x_smbd_conf_t &smbd_conf = x_smbd_conf_get_curr();
 	if (state.in_info_level == x_smb2_info_level_t::FS_VOLUME_INFORMATION) {
 		if (state.in_output_buffer_length < sizeof(x_smb2_fs_volume_info_t)) {
 			return NT_STATUS_INFO_LENGTH_MISMATCH;
 		}
 
 		std::u16string volume = x_smbd_tcon_get_volume_label(smbd_requ->smbd_tcon);
-		size_t hash = std::hash<std::u16string>{}(volume + u":" + *x_smbd_conf_get()->netbios_name_u16);
+		size_t hash = std::hash<std::u16string>{}(volume + u":" + *smbd_conf.netbios_name_u16);
 
 		uint32_t output_buffer_length = state.in_output_buffer_length & ~1;
 		size_t buf_size = std::min(size_t(output_buffer_length),

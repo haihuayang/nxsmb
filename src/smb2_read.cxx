@@ -1,6 +1,7 @@
 
 #include "smbd.hxx"
 #include "smbd_open.hxx"
+#include "smbd_conf.hxx"
 #include "util_io.hxx"
 
 namespace {
@@ -135,13 +136,16 @@ NTSTATUS x_smb2_process_read(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_DEVICE_REQUEST);
 	}
 
+	const x_smbd_conf_t &smbd_conf = x_smbd_conf_get_curr();
+
 	if (state->in_length == 0) {
 		state->out_buf_length = 0;
 		status = NT_STATUS_OK;
 	} else {
 		smbd_requ->async_done_fn = x_smb2_read_async_done;
 		status = x_smbd_open_op_read(smbd_requ->smbd_open, smbd_requ,
-				state, false);
+				state, smbd_conf.my_dev_delay_read_ms,
+				false);
 	}
 
 	if (NT_STATUS_IS_OK(status)) {

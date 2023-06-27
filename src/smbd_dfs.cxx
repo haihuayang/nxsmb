@@ -418,8 +418,9 @@ static inline void create_new_tld(dfs_share_t &dfs_share,
 	/* TODO single node from now, for multi node, it should send msg to
 	   the node hosting tld to create it
 	 */
-	auto smbd_conf = x_smbd_conf_get();
-	if (data_volume->owner_node_l16 == smbd_conf->node_l16) {
+	const x_smbd_conf_t &smbd_conf = x_smbd_conf_get_curr();
+
+	if (data_volume->owner_node_l16 == smbd_conf.node_l16) {
 		posixfs_mktld(x_smbd_sess_get_user(smbd_requ->smbd_sess), *data_volume,
 				uuid_str, ntacl_blob);
 	} else {
@@ -526,15 +527,16 @@ static NTSTATUS dfs_root_op_delete_object(x_smbd_object_t *smbd_object,
 			return NT_STATUS_UNSUCCESSFUL;
 		}
 
-		auto smbd_conf = x_smbd_conf_get();
-		auto smbd_volume = x_smbd_find_volume(*smbd_conf, volume_uuid);
+		const x_smbd_conf_t &smbd_conf = x_smbd_conf_get_curr();
+
+		auto smbd_volume = x_smbd_find_volume(smbd_conf, volume_uuid);
 		X_ASSERT(smbd_volume);
 
 		/* TODO first mark dir fd in deleting */
 		/* TODO single node from now, for multi node, it should send msg to
 		   the node hosting tld to delete it
 		 */
-		if (smbd_volume->owner_node_l16 == smbd_conf->node_l16) {
+		if (smbd_volume->owner_node_l16 == smbd_conf.node_l16) {
 			err = unlinkat(smbd_volume->rootdir_fd, tld_uuid.c_str(), AT_REMOVEDIR);
 			if (err != 0) {
 				if (errno == ENOTEMPTY) {
@@ -564,24 +566,28 @@ static NTSTATUS dfs_root_object_op_read(
 		x_smbd_open_t *smbd_open,
 		x_smbd_requ_t *smbd_requ,
 		std::unique_ptr<x_smb2_state_read_t> &state,
+		uint32_t delay_ms,
 		bool all)
 {
 	if (smbd_open->open_state.priv_data != dfs_open_type_normal) {
 		return NT_STATUS_INVALID_DEVICE_REQUEST;
 	}
-	return posixfs_object_op_read(smbd_object, smbd_open, smbd_requ, state, all);
+	return posixfs_object_op_read(smbd_object, smbd_open, smbd_requ,
+			state, delay_ms, all);
 }
 
 static NTSTATUS dfs_root_object_op_write(
 		x_smbd_object_t *smbd_object,
 		x_smbd_open_t *smbd_open,
 		x_smbd_requ_t *smbd_requ,
-		std::unique_ptr<x_smb2_state_write_t> &state)
+		std::unique_ptr<x_smb2_state_write_t> &state,
+		uint32_t delay_ms)
 {
 	if (smbd_open->open_state.priv_data != dfs_open_type_normal) {
 		return NT_STATUS_INVALID_DEVICE_REQUEST;
 	}
-	return posixfs_object_op_write(smbd_object, smbd_open, smbd_requ, state);
+	return posixfs_object_op_write(smbd_object, smbd_open, smbd_requ,
+			state, delay_ms);
 }
 
 
@@ -1146,7 +1152,7 @@ NTSTATUS dfs_share_t::get_dfs_referral(x_dfs_referral_resp_t &dfs_referral_resp,
 		const char16_t *in_share_end) const
 {
 	return dfs_share_get_dfs_referral(*this,
-			*x_smbd_conf_get(),
+			x_smbd_conf_get_curr(),
 			dfs_referral_resp,
 			in_full_path_begin,
 			in_full_path_end,

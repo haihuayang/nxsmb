@@ -324,8 +324,6 @@ NTSTATUS x_smbd_sess_auth_succeeded(x_smbd_sess_t *smbd_sess,
 			smbd_sess->key_is_valid = true;
 		}
 		smbd_sess->state = x_smbd_sess_t::S_ACTIVE;
-		auto smbd_conf = x_smbd_conf_get();
-		time_rec = std::min(time_rec, smbd_conf->max_session_expiration);
 		if (time_rec == X_INFINITE) {
 			smbd_sess->tick_expired = tick_now + x_tick_diff_max;
 		} else {

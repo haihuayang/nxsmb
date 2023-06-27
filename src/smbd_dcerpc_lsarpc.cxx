@@ -143,7 +143,7 @@ static inline idl::dcerpc_nca_status lsa_QueryInfoPolicy(
 	}
 
 	auto lsa_info = std::static_pointer_cast<lsa_info_t>(handle_data);
-	auto smbd_conf = x_smbd_conf_get();
+	const x_smbd_conf_t &smbd_conf = x_smbd_conf_get_curr();
 
 	//uint32_t acc_required = 0;
 	switch (arg.level) {
@@ -157,9 +157,9 @@ static inline idl::dcerpc_nca_status lsa_QueryInfoPolicy(
 		// check access, acc_required = idl::LSA_POLICY_VIEW_LOCAL_INFORMATION;
 		auto info = std::make_shared<idl::lsa_PolicyInformation>();
 		info->__init(arg.level);
-		info->domain.name.string = smbd_conf->workgroup_u16;
+		info->domain.name.string = smbd_conf.workgroup_u16;
 		info->domain.sid = std::make_shared<idl::dom_sid>(
-				smbd_conf->secrets.domain_sid);
+				smbd_conf.secrets.domain_sid);
 		arg.info = info;
 		arg.__result = NT_STATUS_OK;
 						  }
@@ -173,9 +173,9 @@ static inline idl::dcerpc_nca_status lsa_QueryInfoPolicy(
 		// check access has idl::LSA_POLICY_VIEW_LOCAL_INFORMATION
 		auto info = std::make_shared<idl::lsa_PolicyInformation>();
 		info->__init(arg.level);
-		info->account_domain.name.string = smbd_conf->netbios_name_u16;
+		info->account_domain.name.string = smbd_conf.netbios_name_u16;
 		info->account_domain.sid = std::make_shared<idl::dom_sid>(
-				smbd_conf->secrets.sid);
+				smbd_conf.secrets.sid);
 		arg.info = info;
 		arg.__result = NT_STATUS_OK;
 						  }

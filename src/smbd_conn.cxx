@@ -1467,9 +1467,11 @@ static bool x_smbd_conn_upcall_cb_getevents(x_epoll_upcall_t *upcall, x_fdevents
 	x_smbd_conn_t *smbd_conn = x_smbd_conn_from_upcall(upcall);
 	X_LOG_DBG("%p x%lx", smbd_conn, fdevents);
 
+	x_smbd_conf_pin();
 	g_smbd_conn_curr = x_smbd_ref_inc(smbd_conn);
 	bool ret = x_smbd_conn_handle_events(smbd_conn, fdevents);
 	X_SMBD_REF_DEC(g_smbd_conn_curr);
+	x_smbd_conf_unpin();
 	return ret;
 }
 
@@ -1479,6 +1481,7 @@ static void x_smbd_conn_upcall_cb_unmonitor(x_epoll_upcall_t *upcall)
 	X_LOG_CONN("%p", smbd_conn);
 	X_ASSERT_SYSCALL(close(smbd_conn->fd));
 	smbd_conn->fd = -1;
+	x_smbd_conf_pin();
 	g_smbd_conn_curr = x_smbd_ref_inc(smbd_conn);
 
 	x_smbd_conn_terminate_chans(smbd_conn);
@@ -1500,6 +1503,7 @@ static void x_smbd_conn_upcall_cb_unmonitor(x_epoll_upcall_t *upcall)
 	}
 
 	X_SMBD_REF_DEC(g_smbd_conn_curr);
+	x_smbd_conf_unpin();
 	x_smbd_ref_dec(smbd_conn);
 }
 
@@ -1512,9 +1516,9 @@ static void x_smbd_srv_accepted(x_smbd_srv_t *smbd_srv, int fd, const x_sockaddr
 {
 	X_LOG_CONN("accept %d from %s", fd, saddr.tostring().c_str());
 	set_nbio(fd, 1);
-	auto smbd_conf = x_smbd_conf_get();
+	const x_smbd_conf_t &smbd_conf = x_smbd_conf_get_curr();
 	x_smbd_conn_t *smbd_conn = new x_smbd_conn_t(fd, saddr,
-			smbd_conf->smb2_max_credits);
+			smbd_conf.smb2_max_credits);
 	X_ASSERT(smbd_conn != NULL);
 	smbd_conn->upcall.cbs = &x_smbd_conn_upcall_cbs;
 	smbd_conn->ep_id = x_evtmgmt_monitor(g_evtmgmt, fd, FDEVT_IN | FDEVT_OUT, &smbd_conn->upcall);
@@ -1565,11 +1569,8 @@ static bool x_smbd_srv_do_user(x_smbd_srv_t *smbd_srv, x_fdevents_t &fdevents)
 	return false;
 }
 
-
-static bool x_smbd_srv_upcall_cb_getevents(x_epoll_upcall_t *upcall, x_fdevents_t &fdevents)
+static bool x_smbd_srv_handle_events(x_smbd_srv_t *smbd_srv, x_fdevents_t &fdevents)
 {
-	x_smbd_srv_t *smbd_srv = x_smbd_from_upcall(upcall);
-	X_LOG_DBG("%p x%lx", smbd_srv, fdevents);
 	uint32_t events = x_fdevents_processable(fdevents);
 	if (events & FDEVT_USER) {
 		if (x_smbd_srv_do_user(smbd_srv, fdevents)) {
@@ -1581,6 +1582,16 @@ static bool x_smbd_srv_upcall_cb_getevents(x_epoll_upcall_t *upcall, x_fdevents_
 		return x_smbd_srv_do_recv(smbd_srv, fdevents);
 	}
 	return false;
+}
+
+static bool x_smbd_srv_upcall_cb_getevents(x_epoll_upcall_t *upcall, x_fdevents_t &fdevents)
+{
+	x_smbd_srv_t *smbd_srv = x_smbd_from_upcall(upcall);
+	X_LOG_DBG("%p x%lx", smbd_srv, fdevents);
+	x_smbd_conf_pin();
+	bool ret = x_smbd_srv_handle_events(smbd_srv, fdevents);
+	x_smbd_conf_unpin();
+	return ret;
 }
 
 static void x_smbd_srv_upcall_cb_unmonitor(x_epoll_upcall_t *upcall)
@@ -1743,7 +1754,7 @@ NTSTATUS x_smbd_conn_validate_negotiate_info(const x_smbd_conn_t *smbd_conn,
 		return X_NT_STATUS_INTERNAL_TERMINATE;
 	}
 
-	const auto smbd_conf = x_smbd_conf_get();
+	const x_smbd_conf_t &smbd_conf = x_smbd_conf_get_curr();
 	/*
 	 * From: [MS-SMB2]
 	 * 3.3.5.15.12 Handling a Validate Negotiate Info Request
@@ -1755,7 +1766,7 @@ NTSTATUS x_smbd_conn_validate_negotiate_info(const x_smbd_conn_t *smbd_conn,
 	 * the server MUST terminate the transport connection
 	 * and free the Connection object.
 	 */
-	uint16_t dialect = x_smb2_dialect_match(smbd_conf->dialects, 
+	uint16_t dialect = x_smb2_dialect_match(smbd_conf.dialects, 
 			fsctl_state.in_dialects.data(),
 			fsctl_state.in_dialects.size());
 
@@ -1764,7 +1775,7 @@ NTSTATUS x_smbd_conn_validate_negotiate_info(const x_smbd_conn_t *smbd_conn,
 	}
 
 	fsctl_state.out_capabilities = smbd_conn->server_capabilities;
-	fsctl_state.out_guid = smbd_conf->guid;
+	fsctl_state.out_guid = smbd_conf.guid;
 	fsctl_state.out_security_mode = smbd_conn->server_security_mode;
 	fsctl_state.out_dialect = smbd_conn->dialect;
 

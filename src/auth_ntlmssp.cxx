@@ -54,7 +54,8 @@ struct x_ntlmssp_crypt_direction_t
 
 struct x_auth_ntlmssp_t
 {
-	x_auth_ntlmssp_t(x_auth_context_t *context, const x_auth_ops_t *ops);
+	x_auth_ntlmssp_t(x_auth_context_t *context, const x_auth_ops_t *ops,
+			const x_smbd_conf_t &smbd_conf);
 	~x_auth_ntlmssp_t()
 	{
 		X_SMBD_COUNTER_INC(auth_ntlmssp_delete, 1);
@@ -79,24 +80,30 @@ struct x_auth_ntlmssp_t
 	x_auth_upcall_t *auth_upcall;
 
 	// smbd_smb2_session_setup_send, should in base class
-	uint32_t want_features = GENSEC_FEATURE_SESSION_KEY | GENSEC_FEATURE_UNIX_TOKEN;
+	const uint32_t want_features = GENSEC_FEATURE_SESSION_KEY | GENSEC_FEATURE_UNIX_TOKEN;
 
 	bool sess_is_bind = false;
 	uint8_t sess_security_mode;
 
-	bool allow_lm_response;
-	bool allow_lm_key;
-	bool force_old_spnego;
+	const bool allow_lm_response;
+	const bool allow_lm_key;
+	const bool force_old_spnego;
 	bool force_wrap_seal;
-	bool is_standalone;
+	const bool is_standalone = false;
+	const bool allow_trusted_domains;
 	bool unicode = false;
 	bool doing_ntlm2 = false;
 	bool new_spnego = false;
 	uint32_t neg_flags;
-	uint32_t required_flags = 0;
+	const uint32_t required_flags = 0;
+	const uint32_t max_session_expiration;
+
+	const std::tuple<uint8_t, uint8_t, uint16_t> my_nbt_version;
 
 	std::array<uint8_t, 8> chal;
-	std::u16string netbios_name, netbios_domain, dns_name, dns_domain;
+	const std::u16string netbios_name, netbios_domain, dns_domain, dns_name;
+	const std::string workgroup_8;
+
 	std::shared_ptr<idl::AV_PAIR_LIST> server_av_pair_list;
 
 	std::string client_domain;
@@ -1041,6 +1048,7 @@ static NTSTATUS ntlmssp_post_auth(x_auth_ntlmssp_t *ntlmssp, x_auth_info_t &auth
 		auth_info.session_key.assign(session_key_data, session_key_data + session_key_length);
 	}
 
+	auth_info.time_rec = ntlmssp->max_session_expiration;
 	return ntlmssp_post_auth2(ntlmssp, auth_info);
 }
 
@@ -1073,15 +1081,15 @@ static const x_wb_cbs_t ntlmssp_check_password_cbs = {
 	ntlmssp_check_password_cb_reply,
 };
 
-static bool check_domain_match(const std::string &user, const std::string &domain)
+static bool check_domain_match(const x_auth_ntlmssp_t &ntlmssp,
+		const std::string &user, const std::string &domain)
 {
-	auto smbd_conf = x_smbd_conf_get();
-	if (smbd_conf->allow_trusted_domains) {
+	if (ntlmssp.allow_trusted_domains) {
 		return true;
 	}
 
 	/* we do not check if domain is local name */
-	if (domain.empty() || x_strcase_equal(domain, smbd_conf->workgroup_8)) {
+	if (domain.empty() || x_strcase_equal(domain, ntlmssp.workgroup_8)) {
 		return true;
 	}
 	return false;
@@ -1149,7 +1157,7 @@ static NTSTATUS ntlmssp_check_password(x_auth_ntlmssp_t &ntlmssp,
 		domain = x_convert_utf16_to_utf8(ntlmssp.netbios_name);
 	}
 #endif
-	if (!check_domain_match(ntlmssp.client_user, ntlmssp.client_domain)) {
+	if (!check_domain_match(ntlmssp, ntlmssp.client_user, ntlmssp.client_domain)) {
 		return NT_STATUS_LOGON_FAILURE;
 	}
 
@@ -1264,19 +1272,44 @@ static void x_ntlmssp_is_trusted_domain(x_auth_ntlmssp_t &ntlmssp, x_auth_upcall
 }
 #endif
 
-x_auth_ntlmssp_t::x_auth_ntlmssp_t(x_auth_context_t *context, const x_auth_ops_t *ops)
+static std::u16string auth_ntlmssp_get_dns_name(
+		const std::u16string netbios_name,
+		const std::u16string dns_domain)
+{
+	std::u16string tmp_dns_name = netbios_name;
+	if (dns_domain.size()) {
+		tmp_dns_name += u".";
+		tmp_dns_name += dns_domain;
+	}
+
+	std::u16string dns_name;
+	dns_name.resize(tmp_dns_name.size());
+	std::transform(tmp_dns_name.begin(), tmp_dns_name.end(), dns_name.begin(),
+			[](unsigned char c) { return std::tolower(c); });
+	return dns_name;
+}
+
+x_auth_ntlmssp_t::x_auth_ntlmssp_t(x_auth_context_t *context, const x_auth_ops_t *ops,
+		const x_smbd_conf_t &smbd_conf)
 	: auth{context, ops}
+	, allow_lm_response(smbd_conf.lanman_auth)
+	, allow_lm_key(allow_lm_response && lpcfg_param_bool(NULL, "ntlmssp_server", "allow_lm_key", false))
+	// TODO smbclient fails logon when force_old_spnego is true
+	, force_old_spnego(lpcfg_param_bool(NULL, "ntlmssp_server", "force_old_spnego", false))
+	, allow_trusted_domains(smbd_conf.allow_trusted_domains) 
+	, max_session_expiration(smbd_conf.max_session_expiration)
+	, my_nbt_version(smbd_conf.my_nbt_version)
+	, netbios_name(*smbd_conf.netbios_name_u16)
+	, netbios_domain(*smbd_conf.workgroup_u16)
+	, dns_domain(*smbd_conf.dns_domain_l16)
+	, dns_name(auth_ntlmssp_get_dns_name(netbios_name, dns_domain))
+	, workgroup_8(smbd_conf.workgroup_8)
 {
 	X_SMBD_COUNTER_INC(auth_ntlmssp_create, 1);
 	wbcli.requ = &wbrequ;
 	wbcli.resp = &wbresp;
 
-	const auto smbd_conf = x_smbd_conf_get();
 	// gensec_ntlmssp_server_start
-	allow_lm_response = smbd_conf->lanman_auth;
-	allow_lm_key = (allow_lm_response && lpcfg_param_bool(NULL, "ntlmssp_server", "allow_lm_key", false));
-	// TODO smbclient fails logon when force_old_spnego is true
-	force_old_spnego = lpcfg_param_bool(NULL, "ntlmssp_server", "force_old_spnego", false);
 
 	neg_flags = idl::NTLMSSP_NEGOTIATE_NTLM | idl::NTLMSSP_NEGOTIATE_VERSION;
 	if (lpcfg_param_bool(NULL, "ntlmssp_server", "128bit", true)) {
@@ -1331,20 +1364,6 @@ x_auth_ntlmssp_t::x_auth_ntlmssp_t(x_auth_context_t *context, const x_auth_ops_t
 	   ntlmssp_state->server.is_standalone = false;
 	   }
 	   */
-	is_standalone = false;
-	netbios_name = *smbd_conf->netbios_name_u16;
-	netbios_domain = *smbd_conf->workgroup_u16;
-	dns_domain = *smbd_conf->dns_domain_l16;
-
-	std::u16string tmp_dns_name = netbios_name;
-	if (dns_domain.size()) {
-		tmp_dns_name += u".";
-		tmp_dns_name += dns_domain;
-	}
-
-	dns_name.resize(tmp_dns_name.size());
-	std::transform(tmp_dns_name.begin(), tmp_dns_name.end(), dns_name.begin(),
-			[](unsigned char c) { return std::tolower(c); });
 	/* TODO
 	   ntlmssp_state->neg_flags |= ntlmssp_state->required_flags;
 	   ntlmssp_state->conf_flags = ntlmssp_state->neg_flags;
@@ -1471,7 +1490,6 @@ static inline NTSTATUS handle_negotiate(x_auth_ntlmssp_t &auth_ntlmssp,
 		const uint8_t *in_buf, size_t in_len, std::vector<uint8_t> &out,
 		x_auth_upcall_t *auth_upcall)
 {
-	auto smbd_conf = x_smbd_conf_get();
 	// samba gensec_ntlmssp_server_negotiate
 	idl::NEGOTIATE_MESSAGE nego_msg;
 	idl::x_ndr_off_t ret = idl::x_ndr_pull(nego_msg, in_buf, in_len, 0);
@@ -1551,10 +1569,10 @@ static inline NTSTATUS handle_negotiate(x_auth_ntlmssp_t &auth_ntlmssp,
 	chal_msg.ServerChallenge = cryptkey;
 	auto &version = chal_msg.Version.version;
 	version.ProductMajorVersion = idl::ntlmssp_WindowsMajorVersion(
-			std::get<0>(smbd_conf->my_nbt_version));
+			std::get<0>(auth_ntlmssp.my_nbt_version));
 	version.ProductMinorVersion = idl::ntlmssp_WindowsMinorVersion(
-			std::get<1>(smbd_conf->my_nbt_version));
-	version.ProductBuild = std::get<2>(smbd_conf->my_nbt_version);
+			std::get<1>(auth_ntlmssp.my_nbt_version));
+	version.ProductBuild = std::get<2>(auth_ntlmssp.my_nbt_version);
 	version.Reserved = { 0, 0, 0 };
 	version.NTLMRevisionCurrent = idl::NTLMSSP_REVISION_W2K3;
 
@@ -1840,7 +1858,8 @@ static const x_auth_ops_t auth_ntlmssp_ops = {
 
 x_auth_t *x_auth_create_ntlmssp(x_auth_context_t *context)
 {
-	x_auth_ntlmssp_t *ntlmssp = new x_auth_ntlmssp_t(context, &auth_ntlmssp_ops);
+	x_auth_ntlmssp_t *ntlmssp = new x_auth_ntlmssp_t(context, &auth_ntlmssp_ops,
+			x_smbd_conf_get_curr());
 	return &ntlmssp->auth;
 }
 

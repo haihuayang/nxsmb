@@ -46,6 +46,7 @@ struct x_smbd_qdir_t
 	uint64_t compound_id_blocking = 0;
 	NTSTATUS error_status = NT_STATUS_OK;
 	uint32_t total_count = 0;
+	const uint32_t delay_ms;
 	std::atomic<bool> closed = false;
 	x_fnmatch_t *fnmatch = nullptr;
 };
@@ -148,11 +149,13 @@ struct x_smbd_object_ops_t
 			x_smbd_open_t *smbd_open,
 			x_smbd_requ_t *smbd_requ,
 			std::unique_ptr<x_smb2_state_read_t> &state,
+			uint32_t delay_ms,
 			bool all);
 	NTSTATUS (*write)(x_smbd_object_t *smbd_object,
 			x_smbd_open_t *smbd_open,
 			x_smbd_requ_t *smbd_requ,
-			std::unique_ptr<x_smb2_state_write_t> &state);
+			std::unique_ptr<x_smb2_state_write_t> &state,
+			uint32_t delay_ms);
 	NTSTATUS (*flush)(x_smbd_object_t *smbd_object,
 			x_smbd_open_t *smbd_open,
 			x_smbd_requ_t *smbd_requ);
@@ -344,6 +347,7 @@ static inline NTSTATUS x_smbd_open_op_read(
 		x_smbd_open_t *smbd_open,
 		x_smbd_requ_t *smbd_requ,
 		std::unique_ptr<x_smb2_state_read_t> &state,
+		uint32_t delay_ms,
 		bool all)
 {
 	x_smbd_object_t *smbd_object = smbd_open->smbd_object;
@@ -351,20 +355,21 @@ static inline NTSTATUS x_smbd_open_op_read(
 	if (!op_fn) {
 		return NT_STATUS_INVALID_DEVICE_REQUEST;
 	}
-	return op_fn(smbd_object, smbd_open, smbd_requ, state, all);
+	return op_fn(smbd_object, smbd_open, smbd_requ, state, delay_ms, all);
 }
 
 static inline NTSTATUS x_smbd_open_op_write(
 		x_smbd_open_t *smbd_open,
 		x_smbd_requ_t *smbd_requ,
-		std::unique_ptr<x_smb2_state_write_t> &state)
+		std::unique_ptr<x_smb2_state_write_t> &state,
+		uint32_t delay_ms)
 {
 	x_smbd_object_t *smbd_object = smbd_open->smbd_object;
 	auto op_fn = smbd_object->smbd_volume->ops->write;
 	if (!op_fn) {
 		return NT_STATUS_INVALID_DEVICE_REQUEST;
 	}
-	return op_fn(smbd_object, smbd_open, smbd_requ, state);
+	return op_fn(smbd_object, smbd_open, smbd_requ, state, delay_ms);
 }
 
 static inline NTSTATUS x_smbd_open_op_flush(

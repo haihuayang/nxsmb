@@ -472,8 +472,9 @@ static NTSTATUS x_smb2_fsctl_query_network_interface_info(
 		}
 	}
 
-	const auto smbd_conf = x_smbd_conf_get();
-	const auto &local_ifaces = *smbd_conf->local_ifaces;
+	const x_smbd_conf_t &smbd_conf = x_smbd_conf_get_curr();
+
+	const auto &local_ifaces = *smbd_conf.local_ifaces;
 	if (state.in_max_output_length < sizeof(fsctl_net_iface_info_t) * local_ifaces.size()) {
 		return NT_STATUS_BUFFER_TOO_SMALL;
 	}
