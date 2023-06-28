@@ -233,6 +233,7 @@ static NTSTATUS smbd_object_remove(
 		}
 		changes.push_back(x_smb2_change_t{NOTIFY_ACTION_REMOVED, notify_filter,
 				smbd_open->open_state.parent_lease_key,
+				smbd_open->open_state.client_guid,
 				smbd_object->path, {}});
 	} else if (smbd_open->smbd_stream &&
 			sharemode->meta.delete_on_close) {
@@ -249,6 +250,7 @@ static NTSTATUS smbd_object_remove(
 		changes.push_back(x_smb2_change_t{NOTIFY_ACTION_REMOVED_STREAM,
 				FILE_NOTIFY_CHANGE_STREAM_NAME,
 				smbd_open->open_state.parent_lease_key,
+				smbd_open->open_state.client_guid,
 				smbd_object->path + u':' + smbd_open->smbd_stream->name,
 				{}});
 	}
@@ -299,6 +301,7 @@ static void smbd_close_open_intl(
 		changes.push_back(x_smb2_change_t{NOTIFY_ACTION_MODIFIED,
 				FILE_NOTIFY_CHANGE_LAST_WRITE,
 				smbd_open->open_state.parent_lease_key,
+				smbd_open->open_state.client_guid,
 				smbd_object->path, {}});
 		smbd_open->update_write_time = false;
 	}
@@ -741,6 +744,7 @@ struct send_lease_break_evt_t
 
 void x_smbd_open_break_lease(x_smbd_open_t *smbd_open,
 		const x_smb2_lease_key_t *ignore_lease_key,
+		const x_smb2_uuid_t *client_guid,
 		uint8_t break_to)
 {
 	x_smb2_lease_key_t lease_key;
@@ -750,6 +754,7 @@ void x_smbd_open_break_lease(x_smbd_open_t *smbd_open,
 
 	bool send_break = x_smbd_lease_require_break(smbd_open->smbd_lease,
 			ignore_lease_key,
+			client_guid,
 			lease_key, break_to, curr_state,
 			new_epoch, flags);
 	if (!send_break) {
@@ -1233,7 +1238,7 @@ static bool delay_for_oplock(x_smbd_object_t *smbd_object,
 
 		++break_count;
 		if (curr_open->smbd_lease) {
-			x_smbd_open_break_lease(curr_open, nullptr, break_to);
+			x_smbd_open_break_lease(curr_open, nullptr, nullptr, break_to);
 		} else {
 			x_smbd_open_break_oplock(smbd_object, curr_open, break_to);
 		}
@@ -1694,7 +1699,7 @@ void x_smbd_break_others_to_none(x_smbd_object_t *smbd_object,
 			continue;
 		}
 		if (other_open->smbd_lease) {
-			x_smbd_open_break_lease(other_open, nullptr, X_SMB2_LEASE_NONE);
+			x_smbd_open_break_lease(other_open, nullptr, nullptr, X_SMB2_LEASE_NONE);
 		} else {
 			/* This can break the open's self oplock II, but 
 			 * Windows behave same

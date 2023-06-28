@@ -302,13 +302,14 @@ static void require_break(x_smbd_lease_t *smbd_lease,
 /* samba process_oplock_break_message */
 bool x_smbd_lease_require_break(x_smbd_lease_t *smbd_lease,
 		const x_smb2_lease_key_t *ignore_lease_key,
+		const x_smb2_uuid_t *client_guid,
 		x_smb2_lease_key_t &lease_key,
 		uint8_t &new_state, /* in out */
 		uint8_t &curr_state,
 		uint16_t &epoch,
 		uint32_t &flags)
 {
-	if (ignore_lease_key && smbd_lease_match(smbd_lease, x_smbd_conn_curr_client_guid(),
+	if (ignore_lease_key && smbd_lease_match(smbd_lease, *client_guid,
 				*ignore_lease_key)) {
 		return false;
 	}

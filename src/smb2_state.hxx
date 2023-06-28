@@ -15,9 +15,10 @@ struct x_smb2_change_t
 	uint32_t action;
 	uint32_t filter;
 	/* the change's parent_lease_key, all 0 mean no parent_lease_key,
-	 * support all 0 is not a valid key
+	 * suppose all 0 is not a valid key
 	 */
 	x_smb2_lease_key_t ignore_lease_key;
+	x_smb2_uuid_t client_guid;
 	std::u16string path;
 	std::u16string new_path;
 };

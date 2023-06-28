@@ -38,6 +38,7 @@ void x_smbd_object_notify_change(x_smbd_object_t *smbd_object,
 		const std::u16string &fullpath,
 		const std::u16string *new_name_path,
 		const x_smb2_lease_key_t &ignore_lease_key,
+		const x_smb2_uuid_t &client_guid,
 		bool last_level,
 		long open_priv_data)
 {
@@ -55,7 +56,8 @@ void x_smbd_object_notify_change(x_smbd_object_t *smbd_object,
 		}
 
 		if (last_level && curr_open->smbd_lease) {
-			x_smbd_open_break_lease(curr_open, &ignore_lease_key, 0);
+			x_smbd_open_break_lease(curr_open, &ignore_lease_key, &client_guid,
+					0);
 		}
 
 		if (!(curr_open->notify_filter & notify_filter)) {
@@ -117,6 +119,7 @@ void x_smbd_simple_notify_change(
 		uint32_t notify_action,
 		uint32_t notify_filter,
 		const x_smb2_lease_key_t &ignore_lease_key,
+		const x_smb2_uuid_t &client_guid,
 		bool last_level)
 {
 	x_smbd_object_t *smbd_object = nullptr;
@@ -138,7 +141,9 @@ void x_smbd_simple_notify_change(
 			x_str_todebug(fullpath).c_str());
 	x_smbd_object_notify_change(smbd_object, notify_action, notify_filter,
 			path.empty() ? 0: x_convert<uint32_t>(path.length() + 1),
-			fullpath, new_fullpath, ignore_lease_key, last_level, 0);
+			fullpath, new_fullpath,
+			ignore_lease_key, client_guid,
+			last_level, 0);
 
 	x_smbd_object_release(smbd_object, nullptr);
 }
@@ -150,11 +155,12 @@ static void notify_one_level(std::shared_ptr<x_smbd_volume_t> &smbd_volume,
 		uint32_t notify_action,
 		uint32_t notify_filter,
 		const x_smb2_lease_key_t &ignore_lease_key,
+		const x_smb2_uuid_t &client_guid,
 		bool last_level)
 {
 	smbd_volume->ops->notify_change(smbd_volume, path, fullpath, new_fullpath,
 			notify_action, notify_filter,
-			ignore_lease_key, last_level);
+			ignore_lease_key, client_guid, last_level);
 }
 
 static void notify_change(std::shared_ptr<x_smbd_volume_t> &smbd_volume,
@@ -162,7 +168,8 @@ static void notify_change(std::shared_ptr<x_smbd_volume_t> &smbd_volume,
 		uint32_t notify_filter,
 		const std::u16string &path,
 		const std::u16string *new_path,
-		const x_smb2_lease_key_t &ignore_lease_key)
+		const x_smb2_lease_key_t &ignore_lease_key,
+		const x_smb2_uuid_t &client_guid)
 {
 	bool watch_tree = smbd_volume->watch_tree_cnt > 0;
 	std::size_t curr_pos = 0, last_sep_pos = 0;
@@ -178,6 +185,7 @@ static void notify_change(std::shared_ptr<x_smbd_volume_t> &smbd_volume,
 					path, new_path,
 					notify_action, notify_filter,
 					ignore_lease_key,
+					client_guid,
 					false);
 		}
 		last_sep_pos = found;
@@ -189,6 +197,7 @@ static void notify_change(std::shared_ptr<x_smbd_volume_t> &smbd_volume,
 			path, new_path,
 			notify_action, notify_filter,
 			ignore_lease_key,
+			client_guid,
 			true);
 }
 
@@ -210,26 +219,31 @@ void x_smbd_notify_change(std::shared_ptr<x_smbd_volume_t> &smbd_volume,
 			if (same_parent) {
 				notify_change(smbd_volume, change.action, change.filter,
 						change.path, &change.new_path,
-						change.ignore_lease_key);
+						change.ignore_lease_key,
+						change.client_guid);
 			} else {
 				notify_change(smbd_volume, NOTIFY_ACTION_REMOVED, change.filter,
 						change.path, nullptr,
-						change.ignore_lease_key);
+						change.ignore_lease_key,
+						change.client_guid);
 				notify_change(smbd_volume, NOTIFY_ACTION_ADDED, change.filter,
 						change.new_path, nullptr,
-						change.ignore_lease_key);
+						change.ignore_lease_key,
+						change.client_guid);
 			}
 			if (new_sep != std::u16string::npos) {
 				/* Windows server also notify dest parent dir modified */
 				notify_change(smbd_volume, NOTIFY_ACTION_MODIFIED,
 						FILE_NOTIFY_CHANGE_LAST_WRITE,
 						change.new_path.substr(0, new_sep),
-						nullptr, x_smb2_lease_key_t{});
+						nullptr, x_smb2_lease_key_t{},
+						change.client_guid);
 			}
 		} else {
 			notify_change(smbd_volume, change.action, change.filter,
 					change.path, nullptr,
-					change.ignore_lease_key);
+					change.ignore_lease_key,
+					change.client_guid);
 		}
 	}
 }

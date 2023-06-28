@@ -488,6 +488,7 @@ static NTSTATUS dfs_root_object_op_rename(x_smbd_object_t *smbd_object,
 			state->out_changes.push_back(x_smb2_change_t{NOTIFY_ACTION_OLD_NAME, 
 					FILE_NOTIFY_CHANGE_DIR_NAME,
 					smbd_open->open_state.parent_lease_key,
+					smbd_open->open_state.client_guid,
 					old_path,
 					new_path});
 		}
@@ -551,6 +552,7 @@ static NTSTATUS dfs_root_op_delete_object(x_smbd_object_t *smbd_object,
 			changes.push_back(x_smb2_change_t{NOTIFY_ACTION_REMOVED,
 					FILE_NOTIFY_CHANGE_DIR_NAME,
 					smbd_open->open_state.parent_lease_key,
+					smbd_open->open_state.client_guid,
 					path,
 					{}});
 		} else {
@@ -700,6 +702,7 @@ static void dfs_root_notify_change(std::shared_ptr<x_smbd_volume_t> &smbd_volume
 		uint32_t notify_action,
 		uint32_t notify_filter,
 		const x_smb2_lease_key_t &ignore_lease_key,
+		const x_smb2_uuid_t &client_guid,
 		bool last_level)
 {
 	NTSTATUS status;
@@ -728,7 +731,8 @@ static void dfs_root_notify_change(std::shared_ptr<x_smbd_volume_t> &smbd_volume
 
 	x_smbd_object_notify_change(smbd_object, notify_action, notify_filter,
 			path.empty() ? 0: x_convert<uint32_t>(path.length() + 1),
-			fullpath, new_fullpath, ignore_lease_key,
+			fullpath, new_fullpath,
+			ignore_lease_key, client_guid,
 			last_level,
 			open_priv_data);
 	x_smbd_object_release(smbd_object, nullptr);
@@ -807,11 +811,13 @@ static NTSTATUS dfs_root_op_create_open(
 				changes.push_back(x_smb2_change_t{NOTIFY_ACTION_ADDED, 
 						FILE_NOTIFY_CHANGE_DIR_NAME,
 						x_smb2_lease_key_t{0, 0},
+						x_smbd_conn_curr_client_guid(),
 						smbd_object->path,
 						{}});
 				changes.push_back(x_smb2_change_t{NOTIFY_ACTION_ADDED, 
 						FILE_NOTIFY_CHANGE_DIR_NAME,
 						state->lease.parent_key,
+						x_smbd_conn_curr_client_guid(),
 						u".tlds\\" + smbd_object->path,
 						{}});
 				return status;
