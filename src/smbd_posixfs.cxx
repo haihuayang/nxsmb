@@ -2856,6 +2856,35 @@ NTSTATUS posixfs_object_op_ioctl(
 	return NT_STATUS_INVALID_DEVICE_REQUEST;
 }
 
+NTSTATUS posixfs_object_op_set_attribute(x_smbd_object_t *smbd_object,
+		x_smbd_stream_t *smbd_stream,
+		uint32_t attributes_modify,
+		uint32_t attributes_value,
+		bool &modified)
+{
+	if (smbd_stream) {
+		return NT_STATUS_NOT_SUPPORTED;
+	}
+
+	dos_attr_t dos_attr = { 0 };
+	auto &object_meta = smbd_object->meta;
+	posixfs_object_t *posixfs_object = posixfs_object_from_base_t::container(smbd_object);
+	auto lock = std::lock_guard(posixfs_object->base.mutex);
+	uint32_t new_attr = object_meta.file_attributes;
+	new_attr &= ~attributes_modify;
+	new_attr |= attributes_value;
+	if (new_attr != object_meta.file_attributes) {
+		dos_attr.attr_mask |= DOS_SET_FILE_ATTR;
+		dos_attr.file_attrs = new_attr;
+		posixfs_dos_attr_set(posixfs_object->fd, &dos_attr);
+
+		x_smbd_stream_meta_t stream_meta;
+		posixfs_statex_get(posixfs_object->fd, &object_meta, &stream_meta);
+	}
+
+	return NT_STATUS_OK;
+}
+
 static long posixfs_qdir_filldents(posixfs_qdir_t *posixfs_qdir,
 		posixfs_object_t *posixfs_object)
 {

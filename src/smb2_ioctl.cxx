@@ -520,6 +520,51 @@ static void ioctl_async_done(x_smbd_conn_t *smbd_conn,
 	x_smbd_conn_requ_done(smbd_conn, smbd_requ, status);
 }
 
+static NTSTATUS x_smb2_ioctl_set_sparse(
+		x_smbd_requ_t *smbd_requ,
+		x_smb2_state_ioctl_t &state)
+{
+	/* TODO check tcon writable */
+
+	auto smbd_open = smbd_requ->smbd_open;
+	if (!smbd_open->check_access_any(idl::SEC_FILE_WRITE_DATA |
+				idl::SEC_FILE_WRITE_ATTRIBUTE |
+				idl::SEC_FILE_APPEND_DATA)) {
+		X_LOG_NOTICE("set_sparse invalid access 0x%x",
+				smbd_open->open_state.access_mask);
+		return NT_STATUS_ACCESS_DENIED;
+	}
+
+	auto smbd_object = smbd_open->smbd_object;
+	if (x_smbd_object_is_dir(smbd_object)) {
+		return NT_STATUS_INVALID_PARAMETER;
+	}
+
+	uint32_t set = (state.in_buf_length == 0 ||
+			state.in_buf->data[state.in_buf_offset] != 0) ?
+		X_SMB2_FILE_ATTRIBUTE_SPARSE : 0;
+
+	bool modified = false;
+	NTSTATUS status = x_smbd_object_set_attribute(smbd_object,
+			smbd_open->smbd_stream,
+			X_SMB2_FILE_ATTRIBUTE_SPARSE, set, modified);
+
+	if (modified) {
+#if 0
+		windows server seems not send notify when it change
+		std::vector<x_smb2_change_t> changes;
+		changes.push_back(x_smb2_change_t{NOTIFY_ACTION_MODIFIED,
+				FILE_NOTIFY_CHANGE_ATTRIBUTES,
+				smbd_open->open_state.parent_lease_key,
+				smbd_open->open_state.client_guid,
+				smbd_object->path, {}});
+		x_smbd_notify_change(smbd_object->smbd_volume, changes);
+#endif
+	}
+
+	return status;
+}
+
 static NTSTATUS x_smb2_ioctl_get_compression(
 		x_smbd_requ_t *smbd_requ,
 		x_smb2_state_ioctl_t &state)
@@ -565,6 +610,8 @@ static NTSTATUS x_smbd_open_ioctl(x_smbd_conn_t *smbd_conn,
 		return x_smb2_ioctl_copychunk(smbd_conn, smbd_requ, state);
 	case X_SMB2_FSCTL_SRV_REQUEST_RESUME_KEY:
 		return x_smb2_ioctl_request_resume_key(smbd_requ, *state);
+	case X_SMB2_FSCTL_SET_SPARSE:
+		return x_smb2_ioctl_set_sparse(smbd_requ, *state);
 	case X_SMB2_FSCTL_GET_COMPRESSION:
 		return x_smb2_ioctl_get_compression(smbd_requ, *state);
 	case X_SMB2_FSCTL_SET_COMPRESSION:

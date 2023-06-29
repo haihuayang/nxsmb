@@ -732,6 +732,16 @@ static NTSTATUS ipc_object_op_ioctl(
 		return NT_STATUS_NOT_SUPPORTED;
 	}
 }
+
+static NTSTATUS ipc_object_op_set_attribute(x_smbd_object_t *smbd_object,
+			x_smbd_stream_t *smbd_stream,
+			uint32_t attributes_modify,
+			uint32_t attributes_value,
+			bool &modified)
+{
+	return NT_STATUS_NOT_SUPPORTED;
+}
+
 #if 0
 static NTSTATUS ipc_object_op_qdir(
 		x_smbd_object_t *smbd_object,
@@ -929,6 +939,7 @@ static const x_smbd_object_ops_t x_smbd_ipc_object_ops = {
 	ipc_object_op_getinfo,
 	ipc_object_op_setinfo,
 	ipc_object_op_ioctl,
+	ipc_object_op_set_attribute,
 	nullptr, // op_qdir_create
 	nullptr, // op_rename
 	nullptr, // op_set_delete_on_close

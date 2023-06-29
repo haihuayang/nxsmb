@@ -172,6 +172,11 @@ struct x_smbd_object_ops_t
 	NTSTATUS (*ioctl)(x_smbd_object_t *smbd_object,
 			x_smbd_requ_t *smbd_requ,
 			std::unique_ptr<x_smb2_state_ioctl_t> &state);
+	NTSTATUS (*set_attribute)(x_smbd_object_t *smbd_object,
+			x_smbd_stream_t *smbd_stream,
+			uint32_t attributes_modify,
+			uint32_t attributes_value,
+			bool &modified);
 	x_smbd_qdir_t *(*qdir_create)(x_smbd_open_t *smbd_open);
 #if 0
 	bool (*qdir_get_entry)(x_smbd_qdir_t *smbd_qdir,
@@ -526,7 +531,16 @@ static inline void x_smbd_object_lease_granted(x_smbd_object_t *smbd_object,
 	smbd_object->smbd_volume->ops->lease_granted(smbd_object, smbd_stream);
 }
 
-
+static inline NTSTATUS x_smbd_object_set_attribute(x_smbd_object_t *smbd_object,
+		x_smbd_stream_t *smbd_stream,
+		uint32_t attributes_modify,
+		uint32_t attributes_value,
+		bool &modified)
+{
+	return smbd_object->smbd_volume->ops->set_attribute(smbd_object,
+			smbd_stream, attributes_modify, attributes_value,
+			modified);
+}
 
 bool x_smbd_open_has_space();
 x_smbd_open_t *x_smbd_open_lookup(uint64_t id_presistent, uint64_t id_volatile,
