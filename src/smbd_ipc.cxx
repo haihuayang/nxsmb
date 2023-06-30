@@ -733,6 +733,15 @@ static NTSTATUS ipc_object_op_ioctl(
 	}
 }
 
+static NTSTATUS ipc_object_op_query_allocated_ranges(
+		x_smbd_object_t *smbd_object,
+		x_smbd_stream_t *smbd_stream,
+		std::vector<x_smb2_file_range_t> &ranges,
+		uint64_t offset, uint64_t max_offset)
+{
+	return NT_STATUS_NOT_SUPPORTED;
+}
+
 static NTSTATUS ipc_object_op_set_attribute(x_smbd_object_t *smbd_object,
 			x_smbd_stream_t *smbd_stream,
 			uint32_t attributes_modify,
@@ -939,6 +948,7 @@ static const x_smbd_object_ops_t x_smbd_ipc_object_ops = {
 	ipc_object_op_getinfo,
 	ipc_object_op_setinfo,
 	ipc_object_op_ioctl,
+	ipc_object_op_query_allocated_ranges,
 	ipc_object_op_set_attribute,
 	nullptr, // op_qdir_create
 	nullptr, // op_rename

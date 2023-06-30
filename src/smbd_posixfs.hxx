@@ -56,6 +56,11 @@ NTSTATUS posixfs_object_op_ioctl(
 		x_smbd_object_t *smbd_object,
 		x_smbd_requ_t *smbd_requ,
 		std::unique_ptr<x_smb2_state_ioctl_t> &state);
+NTSTATUS posixfs_object_op_query_allocated_ranges(
+		x_smbd_object_t *smbd_object,
+		x_smbd_stream_t *smbd_stream,
+		std::vector<x_smb2_file_range_t> &ranges,
+		uint64_t offset, uint64_t length);
 NTSTATUS posixfs_object_op_set_attribute(x_smbd_object_t *smbd_object,
 		x_smbd_stream_t *smbd_stream,
 		uint32_t attributes_modify,

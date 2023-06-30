@@ -520,6 +520,73 @@ static void ioctl_async_done(x_smbd_conn_t *smbd_conn,
 	x_smbd_conn_requ_done(smbd_conn, smbd_requ, status);
 }
 
+static NTSTATUS x_smb2_ioctl_query_allocated_ranges(
+		x_smbd_requ_t *smbd_requ,
+		x_smb2_state_ioctl_t &state)
+{
+	/* TODO check tcon writable */
+
+	auto smbd_open = smbd_requ->smbd_open;
+	if (!smbd_open->check_access_any(idl::SEC_FILE_READ_DATA)) {
+		X_LOG_NOTICE("query_allocated_ranges invalid access 0x%x",
+				smbd_open->open_state.access_mask);
+		return NT_STATUS_ACCESS_DENIED;
+	}
+
+	if (state.in_buf_length < sizeof(x_smb2_file_range_t)) {
+		return NT_STATUS_INVALID_PARAMETER;
+	}
+
+	const x_smb2_file_range_t *in_qar =
+		(const x_smb2_file_range_t *)(state.in_buf->data + state.in_buf_offset);
+	uint64_t in_qar_off = X_LE2H64(in_qar->offset);
+	uint64_t in_qar_len = X_LE2H64(in_qar->length);
+
+	auto [object_meta, stream_meta] = x_smbd_open_op_get_meta(smbd_open);
+	if (in_qar_len == 0 || stream_meta->end_of_file == 0 ||
+			in_qar_off >= stream_meta->end_of_file) {
+		/* zero length range or after EOF, no ranges to return */
+		return NT_STATUS_OK;
+	}
+
+	uint64_t in_qar_end = in_qar_off + in_qar_len;
+	if (in_qar_end < in_qar_off) {
+		/* integer overflow */
+		return NT_STATUS_INVALID_PARAMETER;
+	}
+
+	uint64_t max_off = std::min(stream_meta->end_of_file, in_qar_end);
+	std::vector<x_smb2_file_range_t> ranges;
+	if (!(object_meta->file_attributes & X_SMB2_FILE_ATTRIBUTE_SPARSE)) {
+		ranges.push_back({in_qar_off, max_off - in_qar_off});
+	} else {
+		NTSTATUS status = x_smbd_object_query_allocated_ranges(
+				smbd_open->smbd_object,
+				smbd_open->smbd_stream,
+				ranges,
+				in_qar_off, max_off);
+		if (!NT_STATUS_IS_OK(status)) {
+			return status;
+		}
+	}
+
+	size_t out_size = sizeof(x_smb2_file_range_t) * ranges.size();
+	if (out_size > state.in_max_output_length) {
+		return NT_STATUS_BUFFER_TOO_SMALL;
+	}
+
+	state.out_buf = x_buf_alloc(out_size);
+	uint8_t *p = state.out_buf->data;
+	x_smb2_file_range_t *out_range = (x_smb2_file_range_t *)p;
+	for (auto &r: ranges) {
+		out_range->offset = X_H2LE64(r.offset);
+		out_range->length = X_H2LE64(r.length);
+		++out_range;
+	}
+	state.out_buf_length = x_convert_assert<uint32_t>(out_size);
+	return NT_STATUS_OK;
+}
+
 static NTSTATUS x_smb2_ioctl_set_sparse(
 		x_smbd_requ_t *smbd_requ,
 		x_smb2_state_ioctl_t &state)
@@ -612,6 +679,8 @@ static NTSTATUS x_smbd_open_ioctl(x_smbd_conn_t *smbd_conn,
 		return x_smb2_ioctl_request_resume_key(smbd_requ, *state);
 	case X_SMB2_FSCTL_SET_SPARSE:
 		return x_smb2_ioctl_set_sparse(smbd_requ, *state);
+	case X_SMB2_FSCTL_QUERY_ALLOCATED_RANGES:
+		return x_smb2_ioctl_query_allocated_ranges(smbd_requ, *state);
 	case X_SMB2_FSCTL_GET_COMPRESSION:
 		return x_smb2_ioctl_get_compression(smbd_requ, *state);
 	case X_SMB2_FSCTL_SET_COMPRESSION:

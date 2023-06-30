@@ -2856,6 +2856,39 @@ NTSTATUS posixfs_object_op_ioctl(
 	return NT_STATUS_INVALID_DEVICE_REQUEST;
 }
 
+NTSTATUS posixfs_object_op_query_allocated_ranges(
+		x_smbd_object_t *smbd_object,
+		x_smbd_stream_t *smbd_stream,
+		std::vector<x_smb2_file_range_t> &ranges,
+		uint64_t off, uint64_t max_off)
+{
+	posixfs_object_t *posixfs_object = posixfs_object_from_base_t::container(smbd_object);
+	while (off < max_off) {
+		off_t data_off = lseek(posixfs_object->fd, off, SEEK_DATA);
+		if (data_off == -1) {
+			if (errno == ENXIO) {
+				break;
+			}
+			return x_map_nt_error_from_unix(errno);
+		}
+		if (uint64_t(data_off) > max_off) {
+			break;
+		}
+		off_t hole_off = lseek(posixfs_object->fd, data_off, SEEK_HOLE);
+		if (hole_off == -1) {
+			return x_map_nt_error_from_unix(errno);
+		}
+		if (hole_off <= data_off) {
+			X_LOG_ERR("lseek inconsistent: hole %ld at or before data %ld\n",
+					hole_off, data_off);
+			return NT_STATUS_INTERNAL_ERROR;
+		}
+		ranges.push_back({uint64_t(data_off), std::min(uint64_t(hole_off), max_off) - data_off});
+		off = hole_off;
+	}
+	return NT_STATUS_OK;
+}
+
 NTSTATUS posixfs_object_op_set_attribute(x_smbd_object_t *smbd_object,
 		x_smbd_stream_t *smbd_stream,
 		uint32_t attributes_modify,

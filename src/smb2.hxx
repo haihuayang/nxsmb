@@ -309,6 +309,7 @@ enum {
 	X_SMB2_FSCTL_SET_REPARSE_POINT			= 0x000900A4,
 	X_SMB2_FSCTL_CREATE_OR_GET_OBJECT_ID		= 0x000900C0,
 	X_SMB2_FSCTL_SET_SPARSE				= 0x000900C4,
+	X_SMB2_FSCTL_QUERY_ALLOCATED_RANGES		= 0x000940CF,
 	X_SMB2_FSCTL_FILE_LEVEL_TRIM			= 0x00098208,
 	X_SMB2_FSCTL_PIPE_PEEK				= 0x0011400C,
 	X_SMB2_FSCTL_PIPE_WAIT				= 0x00110018,
@@ -1125,6 +1126,12 @@ struct x_smb2_chain_marshall_t
 	uint32_t get_size() const {
 		return last_end;
 	}
+};
+
+struct x_smb2_file_range_t
+{
+	uint64_t offset;
+	uint64_t length;
 };
 
 #endif /* __smb2__hxx__ */

@@ -172,6 +172,10 @@ struct x_smbd_object_ops_t
 	NTSTATUS (*ioctl)(x_smbd_object_t *smbd_object,
 			x_smbd_requ_t *smbd_requ,
 			std::unique_ptr<x_smb2_state_ioctl_t> &state);
+	NTSTATUS (*query_allocated_ranges)(x_smbd_object_t *smbd_object,
+			x_smbd_stream_t *smbd_stream,
+			std::vector<x_smb2_file_range_t> &ranges,
+			uint64_t offset, uint64_t max_offset);
 	NTSTATUS (*set_attribute)(x_smbd_object_t *smbd_object,
 			x_smbd_stream_t *smbd_stream,
 			uint32_t attributes_modify,
@@ -529,6 +533,19 @@ static inline void x_smbd_object_lease_granted(x_smbd_object_t *smbd_object,
 		x_smbd_stream_t *smbd_stream)
 {
 	smbd_object->smbd_volume->ops->lease_granted(smbd_object, smbd_stream);
+}
+
+static inline NTSTATUS x_smbd_object_query_allocated_ranges(
+		x_smbd_object_t *smbd_object,
+		x_smbd_stream_t *smbd_stream,
+		std::vector<x_smb2_file_range_t> &ranges,
+		uint64_t offset, uint64_t max_offset)
+{
+	return smbd_object->smbd_volume->ops->query_allocated_ranges(
+			smbd_object,
+			smbd_stream,
+			ranges,
+			offset, max_offset);
 }
 
 static inline NTSTATUS x_smbd_object_set_attribute(x_smbd_object_t *smbd_object,
