@@ -109,6 +109,7 @@ static const x_smbd_object_ops_t simplefs_object_ops = {
 	posixfs_object_op_setinfo,
 	posixfs_object_op_ioctl,
 	posixfs_object_op_query_allocated_ranges,
+	posixfs_object_op_set_zero_data,
 	posixfs_object_op_set_attribute,
 	simplefs_op_qdir_create,
 	posixfs_object_op_rename,

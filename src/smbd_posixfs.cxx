@@ -2889,6 +2889,33 @@ NTSTATUS posixfs_object_op_query_allocated_ranges(
 	return NT_STATUS_OK;
 }
 
+#include <linux/falloc.h>
+NTSTATUS posixfs_object_op_set_zero_data(x_smbd_object_t *smbd_object,
+		x_smbd_open_t *smbd_open,
+		uint64_t begin_offset,
+		uint64_t end_offset)
+{
+	if (smbd_open->smbd_stream) {
+		return NT_STATUS_NOT_SUPPORTED; // TODO
+	}
+	posixfs_object_t *posixfs_object = posixfs_object_from_base_t::container(smbd_object);
+	std::lock_guard<std::mutex> lock(smbd_object->mutex);
+	if (x_smbd_check_io_brl_conflict(smbd_object, smbd_open, begin_offset,
+				end_offset - begin_offset, true)) {
+		return NT_STATUS_FILE_LOCK_CONFLICT;
+	}
+
+	int err = fallocate(posixfs_object->fd,
+			FALLOC_FL_KEEP_SIZE | FALLOC_FL_PUNCH_HOLE,
+			begin_offset, end_offset - begin_offset);
+	if (err < 0) {
+		X_LOG_ERR("fallocate %lu-%lu errno=%d",
+				begin_offset, end_offset, errno);
+		return x_map_nt_error_from_unix(errno);
+	}
+	return NT_STATUS_OK;
+}
+
 NTSTATUS posixfs_object_op_set_attribute(x_smbd_object_t *smbd_object,
 		x_smbd_stream_t *smbd_stream,
 		uint32_t attributes_modify,

@@ -61,6 +61,10 @@ NTSTATUS posixfs_object_op_query_allocated_ranges(
 		x_smbd_stream_t *smbd_stream,
 		std::vector<x_smb2_file_range_t> &ranges,
 		uint64_t offset, uint64_t length);
+NTSTATUS posixfs_object_op_set_zero_data(
+		x_smbd_object_t *smbd_object,
+		x_smbd_open_t *smbd_open,
+		uint64_t begin_offset, uint64_t end_offset);
 NTSTATUS posixfs_object_op_set_attribute(x_smbd_object_t *smbd_object,
 		x_smbd_stream_t *smbd_stream,
 		uint32_t attributes_modify,

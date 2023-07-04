@@ -632,6 +632,43 @@ static NTSTATUS x_smb2_ioctl_set_sparse(
 	return status;
 }
 
+struct x_smb2_file_range2_t
+{
+	uint64_t begin_offset;
+	uint64_t end_offset;
+};
+
+static NTSTATUS x_smb2_ioctl_set_zero_data(
+		x_smbd_requ_t *smbd_requ,
+		x_smb2_state_ioctl_t &state)
+{
+	/* TODO check tcon writable */
+	auto smbd_open = smbd_requ->smbd_open;
+	if (!smbd_open->check_access_any(idl::SEC_FILE_WRITE_DATA)) {
+		X_LOG_NOTICE("set_sparse invalid access 0x%x",
+				smbd_open->open_state.access_mask);
+		return NT_STATUS_ACCESS_DENIED;
+	}
+
+	if (state.in_buf_length < sizeof(x_smb2_file_range2_t)) {
+		return NT_STATUS_INVALID_PARAMETER;
+	}
+
+	const x_smb2_file_range2_t *in_range =
+		(const x_smb2_file_range2_t *)(state.in_buf->data + state.in_buf_offset);
+	uint64_t in_begin_offset = X_LE2H64(in_range->begin_offset);
+	uint64_t in_end_offset = X_LE2H64(in_range->end_offset);
+
+	if (in_begin_offset > in_end_offset) {
+		return NT_STATUS_INVALID_PARAMETER;
+	} else if (in_begin_offset == in_end_offset) {
+		return NT_STATUS_OK;
+	}
+
+	return x_smbd_object_set_zero_data(smbd_open,
+			in_begin_offset, in_end_offset);
+}
+
 static NTSTATUS x_smb2_ioctl_get_compression(
 		x_smbd_requ_t *smbd_requ,
 		x_smb2_state_ioctl_t &state)
@@ -679,6 +716,8 @@ static NTSTATUS x_smbd_open_ioctl(x_smbd_conn_t *smbd_conn,
 		return x_smb2_ioctl_request_resume_key(smbd_requ, *state);
 	case X_SMB2_FSCTL_SET_SPARSE:
 		return x_smb2_ioctl_set_sparse(smbd_requ, *state);
+	case X_SMB2_FSCTL_SET_ZERO_DATA:
+		return x_smb2_ioctl_set_zero_data(smbd_requ, *state);
 	case X_SMB2_FSCTL_QUERY_ALLOCATED_RANGES:
 		return x_smb2_ioctl_query_allocated_ranges(smbd_requ, *state);
 	case X_SMB2_FSCTL_GET_COMPRESSION:

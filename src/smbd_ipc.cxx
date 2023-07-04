@@ -742,6 +742,14 @@ static NTSTATUS ipc_object_op_query_allocated_ranges(
 	return NT_STATUS_NOT_SUPPORTED;
 }
 
+static NTSTATUS ipc_object_op_set_zero_data(
+		x_smbd_object_t *smbd_object,
+		x_smbd_open_t *smbd_open,
+		uint64_t begin_offset, uint64_t end_offset)
+{
+	return NT_STATUS_NOT_SUPPORTED;
+}
+
 static NTSTATUS ipc_object_op_set_attribute(x_smbd_object_t *smbd_object,
 			x_smbd_stream_t *smbd_stream,
 			uint32_t attributes_modify,
@@ -949,6 +957,7 @@ static const x_smbd_object_ops_t x_smbd_ipc_object_ops = {
 	ipc_object_op_setinfo,
 	ipc_object_op_ioctl,
 	ipc_object_op_query_allocated_ranges,
+	ipc_object_op_set_zero_data,
 	ipc_object_op_set_attribute,
 	nullptr, // op_qdir_create
 	nullptr, // op_rename

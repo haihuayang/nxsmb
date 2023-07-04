@@ -176,6 +176,9 @@ struct x_smbd_object_ops_t
 			x_smbd_stream_t *smbd_stream,
 			std::vector<x_smb2_file_range_t> &ranges,
 			uint64_t offset, uint64_t max_offset);
+	NTSTATUS (*set_zero_data)(x_smbd_object_t *smbd_object,
+			x_smbd_open_t *smbd_open,
+			uint64_t begin_offset, uint64_t end_offset);
 	NTSTATUS (*set_attribute)(x_smbd_object_t *smbd_object,
 			x_smbd_stream_t *smbd_stream,
 			uint32_t attributes_modify,
@@ -546,6 +549,17 @@ static inline NTSTATUS x_smbd_object_query_allocated_ranges(
 			smbd_stream,
 			ranges,
 			offset, max_offset);
+}
+
+static inline NTSTATUS x_smbd_object_set_zero_data(
+		x_smbd_open_t *smbd_open,
+		uint64_t begin_offset, uint64_t end_offset)
+{
+	x_smbd_object_t *smbd_object = smbd_open->smbd_object;
+	return smbd_object->smbd_volume->ops->set_zero_data(
+			smbd_object,
+			smbd_open,
+			begin_offset, end_offset);
 }
 
 static inline NTSTATUS x_smbd_object_set_attribute(x_smbd_object_t *smbd_object,
