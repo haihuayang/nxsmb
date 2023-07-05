@@ -490,6 +490,7 @@ struct x_smbd_requ_t
 	uint8_t interim_state = INTERIM_S_NONE;
 	bool encrypted;
 	bool request_counters_updated = false;
+	bool done = false;
 
 	NTSTATUS status{NT_STATUS_OK};
 	NTSTATUS sess_status{NT_STATUS_OK};

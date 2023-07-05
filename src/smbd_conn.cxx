@@ -201,7 +201,7 @@ int x_smbd_conn_negprot_smb1(x_smbd_conn_t *smbd_conn)
 	return 0;
 }
 
-static void x_smbd_conn_queue(x_smbd_conn_t *smbd_conn, x_bufref_t *buf_head,
+static void x_smbd_conn_queue_buf(x_smbd_conn_t *smbd_conn, x_bufref_t *buf_head,
 		x_bufref_t *buf_tail, uint32_t length)
 {
 	x_bufref_t *bufref = buf_head;
@@ -332,7 +332,7 @@ static void x_smbd_conn_queue(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ
 		smbd_requ->out_length = clen;
 	}
 
-	x_smbd_conn_queue(smbd_conn, smbd_requ->out_buf_head, smbd_requ->out_buf_tail,
+	x_smbd_conn_queue_buf(smbd_conn, smbd_requ->out_buf_head, smbd_requ->out_buf_tail,
 			smbd_requ->out_length);
 
 	smbd_requ->out_buf_head = smbd_requ->out_buf_tail = nullptr;
@@ -519,6 +519,7 @@ static int x_smbd_reply_interim(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_re
 	x_bufref_t *bufref = new x_bufref_t{out_buf, 8, sizeof(x_smb2_header_t) + 8};
 	smbd_requ->interim_state = x_smbd_requ_t::INTERIM_S_SENT;
 	x_smb2_reply_msg(smbd_conn, smbd_requ, bufref, bufref, NT_STATUS_PENDING, sizeof(x_smb2_header_t) + 8);
+	x_smbd_conn_queue(smbd_conn, smbd_requ);
 
 	return 0;
 }
@@ -622,7 +623,7 @@ void x_smbd_conn_send_unsolicited(x_smbd_conn_t *smbd_conn, x_smbd_sess_t *smbd_
 
 	memset(smb2_hdr->signature, 0, sizeof(smb2_hdr->signature));
 
-	x_smbd_conn_queue(smbd_conn, buf, buf, buf->length);
+	x_smbd_conn_queue_buf(smbd_conn, buf, buf, buf->length);
 }
 
 static const struct {
@@ -1044,6 +1045,7 @@ static int x_smbd_conn_process_smb2(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smb
 		memcpy(smbd_requ->in_smb2_hdr.signature, in_smb2_hdr->signature,
 				sizeof(in_smb2_hdr->signature));
 
+		smbd_requ->done = false;
 		NTSTATUS status = x_smbd_conn_process_smb2_intl(
 				smbd_conn, smbd_requ);
 		if (NT_STATUS_EQUAL(status, NT_STATUS_PENDING)) {
@@ -1065,7 +1067,7 @@ static int x_smbd_conn_process_smb2(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smb
 	}
 
 	/* CANCEL request do not have response */
-	if (smbd_requ->out_length > 0) {
+	if (smbd_requ->out_length > 0 && smbd_requ->done) {
 		x_smbd_conn_queue(smbd_conn, smbd_requ);
 	}
 	return 0;
@@ -1242,7 +1244,7 @@ static bool x_smbd_conn_do_recv(x_smbd_conn_t *smbd_conn, x_fdevents_t &fdevents
 {
 	X_TRACE_LOC;
 	ssize_t err;
-	X_LOG_DBG("%p x%lx x%lx", smbd_conn, smbd_conn->ep_id, fdevents);
+	X_LOG_DBG("conn %p x%lx x%lx", smbd_conn, smbd_conn->ep_id, fdevents);
 	if (smbd_conn->recv_buf == NULL) {
 		X_ASSERT(smbd_conn->recv_len < sizeof(smbd_conn->nbt_hdr));
 		err = read(smbd_conn->fd, (char *)&smbd_conn->nbt_hdr + smbd_conn->recv_len,
@@ -1320,23 +1322,27 @@ static bool x_smbd_conn_do_recv(x_smbd_conn_t *smbd_conn, x_fdevents_t &fdevents
 
 static bool x_smbd_conn_do_send(x_smbd_conn_t *smbd_conn, x_fdevents_t &fdevents)
 {
-	X_LOG_DBG("%p x%lx x%lx", smbd_conn, smbd_conn->ep_id, fdevents);
+	X_LOG_DBG("conn %p x%lx x%lx", smbd_conn, smbd_conn->ep_id, fdevents);
 	for (;;) {
 		struct iovec iov[8];
-		uint32_t niov = 0;
 
 		x_bufref_t *bufref = smbd_conn->send_buf_head;
 		if (!bufref) {
 			break;
 		}
 
-		for ( ; niov < 8 && bufref; ++niov) {
+		uint32_t niov;
+		uint32_t total_write = 0;
+		for (niov = 0; niov < 8 && bufref; ++niov) {
 			iov[niov].iov_base = bufref->get_data();
 			iov[niov].iov_len = bufref->length;
+			total_write += bufref->length;
 			bufref = bufref->next;
 		}
 
 		ssize_t ret = writev(smbd_conn->fd, iov, niov);
+		X_LOG_DBG("conn %p send %u ret %ld, errno=%d",
+				smbd_conn, total_write, ret, errno);
 		if (ret > 0) {
 			uint32_t bytes = x_convert_assert<uint32_t>(ret);
 			for ( ; bytes > 0; ) {
