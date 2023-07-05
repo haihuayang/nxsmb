@@ -2851,6 +2851,21 @@ NTSTATUS posixfs_object_op_ioctl(
 			data->domain_id = {0, 0};
 			return NT_STATUS_OK;
 		}
+	case X_SMB2_FSCTL_SRV_ENUMERATE_SNAPSHOTS:
+		if (state->in_max_output_length < 16) {
+			return NT_STATUS_INVALID_PARAMETER;
+		}
+		{
+			/* TODO enumerate snapshots from filesystem */
+			state->out_buf = x_buf_alloc(16);
+			state->out_buf_length = 16;
+			uint32_t *p = (uint32_t *)state->out_buf->data;
+			*p++ = 0;
+			*p++ = 0;
+			*p++ = X_H2LE32(2);
+			*p = 0;
+			return NT_STATUS_OK;
+		}
 	}
 
 	return NT_STATUS_INVALID_DEVICE_REQUEST;
