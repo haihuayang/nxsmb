@@ -922,7 +922,12 @@ static NTSTATUS parent_dirname_compatible_open(
 	auto &open_list = smbd_object->sharemode.open_list;
 	auto lock = std::lock_guard(smbd_object->mutex);
 	for (curr_open = open_list.get_front(); curr_open; curr_open = open_list.next(curr_open)) {
-		if (curr_open->open_state.access_mask & idl::SEC_STD_DELETE) {
+		if ((curr_open->open_state.access_mask & idl::SEC_STD_DELETE) ||
+				((curr_open->open_state.access_mask & idl::SEC_DIR_ADD_FILE) && 
+				 !(curr_open->open_state.share_access & X_SMB2_FILE_SHARE_WRITE))) {
+			X_LOG_DBG("access_mask=0x%x share_access=%d STATUS_SHARING_VIOLATION",
+					curr_open->open_state.access_mask,
+					curr_open->open_state.share_access);
 			status = NT_STATUS_SHARING_VIOLATION;
 			break;
 		}
