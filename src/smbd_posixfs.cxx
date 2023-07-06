@@ -3603,9 +3603,13 @@ NTSTATUS x_smbd_posixfs_create_open(x_smbd_open_t **psmbd_open,
 	bool reload_meta = false;
 	if (overwrite) {
 		// TODO DELETE_ALL_STREAM;
-		int err = ftruncate(posixfs_object->fd, 0);
-		X_TODO_ASSERT(err == 0);
-		uint32_t notify_actions = FILE_NOTIFY_CHANGE_SIZE;
+		uint32_t notify_actions = 0;
+		if (state->smbd_object->type == x_smbd_object_t::type_file) {
+			int err = ftruncate(posixfs_object->fd, 0);
+			X_TODO_ASSERT(err == 0);
+			notify_actions |= FILE_NOTIFY_CHANGE_SIZE;
+		}
+
 		if (state->in_file_attributes != 0) {
 			auto &meta = posixfs_object->get_meta();
 			auto curr_attr = meta.file_attributes;
