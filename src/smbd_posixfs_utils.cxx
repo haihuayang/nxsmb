@@ -227,7 +227,6 @@ void posixfs_post_create(int fd, uint32_t file_attrs,
 	int err = fstat(fd, &stat);
 	X_ASSERT(err == 0);
 	if (S_ISDIR(stat.st_mode)) {
-		file_attrs &= ~(uint32_t)X_SMB2_FILE_ATTRIBUTE_ARCHIVE;
 		file_attrs |= (uint32_t)X_SMB2_FILE_ATTRIBUTE_DIRECTORY;
 	} else {
 		file_attrs |= (uint32_t)X_SMB2_FILE_ATTRIBUTE_ARCHIVE;
