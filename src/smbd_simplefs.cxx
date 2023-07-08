@@ -181,20 +181,7 @@ NTSTATUS simplefs_share_t::resolve_path(
 		const char16_t *in_path_end,
 		const std::shared_ptr<x_smbd_volume_t> &tcon_volume)
 {
-	const char16_t *path_start;
-	if (dfs) {
-		/* TODO we just skip the first 2 components for now */
-		auto sep = x_next_sep(in_path_begin, in_path_end, u'\\');
-		X_ASSERT(sep != in_path_end);
-		path_start = x_next_sep(sep + 1, in_path_end, u'\\');
-		if (path_start != in_path_end) {
-			++path_start;
-		}
-	} else {
-		path_start = in_path_begin;
-	}
-	out_path.assign(path_start, in_path_end);
-
+	out_path.assign(in_path_begin, in_path_end);
 	smbd_volume = this->smbd_volume;
 	path_priv_data = 0;
 	open_priv_data = 0;
