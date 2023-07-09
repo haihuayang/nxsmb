@@ -76,6 +76,8 @@ SET_src_smbd_nx := \
 	smbd_simplefs \
 	smbd_share \
 	smbd_conf \
+	smbd_secrets \
+	smbd_group_mapping \
 	smbd_ipc \
 	smbd \
 	smbd_stats \
@@ -86,7 +88,6 @@ SET_src_smbd_nx := \
 	smbd_tcon \
 	smbd_open \
 	smbd_object \
-	smbd_secrets \
 	smbd_posixfs_utils \
 	smbd_lease \
 	util_sid \

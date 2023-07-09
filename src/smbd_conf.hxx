@@ -12,6 +12,7 @@
 #include "include/librpc/misc.hxx"
 #include "smbd_share.hxx"
 #include "smbd_secrets.hxx"
+#include "smbd_group_mapping.hxx"
 #include <map>
 #include <atomic>
 
@@ -25,6 +26,7 @@ static constexpr uint32_t X_INFINITE = -1;
 struct x_smbd_conf_t
 {
 	x_smbd_conf_t();
+	~x_smbd_conf_t();
 
 	idl::svcctl_ServerType get_default_server_announce() const {
 		// lp_default_server_announce
@@ -71,7 +73,7 @@ struct x_smbd_conf_t
 	uint64_t log_file_size = 2048 * 1024;
 	std::string netbios_name_l8, workgroup_8, dns_domain_l8, realm;
 	std::shared_ptr<std::u16string> netbios_name_u16, workgroup_u16, dns_domain_l16;
-	std::string private_dir;
+	std::string private_dir, lib_dir;
 	std::string samba_locks_dir;
 	std::vector<std::string> cluster_nodes;
 	std::vector<std::string> interfaces;
@@ -84,6 +86,7 @@ struct x_smbd_conf_t
 	std::vector<std::shared_ptr<x_smbd_share_t>> smbd_shares;
 
 	x_smbd_secrets_t secrets;
+	x_smbd_group_mapping_t *group_mapping;
 };
 
 int x_smbd_conf_init(const char *configfile, const std::vector<std::string> &cmdline_options);

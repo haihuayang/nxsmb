@@ -86,6 +86,7 @@ struct x_auth_info_t
 	std::vector<x_dom_sid_with_attrs_t> other_sids;
 	std::vector<uint8_t> session_key;
 	uint32_t time_rec = -1; // auth expired time in seconds, -1 means no expiration
+	bool is_anonymous = false;
 };
 
 struct x_auth_upcall_t;

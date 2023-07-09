@@ -66,6 +66,7 @@ void sid_copy(idl::dom_sid &dst, const idl::dom_sid &src);
 bool sid_append_rid(idl::dom_sid &sid, uint32_t rid);
 bool sid_compose(idl::dom_sid &dst, const idl::dom_sid &domain_sid, uint32_t rid);
 bool sid_split_rid(idl::dom_sid &sid, uint32_t *rid);
+bool sid_from_string(idl::dom_sid &sid, const char *s);
 
 #if 0
 enum lsa_SidType;

@@ -1139,6 +1139,7 @@ static NTSTATUS check_anonymous_security(x_auth_ntlmssp_t *ntlmssp,
 	auth_info.primary_gid = auth_info.rid;
 
 	auth_info.session_key.assign(16, 0);
+	auth_info.is_anonymous = true;
 
 	return ntlmssp_post_auth2(ntlmssp, auth_info);
 }

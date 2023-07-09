@@ -14,12 +14,18 @@
 
 struct x_smbd_user_t
 {
-	idl::dom_sid domain_sid;
-	uint32_t uid, gid;
-	std::vector<idl::samr_RidWithAttribute> group_rids;
-	std::vector<x_dom_sid_with_attrs_t> other_sids;
-	std::shared_ptr<std::u16string> account_name;
-	std::string logon_domain;
+	x_smbd_user_t(const x_auth_info_t &auth_info,
+			const std::vector<idl::dom_sid> &aliases,
+			uint64_t priviledge_mask);
+
+	const bool is_anonymous;
+	const idl::dom_sid domain_sid;
+	const uint32_t uid, gid;
+	const std::vector<idl::samr_RidWithAttribute> group_rids;
+	const std::vector<x_dom_sid_with_attrs_t> other_sids;
+	const uint64_t priviledge_mask;
+	const std::shared_ptr<std::u16string> account_name;
+	const std::string logon_domain;
 
 	std::string tostring() const;
 
@@ -33,8 +39,6 @@ struct x_smbd_user_t
 		return idl::dom_sid_compare_domain_and_rid(sid, domain_sid, uid) == 0;
 	}
 };
-
-
 
 #endif /* __smbd_user__hxx__ */
 

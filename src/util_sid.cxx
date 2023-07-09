@@ -211,6 +211,69 @@ bool sid_split_rid(idl::dom_sid &sid, uint32_t *rid)
 	return false;
 }
 
+bool sid_from_string(idl::dom_sid &sid, const char *s)
+{
+	if ((s[0] != 'S' && s[0] != 's') || s[1] != '-') {
+		return false;
+	}
+	s += 2;
+	char *end;
+	unsigned long rev = strtoul(s, &end, 10);
+	if (*end != '-' || rev > UINT8_MAX) {
+		return false;
+	}
+	s = end + 1;
+	unsigned long long id_auth = strtoull(s, &end, 0);
+	if (id_auth >= (1ull << 48)) {
+		return false;
+	}
+	
+	if (*end == '\0') {
+		/* no subauths */
+	}
+
+	if (*end != '-') {
+		return false;
+	}
+	
+	s = end + 1;
+	idl::dom_sid tmp;
+	size_t i = 0;
+	for (; ;) {
+		unsigned long long subauth = strtoull(s, &end, 10);
+		if (subauth > UINT32_MAX) {
+			return false;
+		}
+		if (i >= tmp.sub_auths.size()) {
+			return false;
+		}
+		tmp.sub_auths[i++] = x_convert<uint32_t>(subauth);
+		if (*end == '\0') {
+			break;
+		} else if (*end != '-') {
+			return false;
+		}
+		s = end + 1;
+	}
+
+	sid.sid_rev_num = x_convert<uint8_t>(rev);
+	sid.id_auth[5] = id_auth & 0xff; id_auth >>= 8;
+	sid.id_auth[4] = id_auth & 0xff; id_auth >>= 8;
+	sid.id_auth[3] = id_auth & 0xff; id_auth >>= 8;
+	sid.id_auth[2] = id_auth & 0xff; id_auth >>= 8;
+	sid.id_auth[1] = id_auth & 0xff; id_auth >>= 8;
+	sid.id_auth[0] = x_convert<uint8_t>(id_auth);
+	sid.num_auths = x_convert<uint8_t>(i);
+	for (i = 0; i < sid.num_auths; ++i) {
+		sid.sub_auths[i] = tmp.sub_auths[i];
+	}
+	for ( ; i < sid.sub_auths.size(); ++i) {
+		sid.sub_auths[i] = 0;
+	}
+
+	return true;
+}
+
 #if HH_COMMENT
 static idl::dom_sid system_sid_array[1] =
 { { 1, 1, {0,0,0,0,0,5}, {18,0,0,0,0,0,0,0,0,0,0,0,0,0,0}} };

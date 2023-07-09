@@ -633,6 +633,7 @@ static int parse_smbconf(x_smbd_conf_t &smbd_conf,
 
 	auto samba_path = get_samba_path(path);
 	smbd_conf.private_dir = samba_path + "/private";
+	smbd_conf.lib_dir = samba_path + "/lib";
 	smbd_conf.samba_locks_dir = samba_path + "/var/locks";
 	std::unique_ptr<share_spec_t> share_spec;
 
@@ -734,6 +735,13 @@ static int parse_smbconf(x_smbd_conf_t &smbd_conf,
 			netbios_name_u8);
 	if (err != 0) {
 		X_LOG_ERR("Fail loading secrets");
+		return err;
+	}
+
+	err = x_smbd_group_mapping_load(smbd_conf.group_mapping,
+			smbd_conf.lib_dir);
+	if (err != 0) {
+		X_LOG_ERR("Fail loading group_mapping");
 		return err;
 	}
 
@@ -1008,6 +1016,12 @@ int x_smbd_conf_reload()
 x_smbd_conf_t::x_smbd_conf_t()
 {
 	strcpy((char *)&guid, "nxsmbd");
+	group_mapping = x_smbd_group_mapping_create();
+}
+
+x_smbd_conf_t::~x_smbd_conf_t()
+{
+	x_smbd_group_mapping_delete(group_mapping);
 }
 
 int x_smbd_restore_durable(const x_smbd_conf_t &smbd_conf)

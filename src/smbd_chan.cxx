@@ -1,6 +1,7 @@
 
 #include "smbd.hxx"
 #include "smbd_stats.hxx"
+#include "smbd_conf.hxx"
 
 static constexpr x_array_const_t<char> SMB2_24_signing_label{"SMB2AESCMAC"};
 static constexpr x_array_const_t<char> SMB2_24_signing_context{"SmbSign"};
@@ -265,33 +266,18 @@ static NTSTATUS smbd_chan_auth_succeeded(x_smbd_chan_t *smbd_chan,
 		const x_auth_info_t &auth_info)
 {
 	X_LOG_DBG("auth_info %s", x_tostr(auth_info).c_str());
+	const x_smbd_conf_t &smbd_conf = x_smbd_conf_get_curr();
+
 	X_ASSERT(auth_info.domain_sid.num_auths < auth_info.domain_sid.sub_auths.size());
 	
-	/* TODO find_user by auth_info
-	sort auth_info sids ..., create unique hash value 
-	static void find_user(x_auth_info_t &auth_info)
-	{
+	std::vector<idl::dom_sid> aliases;
+	uint64_t priviledge_mask;
+	
+	x_smbd_group_mapping_get(smbd_conf.group_mapping, aliases, priviledge_mask,
+			auth_info);
 
-	}
-
-	finalize_local_nt_token
-	add_local_groups
-
-	??? how group_mapping.tdb is generated
-	add group aliases sush global_sid_Builtin_Administrators, global_sid_Builtin_Users,
-	global_sid_Builtin_Backup_Operators
-
-	*/
-	/* TODO set user token ... */
-
-	auto smbd_user = std::make_shared<x_smbd_user_t>();
-	smbd_user->domain_sid = auth_info.domain_sid;
-	smbd_user->uid = auth_info.rid;
-	smbd_user->gid = auth_info.primary_gid;
-	smbd_user->group_rids = auth_info.group_rids;
-	smbd_user->other_sids = auth_info.other_sids;
-	smbd_user->account_name = auth_info.account_name;
-	smbd_user->logon_domain = auth_info.logon_domain;
+	auto smbd_user = std::make_shared<x_smbd_user_t>(auth_info,
+			aliases, priviledge_mask);
 
 	if (!smbd_chan->key_is_valid) {
 		smbd_chan_set_keys(smbd_chan, auth_info.session_key);
@@ -635,3 +621,39 @@ bool x_smbd_chan_post_user(x_smbd_chan_t *smbd_chan, x_fdevt_user_t *fdevt_user,
 {
 	return x_smbd_conn_post_user(smbd_chan->smbd_conn, fdevt_user, always);
 }
+
+
+static std::vector<x_dom_sid_with_attrs_t> merge(
+		const std::vector<x_dom_sid_with_attrs_t> &other_sids,
+		const std::vector<idl::dom_sid> &aliases)
+{
+	std::vector<x_dom_sid_with_attrs_t> ret = other_sids;
+	for (auto &sid: aliases) {
+		bool found = false;
+		for (auto &other: other_sids) {
+			if (other.sid == sid) {
+				found = true;
+				break;
+			}
+		}
+		if (!found) {
+			ret.push_back({sid, 0});
+		}
+	}
+	return ret;
+}
+
+x_smbd_user_t::x_smbd_user_t(const x_auth_info_t &auth_info,
+		const std::vector<idl::dom_sid> &aliases,
+		uint64_t priviledge_mask)
+	: is_anonymous(auth_info.is_anonymous)
+	, domain_sid(auth_info.domain_sid)
+	, uid(auth_info.rid), gid(auth_info.primary_gid)
+	, group_rids(auth_info.group_rids)
+	, other_sids(merge(auth_info.other_sids, aliases))
+	, priviledge_mask(priviledge_mask)
+	, account_name(auth_info.account_name)
+	, logon_domain(auth_info.logon_domain)
+{
+}
+

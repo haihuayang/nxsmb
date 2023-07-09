@@ -717,8 +717,14 @@ static bool user_token_has_sid(const x_smbd_user_t &smbd_user, const idl::dom_si
 		return true;
 	}
 
-	if (sid == global_sid_Authenticated_Users) {
-		return true;
+	if (smbd_user.is_anonymous) {
+		if (sid == global_sid_Builtin_Guests) {
+			return true;
+		}
+	} else {
+		if (sid == global_sid_Authenticated_Users) {
+			return true;
+		}
 	}
 
 	/* add_builtin_alias */
