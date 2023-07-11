@@ -172,6 +172,7 @@ TARGET_SET_idl := \
 	wkssvc \
 	dssetup \
 	xattr \
+	dfs \
 
 TARGET_GEN_nxsmb := \
 	$(TARGET_SET_asn1:%=$(TARGET_DIR_out)/lib/asn1/%_asn1.h) \

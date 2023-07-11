@@ -53,6 +53,11 @@ import "misc.idl";
 		[string,charset(UTF16)] uint16 *path;
 	} dfs_Info1;
 
+        typedef enum {
+		DFS_VOLUME_FLAVOR_STANDALONE = 0x100,
+		DFS_VOLUME_FLAVOR_AD_BLOB = 0x200
+	} dfs_VolumeFlavor;
+
 	typedef [public,bitmap32bit] bitmap {
 		DFS_VOLUME_STATE_OK 		= 0x1,
 		DFS_VOLUME_STATE_INCONSISTENT 	= 0x2,
@@ -123,7 +128,7 @@ import "misc.idl";
 	} dfs_Info5;
 
 	typedef [v1_enum] enum {
-		DFS_INVALID_PRIORITY_CLASS	 	= -1,
+		DFS_INVALID_PRIORITY_CLASS	 	= 0xffffffffu,
 		DFS_SITE_COST_NORMAL_PRIORITY_CLASS	= 0,
 		DFS_GLOBAL_HIGH_PRIORITY_CLASS		= 1,
 		DFS_SITE_COST_HIGH_PRIORITY_CLASS	= 2,
@@ -194,11 +199,6 @@ import "misc.idl";
 	typedef struct {
 		[string,charset(UTF16)] uint16 *dom_root;
 	} dfs_Info200;
-
-        typedef enum {
-		DFS_VOLUME_FLAVOR_STANDALONE = 0x100,
-		DFS_VOLUME_FLAVOR_AD_BLOB = 0x200
-	} dfs_VolumeFlavor;
 
 	typedef struct {
 		dfs_VolumeFlavor flavor;
