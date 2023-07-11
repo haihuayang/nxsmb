@@ -1207,7 +1207,6 @@ def elem_get_pointer_info(elem, iface, in_function):
 		assert not has_any_property(elem, 'relative')
 		assert not has_any_property(elem, 'relative_short')
 		if has_any_property(elem, 'unique'):
-			assert v == 1
 			return v, 'unique', False
 		v -= 1
 		assert v < 3
