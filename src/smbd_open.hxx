@@ -232,6 +232,8 @@ struct x_smbd_object_ops_t
 			bool overwrite);
 	void (*lease_granted)(x_smbd_object_t *smbd_object,
 			x_smbd_stream_t *smbd_stream);
+
+	int (*init_volume)(std::shared_ptr<x_smbd_volume_t> &smbd_volume);
 };
 
 X_DECLARE_MEMBER_TRAITS(x_smbd_open_object_traits, x_smbd_open_t, object_link)

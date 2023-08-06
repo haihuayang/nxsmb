@@ -2,6 +2,7 @@
 #include "smbd_open.hxx"
 #include "smbd_stats.hxx"
 #include "smbd_posixfs.hxx"
+#include "smbd_volume.hxx"
 #include <fcntl.h>
 #include <sys/statvfs.h>
 #include "smbd_ntacl.hxx"
@@ -3708,4 +3709,72 @@ ssize_t posixfs_object_getxattr(x_smbd_object_t *smbd_object,
 	return fgetxattr(posixfs_object->fd, xattr_name, buf, bufsize);
 }
 
+static int smbd_volume_read(int vol_fd,
+		uint16_t &vol_id,
+		int &rootdir_fd, x_smbd_durable_db_t *&durable_db)
+{
+	uint16_t id;
+	int err = x_smbd_volume_read_id(vol_fd, id);
+	if (err) {
+		return err;
+	}
+
+	int rfd = openat(vol_fd, "root", O_RDONLY);
+	if (rfd < 0) {
+		X_LOG_ERR("cannot open rootdir, errno=%d", errno);
+		return -errno;
+	}
+
+	struct stat st;
+	X_ASSERT(fstat(rfd, &st) == 0);
+	if (!S_ISDIR(st.st_mode)) {
+		X_LOG_ERR("root is not directory");
+		close(rfd);
+		return -EINVAL;
+	}
+
+	int durable_fd = openat(vol_fd, "durable.db", O_RDWR | O_CREAT, 0644);
+	X_ASSERT(durable_fd != 0);
+
+	durable_db = x_smbd_durable_db_init(durable_fd,
+			0x20000, 0x200000); /* TODO the number */
+
+	vol_id = id;
+	rootdir_fd = rfd;
+	return 0;
+}
+
+int posixfs_init_volume(std::shared_ptr<x_smbd_volume_t> &smbd_volume)
+{
+	uint16_t vol_id = 0xffffu;
+	int rootdir_fd = -1;
+	x_smbd_durable_db_t *durable_db;
+
+	if (!smbd_volume->path.empty()) {
+		int vol_fd = open(smbd_volume->path.c_str(), O_RDONLY);
+		if (vol_fd < 0) {
+			X_LOG_ERR("cannot open volume %s, %d",
+					smbd_volume->name_8.c_str(), errno);
+			return -1;
+		}
+
+		int ret = smbd_volume_read(vol_fd, vol_id, rootdir_fd, durable_db);
+		close(vol_fd);
+		if (ret < 0) {
+			X_LOG_ERR("cannot read volume %s, %d",
+					smbd_volume->name_8.c_str(), -ret);
+			return -1;
+		}
+	}
+
+	X_LOG_NOTICE("volume '%s' with id=0x%x",
+			smbd_volume->name_8.c_str(), vol_id);
+
+	smbd_volume->rootdir_fd = rootdir_fd;
+	smbd_volume->volume_id = vol_id;
+	smbd_volume->smbd_durable_db = durable_db;
+
+	x_smbd_volume_restore_durable(smbd_volume);
+	return 0;
+}
 

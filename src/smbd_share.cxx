@@ -1,6 +1,7 @@
 
 #include "smbd_share.hxx"
 #include "smbd_volume.hxx"
+#include "smbd_open.hxx"
 #include <fcntl.h>
 #include <unistd.h>
 #include <openssl/sha.h>
@@ -34,41 +35,6 @@ x_smbd_volume_t::~x_smbd_volume_t()
 	}
 }
 
-static int smbd_volume_read(int vol_fd,
-		uint16_t &vol_id,
-		int &rootdir_fd, x_smbd_durable_db_t *&durable_db)
-{
-	uint16_t id;
-	int err = x_smbd_volume_read_id(vol_fd, id);
-	if (err) {
-		return err;
-	}
-
-	int rfd = openat(vol_fd, "root", O_RDONLY);
-	if (rfd < 0) {
-		X_LOG_ERR("cannot open rootdir, errno=%d", errno);
-		return -errno;
-	}
-
-	struct stat st;
-	X_ASSERT(fstat(rfd, &st) == 0);
-	if (!S_ISDIR(st.st_mode)) {
-		X_LOG_ERR("root is not directory");
-		close(rfd);
-		return -EINVAL;
-	}
-
-	int durable_fd = openat(vol_fd, "durable.db", O_RDWR | O_CREAT, 0644);
-	X_ASSERT(durable_fd != 0);
-
-	durable_db = x_smbd_durable_db_init(durable_fd,
-			0x20000, 0x200000); /* TODO the number */
-
-	vol_id = id;
-	rootdir_fd = rfd;
-	return 0;
-}
-
 std::shared_ptr<x_smbd_volume_t> x_smbd_volume_create(
 		const x_smb2_uuid_t &uuid,
 		const std::string &name_8, const std::u16string &name_l16,
@@ -81,36 +47,13 @@ std::shared_ptr<x_smbd_volume_t> x_smbd_volume_create(
 			owner_node_l16, path);
 }
 
-int x_smbd_volume_init(x_smbd_volume_t &smbd_volume)
+int x_smbd_volume_init(std::shared_ptr<x_smbd_volume_t> &smbd_volume,
+		const x_smbd_object_ops_t *ops)
 {
-	uint16_t vol_id = 0xffffu;
-	int rootdir_fd = -1;
-	x_smbd_durable_db_t *durable_db;
+	X_ASSERT(!smbd_volume->ops);
+	smbd_volume->ops = ops;
 
-	if (!smbd_volume.path.empty()) {
-		int vol_fd = open(smbd_volume.path.c_str(), O_RDONLY);
-		if (vol_fd < 0) {
-			X_LOG_ERR("cannot open volume %s, %d",
-					smbd_volume.name_8.c_str(), errno);
-			return -1;
-		}
-
-		int ret = smbd_volume_read(vol_fd, vol_id, rootdir_fd, durable_db);
-		close(vol_fd);
-		if (ret < 0) {
-			X_LOG_ERR("cannot read volume %s, %d",
-					smbd_volume.name_8.c_str(), -ret);
-			return -1;
-		}
-	}
-
-	X_LOG_NOTICE("volume '%s' with id=0x%x",
-			smbd_volume.name_8.c_str(), vol_id);
-
-	smbd_volume.rootdir_fd = rootdir_fd;
-	smbd_volume.volume_id = vol_id;
-	smbd_volume.smbd_durable_db = durable_db;
-	return 0;
+	return ops->init_volume(smbd_volume);
 }
 
 NTSTATUS x_smbd_volume_get_fd_path(std::string &path,

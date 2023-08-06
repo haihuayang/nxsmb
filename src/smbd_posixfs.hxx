@@ -191,5 +191,7 @@ bool posixfs_qdir_get_entry(x_smbd_qdir_t *smbd_qdir,
 		uint32_t pseudo_entry_count,
 		posixfs_qdir_entry_func_t *process_entry_func);
 
+int posixfs_init_volume(std::shared_ptr<x_smbd_volume_t> &smbd_volume);
+
 #endif /* __smbd_posixfs__hxx__ */
 

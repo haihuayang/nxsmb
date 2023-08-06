@@ -944,6 +944,10 @@ static void ipc_op_lease_granted(x_smbd_object_t *smbd_object,
 	X_ASSERT(0);
 }
 
+static int ipc_init_volume(std::shared_ptr<x_smbd_volume_t> &smbd_volume)
+{
+	return 0;
+}
 
 static const x_smbd_object_ops_t x_smbd_ipc_object_ops = {
 	ipc_open_object,
@@ -968,13 +972,14 @@ static const x_smbd_object_ops_t x_smbd_ipc_object_ops = {
 	ipc_op_delete_object,
 	ipc_op_access_check,
 	ipc_op_lease_granted,
+	ipc_init_volume,
 };
 
 static std::shared_ptr<x_smbd_volume_t> ipc_create_volume()
 {
 	std::shared_ptr<x_smbd_volume_t> smbd_volume = 
 		x_smbd_volume_create({0, 0}, "IPC$", u"IPC$", {}, {});
-	smbd_volume->set_ops(&x_smbd_ipc_object_ops);
+	x_smbd_volume_init(smbd_volume, &x_smbd_ipc_object_ops);
 	return smbd_volume;
 }
 

@@ -120,6 +120,7 @@ static const x_smbd_object_ops_t simplefs_object_ops = {
 	posixfs_op_object_delete,
 	x_smbd_posixfs_op_access_check,
 	x_smbd_posixfs_op_lease_granted,
+	posixfs_init_volume,
 };
 
 
@@ -134,7 +135,6 @@ struct simplefs_share_t : x_smbd_share_t
 		: x_smbd_share_t(uuid, name, std::move(name_16), std::move(name_l16), share_flags)
 		, smbd_volume(smbd_volume)
 	{
-		smbd_volume->set_ops(&simplefs_object_ops);
 	}
 					
 	uint8_t get_type() const override {
@@ -194,8 +194,10 @@ std::shared_ptr<x_smbd_share_t> x_smbd_simplefs_share_create(
 		std::u16string &&name_16,
 		std::u16string &&name_l16,
 		uint32_t share_flags,
-		const std::shared_ptr<x_smbd_volume_t> &smbd_volume)
+		std::shared_ptr<x_smbd_volume_t> &smbd_volume)
 {
+	int err = x_smbd_volume_init(smbd_volume, &simplefs_object_ops);
+	X_TODO_ASSERT(err == 0);
 	return std::make_shared<simplefs_share_t>(uuid, name,
 			std::move(name_16), std::move(name_l16),
 			share_flags, smbd_volume);

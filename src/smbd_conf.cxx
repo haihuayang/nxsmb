@@ -972,13 +972,6 @@ int x_smbd_init_shares(x_smbd_conf_t &smbd_conf)
 					vs->owner_node_l16, vs->path));
 	}
 
-	for (auto &smbd_volume: smbd_conf.smbd_volumes) {
-		int err = x_smbd_volume_init(*smbd_volume);
-		if (err != 0) {
-			return err;
-		}
-	}
-
 	add_share(smbd_conf, x_smbd_ipc_share_create());
 
 	for (auto &ss: smbd_conf.share_specs) {
@@ -987,10 +980,6 @@ int x_smbd_init_shares(x_smbd_conf_t &smbd_conf)
 		}
 	}
 
-	for (auto smbd_volume: smbd_conf.smbd_volumes) {
-		/* TODO only for local volume */
-		x_smbd_volume_restore_durable(smbd_volume);
-	}
 	return 0;
 }
 

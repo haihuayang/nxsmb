@@ -47,11 +47,6 @@ struct x_smbd_volume_t
 
 	~x_smbd_volume_t();
 
-	void set_ops(const x_smbd_object_ops_t *ops) {
-		X_ASSERT(!this->ops);
-		this->ops = ops;
-	}
-
 	const x_smbd_object_ops_t *ops = nullptr;
 	const x_smb2_uuid_t uuid;
 	const std::string name_8;
@@ -137,7 +132,8 @@ std::shared_ptr<x_smbd_volume_t> x_smbd_volume_create(
 		const std::string &name_8, const std::u16string &name_l16,
 		const std::u16string &owner_node_l16,
 		const std::string &path);
-int x_smbd_volume_init(x_smbd_volume_t &smbd_volume);
+int x_smbd_volume_init(std::shared_ptr<x_smbd_volume_t> &smbd_volume,
+		const x_smbd_object_ops_t *ops);
 
 NTSTATUS x_smbd_volume_get_fd_path(std::string &ret,
 		const x_smbd_volume_t &smbd_volumen,
@@ -162,7 +158,7 @@ std::shared_ptr<x_smbd_share_t> x_smbd_simplefs_share_create(
 		std::u16string &&name_16,
 		std::u16string &&name_l16,
 		uint32_t share_flags,
-		const std::shared_ptr<x_smbd_volume_t> &smbd_volume);
+		std::shared_ptr<x_smbd_volume_t> &smbd_volume);
 int x_smbd_simplefs_mktld(const std::shared_ptr<x_smbd_user_t> &smbd_user,
 		std::shared_ptr<x_smbd_share_t> &smbd_share,
 		const std::string &name,

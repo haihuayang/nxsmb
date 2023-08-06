@@ -875,6 +875,7 @@ static const x_smbd_object_ops_t dfs_root_object_ops = {
 	dfs_root_op_delete_object,
 	x_smbd_posixfs_op_access_check,
 	x_smbd_posixfs_op_lease_granted,
+	posixfs_init_volume,
 };
 
 static bool dfs_volume_process_entry(
@@ -1004,6 +1005,7 @@ static const x_smbd_object_ops_t dfs_volume_object_ops = {
 	posixfs_op_object_delete,
 	x_smbd_posixfs_op_access_check,
 	x_smbd_posixfs_op_lease_granted,
+	posixfs_init_volume,
 };
 
 NTSTATUS dfs_share_t::resolve_path(std::shared_ptr<x_smbd_volume_t> &smbd_volume,
@@ -1185,13 +1187,16 @@ dfs_share_t::dfs_share_t(const x_smbd_conf_t &smbd_conf,
 {
 	X_ASSERT(smbd_volumes.size() > 1);
 	bool first = true;
-	for (const auto &smbd_volume: smbd_volumes) {
+	int err;
+	for (auto &smbd_volume: smbd_volumes) {
 		if (smbd_volume->owner_node_l16 == smbd_conf.node_l16) {
 			if (first) {
-				smbd_volume->set_ops(&dfs_root_object_ops);
+				err = x_smbd_volume_init(smbd_volume, &dfs_root_object_ops);
+				X_TODO_ASSERT(err == 0);
 				root_volume = smbd_volume;
 			} else {
-				smbd_volume->set_ops(&dfs_volume_object_ops);
+				err = x_smbd_volume_init(smbd_volume, &dfs_volume_object_ops);
+				X_TODO_ASSERT(err == 0);
 				local_data_volume[smbd_volume->name_l16] = smbd_volume;
 			}
 		}
