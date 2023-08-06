@@ -56,8 +56,9 @@ struct x_smbd_volume_t
 
 	std::shared_ptr<x_smbd_share_t> owner_share;
 	uint16_t volume_id;
-	int rootdir_fd;
 	std::atomic<uint32_t> watch_tree_cnt{0};
+
+	x_smbd_object_t *root_object = nullptr;
 
 	x_smbd_durable_db_t *smbd_durable_db;
 };

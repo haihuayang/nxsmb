@@ -30,9 +30,7 @@ x_smbd_volume_t::x_smbd_volume_t(const x_smb2_uuid_t &uuid,
 
 x_smbd_volume_t::~x_smbd_volume_t()
 {
-	if (rootdir_fd != -1) {
-		close(rootdir_fd);
-	}
+	x_smbd_object_release(root_object, nullptr);
 }
 
 std::shared_ptr<x_smbd_volume_t> x_smbd_volume_create(

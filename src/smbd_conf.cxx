@@ -267,6 +267,8 @@ static bool smbd_conf_add_share(x_smbd_conf_t &smbd_conf,
 	std::shared_ptr<x_smbd_share_t> share;
 	if (false) {
 	} else if (smbd_volumes.size() > 1) {
+		X_TODO_ASSERT(false);
+#if 0
 		share = x_smbd_dfs_share_create(smbd_conf,
 				share_spec.uuid,
 				share_spec.name,
@@ -274,6 +276,7 @@ static bool smbd_conf_add_share(x_smbd_conf_t &smbd_conf,
 				std::move(name_l16),
 				share_spec.share_flags,
 				std::move(smbd_volumes));
+#endif
 	} else {
 		share = x_smbd_simplefs_share_create(
 				share_spec.uuid,

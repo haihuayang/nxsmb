@@ -72,7 +72,6 @@ SET_src_smbd_nx := \
 	smbd_access \
 	smbd_posixfs \
 	smbd_notify \
-	smbd_dfs \
 	smbd_simplefs \
 	smbd_share \
 	smbd_conf \
