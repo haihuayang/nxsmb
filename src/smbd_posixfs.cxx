@@ -1086,19 +1086,6 @@ static NTSTATUS posixfs_object_initialize(posixfs_object_t *posixfs_object,
 		}
 	} else {
 		posixfs_object_set_fd(posixfs_object, fd);
-		posixfs_object->fd = fd;
-		int mount_id;
-		auto &file_handle = posixfs_object->base.file_handle;
-		file_handle.base.handle_bytes = MAX_HANDLE_SZ;
-		int err = name_to_handle_at(fd, "",
-				&file_handle.base,
-				&mount_id, AT_EMPTY_PATH);
-		if (err != 0) {
-			X_LOG_ERR("name_to_handle_at %s errno=%d",
-					unix_path.c_str(), errno);
-			X_ASSERT(false);
-		}
-		posixfs_object_update_type(posixfs_object);
 	}
 	posixfs_object->base.flags = x_smbd_object_t::flag_initialized;
 	return NT_STATUS_OK;
