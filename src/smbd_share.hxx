@@ -174,8 +174,6 @@ NTSTATUS x_smbd_open_restore(
 		std::shared_ptr<x_smbd_volume_t> &smbd_volume,
 		x_smbd_durable_t &smbd_durable);
 
-int x_smbd_restore_durable(const x_smbd_conf_t &smbd_conf);
-
 int x_smbd_volume_restore_durable(std::shared_ptr<x_smbd_volume_t> &smbd_volume);
 
 x_smbd_durable_t *x_smbd_share_lookup_durable(

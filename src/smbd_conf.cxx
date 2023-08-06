@@ -10,41 +10,6 @@
 	X_PANIC(fmt "\n", __VA_ARGS__); \
 } while (0)
 
-struct share_spec_t
-{
-	static const uint32_t default_dfs_referral_ttl = 300;
-
-	share_spec_t(const std::string &name) : name(name) { }
-
-	x_smb2_uuid_t uuid;
-	const std::string name;
-	uint32_t share_flags = x_smbd_share_t::f_durable_handle;
-	bool dfs_test = false;
-	uint32_t dfs_referral_ttl = default_dfs_referral_ttl;
-	std::vector<std::pair<x_smb2_uuid_t, int>> volumes;
-};
-
-struct volume_spec_t
-{
-	volume_spec_t(const x_smb2_uuid_t &uuid,
-			std::string &&name_8,
-			std::u16string &&name_l16,
-			std::u16string &&node_l16,
-			std::string &&path)
-		: uuid(uuid), name_8(name_8), name_l16(name_l16)
-		, owner_node_l16(node_l16), path(path)
-	{
-	}
-
-	const x_smb2_uuid_t uuid;
-	const std::string name_8;
-	const std::u16string name_l16;
-	const std::u16string owner_node_l16;
-	const std::string path;
-
-	share_spec_t *share_spec = nullptr;
-};
-
 static const char *g_configfile;
 static std::vector<std::pair<std::string, std::string>> g_cmdline_options;
 static std::shared_ptr<x_smbd_conf_t> g_smbd_conf;
@@ -197,7 +162,9 @@ static bool parse_version(std::tuple<uint8_t, uint8_t, uint16_t> &ver,
 	return true;
 }
 
-static bool parse_volume_map(std::vector<std::unique_ptr<volume_spec_t>> &volumes, const std::string &str)
+static bool parse_volume_map(
+		std::vector<std::unique_ptr<x_smbd_volume_spec_t>> &volumes,
+		const std::string &str)
 {
 	for (auto &token: split_string(str)) {
 		auto sep = token.find(':');
@@ -235,7 +202,7 @@ static bool parse_volume_map(std::vector<std::unique_ptr<volume_spec_t>> &volume
 			return false;
 		}
 
-		volumes.push_back(std::make_unique<volume_spec_t>(uuid, std::move(name),
+		volumes.push_back(std::make_unique<x_smbd_volume_spec_t>(uuid, std::move(name),
 				std::move(name_l16),
 				std::move(node_l16),
 				token.substr(sep + 1)));
@@ -283,7 +250,7 @@ static void add_share(x_smbd_conf_t &smbd_conf,
 }
 
 static bool smbd_conf_add_share(x_smbd_conf_t &smbd_conf,
-		const share_spec_t &share_spec)
+		const x_smbd_share_spec_t &share_spec)
 {
 	std::vector<std::shared_ptr<x_smbd_volume_t>> smbd_volumes;
 	for (auto [uuid, volume_idx]: share_spec.volumes) {
@@ -394,7 +361,7 @@ static bool parse_log_level(const std::string &value, unsigned int &loglevel)
 }
 
 static bool parse_global_param(x_smbd_conf_t &smbd_conf,
-		std::vector<std::unique_ptr<volume_spec_t>> &volume_specs,
+		std::vector<std::unique_ptr<x_smbd_volume_spec_t>> &volume_specs,
 		const std::string &name, const std::string &value)
 {
 	// global parameters
@@ -469,7 +436,7 @@ static bool parse_global_param(x_smbd_conf_t &smbd_conf,
 	return true;
 }
 
-static bool parse_share_param(share_spec_t &share_spec,
+static bool parse_share_param(x_smbd_share_spec_t &share_spec,
 		const std::string &name, const std::string &value,
 		const char *path, unsigned int lineno)
 {
@@ -543,9 +510,9 @@ static bool split_option(const std::string opt, size_t pos,
 }
 
 static void parse_line(x_smbd_conf_t &smbd_conf,
-		std::vector<std::unique_ptr<share_spec_t>> &share_specs,
-		std::unique_ptr<share_spec_t> &share_spec,
-		std::vector<std::unique_ptr<volume_spec_t>> &volume_specs,
+		std::vector<std::unique_ptr<x_smbd_share_spec_t>> &share_specs,
+		std::unique_ptr<x_smbd_share_spec_t> &share_spec,
+		std::vector<std::unique_ptr<x_smbd_volume_spec_t>> &volume_specs,
 		std::string &line,
 		const char *path, unsigned int lineno)
 {
@@ -565,7 +532,7 @@ static void parse_line(x_smbd_conf_t &smbd_conf,
 			share_spec = nullptr;
 		}
 		if (section != "global") {
-			share_spec.reset(new share_spec_t(section));
+			share_spec.reset(new x_smbd_share_spec_t(section));
 		}
 	} else {
 		std::string name, value;
@@ -593,7 +560,7 @@ static std::string get_samba_path(const std::string &config_path)
 }
 
 static int find_volume_by_uuid(
-		const std::vector<std::unique_ptr<volume_spec_t>> &volume_specs,
+		const std::vector<std::unique_ptr<x_smbd_volume_spec_t>> &volume_specs,
 		const x_smb2_uuid_t &uuid)
 {
 	int idx = 0;
@@ -617,9 +584,7 @@ static std::shared_ptr<std::u16string> make_u16string_ptr(const std::string &str
 	return std::make_shared<std::u16string>(std::move(ustr));
 }
 
-static int parse_smbconf(x_smbd_conf_t &smbd_conf,
-		std::vector<std::unique_ptr<share_spec_t>> &share_specs,
-		std::vector<std::unique_ptr<volume_spec_t>> &volume_specs)
+static int parse_smbconf(x_smbd_conf_t &smbd_conf)
 {
 	const char *path = g_configfile;
 	X_LOG_DBG("Loading smbd_conf from %s", path);
@@ -635,7 +600,7 @@ static int parse_smbconf(x_smbd_conf_t &smbd_conf,
 	smbd_conf.private_dir = samba_path + "/private";
 	smbd_conf.lib_dir = samba_path + "/lib";
 	smbd_conf.samba_locks_dir = samba_path + "/var/locks";
-	std::unique_ptr<share_spec_t> share_spec;
+	std::unique_ptr<x_smbd_share_spec_t> share_spec;
 
 	unsigned int lineno = 0;
 	while (std::getline(in, line)) {
@@ -655,23 +620,23 @@ static int parse_smbconf(x_smbd_conf_t &smbd_conf,
 		if (end_with_slash) {
 			continue;
 		}
-		parse_line(smbd_conf, share_specs, share_spec, volume_specs,
+		parse_line(smbd_conf, smbd_conf.share_specs, share_spec, smbd_conf.volume_specs,
 				last_line, path, lineno);
 		last_line.clear();
 	}
 
 	if (last_line.length()) {
-		parse_line(smbd_conf, share_specs, share_spec, volume_specs,
+		parse_line(smbd_conf, smbd_conf.share_specs, share_spec, smbd_conf.volume_specs,
 				last_line, path, lineno);
 	}
 
 	if (share_spec) {
-		share_specs.push_back(std::move(share_spec));
+		smbd_conf.share_specs.push_back(std::move(share_spec));
 	}
 
 	// override global params by argv
 	for (const auto &[name, value]: g_cmdline_options) {
-		parse_global_param(smbd_conf, volume_specs, name, value);
+		parse_global_param(smbd_conf, smbd_conf.volume_specs, name, value);
 	}
 
 	if (smbd_conf.node_l16.empty()) {
@@ -745,21 +710,21 @@ static int parse_smbconf(x_smbd_conf_t &smbd_conf,
 		return err;
 	}
 
-	std::sort(volume_specs.begin(), volume_specs.end(),
+	std::sort(smbd_conf.volume_specs.begin(), smbd_conf.volume_specs.end(),
 			[](const auto &vs1, const auto &vs2) {
 				return comp_uuid(vs1->uuid, vs2->uuid) < 0;
 			});
 
-	std::sort(share_specs.begin(), share_specs.end(),
+	std::sort(smbd_conf.share_specs.begin(), smbd_conf.share_specs.end(),
 			[](const auto &ss1, const auto &ss2) {
 				return comp_uuid(ss1->uuid, ss2->uuid) < 0;
 			});
 
-	for (auto &ss: share_specs) {
+	for (auto &ss: smbd_conf.share_specs) {
 		X_ASSERT(!ss->volumes.empty());
 		for (auto &volume: ss->volumes) {
 			int volume_idx = find_volume_by_uuid(
-					volume_specs, volume.first);
+					smbd_conf.volume_specs, volume.first);
 			if (volume_idx == -1) {
 				X_LOG_ERR("cannot find volume %s for share %s",
 						x_tostr(volume.first).c_str(),
@@ -767,7 +732,7 @@ static int parse_smbconf(x_smbd_conf_t &smbd_conf,
 				return -1;
 			}
 
-			auto &volume_spec = volume_specs[volume_idx];
+			auto &volume_spec = smbd_conf.volume_specs[volume_idx];
 			if (volume_spec->share_spec) {
 				return -1;
 			}
@@ -857,36 +822,13 @@ int x_smbd_conf_init(const char *configfile,
 	g_configfile = configfile;
 
 	auto smbd_conf = std::make_shared<x_smbd_conf_t>();
-	std::vector<std::unique_ptr<share_spec_t>> share_specs;
-	std::vector<std::unique_ptr<volume_spec_t>> volume_specs;
 
-	int err = parse_smbconf(*smbd_conf, share_specs, volume_specs);
+	int err = parse_smbconf(*smbd_conf);
 	if (err) {
 		return err;
 	}
 
 	load_ifaces(*smbd_conf);
-
-	for (auto &vs: volume_specs) {
-		smbd_conf->smbd_volumes.push_back(x_smbd_volume_create(vs->uuid,
-					vs->name_8, vs->name_l16,
-					vs->owner_node_l16, vs->path));
-	}
-
-	for (auto &smbd_volume: smbd_conf->smbd_volumes) {
-		int err = x_smbd_volume_init(*smbd_volume);
-		if (err != 0) {
-			return err;
-		}
-	}
-
-	add_share(*smbd_conf, x_smbd_ipc_share_create());
-
-	for (auto &ss: share_specs) {
-		if (!smbd_conf_add_share(*smbd_conf, *ss)) {
-			return -1;
-		}
-	}
 
 	g_smbd_conf = smbd_conf;
 
@@ -894,7 +836,7 @@ int x_smbd_conf_init(const char *configfile,
 }
 
 static int reload_volumes(x_smbd_conf_t &smbd_conf,
-		const std::vector<std::unique_ptr<volume_spec_t>> &volume_specs)
+		const std::vector<std::unique_ptr<x_smbd_volume_spec_t>> &volume_specs)
 {
 	auto curr_it = g_smbd_conf->smbd_volumes.begin();
 	auto curr_end = g_smbd_conf->smbd_volumes.end();
@@ -927,7 +869,7 @@ static int reload_volumes(x_smbd_conf_t &smbd_conf,
 }
 
 static int reload_shares(x_smbd_conf_t &smbd_conf,
-		const std::vector<std::unique_ptr<share_spec_t>> &share_specs)
+		const std::vector<std::unique_ptr<x_smbd_share_spec_t>> &share_specs)
 {
 	auto curr_it = g_smbd_conf->smbd_shares.begin();
 	auto curr_end = g_smbd_conf->smbd_shares.end();
@@ -982,10 +924,8 @@ static int reload_shares(x_smbd_conf_t &smbd_conf,
 int x_smbd_conf_reload()
 {
 	auto smbd_conf = std::make_shared<x_smbd_conf_t>();
-	std::vector<std::unique_ptr<share_spec_t>> share_specs;
-	std::vector<std::unique_ptr<volume_spec_t>> volume_specs;
 
-	int err = parse_smbconf(*smbd_conf, share_specs, volume_specs);
+	int err = parse_smbconf(*smbd_conf);
 	if (err) {
 		return err;
 	}
@@ -1006,8 +946,8 @@ int x_smbd_conf_reload()
 		smbd_conf->local_ifaces = g_smbd_conf->local_ifaces;
 	}
 
-	reload_volumes(*smbd_conf, volume_specs);
-	reload_shares(*smbd_conf, share_specs);
+	reload_volumes(*smbd_conf, smbd_conf->volume_specs);
+	reload_shares(*smbd_conf, smbd_conf->share_specs);
 
 	g_smbd_conf = smbd_conf;
 	return 0;
@@ -1024,8 +964,29 @@ x_smbd_conf_t::~x_smbd_conf_t()
 	x_smbd_group_mapping_delete(group_mapping);
 }
 
-int x_smbd_restore_durable(const x_smbd_conf_t &smbd_conf)
+int x_smbd_init_shares(x_smbd_conf_t &smbd_conf)
 {
+	for (auto &vs: smbd_conf.volume_specs) {
+		smbd_conf.smbd_volumes.push_back(x_smbd_volume_create(vs->uuid,
+					vs->name_8, vs->name_l16,
+					vs->owner_node_l16, vs->path));
+	}
+
+	for (auto &smbd_volume: smbd_conf.smbd_volumes) {
+		int err = x_smbd_volume_init(*smbd_volume);
+		if (err != 0) {
+			return err;
+		}
+	}
+
+	add_share(smbd_conf, x_smbd_ipc_share_create());
+
+	for (auto &ss: smbd_conf.share_specs) {
+		if (!smbd_conf_add_share(smbd_conf, *ss)) {
+			return -1;
+		}
+	}
+
 	for (auto smbd_volume: smbd_conf.smbd_volumes) {
 		/* TODO only for local volume */
 		x_smbd_volume_restore_durable(smbd_volume);

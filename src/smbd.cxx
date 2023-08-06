@@ -174,7 +174,8 @@ static void init_smbd()
 	TIMER_INIT(x_smbd_timer_id_t::SESSSETUP, 40);
 	TIMER_INIT(x_smbd_timer_id_t::BREAK, 35);
 
-	x_smbd_restore_durable(*smbd_conf);
+	x_smbd_init_shares(*smbd_conf);
+
 	x_smbd_conn_srv_init(smbd_conf->port);
 }
 

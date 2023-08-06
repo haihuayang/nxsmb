@@ -23,6 +23,41 @@ static inline bool lpcfg_param_bool(void *service, const char *type, const char 
 
 static constexpr uint32_t X_INFINITE = -1;
 
+struct x_smbd_share_spec_t
+{
+	static const uint32_t default_dfs_referral_ttl = 300;
+
+	x_smbd_share_spec_t(const std::string &name) : name(name) { }
+
+	x_smb2_uuid_t uuid;
+	const std::string name;
+	uint32_t share_flags = x_smbd_share_t::f_durable_handle;
+	bool dfs_test = false;
+	uint32_t dfs_referral_ttl = default_dfs_referral_ttl;
+	std::vector<std::pair<x_smb2_uuid_t, int>> volumes;
+};
+
+struct x_smbd_volume_spec_t
+{
+	x_smbd_volume_spec_t(const x_smb2_uuid_t &uuid,
+			std::string &&name_8,
+			std::u16string &&name_l16,
+			std::u16string &&node_l16,
+			std::string &&path)
+		: uuid(uuid), name_8(name_8), name_l16(name_l16)
+		, owner_node_l16(node_l16), path(path)
+	{
+	}
+
+	const x_smb2_uuid_t uuid;
+	const std::string name_8;
+	const std::u16string name_l16;
+	const std::u16string owner_node_l16;
+	const std::string path;
+
+	x_smbd_share_spec_t *share_spec = nullptr;
+};
+
 struct x_smbd_conf_t
 {
 	x_smbd_conf_t();
@@ -85,6 +120,9 @@ struct x_smbd_conf_t
 	std::vector<std::shared_ptr<x_smbd_volume_t>> smbd_volumes;
 	std::vector<std::shared_ptr<x_smbd_share_t>> smbd_shares;
 
+	std::vector<std::unique_ptr<x_smbd_share_spec_t>> share_specs;
+	std::vector<std::unique_ptr<x_smbd_volume_spec_t>> volume_specs;
+
 	x_smbd_secrets_t secrets;
 	x_smbd_group_mapping_t *group_mapping;
 };
@@ -121,6 +159,8 @@ static inline void x_smbd_conf_unpin()
 	X_ASSERT(x_smbd_conf_curr);
 	x_smbd_conf_curr = nullptr;
 }
+
+int x_smbd_init_shares(x_smbd_conf_t &smbd_conf);
 
 #endif /* __smbconf__hxx__ */
 
