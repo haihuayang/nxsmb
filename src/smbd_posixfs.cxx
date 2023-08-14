@@ -154,12 +154,6 @@ static int posixfs_openat(int dirfd, const char *path,
 	return fd;
 }
 
-enum class oplock_break_sent_t {
-	OPLOCK_BREAK_NOT_SENT,
-	OPLOCK_BREAK_TO_NONE_SENT,
-	OPLOCK_BREAK_TO_LEVEL_II_SENT,
-};
-
 struct posixfs_open_t
 {
 	posixfs_open_t(x_smbd_object_t *so, x_smbd_tcon_t *st,
@@ -1209,18 +1203,6 @@ static posixfs_open_t *posixfs_open_create(
 		const x_smbd_open_state_t &open_state,
 		uint32_t create_options)
 {
-	NTSTATUS status;
-	if (create_options & X_SMB2_CREATE_OPTION_DELETE_ON_CLOSE) {
-		status = x_smbd_can_set_delete_on_close(&posixfs_object->base,
-				smbd_stream,
-				posixfs_object->get_meta().file_attributes,
-				open_state.access_mask);
-		if (!NT_STATUS_IS_OK(status)) {
-			*pstatus = status;
-			return nullptr;
-		}
-	}
-
 	posixfs_open_t *posixfs_open = new posixfs_open_t(&posixfs_object->base,
 			smbd_tcon, smbd_stream,
 			open_state);
@@ -3652,16 +3634,6 @@ NTSTATUS x_smbd_posixfs_create_open(x_smbd_open_t **psmbd_open,
 		posixfs_object->statex_modified = false;
 	}
 
-	/* TODO we support MXAC and QFID for now,
-	 * without QFID Windows 10 client query
-	 * couple getinfo x_smb2_info_level_t::FILE_NETWORK_OPEN_INFORMATION
-	 */
-	if (state->in_contexts & X_SMB2_CONTEXT_FLAG_QFID) {
-		x_put_le64(state->out_qfid_info, posixfs_object->get_meta().inode);
-		x_put_le64(state->out_qfid_info + 8, posixfs_object->get_meta().fsid);
-		memset(state->out_qfid_info + 16, 0, 16);
-		state->out_contexts |= X_SMB2_CONTEXT_FLAG_QFID;
-	}
 	*psmbd_open = &posixfs_open->base;
 	return NT_STATUS_OK;
 }

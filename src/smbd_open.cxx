@@ -1574,6 +1574,16 @@ static NTSTATUS smbd_open_create_intl(x_smbd_open_t **psmbd_open,
 		overwrite = false;
 	}
 
+	if (state->in_create_options & X_SMB2_CREATE_OPTION_DELETE_ON_CLOSE) {
+		status = x_smbd_can_set_delete_on_close(smbd_object,
+				smbd_stream,
+				smbd_object->meta.file_attributes,
+				state->granted_access);
+		if (!NT_STATUS_IS_OK(status)) {
+			return status;
+		}
+	}
+
 	/* TODO should we check the open limit before create the open */
 	status = smbd_object->smbd_volume->ops->create_open(psmbd_open,
 			smbd_requ, *state->smbd_share, state,
@@ -1583,6 +1593,17 @@ static NTSTATUS smbd_open_create_intl(x_smbd_open_t **psmbd_open,
 			changes);
 	if (!NT_STATUS_IS_OK(status)) {
 		return status;
+	}
+
+	/* TODO we support MXAC and QFID for now,
+	 * without QFID Windows 10 client query
+	 * couple getinfo x_smb2_info_level_t::FILE_NETWORK_OPEN_INFORMATION
+	 */
+	if (state->in_contexts & X_SMB2_CONTEXT_FLAG_QFID) {
+		x_put_le64(state->out_qfid_info, smbd_object->meta.inode);
+		x_put_le64(state->out_qfid_info + 8, smbd_object->meta.fsid);
+		memset(state->out_qfid_info + 16, 0, 16);
+		state->out_contexts |= X_SMB2_CONTEXT_FLAG_QFID;
 	}
 
 	state->out_create_flags = 0;
