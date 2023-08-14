@@ -229,11 +229,6 @@ struct posixfs_object_t
 	x_smbd_object_t base;
 
 	bool exists() const { return base.type != x_smbd_object_t::type_not_exist; }
-	x_dqlink_t hash_link;
-	uint64_t hash;
-	x_tick_t unused_timestamp{0};
-	std::atomic<uint32_t> use_count{1}; // protected by bucket mutex
-	// std::atomic<uint32_t> children_count{};
 	int fd = -1;
 	bool statex_modified{false}; // TODO use flags
 
@@ -367,12 +362,12 @@ static std::pair<bool, uint64_t> hash_object(const x_smbd_volume_t &smbd_volume,
 
 static inline void posixfs_object_incref(posixfs_object_t *posixfs_object)
 {
-	X_ASSERT(++posixfs_object->use_count > 1);
+	posixfs_object->base.incref();
 }
 
 static inline void posixfs_object_decref(posixfs_object_t *posixfs_object)
 {
-	X_ASSERT(--posixfs_object->use_count > 0);
+	posixfs_object->base.decref();
 }
 
 static inline void posixfs_ads_incref(posixfs_ads_t *posixfs_ads)
@@ -405,8 +400,8 @@ static posixfs_object_t *posixfs_object_lookup(
 	auto lock = std::lock_guard(bucket.mutex);
 
 	for (x_dqlink_t *link = bucket.head.get_front(); link; link = link->get_next()) {
-		elem = X_CONTAINER_OF(link, posixfs_object_t, hash_link);
-		if (elem->hash == hash && elem->base.smbd_volume == smbd_volume
+		elem = X_CONTAINER_OF(link, posixfs_object_t, base.hash_link);
+		if (elem->base.hash == hash && elem->base.smbd_volume == smbd_volume
 				&& x_strcase_equal(elem->base.path, path)) {
 			matched_object = elem;
 			break;
@@ -417,25 +412,17 @@ static posixfs_object_t *posixfs_object_lookup(
 		if (!create_if) {
 			return nullptr;
 		}
-		if (elem && elem->use_count == 0 && tick_now >
-				(elem->unused_timestamp + posixfs_object_pool_t::cache_time)) {
-			elem->~posixfs_object_t();
-			new (elem)posixfs_object_t(hash, smbd_volume, path, path_data);
-			matched_object = elem;
-		} else {
-			matched_object = new posixfs_object_t(hash, smbd_volume, path, path_data);
-			X_ASSERT(matched_object);
-			bucket.head.push_front(&matched_object->hash_link);
-			++pool.count;
-		}
-		assert(matched_object->use_count == 1);
+		matched_object = new posixfs_object_t(hash, smbd_volume, path, path_data);
+		X_ASSERT(matched_object);
+		bucket.head.push_front(&matched_object->base.hash_link);
+		++pool.count;
 	} else {
 		posixfs_object_incref(matched_object);
 	}
 	/* move it to head of the bucket to make latest used elem */
-	if (&matched_object->hash_link != bucket.head.get_front()) {
-		matched_object->hash_link.remove();
-		bucket.head.push_front(&matched_object->hash_link);
+	if (&matched_object->base.hash_link != bucket.head.get_front()) {
+		matched_object->base.hash_link.remove();
+		bucket.head.push_front(&matched_object->base.hash_link);
 	}
 	return matched_object;
 }
@@ -672,7 +659,7 @@ static NTSTATUS posixfs_set_allocation_size(
 static void posixfs_object_release(posixfs_object_t *posixfs_object)
 {
 	auto &pool = posixfs_object_pool;
-	auto bucket_idx = posixfs_object->hash % pool.buckets.size();
+	auto bucket_idx = posixfs_object->base.hash % pool.buckets.size();
 	auto &bucket = pool.buckets[bucket_idx];
 	bool free = false;
 
@@ -680,10 +667,9 @@ static void posixfs_object_release(posixfs_object_t *posixfs_object)
 		/* TODO optimize when use_count > 1 */
 		auto lock = std::lock_guard(bucket.mutex);
 
-		X_ASSERT(posixfs_object->use_count > 0);
-		if (--posixfs_object->use_count == 0) {
-			posixfs_object->unused_timestamp = tick_now;
-			bucket.head.remove(&posixfs_object->hash_link);
+		X_ASSERT(posixfs_object->base.use_count > 0);
+		if (--posixfs_object->base.use_count == 0) {
+			bucket.head.remove(&posixfs_object->base.hash_link);
 			free = true;
 		}
 	}
@@ -738,8 +724,8 @@ static NTSTATUS rename_object_intl(posixfs_object_pool_t::bucket_t &new_bucket,
 {
 	posixfs_object_t *new_object = nullptr;
 	for (x_dqlink_t *link = new_bucket.head.get_front(); link; link = link->get_next()) {
-		posixfs_object_t *elem = X_CONTAINER_OF(link, posixfs_object_t, hash_link);
-		if (elem->hash == new_hash && elem->base.smbd_volume == smbd_volume
+		posixfs_object_t *elem = X_CONTAINER_OF(link, posixfs_object_t, base.hash_link);
+		if (elem->base.hash == new_hash && elem->base.smbd_volume == smbd_volume
 				&& elem->base.path == new_path) {
 			new_object = elem;
 			break;
@@ -778,17 +764,17 @@ static NTSTATUS rename_object_intl(posixfs_object_pool_t::bucket_t &new_bucket,
 
 	if (new_object) {
 		/* not exists, should none refer it??? */
-		new_bucket.head.remove(&new_object->hash_link);
-		X_ASSERT(new_object->use_count == 0);
+		new_bucket.head.remove(&new_object->base.hash_link);
+		X_ASSERT(new_object->base.use_count == 0);
 		delete new_object;
 	}
 
 	old_path = old_object->base.path;
-	old_bucket.head.remove(&old_object->hash_link);
-	old_object->hash = new_hash;
+	old_bucket.head.remove(&old_object->base.hash_link);
+	old_object->base.hash = new_hash;
 	old_object->base.path = new_path;
 	old_object->unix_path = new_unix_path;
-	new_bucket.head.push_front(&old_object->hash_link);
+	new_bucket.head.push_front(&old_object->base.hash_link);
 	return NT_STATUS_OK;
 }
 
@@ -989,7 +975,7 @@ NTSTATUS posixfs_object_op_rename(x_smbd_object_t *smbd_object,
 	auto &pool = posixfs_object_pool;
 	auto new_bucket_idx = new_hash % pool.buckets.size();
 	auto &new_bucket = pool.buckets[new_bucket_idx];
-	auto old_bucket_idx = posixfs_object->hash % pool.buckets.size();
+	auto old_bucket_idx = posixfs_object->base.hash % pool.buckets.size();
 
 	std::u16string old_path;
 	if (new_bucket_idx == old_bucket_idx) {
@@ -3336,7 +3322,7 @@ posixfs_object_t::posixfs_object_t(
 		uint64_t h,
 		const std::shared_ptr<x_smbd_volume_t> &smbd_volume,
 		const std::u16string &p, uint64_t path_data)
-	: base(smbd_volume, path_data, p), hash(h)
+	: base(smbd_volume, path_data, h, p)
 {
 }
 
@@ -3728,7 +3714,7 @@ static posixfs_object_t *posixfs_create_root_object(
 		posixfs_object = new posixfs_object_t(hash, smbd_volume,
 				u"", 0);
 		X_ASSERT(posixfs_object);
-		bucket.head.push_front(&posixfs_object->hash_link);
+		bucket.head.push_front(&posixfs_object->base.hash_link);
 		++pool.count;
 	}
 

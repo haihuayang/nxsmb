@@ -992,7 +992,7 @@ static std::shared_ptr<x_smbd_volume_t> ipc_get_volume()
 x_smbd_ipc_object_t::x_smbd_ipc_object_t(const std::u16string &path,
 		const x_dcerpc_iface_t *iface,
 		std::string secondary_address)
-	: base(ipc_get_volume(), 0, path), iface(iface)
+	: base(ipc_get_volume(), 0, 0, path), iface(iface)
 	, secondary_address(std::move(secondary_address))
 {
 	base.flags = x_smbd_object_t::flag_initialized;

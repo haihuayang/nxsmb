@@ -264,10 +264,21 @@ struct x_smbd_object_t
 {
 	x_smbd_object_t(const std::shared_ptr<x_smbd_volume_t> &smbd_volume,
 			long priv_data,
+			uint64_t hash,
 			const std::u16string &path);
 	~x_smbd_object_t();
 
 	bool exists() const { return type != type_not_exist; }
+
+	void incref()
+	{
+		X_ASSERT(++use_count > 1);
+	}
+
+	void decref()
+	{
+		X_ASSERT(--use_count > 0);
+	}
 
 	void add_ads(x_smbd_stream_t *smbd_stream)
 	{
@@ -295,6 +306,9 @@ struct x_smbd_object_t
 		type_pipe = 3,
 	};
 	uint16_t type = type_not_exist;
+	std::atomic<int> use_count{1};
+	x_dqlink_t hash_link;
+	uint64_t hash;
 	std::u16string path;
 	x_smbd_file_handle_t file_handle;
 	x_smbd_object_meta_t meta;
