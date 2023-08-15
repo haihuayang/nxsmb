@@ -139,14 +139,6 @@ static NTSTATUS x_smb2_process_rename(x_smbd_conn_t *smbd_conn,
 	X_LOG_OP("%ld RENAME 0x%lx, 0x%lx", smbd_requ->in_smb2_hdr.mid,
 			state->in_file_id_persistent, state->in_file_id_volatile);
 
-	NTSTATUS status = x_smbd_requ_init_open(smbd_requ,
-			state->in_file_id_persistent,
-			state->in_file_id_volatile,
-			true);
-	if (!NT_STATUS_IS_OK(status)) {
-		RETURN_OP_STATUS(smbd_requ, status);
-	}
-
 	/* MS-FSA 2.1.5.14.11 */
 	if (!smbd_requ->smbd_open->check_access_any(idl::SEC_STD_DELETE)) {
 		RETURN_OP_STATUS(smbd_requ, NT_STATUS_ACCESS_DENIED);
@@ -163,7 +155,7 @@ static NTSTATUS x_smb2_process_rename(x_smbd_conn_t *smbd_conn,
 	}
 
 	smbd_requ->async_done_fn = x_smb2_rename_async_done;
-	status = x_smbd_open_rename(smbd_requ, state);
+	NTSTATUS status = x_smbd_open_rename(smbd_requ, state);
 	if (NT_STATUS_IS_OK(status)) {
 		x_smbd_notify_change(smbd_requ->smbd_open->smbd_object->smbd_volume,
 				state->out_changes);
@@ -196,6 +188,14 @@ NTSTATUS x_smb2_process_setinfo(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_re
 	uint64_t in_file_id_persistent = X_LE2H64(in_setinfo->file_id_persistent);
 	uint64_t in_file_id_volatile = X_LE2H64(in_setinfo->file_id_volatile);
 
+	NTSTATUS status = x_smbd_requ_init_open(smbd_requ,
+			in_file_id_persistent,
+			in_file_id_volatile,
+			true);
+	if (!NT_STATUS_IS_OK(status)) {
+		RETURN_OP_STATUS(smbd_requ, status);
+	}
+
 	if (in_info_class == x_smb2_info_class_t::FILE) {
 		if (in_info_level == x_smb2_info_level_t::FILE_RENAME_INFORMATION) {
 			auto state = std::make_unique<x_smb2_state_rename_t>();
@@ -216,21 +216,13 @@ NTSTATUS x_smb2_process_setinfo(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_re
 	state->in_info_class = in_info_class;
 	state->in_info_level = in_info_level;
 	state->in_additional = X_LE2H32(in_setinfo->additional);
-	state->in_file_id_persistent = X_LE2H64(in_setinfo->file_id_persistent);
-	state->in_file_id_volatile = X_LE2H64(in_setinfo->file_id_volatile);
+	state->in_file_id_persistent = in_file_id_persistent;
+	state->in_file_id_volatile = in_file_id_volatile;
 	state->in_data.assign(in_hdr + in_input_buffer_offset,
 			in_hdr + in_input_buffer_offset + in_input_buffer_length);
 
 	X_LOG_OP("%ld SETINFO 0x%lx, 0x%lx", smbd_requ->in_smb2_hdr.mid,
 			state->in_file_id_persistent, state->in_file_id_volatile);
-
-	NTSTATUS status = x_smbd_requ_init_open(smbd_requ,
-			state->in_file_id_persistent,
-			state->in_file_id_volatile,
-			true);
-	if (!NT_STATUS_IS_OK(status)) {
-		RETURN_OP_STATUS(smbd_requ, status);
-	}
 
 	std::vector<x_smb2_change_t> changes;
 	status = smb2_setinfo_dispatch(smbd_conn, smbd_requ, state, changes);
