@@ -18,7 +18,15 @@ enum {
 struct smbd_open_deleter
 {
 	void operator()(x_smbd_open_t *smbd_open) const {
-		x_smbd_open_op_destroy(smbd_open);
+		auto smbd_object = smbd_open->smbd_object;
+		auto smbd_stream = smbd_open->smbd_stream;
+		if (smbd_stream) {
+			smbd_object->smbd_volume->ops->release_stream(
+					smbd_object,
+					smbd_stream);
+		}
+
+		smbd_object->smbd_volume->ops->destroy_open(smbd_open);
 	}
 };
 
@@ -623,7 +631,7 @@ struct defer_rename_evt_t
 
 		auto state = smbd_requ->release_state<x_smb2_state_rename_t>();
 		if (x_smbd_requ_async_remove(smbd_requ) && smbd_conn) {
-			NTSTATUS status = x_smbd_open_op_rename(smbd_requ, state);
+			NTSTATUS status = x_smbd_open_rename(smbd_requ, state);
 			if (!NT_STATUS_EQUAL(status, NT_STATUS_PENDING)) {
 				smbd_requ->save_requ_state(state);
 				smbd_requ->async_done_fn(smbd_conn, smbd_requ, status);

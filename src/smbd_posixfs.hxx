@@ -81,13 +81,6 @@ void posixfs_notify_fname(
 		uint32_t action,
 		uint32_t notify_filter,
 		const std::u16string *new_name_path);
-void posixfs_object_op_destroy(x_smbd_object_t *smbd_object,
-		x_smbd_open_t *smbd_open);
-NTSTATUS posixfs_object_op_rename(x_smbd_object_t *smbd_object,
-		x_smbd_open_t *smbd_open,
-		x_smbd_requ_t *smbd_requ,
-		const std::u16string &new_path,
-		std::unique_ptr<x_smb2_state_rename_t> &state);
 void posixfs_op_release_object(x_smbd_object_t *smbd_object, x_smbd_stream_t *smbd_stream);
 uint32_t posixfs_op_get_attributes(const x_smbd_object_t *smbd_object);
 NTSTATUS posixfs_op_object_delete(
@@ -99,6 +92,30 @@ NTSTATUS posixfs_op_open_durable(x_smbd_open_t *&smbd_open,
 		std::shared_ptr<x_smbd_volume_t> &smbd_volume,
 		const x_smbd_durable_t &durable);
 
+x_smbd_object_t *posixfs_op_allocate_object(
+		const std::shared_ptr<x_smbd_volume_t> &smbd_volume,
+		long priv_data,
+		uint64_t hash,
+		const std::u16string &path);
+
+void posixfs_op_destroy_object(x_smbd_object_t *smbd_object);
+
+NTSTATUS posixfs_op_rename_object(
+		x_smbd_object_t *smbd_object,
+                bool replace_if_exists,
+                const std::u16string &new_path);
+
+NTSTATUS posixfs_op_rename_stream(
+		x_smbd_object_t *smbd_object,
+		x_smbd_stream_t *smbd_stream,
+                bool replace_if_exists,
+                const std::u16string &new_stream_name);
+
+void posixfs_op_release_stream(
+		x_smbd_object_t *smbd_object,
+		x_smbd_stream_t *smbd_stream);
+
+void posixfs_op_destroy_open(x_smbd_open_t *smbd_open);
 
 int posixfs_object_get_statex(const posixfs_object_t *posixfs_object,
 		x_smbd_object_meta_t *object_meta,

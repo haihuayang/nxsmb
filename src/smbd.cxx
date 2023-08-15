@@ -142,6 +142,7 @@ static void init_smbd()
 	g_smbd.wbpool = x_wbpool_create(g_evtmgmt, 2,
 			smbd_conf->samba_locks_dir + "/winbindd_privileged/pipe");
 
+	x_smbd_object_pool_init(max_opens);
 	x_smbd_open_table_init(max_opens);
 	x_smbd_tcon_table_init(X_SMBD_MAX_TCON);
 	x_smbd_sess_table_init(X_SMBD_MAX_SESSION);

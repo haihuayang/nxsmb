@@ -783,13 +783,6 @@ static NTSTATUS ipc_object_op_close(
 	return NT_STATUS_OK;
 }
 #endif
-static void ipc_object_op_destroy(x_smbd_object_t *smbd_object,
-		x_smbd_open_t *smbd_open)
-{
-	named_pipe_t *named_pipe = from_smbd_open(smbd_open);
-	delete named_pipe;
-}
-
 static std::array<x_smbd_ipc_object_t *, 4> ipc_object_tbl;
 
 static x_smbd_ipc_object_t *find_ipc_object_by_name(const std::u16string &path)
@@ -949,6 +942,53 @@ static int ipc_init_volume(std::shared_ptr<x_smbd_volume_t> &smbd_volume)
 	return 0;
 }
 
+static x_smbd_object_t *ipc_op_allocate_object(
+		const std::shared_ptr<x_smbd_volume_t> &smbd_volume,
+		long priv_data,
+		uint64_t hash,
+		const std::u16string &path)
+{
+	X_ASSERT(false);
+	return nullptr;
+}
+
+static void ipc_op_destroy_object(x_smbd_object_t *smbd_object)
+{
+	X_ASSERT(false);
+}
+
+static NTSTATUS ipc_op_rename_object(
+		x_smbd_object_t *smbd_object,
+		bool replace_if_exists,
+		const std::u16string &new_path)
+{
+	X_ASSERT(false);
+	return NT_STATUS_INTERNAL_ERROR;
+}
+
+static NTSTATUS ipc_op_rename_stream(
+		x_smbd_object_t *smbd_object,
+		x_smbd_stream_t *smbd_stream,
+		bool replace_if_exists,
+		const std::u16string &new_stream_name)
+{
+	X_ASSERT(false);
+	return NT_STATUS_INTERNAL_ERROR;
+}
+
+static void ipc_op_release_stream(x_smbd_object_t *smbd_object,
+		x_smbd_stream_t *smbd_stream)
+{
+	X_ASSERT(false);
+}
+
+static void ipc_op_destroy_open(x_smbd_open_t *smbd_open)
+{
+	named_pipe_t *named_pipe = from_smbd_open(smbd_open);
+	delete named_pipe;
+}
+
+
 static const x_smbd_object_ops_t x_smbd_ipc_object_ops = {
 	ipc_open_object,
 	ipc_create_object,
@@ -964,15 +1004,19 @@ static const x_smbd_object_ops_t x_smbd_ipc_object_ops = {
 	ipc_object_op_set_zero_data,
 	ipc_object_op_set_attribute,
 	nullptr, // op_qdir_create
-	nullptr, // op_rename
 	nullptr, // op_set_delete_on_close
 	nullptr, // notify_fname
-	ipc_object_op_destroy,
 	ipc_op_release_object,
 	ipc_op_delete_object,
 	ipc_op_access_check,
 	ipc_op_lease_granted,
 	ipc_init_volume,
+	ipc_op_allocate_object,
+	ipc_op_destroy_object,
+	ipc_op_rename_object,
+	ipc_op_rename_stream,
+	ipc_op_release_stream,
+	ipc_op_destroy_open,
 };
 
 static std::shared_ptr<x_smbd_volume_t> ipc_create_volume()

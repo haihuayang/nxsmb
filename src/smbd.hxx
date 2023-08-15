@@ -403,6 +403,7 @@ NTSTATUS x_smbd_tcon_resolve_path(x_smbd_tcon_t *smbd_tcon,
 
 
 int x_smbd_open_table_init(uint32_t count);
+int x_smbd_object_pool_init(size_t max_open);
 
 int x_smbd_posixfs_init(size_t max_open);
 int x_smbd_ipc_init();

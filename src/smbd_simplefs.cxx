@@ -112,15 +112,19 @@ static const x_smbd_object_ops_t simplefs_object_ops = {
 	posixfs_object_op_set_zero_data,
 	posixfs_object_op_set_attribute,
 	simplefs_op_qdir_create,
-	posixfs_object_op_rename,
 	posixfs_object_op_set_delete_on_close,
 	x_smbd_simple_notify_change,
-	posixfs_object_op_destroy,
 	posixfs_op_release_object,
 	posixfs_op_object_delete,
 	x_smbd_posixfs_op_access_check,
 	x_smbd_posixfs_op_lease_granted,
 	posixfs_init_volume,
+	posixfs_op_allocate_object,
+	posixfs_op_destroy_object,
+	posixfs_op_rename_object,
+	posixfs_op_rename_stream,
+	posixfs_op_release_stream,
+	posixfs_op_destroy_open,
 };
 
 

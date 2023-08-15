@@ -163,7 +163,7 @@ static NTSTATUS x_smb2_process_rename(x_smbd_conn_t *smbd_conn,
 	}
 
 	smbd_requ->async_done_fn = x_smb2_rename_async_done;
-	status = x_smbd_open_op_rename(smbd_requ, state);
+	status = x_smbd_open_rename(smbd_requ, state);
 	if (NT_STATUS_IS_OK(status)) {
 		x_smbd_notify_change(smbd_requ->smbd_open->smbd_object->smbd_volume,
 				state->out_changes);

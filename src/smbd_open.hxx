@@ -74,6 +74,16 @@ struct x_smbd_open_t
 		return smbd_tcon == nullptr;
 	}
 
+	uint8_t get_oplock_level() const
+	{
+		return open_state.oplock_level;
+	}
+
+	void set_oplock_level(uint8_t oplock_level)
+	{
+		open_state.oplock_level = oplock_level;
+	}
+
 	x_dlink_t tcon_link; // protected by the mutex of smbd_tcon
 	x_dlink_t object_link;
 	const x_tick_t tick_create;
@@ -200,11 +210,6 @@ struct x_smbd_object_ops_t
 			x_smbd_requ_t *smbd_requ,
 			std::unique_ptr<x_smb2_state_qdir_t> &state);
 #endif
-	NTSTATUS (*rename)(x_smbd_object_t *smbd_object,
-			x_smbd_open_t *smbd_open,
-			x_smbd_requ_t *smbd_requ,
-			const std::u16string &new_path,
-			std::unique_ptr<x_smb2_state_rename_t> &state);
 	NTSTATUS (*set_delete_on_close)(x_smbd_object_t *smbd_object,
 			x_smbd_open_t *smbd_open,
 			bool delete_on_close);
@@ -217,7 +222,7 @@ struct x_smbd_object_ops_t
 			const x_smb2_lease_key_t &ignore_lease_key,
 			const x_smb2_uuid_t &client_guid,
 			bool last_level);
-	void (*destroy)(x_smbd_object_t *smbd_object, x_smbd_open_t *smbd_open);
+	// void (*destroy)(x_smbd_object_t *smbd_object, x_smbd_open_t *smbd_open);
 	void (*release_object)(x_smbd_object_t *smbd_object, x_smbd_stream_t *smbd_stream);
 	NTSTATUS (*delete_object)(x_smbd_object_t *smbd_object,
 			x_smbd_stream_t *smbd_stream,
@@ -234,6 +239,30 @@ struct x_smbd_object_ops_t
 			x_smbd_stream_t *smbd_stream);
 
 	int (*init_volume)(std::shared_ptr<x_smbd_volume_t> &smbd_volume);
+
+	x_smbd_object_t *(*allocate_object)(
+			const std::shared_ptr<x_smbd_volume_t> &smbd_volume,
+			long priv_data,
+			uint64_t hash,
+			const std::u16string &path);
+
+	void (*destroy_object)(x_smbd_object_t *smbd_object);
+
+	NTSTATUS (*rename_object)(
+			x_smbd_object_t *smbd_object,
+			bool replace_if_exists,
+			const std::u16string &new_path);
+
+	NTSTATUS (*rename_stream)(
+			x_smbd_object_t *smbd_object,
+			x_smbd_stream_t *smbd_stream,
+			bool replace_if_exists,
+			const std::u16string &new_stream_name);
+
+	void (*release_stream)(x_smbd_object_t *smbd_object,
+			x_smbd_stream_t *smbd_stream);
+
+	void (*destroy_open)(x_smbd_open_t *smbd_open);
 };
 
 X_DECLARE_MEMBER_TRAITS(x_smbd_open_object_traits, x_smbd_open_t, object_link)
@@ -446,26 +475,6 @@ static inline NTSTATUS x_smbd_open_op_ioctl(
 	}
 	return op_fn(smbd_object, smbd_requ, state);
 }
-#if 0
-static inline NTSTATUS x_smbd_open_op_qdir(
-		x_smbd_open_t *smbd_open,
-		x_smbd_conn_t *smbd_conn,
-		x_smbd_requ_t *smbd_requ,
-		std::unique_ptr<x_smb2_state_qdir_t> &state)
-{
-	x_smbd_object_t *smbd_object = smbd_open->smbd_object;
-	return op_fn(smbd_object, smbd_open, smbd_conn, smbd_requ, state);
-}
-#endif
-static inline NTSTATUS x_smbd_open_op_rename(
-		x_smbd_requ_t *smbd_requ,
-		std::unique_ptr<x_smb2_state_rename_t> &state)
-{
-	auto smbd_open = smbd_requ->smbd_open;
-	auto smbd_object = smbd_open->smbd_object;
-	return smbd_object->smbd_volume->ops->rename(smbd_object, smbd_open, smbd_requ,
-			state->in_path, state);
-}
 
 static inline NTSTATUS x_smbd_open_op_set_delete_on_close(
 		x_smbd_open_t *smbd_open,
@@ -483,14 +492,14 @@ x_smbd_open_op_get_meta(const x_smbd_open_t *smbd_open)
 	x_smbd_sharemode_t *sharemode = x_smbd_open_get_sharemode(smbd_open);
 	return { &smbd_object->meta, &sharemode->meta };
 }
-
+#if 0
 static inline void x_smbd_open_op_destroy(
 		x_smbd_open_t *smbd_open)
 {
 	x_smbd_object_t *smbd_object = smbd_open->smbd_object;
 	return smbd_object->smbd_volume->ops->destroy(smbd_object, smbd_open);
 }
-
+#endif
 static inline std::pair<uint64_t, uint64_t> x_smbd_open_get_id(x_smbd_open_t *smbd_open)
 {
 	return { smbd_open->id_persistent, smbd_open->id_volatile };
@@ -656,13 +665,29 @@ static inline void x_smbd_qdir_unget_entry(x_smbd_qdir_t *smbd_qdir,
 
 void x_smbd_qdir_close(x_smbd_qdir_t *smbd_qdir);
 
-#if 0
-	uint32_t (*get_attributes)(const x_smbd_object_t *smbd_object);
-static inline uint32_t x_smbd_object_get_attributes(const x_smbd_object_t *smbd_object)
+x_smbd_object_t *x_smbd_object_lookup(
+		const std::shared_ptr<x_smbd_volume_t> &smbd_volume,
+		const std::u16string &path,
+		uint64_t path_data,
+		bool create_if,
+		uint64_t hash);
+void x_smbd_object_new_release(x_smbd_object_t *smbd_object);
+
+NTSTATUS x_smbd_object_rename(x_smbd_object_t *smbd_object,
+		x_smbd_open_t *smbd_open,
+		x_smbd_requ_t *smbd_requ,
+		const std::u16string &new_path,
+		std::unique_ptr<x_smb2_state_rename_t> &state);
+
+static inline NTSTATUS x_smbd_open_rename(
+		x_smbd_requ_t *smbd_requ,
+		std::unique_ptr<x_smb2_state_rename_t> &state)
 {
-	return smbd_object->smbd_volume->ops->get_attributes(smbd_object);
+	auto smbd_open = smbd_requ->smbd_open;
+	auto smbd_object = smbd_open->smbd_object;
+	return x_smbd_object_rename(smbd_object, smbd_open, smbd_requ,
+			state->in_path, state);
 }
-#endif
 
 #endif /* __smbd_open__hxx__ */
 
