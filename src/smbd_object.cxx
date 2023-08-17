@@ -49,6 +49,23 @@ std::pair<bool, uint64_t> x_smbd_hash_path(const x_smbd_volume_t &smbd_volume,
 	}
 }
 
+/* call hold bucket lock */
+static x_smbd_object_t *smbd_object_lookup_intl(
+		const std::shared_ptr<x_smbd_volume_t> &smbd_volume,
+		smbd_object_pool_t::bucket_t &bucket,
+		const std::u16string &path,
+		uint64_t hash)
+{
+	for (x_dqlink_t *link = bucket.head.get_front(); link; link = link->get_next()) {
+		x_smbd_object_t *elem = X_CONTAINER_OF(link, x_smbd_object_t, hash_link);
+		if (elem->hash == hash && elem->smbd_volume == smbd_volume
+				&& x_strcase_equal(elem->path, path)) {
+			return elem;
+		}
+	}
+	return nullptr;
+}
+
 /**
  * open, find object in pool, 
  	if exist and open count == 0 then
@@ -68,38 +85,29 @@ x_smbd_object_t *x_smbd_object_lookup(
 	auto &pool = smbd_object_pool;
 	auto bucket_idx = hash % pool.buckets.size();
 	auto &bucket = pool.buckets[bucket_idx];
-	x_smbd_object_t *matched_object = nullptr;
-	x_smbd_object_t *elem = nullptr;
 
 	auto lock = std::lock_guard(bucket.mutex);
+	x_smbd_object_t *smbd_object = smbd_object_lookup_intl(
+			smbd_volume, bucket, path, hash);
 
-	for (x_dqlink_t *link = bucket.head.get_front(); link; link = link->get_next()) {
-		elem = X_CONTAINER_OF(link, x_smbd_object_t, hash_link);
-		if (elem->hash == hash && elem->smbd_volume == smbd_volume
-				&& x_strcase_equal(elem->path, path)) {
-			matched_object = elem;
-			break;
-		}
-	}
-
-	if (!matched_object) {
+	if (!smbd_object) {
 		if (!create_if) {
 			return nullptr;
 		}
-		matched_object = smbd_volume->ops->allocate_object(
+		smbd_object = smbd_volume->ops->allocate_object(
 				smbd_volume, path_data, hash, path);
-		X_ASSERT(matched_object);
-		bucket.head.push_front(&matched_object->hash_link);
+		X_ASSERT(smbd_object);
+		bucket.head.push_front(&smbd_object->hash_link);
 		++pool.count;
 	} else {
-		matched_object->incref();
+		smbd_object->incref();
 	}
 	/* move it to head of the bucket to make latest used elem */
-	if (&matched_object->hash_link != bucket.head.get_front()) {
-		matched_object->hash_link.remove();
-		bucket.head.push_front(&matched_object->hash_link);
+	if (&smbd_object->hash_link != bucket.head.get_front()) {
+		smbd_object->hash_link.remove();
+		bucket.head.push_front(&smbd_object->hash_link);
 	}
-	return matched_object;
+	return smbd_object;
 }
 
 void x_smbd_object_new_release(x_smbd_object_t *smbd_object)
@@ -204,15 +212,8 @@ static NTSTATUS rename_object_intl(smbd_object_pool_t::bucket_t &new_bucket,
 		std::u16string &old_path,
 		uint64_t new_hash)
 {
-	x_smbd_object_t *new_object = nullptr;
-	for (x_dqlink_t *link = new_bucket.head.get_front(); link; link = link->get_next()) {
-		x_smbd_object_t *elem = X_CONTAINER_OF(link, x_smbd_object_t, hash_link);
-		if (elem->hash == new_hash && elem->smbd_volume == smbd_volume
-				&& elem->path == new_path) {
-			new_object = elem;
-			break;
-		}
-	}
+	x_smbd_object_t *new_object = smbd_object_lookup_intl(smbd_volume,
+			new_bucket, new_path, new_hash);
 	if (new_object && new_object->exists()) {
 		/* TODO replace forced */
 		return NT_STATUS_OBJECT_NAME_COLLISION;
