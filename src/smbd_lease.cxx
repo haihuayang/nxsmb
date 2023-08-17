@@ -123,7 +123,7 @@ static void smbd_lease_decref(x_smbd_lease_t *smbd_lease)
 		X_ASSERT(smbd_lease->open_cnt == 0);
 		X_ASSERT(!smbd_lease->breaking);
 		if (smbd_lease->smbd_object) {
-			x_smbd_object_release(smbd_lease->smbd_object, smbd_lease->smbd_stream);
+			x_smbd_release_object_and_stream(smbd_lease->smbd_object, smbd_lease->smbd_stream);
 		}
 		X_SMBD_COUNTER_INC(lease_delete, 1);
 		delete smbd_lease;

@@ -1269,7 +1269,7 @@ static x_job_t::retval_t posixfs_read_job_run(x_job_t *job, void *sche)
 
 	NTSTATUS status = posixfs_do_read(posixfs_object, *state, posixfs_read_job->delay_ms);
 
-	x_smbd_object_new_release(&posixfs_object->base);
+	x_smbd_release_object(&posixfs_object->base);
 	X_SMBD_CHAN_POST_USER(smbd_requ->smbd_chan,
 			new posixfs_read_evt_t(smbd_requ, status));
 	delete posixfs_read_job;
@@ -1504,7 +1504,7 @@ static x_job_t::retval_t posixfs_write_job_run(x_job_t *job, void *data)
 	NTSTATUS status = posixfs_do_write(posixfs_object, posixfs_open, *state,
 			posixfs_write_job->delay_ms);
 
-	x_smbd_object_new_release(&posixfs_object->base);
+	x_smbd_release_object(&posixfs_object->base);
 	X_SMBD_CHAN_POST_USER(smbd_requ->smbd_chan,
 			new posixfs_write_evt_t(smbd_requ, status));
 	delete posixfs_write_job;
@@ -2800,7 +2800,7 @@ void posixfs_op_release_object(x_smbd_object_t *smbd_object, x_smbd_stream_t *sm
 	if (smbd_stream) {
 		posixfs_object_release_stream(posixfs_object, smbd_stream);
 	}
-	x_smbd_object_new_release(&posixfs_object->base);
+	x_smbd_release_object(&posixfs_object->base);
 }
 
 static NTSTATUS posixfs_delete_object(posixfs_object_t *posixfs_object)

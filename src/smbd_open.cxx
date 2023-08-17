@@ -1817,7 +1817,7 @@ NTSTATUS x_smbd_open_op_create(x_smbd_requ_t *smbd_requ,
 
 		x_smbd_object_t *smbd_object = nullptr;
 		x_smbd_stream_t *smbd_stream = nullptr;
-		status = x_smbd_open_object_only(&smbd_object,
+		status = x_smbd_open_object(&smbd_object,
 				smbd_volume, path,
 				path_priv_data, true);
 		if (!NT_STATUS_IS_OK(status)) {
@@ -1829,7 +1829,7 @@ NTSTATUS x_smbd_open_op_create(x_smbd_requ_t *smbd_requ,
 				&smbd_stream,
 				state->in_ads_name);
 			if (!NT_STATUS_IS_OK(status)) {
-				x_smbd_object_new_release(smbd_object);
+				x_smbd_release_object(smbd_object);
 				return status;
 			}
 		}
@@ -2086,7 +2086,7 @@ x_smbd_open_t::x_smbd_open_t(x_smbd_object_t *so,
 x_smbd_open_t::~x_smbd_open_t()
 {
 	x_smbd_ref_dec_if(smbd_tcon);
-	x_smbd_object_release(smbd_object, nullptr);
+	x_smbd_release_object_and_stream(smbd_object, smbd_stream);
 	X_SMBD_COUNTER_INC(open_delete, 1);
 }
 

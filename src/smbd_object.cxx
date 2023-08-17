@@ -17,7 +17,7 @@ x_smbd_object_t::~x_smbd_object_t()
 x_smb2_state_create_t::~x_smb2_state_create_t()
 {
 	if (smbd_object) {
-		x_smbd_object_release(smbd_object, smbd_stream);
+		x_smbd_release_object_and_stream(smbd_object, smbd_stream);
 	}
 	if (smbd_lease) {
 		x_smbd_lease_release(smbd_lease);
@@ -110,7 +110,7 @@ x_smbd_object_t *x_smbd_object_lookup(
 	return smbd_object;
 }
 
-void x_smbd_object_new_release(x_smbd_object_t *smbd_object)
+void x_smbd_release_object(x_smbd_object_t *smbd_object)
 {
 	auto &pool = smbd_object_pool;
 	auto bucket_idx = smbd_object->hash % pool.buckets.size();
@@ -132,7 +132,16 @@ void x_smbd_object_new_release(x_smbd_object_t *smbd_object)
 	}
 }
 
-NTSTATUS x_smbd_open_object_only(x_smbd_object_t **p_smbd_object,
+void x_smbd_release_object_and_stream(x_smbd_object_t *smbd_object,
+		x_smbd_stream_t *smbd_stream)
+{
+	if (smbd_stream) {
+		smbd_object->smbd_volume->ops->release_stream(smbd_object, smbd_stream);
+	}
+	x_smbd_release_object(smbd_object);
+}
+
+NTSTATUS x_smbd_open_object(x_smbd_object_t **p_smbd_object,
 		std::shared_ptr<x_smbd_volume_t> &smbd_volume,
 		const std::u16string &path,
 		long path_priv_data,
@@ -159,7 +168,7 @@ NTSTATUS x_smbd_open_object_only(x_smbd_object_t **p_smbd_object,
 	}
 
 	if (!NT_STATUS_IS_OK(status)) {
-		x_smbd_object_new_release(smbd_object);
+		x_smbd_release_object(smbd_object);
 		return status;
 	}
 	*p_smbd_object = smbd_object;
@@ -317,7 +326,7 @@ static NTSTATUS parent_dirname_compatible_open(
 	}
 	std::u16string parent_path = get_parent_path(path);
 	x_smbd_object_t *smbd_object = nullptr;
-	NTSTATUS status = x_smbd_open_object_only(&smbd_object,
+	NTSTATUS status = x_smbd_open_object(&smbd_object,
 			smbd_volume, parent_path, 0, false);
 	if (!smbd_object) {
 		return NT_STATUS_OK;
@@ -338,28 +347,27 @@ static NTSTATUS parent_dirname_compatible_open(
 			break;
 		}
 	}
-	x_smbd_object_release(smbd_object, nullptr);
+	x_smbd_release_object(smbd_object);
 	return status;
 }
 
 NTSTATUS x_smbd_object_rename(x_smbd_object_t *smbd_object,
 		x_smbd_open_t *smbd_open,
 		x_smbd_requ_t *smbd_requ,
-		const std::u16string &new_path,
 		std::unique_ptr<x_smb2_state_rename_t> &state)
 {
 	auto &smbd_volume = smbd_object->smbd_volume;
 	x_smbd_sharemode_t *sharemode = x_smbd_open_get_sharemode(
 			smbd_requ->smbd_open);
 
-	auto [ ok, new_hash ] = x_smbd_hash_path(*smbd_volume, new_path);
+	auto [ ok, new_hash ] = x_smbd_hash_path(*smbd_volume, state->in_path);
 	if (!ok) {
 		return NT_STATUS_ILLEGAL_CHARACTER;
 	}
 
 	NTSTATUS status;
 	if (!smbd_open->smbd_stream) {
-		status = parent_dirname_compatible_open(smbd_object->smbd_volume, new_path);
+		status = parent_dirname_compatible_open(smbd_object->smbd_volume, state->in_path);
 		if (!NT_STATUS_IS_OK(status)) {
 			return status;
 		}
@@ -397,13 +405,13 @@ NTSTATUS x_smbd_object_rename(x_smbd_object_t *smbd_object,
 		auto bucket_lock = std::lock_guard(new_bucket.mutex);
 		status = rename_object_intl(new_bucket, new_bucket, smbd_volume,
 				smbd_object,
-				new_path, old_path, new_hash);
+				state->in_path, old_path, new_hash);
 	} else {
 		auto &old_bucket = pool.buckets[old_bucket_idx];
 		std::scoped_lock bucket_lock(new_bucket.mutex, old_bucket.mutex);
 		status = rename_object_intl(new_bucket, old_bucket, smbd_volume,
 				smbd_object,
-				new_path, old_path, new_hash);
+				state->in_path, old_path, new_hash);
 	}
 
 	if (NT_STATUS_IS_OK(status)) {
@@ -413,7 +421,7 @@ NTSTATUS x_smbd_object_rename(x_smbd_object_t *smbd_object,
 					FILE_NOTIFY_CHANGE_FILE_NAME,
 				smbd_open->open_state.parent_lease_key,
 				smbd_open->open_state.client_guid,
-				old_path, new_path});
+				old_path, state->in_path});
 	}
 
 	return status;

@@ -30,7 +30,7 @@ x_smbd_volume_t::x_smbd_volume_t(const x_smb2_uuid_t &uuid,
 
 x_smbd_volume_t::~x_smbd_volume_t()
 {
-	x_smbd_object_release(root_object, nullptr);
+	x_smbd_release_object(root_object);
 }
 
 std::shared_ptr<x_smbd_volume_t> x_smbd_volume_create(

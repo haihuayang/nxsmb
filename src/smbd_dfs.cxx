@@ -735,7 +735,7 @@ static void dfs_root_notify_change(std::shared_ptr<x_smbd_volume_t> &smbd_volume
 			ignore_lease_key, client_guid,
 			last_level,
 			open_priv_data);
-	x_smbd_object_release(smbd_object, nullptr);
+	x_smbd_release_object(smbd_object);
 }
 
 

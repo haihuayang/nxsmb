@@ -872,6 +872,7 @@ static NTSTATUS ipc_create_open(x_smbd_open_t **psmbd_open,
 				0,
 				x_smb2_create_action_t::WAS_OPENED,
 				X_SMB2_OPLOCK_LEVEL_NONE});
+	ipc_object->base.incref();
 	if (!x_smbd_open_store(&named_pipe->base)) {
 		delete named_pipe;
 		*psmbd_open = nullptr;
@@ -884,13 +885,6 @@ static NTSTATUS ipc_create_open(x_smbd_open_t **psmbd_open,
 
 	*psmbd_open = &named_pipe->base;
 	return NT_STATUS_OK;
-}
-
-static void ipc_op_release_object(x_smbd_object_t *smbd_object,
-		x_smbd_stream_t *smbd_stream)
-{
-	X_ASSERT(!smbd_stream);
-	// do nothing
 }
 
 static NTSTATUS ipc_op_delete_object(x_smbd_object_t *smbd_object,
@@ -1024,7 +1018,6 @@ static const x_smbd_object_ops_t x_smbd_ipc_object_ops = {
 	nullptr, // op_qdir_create
 	nullptr, // op_set_delete_on_close
 	nullptr, // notify_fname
-	ipc_op_release_object,
 	ipc_op_delete_object,
 	ipc_op_access_check,
 	ipc_op_lease_granted,

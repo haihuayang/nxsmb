@@ -123,7 +123,7 @@ void x_smbd_simple_notify_change(
 		bool last_level)
 {
 	x_smbd_object_t *smbd_object = nullptr;
-	NTSTATUS status = x_smbd_open_object_only(&smbd_object,
+	NTSTATUS status = x_smbd_open_object(&smbd_object,
 			smbd_volume, path, 0, false);
 	if (!NT_STATUS_IS_OK(status)) {
 		X_LOG_DBG("skip notify %d,x%x '%s', '%s'", notify_action,
@@ -144,7 +144,7 @@ void x_smbd_simple_notify_change(
 			ignore_lease_key, client_guid,
 			last_level, 0);
 
-	x_smbd_object_release(smbd_object, nullptr);
+	x_smbd_release_object(smbd_object);
 }
 
 static void notify_one_level(std::shared_ptr<x_smbd_volume_t> &smbd_volume,

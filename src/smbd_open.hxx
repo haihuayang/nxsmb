@@ -215,7 +215,7 @@ struct x_smbd_object_ops_t
 			const x_smb2_uuid_t &client_guid,
 			bool last_level);
 	// void (*destroy)(x_smbd_object_t *smbd_object, x_smbd_open_t *smbd_open);
-	void (*release_object)(x_smbd_object_t *smbd_object, x_smbd_stream_t *smbd_stream);
+	// void (*release_object)(x_smbd_object_t *smbd_object, x_smbd_stream_t *smbd_stream);
 	NTSTATUS (*delete_object)(x_smbd_object_t *smbd_object,
 			x_smbd_stream_t *smbd_stream,
 			x_smbd_open_t *smbd_open,
@@ -504,12 +504,6 @@ static inline std::pair<uint64_t, uint64_t> x_smbd_open_get_id(x_smbd_open_t *sm
 	return { smbd_open->id_persistent, smbd_open->id_volatile };
 }
 
-static inline void x_smbd_object_release(x_smbd_object_t *smbd_object,
-		x_smbd_stream_t *smbd_stream)
-{
-	smbd_object->smbd_volume->ops->release_object(smbd_object, smbd_stream);
-}
-
 static inline NTSTATUS x_smbd_object_delete(
 		x_smbd_object_t *smbd_object,
 		x_smbd_stream_t *smbd_stream,
@@ -657,9 +651,13 @@ x_smbd_object_t *x_smbd_object_lookup(
 		uint64_t path_data,
 		bool create_if,
 		uint64_t hash);
-void x_smbd_object_new_release(x_smbd_object_t *smbd_object);
 
-NTSTATUS x_smbd_open_object_only(x_smbd_object_t **psmbd_object,
+void x_smbd_release_object_and_stream(x_smbd_object_t *smbd_object,
+		x_smbd_stream_t *smbd_stream);
+
+void x_smbd_release_object(x_smbd_object_t *smbd_object);
+
+NTSTATUS x_smbd_open_object(x_smbd_object_t **psmbd_object,
 		std::shared_ptr<x_smbd_volume_t> &smbd_volume,
 		const std::u16string &path,
 		long path_priv_data,
@@ -668,7 +666,6 @@ NTSTATUS x_smbd_open_object_only(x_smbd_object_t **psmbd_object,
 NTSTATUS x_smbd_object_rename(x_smbd_object_t *smbd_object,
 		x_smbd_open_t *smbd_open,
 		x_smbd_requ_t *smbd_requ,
-		const std::u16string &new_path,
 		std::unique_ptr<x_smb2_state_rename_t> &state);
 
 static inline NTSTATUS x_smbd_open_rename(
@@ -678,7 +675,7 @@ static inline NTSTATUS x_smbd_open_rename(
 	auto smbd_open = smbd_requ->smbd_open;
 	auto smbd_object = smbd_open->smbd_object;
 	return x_smbd_object_rename(smbd_object, smbd_open, smbd_requ,
-			state->in_path, state);
+			state);
 }
 
 std::pair<bool, uint64_t> x_smbd_hash_path(const x_smbd_volume_t &smbd_volume,
