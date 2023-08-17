@@ -98,7 +98,6 @@ static NTSTATUS simplefs_op_create_open(x_smbd_open_t **psmbd_open,
 }
 
 static const x_smbd_object_ops_t simplefs_object_ops = {
-	x_smbd_posixfs_open_object,
 	x_smbd_posixfs_create_object,
 	simplefs_op_create_open,
 	posixfs_op_open_durable,
@@ -121,7 +120,9 @@ static const x_smbd_object_ops_t simplefs_object_ops = {
 	posixfs_init_volume,
 	posixfs_op_allocate_object,
 	posixfs_op_destroy_object,
+	posixfs_op_initialize_object,
 	posixfs_op_rename_object,
+	posixfs_op_open_stream,
 	posixfs_op_rename_stream,
 	posixfs_op_release_stream,
 	posixfs_op_destroy_open,

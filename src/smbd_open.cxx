@@ -1815,13 +1815,27 @@ NTSTATUS x_smbd_open_op_create(x_smbd_requ_t *smbd_requ,
 				x_str_todebug(path).c_str(),
 				path_priv_data, open_priv_data);
 
-		status = x_smbd_open_object(&state->smbd_object,
-				&state->smbd_stream,
-				smbd_volume, path, state->in_ads_name,
+		x_smbd_object_t *smbd_object = nullptr;
+		x_smbd_stream_t *smbd_stream = nullptr;
+		status = x_smbd_open_object_only(&smbd_object,
+				smbd_volume, path,
 				path_priv_data, true);
 		if (!NT_STATUS_IS_OK(status)) {
 			return status;
 		}
+
+		if (!state->in_ads_name.empty()) {
+			status = smbd_volume->ops->open_stream(smbd_object,
+				&smbd_stream,
+				state->in_ads_name);
+			if (!NT_STATUS_IS_OK(status)) {
+				x_smbd_object_new_release(smbd_object);
+				return status;
+			}
+		}
+
+		state->smbd_object = smbd_object;
+		state->smbd_stream = smbd_stream;
 
 		state->open_priv_data = open_priv_data;
 	}

@@ -100,6 +100,13 @@ x_smbd_object_t *posixfs_op_allocate_object(
 
 void posixfs_op_destroy_object(x_smbd_object_t *smbd_object);
 
+NTSTATUS posixfs_op_initialize_object(
+		x_smbd_object_t *smbd_object);
+
+NTSTATUS posixfs_op_open_stream(x_smbd_object_t *smbd_object,
+		x_smbd_stream_t **p_smbd_stream,
+		const std::u16string &ads_name);
+
 NTSTATUS posixfs_op_rename_object(
 		x_smbd_object_t *smbd_object,
                 bool replace_if_exists,
@@ -134,15 +141,6 @@ typedef bool posixfs_qdir_entry_func_t(x_smbd_object_meta_t *object_meta,
 		posixfs_object_t *dir_obj,
 		const char *ent_name,
 		uint32_t file_number);
-
-
-NTSTATUS x_smbd_posixfs_open_object(x_smbd_object_t **psmbd_object,
-		x_smbd_stream_t **psmbd_stream,
-		std::shared_ptr<x_smbd_volume_t> &smbd_volume,
-		const std::u16string &path,
-		const std::u16string &ads_name,
-		long path_data,
-		bool create_if);
 
 NTSTATUS x_smbd_posixfs_op_create_open(x_smbd_open_t *&smbd_open,
 		x_smbd_requ_t *smbd_requ,

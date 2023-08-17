@@ -123,9 +123,8 @@ void x_smbd_simple_notify_change(
 		bool last_level)
 {
 	x_smbd_object_t *smbd_object = nullptr;
-	x_smbd_stream_t *smbd_stream = nullptr;
-	NTSTATUS status = x_smbd_open_object(&smbd_object, &smbd_stream,
-			smbd_volume, path, std::u16string(), 0, false);
+	NTSTATUS status = x_smbd_open_object_only(&smbd_object,
+			smbd_volume, path, 0, false);
 	if (!NT_STATUS_IS_OK(status)) {
 		X_LOG_DBG("skip notify %d,x%x '%s', '%s'", notify_action,
 				notify_filter,

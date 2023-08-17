@@ -38,7 +38,7 @@ struct smbd_object_pool_t
 
 static smbd_object_pool_t smbd_object_pool;
 
-static std::pair<bool, uint64_t> hash_object(const x_smbd_volume_t &smbd_volume,
+std::pair<bool, uint64_t> x_smbd_hash_path(const x_smbd_volume_t &smbd_volume,
 		const std::u16string &path)
 {
 	auto [ ok, hash ] = x_strcase_hash(path);
@@ -122,6 +122,40 @@ void x_smbd_object_new_release(x_smbd_object_t *smbd_object)
 	if (free) {
 		smbd_object->smbd_volume->ops->destroy_object(smbd_object);
 	}
+}
+
+NTSTATUS x_smbd_open_object_only(x_smbd_object_t **p_smbd_object,
+		std::shared_ptr<x_smbd_volume_t> &smbd_volume,
+		const std::u16string &path,
+		long path_priv_data,
+		bool create_if)
+{
+	auto [ ok, hash ] = x_smbd_hash_path(*smbd_volume, path);
+	if (!ok) {
+		return NT_STATUS_ILLEGAL_CHARACTER;
+	}
+
+	x_smbd_object_t *smbd_object = x_smbd_object_lookup(smbd_volume, path,
+			path_priv_data, create_if, hash);
+	if (!smbd_object) {
+		return NT_STATUS_OBJECT_NAME_NOT_FOUND;
+	}
+
+	NTSTATUS status = NT_STATUS_OK;
+	{
+		auto lock = std::lock_guard(smbd_object->mutex);
+		if (!(smbd_object->flags & x_smbd_object_t::flag_initialized)) {
+			status = smbd_volume->ops->initialize_object(smbd_object);
+			smbd_object->flags = x_smbd_object_t::flag_initialized;
+		}
+	}
+
+	if (!NT_STATUS_IS_OK(status)) {
+		x_smbd_object_new_release(smbd_object);
+		return status;
+	}
+	*p_smbd_object = smbd_object;
+	return status;
 }
 
 
@@ -282,9 +316,8 @@ static NTSTATUS parent_dirname_compatible_open(
 	}
 	std::u16string parent_path = get_parent_path(path);
 	x_smbd_object_t *smbd_object = nullptr;
-	x_smbd_stream_t *smbd_stream = nullptr;
-	NTSTATUS status = x_smbd_open_object(&smbd_object, &smbd_stream,
-			smbd_volume, parent_path, std::u16string(), 0, false);
+	NTSTATUS status = x_smbd_open_object_only(&smbd_object,
+			smbd_volume, parent_path, 0, false);
 	if (!smbd_object) {
 		return NT_STATUS_OK;
 	}
@@ -304,7 +337,7 @@ static NTSTATUS parent_dirname_compatible_open(
 			break;
 		}
 	}
-	x_smbd_object_release(smbd_object, smbd_stream);
+	x_smbd_object_release(smbd_object, nullptr);
 	return status;
 }
 
@@ -318,7 +351,7 @@ NTSTATUS x_smbd_object_rename(x_smbd_object_t *smbd_object,
 	x_smbd_sharemode_t *sharemode = x_smbd_open_get_sharemode(
 			smbd_requ->smbd_open);
 
-	auto [ ok, new_hash ] = hash_object(*smbd_volume, new_path);
+	auto [ ok, new_hash ] = x_smbd_hash_path(*smbd_volume, new_path);
 	if (!ok) {
 		return NT_STATUS_ILLEGAL_CHARACTER;
 	}

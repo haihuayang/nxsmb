@@ -127,14 +127,6 @@ struct x_smbd_open_t
 struct x_smbd_object_t;
 struct x_smbd_object_ops_t
 {
-	NTSTATUS (*open_object)(x_smbd_object_t **psmbd_object,
-			x_smbd_stream_t **psmbd_stream,
-			std::shared_ptr<x_smbd_volume_t> &smbd_volume,
-			const std::u16string &path,
-			const std::u16string &ads_name,
-			long path_priv_data,
-			bool create_if);
-
 	NTSTATUS (*create_object)(x_smbd_object_t *smbd_object,
 			x_smbd_stream_t *smbd_stream,
 			const x_smbd_user_t &smbd_user,
@@ -248,10 +240,17 @@ struct x_smbd_object_ops_t
 
 	void (*destroy_object)(x_smbd_object_t *smbd_object);
 
+	NTSTATUS (*initialize_object)(
+			x_smbd_object_t *smbd_object);
+
 	NTSTATUS (*rename_object)(
 			x_smbd_object_t *smbd_object,
 			bool replace_if_exists,
 			const std::u16string &new_path);
+
+	NTSTATUS (*open_stream)(x_smbd_object_t *smbd_object,
+			x_smbd_stream_t **p_smbd_stream,
+			const std::u16string &ads_name);
 
 	NTSTATUS (*rename_stream)(
 			x_smbd_object_t *smbd_object,
@@ -521,19 +520,6 @@ static inline NTSTATUS x_smbd_object_delete(
 			smbd_stream, smbd_open, changes);
 }
 
-static inline NTSTATUS x_smbd_open_object(x_smbd_object_t **psmbd_object,
-		x_smbd_stream_t **psmbd_stream,
-		std::shared_ptr<x_smbd_volume_t> &smbd_volume,
-		const std::u16string &path,
-		const std::u16string &ads_name,
-		long path_priv_data,
-		bool create_if)
-{
-	return smbd_volume->ops->open_object(psmbd_object, psmbd_stream,
-			smbd_volume, path, ads_name, path_priv_data,
-			create_if);
-}
-
 static inline NTSTATUS x_smbd_create_object(x_smbd_object_t *smbd_object,
 		x_smbd_stream_t *smbd_stream,
 		const x_smbd_user_t &smbd_user,
@@ -673,6 +659,12 @@ x_smbd_object_t *x_smbd_object_lookup(
 		uint64_t hash);
 void x_smbd_object_new_release(x_smbd_object_t *smbd_object);
 
+NTSTATUS x_smbd_open_object_only(x_smbd_object_t **psmbd_object,
+		std::shared_ptr<x_smbd_volume_t> &smbd_volume,
+		const std::u16string &path,
+		long path_priv_data,
+		bool create_if);
+
 NTSTATUS x_smbd_object_rename(x_smbd_object_t *smbd_object,
 		x_smbd_open_t *smbd_open,
 		x_smbd_requ_t *smbd_requ,
@@ -688,6 +680,9 @@ static inline NTSTATUS x_smbd_open_rename(
 	return x_smbd_object_rename(smbd_object, smbd_open, smbd_requ,
 			state->in_path, state);
 }
+
+std::pair<bool, uint64_t> x_smbd_hash_path(const x_smbd_volume_t &smbd_volume,
+		const std::u16string &path);
 
 #endif /* __smbd_open__hxx__ */
 

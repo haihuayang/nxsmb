@@ -78,7 +78,9 @@ struct named_pipe_t
 
 struct x_smbd_ipc_object_t
 {
-	x_smbd_ipc_object_t(const std::u16string &name,
+	x_smbd_ipc_object_t(const std::shared_ptr<x_smbd_volume_t> &smbd_volume,
+			long priv_data, uint64_t hash,
+			const std::u16string &name,
 			const x_dcerpc_iface_t *iface,
 			std::string secondary_address);
 	x_smbd_object_t base;
@@ -782,9 +784,6 @@ static NTSTATUS ipc_object_op_close(
 	}
 	return NT_STATUS_OK;
 }
-#endif
-static std::array<x_smbd_ipc_object_t *, 4> ipc_object_tbl;
-
 static x_smbd_ipc_object_t *find_ipc_object_by_name(const std::u16string &path)
 {
 	for (auto ipc: ipc_object_tbl) {
@@ -795,41 +794,31 @@ static x_smbd_ipc_object_t *find_ipc_object_by_name(const std::u16string &path)
 	return nullptr;
 }
 
+#endif
+static struct x_smbd_ipc_iface_t
+{
+	const std::u16string name;
+	const x_dcerpc_iface_t * const iface;
+	const std::string secondary_address;
+	x_smbd_ipc_object_t *ipc_object;
+} ipc_tbl[] = {
+#define USTR(x) u##x
+#define DECL_RPC(x) { USTR(#x), &x_smbd_dcerpc_##x, "\\PIPE\\" #x, nullptr, }
+	DECL_RPC(srvsvc),
+	DECL_RPC(wkssvc),
+	DECL_RPC(dssetup),
+	DECL_RPC(lsarpc),
+};
+
 static const x_dcerpc_iface_t *find_iface_by_syntax(
 		const idl::ndr_syntax_id &syntax)
 {
-	for (const auto ipc: ipc_object_tbl) {
-		if (ipc->iface->syntax_id == syntax) {
-			return ipc->iface;
+	for (const auto &ipc: ipc_tbl) {
+		if (ipc.iface->syntax_id == syntax) {
+			return ipc.iface;
 		}
 	}
 	return nullptr;
-}
-
-static NTSTATUS ipc_open_object(x_smbd_object_t **psmbd_object,
-		x_smbd_stream_t **psmbd_stream,
-		std::shared_ptr<x_smbd_volume_t> &smbd_volume,
-		const std::u16string &path,
-		const std::u16string &ads_name,
-		long path_priv_data,
-		bool create_if)
-{
-	X_ASSERT(path_priv_data == 0);
-	if (ads_name.length()) {
-		return NT_STATUS_OBJECT_NAME_NOT_FOUND;
-	}
-	std::u16string in_name;
-	in_name.reserve(path.size());
-	std::transform(std::begin(path), std::end(path),
-			std::back_inserter(in_name), tolower);
-
-	x_smbd_ipc_object_t *ipc_object = find_ipc_object_by_name(in_name);
-	if (!ipc_object) {
-		return NT_STATUS_OBJECT_NAME_NOT_FOUND;
-	}
-	*psmbd_object = &ipc_object->base;
-	*psmbd_stream = nullptr;
-	return NT_STATUS_OK;
 }
 
 static NTSTATUS ipc_create_object(x_smbd_object_t *smbd_object,
@@ -939,6 +928,13 @@ static void ipc_op_lease_granted(x_smbd_object_t *smbd_object,
 
 static int ipc_init_volume(std::shared_ptr<x_smbd_volume_t> &smbd_volume)
 {
+	long priv_data = 0;
+	for (auto &item: ipc_tbl) {
+		auto [ ok, hash ] = x_smbd_hash_path(*smbd_volume, item.name);
+		X_ASSERT(ok);
+		X_ASSERT(x_smbd_object_lookup(smbd_volume, item.name, priv_data, true, hash));
+		++priv_data;
+	}
 	return 0;
 }
 
@@ -948,13 +944,29 @@ static x_smbd_object_t *ipc_op_allocate_object(
 		uint64_t hash,
 		const std::u16string &path)
 {
-	X_ASSERT(false);
-	return nullptr;
+	if (priv_data >= (long)std::size(ipc_tbl)) {
+		return nullptr;
+	}
+	auto &item = ipc_tbl[priv_data];
+	if (item.ipc_object) {
+		return nullptr;
+	}
+	x_smbd_ipc_object_t *ipc_object = new x_smbd_ipc_object_t(
+			smbd_volume, priv_data, hash, path,
+			item.iface, item.secondary_address);
+	X_ASSERT(ipc_object);
+	item.ipc_object = ipc_object;
+	return &ipc_object->base;
 }
 
 static void ipc_op_destroy_object(x_smbd_object_t *smbd_object)
 {
 	X_ASSERT(false);
+}
+
+static NTSTATUS ipc_op_initialize_object(x_smbd_object_t *smbd_object)
+{
+	return NT_STATUS_OK;
 }
 
 static NTSTATUS ipc_op_rename_object(
@@ -964,6 +976,13 @@ static NTSTATUS ipc_op_rename_object(
 {
 	X_ASSERT(false);
 	return NT_STATUS_INTERNAL_ERROR;
+}
+
+static NTSTATUS ipc_op_open_stream(x_smbd_object_t *smbd_object,
+		x_smbd_stream_t **p_smbd_stream,
+		const std::u16string &ads_name)
+{
+	return NT_STATUS_OBJECT_NAME_NOT_FOUND;
 }
 
 static NTSTATUS ipc_op_rename_stream(
@@ -990,7 +1009,6 @@ static void ipc_op_destroy_open(x_smbd_open_t *smbd_open)
 
 
 static const x_smbd_object_ops_t x_smbd_ipc_object_ops = {
-	ipc_open_object,
 	ipc_create_object,
 	ipc_create_open,
 	nullptr,
@@ -1013,7 +1031,9 @@ static const x_smbd_object_ops_t x_smbd_ipc_object_ops = {
 	ipc_init_volume,
 	ipc_op_allocate_object,
 	ipc_op_destroy_object,
+	ipc_op_initialize_object,
 	ipc_op_rename_object,
+	ipc_op_open_stream,
 	ipc_op_rename_stream,
 	ipc_op_release_stream,
 	ipc_op_destroy_open,
@@ -1033,10 +1053,12 @@ static std::shared_ptr<x_smbd_volume_t> ipc_get_volume()
 	return ipc_volume;
 }
 
-x_smbd_ipc_object_t::x_smbd_ipc_object_t(const std::u16string &path,
+x_smbd_ipc_object_t::x_smbd_ipc_object_t(const std::shared_ptr<x_smbd_volume_t> &smbd_volume,
+		long priv_data, uint64_t hash,
+		const std::u16string &path,
 		const x_dcerpc_iface_t *iface,
 		std::string secondary_address)
-	: base(ipc_get_volume(), 0, 0, path), iface(iface)
+	: base(smbd_volume, priv_data, hash, path), iface(iface)
 	, secondary_address(std::move(secondary_address))
 {
 	base.flags = x_smbd_object_t::flag_initialized;
@@ -1102,13 +1124,5 @@ std::shared_ptr<x_smbd_share_t> x_smbd_ipc_share_create()
 
 int x_smbd_ipc_init()
 {
-	ipc_object_tbl = {
-#define USTR(x) u##x
-#define DECL_RPC(x) new x_smbd_ipc_object_t{ USTR(#x), &x_smbd_dcerpc_##x, "\\PIPE\\" #x }
-		DECL_RPC(srvsvc),
-		DECL_RPC(wkssvc),
-		DECL_RPC(dssetup),
-		DECL_RPC(lsarpc),
-	};
 	return 0;
 }
