@@ -10,19 +10,6 @@
 #include "smb2.hxx"
 #include "include/librpc/security.hxx"
 
-struct x_smb2_change_t
-{
-	uint32_t action;
-	uint32_t filter;
-	/* the change's parent_lease_key, all 0 mean no parent_lease_key,
-	 * suppose all 0 is not a valid key
-	 */
-	x_smb2_lease_key_t ignore_lease_key;
-	x_smb2_uuid_t client_guid;
-	std::u16string path;
-	std::u16string new_path;
-};
-
 static inline bool x_smb2_file_id_is_nul(uint64_t file_id_persistent,
 		uint64_t file_id_volatile)
 {
@@ -116,7 +103,6 @@ struct x_smb2_state_rename_t
 	uint64_t in_file_id_volatile;
 	bool in_replace_if_exists;
 	std::u16string in_path, in_stream_name;
-	std::vector<x_smb2_change_t> out_changes;
 };
 
 struct x_smb2_state_qdir_t

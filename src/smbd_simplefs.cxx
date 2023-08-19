@@ -90,11 +90,10 @@ static NTSTATUS simplefs_op_create_open(x_smbd_open_t **psmbd_open,
 		std::unique_ptr<x_smb2_state_create_t> &state,
 		bool overwrite,
 		x_smb2_create_action_t create_action,
-		uint8_t oplock_level,
-		std::vector<x_smb2_change_t> &changes)
+		uint8_t oplock_level)
 {
 	return x_smbd_posixfs_create_open(psmbd_open, smbd_requ,
-			state, overwrite, create_action, oplock_level, changes);
+			state, overwrite, create_action, oplock_level);
 }
 
 static const x_smbd_object_ops_t simplefs_object_ops = {

@@ -1980,8 +1980,7 @@ static NTSTATUS posixfs_set_ea(posixfs_object_t *posixfs_object,
 
 static NTSTATUS setinfo_file(posixfs_object_t *posixfs_object,
 		x_smbd_open_t *smbd_open,
-		x_smb2_state_setinfo_t &state,
-		std::vector<x_smb2_change_t> &changes)
+		x_smb2_state_setinfo_t &state)
 {
 	posixfs_open_t *posixfs_open = posixfs_open_from_base_t::container(smbd_open);
 
@@ -2001,11 +2000,12 @@ static NTSTATUS setinfo_file(posixfs_object_t *posixfs_object,
 				&posixfs_object->get_meta());
 		if (NT_STATUS_IS_OK(status)) {
 			if (notify_actions) {
-				changes.push_back(x_smb2_change_t{NOTIFY_ACTION_MODIFIED,
+				x_smbd_schedule_notify(posixfs_object->base.smbd_volume,
+						NOTIFY_ACTION_MODIFIED,
 						notify_actions,
 						smbd_open->open_state.parent_lease_key,
 						smbd_open->open_state.client_guid,
-						posixfs_object->base.path, {}});
+						posixfs_object->base.path, {});
 			}
 			return NT_STATUS_OK;
 		} else {
@@ -2296,8 +2296,7 @@ static NTSTATUS getinfo_security(posixfs_object_t *posixfs_object,
 
 static NTSTATUS setinfo_security(posixfs_object_t *posixfs_object,
 		x_smbd_requ_t *smbd_requ,
-		const x_smb2_state_setinfo_t &state,
-		std::vector<x_smb2_change_t> &changes)
+		const x_smb2_state_setinfo_t &state)
 {
 	uint32_t security_info_sent = state.in_additional & idl::SMB_SUPPORTED_SECINFO_FLAGS;
 	idl::security_descriptor sd;
@@ -2333,10 +2332,11 @@ static NTSTATUS setinfo_security(posixfs_object_t *posixfs_object,
 	}
 
 	posixfs_open_t *posixfs_open = posixfs_open_from_base_t::container(smbd_requ->smbd_open);
-	changes.push_back(x_smb2_change_t{NOTIFY_ACTION_MODIFIED, FILE_NOTIFY_CHANGE_SECURITY,
+	x_smbd_schedule_notify(posixfs_object->base.smbd_volume,
+			NOTIFY_ACTION_MODIFIED, FILE_NOTIFY_CHANGE_SECURITY,
 			posixfs_open->base.open_state.parent_lease_key,
 			posixfs_open->base.open_state.client_guid,
-			posixfs_object->base.path, {}});
+			posixfs_object->base.path, {});
 	return NT_STATUS_OK;
 }
 
@@ -2374,19 +2374,18 @@ NTSTATUS posixfs_object_op_setinfo(
 		x_smbd_object_t *smbd_object,
 		x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ,
-		std::unique_ptr<x_smb2_state_setinfo_t> &state,
-		std::vector<x_smb2_change_t> &changes)
+		std::unique_ptr<x_smb2_state_setinfo_t> &state)
 {
 	posixfs_object_t *posixfs_object = posixfs_object_from_base_t::container(smbd_object);
 
 	if (state->in_info_class == x_smb2_info_class_t::FILE) {
-		return setinfo_file(posixfs_object, smbd_requ->smbd_open, *state, changes);
+		return setinfo_file(posixfs_object, smbd_requ->smbd_open, *state);
 #if 0
 	} else if (state->in_info_class == x_smb2_info_class_t::FS) {
 		return setinfo_fs(posixfs_object, smbd_requ, *state);
 #endif
 	} else if (state->in_info_class == x_smb2_info_class_t::SECURITY) {
-		return setinfo_security(posixfs_object, smbd_requ, *state, changes);
+		return setinfo_security(posixfs_object, smbd_requ, *state);
 	} else {
 		return NT_STATUS_INVALID_PARAMETER;
 	}
@@ -2822,24 +2821,22 @@ static NTSTATUS posixfs_delete_object(posixfs_object_t *posixfs_object)
 
 NTSTATUS posixfs_op_object_delete(x_smbd_object_t *smbd_object,
 		x_smbd_stream_t *smbd_stream,
-		x_smbd_open_t *smbd_open,
-		std::vector<x_smb2_change_t> &changes)
+		x_smbd_open_t *smbd_open)
 {
 	posixfs_object_t *posixfs_object = posixfs_object_from_base_t::container(smbd_object);
-	auto orig_changes_size = changes.size();
 	if (!smbd_stream) {
-		posixfs_ads_foreach_1(posixfs_object, [smbd_object, smbd_open, &changes] (
+		posixfs_ads_foreach_1(posixfs_object, [smbd_object, smbd_open] (
 					const char *xattr_name,
 					const char *stream_name) {
 				std::u16string u16_name;
 				if (x_str_convert(u16_name, std::string_view(stream_name))) {
-					changes.push_back(x_smb2_change_t{
+					x_smbd_schedule_notify(smbd_object->smbd_volume,
 							NOTIFY_ACTION_REMOVED_STREAM,
 							FILE_NOTIFY_CHANGE_STREAM_NAME,
 							smbd_open->open_state.parent_lease_key,
 							smbd_open->open_state.client_guid,
 							smbd_object->path + u':' + u16_name,
-							{}});
+							{});
 				} else {
 					X_LOG_ERR("invalid stream_name '%s'", stream_name);
 				}
@@ -2848,7 +2845,6 @@ NTSTATUS posixfs_op_object_delete(x_smbd_object_t *smbd_object,
 
 		NTSTATUS status = posixfs_delete_object(posixfs_object);
 		if (!NT_STATUS_IS_OK(status)) {
-			changes.resize(orig_changes_size);
 			X_LOG_WARN("fail to unlink %s status=%x",
 					posixfs_object->unix_path.c_str(),
 					NT_STATUS_V(status));
@@ -2948,8 +2944,7 @@ NTSTATUS x_smbd_posixfs_create_object(x_smbd_object_t *smbd_object,
 		const x_smbd_user_t &smbd_user,
 		x_smb2_state_create_t &state,
 		uint32_t file_attributes,
-		uint64_t allocation_size,
-		std::vector<x_smb2_change_t> &changes)
+		uint64_t allocation_size)
 {
 	NTSTATUS status;
 	posixfs_object_t *posixfs_object = posixfs_object_from_base_t::container(smbd_object);
@@ -2963,12 +2958,13 @@ NTSTATUS x_smbd_posixfs_create_object(x_smbd_object_t *smbd_object,
 			return status;
 		}
 		++create_count;
-		changes.push_back(x_smb2_change_t{NOTIFY_ACTION_ADDED,
+		x_smbd_schedule_notify(smbd_object->smbd_volume,
+				NOTIFY_ACTION_ADDED,
 				uint16_t((state.in_create_options & X_SMB2_CREATE_OPTION_DIRECTORY_FILE) ? FILE_NOTIFY_CHANGE_DIR_NAME : FILE_NOTIFY_CHANGE_FILE_NAME),
 				state.lease.parent_key,
 				x_smbd_conn_curr_client_guid(),
 				posixfs_object->base.path,
-				{}});
+				{});
 
 	} else {
 		status = posixfs_object_get_sd__(posixfs_object, psd);
@@ -3103,8 +3099,7 @@ NTSTATUS x_smbd_posixfs_create_open(x_smbd_open_t **psmbd_open,
 		std::unique_ptr<x_smb2_state_create_t> &state,
 		bool overwrite,
 		x_smb2_create_action_t create_action,
-		uint8_t oplock_level,
-		std::vector<x_smb2_change_t> &changes)
+		uint8_t oplock_level)
 {
 	NTSTATUS status;
 	posixfs_object_t *posixfs_object = posixfs_object_from_base_t::container(state->smbd_object);
@@ -3141,11 +3136,12 @@ NTSTATUS x_smbd_posixfs_create_open(x_smbd_open_t **psmbd_open,
 				notify_actions |= FILE_NOTIFY_CHANGE_ATTRIBUTES;
 			}
 		}
-		changes.push_back(x_smb2_change_t{NOTIFY_ACTION_MODIFIED,
+		x_smbd_schedule_notify(posixfs_object->base.smbd_volume,
+				NOTIFY_ACTION_MODIFIED,
 				notify_actions,
 				state->lease.parent_key,
 				x_smbd_conn_curr_client_guid(),
-				posixfs_object->base.path, {}});
+				posixfs_object->base.path, {});
 		reload_meta = true;
 	} else if (create_action != x_smb2_create_action_t::WAS_CREATED
 			&& (state->in_contexts & X_SMB2_CONTEXT_FLAG_ALSI)) {

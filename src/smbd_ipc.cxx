@@ -701,8 +701,7 @@ static NTSTATUS ipc_object_op_setinfo(
 		x_smbd_object_t *smbd_object,
 		x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ,
-		std::unique_ptr<x_smb2_state_setinfo_t> &state,
-		std::vector<x_smb2_change_t> &changes)
+		std::unique_ptr<x_smb2_state_setinfo_t> &state)
 {
 	return NT_STATUS_NOT_SUPPORTED;
 }
@@ -826,8 +825,7 @@ static NTSTATUS ipc_create_object(x_smbd_object_t *smbd_object,
 		const x_smbd_user_t &smbd_user,
 		x_smb2_state_create_t &state,
 		uint32_t file_attributes,
-		uint64_t allocation_size,
-		std::vector<x_smb2_change_t> &changes)
+		uint64_t allocation_size)
 {
 	X_ASSERT(false);
 	return NT_STATUS_ACCESS_DENIED;
@@ -839,8 +837,7 @@ static NTSTATUS ipc_create_open(x_smbd_open_t **psmbd_open,
 		std::unique_ptr<x_smb2_state_create_t> &state,
 		bool overwrite,
 		x_smb2_create_action_t create_action,
-		uint8_t oplock_level,
-		std::vector<x_smb2_change_t> &changes)
+		uint8_t oplock_level)
 {
 	X_ASSERT(!overwrite);
 	X_ASSERT(state->open_priv_data == 0);
@@ -889,8 +886,7 @@ static NTSTATUS ipc_create_open(x_smbd_open_t **psmbd_open,
 
 static NTSTATUS ipc_op_delete_object(x_smbd_object_t *smbd_object,
 			x_smbd_stream_t *smbd_stream,
-			x_smbd_open_t *smbd_open,
-			std::vector<x_smb2_change_t> &changes)
+			x_smbd_open_t *smbd_open)
 {
 	X_ASSERT(false);
 	return NT_STATUS_INTERNAL_ERROR;

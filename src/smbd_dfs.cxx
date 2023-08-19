@@ -479,18 +479,17 @@ static NTSTATUS dfs_root_object_op_rename(x_smbd_object_t *smbd_object,
 		}
 
 		auto old_path = new_path.substr(0, sep + 1) + smbd_object->path;
-		NTSTATUS status =  posixfs_object_op_rename(smbd_object,
+		NTSTATUS status = posixfs_object_op_rename(smbd_object,
 				smbd_open,
 				smbd_requ,
 				new_path.substr(sep + 1),
 				state);
 		if (NT_STATUS_IS_OK(status)) {
-			state->out_changes.push_back(x_smb2_change_t{NOTIFY_ACTION_OLD_NAME, 
+			x_smbd_schedule_notify(smbd_object->smbd_volume,
+					NOTIFY_ACTION_OLD_NAME,
 					FILE_NOTIFY_CHANGE_DIR_NAME,
 					smbd_open->open_state.parent_lease_key,
-					smbd_open->open_state.client_guid,
-					old_path,
-					new_path});
+					old_path, new_path);
 		}
 		return status;
 	} else {

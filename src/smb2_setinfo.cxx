@@ -47,8 +47,7 @@ static void x_smb2_reply_setinfo(x_smbd_conn_t *smbd_conn,
 }
 
 static NTSTATUS smb2_setinfo_dispatch(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ,
-		std::unique_ptr<x_smb2_state_setinfo_t> &state,
-		std::vector<x_smb2_change_t> &changes)
+		std::unique_ptr<x_smb2_state_setinfo_t> &state)
 {
 	if (state->in_info_class == x_smb2_info_class_t::FILE) {
 		if (state->in_info_level == x_smb2_info_level_t::FILE_DISPOSITION_INFORMATION) {
@@ -70,7 +69,7 @@ static NTSTATUS smb2_setinfo_dispatch(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *s
 
 	/* different INFO request different access, so check access inside the op func */
 	return x_smbd_open_op_setinfo(smbd_requ->smbd_open, smbd_conn, smbd_requ,
-			state, changes);
+			state);
 }
 
 static NTSTATUS decode_in_rename(x_smb2_state_rename_t &state,
@@ -125,8 +124,6 @@ static void x_smb2_rename_async_done(x_smbd_conn_t *smbd_conn,
 		return;
 	}
 	if (NT_STATUS_IS_OK(status)) {
-		x_smbd_notify_change(smbd_requ->smbd_open->smbd_object->smbd_volume,
-				state->out_changes);
 		x_smb2_reply_setinfo(smbd_conn, smbd_requ);
 	}
 	x_smbd_conn_requ_done(smbd_conn, smbd_requ, status);
@@ -157,8 +154,6 @@ static NTSTATUS x_smb2_process_rename(x_smbd_conn_t *smbd_conn,
 	smbd_requ->async_done_fn = x_smb2_rename_async_done;
 	NTSTATUS status = x_smbd_open_rename(smbd_requ, state);
 	if (NT_STATUS_IS_OK(status)) {
-		x_smbd_notify_change(smbd_requ->smbd_open->smbd_object->smbd_volume,
-				state->out_changes);
 		x_smb2_reply_setinfo(smbd_conn, smbd_requ);
 		return status;
 	}
@@ -224,10 +219,8 @@ NTSTATUS x_smb2_process_setinfo(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_re
 	X_LOG_OP("%ld SETINFO 0x%lx, 0x%lx", smbd_requ->in_smb2_hdr.mid,
 			state->in_file_id_persistent, state->in_file_id_volatile);
 
-	std::vector<x_smb2_change_t> changes;
-	status = smb2_setinfo_dispatch(smbd_conn, smbd_requ, state, changes);
+	status = smb2_setinfo_dispatch(smbd_conn, smbd_requ, state);
 	if (NT_STATUS_IS_OK(status)) {
-		x_smbd_notify_change(smbd_requ->smbd_open->smbd_object->smbd_volume, changes);
 		x_smb2_reply_setinfo(smbd_conn, smbd_requ);
 		return status;
 	}

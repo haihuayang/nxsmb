@@ -142,7 +142,7 @@ void x_smbd_release_object_and_stream(x_smbd_object_t *smbd_object,
 }
 
 NTSTATUS x_smbd_open_object(x_smbd_object_t **p_smbd_object,
-		std::shared_ptr<x_smbd_volume_t> &smbd_volume,
+		const std::shared_ptr<x_smbd_volume_t> &smbd_volume,
 		const std::u16string &path,
 		long path_priv_data,
 		bool create_if)
@@ -415,13 +415,14 @@ NTSTATUS x_smbd_object_rename(x_smbd_object_t *smbd_object,
 	}
 
 	if (NT_STATUS_IS_OK(status)) {
-		state->out_changes.push_back(x_smb2_change_t{NOTIFY_ACTION_OLD_NAME,
+		x_smbd_schedule_notify(smbd_object->smbd_volume,
+				NOTIFY_ACTION_OLD_NAME,
 				smbd_object->type == x_smbd_object_t::type_dir ?
 					FILE_NOTIFY_CHANGE_DIR_NAME :
 					FILE_NOTIFY_CHANGE_FILE_NAME,
 				smbd_open->open_state.parent_lease_key,
 				smbd_open->open_state.client_guid,
-				old_path, state->in_path});
+				old_path, state->in_path);
 	}
 
 	return status;

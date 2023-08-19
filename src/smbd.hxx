@@ -609,8 +609,24 @@ void x_smbd_open_append_notify(x_smbd_open_t *smbd_open,
 		uint32_t action,
 		const std::u16string &path);
 
-void x_smbd_notify_change(std::shared_ptr<x_smbd_volume_t> &smbd_volume,
-		const std::vector<x_smb2_change_t> &changes);
+void x_smbd_notify_change(const std::shared_ptr<x_smbd_volume_t> &smbd_volume,
+		uint32_t notify_action,
+		uint32_t notify_filter,
+		const x_smb2_lease_key_t &ignore_lease_key,
+		const x_smb2_uuid_t &client_guid,
+		const std::u16string &old_path,
+		const std::u16string &new_path);
+
+void x_smbd_schedule_notify(const std::shared_ptr<x_smbd_volume_t> &smbd_volume,
+		uint32_t notify_action,
+		uint32_t notify_filter,
+		const x_smb2_lease_key_t &ignore_lease_key,
+		const x_smb2_uuid_t &client_guid,
+		const std::u16string &old_path,
+		const std::u16string &new_path);
+
+void x_smbd_set_notify_schedulable(bool f);
+void x_smbd_flush_notifies();
 
 void x_smbd_object_notify_change(x_smbd_object_t *smbd_object,
 		uint32_t notify_action,
@@ -623,7 +639,7 @@ void x_smbd_object_notify_change(x_smbd_object_t *smbd_object,
 		bool last_level,
 		long open_priv_data);
 
-void x_smbd_simple_notify_change(std::shared_ptr<x_smbd_volume_t> &smbd_volume,
+void x_smbd_simple_notify_change(const std::shared_ptr<x_smbd_volume_t> &smbd_volume,
 		const std::u16string &path,
 		const std::u16string &fullpath,
 		const std::u16string *new_fullpath,
