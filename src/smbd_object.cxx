@@ -29,7 +29,7 @@ struct smbd_object_pool_t
 	static const uint64_t cache_time = 60ul * 1000000000; // 60 second
 	struct bucket_t
 	{
-		x_sdqueue_t head;
+		x_sdlist_t head;
 		std::mutex mutex;
 	};
 	std::vector<bucket_t> buckets;
@@ -56,7 +56,7 @@ static x_smbd_object_t *smbd_object_lookup_intl(
 		const std::u16string &path,
 		uint64_t hash)
 {
-	for (x_dqlink_t *link = bucket.head.get_front(); link; link = link->get_next()) {
+	for (auto *link = bucket.head.get_front(); link; link = link->get_next()) {
 		x_smbd_object_t *elem = X_CONTAINER_OF(link, x_smbd_object_t, hash_link);
 		if (elem->hash == hash && elem->smbd_volume == smbd_volume
 				&& x_strcase_equal(elem->path, path)) {
@@ -104,7 +104,7 @@ x_smbd_object_t *x_smbd_object_lookup(
 	}
 	/* move it to head of the bucket to make latest used elem */
 	if (&smbd_object->hash_link != bucket.head.get_front()) {
-		smbd_object->hash_link.remove();
+		bucket.head.remove(&smbd_object->hash_link);
 		bucket.head.push_front(&smbd_object->hash_link);
 	}
 	return smbd_object;

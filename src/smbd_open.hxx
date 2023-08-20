@@ -331,7 +331,7 @@ struct x_smbd_object_t
 	};
 	uint16_t type = type_not_exist;
 	std::atomic<int> use_count{1};
-	x_dqlink_t hash_link;
+	x_dlink_t hash_link;
 	uint64_t hash;
 	std::u16string path;
 	x_smbd_file_handle_t file_handle;
