@@ -232,7 +232,8 @@ struct x_smbd_object_ops_t
 			const std::shared_ptr<x_smbd_volume_t> &smbd_volume,
 			long priv_data,
 			uint64_t hash,
-			const std::u16string &path);
+			x_smbd_object_t *parent_object,
+			const std::u16string &path_base);
 
 	void (*destroy_object)(x_smbd_object_t *smbd_object);
 
@@ -242,6 +243,7 @@ struct x_smbd_object_ops_t
 	NTSTATUS (*rename_object)(
 			x_smbd_object_t *smbd_object,
 			bool replace_if_exists,
+			x_smbd_object_t *new_parent_object,
 			const std::u16string &new_path);
 
 	NTSTATUS (*open_stream)(x_smbd_object_t *smbd_object,
@@ -287,6 +289,7 @@ X_DECLARE_MEMBER_TRAITS(x_smbd_stream_object_traits, x_smbd_stream_t, object_lin
 struct x_smbd_object_t
 {
 	x_smbd_object_t(const std::shared_ptr<x_smbd_volume_t> &smbd_volume,
+			x_smbd_object_t *parent_object,
 			long priv_data,
 			uint64_t hash,
 			const std::u16string &path);
@@ -332,8 +335,9 @@ struct x_smbd_object_t
 	uint16_t type = type_not_exist;
 	std::atomic<int> use_count{1};
 	x_dlink_t hash_link;
-	uint64_t hash;
-	std::u16string path;
+	uint64_t hash, fileid_hash;
+	x_smbd_object_t *parent_object = nullptr;
+	std::u16string path_base;
 	x_smbd_file_handle_t file_handle;
 	x_smbd_object_meta_t meta;
 	x_smbd_sharemode_t sharemode;
@@ -638,7 +642,8 @@ void x_smbd_qdir_close(x_smbd_qdir_t *smbd_qdir);
 
 x_smbd_object_t *x_smbd_object_lookup(
 		const std::shared_ptr<x_smbd_volume_t> &smbd_volume,
-		const std::u16string &path,
+		x_smbd_object_t *parent_object,
+		const std::u16string &path_base,
 		uint64_t path_data,
 		bool create_if,
 		uint64_t hash);
@@ -669,7 +674,11 @@ static inline NTSTATUS x_smbd_open_rename(
 			state);
 }
 
+std::u16string x_smbd_object_get_path(const x_smbd_object_t *smbd_object);
+#define x_smbd_object_get_path_todo x_smbd_object_get_path
+
 std::pair<bool, uint64_t> x_smbd_hash_path(const x_smbd_volume_t &smbd_volume,
+		const x_smbd_object_t *dir_object,
 		const std::u16string &path);
 
 #endif /* __smbd_open__hxx__ */

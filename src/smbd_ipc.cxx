@@ -76,10 +76,23 @@ struct named_pipe_t
 	std::vector<uint8_t> output;
 };
 
+struct x_smbd_ipc_root_t
+{
+	x_smbd_ipc_root_t(const std::shared_ptr<x_smbd_volume_t> &smbd_volume)
+		: base(smbd_volume, nullptr, 0, 0, u"")
+	{
+		base.type = x_smbd_object_t::type_dir;
+		base.flags = x_smbd_object_t::flag_initialized;
+	}
+
+	x_smbd_object_t base;
+};
+
 struct x_smbd_ipc_object_t
 {
 	x_smbd_ipc_object_t(const std::shared_ptr<x_smbd_volume_t> &smbd_volume,
 			long priv_data, uint64_t hash,
+			x_smbd_object_t *parent_object,
 			const std::u16string &name,
 			const x_dcerpc_iface_t *iface,
 			std::string secondary_address);
@@ -916,13 +929,21 @@ static void ipc_op_lease_granted(x_smbd_object_t *smbd_object,
 	X_ASSERT(0);
 }
 
-static int ipc_init_volume(std::shared_ptr<x_smbd_volume_t> &smbd_volume)
+static int ipc_op_init_volume(std::shared_ptr<x_smbd_volume_t> &smbd_volume)
 {
+	auto ipc_root = new x_smbd_ipc_root_t(smbd_volume);
+	smbd_volume->root_object = &ipc_root->base;
+
 	long priv_data = 0;
+	/* TODO create root_object */
+	x_smbd_object_t *parent_object = smbd_volume->root_object;
 	for (auto &item: ipc_tbl) {
-		auto [ ok, hash ] = x_smbd_hash_path(*smbd_volume, item.name);
+		auto [ ok, hash ] = x_smbd_hash_path(*smbd_volume,
+				parent_object, item.name);
 		X_ASSERT(ok);
-		X_ASSERT(x_smbd_object_lookup(smbd_volume, item.name, priv_data, true, hash));
+		X_ASSERT(x_smbd_object_lookup(smbd_volume, parent_object, item.name,
+					priv_data, true, hash));
+		x_smbd_release_object(parent_object);
 		++priv_data;
 	}
 	return 0;
@@ -932,7 +953,8 @@ static x_smbd_object_t *ipc_op_allocate_object(
 		const std::shared_ptr<x_smbd_volume_t> &smbd_volume,
 		long priv_data,
 		uint64_t hash,
-		const std::u16string &path)
+		x_smbd_object_t *parent_object,
+		const std::u16string &path_base)
 {
 	if (priv_data >= (long)std::size(ipc_tbl)) {
 		return nullptr;
@@ -942,7 +964,8 @@ static x_smbd_object_t *ipc_op_allocate_object(
 		return nullptr;
 	}
 	x_smbd_ipc_object_t *ipc_object = new x_smbd_ipc_object_t(
-			smbd_volume, priv_data, hash, path,
+			smbd_volume, priv_data, hash,
+			parent_object, path_base,
 			item.iface, item.secondary_address);
 	X_ASSERT(ipc_object);
 	item.ipc_object = ipc_object;
@@ -962,7 +985,8 @@ static NTSTATUS ipc_op_initialize_object(x_smbd_object_t *smbd_object)
 static NTSTATUS ipc_op_rename_object(
 		x_smbd_object_t *smbd_object,
 		bool replace_if_exists,
-		const std::u16string &new_path)
+		x_smbd_object_t *new_parent_object,
+		const std::u16string &new_path_base)
 {
 	X_ASSERT(false);
 	return NT_STATUS_INTERNAL_ERROR;
@@ -1017,7 +1041,7 @@ static const x_smbd_object_ops_t x_smbd_ipc_object_ops = {
 	ipc_op_delete_object,
 	ipc_op_access_check,
 	ipc_op_lease_granted,
-	ipc_init_volume,
+	ipc_op_init_volume,
 	ipc_op_allocate_object,
 	ipc_op_destroy_object,
 	ipc_op_initialize_object,
@@ -1044,10 +1068,11 @@ static std::shared_ptr<x_smbd_volume_t> ipc_get_volume()
 
 x_smbd_ipc_object_t::x_smbd_ipc_object_t(const std::shared_ptr<x_smbd_volume_t> &smbd_volume,
 		long priv_data, uint64_t hash,
-		const std::u16string &path,
+		x_smbd_object_t *parent_object,
+		const std::u16string &path_base,
 		const x_dcerpc_iface_t *iface,
 		std::string secondary_address)
-	: base(smbd_volume, priv_data, hash, path), iface(iface)
+	: base(smbd_volume, parent_object, priv_data, hash, path_base), iface(iface)
 	, secondary_address(std::move(secondary_address))
 {
 	base.flags = x_smbd_object_t::flag_initialized;

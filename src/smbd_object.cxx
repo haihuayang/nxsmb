@@ -3,15 +3,23 @@
 #include "smbd_stats.hxx"
 
 x_smbd_object_t::x_smbd_object_t(const std::shared_ptr<x_smbd_volume_t> &smbd_volume,
-		long priv_data, uint64_t hash, const std::u16string &path)
-	: smbd_volume(smbd_volume), priv_data(priv_data), hash(hash), path(path)
+		x_smbd_object_t *parent_object,
+		long priv_data, uint64_t hash, const std::u16string &path_base)
+	: smbd_volume(smbd_volume), priv_data(priv_data), hash(hash)
+	, parent_object(parent_object), path_base(path_base)
 {
 	X_SMBD_COUNTER_INC(object_create, 1);
+	if (parent_object) {
+		parent_object->incref();
+	}
 }
 
 x_smbd_object_t::~x_smbd_object_t()
 {
 	X_SMBD_COUNTER_INC(object_delete, 1);
+	if (parent_object) {
+		x_smbd_release_object(parent_object);
+	}
 }
 
 x_smb2_state_create_t::~x_smb2_state_create_t()
@@ -32,18 +40,20 @@ struct smbd_object_pool_t
 		x_sdlist_t head;
 		std::mutex mutex;
 	};
-	std::vector<bucket_t> buckets;
+	bucket_t *buckets = nullptr;
+	size_t bucket_size = 0;
 	std::atomic<uint32_t> count{0}, unused_count{0};
 };
 
 static smbd_object_pool_t smbd_object_pool;
 
 std::pair<bool, uint64_t> x_smbd_hash_path(const x_smbd_volume_t &smbd_volume,
-		const std::u16string &path)
+		const x_smbd_object_t *dir_object,
+		const std::u16string &path_base)
 {
-	auto [ ok, hash ] = x_strcase_hash(path);
+	auto [ ok, hash ] = x_strcase_hash(path_base);
 	if (ok) {
-		return { true, hash ^ smbd_volume.volume_id };
+		return { true, hash ^ smbd_volume.volume_id ^ dir_object->fileid_hash};
 	} else {
 		return { false, 0 };
 	}
@@ -53,13 +63,15 @@ std::pair<bool, uint64_t> x_smbd_hash_path(const x_smbd_volume_t &smbd_volume,
 static x_smbd_object_t *smbd_object_lookup_intl(
 		const std::shared_ptr<x_smbd_volume_t> &smbd_volume,
 		smbd_object_pool_t::bucket_t &bucket,
-		const std::u16string &path,
+		x_smbd_object_t *parent_object,
+		const std::u16string &path_base,
 		uint64_t hash)
 {
 	for (auto *link = bucket.head.get_front(); link; link = link->get_next()) {
 		x_smbd_object_t *elem = X_CONTAINER_OF(link, x_smbd_object_t, hash_link);
-		if (elem->hash == hash && elem->smbd_volume == smbd_volume
-				&& x_strcase_equal(elem->path, path)) {
+		if (elem->hash == hash && elem->parent_object == parent_object
+				&& elem->smbd_volume == smbd_volume
+				&& x_strcase_equal(elem->path_base, path_base)) {
 			return elem;
 		}
 	}
@@ -77,25 +89,27 @@ static x_smbd_object_t *smbd_object_lookup_intl(
 /* TODO case insensitive */
 x_smbd_object_t *x_smbd_object_lookup(
 		const std::shared_ptr<x_smbd_volume_t> &smbd_volume,
-		const std::u16string &path,
+		x_smbd_object_t *parent_object,
+		const std::u16string &path_base,
 		uint64_t path_data,
 		bool create_if,
 		uint64_t hash)
 {
 	auto &pool = smbd_object_pool;
-	auto bucket_idx = hash % pool.buckets.size();
+	auto bucket_idx = hash % pool.bucket_size;
 	auto &bucket = pool.buckets[bucket_idx];
 
 	auto lock = std::lock_guard(bucket.mutex);
 	x_smbd_object_t *smbd_object = smbd_object_lookup_intl(
-			smbd_volume, bucket, path, hash);
+			smbd_volume, bucket, parent_object, path_base, hash);
 
 	if (!smbd_object) {
 		if (!create_if) {
 			return nullptr;
 		}
 		smbd_object = smbd_volume->ops->allocate_object(
-				smbd_volume, path_data, hash, path);
+				smbd_volume, path_data, hash,
+				parent_object, path_base);
 		X_ASSERT(smbd_object);
 		bucket.head.push_front(&smbd_object->hash_link);
 		++pool.count;
@@ -113,7 +127,7 @@ x_smbd_object_t *x_smbd_object_lookup(
 void x_smbd_release_object(x_smbd_object_t *smbd_object)
 {
 	auto &pool = smbd_object_pool;
-	auto bucket_idx = smbd_object->hash % pool.buckets.size();
+	auto bucket_idx = smbd_object->hash % pool.bucket_size;
 	auto &bucket = pool.buckets[bucket_idx];
 	bool free = false;
 
@@ -141,24 +155,114 @@ void x_smbd_release_object_and_stream(x_smbd_object_t *smbd_object,
 	x_smbd_release_object(smbd_object);
 }
 
+static NTSTATUS smbd_object_openat(
+		x_smbd_object_t **p_smbd_object,
+		const std::shared_ptr<x_smbd_volume_t> &smbd_volume,
+		x_smbd_object_t *parent_object,
+		const std::u16string &path_base)
+{
+	if (parent_object->type != x_smbd_object_t::type_dir) {
+		return NT_STATUS_OBJECT_PATH_NOT_FOUND;
+	}
+
+	auto [ ok, hash ] = x_smbd_hash_path(*smbd_volume, parent_object, path_base);
+	if (!ok) {
+		return NT_STATUS_ILLEGAL_CHARACTER;
+	}
+
+	x_smbd_object_t *smbd_object = x_smbd_object_lookup(smbd_volume,
+			parent_object, path_base, 0, true, hash);
+
+	NTSTATUS status = NT_STATUS_OK;
+	{
+		auto lock = std::lock_guard(smbd_object->mutex);
+		if (!(smbd_object->flags & x_smbd_object_t::flag_initialized)) {
+			/* TODO can it fail? */
+			status = smbd_volume->ops->initialize_object(smbd_object);
+			smbd_object->flags = x_smbd_object_t::flag_initialized;
+		}
+	}
+
+	*p_smbd_object = smbd_object;
+	return NT_STATUS_OK;
+}
+
+
+static NTSTATUS open_parent_object(x_smbd_object_t **p_smbd_object,
+		std::u16string &base_name,
+		const std::shared_ptr<x_smbd_volume_t> &smbd_volume,
+		const std::u16string &path)
+{
+	X_ASSERT(!path.empty());
+
+	std::u16string::size_type pos, last_pos = 0;
+	x_smbd_object_t *dir_object = smbd_volume->root_object;
+	x_smbd_object_t *sub_object = nullptr;
+	dir_object->incref();
+	NTSTATUS status;
+
+	/* TODO optimize the loop */
+	for (;;) {
+		pos = path.find(u'\\', last_pos);
+		if (pos == std::u16string::npos) {
+			break;
+		}
+		std::u16string comp = path.substr(last_pos, pos - last_pos);
+		status = smbd_object_openat(&sub_object,
+				smbd_volume, dir_object, comp);
+		x_smbd_release_object(dir_object);
+		if (!NT_STATUS_IS_OK(status)) {
+			return status;
+		}
+		if (sub_object->type != x_smbd_object_t::type_dir) {
+			x_smbd_release_object(sub_object);
+			return NT_STATUS_OBJECT_PATH_NOT_FOUND;
+		}
+		dir_object = sub_object;
+		last_pos = pos + 1;
+	}
+
+	*p_smbd_object = dir_object;
+	base_name = path.substr(last_pos);
+	return NT_STATUS_OK;
+}
+
+
 NTSTATUS x_smbd_open_object(x_smbd_object_t **p_smbd_object,
 		const std::shared_ptr<x_smbd_volume_t> &smbd_volume,
 		const std::u16string &path,
 		long path_priv_data,
 		bool create_if)
 {
-	auto [ ok, hash ] = x_smbd_hash_path(*smbd_volume, path);
+	if (path.empty()) {
+		smbd_volume->root_object->incref();
+		*p_smbd_object = smbd_volume->root_object;
+		return NT_STATUS_OK;
+	}
+
+	x_smbd_object_t *parent_object, *smbd_object;
+	std::u16string path_base;
+	NTSTATUS status = open_parent_object(&parent_object, path_base,
+			smbd_volume, path);
+	if (!NT_STATUS_IS_OK(status)) {
+		return status;
+	}
+
+	auto [ ok, hash ] = x_smbd_hash_path(*smbd_volume, parent_object, path_base);
 	if (!ok) {
+		x_smbd_release_object(parent_object);
 		return NT_STATUS_ILLEGAL_CHARACTER;
 	}
 
-	x_smbd_object_t *smbd_object = x_smbd_object_lookup(smbd_volume, path,
+	smbd_object = x_smbd_object_lookup(smbd_volume,
+			parent_object, path_base,
 			path_priv_data, create_if, hash);
+	x_smbd_release_object(parent_object);
 	if (!smbd_object) {
 		return NT_STATUS_OBJECT_NAME_NOT_FOUND;
 	}
 
-	NTSTATUS status = NT_STATUS_OK;
+	status = NT_STATUS_OK;
 	{
 		auto lock = std::lock_guard(smbd_object->mutex);
 		if (!(smbd_object->flags & x_smbd_object_t::flag_initialized)) {
@@ -213,16 +317,18 @@ struct smbd_defer_rename_evt_t
 };
 
 /* rename_internals_fsp */
-static NTSTATUS rename_object_intl(smbd_object_pool_t::bucket_t &new_bucket,
-		smbd_object_pool_t::bucket_t &old_bucket,
+static NTSTATUS rename_object_intl(
 		const std::shared_ptr<x_smbd_volume_t> &smbd_volume,
-		x_smbd_object_t *old_object,
-		const std::u16string &new_path,
-		std::u16string &old_path,
+		x_smbd_object_t *smbd_object,
+		smbd_object_pool_t::bucket_t &new_bucket,
+		smbd_object_pool_t::bucket_t &old_bucket,
+		x_smbd_object_t *new_parent_object,
+		const std::u16string &new_path_base,
+		std::u16string &old_path_base,
 		uint64_t new_hash)
 {
 	x_smbd_object_t *new_object = smbd_object_lookup_intl(smbd_volume,
-			new_bucket, new_path, new_hash);
+			new_bucket, new_parent_object, new_path_base, new_hash);
 	if (new_object && new_object->exists()) {
 		/* TODO replace forced */
 		return NT_STATUS_OBJECT_NAME_COLLISION;
@@ -235,18 +341,18 @@ static NTSTATUS rename_object_intl(smbd_object_pool_t::bucket_t &new_bucket,
 		delete new_object;
 	}
 
-	NTSTATUS status = smbd_volume->ops->rename_object(old_object,
+	NTSTATUS status = smbd_volume->ops->rename_object(smbd_object,
 			/* TODO replace */
-			false, new_path);
+			false, new_parent_object, new_path_base);
 	if (!NT_STATUS_IS_OK(status)) {
 		return status;
 	}
 
-	old_path = old_object->path;
-	old_bucket.head.remove(&old_object->hash_link);
-	old_object->hash = new_hash;
-	old_object->path = new_path;
-	new_bucket.head.push_front(&old_object->hash_link);
+	old_path_base = smbd_object->path_base;
+	old_bucket.head.remove(&smbd_object->hash_link);
+	smbd_object->hash = new_hash;
+	smbd_object->path_base = new_path_base;
+	new_bucket.head.push_front(&smbd_object->hash_link);
 	return NT_STATUS_OK;
 }
 
@@ -305,50 +411,22 @@ static void smbd_rename_cancel(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_req
 	x_smbd_conn_post_cancel(smbd_conn, smbd_requ, NT_STATUS_CANCELLED);
 }
 
-static std::u16string get_parent_path(
-		const std::u16string &path)
+static NTSTATUS parent_compatible_open(x_smbd_object_t *smbd_object)
 {
-	X_ASSERT(!path.empty());
-	std::u16string parent_path;
-	auto sep = path.rfind('\\');
-	if (sep != std::u16string::npos) {
-		parent_path = path.substr(0, sep);
-	}
-	return parent_path;
-}
-
-static NTSTATUS parent_dirname_compatible_open(
-		std::shared_ptr<x_smbd_volume_t> &smbd_volume,
-		const std::u16string &path)
-{
-	if (path.empty()) {
-		return NT_STATUS_INVALID_PARAMETER;
-	}
-	std::u16string parent_path = get_parent_path(path);
-	x_smbd_object_t *smbd_object = nullptr;
-	NTSTATUS status = x_smbd_open_object(&smbd_object,
-			smbd_volume, parent_path, 0, false);
-	if (!smbd_object) {
-		return NT_STATUS_OK;
-	}
-
-	status = NT_STATUS_OK;
 	const x_smbd_open_t *curr_open;
 	auto &open_list = smbd_object->sharemode.open_list;
 	auto lock = std::lock_guard(smbd_object->mutex);
 	for (curr_open = open_list.get_front(); curr_open; curr_open = open_list.next(curr_open)) {
 		if ((curr_open->open_state.access_mask & idl::SEC_STD_DELETE) ||
-				((curr_open->open_state.access_mask & idl::SEC_DIR_ADD_FILE) && 
+				((curr_open->open_state.access_mask & idl::SEC_DIR_ADD_FILE) &&
 				 !(curr_open->open_state.share_access & X_SMB2_FILE_SHARE_WRITE))) {
 			X_LOG_DBG("access_mask=0x%x share_access=%d STATUS_SHARING_VIOLATION",
 					curr_open->open_state.access_mask,
 					curr_open->open_state.share_access);
-			status = NT_STATUS_SHARING_VIOLATION;
-			break;
+			return NT_STATUS_SHARING_VIOLATION;
 		}
 	}
-	x_smbd_release_object(smbd_object);
-	return status;
+	return NT_STATUS_OK;
 }
 
 NTSTATUS x_smbd_object_rename(x_smbd_object_t *smbd_object,
@@ -356,19 +434,24 @@ NTSTATUS x_smbd_object_rename(x_smbd_object_t *smbd_object,
 		x_smbd_requ_t *smbd_requ,
 		std::unique_ptr<x_smb2_state_rename_t> &state)
 {
-	auto &smbd_volume = smbd_object->smbd_volume;
-	x_smbd_sharemode_t *sharemode = x_smbd_open_get_sharemode(
-			smbd_requ->smbd_open);
+	x_smbd_sharemode_t *sharemode = x_smbd_open_get_sharemode(smbd_open);
 
-	auto [ ok, new_hash ] = x_smbd_hash_path(*smbd_volume, state->in_path);
-	if (!ok) {
-		return NT_STATUS_ILLEGAL_CHARACTER;
-	}
+	auto &smbd_volume = smbd_object->smbd_volume;
+
+	x_smbd_object_t *new_parent_object = nullptr;
+	std::u16string new_path_base;
 
 	NTSTATUS status;
+
 	if (!smbd_open->smbd_stream) {
-		status = parent_dirname_compatible_open(smbd_object->smbd_volume, state->in_path);
+		status = open_parent_object(&new_parent_object, new_path_base,
+				smbd_volume, state->in_path);
 		if (!NT_STATUS_IS_OK(status)) {
+			return status;
+		}
+		status = parent_compatible_open(new_parent_object);
+		if (!NT_STATUS_IS_OK(status)) {
+			x_smbd_release_object(new_parent_object);
 			return status;
 		}
 	}
@@ -382,6 +465,9 @@ NTSTATUS x_smbd_object_rename(x_smbd_object_t *smbd_object,
 		sharemode->defer_rename_list.push_back(smbd_requ);
 		/* windows server do not send interim response in renaming */
 		x_smbd_requ_async_insert(smbd_requ, smbd_rename_cancel, -1);
+		if (new_parent_object) {
+			x_smbd_release_object(new_parent_object);
+		}
 		return NT_STATUS_PENDING;
 	}
 
@@ -396,25 +482,35 @@ NTSTATUS x_smbd_object_rename(x_smbd_object_t *smbd_object,
 	}
 
 	auto &pool = smbd_object_pool;
-	auto new_bucket_idx = new_hash % pool.buckets.size();
-	auto &new_bucket = pool.buckets[new_bucket_idx];
-	auto old_bucket_idx = smbd_object->hash % pool.buckets.size();
+	auto [ ok, new_path_hash ] = x_smbd_hash_path(*smbd_volume, new_parent_object, new_path_base);
+	if (!ok) {
+		x_smbd_release_object(new_parent_object);
+	}
 
-	std::u16string old_path;
+	auto new_bucket_idx = new_path_hash % pool.bucket_size;
+	auto &new_bucket = pool.buckets[new_bucket_idx];
+	auto old_bucket_idx = smbd_object->hash % pool.bucket_size;
+	std::u16string old_path = x_smbd_object_get_path_todo(smbd_object);
+
+	x_smbd_object_t *old_parent_object = smbd_object->parent_object;
+	std::u16string old_path_base;
 	if (new_bucket_idx == old_bucket_idx) {
 		auto bucket_lock = std::lock_guard(new_bucket.mutex);
-		status = rename_object_intl(new_bucket, new_bucket, smbd_volume,
-				smbd_object,
-				state->in_path, old_path, new_hash);
+		status = rename_object_intl(smbd_volume, smbd_object,
+				new_bucket, new_bucket,
+				new_parent_object, new_path_base,
+				old_path_base, new_path_hash);
 	} else {
 		auto &old_bucket = pool.buckets[old_bucket_idx];
 		std::scoped_lock bucket_lock(new_bucket.mutex, old_bucket.mutex);
-		status = rename_object_intl(new_bucket, old_bucket, smbd_volume,
-				smbd_object,
-				state->in_path, old_path, new_hash);
+		status = rename_object_intl(smbd_volume, smbd_object,
+				new_bucket, old_bucket,
+				new_parent_object, new_path_base,
+				old_path_base, new_path_hash);
 	}
 
 	if (NT_STATUS_IS_OK(status)) {
+		smbd_object->parent_object = new_parent_object;
 		x_smbd_schedule_notify(smbd_object->smbd_volume,
 				NOTIFY_ACTION_OLD_NAME,
 				smbd_object->type == x_smbd_object_t::type_dir ?
@@ -423,17 +519,38 @@ NTSTATUS x_smbd_object_rename(x_smbd_object_t *smbd_object,
 				smbd_open->open_state.parent_lease_key,
 				smbd_open->open_state.client_guid,
 				old_path, state->in_path);
+		x_smbd_release_object(old_parent_object);
+	} else {
+		x_smbd_release_object(new_parent_object);
 	}
 
 	return status;
 }
 
+std::u16string x_smbd_object_get_path(const x_smbd_object_t *smbd_object)
+{
+	std::vector<const x_smbd_object_t *> stack;
+	while (smbd_object->parent_object) {
+		stack.push_back(smbd_object);
+		smbd_object = smbd_object->parent_object;
+	}
+
+	std::u16string full_path;
+	for (size_t i = stack.size(); i--; ) {
+		smbd_object = stack[i];
+		if (!full_path.empty()) {
+			full_path.push_back(u'\\');
+		}
+		full_path.append(smbd_object->path_base);
+	}
+	return full_path;
+}
 
 int x_smbd_object_pool_init(size_t max_open)
 {
 	size_t bucket_size = x_next_2_power(max_open);
-	std::vector<smbd_object_pool_t::bucket_t> buckets(bucket_size);
-	smbd_object_pool.buckets.swap(buckets);
+	smbd_object_pool.buckets = new smbd_object_pool_t::bucket_t[bucket_size];
+	smbd_object_pool.bucket_size = bucket_size;
 	return 0;
 }
 

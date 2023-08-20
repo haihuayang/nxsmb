@@ -241,7 +241,7 @@ static NTSTATUS smbd_object_remove(
 				NOTIFY_ACTION_REMOVED, notify_filter,
 				smbd_open->open_state.parent_lease_key,
 				smbd_open->open_state.client_guid,
-				smbd_object->path, {});
+				x_smbd_object_get_path_todo(smbd_object), {});
 	} else if (smbd_open->smbd_stream &&
 			sharemode->meta.delete_on_close) {
 		NTSTATUS status = x_smbd_object_delete(smbd_object,
@@ -258,7 +258,7 @@ static NTSTATUS smbd_object_remove(
 				FILE_NOTIFY_CHANGE_STREAM_NAME,
 				smbd_open->open_state.parent_lease_key,
 				smbd_open->open_state.client_guid,
-				smbd_object->path + u':' + smbd_open->smbd_stream->name,
+				x_smbd_object_get_path_todo(smbd_object) + u':' + smbd_open->smbd_stream->name,
 				{});
 	}
 
@@ -309,7 +309,7 @@ static void smbd_close_open_intl(
 				FILE_NOTIFY_CHANGE_LAST_WRITE,
 				smbd_open->open_state.parent_lease_key,
 				smbd_open->open_state.client_guid,
-				smbd_object->path, {});
+				x_smbd_object_get_path_todo(smbd_object), {});
 		smbd_open->update_write_time = false;
 	}
 
@@ -791,7 +791,7 @@ static bool check_ads_share_access(x_smbd_object_t *smbd_object,
 			if (!(other_open->open_state.share_access & X_SMB2_FILE_SHARE_DELETE)) {
 				X_LOG_NOTICE("ads %s of %s share-access %d violate access 0x%x",
 						x_str_todebug(smbd_stream->name).c_str(),
-						x_str_todebug(smbd_object->path).c_str(),
+						x_str_todebug(smbd_object->path_base).c_str(),
 						other_open->open_state.share_access,
 						granted);
 
@@ -1530,14 +1530,14 @@ static NTSTATUS smbd_open_create_intl(x_smbd_open_t **psmbd_open,
 					(state->in_desired_access & (idl::SEC_FILE_WRITE_DATA | idl::SEC_FILE_APPEND_DATA))) {
 				X_LOG_NOTICE("deny access 0x%x to '%s' due to readonly 0x%x",
 						state->in_desired_access,
-						x_str_todebug(smbd_object->path).c_str(),
+						x_str_todebug(x_smbd_object_get_path(smbd_object)).c_str(),
 						smbd_object->meta.file_attributes);
 				return NT_STATUS_ACCESS_DENIED;
 			}
 
 			if (smbd_object->meta.file_attributes & X_SMB2_FILE_ATTRIBUTE_REPARSE_POINT) {
 				X_LOG_DBG("object '%s' is reparse_point",
-						x_str_todebug(smbd_object->path).c_str());
+						x_str_todebug(x_smbd_object_get_path(smbd_object)).c_str());
 				return NT_STATUS_PATH_NOT_COVERED;
 			}
 		}
@@ -1928,7 +1928,7 @@ static NTSTATUS smbd_open_reconnect(x_smbd_open_t *smbd_open,
 			return NT_STATUS_INVALID_PARAMETER;
 		}
 		/* TODO dfs path and case */
-		if (state.in_path != smbd_open->smbd_object->path) {
+		if (state.in_path != x_smbd_object_get_path(smbd_open->smbd_object)) {
 			X_LOG_NOTICE("path not match");
 			return NT_STATUS_INVALID_PARAMETER;
 		}
@@ -2044,10 +2044,11 @@ NTSTATUS x_smbd_open_restore(
 static std::string x_smbd_open_get_path(const x_smbd_open_t *smbd_open)
 {
 	x_smbd_object_t *smbd_object = smbd_open->smbd_object;
+	std::u16string object_path = x_smbd_object_get_path(smbd_object);
 	if (!smbd_open->smbd_stream) {
-		return x_str_todebug(smbd_object->path);
+		return x_str_todebug(object_path);
 	} else {
-		return x_str_todebug(smbd_object->path + u":" + smbd_open->smbd_stream->name);
+		return x_str_todebug(object_path + u":" + smbd_open->smbd_stream->name);
 	}
 }
 
@@ -2114,7 +2115,7 @@ static std::u16string get_path(const x_smbd_open_t *smbd_open)
 	auto smbd_object = smbd_open->smbd_object;
 	std::u16string ret =  u"C:\\"
 		+ smbd_object->smbd_volume->name_l16
-		+ u"\\" + smbd_object->path;
+		+ u"\\" + x_smbd_object_get_path(smbd_object);
 	if (smbd_open->smbd_stream) {
 		ret += u":" + smbd_open->smbd_stream->name;
 	}
