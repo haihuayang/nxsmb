@@ -69,6 +69,20 @@ struct x_sdlist_t
 	bool empty(void) const {
 		return front == nullptr;
 	}
+
+	void remove(x_dlink_t *link) {
+		assert(in_list_check(link));
+		if (link->next != nullptr) {
+			link->next->prev = link->prev;
+		}
+		if (link->prev != nullptr) {
+			link->prev->next = link->next;
+		} else {
+			front = link->next;
+		}
+		link->prev = link->next = reinterpret_cast<x_dlink_t *>(-1l);
+	}
+
 	void push_front(x_dlink_t *link) {
 		if ((link->next = front) != nullptr) {
 			front->prev = link;
@@ -352,7 +366,7 @@ struct x_tp_dcircle_t
 struct x_dqlink_t
 {
 	x_dqlink_t *get_next() const { return next; }
-	x_dqlink_t *get_prev() const { return *prev; }
+	x_dqlink_t *get_prev() const { return (x_dqlink_t *)prev; }
 	void remove() {
 		if (next != nullptr) {
 			next->prev = prev;
