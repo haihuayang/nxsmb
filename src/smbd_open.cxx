@@ -1767,6 +1767,15 @@ static bool smbd_save_durable(x_smbd_open_t *smbd_open,
 	}
 }
 
+static bool oplock_valid_for_durable(const x_smbd_open_t *smbd_open)
+{
+	if (smbd_open->open_state.oplock_level == X_SMB2_OPLOCK_LEVEL_LEASE) {
+		return x_smbd_lease_get_state(smbd_open->smbd_lease) & X_SMB2_LEASE_HANDLE;
+	} else {
+		return smbd_open->open_state.oplock_level == X_SMB2_OPLOCK_LEVEL_BATCH;
+	}
+}
+
 NTSTATUS x_smbd_open_op_create(x_smbd_requ_t *smbd_requ,
 		std::unique_ptr<x_smb2_state_create_t> &state)
 {
@@ -1840,7 +1849,8 @@ NTSTATUS x_smbd_open_op_create(x_smbd_requ_t *smbd_requ,
 
 	/* we do not support durable handle for ADS */
 	if (!smbd_open->smbd_stream &&
-			state->smbd_object->type == x_smbd_object_t::type_file) {
+			state->smbd_object->type == x_smbd_object_t::type_file &&
+			oplock_valid_for_durable(smbd_open)) {
 		if (state->in_contexts & X_SMB2_CONTEXT_FLAG_DH2Q) {
 			if ((state->in_dh_flags & X_SMB2_DHANDLE_FLAG_PERSISTENT) &&
 					x_smbd_tcon_get_continuously_available(smbd_tcon)) {
