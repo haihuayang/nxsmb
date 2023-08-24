@@ -1959,12 +1959,14 @@ static NTSTATUS setinfo_file(posixfs_object_t *posixfs_object,
 				&posixfs_object->get_meta());
 		if (NT_STATUS_IS_OK(status)) {
 			if (notify_actions) {
-				x_smbd_schedule_notify(posixfs_object->base.smbd_volume,
+				x_smbd_schedule_notify(
 						NOTIFY_ACTION_MODIFIED,
 						notify_actions,
 						smbd_open->open_state.parent_lease_key,
 						smbd_open->open_state.client_guid,
-						x_smbd_object_get_path_todo(&posixfs_object->base), {});
+						posixfs_object->base.parent_object,
+						nullptr,
+						posixfs_object->base.path_base, {});
 			}
 			return NT_STATUS_OK;
 		} else {
@@ -2291,12 +2293,12 @@ static NTSTATUS setinfo_security(posixfs_object_t *posixfs_object,
 	}
 
 	posixfs_open_t *posixfs_open = posixfs_open_from_base_t::container(smbd_requ->smbd_open);
-	x_smbd_schedule_notify(posixfs_object->base.smbd_volume,
+	x_smbd_schedule_notify(
 			NOTIFY_ACTION_MODIFIED, FILE_NOTIFY_CHANGE_SECURITY,
 			posixfs_open->base.open_state.parent_lease_key,
 			posixfs_open->base.open_state.client_guid,
-			x_smbd_object_get_path(&posixfs_object->base),
-			{});
+			posixfs_object->base.parent_object, nullptr,
+			posixfs_object->base.path_base, {});
 	return NT_STATUS_OK;
 }
 
@@ -2777,12 +2779,14 @@ NTSTATUS posixfs_op_object_delete(x_smbd_object_t *smbd_object,
 					const char *stream_name) {
 				std::u16string u16_name;
 				if (x_str_convert(u16_name, std::string_view(stream_name))) {
-					x_smbd_schedule_notify(smbd_object->smbd_volume,
+					x_smbd_schedule_notify(
 							NOTIFY_ACTION_REMOVED_STREAM,
 							FILE_NOTIFY_CHANGE_STREAM_NAME,
 							smbd_open->open_state.parent_lease_key,
 							smbd_open->open_state.client_guid,
-							x_smbd_object_get_path(smbd_object) + u':' + u16_name,
+							smbd_object->parent_object,
+							nullptr,
+							smbd_object->path_base + u':' + u16_name,
 							{});
 				} else {
 					X_LOG_ERR("invalid stream_name '%s'", stream_name);
@@ -2906,12 +2910,14 @@ NTSTATUS x_smbd_posixfs_create_object(x_smbd_object_t *smbd_object,
 			return status;
 		}
 		++create_count;
-		x_smbd_schedule_notify(smbd_object->smbd_volume,
+		x_smbd_schedule_notify(
 				NOTIFY_ACTION_ADDED,
 				uint16_t((state.in_create_options & X_SMB2_CREATE_OPTION_DIRECTORY_FILE) ? FILE_NOTIFY_CHANGE_DIR_NAME : FILE_NOTIFY_CHANGE_FILE_NAME),
 				state.lease.parent_key,
 				x_smbd_conn_curr_client_guid(),
-				x_smbd_object_get_path_todo(&posixfs_object->base),
+				smbd_object->parent_object,
+				nullptr,
+				smbd_object->path_base,
 				{});
 
 	} else {
@@ -3084,12 +3090,13 @@ NTSTATUS x_smbd_posixfs_create_open(x_smbd_open_t **psmbd_open,
 				notify_actions |= FILE_NOTIFY_CHANGE_ATTRIBUTES;
 			}
 		}
-		x_smbd_schedule_notify(posixfs_object->base.smbd_volume,
+		x_smbd_schedule_notify(
 				NOTIFY_ACTION_MODIFIED,
 				notify_actions,
 				state->lease.parent_key,
 				x_smbd_conn_curr_client_guid(),
-				x_smbd_object_get_path_todo(&posixfs_object->base), {});
+				state->smbd_object->parent_object, nullptr,
+				posixfs_object->base.path_base, {});
 		reload_meta = true;
 	} else if (create_action != x_smb2_create_action_t::WAS_CREATED
 			&& (state->in_contexts & X_SMB2_CONTEXT_FLAG_ALSI)) {

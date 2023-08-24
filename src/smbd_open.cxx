@@ -237,11 +237,12 @@ static NTSTATUS smbd_object_remove(
 				smbd_stream = ads_list.next(smbd_stream)) {
 			smbd_stream->exists = false;
 		}
-		x_smbd_schedule_notify(smbd_object->smbd_volume,
+		x_smbd_schedule_notify(
 				NOTIFY_ACTION_REMOVED, notify_filter,
 				smbd_open->open_state.parent_lease_key,
 				smbd_open->open_state.client_guid,
-				x_smbd_object_get_path_todo(smbd_object), {});
+				smbd_object->parent_object, nullptr,
+				smbd_object->path_base, {});
 	} else if (smbd_open->smbd_stream &&
 			sharemode->meta.delete_on_close) {
 		NTSTATUS status = x_smbd_object_delete(smbd_object,
@@ -253,12 +254,13 @@ static NTSTATUS smbd_object_remove(
 		}
 		smbd_open->smbd_stream->exists = false;
 		// TODO should it also notify object MODIFIED
-		x_smbd_schedule_notify(smbd_object->smbd_volume,
+		x_smbd_schedule_notify(
 				NOTIFY_ACTION_REMOVED_STREAM,
 				FILE_NOTIFY_CHANGE_STREAM_NAME,
 				smbd_open->open_state.parent_lease_key,
 				smbd_open->open_state.client_guid,
-				x_smbd_object_get_path_todo(smbd_object) + u':' + smbd_open->smbd_stream->name,
+				smbd_object->parent_object, nullptr,
+				smbd_object->path_base + u':' + smbd_open->smbd_stream->name,
 				{});
 	}
 
@@ -304,12 +306,13 @@ static void smbd_close_open_intl(
 	pending_requ_list = std::move(smbd_open->pending_requ_list);
 
 	if (smbd_open->update_write_time) {
-		x_smbd_schedule_notify(smbd_object->smbd_volume,
+		x_smbd_schedule_notify(
 				NOTIFY_ACTION_MODIFIED,
 				FILE_NOTIFY_CHANGE_LAST_WRITE,
 				smbd_open->open_state.parent_lease_key,
 				smbd_open->open_state.client_guid,
-				x_smbd_object_get_path_todo(smbd_object), {});
+				smbd_object->parent_object, nullptr,
+				smbd_object->path_base, {});
 		smbd_open->update_write_time = false;
 	}
 

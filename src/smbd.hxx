@@ -605,25 +605,15 @@ void x_smbd_conn_requ_done(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ,
 extern x_evtmgmt_t *g_evtmgmt;
 int x_smbd_ctrl_init(x_evtmgmt_t *evtmgmt);
 
-void x_smbd_open_append_notify(x_smbd_open_t *smbd_open,
-		uint32_t action,
-		const std::u16string &path);
-
-void x_smbd_notify_change(const std::shared_ptr<x_smbd_volume_t> &smbd_volume,
+void x_smbd_schedule_notify(
 		uint32_t notify_action,
 		uint32_t notify_filter,
 		const x_smb2_lease_key_t &ignore_lease_key,
 		const x_smb2_uuid_t &client_guid,
-		const std::u16string &old_path,
-		const std::u16string &new_path);
-
-void x_smbd_schedule_notify(const std::shared_ptr<x_smbd_volume_t> &smbd_volume,
-		uint32_t notify_action,
-		uint32_t notify_filter,
-		const x_smb2_lease_key_t &ignore_lease_key,
-		const x_smb2_uuid_t &client_guid,
-		const std::u16string &old_path,
-		const std::u16string &new_path);
+		x_smbd_object_t *parent_object,
+		x_smbd_object_t *new_parent_object,
+		const std::u16string &path_base,
+		const std::u16string &new_path_base);
 
 void x_smbd_set_notify_schedulable(bool f);
 void x_smbd_flush_notifies();

@@ -32,19 +32,18 @@ struct smd_notify_evt_t
 	std::vector<std::pair<uint32_t, std::u16string>> notify_changes;
 };
 
-void x_smbd_object_notify_change(x_smbd_object_t *smbd_object,
+static void x_smbd_object_notify_change(x_smbd_object_t *smbd_object,
+		x_smbd_object_t **p_parent_object,
 		uint32_t notify_action,
 		uint32_t notify_filter,
-		uint32_t prefix_length,
-		const std::u16string &fullpath,
-		const std::u16string *new_name_path,
+		std::u16string &path,
+		std::u16string &new_path,
 		const x_smb2_lease_key_t &ignore_lease_key,
 		const x_smb2_uuid_t &client_guid,
+		bool recursive,
 		bool last_level,
 		long open_priv_data)
 {
-	std::u16string subpath;
-	std::u16string new_subpath;
 	/* TODO change to read lock */
 	auto lock = std::lock_guard(smbd_object->mutex);
 	auto &open_list = smbd_object->sharemode.open_list;
@@ -67,24 +66,11 @@ void x_smbd_object_notify_change(x_smbd_object_t *smbd_object,
 		if (!last_level && !(curr_open->notify_filter & X_FILE_NOTIFY_CHANGE_WATCH_TREE)) {
 			continue;
 		}
-		if (subpath.empty()) {
-			if (prefix_length == 0) {
-				subpath = fullpath;
-				if (new_name_path) {
-					new_subpath = *new_name_path;
-				}
-			} else {
-				subpath = fullpath.substr(prefix_length);
-				if (new_name_path) {
-					new_subpath = new_name_path->substr(prefix_length);
-				}
-			}
-		}
 		bool orig_empty = curr_open->notify_changes.empty();
-		curr_open->notify_changes.push_back(std::make_pair(notify_action, subpath));
-		if (new_name_path) {
+		curr_open->notify_changes.push_back(std::make_pair(notify_action, path));
+		if (notify_action == NOTIFY_ACTION_OLD_NAME) {
 			curr_open->notify_changes.push_back(std::make_pair(NOTIFY_ACTION_NEW_NAME,
-						new_subpath));
+						new_path));
 		}
 
 		if (!orig_empty) {
@@ -110,6 +96,14 @@ void x_smbd_object_notify_change(x_smbd_object_t *smbd_object,
 				new smd_notify_evt_t(smbd_requ,
 					std::move(notify_changes)));
 	}
+	if (recursive && smbd_object->parent_object) {
+		smbd_object->parent_object->incref();
+		*p_parent_object = smbd_object->parent_object;
+		path = smbd_object->path_base + u'\\' + path;
+		if (notify_action == NOTIFY_ACTION_OLD_NAME) {
+			new_path = smbd_object->path_base + u'\\' + new_path;
+		}
+	}
 }
 
 void x_smbd_simple_notify_change(
@@ -123,6 +117,9 @@ void x_smbd_simple_notify_change(
 		const x_smb2_uuid_t &client_guid,
 		bool last_level)
 {
+	X_TODO;
+	/* decide later if we need the op_notify_change, previous it is for the dfs */
+#if 0
 	x_smbd_object_t *smbd_object = nullptr;
 	NTSTATUS status = x_smbd_open_object(&smbd_object,
 			smbd_volume, path, 0, false);
@@ -146,8 +143,9 @@ void x_smbd_simple_notify_change(
 			last_level, 0);
 
 	x_smbd_release_object(smbd_object);
+#endif
 }
-
+#if 0
 static void notify_one_level(const std::shared_ptr<x_smbd_volume_t> &smbd_volume,
 		const std::u16string &path,
 		const std::u16string &fullpath,
@@ -162,93 +160,124 @@ static void notify_one_level(const std::shared_ptr<x_smbd_volume_t> &smbd_volume
 			notify_action, notify_filter,
 			ignore_lease_key, client_guid, last_level);
 }
-
-static void notify_change(const std::shared_ptr<x_smbd_volume_t> &smbd_volume,
-		uint32_t notify_action,
-		uint32_t notify_filter,
-		const std::u16string &path,
-		const std::u16string *new_path,
-		const x_smb2_lease_key_t &ignore_lease_key,
-		const x_smb2_uuid_t &client_guid)
+#endif
+struct x_smbd_notify_t
 {
-	bool watch_tree = smbd_volume->watch_tree_cnt > 0;
-	std::size_t curr_pos = 0, last_sep_pos = 0;
-	for (;;) {
-		auto found = path.find('\\', curr_pos);
-		if (found == std::string::npos) {
-			break;
-		}
-		
-		if (watch_tree) {
-			notify_one_level(smbd_volume,
-					path.substr(0, last_sep_pos),
-					path, new_path,
-					notify_action, notify_filter,
-					ignore_lease_key,
-					client_guid,
-					false);
-		}
-		last_sep_pos = found;
-		curr_pos = found + 1;
-	}
+	x_smbd_object_t *smbd_object;
+	uint32_t action;
+	uint32_t filter;
+	x_smb2_lease_key_t ignore_lease_key;
+	x_smb2_uuid_t client_guid;
+	std::u16string path_base;
+	std::u16string new_path_base;
+};
 
-	notify_one_level(smbd_volume,
-			path.substr(0, last_sep_pos),
+static void notify_change(x_smbd_notify_t &notify)
+{
+	x_smbd_object_t *smbd_object = notify.smbd_object;
+	x_smbd_object_t *parent_object = nullptr;
+	std::u16string path, new_path;
+	std::swap(path, notify.path_base);
+	std::swap(new_path, notify.new_path_base);
+	bool recursive = (smbd_object->smbd_volume->watch_tree_cnt > 0);
+
+	x_smbd_object_notify_change(smbd_object,
+			&parent_object,
+			notify.action, notify.filter,
 			path, new_path,
-			notify_action, notify_filter,
-			ignore_lease_key,
-			client_guid,
-			true);
+			notify.ignore_lease_key,
+			notify.client_guid,
+			recursive,
+			true,
+			0);
+
+	for (; parent_object; ) {
+		smbd_object = parent_object;
+		parent_object = nullptr;
+
+		x_smbd_object_notify_change(smbd_object,
+				&parent_object,
+				notify.action, notify.filter,
+				path, new_path,
+				notify.ignore_lease_key,
+				notify.client_guid,
+				true,
+				false,
+				0);
+		x_smbd_release_object(smbd_object);
+	}
 }
 
-void x_smbd_notify_change(const std::shared_ptr<x_smbd_volume_t> &smbd_volume,
+static thread_local std::vector<x_smbd_notify_t> g_smbd_notifies;
+static thread_local bool is_notify_schedulable = false;
+
+void x_smbd_set_notify_schedulable(bool f)
+{
+	X_ASSERT(is_notify_schedulable != f);
+	is_notify_schedulable = f;
+}
+
+void x_smbd_flush_notifies()
+{
+	x_smbd_set_notify_schedulable(false);
+	for (auto &notify: g_smbd_notifies) {
+		notify_change(notify);
+		x_smbd_release_object(notify.smbd_object);
+	}
+	g_smbd_notifies.clear();
+}
+
+void x_smbd_schedule_notify(
 		uint32_t notify_action,
 		uint32_t notify_filter,
 		const x_smb2_lease_key_t &ignore_lease_key,
 		const x_smb2_uuid_t &client_guid,
-		const std::u16string &path,
-		const std::u16string &new_path)
+		x_smbd_object_t *parent_object,
+		x_smbd_object_t *new_parent_object,
+		const std::u16string &path_base,
+		const std::u16string &new_path_base)
 {
-	if (notify_action == NOTIFY_ACTION_OLD_NAME) {
-		X_ASSERT(!new_path.empty());
+	X_ASSERT(is_notify_schedulable);
+	if (!parent_object) {
+		return;
+	}
 
-		auto old_sep = path.rfind(u'\\');
-		auto new_sep = new_path.rfind(u'\\');
+	if (new_parent_object) {
+		X_ASSERT(notify_action == NOTIFY_ACTION_OLD_NAME);
 
-		bool same_parent = (old_sep == new_sep) &&
-			(old_sep == std::u16string::npos ||
-			 path.compare(0, old_sep, new_path,
-				 0, new_sep) == 0);
-
-		if (same_parent) {
-			notify_change(smbd_volume, notify_action, notify_filter,
-					path, &new_path,
+		if (new_parent_object == parent_object) {
+			parent_object->incref();
+			g_smbd_notifies.push_back(x_smbd_notify_t{parent_object,
+					notify_action,
+					notify_filter,
 					ignore_lease_key,
-					client_guid);
+					client_guid,
+					path_base, new_path_base});
 		} else {
-			notify_change(smbd_volume, NOTIFY_ACTION_REMOVED, notify_filter,
-					path, nullptr,
+			parent_object->incref();
+			new_parent_object->incref();
+			g_smbd_notifies.push_back(x_smbd_notify_t{parent_object,
+					NOTIFY_ACTION_REMOVED,
+					notify_filter,
 					ignore_lease_key,
-					client_guid);
-			notify_change(smbd_volume, NOTIFY_ACTION_ADDED, notify_filter,
-					new_path, nullptr,
-					ignore_lease_key,
-					client_guid);
-		}
-		if (new_sep != std::u16string::npos) {
-			/* Windows server also notify dest parent dir modified */
-			notify_change(smbd_volume, NOTIFY_ACTION_MODIFIED,
-					FILE_NOTIFY_CHANGE_LAST_WRITE,
-					new_path.substr(0, new_sep),
-					nullptr, x_smb2_lease_key_t{},
-					client_guid);
+					client_guid,
+					path_base, u""});
+			g_smbd_notifies.push_back(x_smbd_notify_t{new_parent_object,
+					NOTIFY_ACTION_ADDED,
+					notify_filter,
+					{},
+					{},
+					new_path_base, u""});
 		}
 	} else {
-		notify_change(smbd_volume, notify_action, notify_filter,
-				path, nullptr,
+		X_ASSERT(new_path_base.empty());
+		X_ASSERT(notify_action != NOTIFY_ACTION_OLD_NAME);
+		parent_object->incref();
+		g_smbd_notifies.push_back(x_smbd_notify_t{parent_object,
+				notify_action,
+				notify_filter,
 				ignore_lease_key,
-				client_guid);
+				client_guid,
+				path_base, new_path_base});
 	}
 }
-
-

@@ -490,7 +490,6 @@ NTSTATUS x_smbd_object_rename(x_smbd_object_t *smbd_object,
 	auto new_bucket_idx = new_path_hash % pool.bucket_size;
 	auto &new_bucket = pool.buckets[new_bucket_idx];
 	auto old_bucket_idx = smbd_object->hash % pool.bucket_size;
-	std::u16string old_path = x_smbd_object_get_path_todo(smbd_object);
 
 	x_smbd_object_t *old_parent_object = smbd_object->parent_object;
 	std::u16string old_path_base;
@@ -511,14 +510,15 @@ NTSTATUS x_smbd_object_rename(x_smbd_object_t *smbd_object,
 
 	if (NT_STATUS_IS_OK(status)) {
 		smbd_object->parent_object = new_parent_object;
-		x_smbd_schedule_notify(smbd_object->smbd_volume,
+		x_smbd_schedule_notify(
 				NOTIFY_ACTION_OLD_NAME,
 				smbd_object->type == x_smbd_object_t::type_dir ?
 					FILE_NOTIFY_CHANGE_DIR_NAME :
 					FILE_NOTIFY_CHANGE_FILE_NAME,
 				smbd_open->open_state.parent_lease_key,
 				smbd_open->open_state.client_guid,
-				old_path, state->in_path);
+				old_parent_object, new_parent_object,
+				old_path_base, new_path_base);
 		x_smbd_release_object(old_parent_object);
 	} else {
 		x_smbd_release_object(new_parent_object);

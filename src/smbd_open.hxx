@@ -675,7 +675,6 @@ static inline NTSTATUS x_smbd_open_rename(
 }
 
 std::u16string x_smbd_object_get_path(const x_smbd_object_t *smbd_object);
-#define x_smbd_object_get_path_todo x_smbd_object_get_path
 
 std::pair<bool, uint64_t> x_smbd_hash_path(const x_smbd_volume_t &smbd_volume,
 		const x_smbd_object_t *dir_object,

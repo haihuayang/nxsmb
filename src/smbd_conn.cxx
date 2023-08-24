@@ -1442,56 +1442,6 @@ static void x_smbd_conn_terminate_chans(x_smbd_conn_t *smbd_conn)
 
 __thread x_smbd_conn_t *g_smbd_conn_curr = nullptr;
 
-struct x_smbd_notify_t
-{
-	std::shared_ptr<x_smbd_volume_t> smbd_volume;
-	uint32_t notify_action;
-	uint32_t notify_filter;
-	x_smb2_lease_key_t ignore_lease_key;
-	x_smb2_uuid_t client_guid;
-	std::u16string old_path;
-	std::u16string new_path;
-};
-
-static thread_local std::vector<x_smbd_notify_t> g_smbd_notifies;
-static thread_local bool is_notify_schedulable = false;
-
-void x_smbd_set_notify_schedulable(bool f)
-{
-	X_ASSERT(is_notify_schedulable != f);
-	is_notify_schedulable = f;
-}
-
-void x_smbd_schedule_notify(const std::shared_ptr<x_smbd_volume_t> &smbd_volume,
-		uint32_t notify_action,
-		uint32_t notify_filter,
-		const x_smb2_lease_key_t &ignore_lease_key,
-		const x_smb2_uuid_t &client_guid,
-		const std::u16string &old_path,
-		const std::u16string &new_path)
-{
-	X_ASSERT(is_notify_schedulable);
-	g_smbd_notifies.push_back(x_smbd_notify_t{smbd_volume,
-			notify_action,
-			notify_filter,
-			ignore_lease_key,
-			client_guid,
-			old_path, new_path});
-}
-
-void x_smbd_flush_notifies()
-{
-	for (auto &notify: g_smbd_notifies) {
-		x_smbd_notify_change(notify.smbd_volume,
-				notify.notify_action, notify.notify_filter,
-				notify.ignore_lease_key,
-				notify.client_guid,
-				notify.old_path, notify.new_path);
-	}
-	g_smbd_notifies.clear();
-	x_smbd_set_notify_schedulable(false);
-}
-
 const x_smb2_uuid_t &x_smbd_conn_curr_client_guid()
 {
 	return g_smbd_conn_curr->client_guid;
