@@ -139,11 +139,16 @@ int x_smbd_volume_init(std::shared_ptr<x_smbd_volume_t> &smbd_volume,
 NTSTATUS x_smbd_volume_get_fd_path(std::string &ret,
 		const x_smbd_volume_t &smbd_volumen,
 		int fd);
+int x_smbd_volume_allocate_persistent(x_smbd_volume_t &smbd_volume,
+		uint64_t *p_id_persistent);
 int x_smbd_volume_save_durable(x_smbd_volume_t &smbd_volume,
-		uint64_t &id_persistent,
-		const x_smbd_durable_t *durable);
-int x_smbd_volume_set_durable_timeout(x_smbd_volume_t &smbd_volume,
-		uint64_t id_persistent, uint32_t timeout_sec);
+		uint64_t id_persistent, uint64_t id_volatile,
+		const x_smbd_open_state_t &open_state,
+		const x_smbd_file_handle_t &file_handle);
+int x_smbd_volume_remove_durable(x_smbd_volume_t &smbd_volume,
+		uint64_t id_persistent);
+int x_smbd_volume_disconnect_durable(x_smbd_volume_t &smbd_volume,
+		uint64_t id_persistent);
 std::shared_ptr<x_smbd_share_t> x_smbd_ipc_share_create();
 std::shared_ptr<x_smbd_share_t> x_smbd_dfs_share_create(
 		const x_smbd_conf_t &smbd_conf,

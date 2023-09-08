@@ -997,12 +997,12 @@ x_smbd_durable_t *x_smbd_share_lookup_durable(
 	for (auto &vol: smbd_conf.smbd_volumes) {
 		if (vol->volume_id == vol_id &&
 				vol->owner_share == smbd_share) {
-			void *ret = x_smbd_durable_db_lookup(
+			x_smbd_durable_t *durable = x_smbd_durable_lookup(
 					vol->smbd_durable_db,
 					id_persistent);
-			if (ret) {
+			if (durable) {
 				smbd_volume = vol;
-				return (x_smbd_durable_t *)ret;
+				return durable;
 			}
 			break;
 		}

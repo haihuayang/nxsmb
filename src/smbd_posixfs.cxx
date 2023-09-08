@@ -3170,7 +3170,7 @@ static int smbd_volume_read(int vol_fd,
 	X_ASSERT(durable_fd != 0);
 
 	durable_db = x_smbd_durable_db_init(durable_fd,
-			0x20000, 0x200000); /* TODO the number */
+			0x100000); /* TODO the number */
 
 	vol_id = id;
 	rootdir_fd = rfd;

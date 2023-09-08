@@ -241,7 +241,9 @@ struct x_smbd_file_handle_t
 
 struct x_smbd_durable_t
 {
+	uint64_t id_persistent;
 	uint64_t id_volatile;
+	uint64_t expired_msec;
 	x_smbd_open_state_t open_state;
 	x_smbd_file_handle_t file_handle;
 	/* TODO lease state */

@@ -24,6 +24,7 @@ available commands
 	attrex
 	set-default-security-desc
 	show-security-desc
+	list-durable volumes ...
 )SSS", progname);
 	exit(1);
 }
@@ -283,15 +284,24 @@ static int set_dos_attr(char **argv)
 
 struct smbd_durable_db_printer_t : x_smbd_durable_db_visitor_t
 {
-	bool operator()(uint64_t id, uint32_t timeout,
-			void *record, size_t size) override
+	bool operator()(const x_smbd_durable_t &durable) override
 	{
-		const x_smbd_durable_t *durable = (x_smbd_durable_t *)record;
-		printf("0x%lx %u 0x%lx 0x%x %s\n",
-				id, timeout,
-				durable->id_volatile,
-				durable->open_state.access_mask,
-				x_tostr(durable->open_state.owner).c_str());
+		printf("0x%lx 0x%lx 0x%x %s %u ",
+				durable.id_persistent,
+				durable.id_volatile,
+				durable.open_state.access_mask,
+				x_tostr(durable.open_state.owner).c_str(),
+				durable.open_state.durable_timeout_msec);
+		if (durable.expired_msec == (uint64_t)-1) {
+			printf("active");
+		} else {
+			struct timespec ts;
+			ts.tv_sec = durable.expired_msec / 1000;
+			ts.tv_nsec = (durable.expired_msec % 1000) * 1000000;
+			output_timespec("expire", &ts);
+		}
+
+		printf("\n");
 		return false;
 	}
 };

@@ -401,10 +401,9 @@ static void smbd_open_close(
 	smbd_open->state = SMBD_OPEN_S_DONE;
 
 	if (smbd_open->open_state.dhmode != x_smbd_dhmode_t::NONE) {
-		int ret = x_smbd_volume_set_durable_timeout(
+		int ret = x_smbd_volume_remove_durable(
 				*smbd_open->smbd_object->smbd_volume,
-				smbd_open->id_persistent,
-				0); // 0 mean expired immediately
+				smbd_open->id_persistent);
 		X_LOG_DBG("remove_durable for %p 0x%lx, ret = %d",
 				smbd_open, smbd_open->id_persistent, ret);
 	}
@@ -462,14 +461,12 @@ static bool smbd_open_set_durable(x_smbd_open_t *smbd_open)
 	/* TODO save durable info to volume so it can restore open
 	 * when new smbd take over
 	 */
-	uint32_t durable_sec = (smbd_open->open_state.durable_timeout_msec + 999) / 1000;
 	x_smbd_add_timer(&smbd_open->durable_timer,
 			smbd_open->open_state.durable_timeout_msec * 1000000u);
 
-	int ret = x_smbd_volume_set_durable_timeout(
+	int ret = x_smbd_volume_disconnect_durable(
 			*smbd_object->smbd_volume,
-			smbd_open->id_persistent,
-			durable_sec);
+			smbd_open->id_persistent);
 	X_LOG_DBG("set_durable_expired for %p 0x%lx, ret = %d",
 			smbd_open, smbd_open->id_persistent, ret);
 
@@ -1732,44 +1729,6 @@ void x_smbd_break_others_to_none(x_smbd_object_t *smbd_object,
 	}
 }
 
-static bool smbd_save_durable(x_smbd_open_t *smbd_open,
-		x_smbd_dhmode_t dhmode,
-		uint32_t durable_timeout_msec)
-{
-	X_LOG_DBG("save %p durable info to db", smbd_open);
-	uint64_t id_persistent;
-	const auto &file_handle = smbd_open->smbd_object->file_handle;
-	X_ASSERT(file_handle.base.handle_bytes <= MAX_HANDLE_SZ);
-	x_smbd_durable_t durable{smbd_open->id_volatile,
-		smbd_open->open_state, smbd_open->smbd_object->file_handle};
-	/* TODO lease */
-
-	int ret = x_smbd_volume_save_durable(*smbd_open->smbd_object->smbd_volume,
-			id_persistent, &durable);
-	if (ret == 0) {
-		smbd_open->id_persistent = id_persistent;
-		smbd_open->open_state.dhmode = dhmode;
-
-		if (durable_timeout_msec == 0) {
-			durable_timeout_msec = X_SMBD_DURABLE_TIMEOUT_MAX * 1000u;
-		} else {
-			durable_timeout_msec = std::min(
-					durable_timeout_msec,
-					X_SMBD_DURABLE_TIMEOUT_MAX * 1000u);
-		}
-		smbd_open->open_state.durable_timeout_msec = durable_timeout_msec;
-		X_LOG_DBG("smbd_save_durable for %p 0x%lx 0x%lx",
-				smbd_open, smbd_open->id_persistent,
-				smbd_open->id_volatile);
-		return true;
-	} else {
-		X_LOG_WARN("smbd_save_durable for %p 0x%lx failed, ret = %d",
-				smbd_open,
-				smbd_open->id_volatile, ret);
-		return false;
-	}
-}
-
 static bool oplock_valid_for_durable(const x_smbd_open_t *smbd_open)
 {
 	if (smbd_open->open_state.oplock_level == X_SMB2_OPLOCK_LEVEL_LEASE) {
@@ -1777,6 +1736,72 @@ static bool oplock_valid_for_durable(const x_smbd_open_t *smbd_open)
 	} else {
 		return smbd_open->open_state.oplock_level == X_SMB2_OPLOCK_LEVEL_BATCH;
 	}
+}
+
+static void smbd_save_durable(x_smbd_open_t *smbd_open,
+		x_smbd_tcon_t *smbd_tcon,
+		const x_smb2_state_create_t &state)
+{
+	/* we do not support durable handle for ADS */
+	if (smbd_open->smbd_stream ||
+			smbd_open->smbd_object->type != x_smbd_object_t::type_file ||
+			!oplock_valid_for_durable(smbd_open)) {
+		return;
+	}
+
+	x_smbd_dhmode_t mode = x_smbd_dhmode_t::NONE;
+	uint32_t durable_timeout_msec = 0;
+	if (state.in_contexts & X_SMB2_CONTEXT_FLAG_DH2Q) {
+		if ((state.in_dh_flags & X_SMB2_DHANDLE_FLAG_PERSISTENT) &&
+				x_smbd_tcon_get_continuously_available(smbd_tcon)) {
+			mode = x_smbd_dhmode_t::PERSISTENT;
+			durable_timeout_msec = state.in_dh_timeout;
+		} else if (x_smbd_tcon_get_durable_handle(smbd_tcon)) {
+			mode = x_smbd_dhmode_t::DURABLE;
+			durable_timeout_msec = state.in_dh_timeout;
+		}
+
+	} else if (state.in_contexts & X_SMB2_CONTEXT_FLAG_DHNQ) {
+		if (x_smbd_tcon_get_durable_handle(smbd_tcon)) {
+			mode = x_smbd_dhmode_t::DURABLE;
+		}
+	}
+
+	if (mode == x_smbd_dhmode_t::NONE) {
+		return;
+	}
+
+	auto &smbd_volume = *smbd_open->smbd_object->smbd_volume;
+	int ret = x_smbd_volume_allocate_persistent(
+			smbd_volume,
+			&smbd_open->id_persistent);
+	if (ret < 0) {
+		X_LOG_WARN("x_smbd_volume_allocate_persisten for %p, 0x%lx failed, ret = %d",
+				smbd_open,
+				smbd_open->id_volatile, ret);
+	}
+	
+	smbd_open->open_state.dhmode = mode;
+
+	if (durable_timeout_msec == 0) {
+		durable_timeout_msec = X_SMBD_DURABLE_TIMEOUT_MAX * 1000u;
+	} else {
+		durable_timeout_msec = std::min(
+				durable_timeout_msec,
+				X_SMBD_DURABLE_TIMEOUT_MAX * 1000u);
+	}
+	smbd_open->open_state.durable_timeout_msec = durable_timeout_msec;
+	X_LOG_DBG("smbd_save_durable for %p 0x%lx 0x%lx",
+			smbd_open, smbd_open->id_persistent,
+			smbd_open->id_volatile);
+
+	/* TODO lease */
+
+	x_smbd_volume_save_durable(smbd_volume,
+			smbd_open->id_persistent,
+			smbd_open->id_volatile,
+			smbd_open->open_state,
+			smbd_open->smbd_object->file_handle);
 }
 
 NTSTATUS x_smbd_open_op_create(x_smbd_requ_t *smbd_requ,
@@ -1850,31 +1875,6 @@ NTSTATUS x_smbd_open_op_create(x_smbd_requ_t *smbd_requ,
 
 	X_ASSERT(smbd_open);
 
-	/* we do not support durable handle for ADS */
-	if (!smbd_open->smbd_stream &&
-			state->smbd_object->type == x_smbd_object_t::type_file &&
-			oplock_valid_for_durable(smbd_open)) {
-		if (state->in_contexts & X_SMB2_CONTEXT_FLAG_DH2Q) {
-			if ((state->in_dh_flags & X_SMB2_DHANDLE_FLAG_PERSISTENT) &&
-					x_smbd_tcon_get_continuously_available(smbd_tcon)) {
-				smbd_save_durable(smbd_open,
-						x_smbd_dhmode_t::PERSISTENT,
-						state->in_dh_timeout);
-			} else if (x_smbd_tcon_get_durable_handle(smbd_tcon)) {
-				smbd_save_durable(smbd_open,
-						x_smbd_dhmode_t::DURABLE,
-						state->in_dh_timeout);
-			}
-
-		} else if (state->in_contexts & X_SMB2_CONTEXT_FLAG_DHNQ) {
-			if (x_smbd_tcon_get_durable_handle(smbd_tcon)) {
-				smbd_save_durable(smbd_open,
-						x_smbd_dhmode_t::DURABLE,
-						0);
-			}
-		}
-	}
-
 	x_smbd_lease_t *smbd_lease;
 	x_tp_ddlist_t<requ_async_traits> pending_requ_list;
 
@@ -1900,6 +1900,8 @@ NTSTATUS x_smbd_open_op_create(x_smbd_requ_t *smbd_requ,
 		x_smbd_ref_inc(smbd_tcon); // ref by open
 		x_smbd_ref_inc(smbd_open); // ref tcon link
 		smbd_requ->smbd_open = x_smbd_ref_inc(smbd_open);
+
+		smbd_save_durable(smbd_open, smbd_tcon, *state);
 	} else {
 		if (smbd_lease) {
 			x_smbd_lease_close(smbd_lease);

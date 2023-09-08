@@ -85,61 +85,46 @@ NTSTATUS x_smbd_volume_get_fd_path(std::string &path,
 	return NT_STATUS_OK;
 }
 
-int x_smbd_volume_save_durable(x_smbd_volume_t &smbd_volume,
-		uint64_t &id_persistent,
-		const x_smbd_durable_t *durable)
+int x_smbd_volume_allocate_persistent(x_smbd_volume_t &smbd_volume,
+		uint64_t *p_id_persistent)
 {
-	return x_smbd_durable_db_save(smbd_volume.smbd_durable_db,
-			durable, sizeof *durable,
-			smbd_volume.volume_id,
+	uint64_t id;
+	int err = x_smbd_durable_db_allocate_id(smbd_volume.smbd_durable_db,
+			&id);
+	if (err == 0) {
+		*p_id_persistent = ((uint64_t)smbd_volume.volume_id) << 48 | id;
+	}
+	return err;
+}
+
+int x_smbd_volume_save_durable(x_smbd_volume_t &smbd_volume,
+		uint64_t id_persistent, uint64_t id_volatile,
+		const x_smbd_open_state_t &open_state,
+		const x_smbd_file_handle_t &file_handle)
+{
+	return x_smbd_durable_save(smbd_volume.smbd_durable_db,
+			id_persistent, id_volatile,
+			open_state, file_handle);
+}
+
+int x_smbd_volume_disconnect_durable(x_smbd_volume_t &smbd_volume,
+		uint64_t id_persistent)
+{
+	return x_smbd_durable_disconnect(smbd_volume.smbd_durable_db,
 			id_persistent);
 }
 
-int x_smbd_volume_set_durable_timeout(x_smbd_volume_t &smbd_volume,
-		uint64_t id_persistent, uint32_t timeout_sec)
+int x_smbd_volume_remove_durable(x_smbd_volume_t &smbd_volume,
+		uint64_t id_persistent)
 {
-	return x_smbd_durable_db_set_timeout(smbd_volume.smbd_durable_db,
-			id_persistent, timeout_sec);
+	return x_smbd_durable_remove(smbd_volume.smbd_durable_db,
+			id_persistent);
 }
-#if 0
-struct smbd_durable_restorer_t : x_smbd_durable_db_visitor_t
-{
-	bool operator()(uint64_t id, uint32_t timeout,
-			void *record, size_t size) override
-	{
-		const x_smbd_durable_t *durable = (x_smbd_durable_t *)record;
-		printf("0x%lx %u 0x%lx 0x%x %s\n",
-				id, timeout,
-				durable->id_volatile,
-				durable->access_mask,
-				x_tostr(durable->owner).c_str());
-		return false;
-	}
-};
-#endif
-
-struct smbd_open_restorer_t : x_smbd_durable_db_visitor_t
-{
-	smbd_open_restorer_t(std::shared_ptr<x_smbd_volume_t> &smbd_volume)
-		: smbd_volume{smbd_volume}
-	{
-	}
-	bool operator()(uint64_t id, uint32_t timeout,
-			void *record, size_t size) override
-	{
-		x_smbd_durable_t *durable = (x_smbd_durable_t *)record;
-		x_smbd_open_restore(smbd_volume, *durable);
-		return false;
-	}
-	std::shared_ptr<x_smbd_volume_t> & smbd_volume;
-};
 
 int x_smbd_volume_restore_durable(std::shared_ptr<x_smbd_volume_t> &smbd_volume)
 {
-	smbd_open_restorer_t restore{smbd_volume};
-
-	x_smbd_durable_db_traverse(smbd_volume->smbd_durable_db,
-			restore);
+	x_smbd_durable_db_restore(smbd_volume, smbd_volume->smbd_durable_db,
+			x_smbd_open_restore);
 	return 0;
 }
 
