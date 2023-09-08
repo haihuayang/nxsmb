@@ -263,6 +263,7 @@ TARGET_DEPFILES := \
 	$(TARGET_SET_tests:%=$(TARGET_DIR_out)/tests/%.o.d) \
 	$(TARGET_SRC_libnxsmb:%=$(TARGET_DIR_out)/%.o.d) \
 	$(SET_src_smbd_nx:%=$(TARGET_DIR_out)/src/%.o.d) \
+	$(SET_src_nxutils:%=$(TARGET_DIR_out)/src/%.o.d) \
 	$(TARGET_SET_idl:%=$(TARGET_DIR_out)/librpc/idl/%.idl.ndr.o.d) \
 	$(TARGET_SET_asn1:%=$(TARGET_DIR_out)/lib/asn1/%_asn1.o.d) \
 
