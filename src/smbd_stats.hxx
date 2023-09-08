@@ -27,6 +27,8 @@
 	X_SMBD_COUNTER_DECL(ads_delete) \
 	X_SMBD_COUNTER_DECL(open_create) \
 	X_SMBD_COUNTER_DECL(open_delete) \
+	X_SMBD_COUNTER_DECL(replay_create) \
+	X_SMBD_COUNTER_DECL(replay_delete) \
 	X_SMBD_COUNTER_DECL(requ_create) \
 	X_SMBD_COUNTER_DECL(requ_delete) \
 	X_SMBD_COUNTER_DECL(qdir_create) \
