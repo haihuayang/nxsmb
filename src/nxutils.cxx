@@ -286,9 +286,11 @@ struct smbd_durable_db_printer_t : x_smbd_durable_db_visitor_t
 {
 	bool operator()(const x_smbd_durable_t &durable) override
 	{
-		printf("0x%lx 0x%lx 0x%x %s %u ",
+		printf("0x%lx 0x%lx %c%c 0x%x %s %u ",
 				durable.open_state.id_persistent,
 				durable.id_volatile,
+				x_smbd_dhmode_to_name(durable.open_state.dhmode),
+				durable.open_state.replay_cached ? 'R' : '-',
 				durable.open_state.access_mask,
 				x_tostr(durable.open_state.owner).c_str(),
 				durable.open_state.durable_timeout_msec);

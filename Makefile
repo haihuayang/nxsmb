@@ -121,6 +121,7 @@ SET_src_smbd_nx := \
 	auth_ntlmssp auth_krb5 auth_spnego auth \
 	network misc fnmatch \
 	smbd_ntacl \
+	smbd_string \
 	util_io \
 
 SET_src_nxutils := \
@@ -129,6 +130,7 @@ SET_src_nxutils := \
 	smbd_ntacl \
 	smbd_volume \
 	smbd_durable \
+	smbd_string \
 	util_sid \
 	misc \
 

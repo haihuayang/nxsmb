@@ -20,6 +20,7 @@
 #include <unistd.h>
 #include "smb2.hxx"
 #include "smb2_state.hxx"
+#include "smbd_proto.hxx"
 #include "misc.hxx"
 #include "network.hxx"
 #include "include/utils.hxx"
@@ -193,13 +194,6 @@ struct x_fdevt_user_t
 	func_t *const func;
 };
 X_DECLARE_MEMBER_TRAITS(fdevt_user_conn_traits, x_fdevt_user_t, link)
-
-enum class x_smbd_dhmode_t
-{
-	NONE,
-	DURABLE,
-	PERSISTENT,
-};
 
 enum {
 	X_SMBD_ID_NON_DURABLE = 0xfffffffeu, // resolve id for non durable

@@ -2096,7 +2096,6 @@ struct x_smbd_open_list_t : x_smbd_ctrl_handler_t
 	smbd_open_table_t::iter_t iter;
 };
 
-static const char dh_mode_name[] = "-DP";
 bool x_smbd_open_list_t::output(std::string &data)
 {
 	std::ostringstream os;
@@ -2106,7 +2105,8 @@ bool x_smbd_open_list_t::output(std::string &data)
 			<< idl::x_hex_t<uint64_t>(smbd_open->id_volatile) << ' '
 			<< idl::x_hex_t<uint32_t>(smbd_open->open_state.access_mask) << ' '
 			<< idl::x_hex_t<uint32_t>(smbd_open->open_state.share_access) << ' '
-			<< dh_mode_name[int(smbd_open->open_state.dhmode)] << ' '
+			<< x_smbd_dhmode_to_name(smbd_open->open_state.dhmode)
+			<< (smbd_open->open_state.replay_cached ? 'R' : '-') << ' '
 			<< idl::x_hex_t<uint32_t>(smbd_open->notify_filter) << ' '
 			<< idl::x_hex_t<uint32_t>(x_smbd_tcon_get_id(smbd_open->smbd_tcon)) << " '"
 			<< x_smbd_open_get_path(smbd_open) << "'" << std::endl;
