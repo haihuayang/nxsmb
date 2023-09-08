@@ -798,7 +798,8 @@ static posixfs_open_t *posixfs_open_create(
 {
 	return posixfs_open_create(pstatus, smbd_tcon, posixfs_object,
 			state.smbd_stream, state.smbd_lease,
-			x_smbd_open_state_t{state.granted_access,
+			x_smbd_open_state_t{X_SMBD_ID_NON_DURABLE,
+				state.granted_access,
 				state.in_share_access,
 				x_smbd_conn_curr_client_guid(),
 				state.in_create_guid,

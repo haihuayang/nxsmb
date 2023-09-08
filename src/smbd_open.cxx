@@ -130,7 +130,7 @@ x_smbd_open_t *x_smbd_open_lookup(uint64_t id_persistent, uint64_t id_volatile,
 		auto smbd_object = smbd_open->smbd_object;
 		{
 			auto lock = smbd_object_lock(smbd_object);
-			if (smbd_open->id_persistent == id_persistent &&
+			if (smbd_open->open_state.id_persistent == id_persistent &&
 					smbd_open->state == SMBD_OPEN_S_ACTIVE &&
 					(smbd_open->smbd_tcon == smbd_tcon ||
 					 !smbd_tcon)) {
@@ -403,9 +403,9 @@ static void smbd_open_close(
 	if (smbd_open->open_state.dhmode != x_smbd_dhmode_t::NONE) {
 		int ret = x_smbd_volume_remove_durable(
 				*smbd_open->smbd_object->smbd_volume,
-				smbd_open->id_persistent);
+				smbd_open->open_state.id_persistent);
 		X_LOG_DBG("remove_durable for %p 0x%lx, ret = %d",
-				smbd_open, smbd_open->id_persistent, ret);
+				smbd_open, smbd_open->open_state.id_persistent, ret);
 	}
 
 	if (smbd_object->type != x_smbd_object_t::type_pipe) {
@@ -421,7 +421,7 @@ static long smbd_open_durable_timeout(x_timer_job_t *timer)
 
 	x_smbd_open_t *smbd_open = X_CONTAINER_OF(timer,
 			x_smbd_open_t, durable_timer);
-	X_LOG_DBG("durable_timeout %lx,%lx", smbd_open->id_persistent,
+	X_LOG_DBG("durable_timeout %lx,%lx", smbd_open->open_state.id_persistent,
 			smbd_open->id_volatile);
 	auto smbd_object = smbd_open->smbd_object;
 
@@ -452,7 +452,7 @@ static long smbd_open_durable_timeout(x_timer_job_t *timer)
 
 static bool smbd_open_set_durable(x_smbd_open_t *smbd_open)
 {
-	X_LOG_DBG("set_durable %lx,%lx", smbd_open->id_persistent,
+	X_LOG_DBG("set_durable %lx,%lx", smbd_open->open_state.id_persistent,
 			smbd_open->id_volatile);
 	auto smbd_object = smbd_open->smbd_object;
 	X_ASSERT(smbd_object);
@@ -462,13 +462,13 @@ static bool smbd_open_set_durable(x_smbd_open_t *smbd_open)
 	 * when new smbd take over
 	 */
 	x_smbd_add_timer(&smbd_open->durable_timer,
-			smbd_open->open_state.durable_timeout_msec * 1000000u);
+			smbd_open->open_state.durable_timeout_msec * 1000000ul);
 
 	int ret = x_smbd_volume_disconnect_durable(
 			*smbd_object->smbd_volume,
-			smbd_open->id_persistent);
+			smbd_open->open_state.id_persistent);
 	X_LOG_DBG("set_durable_expired for %p 0x%lx, ret = %d",
-			smbd_open, smbd_open->id_persistent, ret);
+			smbd_open, smbd_open->open_state.id_persistent, ret);
 
 	return true;
 }
@@ -1774,7 +1774,7 @@ static void smbd_save_durable(x_smbd_open_t *smbd_open,
 	auto &smbd_volume = *smbd_open->smbd_object->smbd_volume;
 	int ret = x_smbd_volume_allocate_persistent(
 			smbd_volume,
-			&smbd_open->id_persistent);
+			&smbd_open->open_state.id_persistent);
 	if (ret < 0) {
 		X_LOG_WARN("x_smbd_volume_allocate_persisten for %p, 0x%lx failed, ret = %d",
 				smbd_open,
@@ -1792,13 +1792,12 @@ static void smbd_save_durable(x_smbd_open_t *smbd_open,
 	}
 	smbd_open->open_state.durable_timeout_msec = durable_timeout_msec;
 	X_LOG_DBG("smbd_save_durable for %p 0x%lx 0x%lx",
-			smbd_open, smbd_open->id_persistent,
+			smbd_open, smbd_open->open_state.id_persistent,
 			smbd_open->id_volatile);
 
 	/* TODO lease */
 
 	x_smbd_volume_save_durable(smbd_volume,
-			smbd_open->id_persistent,
 			smbd_open->id_volatile,
 			smbd_open->open_state,
 			smbd_open->smbd_object->file_handle);
@@ -2005,7 +2004,8 @@ NTSTATUS x_smbd_open_op_reconnect(x_smbd_requ_t *smbd_requ,
 
 NTSTATUS x_smbd_open_restore(
 		std::shared_ptr<x_smbd_volume_t> &smbd_volume,
-		x_smbd_durable_t &smbd_durable)
+		x_smbd_durable_t &smbd_durable,
+		uint64_t timeout_msec)
 {
 	if (!x_smbd_open_has_space()) {
 		X_LOG_WARN("too many opens, cannot allocate new");
@@ -2049,7 +2049,7 @@ NTSTATUS x_smbd_open_restore(
 		X_ASSERT(!smbd_open->smbd_tcon);
 		smbd_open->state = SMBD_OPEN_S_DISCONNECTED;
 		x_smbd_add_timer(&smbd_open->durable_timer,
-				smbd_open->open_state.durable_timeout_msec * 1000000u);
+				timeout_msec * 1000000ul);
 	}
 
 	smbd_durable.id_volatile = smbd_open->id_volatile;
@@ -2102,7 +2102,7 @@ bool x_smbd_open_list_t::output(std::string &data)
 	std::ostringstream os;
 
 	bool ret = g_smbd_open_table->iter_entry(iter, [&os](const x_smbd_open_t *smbd_open) {
-			os << idl::x_hex_t<uint64_t>(smbd_open->id_persistent) << ','
+			os << idl::x_hex_t<uint64_t>(smbd_open->open_state.id_persistent) << ','
 			<< idl::x_hex_t<uint64_t>(smbd_open->id_volatile) << ' '
 			<< idl::x_hex_t<uint32_t>(smbd_open->open_state.access_mask) << ' '
 			<< idl::x_hex_t<uint32_t>(smbd_open->open_state.share_access) << ' '

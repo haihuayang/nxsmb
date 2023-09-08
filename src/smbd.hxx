@@ -201,8 +201,13 @@ enum class x_smbd_dhmode_t
 	PERSISTENT,
 };
 
+enum {
+	X_SMBD_ID_NON_DURABLE = 0xfffffffeu, // resolve id for non durable
+};
+
 struct x_smbd_open_state_t
 {
+	uint64_t id_persistent;
 	const uint32_t access_mask, share_access;
 	const x_smb2_uuid_t client_guid;
 	const x_smb2_uuid_t create_guid;
@@ -241,9 +246,8 @@ struct x_smbd_file_handle_t
 
 struct x_smbd_durable_t
 {
-	uint64_t id_persistent;
-	uint64_t id_volatile;
 	uint64_t expired_msec;
+	uint64_t id_volatile;
 	x_smbd_open_state_t open_state;
 	x_smbd_file_handle_t file_handle;
 	/* TODO lease state */

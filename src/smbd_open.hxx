@@ -90,7 +90,6 @@ struct x_smbd_open_t
 	x_smbd_object_t * const smbd_object;
 	x_smbd_stream_t * const smbd_stream; // not null if it is ADS
 	x_smbd_tcon_t * smbd_tcon = nullptr;
-	uint64_t id_persistent = 0xfffffffeu; // resolve id for non durable
 	uint64_t id_volatile;
 	x_timer_job_t durable_timer;
 
@@ -500,7 +499,7 @@ static inline void x_smbd_open_op_destroy(
 #endif
 static inline std::pair<uint64_t, uint64_t> x_smbd_open_get_id(x_smbd_open_t *smbd_open)
 {
-	return { smbd_open->id_persistent, smbd_open->id_volatile };
+	return { smbd_open->open_state.id_persistent, smbd_open->id_volatile };
 }
 
 static inline NTSTATUS x_smbd_object_delete(

@@ -142,7 +142,7 @@ NTSTATUS x_smbd_volume_get_fd_path(std::string &ret,
 int x_smbd_volume_allocate_persistent(x_smbd_volume_t &smbd_volume,
 		uint64_t *p_id_persistent);
 int x_smbd_volume_save_durable(x_smbd_volume_t &smbd_volume,
-		uint64_t id_persistent, uint64_t id_volatile,
+		uint64_t id_volatile,
 		const x_smbd_open_state_t &open_state,
 		const x_smbd_file_handle_t &file_handle);
 int x_smbd_volume_remove_durable(x_smbd_volume_t &smbd_volume,
@@ -174,7 +174,8 @@ int x_smbd_simplefs_rmtld(std::shared_ptr<x_smbd_share_t> &smbd_share,
 		const std::string &name);
 NTSTATUS x_smbd_open_restore(
 		std::shared_ptr<x_smbd_volume_t> &smbd_volume,
-		x_smbd_durable_t &smbd_durable);
+		x_smbd_durable_t &smbd_durable,
+		uint64_t timeout_msec);
 
 int x_smbd_volume_restore_durable(std::shared_ptr<x_smbd_volume_t> &smbd_volume);
 

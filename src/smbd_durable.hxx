@@ -21,7 +21,7 @@ x_smbd_durable_t *x_smbd_durable_lookup(x_smbd_durable_db_t *durable_db,
 		uint64_t id_persistent);
 
 int x_smbd_durable_save(x_smbd_durable_db_t *db,
-		uint64_t id_persistent, uint64_t id_volatile,
+		uint64_t id_volatile,
 		const x_smbd_open_state_t &open_state,
 		const x_smbd_file_handle_t &file_handle);
 
@@ -36,7 +36,7 @@ void x_smbd_durable_db_close(x_smbd_durable_db_t *durable_db);
 void x_smbd_durable_db_restore(std::shared_ptr<x_smbd_volume_t> &smbd_volume,
 		x_smbd_durable_db_t *durable_db,
 		NTSTATUS (*restore_fn)(std::shared_ptr<x_smbd_volume_t> &smbd_volume,
-			x_smbd_durable_t &durable));
+			x_smbd_durable_t &durable, uint64_t timeout_msec));
 
 struct x_smbd_durable_db_visitor_t
 {
