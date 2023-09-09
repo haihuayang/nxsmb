@@ -181,7 +181,8 @@ x_smbd_durable_t *x_smbd_durable_lookup(x_smbd_durable_db_t *db,
 	}
 
 	x_smbd_durable_t *durable = get_durable(db, slot);
-	if (durable->open_state.id_persistent != id_persistent ||
+	if (durable->magic != X_SMBD_DURABLE_MAGIC_ACTIVE ||
+			durable->open_state.id_persistent != id_persistent ||
 			durable->expired_msec < get_epoch_msec()) {
 		return nullptr;
 	}
@@ -347,9 +348,9 @@ void x_smbd_durable_db_restore(std::shared_ptr<x_smbd_volume_t> &smbd_volume,
 			X_LOG_WARN("failed to restore open %lx:%lx",
 					durable->open_state.id_persistent,
 					durable->id_volatile);
-			durable->open_state.id_persistent = 0;
 		}
 
+		durable->magic = X_SMBD_DURABLE_MAGIC_DEAD;
 		if (i == free_range[1]) {
 			++free_range[1];
 		} else {
