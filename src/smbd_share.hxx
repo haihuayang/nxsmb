@@ -145,6 +145,8 @@ int x_smbd_volume_save_durable(x_smbd_volume_t &smbd_volume,
 		uint64_t id_volatile,
 		const x_smbd_open_state_t &open_state,
 		const x_smbd_file_handle_t &file_handle);
+int x_smbd_volume_update_durable(x_smbd_volume_t &smbd_volume,
+		const x_smbd_open_state_t &open_state);
 int x_smbd_volume_remove_durable(x_smbd_volume_t &smbd_volume,
 		uint64_t id_persistent);
 int x_smbd_volume_disconnect_durable(x_smbd_volume_t &smbd_volume,

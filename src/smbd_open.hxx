@@ -679,5 +679,9 @@ std::pair<bool, uint64_t> x_smbd_hash_path(const x_smbd_volume_t &smbd_volume,
 		const x_smbd_object_t *dir_object,
 		const std::u16string &path);
 
+void x_smbd_save_durable(x_smbd_open_t *smbd_open,
+		x_smbd_tcon_t *smbd_tcon,
+		const x_smb2_state_create_t &state);
+
 #endif /* __smbd_open__hxx__ */
 

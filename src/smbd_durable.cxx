@@ -156,6 +156,20 @@ int x_smbd_durable_save(x_smbd_durable_db_t *db,
 	return 0;
 }
 
+int x_smbd_durable_update(x_smbd_durable_db_t *db,
+		const x_smbd_open_state_t &open_state)
+{
+	X_LOG_DBG("id_persistent=0x%lx", open_state.id_persistent);
+	uint32_t slot = get_durable_slot(open_state.id_persistent);
+
+	X_ASSERT(slot < db->capacity);
+	x_smbd_durable_t *db_rec = get_durable(db, slot);
+	/* TODO only update replay_cached */
+	db_rec->open_state.replay_cached = open_state.replay_cached;
+	msync(db_rec, sizeof *db_rec, MS_SYNC);
+	return 0;
+}
+
 x_smbd_durable_t *x_smbd_durable_lookup(x_smbd_durable_db_t *db,
 		uint64_t id_persistent)
 {
@@ -280,20 +294,17 @@ x_smbd_durable_db_t *x_smbd_durable_db_init(int fd, uint32_t capacity)
 void x_smbd_durable_db_traverse(x_smbd_durable_db_t *durable_db,
 		x_smbd_durable_db_visitor_t &visitor)
 {
-	uint64_t epoch = get_epoch_msec();
 	uint8_t *rec = (uint8_t *)durable_db->header + HEADER_SIZE;
 	uint32_t i;
 	for (i = 0; i < durable_db->capacity; ++i, rec += X_SMBD_DURABLE_DB_RECORD_SIZE) {
 		x_smbd_durable_t *durable = (x_smbd_durable_t *)rec;
-		if (durable->open_state.id_persistent == 0 && durable->id_volatile) {
-			/* no valid record beyond this */
-			break;
-		}
-		if (durable->open_state.id_persistent != 0 &&
-				durable->expired_msec > epoch) {
+		if (durable->open_state.id_persistent != 0) {
 			if (visitor(*durable)) {
 				break;
 			}
+		} else if (durable->id_volatile == 0) {
+			/* no valid record beyond this */
+			break;
 		}
 	}
 }

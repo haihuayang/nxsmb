@@ -107,6 +107,13 @@ int x_smbd_volume_save_durable(x_smbd_volume_t &smbd_volume,
 			open_state, file_handle);
 }
 
+int x_smbd_volume_update_durable(x_smbd_volume_t &smbd_volume,
+		const x_smbd_open_state_t &open_state)
+{
+	return x_smbd_durable_update(smbd_volume.smbd_durable_db,
+			open_state);
+}
+
 int x_smbd_volume_disconnect_durable(x_smbd_volume_t &smbd_volume,
 		uint64_t id_persistent)
 {

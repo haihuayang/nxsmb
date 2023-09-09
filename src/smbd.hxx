@@ -196,7 +196,7 @@ struct x_fdevt_user_t
 X_DECLARE_MEMBER_TRAITS(fdevt_user_conn_traits, x_fdevt_user_t, link)
 
 enum {
-	X_SMBD_ID_NON_DURABLE = 0xfffffffeu, // resolve id for non durable
+	X_SMBD_OPEN_ID_NON_DURABLE = 0xfffffffeu, // resolve id for non durable
 };
 
 struct x_smbd_open_state_t

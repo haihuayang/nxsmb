@@ -102,7 +102,7 @@ bool x_smbd_open_store(x_smbd_open_t *smbd_open)
 	return g_smbd_open_table->store(smbd_open, smbd_open->id_volatile);
 }
 
-static void clear_replay_cache(x_smbd_open_state_t &open_state)
+static bool clear_replay_cache(x_smbd_open_state_t &open_state)
 {
 	/* From Samba smb2srv_open_lookup,
 	 * Clear the replay cache for this create_guid if it exists:
@@ -119,7 +119,9 @@ static void clear_replay_cache(x_smbd_open_state_t &open_state)
 		x_smbd_replay_cache_clear(open_state.client_guid,
 				open_state.create_guid);
 		open_state.replay_cached = false;
+		return true;
 	}
+	return false;
 }
 
 x_smbd_open_t *x_smbd_open_lookup(uint64_t id_persistent, uint64_t id_volatile,
@@ -134,7 +136,14 @@ x_smbd_open_t *x_smbd_open_lookup(uint64_t id_persistent, uint64_t id_volatile,
 					smbd_open->state == SMBD_OPEN_S_ACTIVE &&
 					(smbd_open->smbd_tcon == smbd_tcon ||
 					 !smbd_tcon)) {
-				clear_replay_cache(smbd_open->open_state);
+				if (clear_replay_cache(smbd_open->open_state) &&
+						smbd_open->open_state.dhmode !=
+						x_smbd_dhmode_t::NONE) {
+					/* update durable */
+					x_smbd_volume_update_durable(*smbd_object->smbd_volume,
+							smbd_open->open_state);
+				}
+
 				return smbd_open;
 			}
 		}
@@ -276,6 +285,14 @@ static void smbd_close_open_intl(
 		x_smbd_lease_t *&smbd_lease,
 		x_tp_ddlist_t<requ_async_traits> &pending_requ_list)
 {
+	if (smbd_open->open_state.dhmode != x_smbd_dhmode_t::NONE) {
+		int ret = x_smbd_volume_remove_durable(
+				*smbd_open->smbd_object->smbd_volume,
+				smbd_open->open_state.id_persistent);
+		X_LOG_DBG("remove_durable for %p 0x%lx, ret = %d",
+				smbd_open, smbd_open->open_state.id_persistent, ret);
+	}
+
 	clear_replay_cache(smbd_open->open_state);
 
 	if (smbd_open->oplock_break_sent != x_smbd_open_t::OPLOCK_BREAK_NOT_SENT) {
@@ -399,14 +416,6 @@ static void smbd_open_close(
 		x_tp_ddlist_t<requ_async_traits> &pending_requ_list)
 {
 	smbd_open->state = SMBD_OPEN_S_DONE;
-
-	if (smbd_open->open_state.dhmode != x_smbd_dhmode_t::NONE) {
-		int ret = x_smbd_volume_remove_durable(
-				*smbd_open->smbd_object->smbd_volume,
-				smbd_open->open_state.id_persistent);
-		X_LOG_DBG("remove_durable for %p 0x%lx, ret = %d",
-				smbd_open, smbd_open->open_state.id_persistent, ret);
-	}
 
 	if (smbd_object->type != x_smbd_object_t::type_pipe) {
 		smbd_close_open_intl(smbd_object, smbd_open, smbd_requ, state,
@@ -1736,7 +1745,7 @@ static bool oplock_valid_for_durable(const x_smbd_open_t *smbd_open)
 	}
 }
 
-static void smbd_save_durable(x_smbd_open_t *smbd_open,
+void x_smbd_save_durable(x_smbd_open_t *smbd_open,
 		x_smbd_tcon_t *smbd_tcon,
 		const x_smb2_state_create_t &state)
 {
@@ -1770,15 +1779,17 @@ static void smbd_save_durable(x_smbd_open_t *smbd_open,
 	}
 
 	auto &smbd_volume = *smbd_open->smbd_object->smbd_volume;
-	int ret = x_smbd_volume_allocate_persistent(
-			smbd_volume,
-			&smbd_open->open_state.id_persistent);
-	if (ret < 0) {
-		X_LOG_WARN("x_smbd_volume_allocate_persisten for %p, 0x%lx failed, ret = %d",
-				smbd_open,
-				smbd_open->id_volatile, ret);
+	if (smbd_open->open_state.id_persistent == X_SMBD_OPEN_ID_NON_DURABLE) {
+		int ret = x_smbd_volume_allocate_persistent(
+				smbd_volume,
+				&smbd_open->open_state.id_persistent);
+		if (ret < 0) {
+			X_LOG_WARN("x_smbd_volume_allocate_persisten for %p, 0x%lx failed, ret = %d",
+					smbd_open,
+					smbd_open->id_volatile, ret);
+		}
 	}
-	
+
 	smbd_open->open_state.dhmode = mode;
 
 	if (durable_timeout_msec == 0) {
@@ -1897,8 +1908,6 @@ NTSTATUS x_smbd_open_op_create(x_smbd_requ_t *smbd_requ,
 		x_smbd_ref_inc(smbd_tcon); // ref by open
 		x_smbd_ref_inc(smbd_open); // ref tcon link
 		smbd_requ->smbd_open = x_smbd_ref_inc(smbd_open);
-
-		smbd_save_durable(smbd_open, smbd_tcon, *state);
 	} else {
 		if (smbd_lease) {
 			x_smbd_lease_close(smbd_lease);
@@ -2031,15 +2040,14 @@ NTSTATUS x_smbd_open_restore(
 		return status;
 	}
 
-	if (open_state.create_guid.is_valid()) {
+	if (open_state.replay_cached && open_state.create_guid.is_valid()) {
 		/* TODO atomic */
 		x_smbd_replay_cache_set(open_state.client_guid,
 				open_state.create_guid,
 				smbd_open);
-		open_state.replay_cached = true;
-
 	}
 
+	x_smbd_ref_inc(smbd_open); // durable timer
 	{
 		auto lock = smbd_object_lock(smbd_open->smbd_object);
 		X_ASSERT(smbd_open->state == SMBD_OPEN_S_INIT);

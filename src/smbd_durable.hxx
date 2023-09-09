@@ -20,6 +20,9 @@ int x_smbd_durable_db_allocate_id(x_smbd_durable_db_t *db, uint64_t *p_id);
 x_smbd_durable_t *x_smbd_durable_lookup(x_smbd_durable_db_t *durable_db,
 		uint64_t id_persistent);
 
+int x_smbd_durable_update(x_smbd_durable_db_t *db,
+		const x_smbd_open_state_t &open_state);
+
 int x_smbd_durable_save(x_smbd_durable_db_t *db,
 		uint64_t id_volatile,
 		const x_smbd_open_state_t &open_state,
