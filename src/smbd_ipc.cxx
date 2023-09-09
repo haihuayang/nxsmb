@@ -890,8 +890,6 @@ static NTSTATUS ipc_create_open(x_smbd_open_t **psmbd_open,
 		return NT_STATUS_INSUFFICIENT_RESOURCES;
 	}
 
-	state->out_create_flags = 0;
-
 	// x_smbd_open_init(&named_pipe->base, &ipc_object->base, smbd_requ->smbd_tcon,
 
 	*psmbd_open = &named_pipe->base;

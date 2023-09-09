@@ -120,7 +120,7 @@ struct x_smb2_state_create_t
 	std::u16string in_path;
 	std::u16string in_ads_name;
 
-	uint8_t out_create_flags;
+	uint8_t out_create_flags = 0;
 	bool replay_operation = false;
 	bool replay_reserved = false;
 	uint32_t open_attempt = 0;

@@ -1600,8 +1600,6 @@ static NTSTATUS smbd_open_create_intl(x_smbd_open_t **psmbd_open,
 		state->out_contexts |= X_SMB2_CONTEXT_FLAG_QFID;
 	}
 
-	state->out_create_flags = 0;
-
 	(*psmbd_open)->open_state.initial_delete_on_close =
 		(state->in_create_options & X_SMB2_CREATE_OPTION_DELETE_ON_CLOSE) != 0;
 
@@ -1996,7 +1994,6 @@ NTSTATUS x_smbd_open_op_reconnect(x_smbd_requ_t *smbd_requ,
 	}
 
 	x_smbd_ref_inc(smbd_tcon); // ref by smbd_open
-	state->out_create_flags = 0;
 	smbd_requ->smbd_open = smbd_open; // TODO ref count
 
 	return status;
