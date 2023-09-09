@@ -88,30 +88,22 @@ static inline uint32_t get_durable_slot(uint64_t id_persistent)
 int x_smbd_durable_db_allocate_id(x_smbd_durable_db_t *db,
 		uint64_t *p_id_persistent)
 {
-	auto lock = std::lock_guard(db->mutex);
 	uint32_t slot;
-	if (!db->free_slots.empty()) {
-		slot = db->free_slots.top();
-		db->free_slots.pop();
-	} else if (db->free_region_index >= db->capacity) {
-		return -ENOSPC;
-	} else {
-		slot = db->free_region_index++;
+	{
+		auto lock = std::lock_guard(db->mutex);
+		if (!db->free_slots.empty()) {
+			slot = db->free_slots.top();
+			db->free_slots.pop();
+		} else if (db->free_region_index >= db->capacity) {
+			return -ENOSPC;
+		} else {
+			slot = db->free_region_index++;
+		}
 	}
 	uint64_t id = db->generation;
 	id = (id << 32) | slot;
 	*p_id_persistent = id;
 	return 0;
-}
-
-static void smbd_durable_db_free_slot(x_smbd_durable_db_t *db, uint32_t slot)
-{
-	auto lock = std::lock_guard(db->mutex);
-	if (db->free_region_index == slot + 1) {
-		db->free_region_index = slot;
-	} else {
-		db->free_slots.push(slot);
-	}
 }
 
 int x_smbd_durable_remove(x_smbd_durable_db_t *db, uint64_t id_persistent)
@@ -121,9 +113,17 @@ int x_smbd_durable_remove(x_smbd_durable_db_t *db, uint64_t id_persistent)
 
 	X_ASSERT(slot < db->capacity);
 	x_smbd_durable_t *durable = get_durable(db, slot);
-	/* mark it as freed */
-	durable->open_state.id_persistent = 0;
-	smbd_durable_db_free_slot(db, slot);
+	{
+		auto lock = std::lock_guard(db->mutex);
+		if (db->free_region_index == slot + 1) {
+			db->free_region_index = slot;
+			durable->magic = 0ul;
+		} else {
+			db->free_slots.push(slot);
+			durable->magic = X_SMBD_DURABLE_MAGIC_DEAD;
+		}
+	}
+
 	msync(durable, sizeof *durable, MS_SYNC); // can we avoid msync ?
 	return 0;
 }
@@ -150,7 +150,9 @@ int x_smbd_durable_save(x_smbd_durable_db_t *db,
 
 	X_ASSERT(slot < db->capacity);
 	x_smbd_durable_t *db_rec = get_durable(db, slot);
-	new (db_rec)x_smbd_durable_t{uint64_t(-1),
+	new (db_rec)x_smbd_durable_t{
+		X_SMBD_DURABLE_MAGIC_ACTIVE,
+		uint64_t(-1),
 		id_volatile, open_state, file_handle};
 	msync(db_rec, sizeof *db_rec, MS_SYNC);
 	return 0;
@@ -298,12 +300,12 @@ void x_smbd_durable_db_traverse(x_smbd_durable_db_t *durable_db,
 	uint32_t i;
 	for (i = 0; i < durable_db->capacity; ++i, rec += X_SMBD_DURABLE_DB_RECORD_SIZE) {
 		x_smbd_durable_t *durable = (x_smbd_durable_t *)rec;
-		if (durable->open_state.id_persistent != 0) {
-			if (visitor(*durable)) {
-				break;
-			}
-		} else if (durable->id_volatile == 0) {
+		if (durable->magic == 0) {
 			/* no valid record beyond this */
+			break;
+		}
+		if (durable->magic == X_SMBD_DURABLE_MAGIC_ACTIVE &&
+				visitor(*durable)) {
 			break;
 		}
 	}
@@ -320,11 +322,11 @@ void x_smbd_durable_db_restore(std::shared_ptr<x_smbd_volume_t> &smbd_volume,
 	uint32_t i, count = 0;
 	for (i = 0; i < durable_db->capacity; ++i, rec += X_SMBD_DURABLE_DB_RECORD_SIZE) {
 		x_smbd_durable_t *durable = (x_smbd_durable_t *)rec;
-		if (durable->open_state.id_persistent == 0 && durable->id_volatile == 0) {
+		if (durable->magic == 0) {
 			/* no valid record beyond this */
 			break;
 		}
-		if (durable->open_state.id_persistent != 0 &&
+		if (durable->magic == X_SMBD_DURABLE_MAGIC_ACTIVE &&
 				durable->expired_msec > epoch) {
 			uint64_t timeout_msec;
 			if (durable->expired_msec == (uint64_t)-1) {
@@ -366,13 +368,12 @@ void x_smbd_durable_db_restore(std::shared_ptr<x_smbd_volume_t> &smbd_volume,
 	} else {
 		durable_db->free_region_index = free_range[0];
 	}
+	if (durable_db->free_region_index != durable_db->capacity) {
+		x_smbd_durable_t *durable = get_durable(durable_db, durable_db->free_region_index);
+		durable->magic = 0x0ul;
+	}
 	X_LOG_NOTICE("durable_restored %d free_region_index=%u", count,
 			durable_db->free_region_index);
-	/* TODO
-	 * msync the modified records, and
-	 * should clean up all the region started from free_region_index,
-	 * maybe do ftruncate
-	 */
 }
 
 void x_smbd_durable_db_close(x_smbd_durable_db_t *durable_db)

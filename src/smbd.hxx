@@ -238,8 +238,14 @@ struct x_smbd_file_handle_t
 	unsigned char f_handle[MAX_HANDLE_SZ];
 };
 
+enum {
+	X_SMBD_DURABLE_MAGIC_ACTIVE	= 0x656c626172756441ul,
+	X_SMBD_DURABLE_MAGIC_DEAD	= 0x656c626172756444ul,
+};
+
 struct x_smbd_durable_t
 {
+	uint64_t magic;
 	uint64_t expired_msec;
 	uint64_t id_volatile;
 	x_smbd_open_state_t open_state;
