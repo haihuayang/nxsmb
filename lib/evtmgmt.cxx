@@ -15,7 +15,7 @@ static x_job_t::retval_t epoll_job_run(x_job_t *job, void *data);
 struct x_epoll_entry_t
 {
 	uint64_t init(x_epoll_upcall_t *upcall_) {
-		assert(upcall == NULL);
+		X_ASSERT(upcall == nullptr);
 		upcall = upcall_;
 		job.state = x_job_t::STATE_NONE;
 		fdevents = 0;
@@ -60,7 +60,7 @@ struct x_epoll_entry_t
 	x_genref_t genref;
 	std::atomic<x_fdevents_t> fdevents;
 
-	x_epoll_upcall_t *upcall;
+	x_epoll_upcall_t *upcall = nullptr;
 };
 
 X_DECLARE_MEMBER_TRAITS(timer_job_dlink_traits, x_timer_job_t, job.dlink)
