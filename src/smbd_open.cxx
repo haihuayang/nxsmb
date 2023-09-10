@@ -19,13 +19,6 @@ struct smbd_open_deleter
 {
 	void operator()(x_smbd_open_t *smbd_open) const {
 		auto smbd_object = smbd_open->smbd_object;
-		auto smbd_stream = smbd_open->smbd_stream;
-		if (smbd_stream) {
-			smbd_object->smbd_volume->ops->release_stream(
-					smbd_object,
-					smbd_stream);
-		}
-
 		smbd_object->smbd_volume->ops->destroy_open(smbd_open);
 	}
 };

@@ -21,6 +21,8 @@
 	X_SMBD_COUNTER_DECL(tcon_delete) \
 	X_SMBD_COUNTER_DECL(object_create) \
 	X_SMBD_COUNTER_DECL(object_delete) \
+	X_SMBD_COUNTER_DECL(stream_create) \
+	X_SMBD_COUNTER_DECL(stream_delete) \
 	X_SMBD_COUNTER_DECL(lease_create) \
 	X_SMBD_COUNTER_DECL(lease_delete) \
 	X_SMBD_COUNTER_DECL(ads_create) \

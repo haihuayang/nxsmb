@@ -22,6 +22,17 @@ x_smbd_object_t::~x_smbd_object_t()
 	}
 }
 
+x_smbd_stream_t::x_smbd_stream_t(bool exists, const std::u16string &name)
+	: exists(exists), name(name)
+{
+	X_SMBD_COUNTER_INC(stream_create, 1);
+}
+
+x_smbd_stream_t::~x_smbd_stream_t()
+{
+	X_SMBD_COUNTER_INC(stream_delete, 1);
+}
+
 x_smb2_state_create_t::~x_smb2_state_create_t()
 {
 	if (smbd_object) {

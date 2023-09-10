@@ -273,10 +273,8 @@ struct x_smbd_sharemode_t
 
 struct x_smbd_stream_t
 {
-	x_smbd_stream_t(bool exists, const std::u16string &name)
-		: exists(exists), name(name)
-	{
-	}
+	x_smbd_stream_t(bool exists, const std::u16string &name);
+	~x_smbd_stream_t();
 
 	x_dlink_t object_link; // link into object
 	bool exists;
