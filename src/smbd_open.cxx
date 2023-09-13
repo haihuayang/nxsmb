@@ -183,22 +183,6 @@ static void fill_out_info(x_smb2_create_close_info_t &info,
 	info.out_end_of_file = stream_meta.end_of_file;
 }
 
-static bool have_active_open(x_smbd_object_t *smbd_object)
-{
-	if (!smbd_object->sharemode.open_list.empty()) {
-		return true;
-	}
-	
-	for (x_smbd_stream_t *smbd_stream = smbd_object->ads_list.get_front();
-			smbd_stream;
-			smbd_stream = smbd_object->ads_list.next(smbd_stream)) {
-		if (!smbd_stream->sharemode.open_list.empty()) {
-			return true;
-		}
-	}
-	return false;
-}
-
 static NTSTATUS smbd_object_remove(
 		x_smbd_object_t *smbd_object,
 		x_smbd_open_t *smbd_open)
@@ -210,6 +194,10 @@ static NTSTATUS smbd_object_remove(
 
 	auto sharemode = x_smbd_open_get_sharemode(smbd_open);
 	sharemode->open_list.remove(smbd_open);
+	if (--smbd_object->num_active_open == 0 && smbd_object->parent_object) {
+		x_smbd_object_update_num_child(smbd_object->parent_object, -1);
+	}
+
 	if (smbd_open->open_state.initial_delete_on_close) {
 		x_smbd_open_op_set_delete_on_close(smbd_open, true);
 	}
@@ -223,7 +211,7 @@ static NTSTATUS smbd_object_remove(
 	}
 
 	if (smbd_object->sharemode.meta.delete_on_close &&
-			!have_active_open(smbd_object)) {
+			smbd_object->num_active_open == 0) {
 		uint32_t notify_filter = x_smbd_object_is_dir(smbd_object) ?
 			FILE_NOTIFY_CHANGE_DIR_NAME : FILE_NOTIFY_CHANGE_FILE_NAME;
 

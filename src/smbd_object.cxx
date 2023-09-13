@@ -455,6 +455,10 @@ NTSTATUS x_smbd_object_rename(x_smbd_object_t *smbd_object,
 	NTSTATUS status;
 
 	if (!smbd_open->smbd_stream) {
+		if (smbd_object->num_child_object_opened > 0) {
+			return NT_STATUS_ACCESS_DENIED;
+		}
+
 		status = open_parent_object(&new_parent_object, new_path_base,
 				smbd_volume, state->in_path);
 		if (!NT_STATUS_IS_OK(status)) {
@@ -536,6 +540,18 @@ NTSTATUS x_smbd_object_rename(x_smbd_object_t *smbd_object,
 	}
 
 	return status;
+}
+
+void x_smbd_object_update_num_child(x_smbd_object_t *smbd_object, int num)
+{
+	auto lock = std::lock_guard(smbd_object->mutex);
+	auto orig = smbd_object->num_child_object_opened;
+	smbd_object->num_child_object_opened += num;
+	X_ASSERT(smbd_object->num_child_object_opened >= 0);
+	if (smbd_object->parent_object && (orig == 0 ||
+				smbd_object->num_child_object_opened == 0)) {
+		x_smbd_object_update_num_child(smbd_object->parent_object, num);
+	}
 }
 
 std::u16string x_smbd_object_get_path(const x_smbd_object_t *smbd_object)

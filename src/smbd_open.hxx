@@ -331,6 +331,8 @@ struct x_smbd_object_t
 	};
 	uint16_t type = type_not_exist;
 	std::atomic<int> use_count{1};
+	uint32_t num_active_open{0}; // include open on streams
+	int32_t num_child_object_opened{0}; // only valid for dir
 	x_dlink_t hash_link;
 	uint64_t hash, fileid_hash;
 	x_smbd_object_t *parent_object = nullptr;
@@ -680,6 +682,8 @@ std::pair<bool, uint64_t> x_smbd_hash_path(const x_smbd_volume_t &smbd_volume,
 void x_smbd_save_durable(x_smbd_open_t *smbd_open,
 		x_smbd_tcon_t *smbd_tcon,
 		const x_smb2_state_create_t &state);
+
+void x_smbd_object_update_num_child(x_smbd_object_t *smbd_object, int num);
 
 #endif /* __smbd_open__hxx__ */
 
