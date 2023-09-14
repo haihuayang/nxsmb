@@ -213,6 +213,7 @@ TARGET_SRC_libnxsmb := \
 		lib/crypto \
 		lib/ntstatus \
 		lib/werror \
+		lib/SpookyV2 \
 
 
 $(TARGET_DIR_out)/libnxsmb.a: \

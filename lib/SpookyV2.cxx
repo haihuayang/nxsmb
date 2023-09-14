@@ -177,7 +177,7 @@ void SpookyHash::Hash128(
     remainder = (length - ((const uint8 *)end-(const uint8 *)message));
     memcpy(buf, end, remainder);
     memset(((uint8 *)buf)+remainder, 0, sc_blockSize-remainder);
-    ((uint8 *)buf)[sc_blockSize-1] = remainder;
+    ((uint8 *)buf)[sc_blockSize-1] = (uint8)remainder;
     
     // do some final mixing 
     End(buf, h0,h1,h2,h3,h4,h5,h6,h7,h8,h9,h10,h11);
@@ -247,7 +247,7 @@ void SpookyHash::Update(const void *message, size_t length)
     // if we've got anything stuffed away, use it now
     if (m_remainder)
     {
-        uint8 prefix = sc_bufSize-m_remainder;
+        uint8 prefix = (uint8)(sc_bufSize-m_remainder);
         memcpy(&(((uint8 *)m_data)[m_remainder]), message, prefix);
         u.p64 = m_data;
         Mix(u.p64, h0,h1,h2,h3,h4,h5,h6,h7,h8,h9,h10,h11);
@@ -334,7 +334,7 @@ void SpookyHash::Final(uint64 *hash1, uint64 *hash2)
         // m_data can contain two blocks; handle any whole first block
         Mix(data, h0,h1,h2,h3,h4,h5,h6,h7,h8,h9,h10,h11);
         data += sc_numVars;
-        remainder -= sc_blockSize;
+        remainder = uint8(remainder - sc_blockSize);
     }
 
     // mix in the last partial block, and the length mod sc_blockSize
