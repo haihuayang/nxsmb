@@ -1,11 +1,12 @@
 
 #include "smbd_open.hxx"
 #include "smbd_stats.hxx"
+#include "include/SpookyV2.hxx"
 
 x_smbd_object_t::x_smbd_object_t(const std::shared_ptr<x_smbd_volume_t> &smbd_volume,
 		x_smbd_object_t *parent_object,
-		long priv_data, uint64_t hash, const std::u16string &path_base)
-	: smbd_volume(smbd_volume), priv_data(priv_data), hash(hash)
+		long priv_data, uint64_t path_hash, const std::u16string &path_base)
+	: smbd_volume(smbd_volume), priv_data(priv_data), path_hash(path_hash)
 	, parent_object(parent_object), path_base(path_base)
 {
 	X_SMBD_COUNTER_INC(object_create, 1);
@@ -51,7 +52,8 @@ struct smbd_object_pool_t
 		x_sdlist_t head;
 		std::mutex mutex;
 	};
-	bucket_t *buckets = nullptr;
+	bucket_t *path_buckets = nullptr;
+	bucket_t *fileid_buckets = nullptr;
 	size_t bucket_size = 0;
 	std::atomic<uint32_t> count{0}, unused_count{0};
 };
@@ -62,9 +64,9 @@ std::pair<bool, uint64_t> x_smbd_hash_path(const x_smbd_volume_t &smbd_volume,
 		const x_smbd_object_t *dir_object,
 		const std::u16string &path_base)
 {
-	auto [ ok, hash ] = x_strcase_hash(path_base);
+	auto [ ok, path_hash ] = x_strcase_hash(path_base);
 	if (ok) {
-		return { true, hash ^ smbd_volume.volume_id ^ dir_object->fileid_hash};
+		return { true, path_hash ^ smbd_volume.volume_id ^ dir_object->fileid_hash};
 	} else {
 		return { false, 0 };
 	}
@@ -76,11 +78,11 @@ static x_smbd_object_t *smbd_object_lookup_intl(
 		smbd_object_pool_t::bucket_t &bucket,
 		x_smbd_object_t *parent_object,
 		const std::u16string &path_base,
-		uint64_t hash)
+		uint64_t path_hash)
 {
 	for (auto *link = bucket.head.get_front(); link; link = link->get_next()) {
-		x_smbd_object_t *elem = X_CONTAINER_OF(link, x_smbd_object_t, hash_link);
-		if (elem->hash == hash && elem->parent_object == parent_object
+		x_smbd_object_t *elem = X_CONTAINER_OF(link, x_smbd_object_t, path_hash_link);
+		if (elem->path_hash == path_hash && elem->parent_object == parent_object
 				&& elem->smbd_volume == smbd_volume
 				&& x_strcase_equal(elem->path_base, path_base)) {
 			return elem;
@@ -104,33 +106,33 @@ x_smbd_object_t *x_smbd_object_lookup(
 		const std::u16string &path_base,
 		uint64_t path_data,
 		bool create_if,
-		uint64_t hash)
+		uint64_t path_hash)
 {
 	auto &pool = smbd_object_pool;
-	auto bucket_idx = hash % pool.bucket_size;
-	auto &bucket = pool.buckets[bucket_idx];
+	auto bucket_idx = path_hash % pool.bucket_size;
+	auto &bucket = pool.path_buckets[bucket_idx];
 
 	auto lock = std::lock_guard(bucket.mutex);
 	x_smbd_object_t *smbd_object = smbd_object_lookup_intl(
-			smbd_volume, bucket, parent_object, path_base, hash);
+			smbd_volume, bucket, parent_object, path_base, path_hash);
 
 	if (!smbd_object) {
 		if (!create_if) {
 			return nullptr;
 		}
 		smbd_object = smbd_volume->ops->allocate_object(
-				smbd_volume, path_data, hash,
+				smbd_volume, path_data, path_hash,
 				parent_object, path_base);
 		X_ASSERT(smbd_object);
-		bucket.head.push_front(&smbd_object->hash_link);
+		bucket.head.push_front(&smbd_object->path_hash_link);
 		++pool.count;
 	} else {
 		smbd_object->incref();
 	}
 	/* move it to head of the bucket to make latest used elem */
-	if (&smbd_object->hash_link != bucket.head.get_front()) {
-		bucket.head.remove(&smbd_object->hash_link);
-		bucket.head.push_front(&smbd_object->hash_link);
+	if (&smbd_object->path_hash_link != bucket.head.get_front()) {
+		bucket.head.remove(&smbd_object->path_hash_link);
+		bucket.head.push_front(&smbd_object->path_hash_link);
 	}
 	return smbd_object;
 }
@@ -138,8 +140,8 @@ x_smbd_object_t *x_smbd_object_lookup(
 void x_smbd_release_object(x_smbd_object_t *smbd_object)
 {
 	auto &pool = smbd_object_pool;
-	auto bucket_idx = smbd_object->hash % pool.bucket_size;
-	auto &bucket = pool.buckets[bucket_idx];
+	auto bucket_idx = smbd_object->path_hash % pool.bucket_size;
+	auto &bucket = pool.path_buckets[bucket_idx];
 	bool free = false;
 
 	{
@@ -148,7 +150,7 @@ void x_smbd_release_object(x_smbd_object_t *smbd_object)
 
 		X_ASSERT(smbd_object->use_count > 0);
 		if (--smbd_object->use_count == 0) {
-			bucket.head.remove(&smbd_object->hash_link);
+			bucket.head.remove(&smbd_object->path_hash_link);
 			free = true;
 		}
 	}
@@ -165,6 +167,46 @@ void x_smbd_release_object_and_stream(x_smbd_object_t *smbd_object,
 	}
 	x_smbd_release_object(smbd_object);
 }
+/*
+struct x_smbd_file_handle_t
+{
+	int cmp(const x_smbd_file_handle_t &other) const
+	{
+		if (base.handle_type != other.base.handle_type) {
+			return base.handle_type - other.base.handle_type;
+		}
+		if (base.handle_bytes != other.base.handle_bytes) {
+			return int(base.handle_bytes - other.base.handle_bytes);
+		}
+		return memcmp(base.f_handle, other.base.f_handle, base.handle_bytes);
+	}
+
+	struct file_handle base;
+	unsigned char f_handle[MAX_HANDLE_SZ];
+};
+*/
+static uint64_t hash_file_handle(const x_smbd_file_handle_t &fh)
+{
+	return SpookyHash::Hash64(&fh.base, sizeof(struct file_handle) +
+			fh.base.handle_type, 0);
+}
+
+static NTSTATUS smbd_object_initialize_if(x_smbd_volume_t &smbd_volume,
+		x_smbd_object_t *smbd_object)
+{
+	NTSTATUS status = NT_STATUS_OK;
+	auto lock = std::lock_guard(smbd_object->mutex);
+	if (!(smbd_object->flags & x_smbd_object_t::flag_initialized)) {
+		/* TODO can it fail? */
+		status = smbd_volume.ops->initialize_object(smbd_object);
+		smbd_object->flags = x_smbd_object_t::flag_initialized;
+		if (smbd_object->type != x_smbd_object_t::type_not_exist) {
+			smbd_object->fileid_hash = hash_file_handle(
+					smbd_object->file_handle);
+		}
+	}
+	return status;
+}
 
 static NTSTATUS smbd_object_openat(
 		x_smbd_object_t **p_smbd_object,
@@ -176,24 +218,19 @@ static NTSTATUS smbd_object_openat(
 		return NT_STATUS_OBJECT_PATH_NOT_FOUND;
 	}
 
-	auto [ ok, hash ] = x_smbd_hash_path(*smbd_volume, parent_object, path_base);
+	auto [ ok, path_hash ] = x_smbd_hash_path(*smbd_volume, parent_object, path_base);
 	if (!ok) {
 		return NT_STATUS_ILLEGAL_CHARACTER;
 	}
 
 	x_smbd_object_t *smbd_object = x_smbd_object_lookup(smbd_volume,
-			parent_object, path_base, 0, true, hash);
+			parent_object, path_base, 0, true, path_hash);
 
-	NTSTATUS status = NT_STATUS_OK;
-	{
-		auto lock = std::lock_guard(smbd_object->mutex);
-		if (!(smbd_object->flags & x_smbd_object_t::flag_initialized)) {
-			/* TODO can it fail? */
-			status = smbd_volume->ops->initialize_object(smbd_object);
-			smbd_object->flags = x_smbd_object_t::flag_initialized;
-		}
+	NTSTATUS status = smbd_object_initialize_if(*smbd_volume, smbd_object);
+	if (!NT_STATUS_IS_OK(status)) {
+		x_smbd_release_object(smbd_object);
+		return status;
 	}
-
 	*p_smbd_object = smbd_object;
 	return NT_STATUS_OK;
 }
@@ -259,7 +296,7 @@ NTSTATUS x_smbd_open_object(x_smbd_object_t **p_smbd_object,
 		return status;
 	}
 
-	auto [ ok, hash ] = x_smbd_hash_path(*smbd_volume, parent_object, path_base);
+	auto [ ok, path_hash ] = x_smbd_hash_path(*smbd_volume, parent_object, path_base);
 	if (!ok) {
 		x_smbd_release_object(parent_object);
 		return NT_STATUS_ILLEGAL_CHARACTER;
@@ -267,20 +304,13 @@ NTSTATUS x_smbd_open_object(x_smbd_object_t **p_smbd_object,
 
 	smbd_object = x_smbd_object_lookup(smbd_volume,
 			parent_object, path_base,
-			path_priv_data, create_if, hash);
+			path_priv_data, create_if, path_hash);
 	x_smbd_release_object(parent_object);
 	if (!smbd_object) {
 		return NT_STATUS_OBJECT_NAME_NOT_FOUND;
 	}
 
-	status = NT_STATUS_OK;
-	{
-		auto lock = std::lock_guard(smbd_object->mutex);
-		if (!(smbd_object->flags & x_smbd_object_t::flag_initialized)) {
-			status = smbd_volume->ops->initialize_object(smbd_object);
-			smbd_object->flags = x_smbd_object_t::flag_initialized;
-		}
-	}
+	status = smbd_object_initialize_if(*smbd_volume, smbd_object);
 
 	if (!NT_STATUS_IS_OK(status)) {
 		x_smbd_release_object(smbd_object);
@@ -347,7 +377,7 @@ static NTSTATUS rename_object_intl(
 
 	if (new_object) {
 		/* not exists, should none refer it??? */
-		new_bucket.head.remove(&new_object->hash_link);
+		new_bucket.head.remove(&new_object->path_hash_link);
 		X_ASSERT(new_object->use_count == 0);
 		delete new_object;
 	}
@@ -360,10 +390,10 @@ static NTSTATUS rename_object_intl(
 	}
 
 	old_path_base = smbd_object->path_base;
-	old_bucket.head.remove(&smbd_object->hash_link);
-	smbd_object->hash = new_hash;
+	old_bucket.head.remove(&smbd_object->path_hash_link);
+	smbd_object->path_hash = new_hash;
 	smbd_object->path_base = new_path_base;
-	new_bucket.head.push_front(&smbd_object->hash_link);
+	new_bucket.head.push_front(&smbd_object->path_hash_link);
 	return NT_STATUS_OK;
 }
 
@@ -503,8 +533,8 @@ NTSTATUS x_smbd_object_rename(x_smbd_object_t *smbd_object,
 	}
 
 	auto new_bucket_idx = new_path_hash % pool.bucket_size;
-	auto &new_bucket = pool.buckets[new_bucket_idx];
-	auto old_bucket_idx = smbd_object->hash % pool.bucket_size;
+	auto &new_bucket = pool.path_buckets[new_bucket_idx];
+	auto old_bucket_idx = smbd_object->path_hash % pool.bucket_size;
 
 	x_smbd_object_t *old_parent_object = smbd_object->parent_object;
 	std::u16string old_path_base;
@@ -515,7 +545,7 @@ NTSTATUS x_smbd_object_rename(x_smbd_object_t *smbd_object,
 				new_parent_object, new_path_base,
 				old_path_base, new_path_hash);
 	} else {
-		auto &old_bucket = pool.buckets[old_bucket_idx];
+		auto &old_bucket = pool.path_buckets[old_bucket_idx];
 		std::scoped_lock bucket_lock(new_bucket.mutex, old_bucket.mutex);
 		status = rename_object_intl(smbd_volume, smbd_object,
 				new_bucket, old_bucket,
@@ -576,7 +606,8 @@ std::u16string x_smbd_object_get_path(const x_smbd_object_t *smbd_object)
 int x_smbd_object_pool_init(size_t max_open)
 {
 	size_t bucket_size = x_next_2_power(max_open);
-	smbd_object_pool.buckets = new smbd_object_pool_t::bucket_t[bucket_size];
+	smbd_object_pool.path_buckets = new smbd_object_pool_t::bucket_t[bucket_size];
+	smbd_object_pool.fileid_buckets = new smbd_object_pool_t::bucket_t[bucket_size];
 	smbd_object_pool.bucket_size = bucket_size;
 	return 0;
 }

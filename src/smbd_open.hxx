@@ -230,7 +230,7 @@ struct x_smbd_object_ops_t
 	x_smbd_object_t *(*allocate_object)(
 			const std::shared_ptr<x_smbd_volume_t> &smbd_volume,
 			long priv_data,
-			uint64_t hash,
+			uint64_t path_hash,
 			x_smbd_object_t *parent_object,
 			const std::u16string &path_base);
 
@@ -288,7 +288,7 @@ struct x_smbd_object_t
 	x_smbd_object_t(const std::shared_ptr<x_smbd_volume_t> &smbd_volume,
 			x_smbd_object_t *parent_object,
 			long priv_data,
-			uint64_t hash,
+			uint64_t path_hash,
 			const std::u16string &path);
 	~x_smbd_object_t();
 
@@ -333,8 +333,8 @@ struct x_smbd_object_t
 	std::atomic<int> use_count{1};
 	uint32_t num_active_open{0}; // include open on streams
 	int32_t num_child_object_opened{0}; // only valid for dir
-	x_dlink_t hash_link;
-	uint64_t hash, fileid_hash;
+	x_dlink_t path_hash_link;
+	uint64_t path_hash, fileid_hash;
 	x_smbd_object_t *parent_object = nullptr;
 	std::u16string path_base;
 	x_smbd_file_handle_t file_handle;
@@ -645,7 +645,7 @@ x_smbd_object_t *x_smbd_object_lookup(
 		const std::u16string &path_base,
 		uint64_t path_data,
 		bool create_if,
-		uint64_t hash);
+		uint64_t path_hash);
 
 void x_smbd_release_object_and_stream(x_smbd_object_t *smbd_object,
 		x_smbd_stream_t *smbd_stream);
