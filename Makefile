@@ -231,13 +231,10 @@ $(TARGET_SET_asn1:%=$(TARGET_DIR_out)/lib/asn1/%_asn1.o): $(TARGET_DIR_out)/lib/
 	$(CC) -c $(TARGET_CFLAGS) $(TARGET_CFLAGS_EXTRA) $(TARGET_CFLAGS_dependent) -Iinclude/dummy -o $@ $<
 
 
-$(TARGET_SET_idl:%=$(TARGET_DIR_out)/librpc/idl/%.json): %.json: %.idl.i
-	scripts/idl-parser.py -o $@ $<
+$(TARGET_SET_idl:%=$(TARGET_DIR_out)/librpc/idl/%.idl.json): $(TARGET_DIR_out)/librpc/idl/%.idl.json: lib/librpc/idl/%.idl | target_mkdir
+	$(CC) -E -D__PIDL__ -xc $< | scripts/idl-parser.py -o $@
 
-$(TARGET_SET_idl:%=$(TARGET_DIR_out)/librpc/idl/%.json): scripts/idl-parser.py
-
-$(TARGET_SET_idl:%=$(TARGET_DIR_out)/librpc/idl/%.idl.i): $(TARGET_DIR_out)/librpc/idl/%.idl.i: lib/librpc/idl/%.idl | target_mkdir
-	$(CC) -E -D__PIDL__ -o $@ -xc $<
+$(TARGET_SET_idl:%=$(TARGET_DIR_out)/librpc/idl/%.idl.json): scripts/idl-parser.py
 
 
 $(TARGET_SET_idl:%=$(TARGET_DIR_out)/librpc/idl/%.idl.ndr.o) : $(TARGET_DIR_out)/librpc/idl/%.idl.ndr.o: $(TARGET_DIR_out)/librpc/idl/%.idl.ndr.cxx
@@ -245,16 +242,16 @@ $(TARGET_SET_idl:%=$(TARGET_DIR_out)/librpc/idl/%.idl.ndr.o) : $(TARGET_DIR_out)
 
 $(TARGET_SET_idl:%=$(TARGET_DIR_out)/librpc/idl/%.idl.ndr.o) : $(TARGET_DIR_out)/librpc/idl/%.idl.ndr.o: $(TARGET_DIR_out)/librpc/idl/%.idl.hxx
 
-$(TARGET_SET_idl:%=$(TARGET_DIR_out)/librpc/idl/%.idl.hxx): %.idl.hxx: %.json | $(TARGET_SET_idl:%=$(TARGET_DIR_out)/librpc/idl/%.json)
+$(TARGET_SET_idl:%=$(TARGET_DIR_out)/librpc/idl/%.idl.hxx): %.idl.hxx: %.idl.json | $(TARGET_SET_idl:%=$(TARGET_DIR_out)/librpc/idl/%.idl.json)
 	scripts/gen-rpc --header --outputdir $(dir $@) $<
 
-$(TARGET_SET_idl:%=$(TARGET_DIR_out)/librpc/idl/%.idl.ndr.cxx): %.idl.ndr.cxx: %.json | $(TARGET_SET_idl:%=$(TARGET_DIR_out)/librpc/idl/%.json)
+$(TARGET_SET_idl:%=$(TARGET_DIR_out)/librpc/idl/%.idl.ndr.cxx): %.idl.ndr.cxx: %.idl.json | $(TARGET_SET_idl:%=$(TARGET_DIR_out)/librpc/idl/%.idl.json)
 	scripts/gen-rpc --ndrcxx --outputdir $(dir $@) $<
 
-$(TARGET_SET_idl:%=$(TARGET_DIR_out)/librpc/idl/%.d) : %.d: %.json
+$(TARGET_SET_idl:%=$(TARGET_DIR_out)/librpc/idl/%.idl.d) : %.idl.d: %.idl.json
 	scripts/gen-rpc --depend --outputdir $(dir $@) $<
 
-include $(wildcard $(TARGET_SET_idl:%=$(TARGET_DIR_out)/librpc/idl/%.d))
+include $(wildcard $(TARGET_SET_idl:%=$(TARGET_DIR_out)/librpc/idl/%.idl.d))
 
 $(TARGET_SET_idl:%=$(TARGET_DIR_out)/librpc/idl/%.idl.ndr.cxx): scripts/gen-rpc
 $(TARGET_SET_idl:%=$(TARGET_DIR_out)/librpc/idl/%.idl.hxx): scripts/gen-rpc

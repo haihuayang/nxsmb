@@ -7,7 +7,7 @@ import argparse, json
 #def DBG(*msg):
 #	print("DBG:", *msg, file = sys.stderr)
 
-def lexer(filename):
+def lexer(fpin, filename):
 	lineno = 0
 	# Linemarker http://gcc.gnu.org/onlinedocs/cpp/Preprocessor-Output.html
 	ro_linemarker = re.compile('^# ([0-9]+) "(.*)"( [0-9]+)*$')
@@ -17,7 +17,7 @@ def lexer(filename):
 	ro_other = re.compile(r'^(.)(.*)$')
 	ro_operator = re.compile(r'^(->|==|>=|<=|>|<|\|\||&&|\|=|&=|\||&|\+\+|--|\+|-|\*=|\*|/=|/|\?|:)(.*)$')
 
-	for line in open(filename, 'r'):
+	for line in fpin:
 		m = ro_linemarker.search(line)
 		if m:
 			l, f, _ = m.groups()
@@ -581,8 +581,8 @@ class Parser(object):
 			'DATA': cpp_quote
 		}
 		
-def parse(filepath):
-	l = lexer(filepath)
+def parse(fpin, filename):
+	l = lexer(fpin, filename)
 	parser = Parser(l)
 	return parser.start()
 	#idl['FILE'] = filepath
@@ -593,7 +593,7 @@ def main():
 	parser = argparse.ArgumentParser()
 	parser.add_argument("-d", "--debug", action="store_true", help="output debug info")
 	parser.add_argument("-o", "--output", help="output file")
-	parser.add_argument("input_file")
+	parser.add_argument("input_file", nargs='?')
 	args = parser.parse_args()
 
 	global DBG
@@ -607,7 +607,10 @@ def main():
 	else:
 		fp_out = sys.stdout
 
-	idl = parse(args.input_file)
+	if args.input_file:
+		idl = parse(open(args.input_file), args.input_file)
+	else:
+		idl = parse(sys.stdin, '<stdin>')
 	json.dump(idl, fp_out, indent=3)
 	
 

@@ -796,7 +796,7 @@ def load_all(infp, name, path, recur):
 		name = imports.pop()
 		if name in idl_tbl:
 			continue
-		filename = os.path.join(path, '.'.join([name, "json"]))
+		filename = os.path.join(path, '.'.join([name, "idl.json"]))
 		with open(filename, 'r') as fp:
 			new_idl, new_imports = load_idl_with_import(fp)
 			idl_tbl[name] = new_idl
@@ -2330,7 +2330,9 @@ def main():
 	else:
 		for f in args.input:
 			with open(f, 'r') as fp:
-				name = os.path.splitext(os.path.basename(f))[0]
+				basename = os.path.basename(f)
+				assert basename.endswith('.idl.json')
+				name = basename[:-9]
 				process(fp, name, args)
 
 	return 0
