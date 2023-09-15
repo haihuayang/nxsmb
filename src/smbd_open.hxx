@@ -227,7 +227,8 @@ struct x_smbd_object_ops_t
 
 	int (*init_volume)(std::shared_ptr<x_smbd_volume_t> &smbd_volume);
 
-	x_smbd_object_t *(*allocate_object)(
+	NTSTATUS (*allocate_object)(
+			x_smbd_object_t **p_smbd_object,
 			const std::shared_ptr<x_smbd_volume_t> &smbd_volume,
 			long priv_data,
 			uint64_t path_hash,
@@ -639,7 +640,7 @@ static inline void x_smbd_qdir_unget_entry(x_smbd_qdir_t *smbd_qdir,
 
 void x_smbd_qdir_close(x_smbd_qdir_t *smbd_qdir);
 
-x_smbd_object_t *x_smbd_object_lookup(
+NTSTATUS x_smbd_object_lookup(x_smbd_object_t **p_smbd_object,
 		const std::shared_ptr<x_smbd_volume_t> &smbd_volume,
 		x_smbd_object_t *parent_object,
 		const std::u16string &path_base,

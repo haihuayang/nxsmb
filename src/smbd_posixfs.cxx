@@ -3237,7 +3237,7 @@ int posixfs_op_init_volume(std::shared_ptr<x_smbd_volume_t> &smbd_volume)
 	return 0;
 }
 
-x_smbd_object_t *posixfs_op_allocate_object(
+NTSTATUS posixfs_op_allocate_object(x_smbd_object_t **p_smbd_object,
 		const std::shared_ptr<x_smbd_volume_t> &smbd_volume,
 		long priv_data,
 		uint64_t hash,
@@ -3246,7 +3246,8 @@ x_smbd_object_t *posixfs_op_allocate_object(
 {
 	posixfs_object_t *posixfs_object = new posixfs_object_t(hash,
 			smbd_volume, parent_object, path_base, priv_data);
-	return &posixfs_object->base;
+	*p_smbd_object = &posixfs_object->base;
+	return NT_STATUS_OK;
 }
 
 void posixfs_op_destroy_object(x_smbd_object_t *smbd_object)

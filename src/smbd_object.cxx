@@ -100,7 +100,7 @@ static x_smbd_object_t *smbd_object_lookup_intl(
  * close, reduce object's open count, if zero, link to freelist
  */
 /* TODO case insensitive */
-x_smbd_object_t *x_smbd_object_lookup(
+NTSTATUS x_smbd_object_lookup(x_smbd_object_t **p_smbd_object,
 		const std::shared_ptr<x_smbd_volume_t> &smbd_volume,
 		x_smbd_object_t *parent_object,
 		const std::u16string &path_base,
@@ -118,11 +118,15 @@ x_smbd_object_t *x_smbd_object_lookup(
 
 	if (!smbd_object) {
 		if (!create_if) {
-			return nullptr;
+			return NT_STATUS_OBJECT_NAME_NOT_FOUND;
 		}
-		smbd_object = smbd_volume->ops->allocate_object(
+		NTSTATUS status = smbd_volume->ops->allocate_object(
+				&smbd_object,
 				smbd_volume, path_data, path_hash,
 				parent_object, path_base);
+		if (!NT_STATUS_IS_OK(status)) {
+			return status;
+		}
 		X_ASSERT(smbd_object);
 		bucket.head.push_front(&smbd_object->path_hash_link);
 		++pool.count;
@@ -134,7 +138,8 @@ x_smbd_object_t *x_smbd_object_lookup(
 		bucket.head.remove(&smbd_object->path_hash_link);
 		bucket.head.push_front(&smbd_object->path_hash_link);
 	}
-	return smbd_object;
+	*p_smbd_object = smbd_object;
+	return NT_STATUS_OK;
 }
 
 void x_smbd_release_object(x_smbd_object_t *smbd_object)
@@ -223,10 +228,14 @@ static NTSTATUS smbd_object_openat(
 		return NT_STATUS_ILLEGAL_CHARACTER;
 	}
 
-	x_smbd_object_t *smbd_object = x_smbd_object_lookup(smbd_volume,
+	x_smbd_object_t *smbd_object;
+	NTSTATUS status = x_smbd_object_lookup(&smbd_object, smbd_volume,
 			parent_object, path_base, 0, true, path_hash);
+	if (!NT_STATUS_IS_OK(status)) {
+		return status;
+	}
 
-	NTSTATUS status = smbd_object_initialize_if(*smbd_volume, smbd_object);
+	status = smbd_object_initialize_if(*smbd_volume, smbd_object);
 	if (!NT_STATUS_IS_OK(status)) {
 		x_smbd_release_object(smbd_object);
 		return status;
@@ -302,12 +311,12 @@ NTSTATUS x_smbd_open_object(x_smbd_object_t **p_smbd_object,
 		return NT_STATUS_ILLEGAL_CHARACTER;
 	}
 
-	smbd_object = x_smbd_object_lookup(smbd_volume,
+	status = x_smbd_object_lookup(&smbd_object, smbd_volume,
 			parent_object, path_base,
 			path_priv_data, create_if, path_hash);
 	x_smbd_release_object(parent_object);
-	if (!smbd_object) {
-		return NT_STATUS_OBJECT_NAME_NOT_FOUND;
+	if (!NT_STATUS_IS_OK(status)) {
+		return status;
 	}
 
 	status = smbd_object_initialize_if(*smbd_volume, smbd_object);

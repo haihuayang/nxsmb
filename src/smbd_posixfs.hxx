@@ -89,7 +89,7 @@ NTSTATUS posixfs_op_open_durable(x_smbd_open_t *&smbd_open,
 		std::shared_ptr<x_smbd_volume_t> &smbd_volume,
 		const x_smbd_durable_t &durable);
 
-x_smbd_object_t *posixfs_op_allocate_object(
+NTSTATUS posixfs_op_allocate_object(x_smbd_object_t **p_smbd_object,
 		const std::shared_ptr<x_smbd_volume_t> &smbd_volume,
 		long priv_data,
 		uint64_t hash,

@@ -940,15 +940,19 @@ static int ipc_op_init_volume(std::shared_ptr<x_smbd_volume_t> &smbd_volume)
 		auto [ ok, hash ] = x_smbd_hash_path(*smbd_volume,
 				parent_object, item.name);
 		X_ASSERT(ok);
-		X_ASSERT(x_smbd_object_lookup(smbd_volume, parent_object, item.name,
-					priv_data, true, hash));
+		x_smbd_object_t *smbd_object;
+		NTSTATUS status = x_smbd_object_lookup(&smbd_object,
+				smbd_volume, parent_object, item.name,
+				priv_data, true, hash);
+		X_ASSERT(NT_STATUS_IS_OK(status));
 		x_smbd_release_object(parent_object);
 		++priv_data;
 	}
 	return 0;
 }
 
-static x_smbd_object_t *ipc_op_allocate_object(
+static NTSTATUS ipc_op_allocate_object(
+		x_smbd_object_t **p_smbd_object,
 		const std::shared_ptr<x_smbd_volume_t> &smbd_volume,
 		long priv_data,
 		uint64_t hash,
@@ -956,11 +960,11 @@ static x_smbd_object_t *ipc_op_allocate_object(
 		const std::u16string &path_base)
 {
 	if (priv_data >= (long)std::size(ipc_tbl)) {
-		return nullptr;
+		return NT_STATUS_OBJECT_NAME_NOT_FOUND;
 	}
 	auto &item = ipc_tbl[priv_data];
 	if (item.ipc_object) {
-		return nullptr;
+		return NT_STATUS_OBJECT_NAME_NOT_FOUND;
 	}
 	x_smbd_ipc_object_t *ipc_object = new x_smbd_ipc_object_t(
 			smbd_volume, priv_data, hash,
@@ -968,7 +972,8 @@ static x_smbd_object_t *ipc_op_allocate_object(
 			item.iface, item.secondary_address);
 	X_ASSERT(ipc_object);
 	item.ipc_object = ipc_object;
-	return &ipc_object->base;
+	*p_smbd_object = &ipc_object->base;
+	return NT_STATUS_OK;
 }
 
 static void ipc_op_destroy_object(x_smbd_object_t *smbd_object)
