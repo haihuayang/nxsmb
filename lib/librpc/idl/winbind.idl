@@ -169,10 +169,10 @@ interface winbind
 	);
 
   /* Public methods available via IRPC */
-
+#if HH_ORIG
     typedef [switch_type(uint16)] union netr_LogonLevel netr_LogonLevel;
     typedef [switch_type(uint16)] union netr_Validation netr_Validation;
-
+#endif
     /*
      * do a netr_LogonSamLogon() against the right DC
      */
@@ -193,10 +193,11 @@ interface winbind
 	/*
 	 * do a netr_LogonControl2Ex() against the right DC
 	 */
+#if HH_ORIG
 	typedef [v1_enum] enum netr_LogonControlCode netr_LogonControlCode;
 	typedef [switch_type(netr_LogonControlCode)] union netr_CONTROL_DATA_INFORMATION netr_CONTROL_DATA_INFORMATION;
 	typedef [switch_type(uint32)] union netr_CONTROL_QUERY_INFORMATION netr_CONTROL_QUERY_INFORMATION;
-
+#endif
 	WERROR winbind_LogonControl(
 		[in]   netr_LogonControlCode function_code,
 		[in]   uint32 level,

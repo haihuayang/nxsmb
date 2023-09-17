@@ -71,7 +71,7 @@ interface smb_acl
 		mode_t a_perm;
 	} smb_acl_entry;
 
-	[public] typedef struct {
+	typedef [public] struct {
 		int	count;
 		[value(0)] int	next;
 		[size_is(count)] smb_acl_entry acl[*];
@@ -86,7 +86,7 @@ interface smb_acl
 	/* A wrapper of all the information required to reproduce an
 	 * ACL, so we can hash it for the acl_xattr and acl_tdb
 	 * modules */
-	[public] typedef struct {
+	typedef [public] struct {
 		smb_acl_t *access_acl;
 		smb_acl_t *default_acl; /* NULL on files */
 		uid_t owner;

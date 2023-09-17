@@ -122,7 +122,7 @@ interface frsrpc
 		FRSRPC_CO_LOCATION_DIR_NO_CMD	= 0x0000000e | 0x00000001
 	} frsrpc_CommPktCoCmdLocationCmd;
 
-	[public] typedef struct {
+	typedef [public] struct {
 		uint32 sequence_number;
 		frsrpc_CommPktCoCmdFlags flags;
 		frsrpc_CommPktCoCmdIFlags iflags;
@@ -338,7 +338,7 @@ interface frsrpc
 		FRSRPC_COMM_PKT_MINOR_9	= 0x00000009
 	} frsrpc_CommPktMinor;
 
-	[public] typedef struct {
+	typedef [public] struct {
 		frsrpc_CommPktMajor major;
 		frsrpc_CommPktMinor minor;
 		[value(1)] uint32 cs_id;

@@ -22,7 +22,7 @@ interface backupkey
 	 * that are here to check that what is transmited or decoded is really what the client or
 	 * the server expect.
 	 */
-	[public] typedef struct {
+	typedef [public] struct {
 		[value(0x00000002)] uint32 header1;
 		[value(0x00000494)] uint32 header2;
 		uint32 certificate_len;
@@ -42,15 +42,15 @@ interface backupkey
 		[subcontext(0),subcontext_size(certificate_len),flag(NDR_REMAINING)] DATA_BLOB cert;
 	} bkrp_exported_RSA_key_pair;
 
-	[public] typedef struct {
+	typedef [public] struct {
 		[value(0x00000001)] uint32 magic;
 		uint8 key[256];
 	} bkrp_dc_serverwrap_key;
 
-	[public] typedef struct {
+	typedef [public] struct {
 	} bkrp_empty;
 
-	[public,gensize] typedef struct {
+	typedef [public,gensize] struct {
 		uint32 version;
 		uint32 encrypted_secret_len;
 		uint32 access_check_len;
@@ -59,19 +59,19 @@ interface backupkey
 		uint8  access_check[access_check_len];
 	} bkrp_client_side_wrapped;
 
-	[public] typedef struct {
+	typedef [public] struct {
 		[value(0x00000000)] uint32 magic;
 		[subcontext(0),flag(NDR_REMAINING)] DATA_BLOB secret;
 	} bkrp_client_side_unwrapped;
 
-	[public] typedef struct {
+	typedef [public] struct {
 		uint32 secret_len;
 		[value(0x00000020)] uint32 magic;
 		uint8 secret[secret_len];
 		uint8 payload_key[32];
 	} bkrp_encrypted_secret_v2;
 
-	[public] typedef struct {
+	typedef [public] struct {
 		uint32 secret_len;
 		[value(0x00000030)] uint32 magic1;
 		[value(0x00006610)] uint32 magic2;
@@ -81,7 +81,7 @@ interface backupkey
 	} bkrp_encrypted_secret_v3;
 
 	/* Due to alignement constraint we can generate the structure only via pidl*/
-	[public, nopush, nopull] typedef struct {
+	typedef [public, nopush, nopull] struct {
 		[value(0x00000001)] uint32 magic;
 		uint32 nonce_len;
 		uint8 nonce[nonce_len];
@@ -90,7 +90,7 @@ interface backupkey
 	} bkrp_access_check_v2;
 
 	/* Due to alignement constraint we can generate the structure only via pidl*/
-	[public,nopush,nopull] typedef struct {
+	typedef [public,nopush,nopull] struct {
 		[value(0x00000001)] uint32 magic;
 		uint32 nonce_len;
 		uint8 nonce[nonce_len];
@@ -98,14 +98,14 @@ interface backupkey
 		uint8 hash[64];
 	} bkrp_access_check_v3;
 
-	[public] typedef struct {
+	typedef [public] struct {
 		uint8 r3[32];
 		uint8 mac[20];
 		dom_sid sid;
 		[subcontext(0),flag(NDR_REMAINING)] DATA_BLOB secret_data;
 	} bkrp_rc4encryptedpayload;
 
-	[public] typedef struct {
+	typedef [public] struct {
 		[value(0x00000001)] uint32 magic;
 		uint32 payload_length;
 		uint32 ciphertext_length;
@@ -114,7 +114,7 @@ interface backupkey
 		uint8 rc4encryptedpayload[ciphertext_length];
 	} bkrp_server_side_wrapped;
 
-	[public] typedef struct {
+	typedef [public] struct {
 		[flag(NDR_REMAINING)] DATA_BLOB opaque;
 	} bkrp_opaque_blob;
 
@@ -132,7 +132,7 @@ interface backupkey
 		BACKUPKEY_BACKUP_GUID_INTEGER = 0x0003
 	} bkrp_guid_to_integer;
 
-	[public] typedef [nodiscriminant] union {
+	typedef [public] [nodiscriminant] union {
 		[case(BACKUPKEY_RESTORE_GUID_INTEGER)] bkrp_client_side_wrapped restore_req;
 		[case(BACKUPKEY_RETRIEVE_BACKUP_KEY_GUID_INTEGER)] bkrp_empty empty;
 		[case(BACKUPKEY_RESTORE_GUID_WIN2K_INTEGER)] bkrp_server_side_wrapped unsign_req;

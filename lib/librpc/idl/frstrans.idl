@@ -279,11 +279,16 @@ interface frstrans
 
 	/*****************/
 	/* Function 0x0f */
+#if HH_ORIG
 	typedef [flag(NDR_PAHEX)] pipe uint8 frstrans_BytePipe;
-
+#endif
 	WERROR frstrans_RawGetFileDataAsync(
+#ifdef HH_ORIG
 		[in,ref] policy_handle *server_context,
 		[out,ref] frstrans_BytePipe *byte_pipe
+#else
+		[in,ref] policy_handle *server_context
+#endif
 		);
 
 	/*****************/

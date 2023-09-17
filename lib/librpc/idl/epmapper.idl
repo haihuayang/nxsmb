@@ -193,7 +193,7 @@ interface epmapper
 		[case(EPM_PROTOCOL_NULL)] epm_rhs_null null;
 		[default]  [flag(NDR_REMAINING)] DATA_BLOB unknown;
 	} epm_rhs;
-#if HH_ORIG
+#if 1
 	typedef struct {
 		epm_protocol protocol;
 		[flag(NDR_REMAINING)] DATA_BLOB lhs_data;

@@ -224,7 +224,7 @@ coclass WbemClassObject
         WBEM_MASK_RESERVED_FLAGS 			= 0x001F000
     } WBEM_GENERIC_FLAG_TYPE;
 
-    typedef [public,v1_enum] enum tag_WBEM_TIMEOUT_TYPE
+    typedef [public,v1_enum] enum
     {
         WBEM_NO_WAIT = 0,
         WBEM_INFINITE = 0xFFFFFFFF
