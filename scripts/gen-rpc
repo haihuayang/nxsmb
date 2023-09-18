@@ -3,7 +3,8 @@
 from __future__ import print_function
 import os, sys
 from io import StringIO
-import re, argparse, json
+import re, argparse
+import idl_json
 
 # is_trivial false requires construct for union
 # TODO
@@ -778,7 +779,7 @@ class FieldTypeValueField(FieldTypeSlave):
 
 def load_idl_with_import(infp):
 	imports = []
-	idl = json.load(infp)
+	idl = idl_json.load(infp)
 	for o in idl:
 		if o['TYPE'] != "IMPORT":
 			continue

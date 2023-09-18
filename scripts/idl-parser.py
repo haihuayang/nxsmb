@@ -2,7 +2,8 @@
 
 from __future__ import print_function
 import os, sys, re
-import argparse, json
+import argparse
+import idl_json
 
 #def DBG(*msg):
 #	print("DBG:", *msg, file = sys.stderr)
@@ -647,7 +648,7 @@ def main():
 		idl = parse(open(args.input_file), args.input_file)
 	else:
 		idl = parse(sys.stdin, '<stdin>')
-	json.dump(idl, fp_out, indent=3)
+	idl_json.dump(idl, fp_out, indent=3)
 	
 
 if __name__ == "__main__": sys.exit(main())

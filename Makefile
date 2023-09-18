@@ -234,7 +234,7 @@ $(TARGET_SET_asn1:%=$(TARGET_DIR_out)/lib/asn1/%_asn1.o): $(TARGET_DIR_out)/lib/
 $(TARGET_SET_idl:%=$(TARGET_DIR_out)/librpc/idl/%.idl.json): $(TARGET_DIR_out)/librpc/idl/%.idl.json: lib/librpc/idl/%.idl | target_mkdir
 	$(CC) -E -D__PIDL__ -xc $< | scripts/idl-parser.py -o $@
 
-$(TARGET_SET_idl:%=$(TARGET_DIR_out)/librpc/idl/%.idl.json): scripts/idl-parser.py
+$(TARGET_SET_idl:%=$(TARGET_DIR_out)/librpc/idl/%.idl.json): scripts/idl-parser.py scripts/idl_json.py
 
 
 $(TARGET_SET_idl:%=$(TARGET_DIR_out)/librpc/idl/%.idl.ndr.o) : $(TARGET_DIR_out)/librpc/idl/%.idl.ndr.o: $(TARGET_DIR_out)/librpc/idl/%.idl.ndr.cxx
@@ -253,8 +253,8 @@ $(TARGET_SET_idl:%=$(TARGET_DIR_out)/librpc/idl/%.idl.d) : %.idl.d: %.idl.json
 
 include $(wildcard $(TARGET_SET_idl:%=$(TARGET_DIR_out)/librpc/idl/%.idl.d))
 
-$(TARGET_SET_idl:%=$(TARGET_DIR_out)/librpc/idl/%.idl.ndr.cxx): scripts/gen-rpc
-$(TARGET_SET_idl:%=$(TARGET_DIR_out)/librpc/idl/%.idl.hxx): scripts/gen-rpc
+$(TARGET_SET_idl:%=$(TARGET_DIR_out)/librpc/idl/%.idl.ndr.cxx): scripts/gen-rpc scripts/idl_json.py
+$(TARGET_SET_idl:%=$(TARGET_DIR_out)/librpc/idl/%.idl.hxx): scripts/gen-rpc scripts/idl_json.py
 
 
 target_gen: $(TARGET_GEN_nxsmb)
