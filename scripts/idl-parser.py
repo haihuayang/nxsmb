@@ -15,7 +15,7 @@ def lexer(fpin, filename):
 	ro_const = re.compile(r'^(\d+(?:\.\d*)?|0[xX][0-9a-fA-F]+)(\W.*|$)$')
 	ro_ident = re.compile(r'^([\w_]+)(.*)$')
 	ro_other = re.compile(r'^(.)(.*)$')
-	ro_operator = re.compile(r'^(->|==|>=|<=|>|<|\|\||&&|\|=|&=|\||&|\+\+|--|\+|-|\*=|\*|/=|/|\?|:)(.*)$')
+	ro_operator = re.compile(r'^(->|\.|==|>=|<=|>|<|\|\||&&|\|=|&=|\||&|~|\+\+|--|\+|-|\*=|\*|/=|/|\?|:)(.*)$')
 
 	for line in fpin:
 		m = ro_linemarker.search(line)
@@ -112,9 +112,11 @@ class Parser(object):
 		if self.sym_pos > self.sym_pos_max:
 			self.sym_pos_max = self.sym_pos
 
-	def expect(self, sym):
+	def expect(self, sym, val = None):
 		curr_sym, curr_val, filename, lineno = self.syms[self.sym_pos]
 		if curr_sym != sym:
+			self.unexpected()
+		if not val in [ None, curr_val ]:
 			self.unexpected()
 		self.advance()
 		return curr_val
@@ -170,27 +172,41 @@ class Parser(object):
 		return sections
 
 	def p_section(self):
-		return self.choice(self.p_import, self.p_interface, self.p_cpp_quote)
+		ret = self.choice(self.p_import, self.p_cpp_quote,
+				self.p_interface, self.p_coclass)
+		while True:
+			try:
+				self.expect(';')
+			except Unexpected as ex:
+				break
+		return ret
 
 	def p_interface(self):
 		properties = self.p_property_list_loop()
 		self.expect('interface')
 		name = self.expect('IDENT')
 		self.basefile = name
+		inherit = self.optional(self.p_inherit)
 		self.expect('{')
 		definitions = self.p_definitions()
 		filename, lineno = self.location()
 		self.expect('}')
+
 		ret = {
 			'FILE': filename,
 			'LINE': lineno,
 			'TYPE': 'INTERFACE',
 			'NAME': name,
+			'INHERIT': inherit,
 			'DATA': definitions
 		}
 		if properties:
 			ret['PROPERTIES'] = properties
 		return ret
+
+	def p_inherit(self):
+		self.expect('OP', ':')
+		return self.expect('IDENT')
 
 	def p_definitions(self):
 		DBG("enter definitions")
@@ -581,6 +597,26 @@ class Parser(object):
 			'DATA': cpp_quote
 		}
 		
+	def p_coclass(self):
+		properties = self.p_property_list_loop()
+		self.expect('coclass')
+		DBG("enter coclass")
+		name = self.expect('IDENT')
+		self.basefile = name
+		self.expect('{')
+		self.expect('interface')
+		interface = self.expect('IDENT')
+		self.expect(';')
+		filename, lineno = self.location()
+		self.expect('}')
+		return {
+			'FILE': filename,
+			'LINE': lineno,
+			'TYPE': 'COCLASS',
+			'DATA': name,
+		}
+
+
 def parse(fpin, filename):
 	l = lexer(fpin, filename)
 	parser = Parser(l)
