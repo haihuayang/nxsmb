@@ -72,12 +72,46 @@ class Unexpected(Exception):
 		return 'Unexpected %s,%s at %s:%d' % (self.sym, self.val,
 				self.filename, self.lineno)
 
+def expr_list_to_value(pvalue, expected_sym):
+	assert len(pvalue) == 1
+	expr = pvalue[0]
+	assert len(expr.val) == 1
+	sym, value = expr.val[0]
+	assert sym == expected_sym
+	return value
+
 def normalize_array_spec(array_spec):
 	if array_spec:
 		assert len(array_spec) == 1 # TODO
-		if array_spec == ['']:
-			array_spec = ["*"]
+		array_spec = array_spec[0]
+		if not array_spec.val:
+			array_spec = idl_json.IdlExpr([('OP', '*')])
 	return array_spec
+
+def normalize_properties(properties):
+	ret = { }
+	for pname, pvalue in properties.items():
+		if pname == 'subcontext':
+			value = expr_list_to_value(pvalue, 'CONST')
+			ret[pname] = int(value, 0)
+		elif pname == 'charset':
+			value = expr_list_to_value(pvalue, 'IDENT')
+			assert value in [ 'UTF8', 'UTF16', 'DOS' ]
+			ret[pname] = value
+		elif pname in ['switch_is', 'size_is', 'length_is', 'subcontext_size', 'case', 'flag', 'value']:
+			# some property with empty ,
+			pvalue = [ v for v in pvalue if v.val ]
+			assert len(pvalue) == 1
+			ret[pname] = pvalue[0]
+		elif pname == 'uuid':
+			value = expr_list_to_value(pvalue, 'STRING')
+			ret[pname] = value
+		elif pname == 'version':
+			value = expr_list_to_value(pvalue, 'CONST')
+			ret[pname] = value
+		else:
+			ret[pname] = pvalue
+	return ret
 
 class Parser(object):
 	EOF = 0xffff
@@ -182,6 +216,7 @@ class Parser(object):
 
 	def p_interface(self):
 		properties = self.p_property_list_loop()
+
 		self.expect('interface')
 		name = self.expect('IDENT')
 		self.basefile = name
@@ -377,6 +412,7 @@ class Parser(object):
 	def p_struct_element(self):
 		DBG("enter struct_element")
 		properties = self.p_property_list_loop(False)
+
 		type_name = self.expect('IDENT')
 		pointers =  self.p_pointer_list()
 		ident = self.expect('IDENT')
@@ -405,7 +441,7 @@ class Parser(object):
 		if isinstance(element_list, str):
 			return 'BITMAP', 'NAME', element_list
 		else:
-			return 'BITMAP', "ELEMENTS", [ "%s ( %s )" % elem for elem in element_list ]
+			return 'BITMAP', "ELEMENTS", element_list
 
 	def p_bitmap_body(self):
 		self.expect('{')
@@ -429,7 +465,7 @@ class Parser(object):
 		if isinstance(element_list, str):
 			return 'ENUM', 'NAME', element_list
 		else:
-			return 'ENUM', "ELEMENTS", [ "%s=%s" % elem for elem in element_list ]
+			return 'ENUM', "ELEMENTS", element_list
 
 	def p_enum_body(self):
 		self.expect('{')
@@ -494,21 +530,18 @@ class Parser(object):
 		expr = []
 		while True:
 			if sym in [ 'STRING', 'CONST', 'IDENT', 'OP' ]:
-				expr.append(value)
+				expr.append((sym,value))
 				self.advance()
 			elif sym == '(':
 				self.advance()
 				subexpr = self.loop_with_delim(self.p_expr, ',')
 				self.expect(')')
-				expr.append('(')
-				expr.append(','.join(subexpr))
-				expr.append(')')
+				expr.append(('(', subexpr))
 			else:
 				break
 			sym, value = self.peek()
-		ret = ''.join(expr)
-		DBG("leave expr", ret)
-		return ret
+		DBG("leave expr", expr)
+		return idl_json.IdlExpr(expr)
 
 	def p_empty(self):
 		return ''
@@ -554,8 +587,8 @@ class Parser(object):
 				if not value:
 					ret[name] = 1
 				else:
-					ret[name] = ','.join(value)
-		return ret
+					ret[name] = value
+		return normalize_properties(ret)
 
 	def p_property_list(self):
 		self.expect('[')

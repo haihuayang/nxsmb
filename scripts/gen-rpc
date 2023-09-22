@@ -52,6 +52,47 @@ def error(msg):
 	print("Error:", msg, file = sys.stderr)
 
 
+def expr_to_string(expr, fields):
+	def find_field_by_name(name):
+		for f in fields:
+			if f.name == val:
+				return f
+		return None
+		
+	if isinstance(expr, list):
+		ret = []
+		prev_sym, prev_val = None, None
+		for subexpr in expr:
+			sym, val = subexpr
+			if sym == 'IDENT':
+				f = find_field_by_name(val)
+				if f:
+					if prev_sym == 'OP' and prev_val == '*' and f.dereferenced():
+						ret.pop()
+					ret.append('__val.' + val)
+				else:
+					ret.append(val)
+			else:
+				ret.append(expr_to_string(subexpr, fields))
+
+			if prev_sym in [ 'IDENT', 'CONST', 'STRING', '(' ]:
+				prev_sym, prev_val = None, None
+			else:
+				prev_sym, prev_val = sym, val
+		return ''.join(ret)
+	elif isinstance(expr, idl_json.IdlExpr):
+		return expr_to_string(expr.val, fields)
+	else:
+		t, val = expr
+		if t == '(':
+			ret = [expr_to_string(x, fields) for x in val]
+			return '({})'.format(''.join(ret))
+		elif t == 'IDENT':
+			f = find_field_by_name(val)
+			if f:
+				return '__val.' + val
+		return val
+	
 def get_property(jsobj, prop, default = None):
 	try:
 		return jsobj['PROPERTIES'][prop]
@@ -109,21 +150,26 @@ elem_has_property = has_any_property
 
 def elem_is_property_of(elem, elems, *args):
 	for me in elems:
+		if me == elem:
+			continue
 		for prop in args:
 			try:
-				if elem["NAME"] == elem_get_property(me, prop):
-					return me
+				prop_value = elem_get_property(me, prop)
+				if not prop_value:
+					continue
 			except:
-				pass
+				continue
+			assert len(prop_value.val) == 1
+			sym, val = prop_value.val[0]
+			if sym == 'IDENT' and val == elem['NAME']:
+				return me
 	return None
 
 def elem_get_array_len(elem):
 	try:
 		array_len = elem['ARRAY_LEN']
-		if len(array_len) == 0:
-			return None
-		assert len(array_len) == 1
-		return array_len[0]
+		assert isinstance(array_len, idl_json.IdlExpr)
+		return str(array_len)
 	except KeyError:
 		return None
 
@@ -132,12 +178,20 @@ def elem_get_property(t, prop, default = None):
 
 def elem_is_expr_property_of(elem, elems, *args):
 	ename = elem["NAME"]
+	def is_in_expr(expr):
+		if isinstance(expr, list):
+			return any([is_in_expr(subexpr) for subexpr in expr ])
+		elif isinstance(expr, idl_json.IdlExpr):
+			return is_in_expr(expr.val)
+		sym, val = expr
+		return sym == 'IDENT' and val == ename
+
 	for me in elems:
 		for prop in args:
 			value = elem_get_property(me, prop)
 			if value is None:
 				continue
-			if any([ename == operand for operand in re.split(r'[^0-9a-zA-Z_.]+', value)]):
+			if is_in_expr(value):
 				return me
 	return None
 
@@ -301,7 +355,7 @@ class FieldTypeSimple(FieldTypeBase):
 		if flag is None:
 			return flag_arg
 		else:
-			return f'x_ndr_set_flags({flag_arg}, {flag})'
+			return f'x_ndr_set_flags({flag_arg}, {str(flag)})'
 	'''
 	def get_alignment(self):
 		return self.idltype.get_alignment()
@@ -858,10 +912,8 @@ class Globals:
 def get_array_len(elem):
 	try:
 		array_len = elem['ARRAY_LEN']
-		if len(array_len) == 0:
-			return None
-		assert len(array_len) == 1
-		return array_len[0]
+		assert isinstance(array_len, idl_json.IdlExpr)
+		return str(array_len)
 	except KeyError:
 		return None
 
@@ -994,36 +1046,13 @@ class Field(object):
 		if switch_is is None:
 			return 'X_NDR_SWITCH_NONE'
 		else:
-			ro = re.compile('[A-Za-z_][A-Za-z0-9_]*')
-			pos, comps = 0, []
-			while True:
-				m = ro.search(switch_is, pos)
-				if not m:
-					break
-				start, end = m.span()
-				prefix = ''
-				if start != pos:
-					prefix = switch_is[pos:start]
-				op_name = switch_is[start:end]
-				for f in self.idltype.fields:
-					if f.name == op_name:
-						if pos == 0 and f.dereferenced() and prefix.strip() == '*':
-							prefix = ''
-						#op_name = '__val.' + op_name
-						comps.append('__val.')
-						break
-				if prefix:
-					comps.append(prefix)
-				comps.append(op_name)
-				pos = end
-			comps.append(switch_is[pos:])
-			return ''.join(comps)
+			return expr_to_string(switch_is, self.idltype.fields)
 	def get_ndr_flags(self, flag_arg = '__flags'):
 		flag = self.get_property('flag')
 		if flag is None:
 			return flag_arg
 		else:
-			return f'x_ndr_set_flags({flag_arg}, {flag})'
+			return f'x_ndr_set_flags({flag_arg}, {str(flag)})'
 
 	def __str__(self):
 		return "%d,%s,%s" % (self.order, self.name, self.field_type)
@@ -1108,9 +1137,9 @@ class IdlTypeEnum(TypedefBase):
 
 enum {self.get_ctype()} : {self.etype} {{
 ''')
-		for elem in self.elements:
+		for name, val in self.elements:
 			out(f'''
-	{elem},
+	{name} = {str(val)},
 ''')
 		out(f'''
 }}{self.tostring_properties()};
@@ -1125,10 +1154,9 @@ X_NDR_DECLARE_TRAITS_ENUM({self.get_ctype()}, {self.ndrtype}, {len(self.elements
 		out(f'''
 const std::array<std::pair<{self.ndrtype}, const char *>, {len(self.elements)}> ndr_traits_t<{self.get_ctype()}>::value_name_map = {{ {{
 ''')
-		for elem in self.elements:
-			ev = elem.split('=')[0]
+		for name, val in self.elements:
 			out(f'''
-	{{ {self.ndrtype}{{{ev}}}, "{ev}" }},
+	{{ {self.ndrtype}{{{name}}}, "{name}" }},
 ''')
 		out('''
 } };
@@ -1166,10 +1194,9 @@ class IdlTypeBitmap(TypedefBase):
 
 enum {self.get_ctype()} : {self.etype} {{
 ''')
-		for elem in self.elements:
-			stmt = re.sub(r'^([^ ]+) *\( *([^ ]+) *\)$', r'\1=\2,', elem)
+		for name, val in self.elements:
 			out(f'''
-	{stmt}
+	{name} = {str(val)},
 ''')
 		out(f'''
 }}{self.tostring_properties()};
@@ -1183,10 +1210,9 @@ X_DEFINE_ENUM_FLAG_OPERATORS({self.get_ctype()})
 	def ndrcxx(self, out):
 		out(f'''
 const std::array<std::pair<{self.etype}, const char *>, {len(self.elements)}> ndr_traits_t<{self.get_ctype()}>::value_name_map = {{ {{''')
-		for elem in self.elements:
-			ev = re.sub(r'^([^ ]+) *\( *([^ ]+) *\)$', r'\1', elem)
+		for name, value in self.elements:
 			out(f'''
-	{{ {ev}, "{ev}" }},
+	{{ {name}, "{name}" }},
 ''')
 		out('''
 } };
@@ -1228,9 +1254,18 @@ def elem_get_pointer_info(elem, iface, in_function):
 		assert v < 3
 		return v, t, False
 
+def expr_get_ident(expr):
+	assert len(expr.val) == 1
+	sym, val = expr.val[0]
+	if sym == 'IDENT':
+		return val
+	return None
+
 def find_field(fields, elem):
 	if isinstance(elem, str):
 		name = elem
+	elif isinstance(elem, idl_json.IdlExpr):
+		name = expr_get_ident(elem)
 	else:
 		name = elem['NAME']
 	for f in fields:
@@ -1239,14 +1274,29 @@ def find_field(fields, elem):
 	raise KeyError("Cannot find field '%s'" % name)
 
 def int_or_field(fields, expr):
-	try:
-		return int(expr)
-	except: pass
-	for operand in re.split(r'[^0-9a-zA-Z_.]+', expr):
-		try:
-			return find_field(fields, operand)
-		except KeyError: pass
-	raise KeyError("Cannot find field for expr '%s'" % expr)
+	def get_field(e):
+		if isinstance(e, list):
+			for se in e:
+				ret = get_field(se)
+				if ret:
+					return ret
+			return None
+		elif isinstance(e, idl_json.IdlExpr):
+			return get_field(e.val)
+
+		sym, val = e
+		if sym == 'IDENT':
+			return find_field(fields, val)
+		else:
+			return None
+	field = get_field(expr)
+	if field:
+		return field
+
+	assert len(expr.val) == 1
+	sym, val = expr.val[0]
+	assert sym == 'CONST'
+	return int(val, 0)
 
 def make_field_type(field, idltype, elems, iface, in_function):
 	elem = field.elem
@@ -1371,9 +1421,8 @@ def make_field_type(field, idltype, elems, iface, in_function):
 		else:
 			field_type = FieldTypeSimpleVector(field_type, find_field(idltype.fields, array_len_name))
 
-	subcontext = elem_get_property(elem, 'subcontext')
-	if subcontext is not None:
-		subcontext_level = int(subcontext, 0)
+	subcontext_level = elem_get_property(elem, 'subcontext')
+	if subcontext_level is not None:
 		if subcontext_level in [0, 2, 4]:
 			subcontext_size = elem_get_property(elem, "subcontext_size")
 			if subcontext_size is not None:
@@ -1399,6 +1448,23 @@ def make_field_type(field, idltype, elems, iface, in_function):
 
 def make_fields(idltype, name, elems, iface, in_function):
 	idltype.fields = [ Field(elem, order, idltype) for order, elem in enumerate(elems) ]
+
+	def expr_contain_field(expr, name):
+		if isinstance(expr, list):
+			for subexpr in expr:
+				if expr_contain_field(subexpr, name):
+					return True
+		elif isinstance(expr, idl_json.IdlExpr):
+			return expr_contain_field(expr.val, name)
+		else:
+			t, val = expr
+			if t == '(':
+				return expr_contain_field(val, name)
+			elif t == 'IDENT':
+				if val == name:
+					return True
+		return False
+
 	
 	for field in idltype.fields:
 		field.field_type = make_field_type(field, idltype, elems, iface, in_function)
@@ -1407,13 +1473,10 @@ def make_fields(idltype, name, elems, iface, in_function):
 		field.set_idltype(idltype)
 		if field.is_nontrivial_union():
 			switch_is = field.get_property('switch_is')
-			switch_is = switch_is.split('&')[0] # TODO
 			for f in idltype.fields:
-				if f.name == switch_is:
+				if expr_contain_field(switch_is, f.name):
 					f.nontrivial_unions.append(field)
 					break
-			else:
-				assert False
 
 	def dbg_output_fields(fields):
 		return '\n\t'.join([ str(x) for x in fields ])
@@ -1436,7 +1499,7 @@ def output_struct_functions(self, out):
 			if len(field.nontrivial_unions) == 0:
 				continue
 			first_case, _ = get_first_case(field.nontrivial_unions[0].field_type.get_idltype())
-			yield f'{field.name}(({field.get_ctype()}){first_case})'
+			yield f'{field.name}(({field.get_ctype()}){str(first_case)})'
 
 	def move_copy_ctor_initializer(fields):
 		for field in fields:
@@ -1476,20 +1539,20 @@ def output_struct_functions(self, out):
 	output_special(f'{self.get_ctype()}::{self.get_ctype()}()',
 		default_ctor_initializer,
 		lambda uf, switch_is, is_pointer:
-			f'x_ndr_union_field_init({uf.name}, x_ndr_switch_t({switch_is}));')
+			f'x_ndr_union_field_init({uf.name}, x_ndr_switch_t({str(switch_is)}));')
 	output_special(f'{self.get_ctype()}::~{self.get_ctype()}()', None,
 		lambda uf, switch_is, is_pointer:
-			f'x_ndr_union_field_uninit({uf.name}, x_ndr_switch_t({switch_is}));')
+			f'x_ndr_union_field_uninit({uf.name}, x_ndr_switch_t({str(switch_is)}));')
 
 	if not all_nontrivial_unions_are_ptr:
 		output_special(f'{self.get_ctype()}::{self.get_ctype()}({self.get_ctype()} &&__other)',
 			move_copy_ctor_initializer,
 			lambda uf, switch_is, is_pointer:
-				f'x_ndr_union_field_init({uf.name}, x_ndr_switch_t({switch_is}), std::move(__other.{uf.name}));')
+				f'x_ndr_union_field_init({uf.name}, x_ndr_switch_t({str(switch_is)}), std::move(__other.{uf.name}));')
 		output_special(f'{self.get_ctype()}::{self.get_ctype()}(const {self.get_ctype()} &__other)',
 			move_copy_ctor_initializer,
 			lambda uf, switch_is, is_pointer:
-				f'x_ndr_union_field_init({uf.name}, x_ndr_switch_t({switch_is}), __other.{uf.name});')
+				f'x_ndr_union_field_init({uf.name}, x_ndr_switch_t({str(switch_is)}), __other.{uf.name});')
 
 	for field in self.fields:
 		if len(field.nontrivial_unions) == 0:
@@ -1499,12 +1562,12 @@ void {self.get_ctype()}::set_{field.name}({field.get_ctype()} v)
 {{''')
 		for uf, switch_is, is_pointer in union_field_iter(field.nontrivial_unions):
 			out(f'''
-	x_ndr_union_field_uninit({uf.name}, x_ndr_switch_t({switch_is}));''')
+	x_ndr_union_field_uninit({uf.name}, x_ndr_switch_t({str(switch_is)}));''')
 		out(f'''
 	{field.name} = v;''')
 		for uf, switch_is, is_pointer in union_field_iter(field.nontrivial_unions):
 			out(f'''
-	x_ndr_union_field_init({uf.name}, x_ndr_switch_t({switch_is}));''')
+	x_ndr_union_field_init({uf.name}, x_ndr_switch_t({str(switch_is)}));''')
 		out('''
 }
 
@@ -1600,7 +1663,7 @@ x_ndr_off_t ndr_traits_t<{self.get_ctype()}>::scalars({constness}{self.get_ctype
 ''')
 			flag = self.get_property('flag')
 			if flag is not None: out(f'''
-	__flags = x_ndr_set_flags(__flags, {flag});
+	__flags = x_ndr_set_flags(__flags, {str(flag)});
 ''')
 			for field in self.fields:
 				for stmt in field.scalars_step0(upfunc):
@@ -1668,7 +1731,7 @@ void ndr_traits_t<{self.get_ctype()}>::ostr(const {self.get_ctype()} &__val, x_n
 {{''')
 			flag = self.get_property('flag')
 			if flag is not None: out(f'''
-	__flags = x_ndr_set_flags(__flags, {flag});
+	__flags = x_ndr_set_flags(__flags, {str(flag)});
 ''')
 			out(f'''
 	__ndr << enter;''');
@@ -1691,7 +1754,7 @@ void ndr_traits_t<{self.get_ctype()}>::ostr(const {self.get_ctype()} &__val, x_n
 def get_case_str(field):
 	case_value = field.get_property('case')
 	if case_value is not None:
-		return f'case {case_value}'
+		return f'case {str(case_value)}'
 	else:
 		assert field.get_property('default')
 		return 'default'
@@ -1792,7 +1855,7 @@ x_ndr_off_t ndr_traits_t<{self.get_ctype()}>::scalars({constness}{self.get_ctype
 ''')
 			flag = self.get_property('flag')
 			if flag is not None: out(f'''
-	__flags = x_ndr_set_flags(__flags, {flag});
+	__flags = x_ndr_set_flags(__flags, {str(flag)});
 ''')
 			out(f'''
 	X_NDR_UNION_ALIGN({self.get_alignment()}, __ndr, __bpos, __epos, __flags);
@@ -1830,7 +1893,7 @@ x_ndr_off_t ndr_traits_t<{self.get_ctype()}>::buffers({constness}{self.get_ctype
 ''')
 			flag = self.get_property('flag')
 			if flag is not None: out(f'''
-	__flags = x_ndr_set_flags(__flags, {flag});
+	__flags = x_ndr_set_flags(__flags, {str(flag)});
 ''')
 			out(f'''
 	switch (__level) {{
@@ -1861,7 +1924,7 @@ void ndr_traits_t<{self.get_ctype()}>::ostr(const {self.get_ctype()} &__val, x_n
 {{''')
 			flag = self.get_property('flag')
 			if flag is not None: out(f'''
-	x_ndr_set_flags(__flags, {flag});''')
+	x_ndr_set_flags(__flags, {str(flag)});''')
 			out(f'''
 	switch (__level) {{
 ''')
@@ -2018,7 +2081,7 @@ void ndr_traits_t<{self.get_ctype()}>::ostr(const {self.get_ctype()} &__val, x_n
 {{''')
 			flag = self.get_property('flag')
 			if flag is not None: out(f'''
-	__flags = x_ndr_set_flags(__flags, {flag});
+	__flags = x_ndr_set_flags(__flags, {str(flag)});
 ''')
 			out(f'''
 	__ndr << enter;''');
@@ -2097,12 +2160,12 @@ def output_header_CONST(out, t):
 		assert not 'ARRAY_LEN' in t
 		assert t['POINTERS'] == 0
 		out(f'''
-const char * const {t['NAME']} = {t['VALUE']};''')
+const char * const {t['NAME']} = {str(t['VALUE'])};''')
 		return
 	array_suffix = '[]' if 'ARRAY_LEN' in t else ''
 	assert dtype != 'string' or not 'ARRAY_LEN' in t
 	out(f'''
-const {dtype}{'* const' if t['POINTERS'] == 1 else ''} {t['NAME']}{array_suffix} = {t['VALUE']};
+const {dtype}{'* const' if t['POINTERS'] == 1 else ''} {t['NAME']}{array_suffix} = {str(t['VALUE'])};
 ''')
 
 def output_header_INTERFACE(out, iface, idl):
