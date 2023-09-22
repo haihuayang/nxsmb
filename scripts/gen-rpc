@@ -62,7 +62,7 @@ def has_property(jsobj, prop):
 	v = get_property(jsobj, prop)
 	if v is None:
 		return False
-	assert v == '1'
+	assert v == 1
 	return True
 
 def get_elements(jsobj):
@@ -916,10 +916,10 @@ class Field(object):
 					error(f"Unknown property {name}.")
 					assert False
 				if name == 'in':
-					assert value == '1'
+					assert value == 1
 					self.arg_flags |= ARG_FLAG_IN
 				if name == 'out':
-					assert value == '1'
+					assert value == 1
 					self.arg_flags |= ARG_FLAG_OUT
 
 	def set_idltype(self, idltype):
@@ -1218,7 +1218,7 @@ def elem_get_pointer_info(elem, iface, in_function):
 				tv = elem["PROPERTIES"][t]
 			except:
 				continue
-			assert tv == "1"
+			assert tv == 1
 			break
 		else:
 			try:
@@ -2201,7 +2201,6 @@ namespace idl {{
 
 	out(f'''
 
-// }}
 }}
 ''')
 

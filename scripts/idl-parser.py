@@ -5,8 +5,6 @@ import os, sys, re
 import argparse
 import idl_json
 
-#def DBG(*msg):
-#	print("DBG:", *msg, file = sys.stderr)
 
 def lexer(fpin, filename):
 	lineno = 0
@@ -554,7 +552,7 @@ class Parser(object):
 		for block in property_list:
 			for name, value in block:
 				if not value:
-					ret[name] = "1"
+					ret[name] = 1
 				else:
 					ret[name] = ','.join(value)
 		return ret
@@ -622,8 +620,6 @@ def parse(fpin, filename):
 	l = lexer(fpin, filename)
 	parser = Parser(l)
 	return parser.start()
-	#idl['FILE'] = filepath
-	#idl['TYPE'] = "INTERFACE"
 
 	
 def main():
