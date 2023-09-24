@@ -69,10 +69,16 @@ static idl::dcerpc_nca_status x_smbd_dcerpc_fn_##Arg( \
 	return status; \
 }
 
-extern const x_dcerpc_iface_t x_smbd_dcerpc_srvsvc;
-extern const x_dcerpc_iface_t x_smbd_dcerpc_wkssvc;
-extern const x_dcerpc_iface_t x_smbd_dcerpc_dssetup;
-extern const x_dcerpc_iface_t x_smbd_dcerpc_lsarpc;
+#define X_SMBD_DCERPC_IFACE_ENUM \
+	X_SMBD_DCERPC_IFACE_DECL(srvsvc) \
+	X_SMBD_DCERPC_IFACE_DECL(wkssvc) \
+	X_SMBD_DCERPC_IFACE_DECL(dssetup) \
+	X_SMBD_DCERPC_IFACE_DECL(lsarpc) \
+	X_SMBD_DCERPC_IFACE_DECL(winreg) \
+
+#define X_SMBD_DCERPC_IFACE_DECL(x) extern const x_dcerpc_iface_t x_smbd_dcerpc_##x;
+X_SMBD_DCERPC_IFACE_ENUM
+#undef X_SMBD_DCERPC_IFACE_DECL
 
 bool x_smbd_dcerpc_is_admin(const x_smbd_sess_t *smbd_sess);
 
@@ -83,6 +89,15 @@ bool x_smbd_dcerpc_is_admin(const x_smbd_sess_t *smbd_sess);
 	} \
 } while (0)
 
+bool x_smbd_dcerpc_create_handle(x_dcerpc_pipe_t &rpc_pipe,
+		idl::policy_handle &wire_handle,
+		const std::shared_ptr<void> &data);
+
+bool x_smbd_dcerpc_close_handle(x_dcerpc_pipe_t &rpc_pipe,
+		idl::policy_handle &handle);
+
+std::pair<bool, std::shared_ptr<void>> x_smbd_dcerpc_find_handle(
+		x_dcerpc_pipe_t &rpc_pipe, const idl::policy_handle &handle);
 
 #define X_SMBD_DCERPC_IMPL_TODO(Arg) \
 static idl::dcerpc_nca_status x_smbd_dcerpc_impl_##Arg(x_dcerpc_pipe_t &rpc_pipe, x_smbd_sess_t *smbd_sess, idl::Arg &arg) \

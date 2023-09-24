@@ -5,10 +5,6 @@
 #include "smbd_secrets.hxx"
 #include "smbd_ntacl.hxx"
 
-#ifndef MAX_OPEN_POLS
-#define MAX_OPEN_POLS 2048
-#endif
-
 enum lsa_handle_type_t {
 	LSA_HANDLE_POLICY_TYPE = 1,
 	LSA_HANDLE_ACCOUNT_TYPE = 2,
@@ -21,30 +17,6 @@ struct lsa_info_t
 	lsa_handle_type_t type;
 	uint32_t access;
 };
-
-static auto find_handle(x_dcerpc_pipe_t &rpc_pipe, const idl::policy_handle &handle)
-{
-	auto it = std::begin(rpc_pipe.handles);
-	for ( ; it != std::end(rpc_pipe.handles); ++it) {
-		if (it->wire_handle == handle) {
-			break;
-		}
-	}
-	return it;
-}
-
-static std::shared_ptr<void> get_handle_data(x_dcerpc_pipe_t &rpc_pipe, const idl::policy_handle &handle)
-{
-	for (auto it = std::begin(rpc_pipe.handles); it != std::end(rpc_pipe.handles); ++it) {
-		if (it->wire_handle == handle) {
-			return it->data;
-		}
-	}
-	return nullptr;
-}
-
-static std::atomic<uint64_t> pol_hnd{0};
-static std::atomic<uint64_t> pol_hnd_random{0}; // TODO samba use time(), and pid()
 
 static const generic_mapping_t lsa_policy_mapping = {
 	idl::LSA_POLICY_READ,
@@ -77,23 +49,19 @@ static idl::dcerpc_nca_status lsa_OpenPolicy2(
 	}
 #endif
 
-	if (rpc_pipe.handles.size() >= MAX_OPEN_POLS) {
+	idl::policy_handle wire_handle;
+	auto info = std::make_shared<lsa_info_t>();
+	info->type = LSA_HANDLE_POLICY_TYPE;
+	info->access = arg.access_mask;
+
+	if (!x_smbd_dcerpc_create_handle(rpc_pipe, wire_handle,
+				info)) {
 		// samba return NOT_FOUND for any error
 		arg.__result = NT_STATUS_OBJECT_NAME_NOT_FOUND;
 		return X_SMBD_DCERPC_NCA_STATUS_OK;
 	}
 
-	rpc_pipe.handles.resize(rpc_pipe.handles.size() + 1);
-	auto &handle = rpc_pipe.handles.back();
-	handle.wire_handle.handle_type = 0;
-	*(uint64_t *)&handle.wire_handle.uuid = ++pol_hnd;
-	*((uint64_t *)&handle.wire_handle.uuid + 1) = ++pol_hnd_random;
-	auto info = std::make_shared<lsa_info_t>();
-	info->type = LSA_HANDLE_POLICY_TYPE;
-	info->access = arg.access_mask;
-	handle.data = info;
-
-	arg.handle = handle.wire_handle;
+	arg.handle = wire_handle;
 	arg.__result = NT_STATUS_OK;
 	return X_SMBD_DCERPC_NCA_STATUS_OK;
 }
@@ -104,12 +72,10 @@ static idl::dcerpc_nca_status x_smbd_dcerpc_impl_lsa_Close(
 		x_smbd_sess_t *smbd_sess,
 		idl::lsa_Close &arg)
 {
-	auto it = find_handle(rpc_pipe, arg.handle);
-	if (it == std::end(rpc_pipe.handles)) {
+	if (!x_smbd_dcerpc_close_handle(rpc_pipe, arg.handle)) {
 		return idl::DCERPC_NCA_S_FAULT_CONTEXT_MISMATCH;
 	}
 
-	rpc_pipe.handles.erase(it);
 	arg.__result = NT_STATUS_OK;
 	return X_SMBD_DCERPC_NCA_STATUS_OK;
 }
@@ -136,13 +102,13 @@ static inline idl::dcerpc_nca_status lsa_QueryInfoPolicy(
 		x_smbd_sess_t *smbd_sess,
 		Arg &arg)
 {
-	auto handle_data = get_handle_data(rpc_pipe, arg.handle);
-	if (!handle_data) {
+	auto [ found, data ] = x_smbd_dcerpc_find_handle(rpc_pipe, arg.handle);
+	if (!found) {
 		arg.__result = NT_STATUS_INVALID_HANDLE;
 		return X_SMBD_DCERPC_NCA_STATUS_OK;
 	}
 
-	auto lsa_info = std::static_pointer_cast<lsa_info_t>(handle_data);
+	auto lsa_info = std::static_pointer_cast<lsa_info_t>(data);
 	const x_smbd_conf_t &smbd_conf = x_smbd_conf_get_curr();
 
 	//uint32_t acc_required = 0;
