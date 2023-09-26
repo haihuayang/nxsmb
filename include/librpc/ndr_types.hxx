@@ -250,58 +250,73 @@ inline x_ndr_off_t x_ndr_scalars_unique_ptr(
 	X_NDR_SCALARS_DEFAULT(__tmp_size_is_2, (ndr), (bpos), (epos), (flags), X_NDR_SWITCH_NONE); \
 	(val).resize(int_val(__tmp_size_is_2));
 
-#define X_NDR_SCALARS_SIZE_IS_VECTOR_PUSH(tmp_sizeis, val, ndr, bpos, epos, flags) \
-	x_convert_assert((tmp_sizeis), (val).size());
+#define X_NDR_SCALARS_SIZE_IS_VECTOR_PUSH(tmp_size_is, __val, ndr, bpos, epos, flags) \
+	(tmp_size_is).val = (__val).size(); \
+	X_NDR_SCALARS_DEFAULT((tmp_size_is), (ndr), (bpos), (epos), (flags), X_NDR_SWITCH_NONE); \
 
-#define X_NDR_SCALARS_SIZE_IS_VECTOR_PULL(tmp_sizeis, val, ndr, bpos, epos, flags) \
-	x_convert_assert((tmp_sizeis), (val).size());
+#define X_NDR_SCALARS_SIZE_IS_VECTOR_PULL(tmp_size_is, val, ndr, bpos, epos, flags) \
+	X_NDR_SCALARS_DEFAULT((tmp_size_is), (ndr), (bpos), (epos), (flags), X_NDR_SWITCH_NONE); \
+	(val).resize(int_val(tmp_size_is));
 
-#define X_NDR_SIZE_IS_POST_PUSH(tmp_sizeis, pos_sizeis, ndr, bpos, epos, flags) \
-	X_NDR_SCALARS_DEFAULT((tmp_sizeis), (ndr), (pos_sizeis), (epos), (flags), X_NDR_SWITCH_NONE)
+#define X_NDR_SIZE_IS_POST_PUSH(tmp_size_is, pos_size_is, type, ndr, bpos, epos, flags) do { \
+	type __tmp_val; \
+	x_convert_assert(__tmp_val, int_val(tmp_size_is)); \
+	X_NDR_SCALARS_DEFAULT(__tmp_val, (ndr), (pos_size_is), (epos), (flags), X_NDR_SWITCH_NONE); \
+} while (0)
 
-#define X_NDR_SIZE_IS_POST_PULL(tmp_sizeis, pos_sizeis, ndr, bpos, epos, flags) do { \
-	decltype(tmp_sizeis) __tmp_sizeis; \
-	X_NDR_SCALARS_DEFAULT(__tmp_sizeis, (ndr), (pos_sizeis), (epos), (flags), X_NDR_SWITCH_NONE); \
-	if (int_val(__tmp_sizeis) != int_val(tmp_sizeis)) { \
+#define X_NDR_SIZE_IS_POST_PULL(tmp_size_is, pos_size_is, type, ndr, bpos, epos, flags) do { \
+	type __tmp_val; \
+	X_NDR_SCALARS_DEFAULT(__tmp_val, (ndr), (pos_size_is), (epos), (flags), X_NDR_SWITCH_NONE); \
+	if (int_val(__tmp_val) != int_val(tmp_size_is)) { \
 		return -NDR_ERR_LENGTH; \
 	} \
 } while (0)
 
+#define X_NDR_SCALARS_SIZE_IS_VECTOR_PRE_PUSH(order) \
+	uint3264 __tmp_size_is_##order
 
-#define X_NDR_SCALARS_LENGTH_IS_VECTOR_2_PUSH(tmp_sizeis, tmp_lengthis, val, ndr, bpos, epos, flags) do { \
-	X_NDR_SCALARS_DEFAULT(uint3264((val).size()), (ndr), (bpos), (epos), (flags), X_NDR_SWITCH_NONE); \
+#define X_NDR_SCALARS_SIZE_IS_VECTOR_PRE_PULL(order) \
+	uint3264 __tmp_size_is_##order
+
+#define X_NDR_SCALARS_LENGTH_IS_VECTOR_2_PRE_PUSH(order) \
+	uint3264 __tmp_size_is_##order, __tmp_length_is_##order
+
+#define X_NDR_SCALARS_LENGTH_IS_VECTOR_2_PRE_PULL(order) \
+	uint3264 __tmp_size_is_##order, __tmp_length_is_##order
+
+#define X_NDR_SCALARS_LENGTH_IS_VECTOR_2_PUSH(order, val, ndr, bpos, epos, flags) do { \
+	x_convert_assert(__tmp_size_is_##order, (val).size()); \
+	x_convert_assert(__tmp_length_is_##order, (val).size()); \
+	X_NDR_SCALARS_DEFAULT(__tmp_size_is_##order, (ndr), (bpos), (epos), (flags), X_NDR_SWITCH_NONE); \
 	X_NDR_SCALARS_DEFAULT(uint3264(0), (ndr), (bpos), (epos), (flags), X_NDR_SWITCH_NONE); \
-	X_NDR_SCALARS_DEFAULT(uint3264((val).size()), (ndr), (bpos), (epos), (flags), X_NDR_SWITCH_NONE); \
-	x_convert_assert((tmp_sizeis), (val).size()); \
-	x_convert_assert((tmp_lengthis), (val).size()); \
+	X_NDR_SCALARS_DEFAULT(__tmp_length_is_##order, (ndr), (bpos), (epos), (flags), X_NDR_SWITCH_NONE); \
 } while (0)
 
-#define X_NDR_SCALARS_LENGTH_IS_VECTOR_2_PULL(tmp_sizeis, tmp_lengthis, val, ndr, bpos, epos, flags) do {\
-	uint3264 __tmp_size_is_2, __tmp_offset_2, __tmp_length_is_2; \
-	X_NDR_SCALARS_DEFAULT(__tmp_size_is_2, (ndr), (bpos), (epos), (flags), X_NDR_SWITCH_NONE); \
-	X_NDR_SCALARS_DEFAULT(__tmp_offset_2, (ndr), (bpos), (epos), (flags), X_NDR_SWITCH_NONE); \
-	X_NDR_SCALARS_DEFAULT(__tmp_length_is_2, (ndr), (bpos), (epos), (flags), X_NDR_SWITCH_NONE); \
-	if (int_val(__tmp_offset_2) != 0 || int_val(__tmp_length_is_2) > int_val(__tmp_size_is_2)) { \
+#define X_NDR_SCALARS_LENGTH_IS_VECTOR_2_PULL(order, val, ndr, bpos, epos, flags) do {\
+	uint3264 __tmp_offset_##order; \
+	X_NDR_SCALARS_DEFAULT(__tmp_size_is_##order, (ndr), (bpos), (epos), (flags), X_NDR_SWITCH_NONE); \
+	X_NDR_SCALARS_DEFAULT(__tmp_offset_##order, (ndr), (bpos), (epos), (flags), X_NDR_SWITCH_NONE); \
+	X_NDR_SCALARS_DEFAULT(__tmp_length_is_##order, (ndr), (bpos), (epos), (flags), X_NDR_SWITCH_NONE); \
+	if (int_val(__tmp_offset_##order) != 0 || int_val(__tmp_length_is_##order) > int_val(__tmp_size_is_##order)) { \
 		return -NDR_ERR_LENGTH; \
 	} \
-	(val).resize(int_val(__tmp_length_is_2)); \
-	x_convert_assert((tmp_sizeis), int_val(__tmp_size_is_2)); \
-	x_convert_assert((tmp_lengthis), int_val(__tmp_length_is_2)); \
+	(val).resize(int_val(__tmp_length_is_##order)); \
 } while (0)
 
-#define X_NDR_SCALARS_LENGTH_IS_VECTOR_1_PUSH(size_is, tmp_lengthis, val, ndr, bpos, epos, flags) do { \
-	X_NDR_SCALARS_DEFAULT(uint3264(size_is), (ndr), (bpos), (epos), (flags), X_NDR_SWITCH_NONE); \
+#define X_NDR_SCALARS_LENGTH_IS_VECTOR_1_PUSH(size_is, order, val, ndr, bpos, epos, flags) do { \
+	x_convert_assert(__tmp_size_is_##order, (size_is)); \
+	x_convert_assert(__tmp_length_is_##order, (val).size()); \
+	X_NDR_SCALARS_DEFAULT(__tmp_size_is_##order, (ndr), (bpos), (epos), (flags), X_NDR_SWITCH_NONE); \
 	X_NDR_SCALARS_DEFAULT(uint3264(0), (ndr), (bpos), (epos), (flags), X_NDR_SWITCH_NONE); \
-	X_NDR_SCALARS_DEFAULT(uint3264((val).size()), (ndr), (bpos), (epos), (flags), X_NDR_SWITCH_NONE); \
-	x_convert_assert((tmp_lengthis), (val).size()); \
+	X_NDR_SCALARS_DEFAULT(__tmp_length_is_##order, (ndr), (bpos), (epos), (flags), X_NDR_SWITCH_NONE); \
 } while (0)
 
-#define X_NDR_SCALARS_LENGTH_IS_VECTOR_1_PULL(size_is, tmp_lengthis, val, ndr, bpos, epos, flags) do {\
-	uint3264 __tmp_size_is_2, __tmp_offset_2, __tmp_length_is_2; \
-	X_NDR_SCALARS_DEFAULT(__tmp_size_is_2, (ndr), (bpos), (epos), (flags), X_NDR_SWITCH_NONE); \
-	X_NDR_SCALARS_DEFAULT(__tmp_offset_2, (ndr), (bpos), (epos), (flags), X_NDR_SWITCH_NONE); \
-	X_NDR_SCALARS_DEFAULT(__tmp_length_is_2, (ndr), (bpos), (epos), (flags), X_NDR_SWITCH_NONE); \
-	if (int_val(__tmp_offset_2) != 0 || int_val(tmp_lengthis) > int_val(__tmp_size_is_2)) { \
+#define X_NDR_SCALARS_LENGTH_IS_VECTOR_1_PULL(size_is, order, val, ndr, bpos, epos, flags) do {\
+	uint3264 __tmp_offset_##order; \
+	X_NDR_SCALARS_DEFAULT(__tmp_size_is_##order, (ndr), (bpos), (epos), (flags), X_NDR_SWITCH_NONE); \
+	X_NDR_SCALARS_DEFAULT(__tmp_offset_##order, (ndr), (bpos), (epos), (flags), X_NDR_SWITCH_NONE); \
+	X_NDR_SCALARS_DEFAULT(__tmp_length_is_##order, (ndr), (bpos), (epos), (flags), X_NDR_SWITCH_NONE); \
+	if (int_val(__tmp_offset_##order) != 0 || int_val(__tmp_length_is_##order) > int_val(__tmp_size_is_##order) || int_val(__tmp_size_is_##order) != (size_is)) { \
 		return -NDR_ERR_LENGTH; \
 	} \
 	(val).resize(int_val(__tmp_length_is_2)); \
