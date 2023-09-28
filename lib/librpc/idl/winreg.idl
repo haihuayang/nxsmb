@@ -45,7 +45,7 @@ import "lsa.idl", "security.idl", "misc.idl";
 					REG_KEY_WRITE 			|
 					KEY_CREATE_LINK);
 
-	typedef [public] struct {
+	typedef [public, nopush, nopull] struct {
 		[value(strlen_m_term(name)*2)] uint16 name_len;
 		[value(strlen_m_term(name)*2)] uint16 name_size;
 		[string,charset(UTF16)] uint16 *name;
@@ -152,7 +152,7 @@ import "lsa.idl", "security.idl", "misc.idl";
 		[in]	 winreg_String value
 	);
 
-	typedef struct {
+	typedef [nopush, nopull] struct {
 		[value(strlen_m_term_null(name)*2)] uint16 length;
 		/* size cannot be auto-set by value() as it is the
 		   amount of space the server is allowed to use for this
@@ -171,7 +171,7 @@ import "lsa.idl", "security.idl", "misc.idl";
 		[in,out,unique] NTTIME           *last_changed_time
 	);
 
-	typedef struct {
+	typedef [nopush, nopull] struct {
 		[value(strlen_m_term(name)*2)] uint16 length;
 		/* size cannot be auto-set by value() as it is the
 		   amount of space the server is allowed to use for this
@@ -183,7 +183,7 @@ import "lsa.idl", "security.idl", "misc.idl";
 	/******************/
 	/* Function: 0x0a */
 
-	[public] WERROR winreg_EnumValue(
+	[public, in_nopush, in_nopull, out_nopush, out_nopull] WERROR winreg_EnumValue(
 		[in,ref]        policy_handle *handle,
 		[in]            uint32 enum_index,
 		[in,out,ref]    winreg_ValNameBuf *name,
@@ -261,7 +261,7 @@ import "lsa.idl", "security.idl", "misc.idl";
 
 	/******************/
 	/* Function: 0x11 */
-	[public] WERROR winreg_QueryValue(
+	[public, in_nopush, in_nopull, out_nopush, out_nopull] WERROR winreg_QueryValue(
 		[in,ref] policy_handle *handle,
 		[in,ref] winreg_String *value_name,
 		[in,out,unique] winreg_Type *type,

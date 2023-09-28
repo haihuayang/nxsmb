@@ -175,6 +175,7 @@ TARGET_SET_idl := \
 	dssetup \
 	xattr \
 	dfs \
+	winreg \
 
 TARGET_GEN_nxsmb := \
 	$(TARGET_SET_asn1:%=$(TARGET_DIR_out)/lib/asn1/%_asn1.h) \
@@ -199,6 +200,7 @@ TARGET_SRC_libnxsmb := \
 		lib/librpc/krb5pac \
 		lib/librpc/dcerpc \
 		lib/librpc/srvsvc \
+		lib/librpc/winreg \
 		lib/librpc/ntlmssp \
 		lib/xutils \
 		lib/trace \
