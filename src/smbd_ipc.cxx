@@ -815,11 +815,9 @@ static struct x_smbd_ipc_iface_t
 	x_smbd_ipc_object_t *ipc_object;
 } ipc_tbl[] = {
 #define USTR(x) u##x
-#define DECL_RPC(x) { USTR(#x), &x_smbd_dcerpc_##x, "\\PIPE\\" #x, nullptr, }
-	DECL_RPC(srvsvc),
-	DECL_RPC(wkssvc),
-	DECL_RPC(dssetup),
-	DECL_RPC(lsarpc),
+#define X_SMBD_DCERPC_IFACE_DECL(x) { USTR(#x), &x_smbd_dcerpc_##x, "\\PIPE\\" #x, nullptr, },
+X_SMBD_DCERPC_IFACE_ENUM
+#undef X_SMBD_DCERPC_IFACE_DECL
 };
 
 static const x_dcerpc_iface_t *find_iface_by_syntax(
