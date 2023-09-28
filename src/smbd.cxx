@@ -21,6 +21,7 @@
 #include "smbd_replay.hxx"
 #include "smbd_secrets.hxx"
 #include "smbd_stats.hxx"
+#include "smbd_registry.hxx"
 #include "auth.hxx"
 
 #include "smb2.hxx"
@@ -141,6 +142,8 @@ static void init_smbd()
 
 	g_smbd.wbpool = x_wbpool_create(g_evtmgmt, 2,
 			smbd_conf->samba_locks_dir + "/winbindd_privileged/pipe");
+
+	x_smbd_registry_init();
 
 	x_smbd_object_pool_init(max_opens);
 	x_smbd_open_table_init(max_opens);
