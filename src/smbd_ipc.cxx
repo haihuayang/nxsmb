@@ -9,6 +9,7 @@
 #include "include/librpc/srvsvc.hxx"
 #include "include/librpc/security.hxx"
 #include "smbd_share.hxx"
+#include "smbd_conf.hxx"
 
 /* this guid indicates NDR encoding in a protocol tower */
 static const idl::ndr_syntax_id ndr_transfer_syntax_ndr = {
@@ -180,7 +181,7 @@ smbd_named_pipe_match_ctx(named_pipe_t *named_pipe,
 	// api_pipe_bind_req
 	unsigned int weight = 0;
 	for (auto &transfer_syntax: ctx.transfer_syntaxes) {
-		if (transfer_syntax == ndr_transfer_syntax_ndr64) {
+		if (x_smbd_conf_get_curr().ndr64 && transfer_syntax == ndr_transfer_syntax_ndr64) {
 			weight = 2;
 			break;
 		} else if (transfer_syntax == ndr_transfer_syntax_ndr) {

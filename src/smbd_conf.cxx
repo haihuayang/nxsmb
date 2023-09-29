@@ -384,6 +384,8 @@ static bool parse_global_param(x_smbd_conf_t &smbd_conf,
 		smbd_conf.workgroup_8 = value;
 	} else if (name == "lanman auth") {
 		smbd_conf.lanman_auth = parse_bool(value);
+	} else if (name == "ndr64") {
+		smbd_conf.ndr64 = parse_bool(value);
 	} else if (name == "server signing") {
 		if (value == "mandatory") {
 			smbd_conf.security_mode |= X_SMB2_NEGOTIATE_SIGNING_REQUIRED;
