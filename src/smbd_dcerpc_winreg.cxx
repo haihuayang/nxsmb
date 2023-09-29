@@ -4,8 +4,39 @@
 #include "include/librpc/winreg.hxx"
 #include "smbd_conf.hxx"
 #include "smbd_registry.hxx"
-//#include "smbd_dcerpc_winreg.hxx"
 
+static bool normalize_reg_path(std::u16string &name,
+		const std::u16string &src)
+{
+	const char16_t *begin = src.data();
+	const char16_t *end = begin + src.length();
+
+	for ( ; begin != end; ++begin) {
+		if (*begin != u'\\') {
+			break;
+		}
+	}
+
+	if (!x_str_convert(name, begin, end, x_toupper_t())) {
+		return false;
+	}
+
+	if (name[name.length() - 1] == u'\\') {
+		name.pop_back();
+	}
+	return true;
+}
+
+static std::shared_ptr<x_smbd_registry_key_t> find_handle(
+		x_dcerpc_pipe_t &rpc_pipe, const idl::policy_handle &handle)
+{
+	auto [ found, data ] = x_smbd_dcerpc_find_handle(rpc_pipe,
+			handle);
+	if (found) {
+		return std::static_pointer_cast<x_smbd_registry_key_t>(data);
+	}
+	return nullptr;
+}
 
 X_SMBD_DCERPC_IMPL_TODO(winreg_OpenHKCR)
 X_SMBD_DCERPC_IMPL_TODO(winreg_OpenHKCU)
@@ -16,9 +47,15 @@ static idl::dcerpc_nca_status x_smbd_dcerpc_impl_winreg_OpenHKLM(
 		idl::winreg_OpenHKLM &arg)
 {
 	/* TODO check arg.access_mask */
-	auto data = std::make_shared<std::u16string>(u"HKLM");
+	std::shared_ptr<x_smbd_registry_key_t> key =
+		x_smbd_registry_open_key(nullptr, u"HKLM");
+	if (!key) {
+		arg.__result = WERR_FILE_NOT_FOUND;
+		return X_SMBD_DCERPC_NCA_STATUS_OK;
+	}
+
 	if (!x_smbd_dcerpc_create_handle(rpc_pipe, arg.handle,
-				data)) {
+				key)) {
 		// samba return NOT_FOUND for any error
 		arg.__result = WERR_FILE_NOT_FOUND;
 		return X_SMBD_DCERPC_NCA_STATUS_OK;
@@ -33,6 +70,8 @@ static idl::dcerpc_nca_status x_smbd_dcerpc_impl_winreg_OpenHKPD(
 		x_smbd_sess_t *smbd_sess,
 		idl::winreg_OpenHKPD &arg)
 {
+	X_TODO;
+#if 0
 	/* TODO check arg.access_mask */
 	auto data = std::make_shared<std::u16string>(u"HKPD");
 	if (!x_smbd_dcerpc_create_handle(rpc_pipe, arg.handle,
@@ -41,7 +80,7 @@ static idl::dcerpc_nca_status x_smbd_dcerpc_impl_winreg_OpenHKPD(
 		arg.__result = WERR_FILE_NOT_FOUND;
 		return X_SMBD_DCERPC_NCA_STATUS_OK;
 	}
-
+#endif
 	arg.__result = WERR_OK;
 	return X_SMBD_DCERPC_NCA_STATUS_OK;
 }
@@ -67,8 +106,32 @@ static idl::dcerpc_nca_status x_smbd_dcerpc_impl_winreg_CreateKey(
 		x_smbd_sess_t *smbd_sess,
 		idl::winreg_CreateKey &arg)
 {
-	X_TODO;
-	arg.__result = WERR_FILE_NOT_FOUND;
+	std::shared_ptr<x_smbd_registry_key_t> parent_key = find_handle(
+			rpc_pipe, arg.handle);
+	if (!parent_key) {
+		arg.__result = WERR_INVALID_HANDLE;
+		return X_SMBD_DCERPC_NCA_STATUS_OK;
+	}
+
+	std::u16string name;
+	if (!normalize_reg_path(name, *arg.name.name)) {
+		arg.__result = WERR_FILE_NOT_FOUND;
+		return X_SMBD_DCERPC_NCA_STATUS_OK;
+	}
+
+	auto [key, exist] = x_smbd_registry_create_key(parent_key.get(), name);
+	arg.action_taken = std::make_shared<idl::winreg_CreateAction>(
+			exist ? idl::REG_OPENED_EXISTING_KEY :
+			idl::REG_CREATED_NEW_KEY);
+
+	if (!x_smbd_dcerpc_create_handle(rpc_pipe, arg.new_handle,
+				key)) {
+		// samba return NOT_FOUND for any error
+		arg.__result = WERR_FILE_NOT_FOUND;
+		return X_SMBD_DCERPC_NCA_STATUS_OK;
+	}
+
+	arg.__result = WERR_OK;
 	return X_SMBD_DCERPC_NCA_STATUS_OK;
 }
 
@@ -77,14 +140,42 @@ static idl::dcerpc_nca_status x_smbd_dcerpc_impl_winreg_DeleteKey(
 		x_smbd_sess_t *smbd_sess,
 		idl::winreg_DeleteKey &arg)
 {
-	arg.__result = WERR_FILE_NOT_FOUND;
+	std::shared_ptr<x_smbd_registry_key_t> parent_key = find_handle(
+			rpc_pipe, arg.handle);
+	if (!parent_key) {
+		arg.__result = WERR_INVALID_HANDLE;
+		return X_SMBD_DCERPC_NCA_STATUS_OK;
+	}
+
+	std::u16string name;
+	if (!normalize_reg_path(name, *arg.key.name)) {
+		arg.__result = WERR_FILE_NOT_FOUND;
+		return X_SMBD_DCERPC_NCA_STATUS_OK;
+	}
+
+	bool ret = x_smbd_registry_delete_key(parent_key.get(), name);
+
+	if (!ret) {
+		arg.__result = WERR_FILE_NOT_FOUND;
+	} else {
+		arg.__result = WERR_OK;
+	}
 	return X_SMBD_DCERPC_NCA_STATUS_OK;
 }
 
 X_SMBD_DCERPC_IMPL_TODO(winreg_DeleteValue)
 X_SMBD_DCERPC_IMPL_TODO(winreg_EnumKey)
 X_SMBD_DCERPC_IMPL_TODO(winreg_EnumValue)
-X_SMBD_DCERPC_IMPL_TODO(winreg_FlushKey)
+
+static idl::dcerpc_nca_status x_smbd_dcerpc_impl_winreg_FlushKey(
+		x_dcerpc_pipe_t &rpc_pipe,
+		x_smbd_sess_t *smbd_sess,
+		idl::winreg_FlushKey &arg)
+{
+	arg.__result = WERR_OK;
+	return X_SMBD_DCERPC_NCA_STATUS_OK;
+}
+
 X_SMBD_DCERPC_IMPL_TODO(winreg_GetKeySecurity)
 X_SMBD_DCERPC_IMPL_TODO(winreg_LoadKey)
 X_SMBD_DCERPC_IMPL_TODO(winreg_NotifyChangeKeyValue)
@@ -94,48 +185,32 @@ static idl::dcerpc_nca_status x_smbd_dcerpc_impl_winreg_OpenKey(
 		x_smbd_sess_t *smbd_sess,
 		idl::winreg_OpenKey &arg)
 {
-	auto [ found, data ] = x_smbd_dcerpc_find_handle(rpc_pipe,
-			arg.parent_handle);
-	if (!found) {
+	std::shared_ptr<x_smbd_registry_key_t> parent_key = find_handle(
+			rpc_pipe, arg.parent_handle);
+	if (!parent_key) {
 		arg.__result = WERR_INVALID_HANDLE;
 		return X_SMBD_DCERPC_NCA_STATUS_OK;
 	}
 
-	auto parent_name = std::static_pointer_cast<std::u16string>(data);
 	X_LOG_DBG("winreg_OpenKey parent '%s' key '%s'",
-			x_str_todebug(*parent_name).c_str(),
+			x_str_todebug(x_smbd_registry_key_get_name(*parent_key)).c_str(),
 			x_str_todebug(*arg.keyname.name).c_str());
 
-	std::u16string full_path;
-	full_path.reserve(parent_name->length() + 1 + arg.keyname.name->length() + 1);
-	full_path.assign(*parent_name);
-	full_path.push_back(u'\\');
-
-	const char16_t *begin = arg.keyname.name->data();
-	const char16_t *end = begin + arg.keyname.name->length();
-
-	for ( ; begin != end; ++begin) {
-		if (*begin != u'\\') {
-			break;
-		}
-	}
-
-	if (!x_str_convert(full_path, begin, end, x_toupper_t())) {
-		arg.__result = WERR_FILE_NOT_FOUND;
-		return X_SMBD_DCERPC_NCA_STATUS_OK;
-	}
-	if (full_path[full_path.length() - 1] == u'\\') {
-		full_path.pop_back();
-	}
-
-	if (!x_smbd_registry_find_key(full_path)) {
+	std::u16string name;
+	if (!normalize_reg_path(name, *arg.keyname.name)) {
 		arg.__result = WERR_FILE_NOT_FOUND;
 		return X_SMBD_DCERPC_NCA_STATUS_OK;
 	}
 
-	auto full_path_ptr = std::make_shared<std::u16string>(std::move(full_path));
+	std::shared_ptr<x_smbd_registry_key_t> key = x_smbd_registry_open_key(
+			parent_key.get(), name);
+	if (!key) {
+		arg.__result = WERR_FILE_NOT_FOUND;
+		return X_SMBD_DCERPC_NCA_STATUS_OK;
+	}
+
 	if (!x_smbd_dcerpc_create_handle(rpc_pipe, arg.handle,
-				full_path_ptr)) {
+				key)) {
 		// samba return NOT_FOUND for any error
 		arg.__result = WERR_FILE_NOT_FOUND;
 		return X_SMBD_DCERPC_NCA_STATUS_OK;
@@ -152,9 +227,9 @@ static idl::dcerpc_nca_status x_smbd_dcerpc_impl_winreg_QueryValue(
 		x_smbd_sess_t *smbd_sess,
 		idl::winreg_QueryValue &arg)
 {
-	auto [ found, data ] = x_smbd_dcerpc_find_handle(rpc_pipe,
-			arg.handle);
-	if (!found) {
+	std::shared_ptr<x_smbd_registry_key_t> key = find_handle(
+			rpc_pipe, arg.handle);
+	if (!key) {
 		arg.__result = WERR_INVALID_HANDLE;
 		return X_SMBD_DCERPC_NCA_STATUS_OK;
 	}
@@ -169,13 +244,8 @@ static idl::dcerpc_nca_status x_smbd_dcerpc_impl_winreg_QueryValue(
 		return X_SMBD_DCERPC_NCA_STATUS_OK;
 	}
 
-	auto name = std::static_pointer_cast<std::u16string>(data);
-
-	const x_smbd_registry_key_t *reg_key = x_smbd_registry_find_key(*name);
-	X_ASSERT(reg_key);
-
 	const x_smbd_registry_value_t *reg_val = x_smbd_registry_find_value(
-			reg_key, *arg.value_name.name);
+			*key, *arg.value_name.name);
 
 	if (!reg_val) {
 		arg.__result = WERR_FILE_NOT_FOUND;
@@ -230,15 +300,11 @@ static WERROR __winreg_QueryMultipleValues(
 		std::shared_ptr<std::vector<uint8_t>> &out_buf_,
 		uint32_t offered, uint32_t &needed)
 {
-	auto [ found, data ] = x_smbd_dcerpc_find_handle(rpc_pipe,
-			key_handle);
-	if (!found) {
+	std::shared_ptr<x_smbd_registry_key_t> reg_key = find_handle(
+			rpc_pipe, key_handle);
+	if (!reg_key) {
 		return WERR_INVALID_HANDLE;
 	}
-
-	auto name = std::static_pointer_cast<std::u16string>(data);
-	const x_smbd_registry_key_t *reg_key = x_smbd_registry_find_key(*name);
-	X_ASSERT(reg_key);
 
 	std::vector<uint8_t> out_buf;
 	out_buf.reserve(1024);
@@ -249,7 +315,7 @@ static WERROR __winreg_QueryMultipleValues(
 		const x_smbd_registry_value_t *reg_val = nullptr;
 		if (value_in.ve_valuename && value_in.ve_valuename->name) {
 			reg_val = x_smbd_registry_find_value(
-					reg_key, *value_in.ve_valuename->name);
+					*reg_key, *value_in.ve_valuename->name);
 		}
 
 		if (!reg_val) {
