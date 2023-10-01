@@ -71,8 +71,23 @@ static idl::dcerpc_nca_status x_smbd_dcerpc_impl_##Arg( \
 }
 
 
-X_SMBD_DCERPC_IMPL_TODO(winreg_OpenHKCR)
-X_SMBD_DCERPC_IMPL_TODO(winreg_OpenHKCU)
+static idl::dcerpc_nca_status x_smbd_dcerpc_impl_winreg_OpenHKCR(
+		x_dcerpc_pipe_t &rpc_pipe,
+		x_smbd_sess_t *smbd_sess,
+		idl::winreg_OpenHKCR &arg)
+{
+	arg.__result = open_top_key(rpc_pipe, smbd_sess, arg.handle, u"HKCR");
+	return X_SMBD_DCERPC_NCA_STATUS_OK;
+}
+
+static idl::dcerpc_nca_status x_smbd_dcerpc_impl_winreg_OpenHKCU(
+		x_dcerpc_pipe_t &rpc_pipe,
+		x_smbd_sess_t *smbd_sess,
+		idl::winreg_OpenHKCU &arg)
+{
+	arg.__result = open_top_key(rpc_pipe, smbd_sess, arg.handle, u"HKCU");
+	return X_SMBD_DCERPC_NCA_STATUS_OK;
+}
 
 static idl::dcerpc_nca_status x_smbd_dcerpc_impl_winreg_OpenHKLM(
 		x_dcerpc_pipe_t &rpc_pipe,
@@ -88,18 +103,8 @@ static idl::dcerpc_nca_status x_smbd_dcerpc_impl_winreg_OpenHKPD(
 		x_smbd_sess_t *smbd_sess,
 		idl::winreg_OpenHKPD &arg)
 {
-	X_TODO;
-#if 0
-	/* TODO check arg.access_mask */
-	auto data = std::make_shared<std::u16string>(u"HKPD");
-	if (!x_smbd_dcerpc_create_handle(rpc_pipe, arg.handle,
-				data)) {
-		// samba return NOT_FOUND for any error
-		arg.__result = WERR_FILE_NOT_FOUND;
-		return X_SMBD_DCERPC_NCA_STATUS_OK;
-	}
-#endif
-	arg.__result = WERR_OK;
+	/* TODO special hangle, see samba _winreg_QueryValue  */
+	arg.__result = open_top_key(rpc_pipe, smbd_sess, arg.handle, u"HKLM");
 	return X_SMBD_DCERPC_NCA_STATUS_OK;
 }
 

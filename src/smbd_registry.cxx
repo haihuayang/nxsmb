@@ -316,5 +316,6 @@ int x_smbd_registry_init()
 				idl::REG_SZ, u"6.1"));
 	create_subkey_path(&g_smbd_registry_root, u"HKU", 0);
 	create_subkey_path(&g_smbd_registry_root, u"HKCU", 0);
+	create_subkey_path(&g_smbd_registry_root, u"HKCR", 0);
 	return 0;
 }

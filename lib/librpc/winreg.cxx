@@ -36,7 +36,9 @@ static x_ndr_off_t ndr_u16string_buffers(const StrLength &sl, const StrSize &ss,
 		X_NDR_SCALARS_DEFAULT(uint3264{length}, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
 		X_NDR_SCALARS_DEFAULT(uint3264{0}, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
 		X_NDR_SCALARS_DEFAULT(uint3264{size}, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
-		X_NDR_SCALARS_CHARSET(*val, ndr, bpos, epos, flags | LIBNDR_FLAG_STR_NULLTERM, X_NDR_SWITCH_NONE);
+		if (length) {
+			X_NDR_SCALARS_CHARSET(*val, ndr, bpos, epos, flags | LIBNDR_FLAG_STR_NULLTERM, X_NDR_SWITCH_NONE);
+		}
 	}
 	return bpos;
 }
@@ -72,7 +74,9 @@ static x_ndr_off_t ndr_u16string_buffers(const StrLength &sl, const StrSize &ss,
 			return -NDR_ERR_ARRAY_SIZE;
 		}
 		epos = X_NDR_CHECK_POS(bpos + array_length.val * 2, bpos, epos);
-		X_NDR_SCALARS_CHARSET(*val, ndr, bpos, epos, flags | LIBNDR_FLAG_STR_NULLTERM, X_NDR_SWITCH_NONE);
+		if (array_length.val) {
+			X_NDR_SCALARS_CHARSET(*val, ndr, bpos, epos, flags | LIBNDR_FLAG_STR_NULLTERM, X_NDR_SWITCH_NONE);
+		}
 	}
 	x_ndr_off_t pos_1 = ndr.load_pos();
 	x_ndr_off_t pos_2 = ndr.load_pos();
@@ -96,7 +100,7 @@ struct strlen_term
 struct strlen_term_null
 {
 	uint16_t operator()(const std::shared_ptr<u16string> &s) const {
-		auto length = s ? s->length() + 1 : 0;
+		auto length = s ? s->length() : 0;
 		if (length) {
 			++length;
 		}
@@ -216,30 +220,162 @@ x_ndr_off_t ndr_traits_t<winreg_StringBuf>::buffers(
 }
 
 
-x_ndr_off_t ndr_requ_traits_t<winreg_EnumValue>::scalars(const winreg_EnumValue &__val, x_ndr_push_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level) const
+x_ndr_off_t ndr_requ_traits_t<winreg_EnumValue>::scalars(const winreg_EnumValue &val, x_ndr_push_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, x_ndr_switch_t level) const
 {
-	X_TODO;
-	return __bpos;
+	X_NDR_SCALARS_SIMPLE(ndr_traits_t<policy_handle>, val.handle, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
+	X_NDR_SCALARS_SIMPLE(ndr_traits_t<uint32>, val.enum_index, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
+	auto tmp_pos_index_2 = ndr.pos_index;
+	X_NDR_SCALARS_SIMPLE(ndr_traits_t<winreg_ValNameBuf>, val.name, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
+	ndr.pos_index = tmp_pos_index_2;
+	X_NDR_BUFFERS_SIMPLE(ndr_traits_t<winreg_ValNameBuf>, val.name, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
+	X_NDR_RESET_POS(ndr, tmp_pos_index_2);
+	X_NDR_SCALARS_UNIQUE_PTR(val.type, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
+	if (val.type) {
+		X_NDR_SCALARS_SIMPLE(ndr_traits_t<winreg_Type>, *val.type, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
+	}
+	X_NDR_SCALARS_UNIQUE_PTR(val.value, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
+	if (val.value) {
+		X_NDR_SCALARS_DEFAULT(uint3264{val.size ? *val.size : 0}, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
+		X_NDR_SCALARS_DEFAULT(uint3264{0}, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
+		X_NDR_SCALARS_DEFAULT(uint3264{val.length ? *val.length : 0}, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
+		for (auto &elem: *val.value) {
+			X_NDR_SCALARS_DEFAULT(elem, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
+		}
+	}
+	X_NDR_SCALARS_UNIQUE_PTR(val.size, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
+	if (val.size) {
+		X_NDR_SCALARS_SIMPLE(ndr_traits_t<uint32>, *val.size, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
+	}
+	X_NDR_SCALARS_UNIQUE_PTR(val.length, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
+	if (val.length) {
+		X_NDR_SCALARS_SIMPLE(ndr_traits_t<uint32>, *val.length, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
+	}
+	return bpos;
 }
 
-x_ndr_off_t ndr_resp_traits_t<winreg_EnumValue>::scalars(const winreg_EnumValue &__val, x_ndr_push_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level) const
+x_ndr_off_t ndr_resp_traits_t<winreg_EnumValue>::scalars(const winreg_EnumValue &val, x_ndr_push_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, x_ndr_switch_t level) const
 {
-	X_TODO;
-	X_NDR_SCALARS_DEFAULT(__val.__result, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
-	return __bpos;
+	auto tmp_pos_index_2 = ndr.pos_index;
+	X_NDR_SCALARS_SIMPLE(ndr_traits_t<winreg_ValNameBuf>, val.name, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
+	ndr.pos_index = tmp_pos_index_2;
+	X_NDR_BUFFERS_SIMPLE(ndr_traits_t<winreg_ValNameBuf>, val.name, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
+	X_NDR_RESET_POS(ndr, tmp_pos_index_2);
+	X_NDR_SCALARS_UNIQUE_PTR(val.type, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
+	if (val.type) {
+		X_NDR_SCALARS_SIMPLE(ndr_traits_t<winreg_Type>, *val.type, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
+	}
+	X_NDR_SCALARS_UNIQUE_PTR(val.value, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
+	if (val.value) {
+		X_NDR_SCALARS_DEFAULT(uint3264{val.size ? *val.size : 0}, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
+		X_NDR_SCALARS_DEFAULT(uint3264{0}, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
+		X_NDR_SCALARS_DEFAULT(uint3264{val.length ? *val.length : 0}, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
+		for (auto &elem: *val.value) {
+			X_NDR_SCALARS_DEFAULT(elem, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
+		}
+	}
+	X_NDR_SCALARS_UNIQUE_PTR(val.size, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
+	if (val.size) {
+		X_NDR_SCALARS_SIMPLE(ndr_traits_t<uint32>, *val.size, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
+	}
+	X_NDR_SCALARS_UNIQUE_PTR(val.length, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
+	if (val.length) {
+		X_NDR_SCALARS_SIMPLE(ndr_traits_t<uint32>, *val.length, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
+	}
+	X_NDR_SCALARS_DEFAULT(val.__result, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
+	return bpos;
 }
 
-x_ndr_off_t ndr_requ_traits_t<winreg_EnumValue>::scalars(winreg_EnumValue &__val, x_ndr_pull_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level) const
+x_ndr_off_t ndr_requ_traits_t<winreg_EnumValue>::scalars(winreg_EnumValue &val, x_ndr_pull_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, x_ndr_switch_t level) const
 {
-	X_TODO;
-	return __bpos;
+	X_NDR_SCALARS_SIMPLE(ndr_traits_t<policy_handle>, val.handle, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
+	X_NDR_SCALARS_SIMPLE(ndr_traits_t<uint32>, val.enum_index, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
+	auto tmp_pos_index_2 = ndr.pos_index;
+	X_NDR_SCALARS_SIMPLE(ndr_traits_t<winreg_ValNameBuf>, val.name, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
+	ndr.pos_index = tmp_pos_index_2;
+	X_NDR_BUFFERS_SIMPLE(ndr_traits_t<winreg_ValNameBuf>, val.name, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
+	X_NDR_RESET_POS(ndr, tmp_pos_index_2);
+	X_NDR_SCALARS_UNIQUE_PTR(val.type, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
+	if (val.type) {
+		X_NDR_SCALARS_SIMPLE(ndr_traits_t<winreg_Type>, *val.type, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
+	}
+	X_NDR_SCALARS_UNIQUE_PTR(val.value, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
+	uint3264 size, length, offset;
+	if (val.value) {
+		X_NDR_SCALARS_DEFAULT(size, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
+		X_NDR_SCALARS_DEFAULT(offset, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
+		X_NDR_SCALARS_DEFAULT(length, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
+		if (size.val > 0x4000000) {
+			return -NDR_ERR_RANGE;
+		}
+		if (length.val > size.val || offset.val > 0) {
+			return -NDR_ERR_ARRAY_SIZE;
+		}
+		val.value->resize(length.val);
+		for (auto &elem: *val.value) {
+			X_NDR_SCALARS_DEFAULT(elem, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
+		}
+	}
+	X_NDR_SCALARS_UNIQUE_PTR(val.size, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
+	if (val.size) {
+		X_NDR_SCALARS_SIMPLE(ndr_traits_t<uint32>, *val.size, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
+		if (*val.size != size.val) {
+			return -NDR_ERR_ARRAY_SIZE;
+		}
+	}
+	X_NDR_SCALARS_UNIQUE_PTR(val.length, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
+	if (val.length) {
+		X_NDR_SCALARS_SIMPLE(ndr_traits_t<uint32>, *val.length, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
+		if (*val.length != length.val) {
+			return -NDR_ERR_ARRAY_SIZE;
+		}
+	}
+	return bpos;
 }
 
-x_ndr_off_t ndr_resp_traits_t<winreg_EnumValue>::scalars(winreg_EnumValue &__val, x_ndr_pull_t &__ndr, x_ndr_off_t __bpos, x_ndr_off_t __epos, uint32_t __flags, x_ndr_switch_t __level) const
+x_ndr_off_t ndr_resp_traits_t<winreg_EnumValue>::scalars(winreg_EnumValue &val, x_ndr_pull_t &ndr, x_ndr_off_t bpos, x_ndr_off_t epos, uint32_t flags, x_ndr_switch_t level) const
 {
-	X_TODO;
-	X_NDR_SCALARS_DEFAULT(__val.__result, __ndr, __bpos, __epos, __flags, X_NDR_SWITCH_NONE);
-	return __bpos;
+	auto tmp_pos_index_2 = ndr.pos_index;
+	X_NDR_SCALARS_SIMPLE(ndr_traits_t<winreg_ValNameBuf>, val.name, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
+	ndr.pos_index = tmp_pos_index_2;
+	X_NDR_BUFFERS_SIMPLE(ndr_traits_t<winreg_ValNameBuf>, val.name, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
+	X_NDR_RESET_POS(ndr, tmp_pos_index_2);
+	X_NDR_SCALARS_UNIQUE_PTR(val.type, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
+	if (val.type) {
+		X_NDR_SCALARS_SIMPLE(ndr_traits_t<winreg_Type>, *val.type, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
+	}
+	X_NDR_SCALARS_UNIQUE_PTR(val.value, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
+	uint3264 size, length, offset;
+	if (val.value) {
+		X_NDR_SCALARS_DEFAULT(size, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
+		X_NDR_SCALARS_DEFAULT(offset, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
+		X_NDR_SCALARS_DEFAULT(length, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
+		if (size.val > 0x4000000) {
+			return -NDR_ERR_RANGE;
+		}
+		if (length.val > size.val || offset.val > 0) {
+			return -NDR_ERR_ARRAY_SIZE;
+		}
+		val.value->resize(length.val);
+		for (auto &elem: *val.value) {
+			X_NDR_SCALARS_DEFAULT(elem, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
+		}
+	}
+	X_NDR_SCALARS_UNIQUE_PTR(val.size, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
+	if (val.size) {
+		X_NDR_SCALARS_SIMPLE(ndr_traits_t<uint32>, *val.size, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
+		if (*val.size != size.val) {
+			return -NDR_ERR_ARRAY_SIZE;
+		}
+	}
+	X_NDR_SCALARS_UNIQUE_PTR(val.length, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
+	if (val.length) {
+		X_NDR_SCALARS_SIMPLE(ndr_traits_t<uint32>, *val.length, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
+		if (*val.length != length.val) {
+			return -NDR_ERR_ARRAY_SIZE;
+		}
+	}
+	X_NDR_SCALARS_DEFAULT(val.__result, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
+	return bpos;
 }
 
 
