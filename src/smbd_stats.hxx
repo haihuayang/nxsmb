@@ -6,7 +6,7 @@
 #error "Must be c++"
 #endif
 
-
+#include "include/xdefines.h"
 #include <atomic>
 
 /* Declare counter id below, e.g., X_SMBD_COUNTER_DECL(name) */
@@ -48,9 +48,45 @@ enum {
 	X_SMBD_COUNTER_ID_MAX,
 };
 
+#define X_SMBD_HISTOGRAM_ENUM \
+
+enum {
+#undef X_SMBD_HISTOGRAM_DECL
+#define X_SMBD_HISTOGRAM_DECL(x) X_SMBD_HISTOGRAM_ID_ ## x,
+	X_SMBD_HISTOGRAM_ENUM
+	X_SMBD_HISTOGRAM_ID_MAX,
+};
+
+struct x_smbd_histogram_t
+{
+	enum { BAND_NUMBER = 32, };
+	std::atomic<uint64_t> min{uint64_t(-1)}, max, sum;
+	std::atomic<uint64_t> bands[BAND_NUMBER];
+
+	void update(uint64_t val) {
+		unsigned int band = 0;
+		if (x_likely(val != 0)) {
+			band = 64 - __builtin_clzl(val);
+			if (x_unlikely(band >= BAND_NUMBER)) {
+				band = BAND_NUMBER - 1;
+			}
+		}
+
+		bands[band].fetch_add(1, std::memory_order_relaxed);
+		sum.fetch_add(val, std::memory_order_relaxed);
+		if (min.load(std::memory_order_relaxed) > val) {
+			min.store(val, std::memory_order_relaxed);
+		}
+		if (max.load(std::memory_order_relaxed) < val) {
+			max.store(val, std::memory_order_relaxed);
+		}
+	}
+};
+
 struct x_smbd_stats_t
 {
 	std::atomic<uint64_t> counters[X_SMBD_COUNTER_ID_MAX];
+	x_smbd_histogram_t histograms[X_SMBD_HISTOGRAM_ID_MAX];
 };
 
 extern thread_local x_smbd_stats_t *g_smbd_stats;
@@ -58,6 +94,10 @@ extern thread_local x_smbd_stats_t *g_smbd_stats;
 #define X_SMBD_COUNTER_INC(id, num) ( \
 	g_smbd_stats->counters[X_SMBD_COUNTER_ID_ ## id].fetch_add(num, std::memory_order_relaxed) \
 )
+
+#define X_SMBD_HISTOGRAM_UPDATE(id, elapsed) do { \
+	g_smbd_stats->histograms[X_SMBD_HISTOGRAM_ID_ ## id].update(elapsed); \
+} while (0)
 
 int x_smbd_stats_init(uint32_t thread_id);
 
