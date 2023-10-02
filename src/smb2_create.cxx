@@ -3,6 +3,7 @@
 #include "smbd_open.hxx"
 #include "smbd_replay.hxx"
 #include "smbd_ntacl.hxx"
+#include "smbd_stats.hxx"
 #include "include/charset.hxx"
 
 static const uint8_t X_SMB2_CREATE_TAG_APP_INSTANCE_ID[] = {
@@ -590,6 +591,9 @@ static void x_smb2_reply_create(x_smbd_conn_t *smbd_conn,
 
 	uint32_t out_length = encode_out_create(state, smbd_requ->smbd_open, out_hdr);
 	bufref->length = x_convert_assert<uint32_t>(sizeof(x_smb2_header_t) + out_length);
+
+	X_SMBD_HISTOGRAM_UPDATE(op_create, x_tick_now() - smbd_requ->start);
+
 	x_smb2_reply(smbd_conn, smbd_requ, bufref, bufref, NT_STATUS_OK, 
 			bufref->length);
 }

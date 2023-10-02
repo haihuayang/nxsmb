@@ -1026,6 +1026,8 @@ static int x_smbd_conn_process_smb2(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smb
 		smbd_requ->in_offset = offset;
 		smbd_requ->in_requ_len = in_requ_len;
 
+		smbd_requ->start = tick_now = x_tick_now();
+
 		if (smbd_requ->in_smb2_hdr.opcode == X_SMB2_OP_CANCEL) {
 			x_smbd_conn_cancel(smbd_conn, smbd_requ->in_smb2_hdr);
 			continue;

@@ -1,6 +1,7 @@
 
 #include "smbd.hxx"
 #include "smbd_open.hxx"
+#include "smbd_stats.hxx"
 
 enum {
 	X_SMB2_CLOSE_REQU_BODY_LEN = 0x18,
@@ -63,6 +64,9 @@ static void x_smb2_reply_close(x_smbd_conn_t *smbd_conn,
 	uint8_t *out_hdr = bufref->get_data();
 	
 	encode_out_close(state, out_hdr);
+
+	X_SMBD_HISTOGRAM_UPDATE(op_close, x_tick_now() - smbd_requ->start);
+
 	x_smb2_reply(smbd_conn, smbd_requ, bufref, bufref, NT_STATUS_OK, 
 			sizeof(x_smb2_header_t) + X_SMB2_CLOSE_RESP_BODY_LEN);
 }

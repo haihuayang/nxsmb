@@ -495,6 +495,7 @@ struct x_smbd_requ_t
 	uint64_t channel_generation;
 	const uint64_t compound_id;
 
+	x_tick_t start;
 	x_smb2_header_t in_smb2_hdr;
 	uint32_t in_msgsize, in_offset, in_requ_len;
 	std::atomic<uint32_t> async_state = S_INIT;

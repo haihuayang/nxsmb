@@ -49,6 +49,8 @@ enum {
 };
 
 #define X_SMBD_HISTOGRAM_ENUM \
+	X_SMBD_HISTOGRAM_DECL(op_create) \
+	X_SMBD_HISTOGRAM_DECL(op_close) \
 
 enum {
 #undef X_SMBD_HISTOGRAM_DECL
