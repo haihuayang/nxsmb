@@ -57,6 +57,34 @@ x_auth_t *x_smbd_create_auth(const void *sec_buf, size_t sec_len)
 	return x_auth_create_by_oid(g_smbd.auth_context, GSS_SPNEGO_MECHANISM);
 }
 
+static __thread int thread_id = -1;
+static std::array<uint64_t, X_SMBD_MAX_THREAD / sizeof(uint64_t) / 8> g_thread_id_bitmap{};
+static std::mutex g_thread_id_mutex;
+
+static uint32_t thread_id_allocate()
+{
+	auto lock = std::lock_guard(g_thread_id_mutex);
+	uint32_t ret = 0;
+	for (auto &bitmap : g_thread_id_bitmap) {
+		int index = __builtin_ffsl(~bitmap);
+		if (index != 0) {
+			int bit = index - 1;
+			bitmap |= (1ul << bit);
+			return ret + bit;
+		}
+		ret += 64;
+	}
+	X_ASSERT(false);
+	return -1;
+}
+
+static void x_smbd_thread_init(uint32_t no)
+{
+	thread_id = thread_id_allocate();
+	X_LOG_NOTICE("allocate thread_id %u", thread_id);
+	x_smbd_stats_init(thread_id);
+}
+
 enum {
 	X_SMBD_MAX_SESSION = 1024,
 	X_SMBD_MAX_TCON = 1024,
@@ -66,6 +94,8 @@ enum {
 static void *signal_handler_func(void *arg)
 {
 	x_thread_init("SIGHAND");
+	x_smbd_thread_init(0);
+
 	for (;;) {
 		sigset_t sigmask;
 		sigemptyset(&sigmask);
@@ -96,8 +126,6 @@ static void init_smbd()
 
 	x_log_init(smbd_conf->log_name.c_str(), smbd_conf->log_level,
 			smbd_conf->log_file_size);
-
-	x_smbd_stats_init();
 
 	struct timespec ts_now;
 	x_tick_t tick_now1 = x_tick_now();
@@ -134,8 +162,8 @@ static void init_smbd()
 			signal_handler_func, nullptr);
 	X_ASSERT(err == 0);
 
-	g_smbd.tpool_async = x_threadpool_create("ASYNC", smbd_conf->async_thread_count);
-	x_threadpool_t *tpool = x_threadpool_create("CLIENT", smbd_conf->client_thread_count);
+	g_smbd.tpool_async = x_threadpool_create("ASYNC", smbd_conf->async_thread_count, x_smbd_thread_init);
+	x_threadpool_t *tpool = x_threadpool_create("CLIENT", smbd_conf->client_thread_count, x_smbd_thread_init);
 	g_smbd.tpool_evtmgmt = tpool;
 
 	g_evtmgmt = x_evtmgmt_create(tpool, max_fd, 1000, 100);
@@ -207,6 +235,7 @@ bool x_smbd_del_timer(x_timer_job_t *entry)
 int main(int argc, char **argv)
 {
 	x_thread_init("MAIN");
+	x_smbd_thread_init(0);
 
 	const char *configfile = nullptr;
 

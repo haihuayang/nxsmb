@@ -53,13 +53,13 @@ struct x_smbd_stats_t
 	std::atomic<uint64_t> counters[X_SMBD_COUNTER_ID_MAX];
 };
 
-extern x_smbd_stats_t g_smbd_stats;
+extern thread_local x_smbd_stats_t *g_smbd_stats;
 
 #define X_SMBD_COUNTER_INC(id, num) ( \
-	g_smbd_stats.counters[X_SMBD_COUNTER_ID_ ## id].fetch_add(num, std::memory_order_relaxed) \
+	g_smbd_stats->counters[X_SMBD_COUNTER_ID_ ## id].fetch_add(num, std::memory_order_relaxed) \
 )
 
-int x_smbd_stats_init();
+int x_smbd_stats_init(uint32_t thread_id);
 
 
 #endif /* __smbd_stats__hxx__ */

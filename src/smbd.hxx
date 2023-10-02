@@ -38,6 +38,10 @@ x_auth_t *x_smbd_create_auth(const void *sec_buf, size_t sec_len);
 const std::vector<uint8_t> &x_smbd_get_negprot_spnego();
 
 enum {
+	X_SMBD_MAX_THREAD = 256,
+};
+
+enum {
 	/* in seconds */
 	X_SMBD_DURABLE_TIMEOUT_MAX = (5 * 60),
 };

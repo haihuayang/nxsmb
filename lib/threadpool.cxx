@@ -66,6 +66,7 @@ struct x_threadpool_arg_t
 {
 	x_threadpool_t * const tpool;
 	uint32_t const no;
+	void (*init_func)(uint32_t no);
 };
 
 static void *thread_func(void *arg)
@@ -73,9 +74,13 @@ static void *thread_func(void *arg)
 	x_threadpool_arg_t *tparg = (x_threadpool_arg_t *)arg;
 	x_threadpool_t *tpool = tparg->tpool;
 	uint32_t no = tparg->no;
+	void (*init_func)(uint32_t) = tparg->init_func;
 	delete tparg;
 
 	x_thread_init("%s-%03d", tpool->name.c_str(), no);
+	if (init_func) {
+		init_func(no);
+	}
 
 	tick_now = x_tick_now();
 	X_LOG_NOTICE("started");
@@ -124,11 +129,12 @@ static void *thread_func(void *arg)
 	return nullptr;
 }
 
-x_threadpool_t *x_threadpool_create(std::string name, unsigned int count)
+x_threadpool_t *x_threadpool_create(std::string name, unsigned int count,
+		void (*init_func)(uint32_t no))
 {
 	x_threadpool_t *tpool = new x_threadpool_t{std::move(name), count};
 	for (uint32_t i = 0; i < count; ++i) {
-		x_threadpool_arg_t *tparg = new x_threadpool_arg_t{tpool, i};
+		x_threadpool_arg_t *tparg = new x_threadpool_arg_t{tpool, i, init_func};
 		int err = pthread_create(&tpool->threads[i], nullptr,
 				thread_func, tparg);
 		X_ASSERT(err == 0);
