@@ -44,6 +44,7 @@ TARGET_SET_tests := \
 	test-sid \
 	test-signing \
 	test-timeout \
+	test-charset \
 
 TARGET_SET_lib := nxsmb
 
