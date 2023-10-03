@@ -93,7 +93,7 @@ struct x_smbd_stats_report_t : x_smbd_ctrl_handler_t
 
 	bool output(std::string &data) override;
 
-	const uint32_t band_start = 8, band_end = X_SMBD_HISTOGRAM_BAND_NUMBER, band_step = 3;
+	const uint32_t band_start = 3, band_end = X_SMBD_HISTOGRAM_BAND_NUMBER, band_step = 3;
 	x_smbd_stats_t<single_threaded_t> stats;
 	std::array<uint64_t, X_SMBD_HISTOGRAM_ID_MAX> histogram_totals{};
 	uint32_t output_lineno = 0;

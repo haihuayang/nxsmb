@@ -65,7 +65,7 @@ static void x_smb2_reply_close(x_smbd_conn_t *smbd_conn,
 	
 	encode_out_close(state, out_hdr);
 
-	X_SMBD_HISTOGRAM_UPDATE(op_close, x_tick_now() - smbd_requ->start);
+	X_SMBD_HISTOGRAM_UPDATE_US(op_close_us, x_tick_now() - smbd_requ->start);
 
 	x_smb2_reply(smbd_conn, smbd_requ, bufref, bufref, NT_STATUS_OK, 
 			sizeof(x_smb2_header_t) + X_SMB2_CLOSE_RESP_BODY_LEN);
