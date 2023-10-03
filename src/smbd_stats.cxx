@@ -55,7 +55,7 @@ struct x_smbd_stats_report_t : x_smbd_ctrl_handler_t
 						MO);
 			}
 
-			for (uint32_t pi = 0; pi < X_SMBD_COUNTER_ID_MAX; ++pi) {
+			for (uint32_t pi = 0; pi < X_SMBD_PAIR_COUNTER_ID_MAX; ++pi) {
 				stats.pair_counters[pi][0].fetch_add(
 						thread_stats.pair_counters[pi][0].load(MO),
 						MO);
@@ -87,7 +87,7 @@ struct x_smbd_stats_report_t : x_smbd_ctrl_handler_t
 
 	bool output(std::string &data) override;
 
-	const uint32_t band_start = 0, band_end = x_smbd_histogram_t::BAND_NUMBER, band_step = 3;
+	const uint32_t band_start = 8, band_end = x_smbd_histogram_t::BAND_NUMBER, band_step = 3;
 	x_smbd_stats_t stats;
 	std::array<uint64_t, X_SMBD_HISTOGRAM_ID_MAX> histogram_totals{};
 	uint32_t output_lineno = 0;
@@ -135,12 +135,14 @@ static void output_histogram_header(std::ostream &os,
 	uint32_t band;
 	uint32_t last_band = 0;
 	for (band = band_start; band < band_end; ++band) {
-		char buf[24];
+		char bbuf[24];
 		if (band == band_end - 1) {
-			snprintf(buf, sizeof buf, ">=2^%u", last_band);
+			snprintf(bbuf, sizeof bbuf, ">=2^%u", last_band);
+			snprintf(buf, sizeof buf, " %10s", bbuf);
 			os << buf;
 		} else if (((band - band_start) % band_step) == 0) {
-			snprintf(buf, sizeof buf, "<2^%u", band);
+			snprintf(bbuf, sizeof bbuf, "<2^%u", band);
+			snprintf(buf, sizeof buf, " %10s", bbuf);
 			os << buf;
 			last_band = band;
 		}
@@ -155,7 +157,7 @@ static void output_histogram(std::ostream &os,
 		const char *name)
 {
 	char buf[1024];
-	printf("    " HISTOGRAM_FMT, name,
+	snprintf(buf, sizeof buf, "    " HISTOGRAM_FMT, name,
 			total, hist.sum.load(MO), (double)(hist.sum.load(MO)) / (double)total,
 			hist.min.load(MO), hist.max.load(MO));
 	os << buf;
@@ -179,38 +181,44 @@ static void output_histogram(std::ostream &os,
 bool x_smbd_stats_report_t::output(std::string &data)
 {
 	std::ostringstream os;
-	if (output_lineno == 0) {
-		output_counter_header(os);
-	} else if (output_lineno < 1 + X_SMBD_COUNTER_ID_MAX) {
-		uint32_t ci = output_lineno - 1;
-		auto total = stats.counters[ci].load(MO);
-		if (total) {
-			output_counter(os, total, smbd_counter_names[ci]);
+	for (;;) {
+		if (output_lineno == 0) {
+			output_counter_header(os);
+		} else if (output_lineno < 1 + X_SMBD_COUNTER_ID_MAX) {
+			uint32_t ci = output_lineno - 1;
+			auto total = stats.counters[ci].load(MO);
+			if (total) {
+				output_counter(os, total, smbd_counter_names[ci]);
+			}
+		} else if (output_lineno == 1 + X_SMBD_COUNTER_ID_MAX) {
+			output_pair_header(os);
+		} else if (output_lineno < 2 + X_SMBD_COUNTER_ID_MAX + X_SMBD_PAIR_COUNTER_ID_MAX) {
+			uint32_t pi = output_lineno - 2 - X_SMBD_COUNTER_ID_MAX;
+			auto total_create = stats.pair_counters[pi][0].load(MO);
+			auto total_delete = stats.pair_counters[pi][1].load(MO);
+			if (total_create != 0 || total_delete != 0) {
+				output_pair(os, total_create, total_delete, smbd_pair_counter_names[pi]);
+			}
+		} else if (output_lineno == 2 + X_SMBD_COUNTER_ID_MAX + X_SMBD_PAIR_COUNTER_ID_MAX) {
+			output_histogram_header(os, band_start, band_end, band_step);
+		} else if (output_lineno < 3 + X_SMBD_COUNTER_ID_MAX + X_SMBD_PAIR_COUNTER_ID_MAX + X_SMBD_HISTOGRAM_ID_MAX) {
+			uint32_t hi = output_lineno - 3 - X_SMBD_COUNTER_ID_MAX - X_SMBD_PAIR_COUNTER_ID_MAX;
+			if (histogram_totals[hi] > 0) {
+				output_histogram(os, band_start, band_end, band_step,
+						stats.histograms[hi], histogram_totals[hi],
+						smbd_histogram_names[hi]);
+			}
+		} else {
+			return false;
 		}
-	} else if (output_lineno == 1 + X_SMBD_COUNTER_ID_MAX) {
-		output_pair_header(os);
-	} else if (output_lineno < 2 + X_SMBD_COUNTER_ID_MAX + X_SMBD_PAIR_COUNTER_ID_MAX) {
-		uint32_t pi = output_lineno - 2 - X_SMBD_COUNTER_ID_MAX;
-		auto total_create = stats.pair_counters[pi][0].load(MO);
-		auto total_delete = stats.pair_counters[pi][1].load(MO);
-		if (total_create != 0 || total_delete != 0) {
-			output_pair(os, total_create, total_delete, smbd_pair_counter_names[pi]);
-		}
-	} else if (output_lineno == 2 + X_SMBD_COUNTER_ID_MAX + X_SMBD_PAIR_COUNTER_ID_MAX) {
-		output_histogram_header(os, band_start, band_end, band_step);
-	} else if (output_lineno < 3 + X_SMBD_COUNTER_ID_MAX + X_SMBD_PAIR_COUNTER_ID_MAX + X_SMBD_HISTOGRAM_ID_MAX) {
-		uint32_t hi = output_lineno - 3 - X_SMBD_COUNTER_ID_MAX - X_SMBD_PAIR_COUNTER_ID_MAX;
-		if (histogram_totals[hi] > 0) {
-			output_histogram(os, band_start, band_end, band_step,
-					stats.histograms[hi], histogram_totals[hi],
-					smbd_histogram_names[hi]);
-		}
-	} else {
-		return false;
-	}
 
-	data = os.str();
-	++output_lineno;
+		data = os.str();
+		++output_lineno;
+
+		if (data.size() > 0) {
+			break;
+		}
+	}
 	return true;
 }
 

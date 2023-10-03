@@ -83,9 +83,9 @@ struct x_smbd_histogram_t
 
 struct x_smbd_stats_t
 {
-	std::atomic<uint64_t> counters[X_SMBD_COUNTER_ID_MAX];
-	std::atomic<uint64_t> pair_counters[X_SMBD_PAIR_COUNTER_ID_MAX][2];
-	x_smbd_histogram_t histograms[X_SMBD_HISTOGRAM_ID_MAX];
+	std::atomic<uint64_t> counters[X_SMBD_COUNTER_ID_MAX]{};
+	std::atomic<uint64_t> pair_counters[X_SMBD_PAIR_COUNTER_ID_MAX][2]{};
+	x_smbd_histogram_t histograms[X_SMBD_HISTOGRAM_ID_MAX]{};
 };
 
 extern thread_local x_smbd_stats_t *g_smbd_stats;
