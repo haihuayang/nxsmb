@@ -20,7 +20,7 @@ enum {
 	X_SMBD_COUNTER_ID_MAX,
 };
 
-/* Declare counter id below, e.g., X_SMBD_COUNTER_DECL(name) */
+/* Declare pair counter id below, e.g., X_SMBD_PAIR_COUNTER_DECL(name) */
 #define X_SMBD_PAIR_COUNTER_ENUM \
 	X_SMBD_PAIR_COUNTER_DECL(conn) \
 	X_SMBD_PAIR_COUNTER_DECL(sess) \
@@ -44,6 +44,7 @@ enum {
 	X_SMBD_PAIR_COUNTER_ID_MAX,
 };
 
+/* Declare histogram id below, e.g., X_SMBD_HISTOGRAM_DECL(name) */
 #define X_SMBD_HISTOGRAM_ENUM \
 	X_SMBD_HISTOGRAM_DECL(op_create) \
 	X_SMBD_HISTOGRAM_DECL(op_close) \
@@ -55,51 +56,71 @@ enum {
 	X_SMBD_HISTOGRAM_ID_MAX,
 };
 
+template <class T>
+struct atomic_relaxed_t
+{
+	std::atomic<T> val;
+	operator T() const {
+		return val.load(std::memory_order_relaxed);
+	}
+	T operator+=(T v) {
+		return val.fetch_add(v, std::memory_order_relaxed);
+	}
+	void operator=(T v) {
+		return val.store(v, std::memory_order_relaxed);
+	}
+};
+
+enum {
+	X_SMBD_HISTOGRAM_BAND_NUMBER = 32,
+};
+
+template <template <typename> typename T>
 struct x_smbd_histogram_t
 {
-	enum { BAND_NUMBER = 32, };
-	std::atomic<uint64_t> min{uint64_t(-1)}, max, sum;
-	std::atomic<uint64_t> bands[BAND_NUMBER];
+	T<uint64_t> min{uint64_t(-1)}, max{}, sum{};
+	T<uint64_t> bands[X_SMBD_HISTOGRAM_BAND_NUMBER]{};
 
 	void update(uint64_t val) {
 		unsigned int band = 0;
 		if (x_likely(val != 0)) {
 			band = 64 - __builtin_clzl(val);
-			if (x_unlikely(band >= BAND_NUMBER)) {
-				band = BAND_NUMBER - 1;
+			if (x_unlikely(band >= X_SMBD_HISTOGRAM_BAND_NUMBER)) {
+				band = X_SMBD_HISTOGRAM_BAND_NUMBER - 1;
 			}
 		}
 
-		bands[band].fetch_add(1, std::memory_order_relaxed);
-		sum.fetch_add(val, std::memory_order_relaxed);
-		if (min.load(std::memory_order_relaxed) > val) {
-			min.store(val, std::memory_order_relaxed);
+		bands[band] += 1;
+		sum += val;
+		if (min > val) {
+			min = val;
 		}
-		if (max.load(std::memory_order_relaxed) < val) {
-			max.store(val, std::memory_order_relaxed);
+		if (max < val) {
+			max = val;
 		}
 	}
 };
 
+template <template <typename> typename T>
 struct x_smbd_stats_t
 {
-	std::atomic<uint64_t> counters[X_SMBD_COUNTER_ID_MAX]{};
-	std::atomic<uint64_t> pair_counters[X_SMBD_PAIR_COUNTER_ID_MAX][2]{};
-	x_smbd_histogram_t histograms[X_SMBD_HISTOGRAM_ID_MAX]{};
+	T<uint64_t> counters[X_SMBD_COUNTER_ID_MAX]{};
+	T<uint64_t> pair_counters[X_SMBD_PAIR_COUNTER_ID_MAX][2]{};
+	x_smbd_histogram_t<T> histograms[X_SMBD_HISTOGRAM_ID_MAX];
 };
 
-extern thread_local x_smbd_stats_t *g_smbd_stats;
+extern thread_local x_smbd_stats_t<atomic_relaxed_t> *g_smbd_stats;
 
 #define X_SMBD_COUNTER_INC(id, num) ( \
-	g_smbd_stats->counters[X_SMBD_COUNTER_ID_ ## id].fetch_add(num, std::memory_order_relaxed) \
+	g_smbd_stats->counters[X_SMBD_COUNTER_ID_ ## id] += (num) \
 )
 
 #define X_SMBD_COUNTER_INC_CREATE(id, num) ( \
-	g_smbd_stats->pair_counters[X_SMBD_PAIR_COUNTER_ID_ ## id][0].fetch_add(num, std::memory_order_relaxed) \
+	g_smbd_stats->pair_counters[X_SMBD_PAIR_COUNTER_ID_ ## id][0] += (num) \
 )
 
 #define X_SMBD_COUNTER_INC_DELETE(id, num) ( \
-	g_smbd_stats->pair_counters[X_SMBD_PAIR_COUNTER_ID_ ## id][1].fetch_add(num, std::memory_order_relaxed) \
+	g_smbd_stats->pair_counters[X_SMBD_PAIR_COUNTER_ID_ ## id][1] += (num) \
 )
 
 #define X_SMBD_HISTOGRAM_UPDATE(id, elapsed) do { \

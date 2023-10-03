@@ -2,9 +2,9 @@
 #include "smbd_stats.hxx"
 #include "smbd_ctrl.hxx"
 
-thread_local x_smbd_stats_t *g_smbd_stats;
+thread_local x_smbd_stats_t<atomic_relaxed_t> *g_smbd_stats;
 
-static x_smbd_stats_t g_smbd_stats_table[X_SMBD_MAX_THREAD];
+static x_smbd_stats_t<atomic_relaxed_t> g_smbd_stats_table[X_SMBD_MAX_THREAD];
 static std::atomic<uint32_t> g_max_thread = 0;
 
 #undef X_SMBD_COUNTER_DECL
@@ -43,6 +43,21 @@ int x_smbd_stats_init(uint32_t thread_id)
 	return 0;
 }
 
+template <class T>
+struct single_threaded_t
+{
+	T val;
+	operator T() const {
+		return val;
+	}
+	T operator+=(T v) {
+		return val += v;
+	}
+	void operator=(T v) {
+		val = v;
+	}
+};
+
 struct x_smbd_stats_report_t : x_smbd_ctrl_handler_t
 {
 	x_smbd_stats_report_t() {
@@ -50,36 +65,27 @@ struct x_smbd_stats_report_t : x_smbd_ctrl_handler_t
 		for (uint32_t ti = 0; ti < max_thread; ++ti) {
 			const auto &thread_stats = g_smbd_stats_table[ti];
 			for (uint32_t ci = 0; ci < X_SMBD_COUNTER_ID_MAX; ++ci) {
-				stats.counters[ci].fetch_add(
-						thread_stats.counters[ci].load(MO),
-						MO);
+				stats.counters[ci] += thread_stats.counters[ci];
 			}
 
 			for (uint32_t pi = 0; pi < X_SMBD_PAIR_COUNTER_ID_MAX; ++pi) {
-				stats.pair_counters[pi][0].fetch_add(
-						thread_stats.pair_counters[pi][0].load(MO),
-						MO);
-				stats.pair_counters[pi][1].fetch_add(
-						thread_stats.pair_counters[pi][1].load(MO),
-						MO);
+				stats.pair_counters[pi][0] += thread_stats.pair_counters[pi][0];
+				stats.pair_counters[pi][1] += thread_stats.pair_counters[pi][1];
 			}
 
 			for (uint32_t hi = 0; hi < X_SMBD_HISTOGRAM_ID_MAX; ++hi) {
 				auto &dst = stats.histograms[hi];
 				auto &src = thread_stats.histograms[hi];
-				dst.sum.fetch_add(src.sum.load(MO), MO);
-				auto max = src.max.load(MO);
-				if (dst.max.load(MO) < max) {
-					dst.max.store(max, MO);
+				dst.sum += src.sum;
+				if (dst.max < src.max) {
+					dst.max = src.max;
 				}
-				auto min = src.min.load(MO);
-				if (dst.min.load(MO) > min) {
-					dst.min.store(min, MO);
+				if (dst.min > src.min) {
+					dst.min = src.min;
 				}
-				for (uint32_t bi = 0; bi < x_smbd_histogram_t::BAND_NUMBER; ++bi) {
-					auto tmp = src.bands[bi].load(MO);
-					dst.bands[bi].fetch_add(tmp, MO);
-					histogram_totals[hi] += tmp;
+				for (uint32_t bi = 0; bi < X_SMBD_HISTOGRAM_BAND_NUMBER; ++bi) {
+					dst.bands[bi] += src.bands[bi];
+					histogram_totals[hi] += src.bands[bi];
 				}
 			}
 		}
@@ -87,8 +93,8 @@ struct x_smbd_stats_report_t : x_smbd_ctrl_handler_t
 
 	bool output(std::string &data) override;
 
-	const uint32_t band_start = 8, band_end = x_smbd_histogram_t::BAND_NUMBER, band_step = 3;
-	x_smbd_stats_t stats;
+	const uint32_t band_start = 8, band_end = X_SMBD_HISTOGRAM_BAND_NUMBER, band_step = 3;
+	x_smbd_stats_t<single_threaded_t> stats;
 	std::array<uint64_t, X_SMBD_HISTOGRAM_ID_MAX> histogram_totals{};
 	uint32_t output_lineno = 0;
 };
@@ -153,13 +159,13 @@ static void output_histogram_header(std::ostream &os,
 #define HISTOGRAM_FMT	"%-20s %10lu %15lu %15.3f %9lu %12lu"
 static void output_histogram(std::ostream &os,
 		uint32_t band_start, uint32_t band_end, uint32_t band_step,
-		const x_smbd_histogram_t &hist, uint64_t total,
+		const x_smbd_histogram_t<single_threaded_t> &hist, uint64_t total,
 		const char *name)
 {
 	char buf[1024];
 	snprintf(buf, sizeof buf, "    " HISTOGRAM_FMT, name,
-			total, hist.sum.load(MO), (double)(hist.sum.load(MO)) / (double)total,
-			hist.min.load(MO), hist.max.load(MO));
+			total, uint64_t(hist.sum), double(hist.sum) / double(total),
+			uint64_t(hist.min), uint64_t(hist.max));
 	os << buf;
 	uint32_t band;
 	uint64_t band_sum = 0;
@@ -186,7 +192,7 @@ bool x_smbd_stats_report_t::output(std::string &data)
 			output_counter_header(os);
 		} else if (output_lineno < 1 + X_SMBD_COUNTER_ID_MAX) {
 			uint32_t ci = output_lineno - 1;
-			auto total = stats.counters[ci].load(MO);
+			auto total = stats.counters[ci];
 			if (total) {
 				output_counter(os, total, smbd_counter_names[ci]);
 			}
@@ -194,8 +200,8 @@ bool x_smbd_stats_report_t::output(std::string &data)
 			output_pair_header(os);
 		} else if (output_lineno < 2 + X_SMBD_COUNTER_ID_MAX + X_SMBD_PAIR_COUNTER_ID_MAX) {
 			uint32_t pi = output_lineno - 2 - X_SMBD_COUNTER_ID_MAX;
-			auto total_create = stats.pair_counters[pi][0].load(MO);
-			auto total_delete = stats.pair_counters[pi][1].load(MO);
+			auto total_create = stats.pair_counters[pi][0];
+			auto total_delete = stats.pair_counters[pi][1];
 			if (total_create != 0 || total_delete != 0) {
 				output_pair(os, total_create, total_delete, smbd_pair_counter_names[pi]);
 			}
