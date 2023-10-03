@@ -39,10 +39,10 @@ struct x_smbd_sess_t
 		, nonce_high_max(get_nonce_high_max())
 		, machine_name{x_smbd_conn_curr_name()}
 	{
-		X_SMBD_COUNTER_INC(sess_create, 1);
+		X_SMBD_COUNTER_INC_CREATE(sess, 1);
 	}
 	~x_smbd_sess_t() {
-		X_SMBD_COUNTER_INC(sess_delete, 1);
+		X_SMBD_COUNTER_INC_DELETE(sess, 1);
 	}
 
 	const x_tick_t tick_create;

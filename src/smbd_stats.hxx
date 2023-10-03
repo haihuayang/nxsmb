@@ -11,34 +11,6 @@
 
 /* Declare counter id below, e.g., X_SMBD_COUNTER_DECL(name) */
 #define X_SMBD_COUNTER_ENUM \
-	X_SMBD_COUNTER_DECL(conn_create) \
-	X_SMBD_COUNTER_DECL(conn_delete) \
-	X_SMBD_COUNTER_DECL(sess_create) \
-	X_SMBD_COUNTER_DECL(sess_delete) \
-	X_SMBD_COUNTER_DECL(chan_create) \
-	X_SMBD_COUNTER_DECL(chan_delete) \
-	X_SMBD_COUNTER_DECL(tcon_create) \
-	X_SMBD_COUNTER_DECL(tcon_delete) \
-	X_SMBD_COUNTER_DECL(object_create) \
-	X_SMBD_COUNTER_DECL(object_delete) \
-	X_SMBD_COUNTER_DECL(stream_create) \
-	X_SMBD_COUNTER_DECL(stream_delete) \
-	X_SMBD_COUNTER_DECL(lease_create) \
-	X_SMBD_COUNTER_DECL(lease_delete) \
-	X_SMBD_COUNTER_DECL(ads_create) \
-	X_SMBD_COUNTER_DECL(ads_delete) \
-	X_SMBD_COUNTER_DECL(open_create) \
-	X_SMBD_COUNTER_DECL(open_delete) \
-	X_SMBD_COUNTER_DECL(replay_create) \
-	X_SMBD_COUNTER_DECL(replay_delete) \
-	X_SMBD_COUNTER_DECL(requ_create) \
-	X_SMBD_COUNTER_DECL(requ_delete) \
-	X_SMBD_COUNTER_DECL(qdir_create) \
-	X_SMBD_COUNTER_DECL(qdir_delete) \
-	X_SMBD_COUNTER_DECL(auth_krb5_create) \
-	X_SMBD_COUNTER_DECL(auth_krb5_delete) \
-	X_SMBD_COUNTER_DECL(auth_ntlmssp_create) \
-	X_SMBD_COUNTER_DECL(auth_ntlmssp_delete) \
 	X_SMBD_COUNTER_DECL(sess_bind) \
 
 enum {
@@ -46,6 +18,30 @@ enum {
 #define X_SMBD_COUNTER_DECL(x) X_SMBD_COUNTER_ID_ ## x,
 	X_SMBD_COUNTER_ENUM
 	X_SMBD_COUNTER_ID_MAX,
+};
+
+/* Declare counter id below, e.g., X_SMBD_COUNTER_DECL(name) */
+#define X_SMBD_PAIR_COUNTER_ENUM \
+	X_SMBD_PAIR_COUNTER_DECL(conn) \
+	X_SMBD_PAIR_COUNTER_DECL(sess) \
+	X_SMBD_PAIR_COUNTER_DECL(chan) \
+	X_SMBD_PAIR_COUNTER_DECL(tcon) \
+	X_SMBD_PAIR_COUNTER_DECL(object) \
+	X_SMBD_PAIR_COUNTER_DECL(stream) \
+	X_SMBD_PAIR_COUNTER_DECL(lease) \
+	X_SMBD_PAIR_COUNTER_DECL(ads) \
+	X_SMBD_PAIR_COUNTER_DECL(open) \
+	X_SMBD_PAIR_COUNTER_DECL(replay) \
+	X_SMBD_PAIR_COUNTER_DECL(requ) \
+	X_SMBD_PAIR_COUNTER_DECL(qdir) \
+	X_SMBD_PAIR_COUNTER_DECL(auth_krb5) \
+	X_SMBD_PAIR_COUNTER_DECL(auth_ntlmssp) \
+
+enum {
+#undef X_SMBD_PAIR_COUNTER_DECL
+#define X_SMBD_PAIR_COUNTER_DECL(x) X_SMBD_PAIR_COUNTER_ID_ ## x,
+	X_SMBD_PAIR_COUNTER_ENUM
+	X_SMBD_PAIR_COUNTER_ID_MAX,
 };
 
 #define X_SMBD_HISTOGRAM_ENUM \
@@ -88,6 +84,7 @@ struct x_smbd_histogram_t
 struct x_smbd_stats_t
 {
 	std::atomic<uint64_t> counters[X_SMBD_COUNTER_ID_MAX];
+	std::atomic<uint64_t> pair_counters[X_SMBD_PAIR_COUNTER_ID_MAX][2];
 	x_smbd_histogram_t histograms[X_SMBD_HISTOGRAM_ID_MAX];
 };
 
@@ -95,6 +92,14 @@ extern thread_local x_smbd_stats_t *g_smbd_stats;
 
 #define X_SMBD_COUNTER_INC(id, num) ( \
 	g_smbd_stats->counters[X_SMBD_COUNTER_ID_ ## id].fetch_add(num, std::memory_order_relaxed) \
+)
+
+#define X_SMBD_COUNTER_INC_CREATE(id, num) ( \
+	g_smbd_stats->pair_counters[X_SMBD_PAIR_COUNTER_ID_ ## id][0].fetch_add(num, std::memory_order_relaxed) \
+)
+
+#define X_SMBD_COUNTER_INC_DELETE(id, num) ( \
+	g_smbd_stats->pair_counters[X_SMBD_PAIR_COUNTER_ID_ ## id][1].fetch_add(num, std::memory_order_relaxed) \
 )
 
 #define X_SMBD_HISTOGRAM_UPDATE(id, elapsed) do { \

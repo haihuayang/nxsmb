@@ -169,10 +169,10 @@ X_DECLARE_MEMBER_TRAITS(posixfs_open_from_base_t, posixfs_open_t, base)
 struct posixfs_ads_t
 {
 	posixfs_ads_t(bool exists, const std::u16string &name) : base(exists, name) {
-		X_SMBD_COUNTER_INC(ads_create, 1);
+		X_SMBD_COUNTER_INC_CREATE(ads, 1);
 	}
 	~posixfs_ads_t() {
-		X_SMBD_COUNTER_INC(ads_delete, 1);
+		X_SMBD_COUNTER_INC_DELETE(ads, 1);
 	}
 
 	x_smbd_stream_meta_t &get_meta() {

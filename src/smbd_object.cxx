@@ -9,7 +9,7 @@ x_smbd_object_t::x_smbd_object_t(const std::shared_ptr<x_smbd_volume_t> &smbd_vo
 	: smbd_volume(smbd_volume), priv_data(priv_data), path_hash(path_hash)
 	, parent_object(parent_object), path_base(path_base)
 {
-	X_SMBD_COUNTER_INC(object_create, 1);
+	X_SMBD_COUNTER_INC_CREATE(object, 1);
 	if (parent_object) {
 		parent_object->incref();
 	}
@@ -17,7 +17,7 @@ x_smbd_object_t::x_smbd_object_t(const std::shared_ptr<x_smbd_volume_t> &smbd_vo
 
 x_smbd_object_t::~x_smbd_object_t()
 {
-	X_SMBD_COUNTER_INC(object_delete, 1);
+	X_SMBD_COUNTER_INC_DELETE(object, 1);
 	if (parent_object) {
 		x_smbd_release_object(parent_object);
 	}
@@ -26,12 +26,12 @@ x_smbd_object_t::~x_smbd_object_t()
 x_smbd_stream_t::x_smbd_stream_t(bool exists, const std::u16string &name)
 	: exists(exists), name(name)
 {
-	X_SMBD_COUNTER_INC(stream_create, 1);
+	X_SMBD_COUNTER_INC_CREATE(stream, 1);
 }
 
 x_smbd_stream_t::~x_smbd_stream_t()
 {
-	X_SMBD_COUNTER_INC(stream_delete, 1);
+	X_SMBD_COUNTER_INC_DELETE(stream, 1);
 }
 
 x_smb2_state_create_t::~x_smb2_state_create_t()

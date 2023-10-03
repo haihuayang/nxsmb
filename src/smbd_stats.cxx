@@ -13,6 +13,12 @@ static const char *smbd_counter_names[] = {
 	X_SMBD_COUNTER_ENUM
 };
 
+#undef X_SMBD_PAIR_COUNTER_DECL
+#define X_SMBD_PAIR_COUNTER_DECL(x) # x,
+static const char *smbd_pair_counter_names[] = {
+	X_SMBD_PAIR_COUNTER_ENUM
+};
+
 #undef X_SMBD_HISTOGRAM_DECL
 #define X_SMBD_HISTOGRAM_DECL(x) # x,
 static const char *smbd_histogram_names[] = {
@@ -49,6 +55,15 @@ struct x_smbd_stats_report_t : x_smbd_ctrl_handler_t
 						MO);
 			}
 
+			for (uint32_t pi = 0; pi < X_SMBD_COUNTER_ID_MAX; ++pi) {
+				stats.pair_counters[pi][0].fetch_add(
+						thread_stats.pair_counters[pi][0].load(MO),
+						MO);
+				stats.pair_counters[pi][1].fetch_add(
+						thread_stats.pair_counters[pi][1].load(MO),
+						MO);
+			}
+
 			for (uint32_t hi = 0; hi < X_SMBD_HISTOGRAM_ID_MAX; ++hi) {
 				auto &dst = stats.histograms[hi];
 				auto &src = thread_stats.histograms[hi];
@@ -77,6 +92,38 @@ struct x_smbd_stats_report_t : x_smbd_ctrl_handler_t
 	std::array<uint64_t, X_SMBD_HISTOGRAM_ID_MAX> histogram_totals{};
 	uint32_t output_lineno = 0;
 };
+
+static void output_counter_header(std::ostream &os)
+{
+	char buf[1024];
+	snprintf(buf, sizeof buf, "    %-20s %10s",
+			"Counter", "total");
+	os << buf << std::endl;
+}
+
+static void output_counter(std::ostream &os, uint64_t total, const char *name)
+{
+	char buf[1024];
+	snprintf(buf, sizeof buf, "    %-20s %10ld",
+			name, total);
+	os << buf << std::endl;
+}
+
+static void output_pair_header(std::ostream &os)
+{
+	char buf[1024];
+	snprintf(buf, sizeof buf, "    %-20s %10s %10s",
+			"PairCounter", "create", "delete");
+	os << buf << std::endl;
+}
+
+static void output_pair(std::ostream &os, uint64_t total_create, uint64_t total_delete, const char *name)
+{
+	char buf[1024];
+	snprintf(buf, sizeof buf, "    %-20s %10ld %10ld",
+			name, total_create, total_delete);
+	os << buf << std::endl;
+}
 
 static void output_histogram_header(std::ostream &os,
 		uint32_t band_start, uint32_t band_end, uint32_t band_step)
@@ -129,23 +176,30 @@ static void output_histogram(std::ostream &os,
 	os << std::endl;
 }
 
-
 bool x_smbd_stats_report_t::output(std::string &data)
 {
 	std::ostringstream os;
 	if (output_lineno == 0) {
-		os << "COUNTERS" << std::endl;
+		output_counter_header(os);
 	} else if (output_lineno < 1 + X_SMBD_COUNTER_ID_MAX) {
-		auto val = stats.counters[output_lineno - 1].load(MO);
-		if (val) {
-			os << smbd_counter_names[output_lineno - 1] << ": " <<
-				stats.counters[output_lineno - 1].load(MO) << std::endl;
-			data = os.str();
+		uint32_t ci = output_lineno - 1;
+		auto total = stats.counters[ci].load(MO);
+		if (total) {
+			output_counter(os, total, smbd_counter_names[ci]);
 		}
 	} else if (output_lineno == 1 + X_SMBD_COUNTER_ID_MAX) {
+		output_pair_header(os);
+	} else if (output_lineno < 2 + X_SMBD_COUNTER_ID_MAX + X_SMBD_PAIR_COUNTER_ID_MAX) {
+		uint32_t pi = output_lineno - 2 - X_SMBD_COUNTER_ID_MAX;
+		auto total_create = stats.pair_counters[pi][0].load(MO);
+		auto total_delete = stats.pair_counters[pi][1].load(MO);
+		if (total_create != 0 || total_delete != 0) {
+			output_pair(os, total_create, total_delete, smbd_pair_counter_names[pi]);
+		}
+	} else if (output_lineno == 2 + X_SMBD_COUNTER_ID_MAX + X_SMBD_PAIR_COUNTER_ID_MAX) {
 		output_histogram_header(os, band_start, band_end, band_step);
-	} else if (output_lineno < 2 + X_SMBD_COUNTER_ID_MAX + X_SMBD_HISTOGRAM_ID_MAX) {
-		uint32_t hi = output_lineno - 2 - X_SMBD_COUNTER_ID_MAX;
+	} else if (output_lineno < 3 + X_SMBD_COUNTER_ID_MAX + X_SMBD_PAIR_COUNTER_ID_MAX + X_SMBD_HISTOGRAM_ID_MAX) {
+		uint32_t hi = output_lineno - 3 - X_SMBD_COUNTER_ID_MAX - X_SMBD_PAIR_COUNTER_ID_MAX;
 		if (histogram_totals[hi] > 0) {
 			output_histogram(os, band_start, band_end, band_step,
 					stats.histograms[hi], histogram_totals[hi],

@@ -20,7 +20,7 @@ static long interim_timeout_func(x_timer_job_t *timer)
 x_smbd_requ_t::x_smbd_requ_t(x_buf_t *in_buf, uint32_t in_msgsize,
 		bool encrypted)
 	: interim_timer(interim_timeout_func), in_buf(in_buf)
-	, compound_id(X_SMBD_COUNTER_INC(requ_create, 1) + 1)
+	, compound_id(X_SMBD_COUNTER_INC_CREATE(requ, 1) + 1)
 	, in_msgsize(in_msgsize)
 	, encrypted(encrypted)
 {
@@ -43,7 +43,7 @@ x_smbd_requ_t::~x_smbd_requ_t()
 	x_smbd_ref_dec_if(smbd_tcon);
 	x_smbd_ref_dec_if(smbd_chan);
 	x_smbd_ref_dec_if(smbd_sess);
-	X_SMBD_COUNTER_INC(requ_delete, 1);
+	X_SMBD_COUNTER_INC_DELETE(requ, 1);
 }
 
 template <>

@@ -95,7 +95,7 @@ x_smbd_conn_t::x_smbd_conn_t(int fd, const x_sockaddr_t &saddr,
 	, tick_create(tick_now)
 	, seq_bitmap(max_credits)
 {
-	X_SMBD_COUNTER_INC(conn_create, 1);
+	X_SMBD_COUNTER_INC_CREATE(conn, 1);
 }
 
 x_smbd_conn_t::~x_smbd_conn_t()
@@ -112,7 +112,7 @@ x_smbd_conn_t::~x_smbd_conn_t()
 		delete send_buf_head;
 		send_buf_head = next;
 	}
-	X_SMBD_COUNTER_INC(conn_delete, 1);
+	X_SMBD_COUNTER_INC_DELETE(conn, 1);
 }
 
 template <>

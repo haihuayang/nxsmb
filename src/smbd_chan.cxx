@@ -28,7 +28,7 @@ struct x_smbd_chan_t
 		: tick_create(tick_now)
 		, smbd_conn(x_smbd_ref_inc(smbd_conn))
 		, smbd_sess(x_smbd_ref_inc(smbd_sess)) {
-		X_SMBD_COUNTER_INC(chan_create, 1);
+		X_SMBD_COUNTER_INC_CREATE(chan, 1);
 	}
 	~x_smbd_chan_t() {
 		if (auth) {
@@ -37,7 +37,7 @@ struct x_smbd_chan_t
 
 		x_smbd_ref_dec(smbd_sess);
 		x_smbd_ref_dec(smbd_conn);
-		X_SMBD_COUNTER_INC(chan_delete, 1);
+		X_SMBD_COUNTER_INC_DELETE(chan, 1);
 	}
 
 	enum {

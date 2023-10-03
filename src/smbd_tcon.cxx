@@ -22,12 +22,12 @@ struct x_smbd_tcon_t
 		, smbd_sess(x_smbd_ref_inc(smbd_sess)), smbd_share(share)
 		, smbd_volume(volume)
        	{
-		X_SMBD_COUNTER_INC(tcon_create, 1);
+		X_SMBD_COUNTER_INC_CREATE(tcon, 1);
 	}
 	~x_smbd_tcon_t()
 	{
 		x_smbd_ref_dec(smbd_sess);
-		X_SMBD_COUNTER_INC(tcon_delete, 1);
+		X_SMBD_COUNTER_INC_DELETE(tcon, 1);
 	}
 
 	x_dlink_t sess_link; // protected by smbd_sess' mutex

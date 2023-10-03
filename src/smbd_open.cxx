@@ -2063,7 +2063,7 @@ x_smbd_open_t::x_smbd_open_t(x_smbd_object_t *so,
 	, oplock_break_timer(oplock_break_timeout)
 	, open_state(open_state)
 {
-	X_SMBD_COUNTER_INC(open_create, 1);
+	X_SMBD_COUNTER_INC_CREATE(open, 1);
 	memset(lock_sequence_array, 0xff, LOCK_SEQUENCE_MAX);
 }
 
@@ -2071,7 +2071,7 @@ x_smbd_open_t::~x_smbd_open_t()
 {
 	x_smbd_ref_dec_if(smbd_tcon);
 	x_smbd_release_object_and_stream(smbd_object, smbd_stream);
-	X_SMBD_COUNTER_INC(open_delete, 1);
+	X_SMBD_COUNTER_INC_DELETE(open, 1);
 }
 
 struct x_smbd_open_list_t : x_smbd_ctrl_handler_t

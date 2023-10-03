@@ -274,7 +274,7 @@ x_smbd_qdir_t::x_smbd_qdir_t(x_smbd_open_t *smbd_open, const x_smbd_qdir_ops_t *
 	: base(smbd_qdir_job_run), ops(ops), smbd_open(x_smbd_ref_inc(smbd_open))
 	, delay_ms(x_smbd_conf_get_curr().my_dev_delay_qdir_ms)
 {
-	X_SMBD_COUNTER_INC(qdir_create, 1);
+	X_SMBD_COUNTER_INC_CREATE(qdir, 1);
 }
 
 x_smbd_qdir_t::~x_smbd_qdir_t()
@@ -284,7 +284,7 @@ x_smbd_qdir_t::~x_smbd_qdir_t()
 		x_fnmatch_destroy(fnmatch);
 	}
 	x_smbd_ref_dec(smbd_open);
-	X_SMBD_COUNTER_INC(qdir_delete, 1);
+	X_SMBD_COUNTER_INC_DELETE(qdir, 1);
 }
 
 static void smbd_qdir_cancel(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
