@@ -12,6 +12,10 @@
 /* Declare counter id below, e.g., X_SMBD_COUNTER_DECL(name) */
 #define X_SMBD_COUNTER_ENUM \
 	X_SMBD_COUNTER_DECL(sess_bind) \
+	X_SMBD_COUNTER_DECL(reply_interim) \
+	X_SMBD_COUNTER_DECL(cancel_success) \
+	X_SMBD_COUNTER_DECL(cancel_too_late) \
+	X_SMBD_COUNTER_DECL(cancel_not_exist) \
 
 enum {
 #undef X_SMBD_COUNTER_DECL
@@ -46,8 +50,25 @@ enum {
 
 /* Declare histogram id below, e.g., X_SMBD_HISTOGRAM_DECL(name) */
 #define X_SMBD_HISTOGRAM_ENUM \
+	X_SMBD_HISTOGRAM_DECL(op_negprot_us) \
+	X_SMBD_HISTOGRAM_DECL(op_sesssetup_us) \
+	X_SMBD_HISTOGRAM_DECL(op_logoff_us) \
+	X_SMBD_HISTOGRAM_DECL(op_tcon_us) \
+	X_SMBD_HISTOGRAM_DECL(op_tdis_us) \
 	X_SMBD_HISTOGRAM_DECL(op_create_us) \
 	X_SMBD_HISTOGRAM_DECL(op_close_us) \
+	X_SMBD_HISTOGRAM_DECL(op_flush_us) \
+	X_SMBD_HISTOGRAM_DECL(op_read_us) \
+	X_SMBD_HISTOGRAM_DECL(op_write_us) \
+	X_SMBD_HISTOGRAM_DECL(op_lock_us) \
+	X_SMBD_HISTOGRAM_DECL(op_ioctl_us) \
+	X_SMBD_HISTOGRAM_DECL(op_cancel_us) \
+	X_SMBD_HISTOGRAM_DECL(op_keepalive_us) \
+	X_SMBD_HISTOGRAM_DECL(op_querydir_us) \
+	X_SMBD_HISTOGRAM_DECL(op_notify_us) \
+	X_SMBD_HISTOGRAM_DECL(op_getinfo_us) \
+	X_SMBD_HISTOGRAM_DECL(op_setinfo_us) \
+	X_SMBD_HISTOGRAM_DECL(op_break_us) \
 
 enum {
 #undef X_SMBD_HISTOGRAM_DECL
@@ -125,10 +146,6 @@ extern thread_local x_smbd_stats_t<atomic_relaxed_t> *g_smbd_stats;
 
 #define X_SMBD_HISTOGRAM_UPDATE(id, elapsed) do { \
 	g_smbd_stats->histograms[X_SMBD_HISTOGRAM_ID_ ## id].update(elapsed); \
-} while (0)
-
-#define X_SMBD_HISTOGRAM_UPDATE_US(id, elapsed) do { \
-	g_smbd_stats->histograms[X_SMBD_HISTOGRAM_ID_ ## id].update((elapsed) / 1000); \
 } while (0)
 
 int x_smbd_stats_init(uint32_t thread_id);

@@ -160,6 +160,10 @@ uint32_t x_smbd_conn_get_capabilities(const x_smbd_conn_t *smbd_conn)
 	return smbd_conn->server_capabilities;
 }
 
+#define X_SMBD_UPDATE_OP_HISTOGRAM(smbd_requ) do { \
+	g_smbd_stats->histograms[(smbd_requ)->in_smb2_hdr.opcode].update((x_tick_now() - (smbd_requ)->start) / 1000); \
+} while (0)
+
 int x_smbd_conn_negprot(x_smbd_conn_t *smbd_conn,
 		uint16_t dialect,
 		uint16_t encryption_algo,
@@ -474,6 +478,7 @@ void x_smb2_reply(x_smbd_conn_t *smbd_conn,
 	}
 	x_smb2_reply_msg(smbd_conn, smbd_requ, buf_head, buf_tail, status, reply_size);
 	smbd_requ->interim_state = x_smbd_requ_t::INTERIM_S_NONE;
+	X_SMBD_UPDATE_OP_HISTOGRAM(smbd_requ);
 }
 
 static int x_smbd_reply_error(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ,
@@ -519,6 +524,7 @@ static int x_smbd_reply_interim(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_re
 	x_bufref_t *bufref = new x_bufref_t{out_buf, 8, sizeof(x_smb2_header_t) + 8};
 	smbd_requ->interim_state = x_smbd_requ_t::INTERIM_S_SENT;
 	x_smb2_reply_msg(smbd_conn, smbd_requ, bufref, bufref, NT_STATUS_PENDING, sizeof(x_smb2_header_t) + 8);
+	X_SMBD_COUNTER_INC(reply_interim, 1);
 	x_smbd_conn_queue(smbd_conn, smbd_requ);
 
 	return 0;
@@ -581,17 +587,20 @@ static void x_smbd_conn_cancel(x_smbd_conn_t *smbd_conn,
 	if (!smbd_requ) {
 		X_LOG_ERR("cannot find pending requ by flags=0x%x, async_id=x%lx, mid=%lu",
 				smb2_hdr.flags, smb2_hdr.async_id, smb2_hdr.mid);
+		X_SMBD_COUNTER_INC(cancel_not_exist, 1);
 		return;
 	}
 
 	if (!smbd_requ->set_cancelled()) {
 		X_LOG_DBG("cannot cancel requ %p async_id=x%lx, mid=%lu",
 				smbd_requ, smb2_hdr.async_id, smb2_hdr.mid);
+		X_SMBD_COUNTER_INC(cancel_too_late, 1);
 		return;
 	}
 
 	X_LOG_DBG("cancel requ %p async_id=x%lx, mid=%lu",
 			smbd_requ, smb2_hdr.async_id, smb2_hdr.mid);
+	X_SMBD_COUNTER_INC(cancel_success, 1);
 	auto cancel_fn = smbd_requ->cancel_fn;
 	smbd_requ->cancel_fn = nullptr;
 	smbd_conn->pending_requ_list.remove(smbd_requ);
@@ -1030,6 +1039,7 @@ static int x_smbd_conn_process_smb2(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smb
 
 		if (smbd_requ->in_smb2_hdr.opcode == X_SMB2_OP_CANCEL) {
 			x_smbd_conn_cancel(smbd_conn, smbd_requ->in_smb2_hdr);
+			X_SMBD_UPDATE_OP_HISTOGRAM(smbd_requ);
 			continue;
 		}
 
