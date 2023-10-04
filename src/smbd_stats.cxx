@@ -93,7 +93,7 @@ struct x_smbd_stats_report_t : x_smbd_ctrl_handler_t
 
 	bool output(std::string &data) override;
 
-	const uint32_t band_start = 3, band_end = X_SMBD_HISTOGRAM_BAND_NUMBER, band_step = 3;
+	const uint32_t band_start = 3, band_group = 8, band_step = 3;
 	x_smbd_stats_t<single_threaded_t> stats;
 	std::array<uint64_t, X_SMBD_HISTOGRAM_ID_MAX> histogram_totals{};
 	uint32_t output_lineno = 0;
@@ -132,37 +132,31 @@ static void output_pair(std::ostream &os, uint64_t total_create, uint64_t total_
 }
 
 static void output_histogram_header(std::ostream &os,
-		uint32_t band_start, uint32_t band_end, uint32_t band_step)
+		uint32_t band_start, uint32_t band_group, uint32_t band_step)
 {
-	char buf[1024];
+	char buf[512];
+	char bbuf[24];
 	snprintf(buf, sizeof buf, "    %-20s %10s %15s %15s %9s %12s",
 			"Histogram", "total", "sum", "average", "min", "max");
 	os << buf;
-	uint32_t band;
-	uint32_t last_band = 0;
-	for (band = band_start; band < band_end; ++band) {
-		char bbuf[24];
-		if (band == band_end - 1) {
-			snprintf(bbuf, sizeof bbuf, ">=2^%u", last_band);
-			snprintf(buf, sizeof buf, " %10s", bbuf);
-			os << buf;
-		} else if (((band - band_start) % band_step) == 0) {
-			snprintf(bbuf, sizeof bbuf, "<2^%u", band);
-			snprintf(buf, sizeof buf, " %10s", bbuf);
-			os << buf;
-			last_band = band;
-		}
+	uint32_t band = band_start;
+	for (uint32_t i = 0; i < band_group; ++i, band += band_step) {
+		snprintf(bbuf, sizeof bbuf, "<2^%u", band);
+		snprintf(buf, sizeof buf, " %10s", bbuf);
+		os << buf;
 	}
-	os << std::endl;
+	snprintf(bbuf, sizeof bbuf, ">=2^%u", band);
+	snprintf(buf, sizeof buf, " %10s", bbuf);
+	os << buf << std::endl;
 }
 
 #define HISTOGRAM_FMT	"%-20s %10lu %15lu %15.3f %9lu %12lu"
 static void output_histogram(std::ostream &os,
-		uint32_t band_start, uint32_t band_end, uint32_t band_step,
+		uint32_t band_start, uint32_t band_group, uint32_t band_step,
 		const x_smbd_histogram_t<single_threaded_t> &hist, uint64_t total,
 		const char *name)
 {
-	char buf[1024];
+	char buf[512];
 	snprintf(buf, sizeof buf, "    " HISTOGRAM_FMT, name,
 			total, uint64_t(hist.sum), double(hist.sum) / double(total),
 			uint64_t(hist.min), uint64_t(hist.max));
@@ -173,15 +167,23 @@ static void output_histogram(std::ostream &os,
 		band_sum += hist.bands[band];
 	}
 
-	for (band = band_start; band < band_end; ++band) {
+	for (uint32_t i = 0; i < band_group; ++i) {
 		band_sum += hist.bands[band];
-		if (band == band_end - 1 || ((band - band_start) % band_step) == 0) {
-			snprintf(buf , sizeof buf, " %10lu", band_sum);
-			os << buf;
-			band_sum = 0;
+		snprintf(buf , sizeof buf, " %10lu", band_sum);
+		os << buf;
+		band_sum = 0;
+
+		++band;
+		for (uint32_t j = 1; j < band_step; ++j, ++band) {
+			band_sum += hist.bands[band];
 		}
 	}
-	os << std::endl;
+
+	for (; band < X_SMBD_HISTOGRAM_BAND_NUMBER; ++band) {
+		band_sum += hist.bands[band];
+	}
+	snprintf(buf , sizeof buf, " %10lu", band_sum);
+	os << buf << std::endl;
 }
 
 bool x_smbd_stats_report_t::output(std::string &data)
@@ -206,11 +208,11 @@ bool x_smbd_stats_report_t::output(std::string &data)
 				output_pair(os, total_create, total_delete, smbd_pair_counter_names[pi]);
 			}
 		} else if (output_lineno == 2 + X_SMBD_COUNTER_ID_MAX + X_SMBD_PAIR_COUNTER_ID_MAX) {
-			output_histogram_header(os, band_start, band_end, band_step);
+			output_histogram_header(os, band_start, band_group, band_step);
 		} else if (output_lineno < 3 + X_SMBD_COUNTER_ID_MAX + X_SMBD_PAIR_COUNTER_ID_MAX + X_SMBD_HISTOGRAM_ID_MAX) {
 			uint32_t hi = output_lineno - 3 - X_SMBD_COUNTER_ID_MAX - X_SMBD_PAIR_COUNTER_ID_MAX;
 			if (histogram_totals[hi] > 0) {
-				output_histogram(os, band_start, band_end, band_step,
+				output_histogram(os, band_start, band_group, band_step,
 						stats.histograms[hi], histogram_totals[hi],
 						smbd_histogram_names[hi]);
 			}
