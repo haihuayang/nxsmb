@@ -23,8 +23,9 @@ struct posixfs_ads_header_t
 	uint32_t version;
 	uint32_t allocation_size;
 };
-// TODO ext4 xattr max size is 4k
-static const uint64_t posixfs_ads_max_length = 0x1000 - sizeof(posixfs_ads_header_t);
+
+// TODO ext4 xattr max size is 4k while linux fattr is 64k
+static const uint64_t posixfs_ads_max_length = 0x10000 - sizeof(posixfs_ads_header_t);
 
 struct posixfs_qdir_t
 {
@@ -2943,7 +2944,16 @@ NTSTATUS x_smbd_posixfs_create_object(x_smbd_object_t *smbd_object,
 		posixfs_ads->xattr_name = posixfs_get_ads_xattr_name(
 				x_str_convert_assert<std::string>(smbd_stream->name));
 		posixfs_ads_reset(posixfs_object, posixfs_ads, allocation_size);
-		/* TODO change notify */
+
+		x_smbd_schedule_notify(
+				NOTIFY_ACTION_ADDED_STREAM,
+				FILE_NOTIFY_CHANGE_STREAM_NAME,
+				state.lease.parent_key,
+				x_smbd_conn_curr_client_guid(),
+				smbd_object->parent_object,
+				nullptr,
+				smbd_object->path_base + u":" + smbd_stream->name,
+				{});
 	}
 
 	X_ASSERT(create_count > 0);
