@@ -304,13 +304,23 @@ static void smbd_close_open_intl(
 	pending_requ_list = std::move(smbd_open->pending_requ_list);
 
 	if (smbd_open->update_write_time) {
-		x_smbd_schedule_notify(
-				NOTIFY_ACTION_MODIFIED,
-				FILE_NOTIFY_CHANGE_LAST_WRITE,
-				smbd_open->open_state.parent_lease_key,
-				smbd_open->open_state.client_guid,
-				smbd_object->parent_object, nullptr,
-				smbd_object->path_base, {});
+		if (smbd_open->smbd_stream) {
+			x_smbd_schedule_notify(
+					NOTIFY_ACTION_MODIFIED_STREAM,
+					FILE_NOTIFY_CHANGE_STREAM_SIZE | FILE_NOTIFY_CHANGE_STREAM_WRITE,
+					smbd_open->open_state.parent_lease_key,
+					smbd_open->open_state.client_guid,
+					smbd_object->parent_object, nullptr,
+					smbd_object->path_base + u":" + smbd_open->smbd_stream->name, {});
+		} else {
+			x_smbd_schedule_notify(
+					NOTIFY_ACTION_MODIFIED,
+					FILE_NOTIFY_CHANGE_LAST_WRITE,
+					smbd_open->open_state.parent_lease_key,
+					smbd_open->open_state.client_guid,
+					smbd_object->parent_object, nullptr,
+					smbd_object->path_base, {});
+		}
 		smbd_open->update_write_time = false;
 	}
 

@@ -1512,7 +1512,11 @@ NTSTATUS posixfs_object_op_write(
 
 		if (smbd_open->smbd_stream) {
 			posixfs_ads_t *ads = posixfs_ads_from_smbd_stream(smbd_open->smbd_stream);
-			return posixfs_ads_write(posixfs_object, ads, *state);
+			NTSTATUS status =  posixfs_ads_write(posixfs_object, ads, *state);
+			if (NT_STATUS_IS_OK(status)) {
+				smbd_open->update_write_time = true;
+			}
+			return status;
 		}
 	}
 
@@ -2017,8 +2021,31 @@ static NTSTATUS setinfo_file(posixfs_object_t *posixfs_object,
 		} else {
 			posixfs_ads = posixfs_ads_from_smbd_stream(smbd_open->smbd_stream);
 		}
-		return posixfs_set_end_of_file(posixfs_object,
+		NTSTATUS status = posixfs_set_end_of_file(posixfs_object,
 				posixfs_ads, posixfs_open, new_size);
+		if (NT_STATUS_IS_OK(status)) {
+			if (!smbd_open->smbd_stream) {
+				x_smbd_schedule_notify(
+						NOTIFY_ACTION_MODIFIED,
+						FILE_NOTIFY_CHANGE_SIZE,
+						smbd_open->open_state.parent_lease_key,
+						smbd_open->open_state.client_guid,
+						posixfs_object->base.parent_object,
+						nullptr,
+						posixfs_object->base.path_base, {});
+			} else {
+				x_smbd_schedule_notify(
+						NOTIFY_ACTION_MODIFIED_STREAM,
+						FILE_NOTIFY_CHANGE_STREAM_SIZE,
+						smbd_open->open_state.parent_lease_key,
+						smbd_open->open_state.client_guid,
+						posixfs_object->base.parent_object,
+						nullptr,
+						posixfs_object->base.path_base + u":" + smbd_open->smbd_stream->name,
+						{});
+			}
+		}
+		return status;
 
 	} else if (state.in_info_level == x_smb2_info_level_t::FILE_POSITION_INFORMATION) {
 		uint64_t new_size;

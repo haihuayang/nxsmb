@@ -481,6 +481,14 @@ void x_smb2_reply(x_smbd_conn_t *smbd_conn,
 	X_SMBD_UPDATE_OP_HISTOGRAM(smbd_requ);
 }
 
+struct x_smb2_error_t
+{
+	uint16_t struct_size;
+	uint8_t error_context_count;
+	uint8_t unused0;
+	uint32_t byte_count;
+};
+
 static int x_smbd_reply_error(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ,
 		NTSTATUS status,
 		const char *file, unsigned int line)
@@ -488,13 +496,21 @@ static int x_smbd_reply_error(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ
 	X_LOG_OP("%ld RESP 0x%x at %s:%d", smbd_requ->in_smb2_hdr.mid,
 			NT_STATUS_V(status), file, line);
 
-	x_buf_t *out_buf = x_buf_alloc_out_buf(8);
+	x_buf_t *out_buf = x_buf_alloc_out_buf(sizeof(x_smb2_error_t));
 
 	uint8_t *out_hdr = x_buf_get_out_hdr(out_buf);
 
 	uint8_t *out_body = out_hdr + sizeof(x_smb2_header_t);
-	memset(out_body, 0, 8);
-	x_put_le16(out_body, 0x9);
+	x_smb2_error_t *smb2_err = (x_smb2_error_t *)out_body;
+	smb2_err->struct_size = X_H2LE16(9);
+	/* workaround test BVT_SMB2Basic_ChangeNotify_ServerReceiveSmb2Close */
+	if (NT_STATUS_EQUAL(status, NT_STATUS_NOTIFY_CLEANUP)) {
+		smb2_err->error_context_count = 0x48;
+	} else {
+		smb2_err->error_context_count = 0;
+	}
+	smb2_err->unused0 = 0;
+	smb2_err->byte_count = 0;
 
 	x_bufref_t *bufref = new x_bufref_t{out_buf, 8, sizeof(x_smb2_header_t) + 8};
 	x_smb2_reply(smbd_conn, smbd_requ, bufref, bufref, status, sizeof(x_smb2_header_t) + 8);
