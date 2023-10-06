@@ -3038,6 +3038,23 @@ NTSTATUS x_smbd_posixfs_op_access_check(x_smbd_object_t *smbd_object,
 			smbd_tcon, smbd_user,
 			*psd,
 			desired_access, overwrite);
+
+	if (rejected_mask & idl::SEC_FLAG_SYSTEM_SECURITY) {
+		if (smbd_user.priviledge_mask & idl::SEC_PRIV_SECURITY_BIT) {
+			granted_access |= idl::SEC_FLAG_SYSTEM_SECURITY;
+			rejected_mask &= ~idl::SEC_FLAG_SYSTEM_SECURITY;
+		} else {
+			return NT_STATUS_PRIVILEGE_NOT_HELD;
+		}
+	}
+
+        if (rejected_mask & idl::SEC_STD_WRITE_OWNER) {
+		if (smbd_user.priviledge_mask & idl::SEC_PRIV_TAKE_OWNERSHIP_BIT) {
+			granted_access |= idl::SEC_STD_WRITE_OWNER;
+			rejected_mask &= ~idl::SEC_STD_WRITE_OWNER;
+		}
+        }
+
 	if (rejected_mask != 0) {
 		return NT_STATUS_ACCESS_DENIED;
 	}

@@ -54,7 +54,7 @@ static uint32_t share_get_maximum_access(const std::shared_ptr<x_smbd_share_t> &
 ****************************************************************************/
 
 static uint32_t create_share_access_mask(const std::shared_ptr<x_smbd_share_t> &share,
-		x_smbd_chan_t *smbd_chan)
+		x_smbd_sess_t *smbd_sess, x_smbd_chan_t *smbd_chan)
 {
 	uint32_t share_access = share_get_maximum_access(share);
 
@@ -64,20 +64,20 @@ static uint32_t create_share_access_mask(const std::shared_ptr<x_smbd_share_t> &
 			  idl::SEC_FILE_WRITE_EA | idl::SEC_FILE_WRITE_ATTRIBUTE |
 			  idl::SEC_DIR_DELETE_CHILD );
 	}
-#if 0
-	if (security_token_has_privilege(token, SEC_PRIV_SECURITY)) {
-		share_access |= SEC_FLAG_SYSTEM_SECURITY;
+	auto smbd_user = x_smbd_sess_get_user(smbd_sess);
+	if (smbd_user->priviledge_mask & idl::SEC_PRIV_SECURITY_BIT) {
+		share_access |= idl::SEC_FLAG_SYSTEM_SECURITY;
 	}
-	if (security_token_has_privilege(token, SEC_PRIV_RESTORE)) {
-		share_access |= SEC_RIGHTS_PRIV_RESTORE;
+	if (smbd_user->priviledge_mask & idl::SEC_PRIV_RESTORE_BIT) {
+		share_access |= idl::SEC_RIGHTS_PRIV_RESTORE;
 	}
-	if (security_token_has_privilege(token, SEC_PRIV_BACKUP)) {
-		share_access |= SEC_RIGHTS_PRIV_BACKUP;
+	if (smbd_user->priviledge_mask & idl::SEC_PRIV_BACKUP_BIT) {
+		share_access |= idl::SEC_RIGHTS_PRIV_BACKUP;
 	}
-	if (security_token_has_privilege(token, SEC_PRIV_TAKE_OWNERSHIP)) {
-		share_access |= SEC_STD_WRITE_OWNER;
+	if (smbd_user->priviledge_mask & idl::SEC_PRIV_TAKE_OWNERSHIP_BIT) {
+		share_access |= idl::SEC_STD_WRITE_OWNER;
 	}
-#endif
+
 	return share_access;
 }
 #if 0
@@ -216,7 +216,7 @@ NTSTATUS x_smb2_process_tcon(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 	}
 
 	uint32_t share_access = create_share_access_mask(smbd_share,
-			smbd_requ->smbd_chan);
+			smbd_requ->smbd_sess, smbd_requ->smbd_chan);
 
 	if ((share_access & (idl::SEC_FILE_READ_DATA|idl::SEC_FILE_WRITE_DATA)) == 0) {
 		/* No access, read or write. */
