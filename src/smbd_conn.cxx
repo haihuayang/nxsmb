@@ -252,7 +252,7 @@ static void x_smbd_requ_sign_if(x_smbd_conn_t *smbd_conn,
 	x_smb2_header_t *smb2_hdr = (x_smb2_header_t *)buf_head->get_data();
 	uint32_t flags = X_LE2H32(smb2_hdr->flags);
 	NTSTATUS status = { X_LE2H32(smb2_hdr->status) };
-	if (flags & X_SMB2_HDR_FLAG_SIGNED) {
+	if (!smbd_requ->encrypted && flags & (X_SMB2_HDR_FLAG_SIGNED)) {
 		if (smbd_requ->smbd_sess) {
 			uint16_t signing_algo;
 			const x_smb2_key_t *signing_key = get_signing_key(smbd_requ,
@@ -891,7 +891,7 @@ static NTSTATUS x_smbd_conn_process_smb2_intl(x_smbd_conn_t *smbd_conn, x_smbd_r
 		signing_required = x_smbd_sess_is_signing_required(smbd_requ->smbd_sess);
 	}
 
-	if (smbd_requ->is_signed()) {
+	if (!smbd_requ->encrypted && smbd_requ->is_signed()) {
 		if (smbd_requ->in_smb2_hdr.opcode == X_SMB2_OP_NEGPROT) {
 			RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 		}
