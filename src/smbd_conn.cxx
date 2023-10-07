@@ -1834,7 +1834,6 @@ struct send_interim_evt_t
 		X_LOG_DBG("evt=%p, requ=%p, smbd_conn=%p", evt, smbd_requ, smbd_conn);
 		if (smbd_requ->interim_state == x_smbd_requ_t::INTERIM_S_SCHEDULED) {
 			X_SMBD_REPLY_INTERIM(smbd_conn, smbd_requ);
-			x_smbd_conn_queue(smbd_conn, smbd_requ);
 		} else {
 			X_ASSERT(smbd_requ->interim_state != x_smbd_requ_t::INTERIM_S_SENT);
 		}
