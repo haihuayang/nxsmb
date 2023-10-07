@@ -100,6 +100,8 @@ struct x_smbd_conf_t
 	uint32_t max_connections = 512;
 	uint32_t max_opens = 1024;
 
+	uint32_t allocation_roundup_size = 4096; // TODO should be volume param
+
 	uint32_t my_dev_delay_read_ms = 0;
 	uint32_t my_dev_delay_write_ms = 0;
 	uint32_t my_dev_delay_qdir_ms = 0;

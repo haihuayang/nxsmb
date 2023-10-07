@@ -409,6 +409,16 @@ static bool parse_global_param(x_smbd_conf_t &smbd_conf,
 		} else {
 			smbd_conf.capabilities &= ~X_SMB2_CAP_MULTI_CHANNEL;
 		}
+	} else if (name == "allocation roundup size") {
+		uint32_t size;
+		if (!parse_uint32(value, size)) {
+			return false;
+		}
+		if (size < 512 || (size & ~size) != 0) {
+			return false;
+		}
+		smbd_conf.allocation_roundup_size = size;
+		return true;
 
 	} else if (name == "my:nbt version") {
 		return parse_version(smbd_conf.my_nbt_version, value);
@@ -863,7 +873,8 @@ static int reload_volumes(x_smbd_conf_t &smbd_conf,
 			/* new volume */
 			smbd_conf.smbd_volumes.push_back(x_smbd_volume_create(spec->uuid,
 						spec->name_8, spec->name_l16,
-						spec->owner_node_l16, spec->path));
+						spec->owner_node_l16, spec->path,
+						smbd_conf.allocation_roundup_size));
 		}
 	}
 	for ( ; curr_it != curr_end; ++curr_it) {
@@ -974,7 +985,8 @@ int x_smbd_init_shares(x_smbd_conf_t &smbd_conf)
 	for (auto &vs: smbd_conf.volume_specs) {
 		smbd_conf.smbd_volumes.push_back(x_smbd_volume_create(vs->uuid,
 					vs->name_8, vs->name_l16,
-					vs->owner_node_l16, vs->path));
+					vs->owner_node_l16, vs->path,
+					smbd_conf.allocation_roundup_size));
 	}
 
 	add_share(smbd_conf, x_smbd_ipc_share_create());
