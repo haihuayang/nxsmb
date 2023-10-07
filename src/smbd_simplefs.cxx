@@ -29,6 +29,7 @@ static bool simplefs_process_entry(
 		ret = posixfs_object_get_statex(dir_obj, object_meta, stream_meta);
 	} else if (file_number == 1) {
 		ret = posixfs_object_get_parent_statex(dir_obj, object_meta, stream_meta);
+		object_meta->inode = 0;
 	} else {
 		return -1; // TODO not support snapshot for now
 #if 0
