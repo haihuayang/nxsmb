@@ -118,7 +118,7 @@ struct x_smbd_conf_t
 	std::vector<std::string> interfaces;
 	std::shared_ptr<const std::vector<x_iface_t>> local_ifaces;
 
-	std::vector<uint16_t> dialects{0x311, 0x310, 0x302, 0x210, 0x202};
+	std::vector<uint16_t> dialects{0x311, 0x302, 0x300, 0x210, 0x202};
 	std::u16string node_l16;
 	std::vector<std::string> nodes;
 	std::vector<std::shared_ptr<x_smbd_volume_t>> smbd_volumes;

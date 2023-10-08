@@ -161,7 +161,8 @@ int x_smbd_conn_process_smb1negprot(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smb
 	negprot.out_dialect = 0x2ff;
 	negprot.out_security_mode = smbd_conf.security_mode;
 	negprot.out_capabilities = smbd_conf.capabilities & 
-		~(X_SMB2_CAP_DIRECTORY_LEASING | X_SMB2_CAP_MULTI_CHANNEL);
+		~(X_SMB2_CAP_DIRECTORY_LEASING | X_SMB2_CAP_MULTI_CHANNEL |
+				X_SMB2_CAP_ENCRYPTION);
 	x_smbd_conn_reply_negprot(smbd_conn, smbd_requ, smbd_conf, negprot);
 	return 0;
 }
@@ -430,12 +431,22 @@ NTSTATUS x_smb2_process_negprot(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_re
 	}
 
 	negprot.out_security_mode = smbd_conf.security_mode;
-	// TODO should it consider client capabilities?
-	negprot.out_capabilities = smbd_conf.capabilities;
+
+	static const uint32_t bits_300 = X_SMB2_CAP_MULTI_CHANNEL
+		| X_SMB2_CAP_PERSISTENT_HANDLES
+		| X_SMB2_CAP_DIRECTORY_LEASING
+		| X_SMB2_CAP_ENCRYPTION;
+
+	negprot.out_capabilities = smbd_conf.capabilities &
+		((bits_300 & in_capabilities) | ~(bits_300));
 	if (negprot.out_dialect < X_SMB2_DIALECT_300) {
-		negprot.out_capabilities &= ~(X_SMB2_CAP_DIRECTORY_LEASING |
-				X_SMB2_CAP_MULTI_CHANNEL | X_SMB2_CAP_ENCRYPTION);
+		negprot.out_capabilities &= ~bits_300;
 	}
+	if (negprot.out_dialect < X_SMB2_DIALECT_210) {
+		negprot.out_capabilities &= ~(X_SMB2_CAP_LEASING |
+				X_SMB2_CAP_LARGE_MTU);
+	}
+
 	x_smbd_conn_negprot(smbd_conn, negprot.out_dialect,
 			negprot.out_encryption_algo,
 			negprot.out_signing_algo,
