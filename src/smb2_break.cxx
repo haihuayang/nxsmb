@@ -215,7 +215,7 @@ void x_smb2_send_lease_break(x_smbd_conn_t *smbd_conn, x_smbd_sess_t *smbd_sess,
 	noti->access_mask_hint = 0;
 	noti->share_mask_hint = 0;
 
-	x_smbd_conn_send_unsolicited(smbd_conn, smbd_sess, bufref, X_SMB2_OP_BREAK);
+	x_smbd_conn_send_unsolicited(smbd_conn, nullptr, bufref, X_SMB2_OP_BREAK);
 }
 
 void x_smb2_send_oplock_break(x_smbd_conn_t *smbd_conn, x_smbd_sess_t *smbd_sess,
@@ -232,7 +232,7 @@ void x_smb2_send_oplock_break(x_smbd_conn_t *smbd_conn, x_smbd_sess_t *smbd_sess
 	noti->file_id_persistent = X_H2LE64(id_persistent);
 	noti->file_id_volatile = X_H2LE64(id_volatile);
 
-	x_smbd_conn_send_unsolicited(smbd_conn, smbd_sess, bufref, X_SMB2_OP_BREAK);
+	x_smbd_conn_send_unsolicited(smbd_conn, nullptr, bufref, X_SMB2_OP_BREAK);
 }
 
 #if 0
