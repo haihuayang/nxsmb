@@ -771,6 +771,12 @@ NTSTATUS x_smb2_process_create(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_req
 		RETURN_OP_STATUS(smbd_requ, status);
 	}
 
+	auto dialect = x_smbd_conn_get_dialect(smbd_conn);
+	if (dialect < X_SMB2_DIALECT_210 &&
+			state->in_oplock_level == X_SMB2_OPLOCK_LEVEL_LEASE) {
+		state->in_oplock_level = X_SMB2_OPLOCK_LEVEL_NONE;
+	}
+
 	state->replay_operation = smbd_requ->in_smb2_hdr.flags & X_SMB2_HDR_FLAG_REPLAY_OPERATION;
 
 	if (state->in_contexts & X_SMB2_CONTEXT_FLAG_DH2Q) {
