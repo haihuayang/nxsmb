@@ -178,6 +178,10 @@ NTSTATUS x_smb2_process_setinfo(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_re
 		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
 
+	if (in_input_buffer_length > x_smbd_conn_get_negprot(smbd_conn).max_trans_size) {
+		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
+	}
+
 	auto in_info_class = x_smb2_info_class_t(X_LE2H8(in_setinfo->info_class));
 	auto in_info_level = x_smb2_info_level_t(X_LE2H8(in_setinfo->info_level));
 	uint64_t in_file_id_persistent = X_LE2H64(in_setinfo->file_id_persistent);

@@ -80,6 +80,7 @@ struct x_smb2_state_getinfo_t
 	x_smb2_info_level_t  in_info_level;
 	uint32_t in_output_buffer_length;
 	uint32_t in_additional;
+	uint32_t in_input_buffer_length;
 	uint32_t in_flags;
 	uint64_t in_file_id_persistent;
 	uint64_t in_file_id_volatile;
