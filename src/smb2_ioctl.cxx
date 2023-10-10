@@ -421,6 +421,10 @@ static NTSTATUS x_smb2_fsctl_validate_negotiate_info(
 		return NT_STATUS_INVALID_PARAMETER;
 	}
 
+	if (x_smbd_conn_get_dialect(smbd_conn) >= X_SMB2_DIALECT_311) {
+		return X_NT_STATUS_INTERNAL_TERMINATE;
+	}
+
 	const uint16_t *in_dialects = (const uint16_t *)(in + 1);
 
 	fsctl_state.in_dialects.resize(in_num_dialects);
