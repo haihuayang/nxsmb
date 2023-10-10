@@ -168,7 +168,8 @@ int x_smbd_conn_process_smb1negprot(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smb
 }
 
 static NTSTATUS parse_context(const uint8_t *in_context, uint32_t in_context_length,
-		uint32_t in_context_count, uint32_t &encryption_algos,
+		uint32_t in_context_count, uint32_t &hash_algos,
+		uint32_t &encryption_algos,
 		uint32_t &signing_algos)
 {
 	size_t offset = 0;
@@ -198,17 +199,17 @@ static NTSTATUS parse_context(const uint8_t *in_context, uint32_t in_context_len
 			}
 
 			offset += 4;
-			bool hash_matched = false;
+			uint32_t algos = 0;
 			for (uint16_t i = 0; i < hash_count; ++i) {
 				uint16_t hash = x_get_le16(in_context + offset + 2 * i);
 				if (hash == X_SMB2_PREAUTH_INTEGRITY_SHA512) {
-					hash_matched = true;
-					break;
+					algos |= (1 << X_SMB2_PREAUTH_INTEGRITY_SHA512);
 				}
 			}
-			if (!hash_matched) {
+			if (!algos) {
 				return NT_STATUS_SMB_NO_PREAUTH_INTEGRITY_HASH_OVERLAP;
 			}
+			hash_algos = algos;
 
 		} else if (type == X_SMB2_ENCRYPTION_CAPABILITIES) {
 			if (length < 2) {
@@ -390,10 +391,10 @@ NTSTATUS x_smb2_process_negprot(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_re
 
 		const uint8_t *in_context = in_buf + in_context_offset;
 
-		uint32_t encryption_algos = 0, signing_algos = 0;
+		uint32_t hash_algos = 0, encryption_algos = 0, signing_algos = 0;
 		NTSTATUS status = parse_context(in_context,
 				smbd_requ->in_requ_len - in_context_offset,
-				in_context_count,
+				in_context_count, hash_algos,
 				encryption_algos, signing_algos);
 		if (!NT_STATUS_IS_OK(status)) {
 			RETURN_OP_STATUS(smbd_requ, status);
@@ -419,6 +420,10 @@ NTSTATUS x_smb2_process_negprot(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_re
 			negprot.out_signing_algo = X_SMB2_SIGNING_HMAC_SHA256;
 		} else {
 			negprot.out_signing_algo = X_SMB2_SIGNING_INVALID_ALGO;
+		}
+
+		if (hash_algos == 0) {
+			RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 		}
 
 		x_smbd_conn_update_preauth(smbd_conn, 
