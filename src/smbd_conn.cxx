@@ -35,16 +35,8 @@ struct x_smbd_conn_t
 	const x_sockaddr_t saddr;
 	const std::shared_ptr<std::u16string> machine_name;
 	const x_tick_t tick_create;
-	uint16_t cryption_algo = X_SMB2_ENCRYPTION_INVALID_ALGO;
-	uint16_t signing_algo = X_SMB2_SIGNING_INVALID_ALGO;
-	uint16_t dialect = X_SMB2_DIALECT_000;
 
-	uint16_t server_security_mode;
-	uint16_t client_security_mode;
-	uint32_t server_capabilities;
-	uint32_t client_capabilities;
-
-	x_smb2_uuid_t client_guid;
+	x_smbd_negprot_t negprot;
 
 	uint64_t credit_seq_low = 0;
 	uint64_t credit_seq_range = 1;
@@ -96,6 +88,7 @@ x_smbd_conn_t::x_smbd_conn_t(int fd, const x_sockaddr_t &saddr,
 	, seq_bitmap(max_credits)
 {
 	X_SMBD_COUNTER_INC_CREATE(conn, 1);
+	negprot.dialect = X_SMB2_DIALECT_000;
 }
 
 x_smbd_conn_t::~x_smbd_conn_t()
@@ -138,26 +131,31 @@ void x_smbd_conn_update_preauth(x_smbd_conn_t *smbd_conn,
 
 const x_smb2_preauth_t *x_smbd_conn_get_preauth(x_smbd_conn_t *smbd_conn)
 {
-	if (smbd_conn->dialect >= X_SMB2_DIALECT_310) {
+	if (smbd_conn->negprot.dialect >= X_SMB2_DIALECT_310) {
 		return &smbd_conn->preauth;
 	} else {
 		return nullptr;
 	}
 }
 
+const x_smbd_negprot_t &x_smbd_conn_get_negprot(const x_smbd_conn_t *smbd_conn)
+{
+	return smbd_conn->negprot;
+}
+
 uint16_t x_smbd_conn_get_dialect(const x_smbd_conn_t *smbd_conn)
 {
-	return smbd_conn->dialect;
+	return smbd_conn->negprot.dialect;
 }
 
 uint16_t x_smbd_conn_get_cryption_algo(const x_smbd_conn_t *smbd_conn)
 {
-	return smbd_conn->cryption_algo;
+	return smbd_conn->negprot.cryption_algo;
 }
 
 uint32_t x_smbd_conn_get_capabilities(const x_smbd_conn_t *smbd_conn)
 {
-	return smbd_conn->server_capabilities;
+	return smbd_conn->negprot.server_capabilities;
 }
 
 #define X_SMBD_UPDATE_OP_HISTOGRAM(smbd_requ) do { \
@@ -165,43 +163,33 @@ uint32_t x_smbd_conn_get_capabilities(const x_smbd_conn_t *smbd_conn)
 } while (0)
 
 int x_smbd_conn_negprot(x_smbd_conn_t *smbd_conn,
-		uint16_t dialect,
-		uint16_t encryption_algo,
-		uint16_t signing_algo,
-		uint16_t client_security_mode,
-		uint16_t server_security_mode,
-		uint32_t client_capabilities,
-		uint32_t server_capabilities,
-		const x_smb2_uuid_t &client_guid)
+		const x_smbd_negprot_t &negprot, bool smb1)
 {
-	if (smbd_conn->dialect != X_SMB2_DIALECT_000 &&
-			smbd_conn->dialect != X_SMB2_DIALECT_2FF) {
-		return -EBADMSG;
-	}
-	smbd_conn->dialect = dialect;
-	smbd_conn->cryption_algo = encryption_algo;
-	if (signing_algo == X_SMB2_SIGNING_INVALID_ALGO) {
-		if (dialect >= X_SMB2_DIALECT_224) {
-			signing_algo = X_SMB2_SIGNING_AES128_CMAC;
-		} else {
-			signing_algo = X_SMB2_SIGNING_HMAC_SHA256;
+	if (smb1) {
+		if (smbd_conn->negprot.dialect != X_SMB2_DIALECT_000) {
+			X_LOG_ERR("Invalid smb1 negprot, curr dialect is 0x%x",
+					smbd_conn->negprot.dialect);
+			return -EBADMSG;
+		}
+	} else {
+		if (smbd_conn->negprot.dialect != X_SMB2_DIALECT_000 &&
+				smbd_conn->negprot.dialect != X_SMB2_DIALECT_2FF) {
+			X_LOG_ERR("Invalid smb2 negprot, curr dialect is 0x%x",
+					smbd_conn->negprot.dialect);
+			return -EBADMSG;
 		}
 	}
-	smbd_conn->signing_algo = signing_algo;
-	smbd_conn->client_security_mode = client_security_mode;
-	smbd_conn->server_security_mode = server_security_mode;
-	smbd_conn->client_capabilities = client_capabilities;
-	smbd_conn->server_capabilities = server_capabilities;
-	smbd_conn->client_guid = client_guid;
-	return 0;
-}
 
-int x_smbd_conn_negprot_smb1(x_smbd_conn_t *smbd_conn)
-{
-	if (smbd_conn->dialect != X_SMB2_DIALECT_000) {
-		return -EBADMSG;
+	smbd_conn->negprot = negprot;
+	if (negprot.signing_algo == X_SMB2_SIGNING_INVALID_ALGO) {
+		if (negprot.dialect >= X_SMB2_DIALECT_224) {
+			smbd_conn->negprot.signing_algo = X_SMB2_SIGNING_AES128_CMAC;
+		} else {
+			smbd_conn->negprot.signing_algo = X_SMB2_SIGNING_HMAC_SHA256;
+		}
+	} else {
+		smbd_conn->negprot.signing_algo = negprot.signing_algo;
 	}
-	smbd_conn->dialect = X_SMB2_DIALECT_2FF;
 	return 0;
 }
 
@@ -298,13 +286,13 @@ static int x_smbd_conn_create_smb2_tf(x_smbd_conn_t *smbd_conn,
 	tf_hdr->sess_id_low = X_H2LE32(x_convert<uint32_t>(sess_id & 0xffffffff));
 	tf_hdr->sess_id_high = X_H2LE32(x_convert<uint32_t>(sess_id >> 32));
 
-	int clen = x_smb2_signing_encrypt(smbd_conn->cryption_algo,
+	int clen = x_smb2_signing_encrypt(smbd_conn->negprot.cryption_algo,
 			key, tf_hdr,
 			smbd_requ->out_buf_head, smbd_requ->out_length);
 
 	if (clen < 0) {
 		X_LOG_DBG("x_smb2_signing_encrypt(%u) error %d",
-				smbd_conn->cryption_algo, clen);
+				smbd_conn->negprot.cryption_algo, clen);
 		return -1;
 	}
 
@@ -801,7 +789,7 @@ static void smbd_conn_reply_update_counts(
 
 	smbd_requ->request_counters_updated = false;
 
-	if (smbd_conn->dialect < X_SMB2_DIALECT_300) {
+	if (smbd_conn->negprot.dialect < X_SMB2_DIALECT_300) {
 		return;
 	}
 
@@ -851,7 +839,7 @@ static NTSTATUS x_smbd_conn_process_smb2_intl(x_smbd_conn_t *smbd_conn, x_smbd_r
 			smbd_requ->in_smb2_hdr.sess_id != UINT64_MAX) {
 		smbd_requ->smbd_sess = x_smbd_sess_lookup(sess_status,
 				smbd_requ->in_smb2_hdr.sess_id,
-				smbd_conn->client_guid);
+				smbd_conn->negprot.client_guid);
 		if ((smbd_requ->in_smb2_hdr.flags & X_SMB2_HDR_FLAG_CHAINED) == 0) {
 			smbd_requ->sess_status = sess_status;
 		}
@@ -1105,11 +1093,11 @@ static int x_smbd_conn_process_smb2_tf(x_smbd_conn_t *smbd_conn,
 		x_buf_t *buf, uint32_t total_size,
 		x_buf_t **out_buf)
 {
-	if (smbd_conn->dialect < X_SMB2_DIALECT_300) {
+	if (smbd_conn->negprot.dialect < X_SMB2_DIALECT_300) {
 		return -EBADMSG;
 	}
 
-	if (smbd_conn->cryption_algo == X_SMB2_ENCRYPTION_INVALID_ALGO) {
+	if (smbd_conn->negprot.cryption_algo == X_SMB2_ENCRYPTION_INVALID_ALGO) {
 		return -EBADMSG;
 	}
 
@@ -1129,13 +1117,13 @@ static int x_smbd_conn_process_smb2_tf(x_smbd_conn_t *smbd_conn,
 
 	NTSTATUS status;
 	x_smbd_sess_t *smbd_sess = x_smbd_sess_lookup(status,
-				sess_id, smbd_conn->client_guid);
+				sess_id, smbd_conn->negprot.client_guid);
 	if (!smbd_sess) {
 		return -EBADMSG;
 	}
 
 	x_buf_t *pbuf = x_buf_alloc(msgsize);
-	int plen = x_smb2_signing_decrypt(smbd_conn->cryption_algo,
+	int plen = x_smb2_signing_decrypt(smbd_conn->negprot.cryption_algo,
 			x_smbd_sess_get_decryption_key(smbd_sess),
 			smb2_tf, smb2_tf + 1, msgsize,
 			pbuf->data);
@@ -1144,7 +1132,7 @@ static int x_smbd_conn_process_smb2_tf(x_smbd_conn_t *smbd_conn,
 
 	if (plen < 0) {
 		X_LOG_DBG("x_smb2_signing_decrypt(%u) error %d",
-				smbd_conn->cryption_algo, plen);
+				smbd_conn->negprot.cryption_algo, plen);
 		x_buf_release(pbuf);
 		return -EBADMSG;
 	}
@@ -1470,24 +1458,29 @@ static void x_smbd_conn_terminate_chans(x_smbd_conn_t *smbd_conn)
 
 __thread x_smbd_conn_t *g_smbd_conn_curr = nullptr;
 
+const x_smbd_negprot_t &x_smbd_conn_curr_negprot()
+{
+	return g_smbd_conn_curr->negprot;
+}
+
 const x_smb2_uuid_t &x_smbd_conn_curr_client_guid()
 {
-	return g_smbd_conn_curr->client_guid;
+	return g_smbd_conn_curr->negprot.client_guid;
 }
 
 uint16_t x_smbd_conn_curr_dialect()
 {
-	return g_smbd_conn_curr->dialect;
+	return g_smbd_conn_curr->negprot.dialect;
 }
 
 uint16_t x_smbd_conn_curr_get_signing_algo()
 {
-	return g_smbd_conn_curr->signing_algo;
+	return g_smbd_conn_curr->negprot.signing_algo;
 }
 
 uint16_t x_smbd_conn_curr_get_cryption_algo()
 {
-	return g_smbd_conn_curr->cryption_algo;
+	return g_smbd_conn_curr->negprot.cryption_algo;
 }
 
 std::shared_ptr<std::u16string> x_smbd_conn_curr_name()
@@ -1784,15 +1777,15 @@ void x_smbd_conn_post_cancel(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ,
 NTSTATUS x_smbd_conn_validate_negotiate_info(const x_smbd_conn_t *smbd_conn,
 		x_smb2_fsctl_validate_negotiate_info_state_t &fsctl_state)
 {
-	if (fsctl_state.in_capabilities != smbd_conn->client_capabilities) {
+	if (fsctl_state.in_capabilities != smbd_conn->negprot.client_capabilities) {
 		return X_NT_STATUS_INTERNAL_TERMINATE;
 	}
 
-	if (!(fsctl_state.in_guid == smbd_conn->client_guid)) {
+	if (!(fsctl_state.in_guid == smbd_conn->negprot.client_guid)) {
 		return X_NT_STATUS_INTERNAL_TERMINATE;
 	}
 
-	if (fsctl_state.in_security_mode != smbd_conn->client_security_mode) {
+	if (fsctl_state.in_security_mode != smbd_conn->negprot.client_security_mode) {
 		return X_NT_STATUS_INTERNAL_TERMINATE;
 	}
 
@@ -1812,14 +1805,14 @@ NTSTATUS x_smbd_conn_validate_negotiate_info(const x_smbd_conn_t *smbd_conn,
 			fsctl_state.in_dialects.data(),
 			fsctl_state.in_dialects.size());
 
-	if (dialect != smbd_conn->dialect) {
+	if (dialect != smbd_conn->negprot.dialect) {
 		return X_NT_STATUS_INTERNAL_TERMINATE;
 	}
 
-	fsctl_state.out_capabilities = smbd_conn->server_capabilities;
+	fsctl_state.out_capabilities = smbd_conn->negprot.server_capabilities;
 	fsctl_state.out_guid = smbd_conf.guid;
-	fsctl_state.out_security_mode = smbd_conn->server_security_mode;
-	fsctl_state.out_dialect = smbd_conn->dialect;
+	fsctl_state.out_security_mode = smbd_conn->negprot.server_security_mode;
+	fsctl_state.out_dialect = smbd_conn->negprot.dialect;
 
 	return NT_STATUS_OK;
 }

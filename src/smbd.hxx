@@ -269,16 +269,23 @@ uint16_t x_smbd_conn_curr_get_signing_algo();
 uint16_t x_smbd_conn_curr_get_cryption_algo();
 std::shared_ptr<std::u16string> x_smbd_conn_curr_name();
 
+struct x_smbd_negprot_t
+{
+	uint16_t dialect;
+	uint16_t client_security_mode;
+	uint16_t server_security_mode;
+	uint16_t cryption_algo = X_SMB2_ENCRYPTION_INVALID_ALGO;
+	uint16_t signing_algo = X_SMB2_SIGNING_INVALID_ALGO;
+	uint32_t client_capabilities;
+	uint32_t server_capabilities;
+	uint32_t max_trans_size, max_read_size, max_write_size;
+	x_smb2_uuid_t client_guid;
+};
+
+const x_smbd_negprot_t &x_smbd_conn_curr_negprot();
 int x_smbd_conn_negprot(x_smbd_conn_t *smbd_conn,
-		uint16_t dialect,
-		uint16_t encryption_algo,
-		uint16_t signing_algo,
-		uint16_t client_security_mode,
-		uint16_t server_security_mode,
-		uint32_t client_capabilities,
-		uint32_t server_capabilities,
-		const x_smb2_uuid_t &client_guid);
-int x_smbd_conn_negprot_smb1(x_smbd_conn_t *smbd_conn);
+		const x_smbd_negprot_t &negprot, bool smb1);
+const x_smbd_negprot_t &x_smbd_conn_get_negprot(const x_smbd_conn_t *smbd_conn);
 uint16_t x_smbd_conn_get_dialect(const x_smbd_conn_t *smbd_conn);
 uint16_t x_smbd_conn_get_cryption_algo(const x_smbd_conn_t *smbd_conn);
 uint32_t x_smbd_conn_get_capabilities(const x_smbd_conn_t *smbd_conn);
