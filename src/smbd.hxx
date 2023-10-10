@@ -659,5 +659,14 @@ void x_smbd_simple_notify_change(const std::shared_ptr<x_smbd_volume_t> &smbd_vo
 
 void x_smbd_schedule_async(x_job_t *job);
 
+static inline bool x_smbd_request_verify_creditcharge(
+		x_smbd_requ_t *smbd_requ, uint32_t data_length)
+{
+	uint32_t credit_charge = std::max(smbd_requ->in_smb2_hdr.credit_charge, uint16_t(1u));
+	/* must be uint16_t so data_length is 0, it because 0 */
+	uint16_t needed_charge = x_convert<uint16_t>((data_length - 1) / 65536 + 1);
+	return needed_charge <= credit_charge;
+}
+
 #endif /* __smbd__hxx__ */
 

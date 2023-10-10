@@ -812,8 +812,58 @@ static void smbd_conn_reply_update_counts(
 	}
 }
 
+static bool x_smb2_validate_message_id(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
+{
+	X_ASSERT(smbd_requ->in_smb2_hdr.opcode != X_SMB2_OP_CANCEL);
+
+	uint16_t credit_charge = std::max(smbd_requ->in_smb2_hdr.credit_charge, uint16_t(1u));
+
+	if (smbd_conn->credit_granted < credit_charge) {
+		X_LOG_ERR("credit_charge %u > credit_granted %lu",
+				credit_charge, smbd_conn->credit_granted);
+		return false;
+	}
+
+	if (!x_check_range<uint64_t>(smbd_requ->in_smb2_hdr.mid, credit_charge, smbd_conn->credit_seq_low,
+				smbd_conn->credit_seq_low + smbd_conn->credit_seq_range)) {
+		X_LOG_ERR("%lu+%u not in the credit range %lu+%lu", smbd_requ->in_smb2_hdr.mid, credit_charge,
+				smbd_conn->credit_seq_low, smbd_conn->credit_seq_range);
+		return false;
+	}
+
+	auto &seq_bitmap = smbd_conn->seq_bitmap;
+	uint64_t id = smbd_requ->in_smb2_hdr.mid;
+	for (uint16_t i = 0; i < credit_charge; ++i, ++id) {
+		uint64_t offset = id % seq_bitmap.size();
+		if (seq_bitmap[offset]) {
+			X_LOG_ERR("duplicated mid %lu", id);
+			return false;
+		}
+		seq_bitmap[offset] = true;
+	}
+
+	if (smbd_requ->in_smb2_hdr.mid == smbd_conn->credit_seq_low) {
+		uint64_t clear = 0;
+		id = smbd_requ->in_smb2_hdr.mid;
+		uint64_t offset = id % seq_bitmap.size();
+		for ( ; seq_bitmap[offset]; ++clear) {
+			seq_bitmap[offset] = false;
+			offset = (offset + 1) % seq_bitmap.size();
+		}
+		smbd_conn->credit_seq_low += clear;
+		smbd_conn->credit_seq_range -= clear;
+	}
+
+	smbd_conn->credit_granted -= credit_charge;
+	return true;
+}
+
 static NTSTATUS x_smbd_conn_process_smb2_intl(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 {
+	if (!x_smb2_validate_message_id(smbd_conn, smbd_requ)) {
+		return NT_STATUS_INVALID_PARAMETER;
+	}
+
 	if (smbd_requ->in_smb2_hdr.flags & X_SMB2_HDR_FLAG_ASYNC) {
 		return NT_STATUS_INVALID_PARAMETER;
 	}
@@ -944,52 +994,6 @@ static NTSTATUS x_smbd_conn_process_smb2_intl(x_smbd_conn_t *smbd_conn, x_smbd_r
 	return op.op_func(smbd_conn, smbd_requ);
 }
 
-static bool x_smb2_validate_message_id(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
-{
-	X_ASSERT(smbd_requ->in_smb2_hdr.opcode != X_SMB2_OP_CANCEL);
-
-	uint16_t credit_charge = std::max(smbd_requ->in_smb2_hdr.credit_charge, uint16_t(1u));
-
-	if (smbd_conn->credit_granted < credit_charge) {
-		X_LOG_ERR("credit_charge %u > credit_granted %lu",
-				credit_charge, smbd_conn->credit_granted);
-		return false;
-	}
-
-	if (!x_check_range<uint64_t>(smbd_requ->in_smb2_hdr.mid, credit_charge, smbd_conn->credit_seq_low,
-				smbd_conn->credit_seq_low + smbd_conn->credit_seq_range)) {
-		X_LOG_ERR("%lu+%u not in the credit range %lu+%lu", smbd_requ->in_smb2_hdr.mid, credit_charge,
-				smbd_conn->credit_seq_low, smbd_conn->credit_seq_range);
-		return false;
-	}
-
-	auto &seq_bitmap = smbd_conn->seq_bitmap;
-	uint64_t id = smbd_requ->in_smb2_hdr.mid;
-	for (uint16_t i = 0; i < credit_charge; ++i, ++id) {
-		uint64_t offset = id % seq_bitmap.size();
-		if (seq_bitmap[offset]) {
-			X_LOG_ERR("duplicated mid %lu", id);
-			return false;
-		}
-		seq_bitmap[offset] = true;
-	}
-
-	if (smbd_requ->in_smb2_hdr.mid == smbd_conn->credit_seq_low) {
-		uint64_t clear = 0;
-		id = smbd_requ->in_smb2_hdr.mid;
-		uint64_t offset = id % seq_bitmap.size();
-		for ( ; seq_bitmap[offset]; ++clear) {
-			seq_bitmap[offset] = false;
-			offset = (offset + 1) % seq_bitmap.size();
-		}
-		smbd_conn->credit_seq_low += clear;
-		smbd_conn->credit_seq_range -= clear;
-	}
-
-	smbd_conn->credit_granted -= credit_charge;
-	return true;
-}
-
 
 static bool is_success(NTSTATUS status)
 {
@@ -1049,10 +1053,6 @@ static int x_smbd_conn_process_smb2(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smb
 
 
 		smbd_requ->cancel_fn = nullptr;
-		if (!x_smb2_validate_message_id(smbd_conn, smbd_requ)) {
-			return -EBADMSG;
-		}
-
 		if (false && !NT_STATUS_IS_OK(smbd_requ->status) && (smbd_requ->in_smb2_hdr.flags & X_SMB2_HDR_FLAG_CHAINED)) {
 			X_SMBD_REPLY_ERROR(smbd_conn, smbd_requ, smbd_requ->status);
 			continue;

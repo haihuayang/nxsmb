@@ -11,7 +11,7 @@ struct x_smb2_in_getinfo_t
 	uint32_t output_buffer_length;
 	uint16_t input_buffer_offset;
 	uint16_t reserved0;
-	uint32_t input_buffer_length;;
+	uint32_t input_buffer_length;
 	uint32_t additional;
 	uint32_t flags;
 	uint64_t file_id_persistent;
@@ -36,6 +36,7 @@ static bool decode_in_getinfo(x_smb2_state_getinfo_t &state,
 	state.in_info_level = x_smb2_info_level_t(X_LE2H8(in_getinfo->info_level));
 	state.in_output_buffer_length = X_LE2H32(in_getinfo->output_buffer_length);
 	state.in_additional = X_LE2H32(in_getinfo->additional);
+	state.in_input_buffer_length = X_LE2H32(in_getinfo->input_buffer_length);
 	state.in_flags = X_LE2H32(in_getinfo->flags);
 	state.in_file_id_persistent = X_LE2H64(in_getinfo->file_id_persistent);
 	state.in_file_id_volatile = X_LE2H64(in_getinfo->file_id_volatile);
@@ -107,6 +108,12 @@ NTSTATUS x_smb2_process_getinfo(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_re
 	}
 
 	if (state->in_output_buffer_length > x_smbd_conn_get_negprot(smbd_conn).max_trans_size) {
+		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
+	}
+
+	if (!x_smbd_request_verify_creditcharge(smbd_requ,
+				std::max(state->in_input_buffer_length,
+					state->in_output_buffer_length))) {
 		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
 

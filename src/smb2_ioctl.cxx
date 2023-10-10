@@ -748,6 +748,17 @@ NTSTATUS x_smb2_process_ioctl(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ
 	X_LOG_OP("%ld IOCTL 0x%lx, 0x%lx", smbd_requ->in_smb2_hdr.mid,
 			state->in_file_id_persistent, state->in_file_id_volatile);
 
+	if ((uint64_t)state->in_max_input_length + state->in_max_output_length > UINT32_MAX) {
+		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
+	}
+
+	if (!x_smbd_request_verify_creditcharge(smbd_requ,
+				std::max(state->in_max_input_length +
+					state->in_max_output_length,
+					state->in_buf_length))) {
+		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
+	}
+
 	if (state->in_flags != X_SMB2_IOCTL_FLAG_IS_FSCTL) {
 		RETURN_OP_STATUS(smbd_requ, NT_STATUS_NOT_SUPPORTED);
 	}

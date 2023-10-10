@@ -149,6 +149,12 @@ NTSTATUS x_smb2_process_notify(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_req
 		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
 
+
+	if (!x_smbd_request_verify_creditcharge(smbd_requ,
+				in_output_buffer_length)) {
+		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
+	}
+
 	state->in_output_buffer_length = in_output_buffer_length;
 
 	NTSTATUS status = x_smbd_requ_init_open(smbd_requ,
