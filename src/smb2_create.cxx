@@ -720,14 +720,15 @@ static NTSTATUS smb2_process_create(x_smbd_requ_t *smbd_requ,
 		RETURN_OP_STATUS(smbd_requ, NT_STATUS_ACCESS_DENIED);
 	}
 
+	if ((state->in_create_options & X_SMB2_CREATE_OPTION_DELETE_ON_CLOSE) &&
+			!(state->in_desired_access & (idl::SEC_STD_DELETE |
+					0xee000000u))) {
+		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
+	}
+
 	uint32_t orig_access = state->in_desired_access;
 	state->in_desired_access = se_file_map_generic(orig_access);
 	X_LOG_DBG("map access 0x%x to 0x%x", orig_access, state->in_desired_access);
-
-	if ((state->in_create_options & X_SMB2_CREATE_OPTION_DELETE_ON_CLOSE) &&
-			!(state->in_desired_access & idl::SEC_STD_DELETE)) {
-		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
-	}
 
 	if (!state->in_path.empty()) {
 		auto ch = state->in_path[0];
