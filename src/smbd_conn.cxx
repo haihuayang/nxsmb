@@ -396,13 +396,11 @@ static void x_smb2_reply_msg(x_smbd_conn_t *smbd_conn,
 	smb2_hdr->credit = X_H2LE16(smbd_requ->out_credit_granted);
 	smb2_hdr->next_command = 0;
 	smb2_hdr->mid = X_H2LE64(smbd_requ->in_smb2_hdr.mid);
+	uint32_t flags = smbd_requ->out_hdr_flags | X_SMB2_HDR_FLAG_REDIRECT;
 	if (smbd_requ->interim_state == x_smbd_requ_t::INTERIM_S_SENT) {
-		smb2_hdr->flags = X_H2LE32(smbd_requ->out_hdr_flags |
-				X_SMB2_HDR_FLAG_REDIRECT | X_SMB2_HDR_FLAG_ASYNC);
+		flags |= X_SMB2_HDR_FLAG_ASYNC;
 		smb2_hdr->async_id = X_H2LE64(x_smbd_requ_get_async_id(smbd_requ));
 	} else {
-		smb2_hdr->flags = X_H2LE32(smbd_requ->out_hdr_flags |
-				X_SMB2_HDR_FLAG_REDIRECT);
 		smb2_hdr->pid = X_H2LE32(0xfeff);
 		if (smbd_requ->smbd_tcon) {
 			smb2_hdr->tid = X_H2LE32(x_smbd_tcon_get_id(smbd_requ->smbd_tcon));
@@ -410,6 +408,13 @@ static void x_smb2_reply_msg(x_smbd_conn_t *smbd_conn,
 			smb2_hdr->tid = X_H2LE32(smbd_requ->in_smb2_hdr.tid);
 		}
 	}
+
+	if (smbd_requ->out_buf_head) {
+		/* not the first in the chain */
+		flags |= (smbd_requ->in_smb2_hdr.flags & X_SMB2_HDR_FLAG_CHAINED);
+	}
+
+	smb2_hdr->flags = X_H2LE32(flags);
 
 	if (smbd_requ->smbd_sess) {
 		smb2_hdr->sess_id = X_H2LE64(x_smbd_sess_get_id(smbd_requ->smbd_sess));
