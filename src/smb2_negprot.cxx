@@ -461,7 +461,8 @@ NTSTATUS x_smb2_process_negprot(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_re
 	}
 
 	negprot.client_security_mode = in_security_mode;
-	negprot.server_security_mode = smbd_conf.security_mode;
+	negprot.server_security_mode = x_convert<uint16_t>(smbd_conf.security_mode |
+		(in_security_mode & X_SMB2_NEGOTIATE_SIGNING_REQUIRED));
 
 	negprot.client_capabilities = in_capabilities;
 

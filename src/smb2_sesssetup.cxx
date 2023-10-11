@@ -229,7 +229,8 @@ NTSTATUS x_smb2_process_sesssetup(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_
 			in_hdr + in_security_offset, in_security_length,
 			out_security,
 			state->in_flags & X_SMB2_SESSION_FLAG_BINDING,
-			state->in_security_mode,
+			x_convert<uint8_t>(state->in_security_mode |
+				x_smbd_conn_curr_negprot().server_security_mode),
 			new_auth);
 	if (!NT_STATUS_EQUAL(status, X_NT_STATUS_INTERNAL_BLOCKED)) {
 		smb2_sesssetup_done(smbd_conn, smbd_requ, dialect, status,

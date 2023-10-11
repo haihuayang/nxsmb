@@ -129,7 +129,8 @@ uint16_t x_smbd_sess_get_dialect(const x_smbd_sess_t *smbd_sess)
 
 bool x_smbd_sess_is_signing_required(const x_smbd_sess_t *smbd_sess)
 {
-	return smbd_sess->security_mode & X_SMB2_NEGOTIATE_SIGNING_REQUIRED;
+	return (smbd_sess->security_mode & X_SMB2_NEGOTIATE_SIGNING_REQUIRED) &&
+		!smbd_sess->smbd_user->is_anonymous;
 }
 
 std::shared_ptr<x_smbd_user_t> x_smbd_sess_get_user(const x_smbd_sess_t *smbd_sess)
