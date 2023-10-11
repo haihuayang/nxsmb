@@ -435,6 +435,11 @@ static NTSTATUS decode_in_create(x_smb2_state_create_t &state,
 		const uint8_t *in_hdr, uint32_t in_len)
 {
 	const x_smb2_in_create_t *in_create = (const x_smb2_in_create_t *)(in_hdr + sizeof(x_smb2_header_t));
+	uint16_t in_struct_size		 = X_LE2H16(in_create->struct_size);
+	if (in_struct_size != sizeof(*in_create) + 1) {
+		return NT_STATUS_INVALID_PARAMETER;
+	}
+
 	uint16_t in_name_offset          = X_LE2H16(in_create->name_offset);
 	uint16_t in_name_length          = X_LE2H16(in_create->name_length);
 	uint32_t in_context_offset       = X_LE2H32(in_create->context_offset);
