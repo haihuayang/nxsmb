@@ -866,7 +866,10 @@ static bool x_smb2_validate_message_id(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *
 static NTSTATUS x_smbd_conn_process_smb2_intl(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 {
 	if (!x_smb2_validate_message_id(smbd_conn, smbd_requ)) {
-		return NT_STATUS_INVALID_PARAMETER;
+		/* NOTE, WPTS CreditMgmtTestCaseS776 requires it return
+		 * NT_STATUS_INVALID_PARAMETER
+		 */
+		return X_NT_STATUS_INTERNAL_TERMINATE;
 	}
 
 	if (smbd_requ->in_smb2_hdr.flags & X_SMB2_HDR_FLAG_ASYNC) {
