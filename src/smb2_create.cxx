@@ -105,9 +105,8 @@ static inline bool x_bit_all(T v1, T v2)
 }
 
 static bool decode_contexts(x_smb2_state_create_t &state,
-		const uint8_t *data, uint32_t length)
+		const uint8_t *data, uint32_t length, bool &has_RqLs)
 {
-	bool has_RqLs = false;
 	const x_smb2_create_dhnc_requ_t *dhnc = nullptr;
 	const x_smb2_create_dh2q_requ_t *dh2q = nullptr;
 	const x_smb2_create_dh2c_requ_t *dh2c = nullptr;
@@ -265,10 +264,6 @@ static bool decode_contexts(x_smb2_state_create_t &state,
 		state.in_dh_id_volatile = X_LE2H64(dhnc->file_id_volatile);
 	}
 
-	if (state.in_oplock_level == X_SMB2_OPLOCK_LEVEL_LEASE && !has_RqLs) {
-		X_LOG_WARN("missing RqLs");
-		state.in_oplock_level = X_SMB2_OPLOCK_LEVEL_NONE;
-	}
 	return true;
 }
 
@@ -486,11 +481,18 @@ static NTSTATUS decode_in_create(x_smb2_state_create_t &state,
 		return NT_STATUS_INVALID_PARAMETER;
 	}
 
+	bool has_RqLs = false;
 	if (in_context_length != 0 && !decode_contexts(state,
 				in_hdr + in_context_offset,
-				in_context_length)) {
+				in_context_length, has_RqLs)) {
 		return NT_STATUS_INVALID_PARAMETER;
 	}
+
+	if (state.in_oplock_level == X_SMB2_OPLOCK_LEVEL_LEASE && !has_RqLs) {
+		X_LOG_WARN("missing RqLs");
+		state.in_oplock_level = X_SMB2_OPLOCK_LEVEL_NONE;
+	}
+
 #if 0
 	if (state.in_contexts & (X_SMB2_CONTEXT_FLAG_DHNQ | X_SMB2_CONTEXT_FLAG_DH2Q)) {
 		if (state.in_oplock_level == X_SMB2_OPLOCK_LEVEL_LEASE) {
