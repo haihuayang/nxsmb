@@ -604,9 +604,13 @@ static int parse_smbconf(x_smbd_conf_t &smbd_conf)
 	const char *path = g_configfile;
 	X_LOG_DBG("Loading smbd_conf from %s", path);
 
-	smbd_conf.capabilities = X_SMB2_CAP_DFS | X_SMB2_CAP_LARGE_MTU | X_SMB2_CAP_LEASING
-		| X_SMB2_CAP_DIRECTORY_LEASING | X_SMB2_CAP_MULTI_CHANNEL
-		| X_SMB2_CAP_ENCRYPTION;
+	smbd_conf.capabilities = X_SMB2_CAP_DFS |
+		X_SMB2_CAP_LEASING |
+		X_SMB2_CAP_LARGE_MTU |
+		X_SMB2_CAP_MULTI_CHANNEL |
+		X_SMB2_CAP_PERSISTENT_HANDLES |
+		X_SMB2_CAP_DIRECTORY_LEASING |
+		X_SMB2_CAP_ENCRYPTION;
 
 	std::string line, last_line;
 	std::ifstream in(path);
