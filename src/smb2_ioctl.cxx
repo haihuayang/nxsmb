@@ -406,7 +406,7 @@ static NTSTATUS x_smb2_fsctl_validate_negotiate_info(
 	}
 
 	if (state.in_max_output_length < sizeof(x_smb2_fsctl_validate_negotiate_info_out_t)) {
-		return NT_STATUS_BUFFER_TOO_SMALL;
+		return X_NT_STATUS_INTERNAL_TERMINATE;
 	}
 
 	x_smb2_fsctl_validate_negotiate_info_state_t fsctl_state;
