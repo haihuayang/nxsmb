@@ -757,7 +757,7 @@ static NTSTATUS posixfs_object_set_delete_on_close(posixfs_object_t *posixfs_obj
 	return NT_STATUS_OK;
 }
 
-static posixfs_open_t *posixfs_open_create(
+static posixfs_open_t *posixfs_open_create_intl(
 		NTSTATUS *pstatus,
 		x_smbd_tcon_t *smbd_tcon,
 		posixfs_object_t *posixfs_object,
@@ -808,7 +808,7 @@ static posixfs_open_t *posixfs_open_create(
 		x_smb2_create_action_t create_action,
 		uint8_t oplock_level)
 {
-	return posixfs_open_create(pstatus, smbd_tcon, posixfs_object,
+	return posixfs_open_create_intl(pstatus, smbd_tcon, posixfs_object,
 			state.smbd_stream,
 			oplock_level == X_SMB2_OPLOCK_LEVEL_LEASE ?
 				state.smbd_lease : nullptr,
@@ -2777,7 +2777,7 @@ NTSTATUS posixfs_op_open_durable(x_smbd_open_t *&smbd_open,
 		smbd_durable.open_state.current_offset};
 #endif
 
-	posixfs_open_t *posixfs_open = posixfs_open_create(&status,
+	posixfs_open_t *posixfs_open = posixfs_open_create_intl(&status,
 			nullptr,
 			posixfs_object, nullptr,
 			nullptr, smbd_durable.open_state, 0);
