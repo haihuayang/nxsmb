@@ -293,6 +293,11 @@ struct x_smbd_object_t
 			const std::u16string &path);
 	~x_smbd_object_t();
 
+	bool is_root() const
+	{
+		return !parent_object;
+	}
+
 	bool exists() const { return type != type_not_exist; }
 
 	void incref()
