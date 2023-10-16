@@ -604,11 +604,11 @@ NTSTATUS x_smbd_open_op_reconnect(x_smbd_requ_t *smbd_requ,
 void x_smbd_open_break_lease(x_smbd_open_t *smbd_open,
 		const x_smb2_lease_key_t *ignore_lease_key,
 		const x_smb2_uuid_t *client_guid,
-		uint8_t break_to);
+		uint8_t break_mask);
 
 void x_smbd_open_break_oplock(x_smbd_object_t *smbd_object,
 		x_smbd_open_t *smbd_open,
-		uint8_t break_to);
+		uint8_t break_mask);
 
 void x_smbd_break_lease(x_smbd_object_t *smbd_object,
 		x_smbd_stream_t *smbd_stream);

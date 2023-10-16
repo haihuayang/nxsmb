@@ -748,17 +748,17 @@ struct send_lease_break_evt_t
 void x_smbd_open_break_lease(x_smbd_open_t *smbd_open,
 		const x_smb2_lease_key_t *ignore_lease_key,
 		const x_smb2_uuid_t *client_guid,
-		uint8_t break_to)
+		uint8_t break_mask)
 {
 	x_smb2_lease_key_t lease_key;
-	uint8_t curr_state;
+	uint8_t curr_state, new_state;
 	uint16_t new_epoch;
 	uint32_t flags;
 
 	bool send_break = x_smbd_lease_require_break(smbd_open->smbd_lease,
 			ignore_lease_key,
 			client_guid,
-			lease_key, break_to, curr_state,
+			lease_key, break_mask, curr_state, new_state,
 			new_epoch, flags);
 	if (!send_break) {
 		return;
@@ -767,7 +767,7 @@ void x_smbd_open_break_lease(x_smbd_open_t *smbd_open,
 	if (smbd_open->smbd_tcon) {
 		x_smbd_sess_t *smbd_sess = x_smbd_tcon_get_sess(smbd_open->smbd_tcon);
 		X_SMBD_SESS_POST_USER(smbd_sess, new send_lease_break_evt_t(
-					smbd_sess, lease_key, curr_state, break_to,
+					smbd_sess, lease_key, curr_state, new_state,
 					new_epoch, flags));
 		/* if posted fails, the connection is in shutdown,
 		 * and it eventually close the open and wakeup the
@@ -1108,8 +1108,9 @@ struct send_oplock_break_evt_t
 
 void x_smbd_open_break_oplock(x_smbd_object_t *smbd_object,
 		x_smbd_open_t *smbd_open,
-		uint8_t break_to)
+		uint8_t break_mask)
 {
+	uint8_t break_to = get_lease_type(smbd_open) & x_convert<uint8_t>(~break_mask);
 	/* already hold smbd_object mutex */
 	X_ASSERT(break_to == X_SMB2_LEASE_READ || break_to == X_SMB2_OPLOCK_LEVEL_NONE);
 	if (smbd_open->oplock_break_sent != x_smbd_open_t::OPLOCK_BREAK_NOT_SENT) {
@@ -1179,10 +1180,6 @@ static bool delay_for_oplock(x_smbd_object_t *smbd_object,
 	for (curr_open = open_list.get_front(); curr_open; curr_open = next_open) {
 		next_open = open_list.next(curr_open);
 
-		/* TODO mutex curr_open ? */
-		uint8_t e_lease_type = get_lease_type(curr_open);
-		uint8_t break_to;
-		uint8_t delay_mask = 0;
 		if (curr_open->open_state.oplock_level == X_SMB2_OPLOCK_LEVEL_LEASE) {
 			if (smbd_lease && curr_open->smbd_lease == smbd_lease) {
 				continue;
@@ -1193,20 +1190,22 @@ static bool delay_for_oplock(x_smbd_object_t *smbd_object,
 			}
 		}
 
+		uint8_t delay_mask = 0;
 		if (have_sharing_violation) {
 			delay_mask = X_SMB2_LEASE_HANDLE;
 		} else {
 			delay_mask = X_SMB2_LEASE_WRITE;
 		}
 
-		break_to = x_convert<uint8_t>(e_lease_type & ~delay_mask);
+		uint8_t e_lease_type = get_lease_type(curr_open);
+		uint8_t break_mask = delay_mask;
 
 		if (will_overwrite) {
-			break_to = x_convert<uint8_t>(break_to &
-					~(X_SMB2_LEASE_HANDLE|X_SMB2_LEASE_READ));
+			/* windows server seem not break HANDLE or READ */
+			break_mask |= X_SMB2_LEASE_HANDLE|X_SMB2_LEASE_READ;
 		}
 
-		if ((e_lease_type & ~break_to) == 0) {
+		if ((e_lease_type & break_mask) == 0) {
 			if (curr_open->smbd_lease && x_smbd_lease_is_breaking(curr_open->smbd_lease)) {
 				delay = true;
 			}
@@ -1226,21 +1225,23 @@ static bool delay_for_oplock(x_smbd_object_t *smbd_object,
 			 * Otherwise vfs_set_filelen() will trigger the
 			 * break.
 			 */
-			break_to = x_convert<uint8_t>(break_to & ~(X_SMB2_LEASE_READ|X_SMB2_LEASE_WRITE));
+			break_mask |= X_SMB2_LEASE_READ|X_SMB2_LEASE_WRITE;
 		}
 
 		if (curr_open->open_state.oplock_level != X_SMB2_OPLOCK_LEVEL_LEASE) {
 			/*
 			 * Oplocks only support breaking to R or NONE.
 			 */
-			break_to = x_convert<uint8_t>(break_to & ~(X_SMB2_LEASE_HANDLE|X_SMB2_LEASE_WRITE));
+			break_mask |= X_SMB2_LEASE_HANDLE|X_SMB2_LEASE_WRITE;
 		}
 
 		++break_count;
 		if (curr_open->smbd_lease) {
-			x_smbd_open_break_lease(curr_open, nullptr, nullptr, break_to);
+			x_smbd_open_break_lease(curr_open, nullptr, nullptr,
+					break_mask);
 		} else {
-			x_smbd_open_break_oplock(smbd_object, curr_open, break_to);
+			x_smbd_open_break_oplock(smbd_object, curr_open,
+					break_mask);
 		}
 		if (e_lease_type & delay_mask) {
 			delay = true;
@@ -1712,7 +1713,8 @@ void x_smbd_break_others_to_none(x_smbd_object_t *smbd_object,
 			continue;
 		}
 		if (other_open->smbd_lease) {
-			x_smbd_open_break_lease(other_open, nullptr, nullptr, X_SMB2_LEASE_NONE);
+			x_smbd_open_break_lease(other_open, nullptr, nullptr,
+					X_SMB2_LEASE_ALL);
 		} else {
 			/* This can break the open's self oplock II, but 
 			 * Windows behave same
@@ -1722,7 +1724,7 @@ void x_smbd_break_others_to_none(x_smbd_object_t *smbd_object,
 			X_ASSERT(other_oplock_level != X_SMB2_OPLOCK_LEVEL_EXCLUSIVE);
 			if (other_oplock_level == X_SMB2_OPLOCK_LEVEL_II) {
 				x_smbd_open_break_oplock(smbd_object,
-						other_open, X_SMB2_LEASE_NONE);
+						other_open, X_SMB2_LEASE_ALL);
 			}
 		}
 	}

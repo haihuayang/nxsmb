@@ -436,9 +436,9 @@ static bool delay_rename_for_lease_break(x_smbd_object_t *smbd_object,
 		}
 
 		delay = true;
-		uint8_t break_to = x_convert<uint8_t>(e_lease_type & ~X_SMB2_LEASE_HANDLE);
 		++break_count;
-		x_smbd_open_break_lease(curr_open, nullptr, nullptr, break_to);
+		x_smbd_open_break_lease(curr_open, nullptr, nullptr,
+				X_SMB2_LEASE_HANDLE);
 	}
 	return delay;
 }

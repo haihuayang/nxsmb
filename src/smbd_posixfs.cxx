@@ -376,7 +376,8 @@ static void break_others_to_none(x_smbd_object_t *smbd_object,
 			continue;
 		}
 		if (other_open->smbd_lease) {
-			x_smbd_open_break_lease(other_open, nullptr, nullptr, X_SMB2_LEASE_NONE);
+			x_smbd_open_break_lease(other_open, nullptr, nullptr,
+					X_SMB2_LEASE_ALL);
 		} else {
 			/* This can break the open's self oplock II, but 
 			 * Windows behave same
@@ -385,7 +386,8 @@ static void break_others_to_none(x_smbd_object_t *smbd_object,
 			X_ASSERT(other_oplock_level != X_SMB2_OPLOCK_LEVEL_BATCH);
 			X_ASSERT(other_oplock_level != X_SMB2_OPLOCK_LEVEL_EXCLUSIVE);
 			if (other_oplock_level == X_SMB2_OPLOCK_LEVEL_II) {
-				x_smbd_open_break_oplock(smbd_object, other_open, X_SMB2_LEASE_NONE);
+				x_smbd_open_break_oplock(smbd_object, other_open,
+						X_SMB2_LEASE_ALL);
 			}
 		}
 	}

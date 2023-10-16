@@ -57,7 +57,7 @@ static void x_smbd_object_notify_change(x_smbd_object_t *smbd_object,
 
 		if (last_level && curr_open->smbd_lease) {
 			x_smbd_open_break_lease(curr_open, &ignore_lease_key, &client_guid,
-					0);
+					X_SMB2_LEASE_ALL);
 		}
 
 		if (!(curr_open->notify_filter & notify_filter)) {

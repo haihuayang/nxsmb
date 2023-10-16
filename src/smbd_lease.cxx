@@ -304,8 +304,9 @@ bool x_smbd_lease_require_break(x_smbd_lease_t *smbd_lease,
 		const x_smb2_lease_key_t *ignore_lease_key,
 		const x_smb2_uuid_t *client_guid,
 		x_smb2_lease_key_t &lease_key,
-		uint8_t &new_state, /* in out */
+		uint8_t break_mask,
 		uint8_t &curr_state,
+		uint8_t &new_state,
 		uint16_t &epoch,
 		uint32_t &flags)
 {
@@ -315,13 +316,13 @@ bool x_smbd_lease_require_break(x_smbd_lease_t *smbd_lease,
 	}
 
 	auto lock = smbd_lease_lock(smbd_lease);
-	X_LOG_DBG("lease=%p %c state=%d epoch=%u new_state=%u",
+	X_LOG_DBG("lease=%p %c state=%d epoch=%u break_mask=%u",
 			smbd_lease, smbd_lease->breaking ? 'B' : '-',
 			smbd_lease->lease_state, smbd_lease->epoch,
-			new_state);
+			break_mask);
 
 	uint8_t break_from = smbd_lease->lease_state;
-	uint8_t break_to = new_state & break_from;
+	uint8_t break_to = break_from & x_convert<uint8_t>(~break_mask);
 	if (smbd_lease->breaking) {
 		break_to &= smbd_lease->breaking_to_required;
 		if (smbd_lease->breaking_to_required != break_to) {
