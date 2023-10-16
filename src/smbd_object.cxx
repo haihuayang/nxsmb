@@ -426,12 +426,7 @@ static bool delay_rename_for_lease_break(x_smbd_object_t *smbd_object,
 	auto &open_list = smbd_sharemode->open_list;
 	x_smbd_open_t *curr_open;
 	for (curr_open = open_list.get_front(); curr_open; curr_open = open_list.next(curr_open)) {
-		if (curr_open->open_state.oplock_level != X_SMB2_OPLOCK_LEVEL_LEASE) {
-			continue;
-		}
-
-		if (smbd_open->get_oplock_level() == X_SMB2_OPLOCK_LEVEL_LEASE &&
-				smbd_open->smbd_lease == curr_open->smbd_lease) {
+		if (!curr_open->smbd_lease || curr_open->smbd_lease == smbd_open->smbd_lease) {
 			continue;
 		}
 
