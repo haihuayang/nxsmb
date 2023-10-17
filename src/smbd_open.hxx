@@ -268,8 +268,7 @@ struct x_smbd_sharemode_t
 {
 	x_smbd_stream_meta_t meta;
 	x_tp_ddlist_t<x_smbd_open_object_traits> open_list;
-	x_tp_ddlist_t<requ_async_traits> defer_open_list;
-	x_tp_ddlist_t<requ_async_traits> defer_rename_list;
+	x_tp_ddlist_t<requ_async_traits> defer_requ_list;
 };
 
 struct x_smbd_stream_t

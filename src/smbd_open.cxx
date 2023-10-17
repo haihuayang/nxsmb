@@ -573,75 +573,50 @@ static bool is_lease_stat_open(uint32_t access_mask)
 			((access_mask & ~stat_open_bits) == 0));
 }
 
-struct defer_open_evt_t
+struct defer_requ_evt_t
 {
 	static void func(x_smbd_conn_t *smbd_conn, x_fdevt_user_t *fdevt_user)
 	{
-		defer_open_evt_t *evt = X_CONTAINER_OF(fdevt_user,
-				defer_open_evt_t, base);
+		defer_requ_evt_t *evt = X_CONTAINER_OF(fdevt_user,
+				defer_requ_evt_t, base);
 		x_smbd_requ_t *smbd_requ = evt->smbd_requ;
-		X_LOG_DBG("defer_open_evt=%p, requ=%p, smbd_conn=%p",
+		X_LOG_DBG("defer_requ_evt=%p, requ=%p, smbd_conn=%p",
 				evt, smbd_requ, smbd_conn);
 
-		auto state = smbd_requ->release_state<x_smb2_state_create_t>();
-		if (x_smbd_requ_async_remove(smbd_requ) && smbd_conn) {
-			NTSTATUS status = x_smbd_open_op_create(smbd_requ, state);
-			if (!NT_STATUS_EQUAL(status, NT_STATUS_PENDING)) {
-				smbd_requ->save_requ_state(state);
-				smbd_requ->async_done_fn(smbd_conn, smbd_requ, status);
+		if (smbd_requ->in_smb2_hdr.opcode == X_SMB2_OP_CREATE) {
+			auto state = smbd_requ->release_state<x_smb2_state_create_t>();
+			if (x_smbd_requ_async_remove(smbd_requ) && smbd_conn) {
+				NTSTATUS status = x_smbd_open_op_create(smbd_requ, state);
+				if (!NT_STATUS_EQUAL(status, NT_STATUS_PENDING)) {
+					smbd_requ->save_requ_state(state);
+					smbd_requ->async_done_fn(smbd_conn, smbd_requ, status);
+				}
+			} else {
+				if (state->replay_reserved) {
+					x_smbd_replay_cache_clear(state->in_client_guid,
+							state->in_create_guid);
+				}
 			}
-		} else {
-			if (state->replay_reserved) {
-				x_smbd_replay_cache_clear(state->in_client_guid,
-						state->in_create_guid);
+		} else if (smbd_requ->in_smb2_hdr.opcode == X_SMB2_OP_SETINFO) {
+			auto state = smbd_requ->release_state<x_smb2_state_rename_t>();
+			if (x_smbd_requ_async_remove(smbd_requ) && smbd_conn) {
+				NTSTATUS status = x_smbd_open_rename(smbd_requ, state);
+				if (!NT_STATUS_EQUAL(status, NT_STATUS_PENDING)) {
+					smbd_requ->save_requ_state(state);
+					smbd_requ->async_done_fn(smbd_conn, smbd_requ, status);
+				}
 			}
 		}
 
 		delete evt;
 	}
 
-	explicit defer_open_evt_t(x_smbd_requ_t *smbd_requ)
+	explicit defer_requ_evt_t(x_smbd_requ_t *smbd_requ)
 		: base(func), smbd_requ(smbd_requ)
 	{
 	}
 
-	~defer_open_evt_t()
-	{
-		x_smbd_ref_dec(smbd_requ);
-	}
-
-	x_fdevt_user_t base;
-	x_smbd_requ_t * const smbd_requ;
-};
-
-struct defer_rename_evt_t
-{
-	static void func(x_smbd_conn_t *smbd_conn, x_fdevt_user_t *fdevt_user)
-	{
-		defer_rename_evt_t *evt = X_CONTAINER_OF(fdevt_user,
-				defer_rename_evt_t, base);
-		x_smbd_requ_t *smbd_requ = evt->smbd_requ;
-		X_LOG_DBG("defer_rename_evt=%p, requ=%p, smbd_conn=%p",
-				evt, smbd_requ, smbd_conn);
-
-		auto state = smbd_requ->release_state<x_smb2_state_rename_t>();
-		if (x_smbd_requ_async_remove(smbd_requ) && smbd_conn) {
-			NTSTATUS status = x_smbd_open_rename(smbd_requ, state);
-			if (!NT_STATUS_EQUAL(status, NT_STATUS_PENDING)) {
-				smbd_requ->save_requ_state(state);
-				smbd_requ->async_done_fn(smbd_conn, smbd_requ, status);
-			}
-		}
-
-		delete evt;
-	}
-
-	explicit defer_rename_evt_t(x_smbd_requ_t *smbd_requ)
-		: base(func), smbd_requ(smbd_requ)
-	{
-	}
-
-	~defer_rename_evt_t()
+	~defer_requ_evt_t()
 	{
 		x_smbd_ref_dec(smbd_requ);
 	}
@@ -656,14 +631,9 @@ static void sharemode_modified(x_smbd_object_t *smbd_object,
 	x_smbd_sharemode_t *sharemode = get_sharemode(
 			smbd_object, smbd_stream);
 	/* smbd_object is locked */
-	while (x_smbd_requ_t *smbd_requ = sharemode->defer_rename_list.get_front()) {
-		sharemode->defer_rename_list.remove(smbd_requ);
-		defer_rename_evt_t *evt = new defer_rename_evt_t(smbd_requ);
-		X_SMBD_CHAN_POST_USER(smbd_requ->smbd_chan, evt);
-	}
-	while (x_smbd_requ_t *smbd_requ = sharemode->defer_open_list.get_front()) {
-		sharemode->defer_open_list.remove(smbd_requ);
-		defer_open_evt_t *evt = new defer_open_evt_t(smbd_requ);
+	while (x_smbd_requ_t *smbd_requ = sharemode->defer_requ_list.get_front()) {
+		sharemode->defer_requ_list.remove(smbd_requ);
+		defer_requ_evt_t *evt = new defer_requ_evt_t(smbd_requ);
 		X_SMBD_CHAN_POST_USER(smbd_requ->smbd_chan, evt);
 	}
 }
@@ -891,7 +861,7 @@ static void smbd_create_cancel(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_req
 
 	{
 		auto lock = smbd_object_lock(state->smbd_object);
-		sharemode->defer_open_list.remove(smbd_requ);
+		sharemode->defer_requ_list.remove(smbd_requ);
 	}
 	x_smbd_conn_post_cancel(smbd_conn, smbd_requ, NT_STATUS_CANCELLED);
 }
@@ -903,7 +873,7 @@ static void defer_open(x_smbd_sharemode_t *sharemode,
 	smbd_requ->save_requ_state(state);
 	/* TODO does it need a timer? can break timer always wake up it? */
 	x_smbd_ref_inc(smbd_requ);
-	sharemode->defer_open_list.push_back(smbd_requ);
+	sharemode->defer_requ_list.push_back(smbd_requ);
 	X_LOG_DBG("smbd_requ %p interim_state %d", smbd_requ,
 			smbd_requ->interim_state);
 	x_smbd_requ_async_insert(smbd_requ, smbd_create_cancel, 0);

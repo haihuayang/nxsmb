@@ -451,7 +451,7 @@ static void smbd_rename_cancel(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_req
 
 	{
 		auto lock = std::lock_guard(smbd_object->mutex);
-		sharemode->defer_rename_list.remove(smbd_requ);
+		sharemode->defer_requ_list.remove(smbd_requ);
 	}
 	x_smbd_conn_post_cancel(smbd_conn, smbd_requ, NT_STATUS_CANCELLED);
 }
@@ -511,7 +511,7 @@ NTSTATUS x_smbd_object_rename(x_smbd_object_t *smbd_object,
 		smbd_requ->save_requ_state(state);
 		/* TODO does it need a timer? can break timer always wake up it? */
 		x_smbd_ref_inc(smbd_requ);
-		sharemode->defer_rename_list.push_back(smbd_requ);
+		sharemode->defer_requ_list.push_back(smbd_requ);
 		/* windows server do not send interim response in renaming */
 		x_smbd_requ_async_insert(smbd_requ, smbd_rename_cancel, -1);
 		if (new_parent_object) {
