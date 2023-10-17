@@ -1688,7 +1688,7 @@ bool x_smbd_conn_post_user(x_smbd_conn_t *smbd_conn, x_fdevt_user_t *fdevt_user,
 		return false;
 	}
 	/* queued to srv's user event queue to clean up the request */
-	X_LOG_WARN("smbd_conn %p is done, queued to srv", smbd_conn); \
+	X_LOG_WARN("smbd_conn %p is done, queued to srv", smbd_conn);
 	{
 		auto lock = std::lock_guard(g_smbd_srv.mutex);
 		notify = g_smbd_srv.fdevt_user_list.get_front() == nullptr;
@@ -1858,6 +1858,6 @@ struct send_interim_evt_t
 void x_smbd_conn_post_interim(x_smbd_requ_t *smbd_requ)
 {
 	send_interim_evt_t *evt = new send_interim_evt_t(smbd_requ);
-	X_SMBD_CHAN_POST_USER(smbd_requ->smbd_chan, evt);
+	x_smbd_chan_post_user(smbd_requ->smbd_chan, &evt->base, false);
 }
 
