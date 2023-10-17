@@ -346,54 +346,6 @@ static inline void posixfs_ads_incref(posixfs_ads_t *posixfs_ads)
 	X_ASSERT(++posixfs_ads->ref_count > 1);
 }
 
-static bool lease_type_is_exclusive(const x_smbd_lease_t *smbd_lease,
-		uint8_t oplock_level)
-{
-	if (smbd_lease) {
-		uint8_t state = x_smbd_lease_get_state(smbd_lease);
-		return (state & (X_SMB2_LEASE_READ | X_SMB2_LEASE_WRITE)) == 
-			(X_SMB2_LEASE_READ | X_SMB2_LEASE_WRITE);
-	} else {
-		return oplock_level == X_SMB2_OPLOCK_LEVEL_EXCLUSIVE ||
-			oplock_level == X_SMB2_OPLOCK_LEVEL_BATCH;
-	}
-}
-
-static void break_others_to_none(x_smbd_object_t *smbd_object,
-		x_smbd_sharemode_t *sharemode,
-		const x_smbd_lease_t *smbd_lease,
-		uint8_t oplock_level)
-{
-	if (lease_type_is_exclusive(smbd_lease, oplock_level)) {
-		return;
-	}
-
-	/* break other to none */
-	auto &open_list = sharemode->open_list;
-	for (x_smbd_open_t *other_open = open_list.get_front(); other_open;
-			other_open = open_list.next(other_open)) {
-		if (smbd_lease && other_open->smbd_lease == smbd_lease) {
-			continue;
-		}
-		if (other_open->smbd_lease) {
-			x_smbd_open_break_lease(other_open, nullptr, nullptr,
-					X_SMB2_LEASE_ALL);
-		} else {
-			/* This can break the open's self oplock II, but 
-			 * Windows behave same
-			 */
-			auto other_oplock_level = other_open->open_state.oplock_level;
-			X_ASSERT(other_oplock_level != X_SMB2_OPLOCK_LEVEL_BATCH);
-			X_ASSERT(other_oplock_level != X_SMB2_OPLOCK_LEVEL_EXCLUSIVE);
-			if (other_oplock_level == X_SMB2_OPLOCK_LEVEL_II) {
-				x_smbd_open_break_oplock(smbd_object, other_open,
-						X_SMB2_LEASE_ALL);
-			}
-		}
-	}
-}
-
-
 static inline void posixfs_object_add_ads(posixfs_object_t *posixfs_object,
 		posixfs_ads_t *posixfs_ads)
 {
@@ -470,7 +422,7 @@ static NTSTATUS posixfs_set_end_of_file(
 	NTSTATUS status = NT_STATUS_OK;
 
 	auto lock = std::lock_guard(posixfs_object->base.mutex);
-	break_others_to_none(&posixfs_object->base, sharemode,
+	x_smbd_break_others_to_none(&posixfs_object->base, sharemode,
 			posixfs_open->base.smbd_lease,
 			posixfs_open->get_oplock_level());
 
@@ -509,7 +461,7 @@ static NTSTATUS posixfs_set_allocation_size_intl(
 	auto sharemode = x_smbd_object_get_sharemode(
 			&posixfs_object->base, smbd_stream);
 
-	break_others_to_none(&posixfs_object->base, sharemode,
+	x_smbd_break_others_to_none(&posixfs_object->base, sharemode,
 			smbd_lease, oplock_level);
 
 	bool modified = false;

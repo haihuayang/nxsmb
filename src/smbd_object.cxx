@@ -330,42 +330,6 @@ NTSTATUS x_smbd_open_object(x_smbd_object_t **p_smbd_object,
 }
 
 
-struct smbd_defer_rename_evt_t
-{
-	static void func(x_smbd_conn_t *smbd_conn, x_fdevt_user_t *fdevt_user)
-	{
-		smbd_defer_rename_evt_t *evt = X_CONTAINER_OF(fdevt_user,
-				smbd_defer_rename_evt_t, base);
-		x_smbd_requ_t *smbd_requ = evt->smbd_requ;
-		X_LOG_DBG("evt=%p, requ=%p, smbd_conn=%p", evt, smbd_requ, smbd_conn);
-
-		auto state = smbd_requ->release_state<x_smb2_state_rename_t>();
-		if (x_smbd_requ_async_remove(smbd_requ) && smbd_conn) {
-			NTSTATUS status = x_smbd_open_rename(smbd_requ,
-					state);
-			if (!NT_STATUS_EQUAL(status, NT_STATUS_PENDING)) {
-				smbd_requ->save_requ_state(state);
-				smbd_requ->async_done_fn(smbd_conn, smbd_requ, status);
-			}
-		}
-
-		delete evt;
-	}
-
-	explicit smbd_defer_rename_evt_t(x_smbd_requ_t *smbd_requ)
-		: base(func), smbd_requ(smbd_requ)
-	{
-	}
-
-	~smbd_defer_rename_evt_t()
-	{
-		x_smbd_ref_dec(smbd_requ);
-	}
-
-	x_fdevt_user_t base;
-	x_smbd_requ_t * const smbd_requ;
-};
-
 /* rename_internals_fsp */
 static NTSTATUS rename_object_intl(
 		const std::shared_ptr<x_smbd_volume_t> &smbd_volume,
