@@ -942,7 +942,8 @@ static NTSTATUS grant_oplock(x_smbd_object_t *smbd_object,
 
 	if (smbd_object->type == x_smbd_object_t::type_dir &&
 			!smbd_stream) {
-		if (lease) {
+		if (lease && (x_smbd_conn_curr_negprot().server_capabilities &
+					X_SMB2_CAP_DIRECTORY_LEASING)) {
 			granted = lease->state & (X_SMB2_LEASE_READ|X_SMB2_LEASE_HANDLE);
 			/* TODO workaround directory leasing upgrade issue,
 			 * x_smbd_lease_grant check requested == granted 

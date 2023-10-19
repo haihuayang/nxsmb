@@ -809,7 +809,9 @@ static posixfs_open_t *posixfs_open_create(
 		uint8_t oplock_level)
 {
 	return posixfs_open_create(pstatus, smbd_tcon, posixfs_object,
-			state.smbd_stream, state.smbd_lease,
+			state.smbd_stream,
+			oplock_level == X_SMB2_OPLOCK_LEVEL_LEASE ?
+				state.smbd_lease : nullptr,
 			x_smbd_open_state_t{X_SMBD_OPEN_ID_NON_DURABLE,
 				state.granted_access,
 				state.in_share_access,
