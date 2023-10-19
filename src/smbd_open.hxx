@@ -52,6 +52,8 @@ struct x_smbd_qdir_t
 	x_fnmatch_t *fnmatch = nullptr;
 };
 
+using x_smbd_requ_id_list_t = std::vector<uint64_t>;
+
 struct x_smbd_open_t
 {
 	x_smbd_open_t(x_smbd_object_t *so, x_smbd_stream_t *ss,
@@ -122,6 +124,7 @@ struct x_smbd_open_t
 	uint8_t lock_sequence_array[LOCK_SEQUENCE_MAX] = { 0 };
 
 	uint64_t request_count = 0, pre_request_count = 0;
+	x_smbd_requ_id_list_t oplock_pending_list; // pending on oplock
 };
 
 struct x_smbd_object_t;
@@ -269,7 +272,6 @@ struct x_smbd_sharemode_t
 {
 	x_smbd_stream_meta_t meta;
 	x_tp_ddlist_t<x_smbd_open_object_traits> open_list;
-	x_tp_ddlist_t<requ_async_traits> defer_requ_list;
 };
 
 struct x_smbd_stream_t
@@ -603,17 +605,13 @@ NTSTATUS x_smbd_open_op_create(x_smbd_requ_t *smbd_requ,
 NTSTATUS x_smbd_open_op_reconnect(x_smbd_requ_t *smbd_requ,
 		std::unique_ptr<x_smbd_requ_state_create_t> &state);
 
-void x_smbd_open_break_lease(x_smbd_open_t *smbd_open,
+bool x_smbd_open_break_lease(x_smbd_open_t *smbd_open,
 		const x_smb2_lease_key_t *ignore_lease_key,
 		const x_smb2_uuid_t *client_guid,
-		uint8_t break_mask);
-
-void x_smbd_open_break_oplock(x_smbd_object_t *smbd_object,
-		x_smbd_open_t *smbd_open,
-		uint8_t break_mask);
-
-void x_smbd_break_lease(x_smbd_object_t *smbd_object,
-		x_smbd_stream_t *smbd_stream);
+		uint8_t break_mask,
+		uint8_t delay_mask,
+		x_smbd_requ_t *smbd_requ,
+		bool block_breaking);
 
 NTSTATUS x_smbd_break_oplock(
 		x_smbd_open_t *smbd_open,
@@ -692,6 +690,8 @@ void x_smbd_save_durable(x_smbd_open_t *smbd_open,
 		const x_smbd_requ_state_create_t &state);
 
 void x_smbd_object_update_num_child(x_smbd_object_t *smbd_object, int num);
+
+void x_smbd_wakeup_requ_list(const x_smbd_requ_id_list_t &requ_list);
 
 #endif /* __smbd_open__hxx__ */
 

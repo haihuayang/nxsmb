@@ -357,6 +357,7 @@ struct x_smbd_requ_t
 	x_smb2_header_t in_smb2_hdr;
 	uint32_t in_msgsize, in_offset, in_requ_len;
 	std::atomic<uint32_t> async_state = S_INIT;
+	std::atomic<int32_t> async_pending = 0;
 	uint8_t interim_state = INTERIM_S_NONE;
 	bool encrypted;
 	bool request_counters_updated = false;
@@ -381,6 +382,7 @@ X_DECLARE_MEMBER_TRAITS(requ_async_traits, x_smbd_requ_t, async_link)
 int x_smbd_requ_pool_init(uint32_t count);
 x_smbd_requ_t *x_smbd_requ_create(x_buf_t *in_buf, uint32_t in_msgsize, bool encrypted);
 uint64_t x_smbd_requ_get_async_id(const x_smbd_requ_t *smbd_requ);
+x_smbd_requ_t *x_smbd_requ_lookup(uint64_t id);
 x_smbd_requ_t *x_smbd_requ_async_lookup(uint64_t id, const x_smbd_conn_t *smbd_conn, bool remove);
 void x_smbd_requ_async_insert(x_smbd_requ_t *smbd_requ,
 		void (*cancel_fn)(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ),

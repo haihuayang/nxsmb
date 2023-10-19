@@ -91,6 +91,15 @@ uint64_t x_smbd_requ_get_async_id(const x_smbd_requ_t *smbd_requ)
 	return smbd_requ->id;
 }
 
+x_smbd_requ_t *x_smbd_requ_lookup(uint64_t id)
+{
+	auto [found, smbd_requ] = g_smbd_requ_table->lookup(id);
+	if (!found) {
+		return nullptr;
+	}
+	return smbd_requ;
+}
+
 x_smbd_requ_t *x_smbd_requ_async_lookup(uint64_t id, const x_smbd_conn_t *smbd_conn, bool remove)
 {
 	/* skip client_guid checking, since session bind is signed,

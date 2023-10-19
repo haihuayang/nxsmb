@@ -44,19 +44,25 @@ void x_smbd_lease_close(x_smbd_lease_t *smbd_lease);
 
 uint8_t x_smbd_lease_get_state(const x_smbd_lease_t *smbd_lease);
 
-bool x_smbd_lease_require_break(x_smbd_lease_t *smbd_lease,
+enum {
+	X_SMBD_BREAK_ACTION_SEND = 0x1,
+	X_SMBD_BREAK_ACTION_BLOCKED = 0x2,
+};
+
+uint32_t x_smbd_lease_require_break(x_smbd_lease_t *smbd_lease,
 		const x_smb2_lease_key_t *ignore_lease_key,
 		const x_smb2_uuid_t *client_guid,
 		x_smb2_lease_key_t &lease_key,
 		uint8_t break_mask,
+		uint8_t delay_mask,
 		uint8_t &curr_state,
 		uint8_t &new_state,
 		uint16_t &epoch,
-		uint32_t &flags);
-NTSTATUS x_smbd_lease_process_break(x_smbd_requ_state_lease_break_t &state);
+		uint32_t &flags,
+		x_smbd_requ_t *smbd_requ,
+		bool block_breaking);
 
-bool x_smbd_lease_is_breaking(const x_smbd_lease_t *smbd_lease);
-bool x_smbd_lease_set_breaking_if(x_smbd_lease_t *smbd_lease);
+NTSTATUS x_smbd_lease_process_break(x_smbd_requ_state_lease_break_t &state);
 
 bool x_smbd_lease_match(const x_smbd_lease_t *smbd_lease,
 		x_smbd_object_t *smbd_object,

@@ -370,7 +370,8 @@ static NTSTATUS rename_object_intl(
 /* caller locked smbd_object */
 static bool delay_rename_for_lease_break(x_smbd_object_t *smbd_object,
 		x_smbd_sharemode_t *smbd_sharemode,
-		x_smbd_open_t *smbd_open)
+		x_smbd_open_t *smbd_open,
+		x_smbd_requ_t *smbd_requ)
 {
 	/* this function is called when rename a file or
 	 * rename/delete a dir. for unknown reason, it skips lease break
@@ -391,29 +392,28 @@ static bool delay_rename_for_lease_break(x_smbd_object_t *smbd_object,
 			continue;
 		}
 
+		++break_count;
+		if (x_smbd_open_break_lease(curr_open, nullptr, nullptr,
+					X_SMB2_LEASE_HANDLE, X_SMB2_LEASE_HANDLE,
+					smbd_requ, false)) {
+			delay = true;
+		}
+#if 0
 		uint8_t e_lease_type = x_smbd_lease_get_state(curr_open->smbd_lease);
 		if ((e_lease_type & X_SMB2_LEASE_HANDLE) == 0) {
 			continue;
 		}
 
 		delay = true;
-		++break_count;
 		x_smbd_open_break_lease(curr_open, nullptr, nullptr,
-				X_SMB2_LEASE_HANDLE);
+				X_SMB2_LEASE_HANDLE, smbd_requ);
+#endif
 	}
 	return delay;
 }
 
 static void smbd_rename_cancel(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 {
-	x_smbd_object_t *smbd_object = smbd_requ->smbd_open->smbd_object;
-	x_smbd_sharemode_t *sharemode = x_smbd_open_get_sharemode(
-			smbd_requ->smbd_open);
-
-	{
-		auto lock = std::lock_guard(smbd_object->mutex);
-		sharemode->defer_requ_list.remove(smbd_requ);
-	}
 	x_smbd_conn_post_cancel(smbd_conn, smbd_requ, NT_STATUS_CANCELLED);
 }
 
@@ -485,11 +485,8 @@ NTSTATUS x_smbd_object_rename(x_smbd_object_t *smbd_object,
 
 	auto lock = std::lock_guard(smbd_object->mutex);
 
-	if (delay_rename_for_lease_break(smbd_object, sharemode, smbd_open)) {
+	if (delay_rename_for_lease_break(smbd_object, sharemode, smbd_open, smbd_requ)) {
 		smbd_requ->save_requ_state(state);
-		/* TODO does it need a timer? can break timer always wake up it? */
-		x_smbd_ref_inc(smbd_requ);
-		sharemode->defer_requ_list.push_back(smbd_requ);
 		/* windows server do not send interim response in renaming */
 		x_smbd_requ_async_insert(smbd_requ, smbd_rename_cancel, -1);
 		if (new_parent_object) {

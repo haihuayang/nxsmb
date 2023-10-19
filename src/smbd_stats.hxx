@@ -16,6 +16,7 @@
 	X_SMBD_COUNTER_DECL(cancel_success) \
 	X_SMBD_COUNTER_DECL(cancel_too_late) \
 	X_SMBD_COUNTER_DECL(cancel_not_exist) \
+	X_SMBD_COUNTER_DECL(wakeup_stale_requ) \
 
 enum {
 #undef X_SMBD_COUNTER_DECL
