@@ -26,7 +26,7 @@ struct x_smb2_in_write_t
 	uint32_t flags;
 };
 
-static bool decode_in_write(x_smb2_state_write_t &state,
+static bool decode_in_write(x_smbd_requ_state_write_t &state,
 		x_buf_t *in_buf, uint32_t in_offset, uint32_t in_len)
 {
 	const uint8_t *in_hdr = in_buf->data + in_offset;
@@ -66,7 +66,7 @@ struct x_smb2_out_write_t
 	uint16_t write_channel_info_length;
 };
 
-static void encode_out_write(const x_smb2_state_write_t &state,
+static void encode_out_write(const x_smbd_requ_state_write_t &state,
 		uint8_t *out_hdr)
 {
 	x_smb2_out_write_t *out_write = (x_smb2_out_write_t *)(out_hdr + sizeof(x_smb2_header_t));
@@ -80,7 +80,7 @@ static void encode_out_write(const x_smb2_state_write_t &state,
 
 static void x_smb2_reply_write(x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ,
-		const x_smb2_state_write_t &state)
+		const x_smbd_requ_state_write_t &state)
 {
 	X_LOG_OP("%ld WRITE SUCCESS", smbd_requ->in_smb2_hdr.mid);
 
@@ -98,7 +98,7 @@ static void x_smb2_write_async_done(x_smbd_conn_t *smbd_conn,
 		NTSTATUS status)
 {
 	X_LOG_DBG("status=0x%x", status.v);
-	auto state = smbd_requ->release_state<x_smb2_state_write_t>();
+	auto state = smbd_requ->release_state<x_smbd_requ_state_write_t>();
 	if (!smbd_conn) {
 		return;
 	}
@@ -114,7 +114,7 @@ NTSTATUS x_smb2_process_write(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ
 		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
 
-	auto state = std::make_unique<x_smb2_state_write_t>();
+	auto state = std::make_unique<x_smbd_requ_state_write_t>();
 	if (!decode_in_write(*state, smbd_requ->in_buf, smbd_requ->in_offset, smbd_requ->in_requ_len)) {
 		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}

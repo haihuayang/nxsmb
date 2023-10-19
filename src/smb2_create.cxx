@@ -106,7 +106,7 @@ static inline bool x_bit_all(T v1, T v2)
 	return (v1 & v2) == v2;
 }
 
-static bool decode_contexts(x_smb2_state_create_t &state,
+static bool decode_contexts(x_smbd_requ_state_create_t &state,
 		const uint8_t *data, uint32_t length, bool &has_RqLs)
 {
 	const x_smb2_create_dhnc_requ_t *dhnc = nullptr;
@@ -313,7 +313,7 @@ static void encode_durable_v2_context(uint32_t timeout, uint32_t flags,
 		}, ch, p, out_ptr, X_SMB2_CREATE_TAG_DH2Q);
 }
 
-static uint32_t encode_contexts(const x_smb2_state_create_t &state,
+static uint32_t encode_contexts(const x_smbd_requ_state_create_t &state,
 		const x_smbd_open_state_t &open_state,
 		uint8_t *out_ptr)
 {
@@ -433,7 +433,7 @@ static bool normalize_path(std::u16string &path,
 	return true;
 }
 
-static NTSTATUS decode_in_create(x_smb2_state_create_t &state,
+static NTSTATUS decode_in_create(x_smbd_requ_state_create_t &state,
 		const uint8_t *in_hdr, uint32_t in_len)
 {
 	const x_smb2_in_create_t *in_create = (const x_smb2_in_create_t *)(in_hdr + sizeof(x_smb2_header_t));
@@ -539,7 +539,7 @@ struct x_smb2_out_create_t
 };
 
 /* it assume output has enough space */
-static uint32_t encode_out_create(const x_smb2_state_create_t &state,
+static uint32_t encode_out_create(const x_smbd_requ_state_create_t &state,
 		x_smbd_open_t *smbd_open, uint8_t *out_hdr)
 {
 	/* TODO we assume max output context 256 */
@@ -579,7 +579,7 @@ static uint32_t encode_out_create(const x_smb2_state_create_t &state,
 
 static void x_smb2_reply_create(x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ,
-		const x_smb2_state_create_t &state)
+		const x_smbd_requ_state_create_t &state)
 {
 	X_LOG_OP("%ld RESP SUCCESS 0x%lx,0x%lx", smbd_requ->in_smb2_hdr.mid,
 			smbd_requ->smbd_open->open_state.id_persistent,
@@ -605,7 +605,7 @@ static void x_smb2_reply_create(x_smbd_conn_t *smbd_conn,
 			bufref->length);
 }
 
-static void smb2_replay_cache_clear_if(const x_smb2_state_create_t &state)
+static void smb2_replay_cache_clear_if(const x_smbd_requ_state_create_t &state)
 {
 	if (state.replay_reserved) {
 		x_smbd_replay_cache_clear(state.in_client_guid,
@@ -615,7 +615,7 @@ static void smb2_replay_cache_clear_if(const x_smb2_state_create_t &state)
 
 static void smb2_create_success(x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ,
-		x_smb2_state_create_t &state)
+		x_smbd_requ_state_create_t &state)
 {
 	x_smbd_open_t *smbd_open = smbd_requ->smbd_open;
 	if (state.replay_reserved) {
@@ -643,7 +643,7 @@ static void x_smb2_create_async_done(x_smbd_conn_t *smbd_conn,
 		NTSTATUS status)
 {
 	X_LOG_DBG("status=0x%x", status.v);
-	auto state = smbd_requ->release_state<x_smb2_state_create_t>();
+	auto state = smbd_requ->release_state<x_smbd_requ_state_create_t>();
 
 	if (!smbd_conn) {
 		smb2_replay_cache_clear_if(*state);
@@ -660,7 +660,7 @@ static void x_smb2_create_async_done(x_smbd_conn_t *smbd_conn,
 	x_smbd_conn_requ_done(smbd_conn, smbd_requ, status);
 }
 
-static bool oplock_valid_for_durable(const x_smb2_state_create_t &state)
+static bool oplock_valid_for_durable(const x_smbd_requ_state_create_t &state)
 {
 	if (state.in_oplock_level == X_SMB2_OPLOCK_LEVEL_LEASE) {
 		return state.lease.state & X_SMB2_LEASE_HANDLE;
@@ -670,7 +670,7 @@ static bool oplock_valid_for_durable(const x_smb2_state_create_t &state)
 }
 
 static NTSTATUS smb2_process_create(x_smbd_requ_t *smbd_requ,
-		std::unique_ptr<x_smb2_state_create_t> &state)
+		std::unique_ptr<x_smbd_requ_state_create_t> &state)
 {
 	if (state->in_contexts & (X_SMB2_CONTEXT_FLAG_DHNQ | X_SMB2_CONTEXT_FLAG_DH2Q)) {
 		if (!oplock_valid_for_durable(*state)) {
@@ -775,7 +775,7 @@ NTSTATUS x_smb2_process_create(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_req
 
 	/* TODO check limit of open for both total and per conn*/
 
-	auto state = std::make_unique<x_smb2_state_create_t>(x_smbd_conn_curr_client_guid());
+	auto state = std::make_unique<x_smbd_requ_state_create_t>(x_smbd_conn_curr_client_guid());
 	NTSTATUS status = decode_in_create(*state, in_hdr, smbd_requ->in_requ_len);
 	if (!NT_STATUS_IS_OK(status)) {
 		RETURN_OP_STATUS(smbd_requ, status);
@@ -849,8 +849,4 @@ NTSTATUS x_smb2_process_create(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_req
 	}
 }
 
-x_smb2_state_create_t::x_smb2_state_create_t(const x_smb2_uuid_t &client_guid)
-	: in_client_guid(client_guid), in_create_guid{0, 0}
-{
-}
 

@@ -16,24 +16,24 @@ NTSTATUS posixfs_create_open(x_smbd_open_t **psmbd_open,
 		std::shared_ptr<x_smbd_volume_t> &smbd_volume,
 		const std::u16string &path, uint64_t path_data,
 		x_smbd_requ_t *smbd_requ,
-		std::unique_ptr<x_smb2_state_create_t> &state);
+		std::unique_ptr<x_smbd_requ_state_create_t> &state);
 NTSTATUS posixfs_object_op_close(
 		x_smbd_object_t *smbd_object,
 		x_smbd_open_t *smbd_open,
 		x_smbd_requ_t *smbd_requ,
-		std::unique_ptr<x_smb2_state_close_t> &state);
+		std::unique_ptr<x_smbd_requ_state_close_t> &state);
 NTSTATUS posixfs_object_op_read(
 		x_smbd_object_t *smbd_object,
 		x_smbd_open_t *smbd_open,
 		x_smbd_requ_t *smbd_requ,
-		std::unique_ptr<x_smb2_state_read_t> &state,
+		std::unique_ptr<x_smbd_requ_state_read_t> &state,
 		uint32_t delay_ms,
 		bool all);
 NTSTATUS posixfs_object_op_write(
 		x_smbd_object_t *smbd_object,
 		x_smbd_open_t *smbd_open,
 		x_smbd_requ_t *smbd_requ,
-		std::unique_ptr<x_smb2_state_write_t> &state,
+		std::unique_ptr<x_smbd_requ_state_write_t> &state,
 		uint32_t delay_ms);
 NTSTATUS posixfs_object_op_flush(
 		x_smbd_object_t *smbd_object,
@@ -44,16 +44,16 @@ NTSTATUS posixfs_object_op_getinfo(
 		x_smbd_open_t *smbd_open,
 		x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ,
-		std::unique_ptr<x_smb2_state_getinfo_t> &state);
+		std::unique_ptr<x_smbd_requ_state_getinfo_t> &state);
 NTSTATUS posixfs_object_op_setinfo(
 		x_smbd_object_t *smbd_object,
 		x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ,
-		std::unique_ptr<x_smb2_state_setinfo_t> &state);
+		std::unique_ptr<x_smbd_requ_state_setinfo_t> &state);
 NTSTATUS posixfs_object_op_ioctl(
 		x_smbd_object_t *smbd_object,
 		x_smbd_requ_t *smbd_requ,
-		std::unique_ptr<x_smb2_state_ioctl_t> &state);
+		std::unique_ptr<x_smbd_requ_state_ioctl_t> &state);
 NTSTATUS posixfs_object_op_query_allocated_ranges(
 		x_smbd_object_t *smbd_object,
 		x_smbd_stream_t *smbd_stream,
@@ -145,7 +145,7 @@ NTSTATUS x_smbd_posixfs_op_create_open(x_smbd_open_t *&smbd_open,
 		x_smbd_requ_t *smbd_requ,
 		const std::shared_ptr<x_smbd_share_t> &smbd_share,
 		const std::string &volume_name,
-		std::unique_ptr<x_smb2_state_create_t> &state);
+		std::unique_ptr<x_smbd_requ_state_create_t> &state);
 
 NTSTATUS x_smbd_posixfs_op_access_check(x_smbd_object_t *smbd_object,
 		uint32_t &granted_access,
@@ -164,14 +164,14 @@ x_smbd_object_t *x_smbd_posixfs_open_object_by_handle(NTSTATUS *pstatus,
 
 NTSTATUS x_smbd_posixfs_create_open(x_smbd_open_t **psmbd_open,
 		x_smbd_requ_t *smbd_requ,
-		std::unique_ptr<x_smb2_state_create_t> &state,
+		std::unique_ptr<x_smbd_requ_state_create_t> &state,
 		bool overwrite,
 		x_smb2_create_action_t create_action,
 		uint8_t oplock_level);
 NTSTATUS x_smbd_posixfs_create_object(x_smbd_object_t *smbd_object,
 		x_smbd_stream_t *smbd_stream,
 		const x_smbd_user_t &smbd_user,
-		x_smb2_state_create_t &state,
+		x_smbd_requ_state_create_t &state,
 		uint32_t file_attributes,
 		uint64_t allocation_size);
 NTSTATUS x_smbd_posixfs_object_init(x_smbd_object_t *smbd_object,

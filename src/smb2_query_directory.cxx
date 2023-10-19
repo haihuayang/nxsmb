@@ -23,7 +23,7 @@ struct x_smb2_in_qdir_t
 	uint32_t output_buffer_length;
 };
 
-static bool decode_in_qdir(x_smb2_state_qdir_t &state,
+static bool decode_in_qdir(x_smbd_requ_state_qdir_t &state,
 		const uint8_t *in_hdr, uint32_t in_len)
 {
 	const x_smb2_in_qdir_t *in_qdir = (const x_smb2_in_qdir_t *)(in_hdr + sizeof(x_smb2_header_t));
@@ -56,7 +56,7 @@ struct x_smb2_out_qdir_t
 	uint32_t length;
 };
 
-static void encode_out_qdir(const x_smb2_state_qdir_t &state,
+static void encode_out_qdir(const x_smbd_requ_state_qdir_t &state,
 		uint8_t *out_hdr)
 {
 	x_smb2_out_qdir_t *out_qdir = (x_smb2_out_qdir_t *)(out_hdr + sizeof(x_smb2_header_t));
@@ -68,7 +68,7 @@ static void encode_out_qdir(const x_smb2_state_qdir_t &state,
 
 static void x_smb2_reply_qdir(x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ,
-		x_smb2_state_qdir_t &state)
+		x_smbd_requ_state_qdir_t &state)
 {
 	X_LOG_OP("%ld RESP SUCCESS", smbd_requ->in_smb2_hdr.mid);
 
@@ -92,7 +92,7 @@ static void x_smb2_qdir_async_done(x_smbd_conn_t *smbd_conn,
 		NTSTATUS status)
 {
 	X_LOG_DBG("status=0x%x", status.v);
-	auto state = smbd_requ->release_state<x_smb2_state_qdir_t>();
+	auto state = smbd_requ->release_state<x_smbd_requ_state_qdir_t>();
 	if (!smbd_conn) {
 		return;
 	}
@@ -129,7 +129,7 @@ static NTSTATUS smbd_qdir_process_requ(x_smbd_qdir_t *smbd_qdir, x_smbd_requ_t *
 	if (smbd_qdir->delay_ms) {
 		usleep(smbd_qdir->delay_ms * 1000);
 	}
-	auto state = smbd_requ->get_requ_state<x_smb2_state_qdir_t>();
+	auto state = smbd_requ->get_requ_state<x_smbd_requ_state_qdir_t>();
 	if (smbd_qdir->total_count == 0 ||
 			(state->in_flags & (X_SMB2_CONTINUE_FLAG_REOPEN |
 					    X_SMB2_CONTINUE_FLAG_RESTART))) {
@@ -311,7 +311,7 @@ NTSTATUS x_smb2_process_query_directory(x_smbd_conn_t *smbd_conn, x_smbd_requ_t 
 
 	const uint8_t *in_hdr = smbd_requ->get_in_data();
 
-	auto state = std::make_unique<x_smb2_state_qdir_t>();
+	auto state = std::make_unique<x_smbd_requ_state_qdir_t>();
 	if (!decode_in_qdir(*state, in_hdr, smbd_requ->in_requ_len)) {
 		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}

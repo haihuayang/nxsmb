@@ -27,7 +27,7 @@ struct x_smb2_in_read_t
 	uint16_t read_channel_info_length;
 };
 
-static void decode_in_read(x_smb2_state_read_t &state,
+static void decode_in_read(x_smbd_requ_state_read_t &state,
 		const uint8_t *in_hdr)
 {
 	const x_smb2_in_read_t *in_read = (const x_smb2_in_read_t *)(in_hdr + sizeof(x_smb2_header_t));
@@ -51,7 +51,7 @@ struct x_smb2_out_read_t
 
 static void x_smb2_reply_read(x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ,
-		x_smb2_state_read_t &state)
+		x_smbd_requ_state_read_t &state)
 {
 	X_LOG_OP("%ld RESP SUCCESS", smbd_requ->in_smb2_hdr.mid);
 
@@ -84,7 +84,7 @@ static void x_smb2_read_async_done(x_smbd_conn_t *smbd_conn,
 		NTSTATUS status)
 {
 	X_LOG_DBG("status=0x%x", status.v);
-	auto state = smbd_requ->release_state<x_smb2_state_read_t>();
+	auto state = smbd_requ->release_state<x_smbd_requ_state_read_t>();
 	if (!smbd_conn) {
 		return;
 	}
@@ -109,7 +109,7 @@ NTSTATUS x_smb2_process_read(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 
 	const uint8_t *in_hdr = smbd_requ->get_in_data();
 
-	auto state = std::make_unique<x_smb2_state_read_t>();
+	auto state = std::make_unique<x_smbd_requ_state_read_t>();
 	decode_in_read(*state, in_hdr);
 
 	X_LOG_OP("%ld READ 0x%lx, 0x%lx", smbd_requ->in_smb2_hdr.mid,

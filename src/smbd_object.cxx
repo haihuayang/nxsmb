@@ -34,16 +34,6 @@ x_smbd_stream_t::~x_smbd_stream_t()
 	X_SMBD_COUNTER_INC_DELETE(stream, 1);
 }
 
-x_smb2_state_create_t::~x_smb2_state_create_t()
-{
-	if (smbd_object) {
-		x_smbd_release_object_and_stream(smbd_object, smbd_stream);
-	}
-	if (smbd_lease) {
-		x_smbd_lease_release(smbd_lease);
-	}
-}
-
 struct smbd_object_pool_t
 {
 	static const uint64_t cache_time = 60ul * 1000000000; // 60 second
@@ -441,7 +431,7 @@ static NTSTATUS parent_compatible_open(x_smbd_object_t *smbd_object)
 NTSTATUS x_smbd_object_rename(x_smbd_object_t *smbd_object,
 		x_smbd_open_t *smbd_open,
 		x_smbd_requ_t *smbd_requ,
-		std::unique_ptr<x_smb2_state_rename_t> &state)
+		std::unique_ptr<x_smbd_requ_state_rename_t> &state)
 {
 	x_smbd_sharemode_t *sharemode = x_smbd_open_get_sharemode(smbd_open);
 

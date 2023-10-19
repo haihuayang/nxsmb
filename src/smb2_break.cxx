@@ -38,7 +38,7 @@ struct x_smb2_lease_break_noti_t
 	uint32_t share_mask_hint;
 } __attribute__((packed));
 
-static void decode_in_lease_break(x_smb2_state_lease_break_t &state,
+static void decode_in_lease_break(x_smbd_requ_state_lease_break_t &state,
 		const x_smb2_lease_break_t *in_lease_break)
 {
 	state.in_flags = X_LE2H32(in_lease_break->flags);
@@ -49,7 +49,7 @@ static void decode_in_lease_break(x_smb2_state_lease_break_t &state,
 	state.in_duration = (duration_high << 32 | duration_low);
 }
 	
-static void encode_lease_break_resp(const x_smb2_state_lease_break_t &state,
+static void encode_lease_break_resp(const x_smbd_requ_state_lease_break_t &state,
 		uint8_t *out_hdr)
 {
 	x_smb2_lease_break_t *resp = (x_smb2_lease_break_t *)(out_hdr + sizeof(x_smb2_header_t));
@@ -62,7 +62,7 @@ static void encode_lease_break_resp(const x_smb2_state_lease_break_t &state,
 	resp->duration_high = 0;
 }
 
-static void decode_in_oplock_break(x_smb2_state_oplock_break_t &state,
+static void decode_in_oplock_break(x_smbd_requ_state_oplock_break_t &state,
 		const x_smb2_oplock_break_t *in_oplock_break)
 {
 	state.in_oplock_level = X_LE2H8(in_oplock_break->oplock_level);
@@ -70,7 +70,7 @@ static void decode_in_oplock_break(x_smb2_state_oplock_break_t &state,
 	state.in_file_id_volatile = X_LE2H64(in_oplock_break->file_id_volatile);
 }
 
-static void encode_oplock_break_resp(const x_smb2_state_oplock_break_t &state,
+static void encode_oplock_break_resp(const x_smbd_requ_state_oplock_break_t &state,
 		uint8_t *out_hdr)
 {
 	x_smb2_oplock_break_t *resp = (x_smb2_oplock_break_t *)(out_hdr + sizeof(x_smb2_header_t));
@@ -84,7 +84,7 @@ static void encode_oplock_break_resp(const x_smb2_state_oplock_break_t &state,
 
 static void x_smb2_reply_oplock_break(x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ,
-		const x_smb2_state_oplock_break_t &state)
+		const x_smbd_requ_state_oplock_break_t &state)
 {
 	X_LOG_OP("%ld RESP SUCCESS", smbd_requ->in_smb2_hdr.mid);
 
@@ -100,7 +100,7 @@ static NTSTATUS x_smb2_process_oplock_break(x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ,
 		const x_smb2_oplock_break_t *in_oplock_break)
 {
-	auto state = std::make_unique<x_smb2_state_oplock_break_t>();
+	auto state = std::make_unique<x_smbd_requ_state_oplock_break_t>();
 	decode_in_oplock_break(*state, in_oplock_break);
 
 	NTSTATUS status = x_smbd_requ_init_open(smbd_requ,
@@ -122,7 +122,7 @@ static NTSTATUS x_smb2_process_oplock_break(x_smbd_conn_t *smbd_conn,
 
 static void x_smb2_reply_lease_break(x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ,
-		const x_smb2_state_lease_break_t &state)
+		const x_smbd_requ_state_lease_break_t &state)
 {
 	X_LOG_OP("%ld RESP SUCCESS", smbd_requ->in_smb2_hdr.mid);
 
@@ -145,7 +145,7 @@ static NTSTATUS x_smb2_process_lease_break(x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ,
 		const x_smb2_lease_break_t *in_lease_break)
 {
-	x_smb2_state_lease_break_t state;
+	x_smbd_requ_state_lease_break_t state;
 	decode_in_lease_break(state, in_lease_break);
 
 	NTSTATUS status = x_smbd_lease_process_break(state);

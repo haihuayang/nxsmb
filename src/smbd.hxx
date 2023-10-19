@@ -19,7 +19,6 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include "smb2.hxx"
-#include "smb2_state.hxx"
 #include "smbd_proto.hxx"
 #include "misc.hxx"
 #include "network.hxx"
@@ -94,57 +93,6 @@ inline void x_smbd_ref_dec_if(T *t)
 }
 
 #define X_SMBD_REF_DEC(t) do { x_smbd_ref_dec(t); (t) = nullptr; } while (0)
-
-struct x_smb2_state_create_t
-{
-	x_smb2_state_create_t(const x_smb2_uuid_t &client_guid);
-	~x_smb2_state_create_t();
-
-	const x_smb2_uuid_t in_client_guid;
-
-	uint8_t in_oplock_level;
-	uint8_t out_oplock_level;
-	uint32_t in_contexts{0};
-	uint32_t out_contexts{0};
-
-	uint32_t in_impersonation_level;
-	uint32_t in_desired_access;
-	uint32_t in_file_attributes;
-	uint32_t in_share_access;
-	x_smb2_create_disposition_t in_create_disposition;
-	uint32_t in_create_options;
-	std::shared_ptr<idl::security_descriptor> in_security_descriptor;
-
-	x_smb2_lease_t lease;
-	uint64_t in_allocation_size{0};
-	uint64_t in_timestamp{0};
-
-	bool is_dollar_data = false;
-	bool end_with_sep = false;
-	std::u16string in_path;
-	std::u16string in_ads_name;
-
-	uint8_t out_create_flags = 0;
-	bool replay_operation = false;
-	bool replay_reserved = false;
-	uint32_t open_attempt = 0;
-	uint32_t out_maximal_access{0};
-	uint8_t out_qfid_info[32];
-
-	uint32_t granted_access{0}; // internally used
-
-	x_smbd_object_t *smbd_object{};
-	x_smbd_stream_t *smbd_stream{};
-	x_smbd_lease_t *smbd_lease{};
-	std::shared_ptr<x_smbd_share_t> smbd_share;
-	long open_priv_data;
-
-	uint64_t in_dh_id_persistent;
-	uint64_t in_dh_id_volatile;
-	uint32_t in_dh_timeout;
-	uint32_t in_dh_flags;
-	x_smb2_uuid_t in_create_guid;
-};
 
 template <class T>
 struct x_smbd_ptr_t

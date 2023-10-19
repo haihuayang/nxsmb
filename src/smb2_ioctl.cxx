@@ -27,7 +27,7 @@ struct x_smb2_in_ioctl_t
 	uint32_t reserved1;
 };
 
-static bool decode_in_ioctl(x_smb2_state_ioctl_t &state,
+static bool decode_in_ioctl(x_smbd_requ_state_ioctl_t &state,
 		x_buf_t *in_buf, uint32_t in_offset, uint32_t in_len)
 {
 	const uint8_t *in_hdr = in_buf->data + in_offset;
@@ -69,7 +69,7 @@ struct x_smb2_out_ioctl_t
 	uint64_t reserved1;
 };
 
-static void encode_out_ioctl(const x_smb2_state_ioctl_t &state,
+static void encode_out_ioctl(const x_smbd_requ_state_ioctl_t &state,
 		uint8_t *out_hdr)
 {
 	x_smb2_out_ioctl_t *out_ioctl = (x_smb2_out_ioctl_t *)(out_hdr + sizeof(x_smb2_header_t));
@@ -89,7 +89,7 @@ static void encode_out_ioctl(const x_smb2_state_ioctl_t &state,
 static void x_smb2_reply_ioctl(x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ,
 		NTSTATUS status,
-		x_smb2_state_ioctl_t &state)
+		x_smbd_requ_state_ioctl_t &state)
 {
 	X_LOG_OP("%ld IOCTL SUCCESS", smbd_requ->in_smb2_hdr.mid);
 
@@ -108,7 +108,7 @@ static void x_smb2_reply_ioctl(x_smbd_conn_t *smbd_conn,
 }
 
 
-static inline bool file_id_is_nul(const x_smb2_state_ioctl_t &state)
+static inline bool file_id_is_nul(const x_smbd_requ_state_ioctl_t &state)
 {
 	/*
 	 * Some SMB2 specific CtlCodes like FSCTL_DFS_GET_REFERRALS or
@@ -229,7 +229,7 @@ static NTSTATUS push_ref_resp(const x_dfs_referral_resp_t &resp, size_t in_max_o
 
 static NTSTATUS fsctl_dfs_get_refers_internal(
 		x_smbd_conn_t *smbd_conn,
-		x_smb2_state_ioctl_t &state,
+		x_smbd_requ_state_ioctl_t &state,
 		uint16_t in_max_referral_level,
 		const uint8_t *in_file_name_data,
 		uint32_t in_file_name_size)
@@ -291,7 +291,7 @@ static NTSTATUS fsctl_dfs_get_refers_internal(
 	*/
 static NTSTATUS x_smb2_fsctl_dfs_get_referrals(
 		x_smbd_conn_t *smbd_conn,
-		x_smb2_state_ioctl_t &state)
+		x_smbd_requ_state_ioctl_t &state)
 {
 	if (!file_id_is_nul(state)) {
 		return NT_STATUS_INVALID_PARAMETER;
@@ -318,7 +318,7 @@ struct x_smb2_in_refers_ex_t
 
 static NTSTATUS x_smb2_fsctl_dfs_get_referrals_ex(
 		x_smbd_conn_t *smbd_conn,
-		x_smb2_state_ioctl_t &state)
+		x_smbd_requ_state_ioctl_t &state)
 {
 	if (!file_id_is_nul(state)) {
 		return NT_STATUS_INVALID_PARAMETER;
@@ -356,7 +356,7 @@ static NTSTATUS x_smb2_fsctl_dfs_get_referrals_ex(
 
 static NTSTATUS x_smb2_fsctl_pipe_wait(
 		x_smbd_conn_t *smbd_conn,
-		x_smb2_state_ioctl_t &state)
+		x_smbd_requ_state_ioctl_t &state)
 {
 	if (!file_id_is_nul(state)) {
 		return NT_STATUS_INVALID_PARAMETER;
@@ -366,7 +366,7 @@ static NTSTATUS x_smb2_fsctl_pipe_wait(
 
 static NTSTATUS x_smb2_fsctl_validate_negotiate_info_224(
 		x_smbd_conn_t *smbd_conn,
-		x_smb2_state_ioctl_t &state)
+		x_smbd_requ_state_ioctl_t &state)
 {
 	if (!file_id_is_nul(state)) {
 		return NT_STATUS_INVALID_PARAMETER;
@@ -393,7 +393,7 @@ struct x_smb2_fsctl_validate_negotiate_info_out_t
 
 static NTSTATUS x_smb2_fsctl_validate_negotiate_info(
 		x_smbd_conn_t *smbd_conn,
-		x_smb2_state_ioctl_t &state)
+		x_smbd_requ_state_ioctl_t &state)
 {
 	if (!file_id_is_nul(state)) {
 		return NT_STATUS_INVALID_PARAMETER;
@@ -463,7 +463,7 @@ enum {
 static NTSTATUS x_smb2_fsctl_query_network_interface_info(
 		x_smbd_conn_t *smbd_conn,
 		x_smbd_tcon_t *smbd_tcon,
-		x_smb2_state_ioctl_t &state)
+		x_smbd_requ_state_ioctl_t &state)
 {
 	if (!file_id_is_nul(state)) {
 		return NT_STATUS_INVALID_PARAMETER;
@@ -513,7 +513,7 @@ static void ioctl_async_done(x_smbd_conn_t *smbd_conn,
 		NTSTATUS status)
 {
 	X_LOG_DBG("status=0x%x", status.v);
-	auto state = smbd_requ->release_state<x_smb2_state_ioctl_t>();
+	auto state = smbd_requ->release_state<x_smbd_requ_state_ioctl_t>();
 	if (!smbd_conn) {
 		return;
 	}
@@ -526,7 +526,7 @@ static void ioctl_async_done(x_smbd_conn_t *smbd_conn,
 
 static NTSTATUS x_smb2_ioctl_query_allocated_ranges(
 		x_smbd_requ_t *smbd_requ,
-		x_smb2_state_ioctl_t &state)
+		x_smbd_requ_state_ioctl_t &state)
 {
 	/* TODO check tcon writable */
 
@@ -593,7 +593,7 @@ static NTSTATUS x_smb2_ioctl_query_allocated_ranges(
 
 static NTSTATUS x_smb2_ioctl_set_sparse(
 		x_smbd_requ_t *smbd_requ,
-		x_smb2_state_ioctl_t &state)
+		x_smbd_requ_state_ioctl_t &state)
 {
 	/* TODO check tcon writable */
 
@@ -644,7 +644,7 @@ struct x_smb2_file_range2_t
 
 static NTSTATUS x_smb2_ioctl_set_zero_data(
 		x_smbd_requ_t *smbd_requ,
-		x_smb2_state_ioctl_t &state)
+		x_smbd_requ_state_ioctl_t &state)
 {
 	/* TODO check tcon writable */
 	auto smbd_open = smbd_requ->smbd_open;
@@ -675,7 +675,7 @@ static NTSTATUS x_smb2_ioctl_set_zero_data(
 
 static NTSTATUS x_smb2_ioctl_get_compression(
 		x_smbd_requ_t *smbd_requ,
-		x_smb2_state_ioctl_t &state)
+		x_smbd_requ_state_ioctl_t &state)
 {
 	if (state.in_max_output_length < 2) {
 		return NT_STATUS_BUFFER_TOO_SMALL;
@@ -689,7 +689,7 @@ static NTSTATUS x_smb2_ioctl_get_compression(
 
 static NTSTATUS x_smb2_ioctl_set_compression(
 		x_smbd_requ_t *smbd_requ,
-		x_smb2_state_ioctl_t &state)
+		x_smbd_requ_state_ioctl_t &state)
 {
 	if (state.in_buf_length < 2) {
 		return NT_STATUS_INVALID_PARAMETER;
@@ -702,7 +702,7 @@ static NTSTATUS x_smb2_ioctl_set_compression(
 
 static NTSTATUS x_smbd_open_ioctl(x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ,
-		std::unique_ptr<x_smb2_state_ioctl_t> &state)
+		std::unique_ptr<x_smbd_requ_state_ioctl_t> &state)
 {
 	smbd_requ->async_done_fn = ioctl_async_done;
 	switch (state->ctl_code) {
@@ -740,7 +740,7 @@ NTSTATUS x_smb2_process_ioctl(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ
 		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
 
-	auto state = std::make_unique<x_smb2_state_ioctl_t>();
+	auto state = std::make_unique<x_smbd_requ_state_ioctl_t>();
 	if (!decode_in_ioctl(*state, smbd_requ->in_buf, smbd_requ->in_offset, smbd_requ->in_requ_len)) {
 		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
@@ -815,7 +815,7 @@ NTSTATUS x_smb2_process_ioctl_torture(x_smbd_conn_t *smbd_conn,
 		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
 
-	auto state = std::make_unique<x_smb2_state_ioctl_t>();
+	auto state = std::make_unique<x_smbd_requ_state_ioctl_t>();
 	if (!decode_in_ioctl(*state, smbd_requ->in_buf, smbd_requ->in_offset, smbd_requ->in_requ_len)) {
 		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}

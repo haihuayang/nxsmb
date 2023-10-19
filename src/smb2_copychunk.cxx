@@ -81,7 +81,7 @@ static x_job_t::retval_t copychunk_job_run(x_job_t *job, void *data)
 	x_smbd_requ_t *smbd_requ = copychunk_job->smbd_requ;
 	copychunk_job->smbd_requ = nullptr;
 
-	auto state = smbd_requ->get_requ_state<x_smb2_state_ioctl_t>();
+	auto state = smbd_requ->get_requ_state<x_smbd_requ_state_ioctl_t>();
 
 	NTSTATUS status = NT_STATUS_OK;
 	uint32_t total_count = 0;
@@ -89,7 +89,7 @@ static x_job_t::retval_t copychunk_job_run(x_job_t *job, void *data)
 	for (auto &chunk : copychunk_job->chunks) {
 		/* do sync read write because we have in async job */
 		/* TODO use copy_file_range to avoid copying */
-		auto read_state = std::make_unique<x_smb2_state_read_t>();
+		auto read_state = std::make_unique<x_smbd_requ_state_read_t>();
 		read_state->in_flags = 0;
 		read_state->in_length = chunk.length;
 		read_state->in_offset = chunk.source_offset;
@@ -100,7 +100,7 @@ static x_job_t::retval_t copychunk_job_run(x_job_t *job, void *data)
 			break;
 		}
 
-		auto write_state = std::make_unique<x_smb2_state_write_t>();
+		auto write_state = std::make_unique<x_smbd_requ_state_write_t>();
 		write_state->in_offset = chunk.target_offset;
 		write_state->in_flags = 0;
 		write_state->in_buf = read_state->out_buf;
@@ -141,7 +141,7 @@ static void copychunk_cancel(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 	x_smbd_conn_post_cancel(smbd_conn, smbd_requ, NT_STATUS_CANCELLED);
 }
 
-static NTSTATUS copychunk_invalid_limit(x_smb2_state_ioctl_t &state)
+static NTSTATUS copychunk_invalid_limit(x_smbd_requ_state_ioctl_t &state)
 {
 	state.out_buf = x_buf_alloc(sizeof(x_smb2_fsctl_srv_copychunk_out_t));
 	x_smb2_fsctl_srv_copychunk_out_t *out = (x_smb2_fsctl_srv_copychunk_out_t *)state.out_buf->data;
@@ -213,7 +213,7 @@ static NTSTATUS copychunk_check_access(uint32_t fsctl,
 NTSTATUS x_smb2_ioctl_copychunk(
 		x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ,
-		std::unique_ptr<x_smb2_state_ioctl_t> &state)
+		std::unique_ptr<x_smbd_requ_state_ioctl_t> &state)
 {
 	if (state->in_buf_length < sizeof(x_smb2_fsctl_srv_copychunk_in_t)) {
 		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
@@ -287,7 +287,7 @@ NTSTATUS x_smb2_ioctl_copychunk(
 
 NTSTATUS x_smb2_ioctl_request_resume_key(
 		x_smbd_requ_t *smbd_requ,
-		x_smb2_state_ioctl_t &state)
+		x_smbd_requ_state_ioctl_t &state)
 {
 	if (state.in_max_output_length < 32) {
 		return NT_STATUS_BUFFER_TOO_SMALL;

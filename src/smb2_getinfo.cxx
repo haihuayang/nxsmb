@@ -27,7 +27,7 @@ struct x_smb2_out_getinfo_t
 
 }
 
-static bool decode_in_getinfo(x_smb2_state_getinfo_t &state,
+static bool decode_in_getinfo(x_smbd_requ_state_getinfo_t &state,
 		const uint8_t *in_hdr, uint32_t in_len)
 {
 	const x_smb2_in_getinfo_t *in_getinfo = (const x_smb2_in_getinfo_t *)(in_hdr + sizeof(x_smb2_header_t));
@@ -60,7 +60,7 @@ static bool decode_in_getinfo(x_smb2_state_getinfo_t &state,
 	return true;
 }
 
-static void encode_out_getinfo(const x_smb2_state_getinfo_t &state,
+static void encode_out_getinfo(const x_smbd_requ_state_getinfo_t &state,
 		uint8_t *out_hdr)
 {
 	x_smb2_out_getinfo_t *out_getinfo = (x_smb2_out_getinfo_t *)(out_hdr + sizeof(x_smb2_header_t));
@@ -72,7 +72,7 @@ static void encode_out_getinfo(const x_smb2_state_getinfo_t &state,
 
 static void x_smb2_reply_getinfo(x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ,
-		const x_smb2_state_getinfo_t &state,
+		const x_smbd_requ_state_getinfo_t &state,
 		NTSTATUS status)
 {
 	X_LOG_OP("%ld RESP SUCCESS", smbd_requ->in_smb2_hdr.mid);
@@ -94,7 +94,7 @@ NTSTATUS x_smb2_process_getinfo(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_re
 
 	const uint8_t *in_hdr = smbd_requ->get_in_data();
 
-	auto state = std::make_unique<x_smb2_state_getinfo_t>();
+	auto state = std::make_unique<x_smbd_requ_state_getinfo_t>();
 	if (!decode_in_getinfo(*state, in_hdr, smbd_requ->in_requ_len)) {
 		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}

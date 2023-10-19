@@ -17,7 +17,7 @@ struct x_smb2_in_close_t
 	uint64_t file_id_volatile;
 };
 
-static bool decode_in_close(x_smb2_state_close_t &state,
+static bool decode_in_close(x_smbd_requ_state_close_t &state,
 		const uint8_t *in_hdr)
 {
 	const x_smb2_in_close_t *in_close = (const x_smb2_in_close_t *)(in_hdr + sizeof(x_smb2_header_t));
@@ -37,7 +37,7 @@ struct x_smb2_out_close_t
 	x_smb2_create_close_info_t info;
 };
 
-static void encode_out_close(const x_smb2_state_close_t &state,
+static void encode_out_close(const x_smbd_requ_state_close_t &state,
 		uint8_t *out_hdr)
 {
 	x_smb2_out_close_t *out_close = (x_smb2_out_close_t *)(out_hdr + sizeof(x_smb2_header_t));
@@ -57,7 +57,7 @@ static void encode_out_close(const x_smb2_state_close_t &state,
 
 static void x_smb2_reply_close(x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ,
-		const x_smb2_state_close_t &state)
+		const x_smbd_requ_state_close_t &state)
 {
 	x_bufref_t *bufref = x_bufref_alloc(X_SMB2_CLOSE_RESP_BODY_LEN);
 
@@ -79,7 +79,7 @@ NTSTATUS x_smb2_process_close(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ
 
 	const uint8_t *in_hdr = smbd_requ->get_in_data();
 
-	auto state = std::make_unique<x_smb2_state_close_t>();
+	auto state = std::make_unique<x_smbd_requ_state_close_t>();
 	if (!decode_in_close(*state, in_hdr)) {
 		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}

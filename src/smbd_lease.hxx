@@ -9,13 +9,13 @@
 #include "include/librpc/misc.hxx"
 #include "include/list.hxx"
 #include "smb2.hxx"
-#include "smb2_state.hxx"
 
 struct x_smbd_conn_t;
 struct x_smbd_requ_t;
 struct x_smbd_lease_t;
 struct x_smbd_object_t;
 struct x_smbd_stream_t;
+struct x_smbd_requ_state_lease_break_t;
 
 int x_smbd_lease_pool_init(uint32_t count, uint32_t mutex_count);
 #if 0
@@ -53,7 +53,7 @@ bool x_smbd_lease_require_break(x_smbd_lease_t *smbd_lease,
 		uint8_t &new_state,
 		uint16_t &epoch,
 		uint32_t &flags);
-NTSTATUS x_smbd_lease_process_break(x_smb2_state_lease_break_t &state);
+NTSTATUS x_smbd_lease_process_break(x_smbd_requ_state_lease_break_t &state);
 
 bool x_smbd_lease_is_breaking(const x_smbd_lease_t *smbd_lease);
 bool x_smbd_lease_set_breaking_if(x_smbd_lease_t *smbd_lease);

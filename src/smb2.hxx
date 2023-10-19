@@ -1138,5 +1138,20 @@ struct x_smb2_file_range_t
 	uint64_t length;
 };
 
+static inline bool x_smb2_file_id_is_nul(uint64_t file_id_persistent,
+		uint64_t file_id_volatile)
+{
+	return file_id_persistent == UINT64_MAX &&
+		file_id_volatile == UINT64_MAX;
+}
+
+struct x_smb2_lock_element_t
+{
+	uint64_t offset;
+	uint64_t length;
+	uint32_t flags;
+	uint32_t unused;
+};
+
 #endif /* __smb2__hxx__ */
 

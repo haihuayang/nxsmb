@@ -363,7 +363,7 @@ bool x_smbd_lease_require_break(x_smbd_lease_t *smbd_lease,
 
 /* downgrade_lease() */
 static NTSTATUS smbd_lease_process_break(x_smbd_lease_t *smbd_lease,
-		x_smb2_state_lease_break_t &state,
+		x_smbd_requ_state_lease_break_t &state,
 		bool &modified)
 {
 	auto lock = smbd_lease_lock(smbd_lease);
@@ -424,7 +424,7 @@ static NTSTATUS smbd_lease_process_break(x_smbd_lease_t *smbd_lease,
 	return NT_STATUS_OK;
 }
 
-NTSTATUS x_smbd_lease_process_break(x_smb2_state_lease_break_t &state)
+NTSTATUS x_smbd_lease_process_break(x_smbd_requ_state_lease_break_t &state)
 {
 	bool modified = false;
 	auto &client_guid = x_smbd_conn_curr_client_guid();

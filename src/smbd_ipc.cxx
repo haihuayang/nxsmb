@@ -639,7 +639,7 @@ static NTSTATUS ipc_object_op_read(
 		x_smbd_object_t *smbd_object,
 		x_smbd_open_t *smbd_open,
 		x_smbd_requ_t *smbd_requ,
-		std::unique_ptr<x_smb2_state_read_t> &state,
+		std::unique_ptr<x_smbd_requ_state_read_t> &state,
 		uint32_t delay_ms,
 		bool all)
 {
@@ -653,7 +653,7 @@ static NTSTATUS ipc_object_op_write(
 		x_smbd_object_t *smbd_object,
 		x_smbd_open_t *smbd_open,
 		x_smbd_requ_t *smbd_requ,
-		std::unique_ptr<x_smb2_state_write_t> &state,
+		std::unique_ptr<x_smbd_requ_state_write_t> &state,
 		uint32_t delay_ms)
 {
 	named_pipe_t *named_pipe = from_smbd_open(smbd_requ->smbd_open);
@@ -684,7 +684,7 @@ static NTSTATUS ipc_object_op_getinfo(
 		x_smbd_open_t *smbd_open,
 		x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ,
-		std::unique_ptr<x_smb2_state_getinfo_t> &state)
+		std::unique_ptr<x_smbd_requ_state_getinfo_t> &state)
 {
 	/* TODO should access check ? */
 	/* SMB2_GETINFO_FILE, SMB2_FILE_STANDARD_INFO */
@@ -715,7 +715,7 @@ static NTSTATUS ipc_object_op_setinfo(
 		x_smbd_object_t *smbd_object,
 		x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ,
-		std::unique_ptr<x_smb2_state_setinfo_t> &state)
+		std::unique_ptr<x_smbd_requ_state_setinfo_t> &state)
 {
 	return NT_STATUS_NOT_SUPPORTED;
 }
@@ -723,7 +723,7 @@ static NTSTATUS ipc_object_op_setinfo(
 static NTSTATUS ipc_object_op_ioctl(
 		x_smbd_object_t *smbd_object,
 		x_smbd_requ_t *smbd_requ,
-		std::unique_ptr<x_smb2_state_ioctl_t> &state)
+		std::unique_ptr<x_smbd_requ_state_ioctl_t> &state)
 {
 	x_smbd_ipc_object_t *ipc_object = from_smbd_object(smbd_object);
 	named_pipe_t *named_pipe = from_smbd_open(smbd_requ->smbd_open);
@@ -774,40 +774,6 @@ static NTSTATUS ipc_object_op_set_attribute(x_smbd_object_t *smbd_object,
 	return NT_STATUS_NOT_SUPPORTED;
 }
 
-#if 0
-static NTSTATUS ipc_object_op_qdir(
-		x_smbd_object_t *smbd_object,
-		x_smbd_open_t *smbd_open,
-		x_smbd_conn_t *smbd_conn,
-		x_smbd_requ_t *smbd_requ,
-		std::unique_ptr<x_smb2_state_qdir_t> &state)
-{
-	return NT_STATUS_INVALID_PARAMETER;
-}
-
-static NTSTATUS ipc_object_op_close(
-		x_smbd_object_t *smbd_object,
-		x_smbd_open_t *smbd_open,
-		x_smbd_requ_t *smbd_requ,
-		std::unique_ptr<x_smb2_state_close_t> &state,
-		std::vector<x_smb2_change_t> &changes)
-{
-	if (smbd_requ) {
-		state->out_flags = 0;
-	}
-	return NT_STATUS_OK;
-}
-static x_smbd_ipc_object_t *find_ipc_object_by_name(const std::u16string &path)
-{
-	for (auto ipc: ipc_object_tbl) {
-		if (path == ipc->base.path) {
-			return ipc;
-		}
-	}
-	return nullptr;
-}
-
-#endif
 static struct x_smbd_ipc_iface_t
 {
 	const std::u16string name;
@@ -835,7 +801,7 @@ static const x_dcerpc_iface_t *find_iface_by_syntax(
 static NTSTATUS ipc_create_object(x_smbd_object_t *smbd_object,
 		x_smbd_stream_t *smbd_stream,
 		const x_smbd_user_t &smbd_user,
-		x_smb2_state_create_t &state,
+		x_smbd_requ_state_create_t &state,
 		uint32_t file_attributes,
 		uint64_t allocation_size)
 {
@@ -846,7 +812,7 @@ static NTSTATUS ipc_create_object(x_smbd_object_t *smbd_object,
 static NTSTATUS ipc_create_open(x_smbd_open_t **psmbd_open,
 		x_smbd_requ_t *smbd_requ,
 		x_smbd_share_t &smbd_share,
-		std::unique_ptr<x_smb2_state_create_t> &state,
+		std::unique_ptr<x_smbd_requ_state_create_t> &state,
 		bool overwrite,
 		x_smb2_create_action_t create_action,
 		uint8_t oplock_level)

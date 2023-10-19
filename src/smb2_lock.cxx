@@ -17,7 +17,7 @@ struct x_smb2_out_lock_t
 	uint16_t reserved0;
 };
 
-static bool decode_in_lock(x_smb2_state_lock_t &state,
+static bool decode_in_lock(x_smbd_requ_state_lock_t &state,
 		const uint8_t *in_hdr, uint32_t in_len)
 {
 	const x_smb2_in_lock_t *in_lock = (const x_smb2_in_lock_t *)(in_hdr + sizeof(x_smb2_header_t));
@@ -55,7 +55,7 @@ static void encode_out_lock(uint8_t *out_hdr)
 
 static void x_smb2_reply_lock(x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ,
-		const x_smb2_state_lock_t &state)
+		const x_smbd_requ_state_lock_t &state)
 {
 	X_LOG_OP("%ld RESP SUCCESS", smbd_requ->in_smb2_hdr.mid);
 
@@ -68,7 +68,7 @@ static void x_smb2_reply_lock(x_smbd_conn_t *smbd_conn,
 }
 
 static void smb2_lock_set_sequence(x_smbd_open_t *smbd_open,
-		const x_smb2_state_lock_t &state)
+		const x_smbd_requ_state_lock_t &state)
 {
 	auto lock_sequence_bucket = state.in_lock_sequence_index >> 4;
 	if (lock_sequence_bucket > 0 &&
@@ -83,7 +83,7 @@ static void x_smb2_lock_async_done(x_smbd_conn_t *smbd_conn,
 		NTSTATUS status)
 {
 	X_LOG_DBG("status=0x%x", status.v);
-	auto state = smbd_requ->release_state<x_smb2_state_lock_t>();
+	auto state = smbd_requ->release_state<x_smbd_requ_state_lock_t>();
 	if (!smbd_conn) {
 		return;
 	}
@@ -269,7 +269,7 @@ void x_smbd_lock_retry(x_smbd_sharemode_t *sharemode)
 		while (smbd_requ) {
 			x_smbd_requ_t *next_requ = curr_open->pending_requ_list.next(smbd_requ);
 			if (smbd_requ->in_smb2_hdr.opcode == X_SMB2_OP_LOCK) {
-				auto state = smbd_requ->get_requ_state<x_smb2_state_lock_t>();
+				auto state = smbd_requ->get_requ_state<x_smbd_requ_state_lock_t>();
 				if (!brl_conflict(sharemode, curr_open, state->in_lock_elements)) {
 					curr_open->pending_requ_list.remove(smbd_requ);
 					curr_open->locks.insert(curr_open->locks.end(),
@@ -299,7 +299,7 @@ static void smbd_lock_cancel(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 static NTSTATUS smbd_open_lock(
 		x_smbd_open_t *smbd_open,
 		x_smbd_requ_t *smbd_requ,
-		std::unique_ptr<x_smb2_state_lock_t> &state)
+		std::unique_ptr<x_smbd_requ_state_lock_t> &state)
 {
 	if (state->in_lock_elements.size() > 1) {
 		for (const auto &le: state->in_lock_elements) {
@@ -360,7 +360,7 @@ static NTSTATUS smbd_open_lock(
 static NTSTATUS smbd_open_unlock(
 		x_smbd_open_t *smbd_open,
 		x_smbd_requ_t *smbd_requ,
-		std::unique_ptr<x_smb2_state_lock_t> &state)
+		std::unique_ptr<x_smbd_requ_state_lock_t> &state)
 {
 	x_smbd_sharemode_t *sharemode = x_smbd_open_get_sharemode(
 			smbd_open);
@@ -403,7 +403,7 @@ NTSTATUS x_smb2_process_lock(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 
 	const uint8_t *in_hdr = smbd_requ->get_in_data();
 
-	auto state = std::make_unique<x_smb2_state_lock_t>();
+	auto state = std::make_unique<x_smbd_requ_state_lock_t>();
 	if (!decode_in_lock(*state, in_hdr, smbd_requ->in_requ_len)) {
 		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}

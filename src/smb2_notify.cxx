@@ -30,7 +30,7 @@ struct x_smb2_out_notify_t
 
 static NTSTATUS x_smb2_reply_notify(x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ,
-		const x_smb2_state_notify_t &state)
+		const x_smbd_requ_state_notify_t &state)
 {
 	X_LOG_OP("%ld RESP SUCCESS", smbd_requ->in_smb2_hdr.mid);
 	/* TODO seem windows server remember in_output_buffer_length */
@@ -69,7 +69,7 @@ static void x_smb2_notify_async_done(x_smbd_conn_t *smbd_conn,
 		NTSTATUS status)
 {
 	X_LOG_DBG("status=0x%x", status.v);
-	auto state = smbd_requ->release_state<x_smb2_state_notify_t>();
+	auto state = smbd_requ->release_state<x_smbd_requ_state_notify_t>();
 	if (!smbd_conn) {
 		return;
 	}
@@ -94,7 +94,7 @@ static void posixfs_notify_cancel(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_
 
 static NTSTATUS smbd_open_notify(x_smbd_open_t *smbd_open,
 		x_smbd_requ_t *smbd_requ,
-		std::unique_ptr<x_smb2_state_notify_t> &state)
+		std::unique_ptr<x_smbd_requ_state_notify_t> &state)
 {
 	x_smbd_object_t *smbd_object = smbd_open->smbd_object;
 	auto lock = std::lock_guard(smbd_object->mutex);
@@ -130,7 +130,7 @@ NTSTATUS x_smb2_process_notify(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_req
 	}
 
 	const uint8_t *in_hdr = smbd_requ->get_in_data();
-	auto state = std::make_unique<x_smb2_state_notify_t>();
+	auto state = std::make_unique<x_smbd_requ_state_notify_t>();
 	const x_smb2_in_notify_t *in_notify = (const x_smb2_in_notify_t *)(in_hdr + sizeof(x_smb2_header_t));
 
 	uint16_t in_flags = X_LE2H16(in_notify->flags);

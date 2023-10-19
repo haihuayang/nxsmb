@@ -262,7 +262,7 @@ static void smbd_close_open_intl(
 		x_smbd_object_t *smbd_object,
 		x_smbd_open_t *smbd_open,
 		x_smbd_requ_t *smbd_requ,
-		std::unique_ptr<x_smb2_state_close_t> &state,
+		std::unique_ptr<x_smbd_requ_state_close_t> &state,
 		x_smbd_lease_t *&smbd_lease,
 		x_tp_ddlist_t<requ_async_traits> &pending_requ_list)
 {
@@ -344,7 +344,7 @@ static bool smbd_open_close_disconnected_if(
 {
 	x_smbd_lease_t *smbd_lease = nullptr;
 	x_tp_ddlist_t<requ_async_traits> tmp_requ_list;
-	std::unique_ptr<x_smb2_state_close_t> state;
+	std::unique_ptr<x_smbd_requ_state_close_t> state;
 
 	if (smbd_open->state != SMBD_OPEN_S_DISCONNECTED) {
 		return false;
@@ -402,7 +402,7 @@ static void smbd_open_close(
 		x_smbd_open_t *smbd_open,
 		x_smbd_object_t *smbd_object,
 		x_smbd_requ_t *smbd_requ,
-		std::unique_ptr<x_smb2_state_close_t> &state,
+		std::unique_ptr<x_smbd_requ_state_close_t> &state,
 		x_smbd_lease_t * &smbd_lease,
 		x_tp_ddlist_t<requ_async_traits> &pending_requ_list)
 {
@@ -425,7 +425,7 @@ static long smbd_open_durable_timeout(x_timer_job_t *timer)
 			smbd_open->id_volatile);
 	auto smbd_object = smbd_open->smbd_object;
 
-	std::unique_ptr<x_smb2_state_close_t> state;
+	std::unique_ptr<x_smbd_requ_state_close_t> state;
 	x_smbd_lease_t *smbd_lease = nullptr;
 	x_tp_ddlist_t<requ_async_traits> pending_requ_list;
 
@@ -476,7 +476,7 @@ static bool smbd_open_set_durable(x_smbd_open_t *smbd_open)
 NTSTATUS x_smbd_open_op_close(
 		x_smbd_open_t *smbd_open,
 		x_smbd_requ_t *smbd_requ,
-		std::unique_ptr<x_smb2_state_close_t> &state)
+		std::unique_ptr<x_smbd_requ_state_close_t> &state)
 {
 	x_smbd_object_t *smbd_object = smbd_open->smbd_object;
 	x_smbd_tcon_t *smbd_tcon = nullptr;
@@ -515,7 +515,7 @@ void x_smbd_open_unlinked(x_dlink_t *link,
 {
 	x_smbd_open_t *smbd_open = X_CONTAINER_OF(link, x_smbd_open_t, tcon_link);
 	auto smbd_object = smbd_open->smbd_object;
-	std::unique_ptr<x_smb2_state_close_t> state;
+	std::unique_ptr<x_smbd_requ_state_close_t> state;
 	x_smbd_tcon_t *smbd_tcon = nullptr;
 
 	x_smbd_lease_t *smbd_lease = nullptr;
@@ -584,7 +584,7 @@ struct defer_requ_evt_t
 				evt, smbd_requ, smbd_conn);
 
 		if (smbd_requ->in_smb2_hdr.opcode == X_SMB2_OP_CREATE) {
-			auto state = smbd_requ->release_state<x_smb2_state_create_t>();
+			auto state = smbd_requ->release_state<x_smbd_requ_state_create_t>();
 			if (x_smbd_requ_async_remove(smbd_requ) && smbd_conn) {
 				NTSTATUS status = x_smbd_open_op_create(smbd_requ, state);
 				if (!NT_STATUS_EQUAL(status, NT_STATUS_PENDING)) {
@@ -598,7 +598,7 @@ struct defer_requ_evt_t
 				}
 			}
 		} else if (smbd_requ->in_smb2_hdr.opcode == X_SMB2_OP_SETINFO) {
-			auto state = smbd_requ->release_state<x_smb2_state_rename_t>();
+			auto state = smbd_requ->release_state<x_smbd_requ_state_rename_t>();
 			if (x_smbd_requ_async_remove(smbd_requ) && smbd_conn) {
 				NTSTATUS status = x_smbd_open_rename(smbd_requ, state);
 				if (!NT_STATUS_EQUAL(status, NT_STATUS_PENDING)) {
@@ -855,7 +855,7 @@ static bool open_mode_check(x_smbd_object_t *smbd_object,
 
 static void smbd_create_cancel(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 {
-	auto state = smbd_requ->get_requ_state<x_smb2_state_create_t>();
+	auto state = smbd_requ->get_requ_state<x_smbd_requ_state_create_t>();
 	x_smbd_sharemode_t *sharemode = get_sharemode(state->smbd_object,
 			state->smbd_stream);
 
@@ -868,7 +868,7 @@ static void smbd_create_cancel(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_req
 
 static void defer_open(x_smbd_sharemode_t *sharemode,
 		x_smbd_requ_t *smbd_requ,
-		std::unique_ptr<x_smb2_state_create_t> &state)
+		std::unique_ptr<x_smbd_requ_state_create_t> &state)
 {
 	smbd_requ->save_requ_state(state);
 	/* TODO does it need a timer? can break timer always wake up it? */
@@ -897,7 +897,7 @@ static inline uint8_t get_lease_type(const x_smbd_open_t *smbd_open)
 static NTSTATUS grant_oplock(x_smbd_object_t *smbd_object,
 		x_smbd_stream_t *smbd_stream,
 		x_smbd_sharemode_t *sharemode,
-		x_smb2_state_create_t &state,
+		x_smbd_requ_state_create_t &state,
 		uint8_t &out_oplock_level)
 {
 	uint8_t granted = X_SMB2_LEASE_NONE;
@@ -1246,7 +1246,7 @@ static NTSTATUS smbd_open_create(
 		x_smbd_object_t *smbd_object,
 		x_smbd_stream_t *smbd_stream,
 		x_smbd_requ_t *smbd_requ,
-		std::unique_ptr<x_smb2_state_create_t> &state,
+		std::unique_ptr<x_smbd_requ_state_create_t> &state,
 		x_smb2_create_action_t &create_action,
 		uint8_t &out_oplock_level,
 		bool overwrite,
@@ -1365,7 +1365,7 @@ static NTSTATUS smbd_open_create(
 
 static NTSTATUS smbd_open_create_intl(x_smbd_open_t **psmbd_open,
 		x_smbd_requ_t *smbd_requ,
-		std::unique_ptr<x_smb2_state_create_t> &state,
+		std::unique_ptr<x_smbd_requ_state_create_t> &state,
 		std::vector<x_smbd_open_t *> &smbd_opens,
 		std::vector<x_smbd_lease_t *> &smbd_leases,
 		x_tp_ddlist_t<requ_async_traits> &pending_requ_list)
@@ -1583,7 +1583,7 @@ static NTSTATUS smbd_open_create_intl(x_smbd_open_t **psmbd_open,
 
 static NTSTATUS smbd_open_op_create(x_smbd_open_t **psmbd_open,
 		x_smbd_requ_t *smbd_requ,
-		std::unique_ptr<x_smb2_state_create_t> &state)
+		std::unique_ptr<x_smbd_requ_state_create_t> &state)
 {
 	std::vector<x_smbd_open_t *> smbd_opens;
 	std::vector<x_smbd_lease_t *> smbd_leases;
@@ -1619,7 +1619,7 @@ void x_smbd_break_lease(x_smbd_object_t *smbd_object,
 NTSTATUS x_smbd_break_oplock(
 		x_smbd_open_t *smbd_open,
 		x_smbd_requ_t *smbd_requ,
-		x_smb2_state_oplock_break_t &state)
+		x_smbd_requ_state_oplock_break_t &state)
 {
 	uint8_t out_oplock_level;
 	bool modified = false;
@@ -1711,7 +1711,7 @@ static bool oplock_valid_for_durable(const x_smbd_open_t *smbd_open)
 
 void x_smbd_save_durable(x_smbd_open_t *smbd_open,
 		x_smbd_tcon_t *smbd_tcon,
-		const x_smb2_state_create_t &state)
+		const x_smbd_requ_state_create_t &state)
 {
 	/* we do not support durable handle for ADS */
 	if (smbd_open->smbd_stream ||
@@ -1777,7 +1777,7 @@ void x_smbd_save_durable(x_smbd_open_t *smbd_open,
 }
 
 NTSTATUS x_smbd_open_op_create(x_smbd_requ_t *smbd_requ,
-		std::unique_ptr<x_smb2_state_create_t> &state)
+		std::unique_ptr<x_smbd_requ_state_create_t> &state)
 {
 	X_TRACE_LOC;
 	if (!x_smbd_open_has_space()) {
@@ -1862,7 +1862,7 @@ NTSTATUS x_smbd_open_op_create(x_smbd_requ_t *smbd_requ,
 			smbd_open->smbd_tcon = smbd_tcon;
 			linked = true;
 		} else {
-			std::unique_ptr<x_smb2_state_close_t> close_state;
+			std::unique_ptr<x_smbd_requ_state_close_t> close_state;
 			smbd_open_close(smbd_open, state->smbd_object, nullptr, close_state,
 					smbd_lease, pending_requ_list);
 		}
@@ -1884,7 +1884,7 @@ NTSTATUS x_smbd_open_op_create(x_smbd_requ_t *smbd_requ,
 
 static NTSTATUS smbd_open_reconnect(x_smbd_open_t *smbd_open,
 		x_smbd_tcon_t *smbd_tcon,
-		x_smb2_state_create_t &state)
+		x_smbd_requ_state_create_t &state)
 {
 	auto smbd_object = smbd_open->smbd_object;
 	auto &open_state = smbd_open->open_state;
@@ -1941,7 +1941,7 @@ static NTSTATUS smbd_open_reconnect(x_smbd_open_t *smbd_open,
 }
 
 NTSTATUS x_smbd_open_op_reconnect(x_smbd_requ_t *smbd_requ,
-		std::unique_ptr<x_smb2_state_create_t> &state)
+		std::unique_ptr<x_smbd_requ_state_create_t> &state)
 {
 	uint64_t id_persistent = state->in_dh_id_persistent;
 	std::shared_ptr<x_smbd_volume_t> smbd_volume;
@@ -2178,7 +2178,7 @@ static void smbd_net_file_close(x_smbd_open_t *smbd_open)
 
 	x_smbd_lease_t *smbd_lease = nullptr;
 	x_tp_ddlist_t<requ_async_traits> pending_requ_list;
-	std::unique_ptr<x_smb2_state_close_t> state;
+	std::unique_ptr<x_smbd_requ_state_close_t> state;
 
 	{
 		auto lock = smbd_object_lock(smbd_object);

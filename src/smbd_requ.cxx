@@ -8,6 +8,21 @@
 using smbd_requ_table_t = x_idtable_t<x_smbd_requ_t, x_idtable_64_traits_t>;
 static smbd_requ_table_t *g_smbd_requ_table;
 
+x_smbd_requ_state_create_t::x_smbd_requ_state_create_t(const x_smb2_uuid_t &client_guid)
+	: in_client_guid(client_guid), in_create_guid{0, 0}
+{
+}
+
+x_smbd_requ_state_create_t::~x_smbd_requ_state_create_t()
+{
+	if (smbd_object) {
+		x_smbd_release_object_and_stream(smbd_object, smbd_stream);
+	}
+	if (smbd_lease) {
+		x_smbd_lease_release(smbd_lease);
+	}
+}
+
 static long interim_timeout_func(x_timer_job_t *timer)
 {
 	/* we already have a ref on smbd_chan when adding timer */

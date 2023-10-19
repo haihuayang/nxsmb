@@ -758,7 +758,7 @@ static posixfs_open_t *posixfs_open_create(
 		NTSTATUS *pstatus,
 		x_smbd_tcon_t *smbd_tcon,
 		posixfs_object_t *posixfs_object,
-		const x_smb2_state_create_t &state,
+		const x_smbd_requ_state_create_t &state,
 		x_smb2_create_action_t create_action,
 		uint8_t oplock_level)
 {
@@ -819,7 +819,7 @@ static inline bool is_sd_empty(const idl::security_descriptor &sd)
 static NTSTATUS posixfs_new_object(
 		posixfs_object_t *posixfs_object,
 		const x_smbd_user_t &smbd_user,
-		x_smb2_state_create_t &state,
+		x_smbd_requ_state_create_t &state,
 		uint32_t file_attributes,
 		uint64_t allocation_size,
 		std::shared_ptr<idl::security_descriptor> &psd)
@@ -1003,7 +1003,7 @@ static bool can_delete_file_in_directory(
 static void posixfs_access_check_new(
 		const idl::security_descriptor &sd,
 		const x_smbd_user_t &smbd_user,
-		x_smb2_state_create_t &state)
+		x_smbd_requ_state_create_t &state)
 {
 	state.out_maximal_access = se_calculate_maximal_access(sd, smbd_user);
 	/* Windows server seem not do access check for create new object */
@@ -1157,7 +1157,7 @@ struct posixfs_read_evt_t
 };
 
 static NTSTATUS posixfs_do_read(posixfs_object_t *posixfs_object,
-		x_smb2_state_read_t &state, uint32_t delay_ms)
+		x_smbd_requ_state_read_t &state, uint32_t delay_ms)
 {
 	if (delay_ms) {
 		usleep(delay_ms * 1000);
@@ -1200,7 +1200,7 @@ static x_job_t::retval_t posixfs_read_job_run(x_job_t *job, void *sche)
 	posixfs_read_job->smbd_requ = nullptr;
 	posixfs_read_job->posixfs_object = nullptr;
 
-	auto state = smbd_requ->get_requ_state<x_smb2_state_read_t>();
+	auto state = smbd_requ->get_requ_state<x_smbd_requ_state_read_t>();
 
 	NTSTATUS status = posixfs_do_read(posixfs_object, *state, posixfs_read_job->delay_ms);
 
@@ -1225,7 +1225,7 @@ static void posixfs_read_cancel(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_re
 
 static NTSTATUS posixfs_ads_read(posixfs_object_t *posixfs_object,
 		posixfs_ads_t *ads,
-		x_smb2_state_read_t &state)
+		x_smbd_requ_state_read_t &state)
 {
 	if (state.in_length == 0) {
 		state.out_buf_length = 0;
@@ -1255,7 +1255,7 @@ static NTSTATUS posixfs_ads_read(posixfs_object_t *posixfs_object,
 
 static NTSTATUS posixfs_ads_write(posixfs_object_t *posixfs_object,
 		posixfs_ads_t *posixfs_ads,
-		x_smb2_state_write_t &state)
+		x_smbd_requ_state_write_t &state)
 {
 	uint64_t last_offset = state.in_offset + state.in_buf_length;
 	if (last_offset > posixfs_ads_max_length) {
@@ -1291,7 +1291,7 @@ NTSTATUS posixfs_object_op_read(
 		x_smbd_object_t *smbd_object,
 		x_smbd_open_t *smbd_open,
 		x_smbd_requ_t *smbd_requ,
-		std::unique_ptr<x_smb2_state_read_t> &state,
+		std::unique_ptr<x_smbd_requ_state_read_t> &state,
 		uint32_t delay_ms,
 		bool all)
 {
@@ -1360,7 +1360,7 @@ NTSTATUS posixfs_object_op_read(
 
 static NTSTATUS posixfs_do_write(posixfs_object_t *posixfs_object,
 		posixfs_open_t *posixfs_open,
-		x_smb2_state_write_t &state,
+		x_smbd_requ_state_write_t &state,
 		uint32_t delay_ms)
 {
 	if (delay_ms) {
@@ -1436,7 +1436,7 @@ static x_job_t::retval_t posixfs_write_job_run(x_job_t *job, void *data)
 	posixfs_write_job->smbd_requ = nullptr;
 	posixfs_write_job->posixfs_object = nullptr;
 
-	auto state = smbd_requ->get_requ_state<x_smb2_state_write_t>();
+	auto state = smbd_requ->get_requ_state<x_smbd_requ_state_write_t>();
 	NTSTATUS status = posixfs_do_write(posixfs_object, posixfs_open, *state,
 			posixfs_write_job->delay_ms);
 
@@ -1463,7 +1463,7 @@ NTSTATUS posixfs_object_op_write(
 		x_smbd_object_t *smbd_object,
 		x_smbd_open_t *smbd_open,
 		x_smbd_requ_t *smbd_requ,
-		std::unique_ptr<x_smb2_state_write_t> &state,
+		std::unique_ptr<x_smbd_requ_state_write_t> &state,
 		uint32_t delay_ms)
 {
 	posixfs_object_t *posixfs_object = posixfs_object_from_base_t::container(smbd_object);
@@ -1534,7 +1534,7 @@ static bool decode_le(T &val,
 
 template<typename T>
 static NTSTATUS getinfo_encode_le(T val,
-		x_smb2_state_getinfo_t &state)
+		x_smbd_requ_state_getinfo_t &state)
 {
 	if (state.in_output_buffer_length < sizeof(T)) {
 		return NT_STATUS_INFO_LENGTH_MISMATCH;
@@ -1568,7 +1568,7 @@ static bool marshall_stream_info(x_smb2_chain_marshall_t &marshall,
 }
 
 static NTSTATUS getinfo_stream_info(const posixfs_object_t *posixfs_object,
-		x_smb2_state_getinfo_t &state)
+		x_smbd_requ_state_getinfo_t &state)
 {
 	state.out_data.resize(state.in_output_buffer_length);
 	x_smb2_chain_marshall_t marshall{state.out_data.data(), state.out_data.data() + state.out_data.size(), 8};
@@ -1614,7 +1614,7 @@ static void reload_statex_if(posixfs_object_t *posixfs_object)
 
 static NTSTATUS getinfo_file(posixfs_object_t *posixfs_object,
 		x_smbd_open_t *smbd_open,
-		x_smb2_state_getinfo_t &state)
+		x_smbd_requ_state_getinfo_t &state)
 {
 	/* TODO should move it into smb2_getinfo??  does other class request
 	   the same access??
@@ -1828,7 +1828,7 @@ static std::vector<std::string> collect_ea_names(const posixfs_object_t *posixfs
 
 static NTSTATUS posixfs_set_ea(posixfs_object_t *posixfs_object,
 		x_smbd_open_t *smbd_open,
-		x_smb2_state_setinfo_t &state)
+		x_smbd_requ_state_setinfo_t &state)
 {
 	struct ea_info_t
 	{
@@ -1922,7 +1922,7 @@ static NTSTATUS posixfs_set_ea(posixfs_object_t *posixfs_object,
 
 static NTSTATUS setinfo_file(posixfs_object_t *posixfs_object,
 		x_smbd_open_t *smbd_open,
-		x_smb2_state_setinfo_t &state)
+		x_smbd_requ_state_setinfo_t &state)
 {
 	posixfs_open_t *posixfs_open = posixfs_open_from_base_t::container(smbd_open);
 
@@ -2051,7 +2051,7 @@ static NTSTATUS setinfo_file(posixfs_object_t *posixfs_object,
 
 static NTSTATUS getinfo_fs(x_smbd_requ_t *smbd_requ,
 		posixfs_object_t *posixfs_object,
-		x_smb2_state_getinfo_t &state)
+		x_smbd_requ_state_getinfo_t &state)
 {
 	const x_smbd_conf_t &smbd_conf = x_smbd_conf_get_curr();
 	if (state.in_info_level == x_smb2_info_level_t::FS_VOLUME_INFORMATION) {
@@ -2211,7 +2211,7 @@ static NTSTATUS getinfo_fs(x_smbd_requ_t *smbd_requ,
 
 static NTSTATUS getinfo_security(posixfs_object_t *posixfs_object,
 		x_smbd_open_t *smbd_open,
-		x_smb2_state_getinfo_t &state)
+		x_smbd_requ_state_getinfo_t &state)
 {
 	if ((state.in_additional & idl::SECINFO_SACL) &&
 			!smbd_open->check_access_any(idl::SEC_FLAG_SYSTEM_SECURITY)) {
@@ -2263,7 +2263,7 @@ static NTSTATUS getinfo_security(posixfs_object_t *posixfs_object,
 
 static NTSTATUS setinfo_security(posixfs_object_t *posixfs_object,
 		x_smbd_requ_t *smbd_requ,
-		const x_smb2_state_setinfo_t &state)
+		const x_smbd_requ_state_setinfo_t &state)
 {
 	uint32_t security_info_sent = state.in_additional & idl::SMB_SUPPORTED_SECINFO_FLAGS;
 	idl::security_descriptor sd;
@@ -2309,7 +2309,7 @@ static NTSTATUS setinfo_security(posixfs_object_t *posixfs_object,
 }
 
 static NTSTATUS getinfo_quota(posixfs_object_t *posixfs_object,
-		x_smb2_state_getinfo_t &state)
+		x_smbd_requ_state_getinfo_t &state)
 {
 	return NT_STATUS_INVALID_LEVEL;
 }
@@ -2319,7 +2319,7 @@ NTSTATUS posixfs_object_op_getinfo(
 		x_smbd_open_t *smbd_open,
 		x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ,
-		std::unique_ptr<x_smb2_state_getinfo_t> &state)
+		std::unique_ptr<x_smbd_requ_state_getinfo_t> &state)
 {
 	posixfs_object_t *posixfs_object = posixfs_object_from_base_t::container(smbd_object);
 
@@ -2342,7 +2342,7 @@ NTSTATUS posixfs_object_op_setinfo(
 		x_smbd_object_t *smbd_object,
 		x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ,
-		std::unique_ptr<x_smb2_state_setinfo_t> &state)
+		std::unique_ptr<x_smbd_requ_state_setinfo_t> &state)
 {
 	posixfs_object_t *posixfs_object = posixfs_object_from_base_t::container(smbd_object);
 
@@ -2362,7 +2362,7 @@ NTSTATUS posixfs_object_op_setinfo(
 NTSTATUS posixfs_object_op_ioctl(
 		x_smbd_object_t *smbd_object,
 		x_smbd_requ_t *smbd_requ,
-		std::unique_ptr<x_smb2_state_ioctl_t> &state)
+		std::unique_ptr<x_smbd_requ_state_ioctl_t> &state)
 {
 	posixfs_object_t *posixfs_object = posixfs_object_from_base_t::container(smbd_object);
 	switch (state->ctl_code) {
@@ -2908,7 +2908,7 @@ int posixfs_mktld(const std::shared_ptr<x_smbd_user_t> &smbd_user,
 NTSTATUS x_smbd_posixfs_create_object(x_smbd_object_t *smbd_object,
 		x_smbd_stream_t *smbd_stream,
 		const x_smbd_user_t &smbd_user,
-		x_smb2_state_create_t &state,
+		x_smbd_requ_state_create_t &state,
 		uint32_t file_attributes,
 		uint64_t allocation_size)
 {
@@ -3090,7 +3090,7 @@ static uint32_t filter_attributes(uint32_t new_attr, uint32_t curr_attr)
 /* smbd_object's mutex is locked */
 NTSTATUS x_smbd_posixfs_create_open(x_smbd_open_t **psmbd_open,
 		x_smbd_requ_t *smbd_requ,
-		std::unique_ptr<x_smb2_state_create_t> &state,
+		std::unique_ptr<x_smbd_requ_state_create_t> &state,
 		bool overwrite,
 		x_smb2_create_action_t create_action,
 		uint8_t oplock_level)

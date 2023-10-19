@@ -47,7 +47,7 @@ static void x_smb2_reply_setinfo(x_smbd_conn_t *smbd_conn,
 }
 
 static NTSTATUS smb2_setinfo_dispatch(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ,
-		std::unique_ptr<x_smb2_state_setinfo_t> &state)
+		std::unique_ptr<x_smbd_requ_state_setinfo_t> &state)
 {
 	if (state->in_info_class == x_smb2_info_class_t::FILE) {
 		if (state->in_info_level == x_smb2_info_level_t::FILE_DISPOSITION_INFORMATION) {
@@ -72,7 +72,7 @@ static NTSTATUS smb2_setinfo_dispatch(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *s
 			state);
 }
 
-static NTSTATUS decode_in_rename(x_smb2_state_rename_t &state,
+static NTSTATUS decode_in_rename(x_smbd_requ_state_rename_t &state,
 		const uint8_t *in_hdr,
 		uint16_t in_input_buffer_offset,
 		uint32_t in_input_buffer_length)
@@ -119,7 +119,7 @@ static void x_smb2_rename_async_done(x_smbd_conn_t *smbd_conn,
 		NTSTATUS status)
 {
 	X_LOG_DBG("status=0x%x", status.v);
-	auto state = smbd_requ->release_state<x_smb2_state_rename_t>();
+	auto state = smbd_requ->release_state<x_smbd_requ_state_rename_t>();
 	if (!smbd_conn) {
 		return;
 	}
@@ -131,7 +131,7 @@ static void x_smb2_rename_async_done(x_smbd_conn_t *smbd_conn,
 
 static NTSTATUS x_smb2_process_rename(x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ,
-		std::unique_ptr<x_smb2_state_rename_t> &state)
+		std::unique_ptr<x_smbd_requ_state_rename_t> &state)
 {
 	X_LOG_OP("%ld RENAME 0x%lx, 0x%lx", smbd_requ->in_smb2_hdr.mid,
 			state->in_file_id_persistent, state->in_file_id_volatile);
@@ -202,7 +202,7 @@ NTSTATUS x_smb2_process_setinfo(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_re
 
 	if (in_info_class == x_smb2_info_class_t::FILE) {
 		if (in_info_level == x_smb2_info_level_t::FILE_RENAME_INFORMATION) {
-			auto state = std::make_unique<x_smb2_state_rename_t>();
+			auto state = std::make_unique<x_smbd_requ_state_rename_t>();
 			NTSTATUS status = decode_in_rename(*state, in_hdr, 
 					in_input_buffer_offset, in_input_buffer_length);
 			if (!NT_STATUS_IS_OK(status)) {
@@ -216,7 +216,7 @@ NTSTATUS x_smb2_process_setinfo(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_re
 		}
 	}
 
-	auto state = std::make_unique<x_smb2_state_setinfo_t>();
+	auto state = std::make_unique<x_smbd_requ_state_setinfo_t>();
 	state->in_info_class = in_info_class;
 	state->in_info_level = in_info_level;
 	state->in_additional = X_LE2H32(in_setinfo->additional);

@@ -88,7 +88,7 @@ static NTSTATUS simplefs_object_op_qdir(
 static NTSTATUS simplefs_op_create_open(x_smbd_open_t **psmbd_open,
 		x_smbd_requ_t *smbd_requ,
 		x_smbd_share_t &smbd_share,
-		std::unique_ptr<x_smb2_state_create_t> &state,
+		std::unique_ptr<x_smbd_requ_state_create_t> &state,
 		bool overwrite,
 		x_smb2_create_action_t create_action,
 		uint8_t oplock_level)
