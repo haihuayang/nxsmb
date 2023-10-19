@@ -12,6 +12,8 @@ x_smbd_object_t::x_smbd_object_t(const std::shared_ptr<x_smbd_volume_t> &smbd_vo
 	X_SMBD_COUNTER_INC_CREATE(object, 1);
 	if (parent_object) {
 		parent_object->incref();
+		auto lock = std::lock_guard(parent_object->mutex);
+		parent_object->active_child_object_list.push_back(&parent_link);
 	}
 }
 
@@ -19,6 +21,10 @@ x_smbd_object_t::~x_smbd_object_t()
 {
 	X_SMBD_COUNTER_INC_DELETE(object, 1);
 	if (parent_object) {
+		{
+			auto lock = std::lock_guard(parent_object->mutex);
+			parent_object->active_child_object_list.remove(&parent_link);
+		}
 		x_smbd_release_object(parent_object);
 	}
 }
@@ -150,6 +156,7 @@ void x_smbd_release_object(x_smbd_object_t *smbd_object)
 		}
 	}
 	if (free) {
+		X_ASSERT(smbd_object->parent_object);
 		smbd_object->smbd_volume->ops->destroy_object(smbd_object);
 	}
 }
@@ -428,6 +435,23 @@ static NTSTATUS parent_compatible_open(x_smbd_object_t *smbd_object)
 	return NT_STATUS_OK;
 }
 
+static void smbd_object_set_parent(x_smbd_object_t *smbd_object,
+		x_smbd_object_t *new_parent_object)
+{
+	auto old_parent_object = smbd_object->parent_object;
+	if (new_parent_object != old_parent_object) {
+		{
+			auto lock = std::lock_guard(old_parent_object->mutex);
+			old_parent_object->active_child_object_list.remove(&smbd_object->parent_link);
+		}
+		{
+			auto lock = std::lock_guard(new_parent_object->mutex);
+			new_parent_object->active_child_object_list.push_back(&smbd_object->parent_link);
+		}
+		smbd_object->parent_object = new_parent_object;
+	}
+}
+
 NTSTATUS x_smbd_object_rename(x_smbd_object_t *smbd_object,
 		x_smbd_open_t *smbd_open,
 		x_smbd_requ_t *smbd_requ,
@@ -502,6 +526,9 @@ NTSTATUS x_smbd_object_rename(x_smbd_object_t *smbd_object,
 				new_bucket, new_bucket,
 				new_parent_object, new_path_base,
 				old_path_base, new_path_hash);
+		if (NT_STATUS_IS_OK(status)) {
+			smbd_object_set_parent(smbd_object, new_parent_object);
+		}
 	} else {
 		auto &old_bucket = pool.path_buckets[old_bucket_idx];
 		std::scoped_lock bucket_lock(new_bucket.mutex, old_bucket.mutex);
@@ -509,10 +536,12 @@ NTSTATUS x_smbd_object_rename(x_smbd_object_t *smbd_object,
 				new_bucket, old_bucket,
 				new_parent_object, new_path_base,
 				old_path_base, new_path_hash);
+		if (NT_STATUS_IS_OK(status)) {
+			smbd_object_set_parent(smbd_object, new_parent_object);
+		}
 	}
 
 	if (NT_STATUS_IS_OK(status)) {
-		smbd_object->parent_object = new_parent_object;
 		x_smbd_schedule_notify(
 				NOTIFY_ACTION_OLD_NAME,
 				smbd_object->type == x_smbd_object_t::type_dir ?

@@ -340,12 +340,14 @@ struct x_smbd_object_t
 	uint32_t num_active_open{0}; // include open on streams
 	int32_t num_child_object_opened{0}; // only valid for dir
 	x_dlink_t path_hash_link;
+	x_dlink_t parent_link; // used by parent's active_child_object_list
 	uint64_t path_hash, fileid_hash;
 	x_smbd_object_t *parent_object = nullptr;
 	std::u16string path_base;
 	x_smbd_file_handle_t file_handle;
 	x_smbd_object_meta_t meta;
 	x_smbd_sharemode_t sharemode;
+	x_ddlist_t active_child_object_list;
 	x_tp_ddlist_t<x_smbd_stream_object_traits> ads_list;
 };
 
