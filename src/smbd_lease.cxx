@@ -438,12 +438,18 @@ NTSTATUS x_smbd_lease_process_break(x_smb2_state_lease_break_t &state)
 
 		smbd_lease = smbd_lease_find(hash, client_guid, lease_key);
 		if (!smbd_lease) {
-			return NT_STATUS_INVALID_PARAMETER;
+			X_LOG_DBG("smbd_lease_find failed client %s lease_key %s",
+					x_tostr(client_guid).c_str(),
+					x_tostr(lease_key).c_str());
+			return NT_STATUS_OBJECT_NAME_NOT_FOUND;
 		}
 		
 		if (!smbd_lease->smbd_object) {
 			/* not yet granted */
-			return NT_STATUS_INVALID_PARAMETER;
+			X_LOG_DBG("smbd_lease_find not granted %s lease_key %s",
+					x_tostr(client_guid).c_str(),
+					x_tostr(lease_key).c_str());
+			return NT_STATUS_OBJECT_NAME_NOT_FOUND;
 		}
 
 		++smbd_lease->refcnt;
