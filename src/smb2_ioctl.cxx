@@ -752,7 +752,7 @@ NTSTATUS x_smb2_process_ioctl(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ
 		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
 
-	if (!x_smbd_request_verify_creditcharge(smbd_requ,
+	if (!x_smbd_requ_verify_creditcharge(smbd_requ,
 				std::max(state->in_max_input_length +
 					state->in_max_output_length,
 					state->in_buf_length))) {

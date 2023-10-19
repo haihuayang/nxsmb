@@ -123,7 +123,7 @@ NTSTATUS x_smb2_process_read(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
 
-	if (!x_smbd_request_verify_creditcharge(smbd_requ, state->in_length)) {
+	if (!x_smbd_requ_verify_creditcharge(smbd_requ, state->in_length)) {
 		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
 

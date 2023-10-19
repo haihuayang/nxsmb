@@ -3,6 +3,7 @@
 #include "include/charset.hxx"
 #include "smbd_share.hxx"
 #include "smbd_conf.hxx"
+#include "smbd_requ.hxx"
 
 struct x_smb2_tcon_requ_t
 {

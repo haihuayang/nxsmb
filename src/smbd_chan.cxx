@@ -1,5 +1,6 @@
 
 #include "smbd.hxx"
+#include "smbd_requ.hxx"
 #include "smbd_stats.hxx"
 #include "smbd_conf.hxx"
 

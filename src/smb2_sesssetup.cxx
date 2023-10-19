@@ -1,4 +1,5 @@
 #include "smbd.hxx"
+#include "smbd_requ.hxx"
 #include "misc.hxx"
 #include "smbd_ntacl.hxx"
 #include "smbd_stats.hxx"

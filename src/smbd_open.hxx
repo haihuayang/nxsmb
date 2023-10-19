@@ -7,6 +7,7 @@
 #endif
 
 #include "smbd.hxx"
+#include "smbd_requ.hxx"
 #include "defines.hxx"
 #include "smb2.hxx"
 #include "smbd_lease.hxx"

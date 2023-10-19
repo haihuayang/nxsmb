@@ -1,4 +1,5 @@
 #include "smbd.hxx"
+#include "smbd_requ.hxx"
 #include "smbd_conf.hxx"
 #include "include/nttime.hxx"
 

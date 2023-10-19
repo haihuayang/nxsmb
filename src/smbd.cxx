@@ -22,6 +22,7 @@
 #include "smbd_secrets.hxx"
 #include "smbd_stats.hxx"
 #include "smbd_registry.hxx"
+#include "smbd_requ.hxx"
 #include "auth.hxx"
 
 #include "smb2.hxx"

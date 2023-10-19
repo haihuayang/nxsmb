@@ -1,5 +1,6 @@
 
 #include "smbd.hxx"
+#include "smbd_requ.hxx"
 #include "misc.hxx"
 
 struct x_smb2_logoff_t
