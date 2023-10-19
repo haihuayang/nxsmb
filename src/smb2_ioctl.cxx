@@ -508,17 +508,16 @@ static NTSTATUS x_smb2_fsctl_query_network_interface_info(
 	return NT_STATUS_OK;
 }
 
-static void ioctl_async_done(x_smbd_conn_t *smbd_conn,
+void x_smbd_requ_state_ioctl_t::async_done(x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ,
 		NTSTATUS status)
 {
 	X_LOG_DBG("status=0x%x", status.v);
-	auto state = smbd_requ->release_state<x_smbd_requ_state_ioctl_t>();
 	if (!smbd_conn) {
 		return;
 	}
-	if (NT_STATUS_IS_OK(status) || state->out_buf_length) {
-		x_smb2_reply_ioctl(smbd_conn, smbd_requ, status, *state);
+	if (NT_STATUS_IS_OK(status) || out_buf_length) {
+		x_smb2_reply_ioctl(smbd_conn, smbd_requ, status, *this);
 		status = NT_STATUS_OK;
 	}
 	x_smbd_conn_requ_done(smbd_conn, smbd_requ, status);
@@ -704,7 +703,6 @@ static NTSTATUS x_smbd_open_ioctl(x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ,
 		std::unique_ptr<x_smbd_requ_state_ioctl_t> &state)
 {
-	smbd_requ->async_done_fn = ioctl_async_done;
 	switch (state->ctl_code) {
 	/*
 	 * [MS-SMB2] 2.2.31

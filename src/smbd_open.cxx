@@ -588,8 +588,7 @@ struct defer_requ_evt_t
 			if (x_smbd_requ_async_remove(smbd_requ) && smbd_conn) {
 				NTSTATUS status = x_smbd_open_op_create(smbd_requ, state);
 				if (!NT_STATUS_EQUAL(status, NT_STATUS_PENDING)) {
-					smbd_requ->save_requ_state(state);
-					smbd_requ->async_done_fn(smbd_conn, smbd_requ, status);
+					state->async_done(smbd_conn, smbd_requ, status);
 				}
 			} else {
 				if (state->replay_reserved) {
@@ -602,8 +601,7 @@ struct defer_requ_evt_t
 			if (x_smbd_requ_async_remove(smbd_requ) && smbd_conn) {
 				NTSTATUS status = x_smbd_open_rename(smbd_requ, state);
 				if (!NT_STATUS_EQUAL(status, NT_STATUS_PENDING)) {
-					smbd_requ->save_requ_state(state);
-					smbd_requ->async_done_fn(smbd_conn, smbd_requ, status);
+					state->async_done(smbd_conn, smbd_requ, status);
 				}
 			}
 		}

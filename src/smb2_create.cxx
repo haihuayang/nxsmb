@@ -638,23 +638,21 @@ static void smb2_create_success(x_smbd_conn_t *smbd_conn,
 	x_smb2_reply_create(smbd_conn, smbd_requ, state);
 }
 
-static void x_smb2_create_async_done(x_smbd_conn_t *smbd_conn,
+void x_smbd_requ_state_create_t::async_done(x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ,
 		NTSTATUS status)
 {
 	X_LOG_DBG("status=0x%x", status.v);
-	auto state = smbd_requ->release_state<x_smbd_requ_state_create_t>();
-
 	if (!smbd_conn) {
-		smb2_replay_cache_clear_if(*state);
+		smb2_replay_cache_clear_if(*this);
 		return;
 	}
 	if (NT_STATUS_IS_OK(status)) {
 		auto &open_state = smbd_requ->smbd_open->open_state;
-		state->out_oplock_level = open_state.oplock_level;
-		smb2_create_success(smbd_conn, smbd_requ, *state);
+		out_oplock_level = open_state.oplock_level;
+		smb2_create_success(smbd_conn, smbd_requ, *this);
 	} else {
-		smb2_replay_cache_clear_if(*state);
+		smb2_replay_cache_clear_if(*this);
 	}
 
 	x_smbd_conn_requ_done(smbd_conn, smbd_requ, status);
@@ -752,7 +750,7 @@ static NTSTATUS smb2_process_create(x_smbd_requ_t *smbd_requ,
 		RETURN_OP_STATUS(smbd_requ, NT_STATUS_OBJECT_NAME_INVALID);
 	}
 
-	smbd_requ->async_done_fn = x_smb2_create_async_done;
+	// smbd_requ->async_done_fn = x_smb2_create_async_done;
 	if (state->in_oplock_level == X_SMB2_OPLOCK_LEVEL_LEASE) {
 		state->smbd_lease = x_smbd_lease_find(x_smbd_conn_curr_client_guid(),
 				state->lease, true);

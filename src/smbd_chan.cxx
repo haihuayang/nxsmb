@@ -410,17 +410,21 @@ struct smbd_chan_auth_upcall_evt_t
 		if (smbd_conn) {
 			x_smbd_chan_t *smbd_chan = evt->smbd_chan;
 			X_ASSERT(smbd_chan->auth_requ);
-			x_smbd_ptr_t<x_smbd_requ_t> smbd_requ{std::exchange(smbd_chan->auth_requ, nullptr)};
+			x_smbd_requ_t *smbd_requ = smbd_chan->auth_requ;
+			smbd_chan->auth_requ = nullptr;
 
 			if (smbd_chan_set_state(smbd_chan, x_smbd_chan_t::S_PROCESSING,
 						x_smbd_chan_t::S_BLOCKED)) {
+				auto state = smbd_requ->release_state<x_smbd_requ_state_sesssetup_t>();
 				NTSTATUS status = smbd_chan_auth_updated(smbd_chan, smbd_requ,
 						evt->status,
 						evt->is_bind, evt->security_mode,
 						*evt->auth_info);
-				x_smb2_sesssetup_done(smbd_chan->smbd_conn, smbd_requ, status,
-						evt->out_security);
+				
+				std::swap(state->out_security, evt->out_security);
+				state->async_done(smbd_conn, smbd_requ, status);
 			}
+			x_smbd_ref_dec(smbd_requ);
 		}
 		delete evt;
 	}
@@ -447,7 +451,7 @@ struct smbd_chan_auth_upcall_evt_t
 	NTSTATUS const status;
 	bool const is_bind;
 	uint8_t const security_mode;
-	std::vector<uint8_t> const out_security;
+	std::vector<uint8_t> out_security;
 	std::shared_ptr<x_auth_info_t> const auth_info;
 };
 

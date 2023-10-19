@@ -28,13 +28,6 @@ struct x_smb2_sesssetup_resp_t
 	uint16_t security_buffer_length;
 };
 
-struct x_smb2_state_sesssetup_t
-{
-	uint8_t in_flags;
-	uint8_t in_security_mode;
-	uint64_t in_previous_session_id;
-};
-
 
 static void x_smb2_reply_sesssetup(x_smbd_conn_t *smbd_conn,
 		x_smbd_chan_t *smbd_chan,
@@ -72,7 +65,7 @@ static void x_smb2_reply_sesssetup(x_smbd_conn_t *smbd_conn,
 
 static void smb2_sesssetup_done(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ,
 		uint16_t dialect, NTSTATUS status,
-		const x_smb2_state_sesssetup_t &state,
+		const x_smbd_requ_state_sesssetup_t &state,
 		const std::vector<uint8_t> &out_security)
 {
 	X_LOG_DBG("smbd_chan=%p, smbd_requ=%p, status=0x%x", smbd_requ->smbd_chan, smbd_requ, NT_STATUS_V(status));
@@ -94,17 +87,25 @@ static void smb2_sesssetup_done(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_re
 	}
 }
 
+void x_smbd_requ_state_sesssetup_t::async_done(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ, NTSTATUS status)
+{
+	smb2_sesssetup_done(smbd_conn, smbd_requ,
+			x_smbd_conn_get_dialect(smbd_conn),
+			status, *this, out_security);
+	x_smbd_conn_requ_done(smbd_conn, smbd_requ, status);
+}
+#if 0
 void x_smb2_sesssetup_done(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ, NTSTATUS status,
 		const std::vector<uint8_t> &out_security)
 {
-	auto state = smbd_requ->release_state<x_smb2_state_sesssetup_t>();
+	auto state = smbd_requ->release_state<x_smbd_requ_state_sesssetup_t>();
 	/* async done */
 	smb2_sesssetup_done(smbd_conn, smbd_requ,
 			x_smbd_conn_get_dialect(smbd_conn),
 			status, *state, out_security);
 	x_smbd_conn_requ_done(smbd_conn, smbd_requ, status);
 }
-
+#endif
 NTSTATUS x_smb2_process_sesssetup(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 {
 	X_LOG_OP("%ld SESSSETUP", smbd_requ->in_smb2_hdr.mid);
@@ -123,7 +124,7 @@ NTSTATUS x_smb2_process_sesssetup(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_
 		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
 	
-	auto state = std::make_unique<x_smb2_state_sesssetup_t>();
+	auto state = std::make_unique<x_smbd_requ_state_sesssetup_t>();
 	state->in_flags = requ->flags;
 	state->in_security_mode = requ->security_mode;
 	state->in_previous_session_id = X_LE2H64(requ->previous_session);

@@ -9,34 +9,43 @@
 #include "smbd.hxx"
 #include "smb2.hxx"
 
-struct x_smbd_requ_state_read_t
+struct x_smbd_requ_state_async_t
 {
+	virtual ~x_smbd_requ_state_async_t() { }
+	virtual void async_done(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ,
+			NTSTATUS status) = 0;
+};
+
+struct x_smbd_requ_state_read_t : x_smbd_requ_state_async_t
+{
+	~x_smbd_requ_state_read_t() {
+		if (out_buf) {
+			x_buf_release(out_buf);
+		}
+	}
+	void async_done(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ,
+			NTSTATUS status) override;
+
 	uint8_t in_flags;
 	uint32_t in_length;
 	uint64_t in_offset;
 	uint64_t in_file_id_persistent;
 	uint64_t in_file_id_volatile;
 	uint32_t in_minimum_count;
-#if 1
-	~x_smbd_requ_state_read_t() {
-		if (out_buf) {
-			x_buf_release(out_buf);
-		}
-	}
 	x_buf_t *out_buf{};
 	uint32_t out_buf_length;
-#else
-	std::unique_ptr<x_bufref_t> out_data;
-#endif
 };
 
-struct x_smbd_requ_state_write_t
+struct x_smbd_requ_state_write_t : x_smbd_requ_state_async_t
 {
 	~x_smbd_requ_state_write_t() {
 		if (in_buf) {
 			x_buf_release(in_buf);
 		}
 	}
+	void async_done(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ,
+			NTSTATUS status) override;
+
 	uint64_t in_offset;
 	uint64_t in_file_id_persistent;
 	uint64_t in_file_id_volatile;
@@ -50,8 +59,11 @@ struct x_smbd_requ_state_write_t
 	uint32_t out_remaining;
 };
 
-struct x_smbd_requ_state_lock_t
+struct x_smbd_requ_state_lock_t : x_smbd_requ_state_async_t
 {
+	void async_done(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ,
+			NTSTATUS status) override;
+
 	uint64_t in_file_id_persistent;
 	uint64_t in_file_id_volatile;
 	uint32_t in_lock_sequence_index;
@@ -82,16 +94,22 @@ struct x_smbd_requ_state_setinfo_t
 	std::vector<uint8_t> in_data;
 };
 
-struct x_smbd_requ_state_rename_t
+struct x_smbd_requ_state_rename_t : x_smbd_requ_state_async_t
 {
+	void async_done(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ,
+			NTSTATUS status) override;
+
 	uint64_t in_file_id_persistent;
 	uint64_t in_file_id_volatile;
 	bool in_replace_if_exists;
 	std::u16string in_path, in_stream_name;
 };
 
-struct x_smbd_requ_state_qdir_t
+struct x_smbd_requ_state_qdir_t : x_smbd_requ_state_async_t
 {
+	void async_done(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ,
+			NTSTATUS status) override;
+
 	x_smb2_info_level_t in_info_level;
 	uint8_t in_flags;
 	uint32_t in_file_index;
@@ -103,7 +121,7 @@ struct x_smbd_requ_state_qdir_t
 	uint32_t out_buf_length{0};
 };
 
-struct x_smbd_requ_state_ioctl_t
+struct x_smbd_requ_state_ioctl_t : x_smbd_requ_state_async_t
 {
 	~x_smbd_requ_state_ioctl_t() {
 		if (in_buf) {
@@ -113,6 +131,9 @@ struct x_smbd_requ_state_ioctl_t
 			x_buf_release(out_buf);
 		}
 	}
+	void async_done(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ,
+			NTSTATUS status) override;
+
 	uint32_t ctl_code;
 	uint32_t in_flags;
 	uint64_t in_file_id_persistent;
@@ -131,8 +152,11 @@ struct x_smbd_requ_state_ioctl_t
 #endif
 };
 
-struct x_smbd_requ_state_notify_t
+struct x_smbd_requ_state_notify_t : x_smbd_requ_state_async_t
 {
+	void async_done(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ,
+			NTSTATUS status) override;
+
 	uint32_t in_output_buffer_length;
 	std::vector<std::pair<uint32_t, std::u16string>> out_notify_changes;
 };
@@ -174,10 +198,12 @@ struct x_smbd_requ_state_close_t
 	x_smb2_create_close_info_t out_info;
 };
 
-struct x_smbd_requ_state_create_t
+struct x_smbd_requ_state_create_t : x_smbd_requ_state_async_t
 {
 	x_smbd_requ_state_create_t(const x_smb2_uuid_t &client_guid);
 	~x_smbd_requ_state_create_t();
+	void async_done(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ,
+			NTSTATUS status) override;
 
 	const x_smb2_uuid_t in_client_guid;
 
@@ -236,6 +262,17 @@ enum {
 	X_SMB2_CONTEXT_FLAG_APP_INSTANCE_ID = 0x80,
 };
 
+struct x_smbd_requ_state_sesssetup_t : x_smbd_requ_state_async_t
+{
+	void async_done(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ,
+			NTSTATUS status) override;
+
+	uint8_t in_flags;
+	uint8_t in_security_mode;
+	uint64_t in_previous_session_id;
+	std::vector<uint8_t> out_security;
+};
+
 struct x_smbd_requ_t
 {
 	enum {
@@ -273,21 +310,25 @@ struct x_smbd_requ_t
 	template <class T>
 	std::unique_ptr<T> release_state() {
 		X_ASSERT(requ_state);
-		std::unique_ptr<T> state{(T *)requ_state};
-		requ_state = nullptr;
-		return state;
+		x_smbd_requ_state_async_t *ptr = requ_state.release();
+		return std::unique_ptr<T>{dynamic_cast<T *>(ptr)};
+	}
+
+	std::unique_ptr<x_smbd_requ_state_async_t> release_state() {
+		X_ASSERT(requ_state);
+		return std::move(requ_state);
 	}
 
 	template <class T>
 	T *get_requ_state() const {
 		X_ASSERT(requ_state);
-		return (T *)requ_state;
+		return dynamic_cast<T *>(requ_state.get());
 	}
 
 	template <class T>
 	void save_requ_state(std::unique_ptr<T> &state) {
 		X_ASSERT(!requ_state);
-		requ_state = state.release();
+		requ_state = std::move(state);
 	}
 
 	bool set_processing() {
@@ -305,7 +346,7 @@ struct x_smbd_requ_t
 	x_dlink_t async_link; // link into open
 	x_dlink_t conn_link; // link into conn
 	x_timer_job_t interim_timer;
-	void *requ_state = nullptr;
+	std::unique_ptr<x_smbd_requ_state_async_t> requ_state;
 
 	x_buf_t *in_buf;
 	uint64_t id = 0;
@@ -334,8 +375,6 @@ struct x_smbd_requ_t
 	x_smbd_tcon_t *smbd_tcon{};
 	x_smbd_open_t *smbd_open{};
 	void (*cancel_fn)(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ);
-	void (*async_done_fn)(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ,
-			NTSTATUS status);
 };
 X_DECLARE_MEMBER_TRAITS(requ_async_traits, x_smbd_requ_t, async_link)
 

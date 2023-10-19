@@ -9,10 +9,10 @@ struct smd_notify_evt_t
 		x_smbd_requ_t *smbd_requ = evt->smbd_requ;
 		X_LOG_DBG("evt=%p, requ=%p, smbd_conn=%p", evt, smbd_requ, smbd_conn);
 
-		auto state = smbd_requ->get_requ_state<x_smbd_requ_state_notify_t>();
+		auto state = smbd_requ->release_state<x_smbd_requ_state_notify_t>();
 		X_ASSERT(state->out_notify_changes.empty());
 		std::swap(state->out_notify_changes, evt->notify_changes);
-		x_smbd_requ_async_done(smbd_conn, smbd_requ, NT_STATUS_OK);
+		state->async_done(smbd_conn, smbd_requ, NT_STATUS_OK);
 		delete evt;
 	}
 

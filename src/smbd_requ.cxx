@@ -45,7 +45,6 @@ x_smbd_requ_t::x_smbd_requ_t(x_buf_t *in_buf, uint32_t in_msgsize,
 x_smbd_requ_t::~x_smbd_requ_t()
 {
 	X_LOG_DBG("free %p", this);
-	X_ASSERT(!requ_state);
 	x_buf_release(in_buf);
 
 	while (out_buf_head) {
@@ -119,7 +118,8 @@ void x_smbd_requ_async_done(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ,
 	if (!x_smbd_requ_async_remove(smbd_requ)) {
 		/* it must be cancelled by x_smbd_conn_cancel */
 	}
-	smbd_requ->async_done_fn(smbd_conn, smbd_requ, status);
+	auto state = smbd_requ->release_state();
+	state->async_done(smbd_conn, smbd_requ, status);
 }
 
 void x_smbd_requ_done(x_smbd_requ_t *smbd_requ)

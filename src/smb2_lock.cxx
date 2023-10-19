@@ -78,19 +78,18 @@ static void smb2_lock_set_sequence(x_smbd_open_t *smbd_open,
 	}
 }
 
-static void x_smb2_lock_async_done(x_smbd_conn_t *smbd_conn,
+void x_smbd_requ_state_lock_t::async_done(x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ,
 		NTSTATUS status)
 {
 	X_LOG_DBG("status=0x%x", status.v);
-	auto state = smbd_requ->release_state<x_smbd_requ_state_lock_t>();
 	if (!smbd_conn) {
 		return;
 	}
 	X_ASSERT(!NT_STATUS_EQUAL(status, NT_STATUS_PENDING));
 	if (NT_STATUS_IS_OK(status)) {
-		smb2_lock_set_sequence(smbd_requ->smbd_open, *state);
-		x_smb2_reply_lock(smbd_conn, smbd_requ, *state);
+		smb2_lock_set_sequence(smbd_requ->smbd_open, *this);
+		x_smb2_reply_lock(smbd_conn, smbd_requ, *this);
 	}
 	x_smbd_conn_requ_done(smbd_conn, smbd_requ, status);
 }
@@ -456,7 +455,6 @@ NTSTATUS x_smb2_process_lock(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 				smbd_requ, state);
 	} else {
 		smbd_requ->status = NT_STATUS_RANGE_NOT_LOCKED;
-		smbd_requ->async_done_fn = x_smb2_lock_async_done;
 		status = smbd_open_lock(smbd_requ->smbd_open,
 				smbd_requ, state);
 	}

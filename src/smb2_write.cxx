@@ -93,17 +93,16 @@ static void x_smb2_reply_write(x_smbd_conn_t *smbd_conn,
 			sizeof(x_smb2_header_t) + sizeof(x_smb2_out_write_t));
 }
 
-static void x_smb2_write_async_done(x_smbd_conn_t *smbd_conn,
+void x_smbd_requ_state_write_t::async_done(x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ,
 		NTSTATUS status)
 {
 	X_LOG_DBG("status=0x%x", status.v);
-	auto state = smbd_requ->release_state<x_smbd_requ_state_write_t>();
 	if (!smbd_conn) {
 		return;
 	}
 	if (NT_STATUS_IS_OK(status)) {
-		x_smb2_reply_write(smbd_conn, smbd_requ, *state);
+		x_smb2_reply_write(smbd_conn, smbd_requ, *this);
 	}
 	x_smbd_conn_requ_done(smbd_conn, smbd_requ, status);
 }
@@ -154,7 +153,6 @@ NTSTATUS x_smb2_process_write(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ
 	const x_smbd_conf_t &smbd_conf = x_smbd_conf_get_curr();
 
 	if (state->in_buf) {
-		smbd_requ->async_done_fn = x_smb2_write_async_done;
 		status = x_smbd_open_op_write(smbd_requ->smbd_open, smbd_requ,
 				state, smbd_conf.my_dev_delay_write_ms);
 	} else {
@@ -169,54 +167,3 @@ NTSTATUS x_smb2_process_write(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ
 	}
 	RETURN_OP_STATUS(smbd_requ, status);
 }
-#if 0
-static NTSTATUS x_smbd_read(x_smbd_conn_t *smbd_conn,
-		x_smbd_requ_t *smbd_requ,
-		x_smb2_state_read_t &state)
-{
-	auto smbd_object = smbd_requ->smbd_open->smbd_object;
-	if (!smbd_object->ops->read)
-		return NT_STATUS_INVALID_DEVICE_REQUEST;
-	}
-
-	ssize_t ret = smbd_object->ops->read(smbd_object, smbd_requ->smbd_open,
-			state->out_data, state->in_length, state->in_offset);
-	if (ret > 0) {
-		state->out_data.resize(ret);
-		return NT_STATUS_OK;
-	} else if (ret == 0) {
-		state->out_data.clear();
-		return NT_STATUS_END_OF_FILE;
-	} else {
-		X_TODO;
-		return NT_STATUS_INTERNAL_ERROR;
-	}
-#if 0
-	++smb2_read->requ.refcount;
-	smb2_read->job.ops = &async_read_job_ops;
-	x_smbd_schedule_async(&smb2_read->job);
-
-	return X_NT_STATUS_INTERNAL_BLOCKED;
-#endif
-}
-
-static NTSTATUS x_smbd_write(x_smbd_conn_t *smbd_conn,
-		x_smbd_requ_t *smbd_requ,
-		x_smb2_state_write_t &state)
-{
-	auto smbd_object = smbd_requ->smbd_open->smbd_object;
-	if (!smbd_object->ops->write)
-		return NT_STATUS_INVALID_DEVICE_REQUEST;
-	}
-
-	ssize_t ret = smbd_object->ops->write(smbd_object, smbd_requ->smbd_open,
-			state->out_data, state->in_offset);
-	if (ret < 0) {
-		X_TODO;
-	} else {
-		state->out_count = ret;
-		state->out_remaining = 0;
-	}
-	return NT_STATUS_OK;
-}
-#endif

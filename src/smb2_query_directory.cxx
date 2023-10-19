@@ -87,17 +87,16 @@ static void x_smb2_reply_qdir(x_smbd_conn_t *smbd_conn,
 }
 
 
-static void x_smb2_qdir_async_done(x_smbd_conn_t *smbd_conn,
+void x_smbd_requ_state_qdir_t::async_done(x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ,
 		NTSTATUS status)
 {
 	X_LOG_DBG("status=0x%x", status.v);
-	auto state = smbd_requ->release_state<x_smbd_requ_state_qdir_t>();
 	if (!smbd_conn) {
 		return;
 	}
 	if (NT_STATUS_IS_OK(status)) {
-		x_smb2_reply_qdir(smbd_conn, smbd_requ, *state);
+		x_smb2_reply_qdir(smbd_conn, smbd_requ, *this);
 	}
 	x_smbd_conn_requ_done(smbd_conn, smbd_requ, status);
 }
@@ -363,7 +362,6 @@ NTSTATUS x_smb2_process_query_directory(x_smbd_conn_t *smbd_conn, x_smbd_requ_t 
 		return NT_STATUS_INVALID_DEVICE_REQUEST;
 	}
 
-	smbd_requ->async_done_fn = x_smb2_qdir_async_done;
 	{
 		auto lock = std::lock_guard(smbd_object->mutex);
 		if (!smbd_open->smbd_qdir) {

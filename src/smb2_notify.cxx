@@ -64,17 +64,16 @@ static NTSTATUS x_smb2_reply_notify(x_smbd_conn_t *smbd_conn,
 	return status;
 }
 
-static void x_smb2_notify_async_done(x_smbd_conn_t *smbd_conn,
+void x_smbd_requ_state_notify_t::async_done(x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ,
 		NTSTATUS status)
 {
 	X_LOG_DBG("status=0x%x", status.v);
-	auto state = smbd_requ->release_state<x_smbd_requ_state_notify_t>();
 	if (!smbd_conn) {
 		return;
 	}
 	if (NT_STATUS_IS_OK(status)) {
-		x_smb2_reply_notify(smbd_conn, smbd_requ, *state);
+		x_smb2_reply_notify(smbd_conn, smbd_requ, *this);
 	}
 	x_smbd_conn_requ_done(smbd_conn, smbd_requ, status);
 }
@@ -185,7 +184,6 @@ NTSTATUS x_smb2_process_notify(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_req
 	}
 
 	smbd_requ->status = NT_STATUS_NOTIFY_CLEANUP;
-	smbd_requ->async_done_fn = x_smb2_notify_async_done;
 	status = smbd_open_notify(smbd_open,
 			smbd_requ, state);
 	if (NT_STATUS_IS_OK(status)) {

@@ -79,20 +79,19 @@ static void x_smb2_reply_read(x_smbd_conn_t *smbd_conn,
 			sizeof(x_smb2_header_t) + sizeof(x_smb2_out_read_t) + state.out_buf_length);
 }
 
-static void x_smb2_read_async_done(x_smbd_conn_t *smbd_conn,
+void x_smbd_requ_state_read_t::async_done(x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ,
 		NTSTATUS status)
 {
 	X_LOG_DBG("status=0x%x", status.v);
-	auto state = smbd_requ->release_state<x_smbd_requ_state_read_t>();
 	if (!smbd_conn) {
 		return;
 	}
 	if (NT_STATUS_IS_OK(status)) {
-		if (state->out_buf_length < state->in_minimum_count) {
+		if (out_buf_length < in_minimum_count) {
 			status = NT_STATUS_END_OF_FILE;
 		} else {
-			x_smb2_reply_read(smbd_conn, smbd_requ, *state);
+			x_smb2_reply_read(smbd_conn, smbd_requ, *this);
 		}
 	}
 	x_smbd_conn_requ_done(smbd_conn, smbd_requ, status);
@@ -150,7 +149,6 @@ NTSTATUS x_smb2_process_read(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 		state->out_buf_length = 0;
 		status = NT_STATUS_OK;
 	} else {
-		smbd_requ->async_done_fn = x_smb2_read_async_done;
 		status = x_smbd_open_op_read(smbd_requ->smbd_open, smbd_requ,
 				state, smbd_conf.my_dev_delay_read_ms,
 				false);

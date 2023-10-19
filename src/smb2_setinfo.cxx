@@ -114,12 +114,11 @@ static NTSTATUS decode_in_rename(x_smbd_requ_state_rename_t &state,
 	return NT_STATUS_OK;
 }
 
-static void x_smb2_rename_async_done(x_smbd_conn_t *smbd_conn,
+void x_smbd_requ_state_rename_t::async_done(x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ,
 		NTSTATUS status)
 {
 	X_LOG_DBG("status=0x%x", status.v);
-	auto state = smbd_requ->release_state<x_smbd_requ_state_rename_t>();
 	if (!smbd_conn) {
 		return;
 	}
@@ -151,7 +150,6 @@ static NTSTATUS x_smb2_process_rename(x_smbd_conn_t *smbd_conn,
 		}
 	}
 
-	smbd_requ->async_done_fn = x_smb2_rename_async_done;
 	NTSTATUS status = x_smbd_open_rename(smbd_requ, state);
 	if (NT_STATUS_IS_OK(status)) {
 		x_smb2_reply_setinfo(smbd_conn, smbd_requ);
