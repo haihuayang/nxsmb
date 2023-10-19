@@ -159,7 +159,10 @@ uint32_t x_smbd_conn_get_capabilities(const x_smbd_conn_t *smbd_conn)
 }
 
 #define X_SMBD_UPDATE_OP_HISTOGRAM(smbd_requ) do { \
-	g_smbd_stats->histograms[(smbd_requ)->in_smb2_hdr.opcode].update((x_tick_now() - (smbd_requ)->start) / 1000); \
+	auto __now = x_tick_now(); \
+	auto __elapsed = __now - (smbd_requ)->start; \
+	X_ASSERT(__elapsed >= 0); \
+	g_smbd_stats->histograms[(smbd_requ)->in_smb2_hdr.opcode].update(__elapsed / 1000); \
 } while (0)
 
 int x_smbd_conn_negprot(x_smbd_conn_t *smbd_conn,
@@ -1206,6 +1209,9 @@ static int x_smbd_conn_process_smb(x_smbd_conn_t *smbd_conn, x_buf_t *buf, uint3
 		if (!x_smb2_validate_message_id(smbd_conn, smbd_requ)) {
 			return -EBADMSG;
 		}
+
+		smbd_requ->start = tick_now = x_tick_now();
+
 		int ret = x_smbd_conn_process_smb1negprot(smbd_conn, smbd_requ);
 		if (ret < 0) {
 			return ret;
