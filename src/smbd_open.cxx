@@ -675,10 +675,10 @@ void x_smbd_wakeup_requ_list(const x_smbd_requ_id_list_t &requ_list)
 			X_SMBD_COUNTER_INC(wakeup_stale_requ, 1);
 			continue;
 		}
-		X_LOG_DBG("wakeup requ 0x%lx %p", requ_id, smbd_requ);
 
 		int32_t count = smbd_requ->async_pending.fetch_sub(1,
 				std::memory_order_relaxed);
+		X_LOG_DBG(X_SMBD_REQU_DBG_FMT, X_SMBD_REQU_DBG_ARG(smbd_requ));
 		X_ASSERT(count > 0);
 		if (count == 1) {
 			defer_requ_evt_t *evt = new defer_requ_evt_t(smbd_requ);

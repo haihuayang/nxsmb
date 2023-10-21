@@ -81,7 +81,7 @@ x_smbd_requ_t *x_smbd_requ_create(x_buf_t *in_buf, uint32_t in_msgsize,
 		delete smbd_requ;
 		return nullptr;
 	}
-	X_LOG_DBG("0x%lx %p", smbd_requ->id, smbd_requ);
+	X_LOG_DBG(X_SMBD_REQU_DBG_FMT, X_SMBD_REQU_DBG_ARG(smbd_requ));
 	return smbd_requ;
 }
 
@@ -133,6 +133,7 @@ void x_smbd_requ_async_done(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ,
 
 void x_smbd_requ_done(x_smbd_requ_t *smbd_requ)
 {
+	X_LOG_DBG(X_SMBD_REQU_DBG_FMT, X_SMBD_REQU_DBG_ARG(smbd_requ));
 	smbd_requ->id = g_smbd_requ_table->remove(smbd_requ->id);
 	smbd_requ->done = true;
 }

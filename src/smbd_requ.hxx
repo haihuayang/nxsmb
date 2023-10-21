@@ -379,6 +379,10 @@ struct x_smbd_requ_t
 };
 X_DECLARE_MEMBER_TRAITS(requ_async_traits, x_smbd_requ_t, async_link)
 
+#define X_SMBD_REQU_DBG_FMT "%p 0x%lx mid=0x%lx op=%d"
+#define X_SMBD_REQU_DBG_ARG(smbd_requ) (smbd_requ), (smbd_requ)->id, \
+		(smbd_requ)->in_smb2_hdr.mid, (smbd_requ)->in_smb2_hdr.opcode
+
 int x_smbd_requ_pool_init(uint32_t count);
 x_smbd_requ_t *x_smbd_requ_create(x_buf_t *in_buf, uint32_t in_msgsize, bool encrypted);
 uint64_t x_smbd_requ_get_async_id(const x_smbd_requ_t *smbd_requ);

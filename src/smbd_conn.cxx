@@ -389,6 +389,7 @@ static void x_smb2_reply_msg(x_smbd_conn_t *smbd_conn,
 		NTSTATUS status,
 		size_t reply_size)
 {
+	X_LOG_DBG(X_SMBD_REQU_DBG_FMT " %s", X_SMBD_REQU_DBG_ARG(smbd_requ), x_ntstatus_str(status));
 	smbd_requ->out_hdr_flags = calculate_out_hdr_flags(smbd_requ->in_smb2_hdr.flags, smbd_requ->out_hdr_flags);
 	x_smb2_header_t *smb2_hdr = (x_smb2_header_t *)buf_head->get_data();
 	smb2_hdr->protocol_id = X_H2BE32(X_SMB2_MAGIC);
