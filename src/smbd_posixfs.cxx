@@ -744,12 +744,7 @@ static posixfs_open_t *posixfs_open_create_intl(
 	} else {
 		posixfs_object->base.sharemode.open_list.push_back(&posixfs_open->base);
 	}
-	if (posixfs_object->base.num_active_open++ == 0) {
-		x_smbd_object_t *parent_object = posixfs_object->base.parent_object;
-		if (parent_object) {
-			x_smbd_object_update_num_child(parent_object, 1);
-		}
-	}
+	++posixfs_object->base.num_active_open;
 	*pstatus = NT_STATUS_OK;
 	return posixfs_open;
 }

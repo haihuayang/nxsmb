@@ -191,10 +191,7 @@ static NTSTATUS smbd_object_remove(
 
 	auto sharemode = x_smbd_open_get_sharemode(smbd_open);
 	sharemode->open_list.remove(smbd_open);
-	if (--smbd_object->num_active_open == 0 && smbd_object->parent_object) {
-		x_smbd_object_update_num_child(smbd_object->parent_object, -1);
-	}
-
+	--smbd_object->num_active_open;
 	if (smbd_open->open_state.initial_delete_on_close) {
 		x_smbd_open_op_set_delete_on_close(smbd_open, true);
 	}
@@ -1131,7 +1128,7 @@ static void smbd_open_add_oplock_pending(x_smbd_open_t *smbd_open,
 	smbd_open->oplock_pending_list.push_back(smbd_requ->id);
 }
 
-static bool x_smbd_open_break_oplock(x_smbd_object_t *smbd_object,
+bool x_smbd_open_break_oplock(x_smbd_object_t *smbd_object,
 		x_smbd_open_t *smbd_open,
 		uint8_t break_mask,
 		x_smbd_requ_t *smbd_requ)

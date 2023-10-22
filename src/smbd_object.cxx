@@ -368,48 +368,69 @@ static NTSTATUS rename_object_intl(
 }
 
 /* caller locked smbd_object */
-static bool delay_rename_for_lease_break(x_smbd_object_t *smbd_object,
+static NTSTATUS delay_rename_for_lease_break(x_smbd_object_t *smbd_object,
 		x_smbd_sharemode_t *smbd_sharemode,
 		x_smbd_open_t *smbd_open,
 		x_smbd_requ_t *smbd_requ)
 {
-	/* this function is called when rename a file or
-	 * rename/delete a dir. for unknown reason, it skips lease break
-	 * for files if the renamer is not granted lease. but for dir,
-	 * it cannot skip.
-	 */
-	if (smbd_open->get_oplock_level() != X_SMB2_OPLOCK_LEVEL_LEASE &&
-			x_smbd_open_is_data(smbd_open)) {
-		return false;
+	if (!smbd_open || !smbd_open->smbd_stream) {
+		for (x_dlink_t *link = smbd_object->active_child_object_list.get_front();
+				link; link = link->next) {
+			x_smbd_object_t *child_object = X_CONTAINER_OF(link, x_smbd_object_t,
+					parent_link);
+			NTSTATUS status;
+			child_object->incref();
+			{
+				auto lock = std::lock_guard(child_object->mutex);
+				/* pass null lease as it could not be same */
+				status = delay_rename_for_lease_break(child_object,
+						&child_object->sharemode,
+						nullptr, smbd_requ);
+			}
+
+			child_object->decref();
+
+			X_LOG_DBG("%s", x_ntstatus_str(status));
+			if (!NT_STATUS_IS_OK(status)) {
+				return status;
+			}
+		}
 	}
 
-	uint32_t break_count = 0;
 	bool delay = false;
 	auto &open_list = smbd_sharemode->open_list;
+	size_t count = 0;
 	x_smbd_open_t *curr_open;
 	for (curr_open = open_list.get_front(); curr_open; curr_open = open_list.next(curr_open)) {
-		if (!curr_open->smbd_lease || curr_open->smbd_lease == smbd_open->smbd_lease) {
+		if (smbd_open == curr_open) {
 			continue;
 		}
 
-		++break_count;
-		if (x_smbd_open_break_lease(curr_open, nullptr, nullptr,
-					X_SMB2_LEASE_HANDLE, X_SMB2_LEASE_HANDLE,
-					smbd_requ, false)) {
-			delay = true;
-		}
-#if 0
-		uint8_t e_lease_type = x_smbd_lease_get_state(curr_open->smbd_lease);
-		if ((e_lease_type & X_SMB2_LEASE_HANDLE) == 0) {
+		if (smbd_open && smbd_open->smbd_lease &&
+				curr_open->smbd_lease == smbd_open->smbd_lease) {
 			continue;
 		}
 
-		delay = true;
-		x_smbd_open_break_lease(curr_open, nullptr, nullptr,
-				X_SMB2_LEASE_HANDLE, smbd_requ);
-#endif
+		++count;
+		if (curr_open->smbd_lease) {
+			if (x_smbd_open_break_lease(curr_open, nullptr, nullptr,
+						X_SMB2_LEASE_HANDLE, X_SMB2_LEASE_HANDLE,
+						smbd_requ, false)) {
+				delay = true;
+			}
+		} else {
+			if (x_smbd_open_break_oplock(smbd_object, curr_open,
+						X_SMB2_LEASE_HANDLE, smbd_requ)) {
+				delay = true;
+			}
+		}
 	}
-	return delay;
+	if (delay) {
+		return NT_STATUS_PENDING;
+	} else if (count > 0 && !smbd_open) { // only deny when open under the dir
+		return NT_STATUS_ACCESS_DENIED;
+	}
+	return NT_STATUS_OK;
 }
 
 static void smbd_rename_cancel(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
@@ -467,10 +488,6 @@ NTSTATUS x_smbd_object_rename(x_smbd_object_t *smbd_object,
 	NTSTATUS status;
 
 	if (!smbd_open->smbd_stream) {
-		if (smbd_object->num_child_object_opened > 0) {
-			return NT_STATUS_ACCESS_DENIED;
-		}
-
 		status = open_parent_object(&new_parent_object, new_path_base,
 				smbd_volume, state->in_path);
 		if (!NT_STATUS_IS_OK(status)) {
@@ -485,7 +502,8 @@ NTSTATUS x_smbd_object_rename(x_smbd_object_t *smbd_object,
 
 	auto lock = std::lock_guard(smbd_object->mutex);
 
-	if (delay_rename_for_lease_break(smbd_object, sharemode, smbd_open, smbd_requ)) {
+	status = delay_rename_for_lease_break(smbd_object, sharemode, smbd_open, smbd_requ);
+	if (NT_STATUS_EQUAL(status, NT_STATUS_PENDING)) {
 		smbd_requ->save_requ_state(state);
 		/* windows server do not send interim response in renaming */
 		x_smbd_requ_async_insert(smbd_requ, smbd_rename_cancel, -1);
@@ -493,6 +511,10 @@ NTSTATUS x_smbd_object_rename(x_smbd_object_t *smbd_object,
 			x_smbd_release_object(new_parent_object);
 		}
 		return NT_STATUS_PENDING;
+	}
+
+	if (!NT_STATUS_IS_OK(status)) {
+		return status;
 	}
 
 	if (smbd_open->smbd_stream) {
@@ -554,18 +576,6 @@ NTSTATUS x_smbd_object_rename(x_smbd_object_t *smbd_object,
 	}
 
 	return status;
-}
-
-void x_smbd_object_update_num_child(x_smbd_object_t *smbd_object, int num)
-{
-	auto lock = std::lock_guard(smbd_object->mutex);
-	auto orig = smbd_object->num_child_object_opened;
-	smbd_object->num_child_object_opened += num;
-	X_ASSERT(smbd_object->num_child_object_opened >= 0);
-	if (smbd_object->parent_object && (orig == 0 ||
-				smbd_object->num_child_object_opened == 0)) {
-		x_smbd_object_update_num_child(smbd_object->parent_object, num);
-	}
 }
 
 std::u16string x_smbd_object_get_path(const x_smbd_object_t *smbd_object)

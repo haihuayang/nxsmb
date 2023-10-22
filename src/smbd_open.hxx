@@ -340,7 +340,6 @@ struct x_smbd_object_t
 	uint16_t type = type_not_exist;
 	std::atomic<int> use_count{1};
 	uint32_t num_active_open{0}; // include open on streams
-	int32_t num_child_object_opened{0}; // only valid for dir
 	x_dlink_t path_hash_link;
 	x_dlink_t parent_link; // used by parent's active_child_object_list
 	uint64_t path_hash, fileid_hash;
@@ -613,6 +612,11 @@ bool x_smbd_open_break_lease(x_smbd_open_t *smbd_open,
 		x_smbd_requ_t *smbd_requ,
 		bool block_breaking);
 
+bool x_smbd_open_break_oplock(x_smbd_object_t *smbd_object,
+		x_smbd_open_t *smbd_open,
+		uint8_t break_mask,
+		x_smbd_requ_t *smbd_requ);
+
 NTSTATUS x_smbd_break_oplock(
 		x_smbd_open_t *smbd_open,
 		x_smbd_requ_t *smbd_requ,
@@ -688,8 +692,6 @@ std::pair<bool, uint64_t> x_smbd_hash_path(const x_smbd_volume_t &smbd_volume,
 void x_smbd_save_durable(x_smbd_open_t *smbd_open,
 		x_smbd_tcon_t *smbd_tcon,
 		const x_smbd_requ_state_create_t &state);
-
-void x_smbd_object_update_num_child(x_smbd_object_t *smbd_object, int num);
 
 void x_smbd_wakeup_requ_list(const x_smbd_requ_id_list_t &requ_list);
 
