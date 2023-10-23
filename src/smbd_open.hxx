@@ -673,6 +673,11 @@ NTSTATUS x_smbd_object_rename(x_smbd_object_t *smbd_object,
 		x_smbd_requ_t *smbd_requ,
 		std::unique_ptr<x_smbd_requ_state_rename_t> &state);
 
+NTSTATUS x_smbd_object_set_delete_on_close(x_smbd_object_t *smbd_object,
+		x_smbd_stream_t *smbd_stream,
+		uint32_t access_mask,
+		bool delete_on_close);
+
 static inline NTSTATUS x_smbd_open_rename(
 		x_smbd_requ_t *smbd_requ,
 		std::unique_ptr<x_smbd_requ_state_rename_t> &state)

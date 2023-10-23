@@ -6,7 +6,6 @@
 #include <fcntl.h>
 #include <sys/statvfs.h>
 #include "smbd_ntacl.hxx"
-#include "smbd_access.hxx"
 #include "smbd_lease.hxx"
 #include "smbd_share.hxx"
 #include "smbd_conf.hxx"
@@ -673,42 +672,8 @@ static NTSTATUS posixfs_object_set_delete_on_close(posixfs_object_t *posixfs_obj
 		uint32_t access_mask,
 		bool delete_on_close)
 {
-	auto sharemode = x_smbd_object_get_sharemode(
-			&posixfs_object->base, smbd_stream);
-
-	if (delete_on_close) {
-		NTSTATUS status = x_smbd_can_set_delete_on_close(&posixfs_object->base,
-				smbd_stream,
-				posixfs_object->get_meta().file_attributes,
-				access_mask);
-		if (!NT_STATUS_IS_OK(status)) {
-			return status;
-		}
-		sharemode->meta.delete_on_close = true;
-		if (posixfs_object->base.type == x_smbd_object_t::type_dir &&
-				!smbd_stream) {
-			auto &open_list = sharemode->open_list;
-			x_smbd_open_t *curr_open;
-			for (curr_open = open_list.get_front(); curr_open; curr_open = open_list.next(curr_open)) {
-				x_smbd_requ_t *requ_notify, *requ_next;
-				for (requ_notify = curr_open->pending_requ_list.get_front();
-						requ_notify;
-						requ_notify = requ_next) {
-
-					requ_next = curr_open->pending_requ_list.next(requ_notify);
-					if (requ_notify->in_smb2_hdr.opcode != X_SMB2_OP_NOTIFY) {
-						continue;
-					}
-					curr_open->pending_requ_list.remove(requ_notify);
-					x_smbd_conn_post_cancel(x_smbd_chan_get_conn(requ_notify->smbd_chan),
-							requ_notify, NT_STATUS_DELETE_PENDING);
-				}
-			}
-		}
-	} else {
-		sharemode->meta.delete_on_close = false;
-	}
-	return NT_STATUS_OK;
+	return x_smbd_object_set_delete_on_close(&posixfs_object->base, smbd_stream,
+			access_mask, delete_on_close);
 }
 
 static posixfs_open_t *posixfs_open_create_intl(

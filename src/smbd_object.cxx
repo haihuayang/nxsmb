@@ -1,6 +1,7 @@
 
 #include "smbd_open.hxx"
 #include "smbd_stats.hxx"
+#include "smbd_access.hxx"
 #include "include/SpookyV2.hxx"
 
 x_smbd_object_t::x_smbd_object_t(const std::shared_ptr<x_smbd_volume_t> &smbd_volume,
@@ -576,6 +577,50 @@ NTSTATUS x_smbd_object_rename(x_smbd_object_t *smbd_object,
 	}
 
 	return status;
+}
+
+/* smbd_object mutex is locked */
+NTSTATUS x_smbd_object_set_delete_on_close(x_smbd_object_t *smbd_object,
+		x_smbd_stream_t *smbd_stream,
+		uint32_t access_mask,
+		bool delete_on_close)
+{
+	auto sharemode = x_smbd_object_get_sharemode(
+			smbd_object, smbd_stream);
+
+	if (delete_on_close) {
+		NTSTATUS status = x_smbd_can_set_delete_on_close(smbd_object,
+				smbd_stream,
+				smbd_object->meta.file_attributes,
+				access_mask);
+		if (!NT_STATUS_IS_OK(status)) {
+			return status;
+		}
+		sharemode->meta.delete_on_close = true;
+		if (smbd_object->type == x_smbd_object_t::type_dir &&
+				!smbd_stream) {
+			auto &open_list = sharemode->open_list;
+			x_smbd_open_t *curr_open;
+			for (curr_open = open_list.get_front(); curr_open; curr_open = open_list.next(curr_open)) {
+				x_smbd_requ_t *requ_notify, *requ_next;
+				for (requ_notify = curr_open->pending_requ_list.get_front();
+						requ_notify;
+						requ_notify = requ_next) {
+
+					requ_next = curr_open->pending_requ_list.next(requ_notify);
+					if (requ_notify->in_smb2_hdr.opcode != X_SMB2_OP_NOTIFY) {
+						continue;
+					}
+					curr_open->pending_requ_list.remove(requ_notify);
+					x_smbd_conn_post_cancel(x_smbd_chan_get_conn(requ_notify->smbd_chan),
+							requ_notify, NT_STATUS_DELETE_PENDING);
+				}
+			}
+		}
+	} else {
+		sharemode->meta.delete_on_close = false;
+	}
+	return NT_STATUS_OK;
 }
 
 std::u16string x_smbd_object_get_path(const x_smbd_object_t *smbd_object)
