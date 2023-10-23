@@ -672,8 +672,8 @@ static NTSTATUS posixfs_object_set_delete_on_close(posixfs_object_t *posixfs_obj
 		uint32_t access_mask,
 		bool delete_on_close)
 {
-	return x_smbd_object_set_delete_on_close(&posixfs_object->base, smbd_stream,
-			access_mask, delete_on_close);
+	X_TODO;
+	return NT_STATUS_INTERNAL_ERROR;
 }
 
 static posixfs_open_t *posixfs_open_create_intl(

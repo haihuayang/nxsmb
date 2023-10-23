@@ -193,7 +193,10 @@ static NTSTATUS smbd_object_remove(
 	sharemode->open_list.remove(smbd_open);
 	--smbd_object->num_active_open;
 	if (smbd_open->open_state.initial_delete_on_close) {
-		x_smbd_open_op_set_delete_on_close(smbd_open, true);
+		auto state = std::make_unique<x_smbd_requ_state_disposition_t>();
+		state->delete_pending = true;
+		x_smbd_object_set_delete_pending_intl(smbd_object, smbd_open,
+				nullptr, state);
 	}
 
 	if (smbd_open->locks.size()) {
@@ -637,11 +640,22 @@ struct defer_requ_evt_t
 				}
 			}
 		} else if (smbd_requ->in_smb2_hdr.opcode == X_SMB2_OP_SETINFO) {
-			auto state = smbd_requ->release_state<x_smbd_requ_state_rename_t>();
-			if (x_smbd_requ_async_remove(smbd_requ) && smbd_conn) {
-				NTSTATUS status = x_smbd_open_rename(smbd_requ, state);
-				if (!NT_STATUS_EQUAL(status, NT_STATUS_PENDING)) {
-					state->async_done(smbd_conn, smbd_requ, status);
+			/* TODO polymorphism */
+			if (smbd_requ->get_requ_state<x_smbd_requ_state_rename_t>()) {
+				auto state = smbd_requ->release_state<x_smbd_requ_state_rename_t>();
+				if (x_smbd_requ_async_remove(smbd_requ) && smbd_conn) {
+					NTSTATUS status = x_smbd_open_rename(smbd_requ, state);
+					if (!NT_STATUS_EQUAL(status, NT_STATUS_PENDING)) {
+						state->async_done(smbd_conn, smbd_requ, status);
+					}
+				}
+			} else {
+				auto state = smbd_requ->release_state<x_smbd_requ_state_disposition_t>();
+				if (x_smbd_requ_async_remove(smbd_requ) && smbd_conn) {
+					NTSTATUS status = x_smbd_open_set_delete_pending(smbd_requ, state);
+					if (!NT_STATUS_EQUAL(status, NT_STATUS_PENDING)) {
+						state->async_done(smbd_conn, smbd_requ, status);
+					}
 				}
 			}
 		}

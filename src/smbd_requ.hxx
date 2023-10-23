@@ -105,6 +105,16 @@ struct x_smbd_requ_state_rename_t : x_smbd_requ_state_async_t
 	std::u16string in_path, in_stream_name;
 };
 
+struct x_smbd_requ_state_disposition_t : x_smbd_requ_state_async_t
+{
+	void async_done(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ,
+			NTSTATUS status) override;
+
+	uint64_t in_file_id_persistent;
+	uint64_t in_file_id_volatile;
+	bool delete_pending;
+};
+
 struct x_smbd_requ_state_qdir_t : x_smbd_requ_state_async_t
 {
 	void async_done(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ,

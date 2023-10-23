@@ -673,11 +673,6 @@ NTSTATUS x_smbd_object_rename(x_smbd_object_t *smbd_object,
 		x_smbd_requ_t *smbd_requ,
 		std::unique_ptr<x_smbd_requ_state_rename_t> &state);
 
-NTSTATUS x_smbd_object_set_delete_on_close(x_smbd_object_t *smbd_object,
-		x_smbd_stream_t *smbd_stream,
-		uint32_t access_mask,
-		bool delete_on_close);
-
 static inline NTSTATUS x_smbd_open_rename(
 		x_smbd_requ_t *smbd_requ,
 		std::unique_ptr<x_smbd_requ_state_rename_t> &state)
@@ -686,6 +681,26 @@ static inline NTSTATUS x_smbd_open_rename(
 	auto smbd_object = smbd_open->smbd_object;
 	return x_smbd_object_rename(smbd_object, smbd_open, smbd_requ,
 			state);
+}
+
+NTSTATUS x_smbd_object_set_delete_pending_intl(x_smbd_object_t *smbd_object,
+		x_smbd_open_t *smbd_open,
+		x_smbd_requ_t *smbd_requ,
+		std::unique_ptr<x_smbd_requ_state_disposition_t> &state);
+
+NTSTATUS x_smbd_object_set_delete_pending(x_smbd_object_t *smbd_object,
+		x_smbd_open_t *smbd_open,
+		x_smbd_requ_t *smbd_requ,
+		std::unique_ptr<x_smbd_requ_state_disposition_t> &state);
+
+static inline NTSTATUS x_smbd_open_set_delete_pending(
+		x_smbd_requ_t *smbd_requ,
+		std::unique_ptr<x_smbd_requ_state_disposition_t> &state)
+{
+	auto smbd_open = smbd_requ->smbd_open;
+	auto smbd_object = smbd_open->smbd_object;
+	return x_smbd_object_set_delete_pending(smbd_object, smbd_open,
+			smbd_requ, state);
 }
 
 std::u16string x_smbd_object_get_path(const x_smbd_object_t *smbd_object);

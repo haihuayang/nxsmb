@@ -579,48 +579,94 @@ NTSTATUS x_smbd_object_rename(x_smbd_object_t *smbd_object,
 	return status;
 }
 
-/* smbd_object mutex is locked */
 NTSTATUS x_smbd_object_set_delete_on_close(x_smbd_object_t *smbd_object,
 		x_smbd_stream_t *smbd_stream,
 		uint32_t access_mask,
-		bool delete_on_close)
-{
-	auto sharemode = x_smbd_object_get_sharemode(
-			smbd_object, smbd_stream);
+		bool delete_on_close);
 
-	if (delete_on_close) {
+NTSTATUS x_smbd_object_set_delete_pending_intl(x_smbd_object_t *smbd_object,
+		x_smbd_open_t *smbd_open,
+		x_smbd_requ_t *smbd_requ,
+		std::unique_ptr<x_smbd_requ_state_disposition_t> &state)
+{
+	auto sharemode = x_smbd_open_get_sharemode(smbd_open);
+
+	if (!state->delete_pending) {
+		sharemode->meta.delete_on_close = false;
+		return NT_STATUS_OK;
+	}
+
+	if (smbd_requ) {
 		NTSTATUS status = x_smbd_can_set_delete_on_close(smbd_object,
-				smbd_stream,
+				smbd_open->smbd_stream,
 				smbd_object->meta.file_attributes,
-				access_mask);
+				smbd_open->open_state.access_mask);
 		if (!NT_STATUS_IS_OK(status)) {
 			return status;
 		}
-		sharemode->meta.delete_on_close = true;
-		if (smbd_object->type == x_smbd_object_t::type_dir &&
-				!smbd_stream) {
-			auto &open_list = sharemode->open_list;
-			x_smbd_open_t *curr_open;
-			for (curr_open = open_list.get_front(); curr_open; curr_open = open_list.next(curr_open)) {
-				x_smbd_requ_t *requ_notify, *requ_next;
-				for (requ_notify = curr_open->pending_requ_list.get_front();
-						requ_notify;
-						requ_notify = requ_next) {
+	}
 
-					requ_next = curr_open->pending_requ_list.next(requ_notify);
-					if (requ_notify->in_smb2_hdr.opcode != X_SMB2_OP_NOTIFY) {
-						continue;
-					}
-					curr_open->pending_requ_list.remove(requ_notify);
-					x_smbd_conn_post_cancel(x_smbd_chan_get_conn(requ_notify->smbd_chan),
-							requ_notify, NT_STATUS_DELETE_PENDING);
-				}
+	auto &open_list = sharemode->open_list;
+	x_smbd_open_t *curr_open;
+	bool delay = false;
+	for (curr_open = open_list.get_front(); curr_open; curr_open = open_list.next(curr_open)) {
+		if (curr_open == smbd_open) {
+			continue;
+		}
+		if (curr_open->smbd_lease) {
+			if (curr_open->smbd_lease == smbd_open->smbd_lease) {
+				continue;
+			}
+			if (x_smbd_open_break_lease(curr_open, nullptr, nullptr,
+						X_SMB2_LEASE_HANDLE, X_SMB2_LEASE_HANDLE,
+						smbd_requ, false)) {
+				delay = true;
+			}
+		} else {
+			if (x_smbd_open_break_oplock(smbd_object, curr_open,
+						X_SMB2_LEASE_HANDLE, smbd_requ)) {
+				delay = true;
 			}
 		}
-	} else {
-		sharemode->meta.delete_on_close = false;
+	}
+
+	if (delay && smbd_requ) {
+		smbd_requ->save_requ_state(state);
+		/* windows server do not send interim response in renaming */
+		x_smbd_requ_async_insert(smbd_requ, smbd_rename_cancel, -1);
+		return NT_STATUS_PENDING;
+	}
+
+	sharemode->meta.delete_on_close = true;
+	if (smbd_object->type == x_smbd_object_t::type_dir &&
+			!smbd_open->smbd_stream) {
+		for (curr_open = open_list.get_front(); curr_open; curr_open = open_list.next(curr_open)) {
+			x_smbd_requ_t *requ_notify, *requ_next;
+			for (requ_notify = curr_open->pending_requ_list.get_front();
+					requ_notify;
+					requ_notify = requ_next) {
+
+				requ_next = curr_open->pending_requ_list.next(requ_notify);
+				if (requ_notify->in_smb2_hdr.opcode != X_SMB2_OP_NOTIFY) {
+					continue;
+				}
+				curr_open->pending_requ_list.remove(requ_notify);
+				x_smbd_conn_post_cancel(x_smbd_chan_get_conn(requ_notify->smbd_chan),
+						requ_notify, NT_STATUS_DELETE_PENDING);
+			}
+		}
 	}
 	return NT_STATUS_OK;
+}
+
+NTSTATUS x_smbd_object_set_delete_pending(x_smbd_object_t *smbd_object,
+		x_smbd_open_t *smbd_open,
+		x_smbd_requ_t *smbd_requ,
+		std::unique_ptr<x_smbd_requ_state_disposition_t> &state)
+{
+	auto lock = std::lock_guard(smbd_object->mutex);
+	return x_smbd_object_set_delete_pending_intl(smbd_object, smbd_open,
+			smbd_requ, state);
 }
 
 std::u16string x_smbd_object_get_path(const x_smbd_object_t *smbd_object)
