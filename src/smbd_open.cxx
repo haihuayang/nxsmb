@@ -1982,8 +1982,8 @@ static NTSTATUS smbd_open_reconnect(x_smbd_open_t *smbd_open,
 		}
 	}
 	if (!smbd_user->match(open_state.owner)) {
-		X_LOG_NOTICE("user sid not match");
-		return NT_STATUS_OBJECT_NAME_NOT_FOUND;
+		X_LOG_NOTICE("user sid not match, STATUS_ACCESS_DENIED");
+		return NT_STATUS_ACCESS_DENIED;
 	}
 	if (!x_smbd_del_timer(&smbd_open->durable_timer)) {
 		return NT_STATUS_OBJECT_NAME_NOT_FOUND;
