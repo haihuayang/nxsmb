@@ -43,7 +43,7 @@ static idl::dcerpc_nca_status lsa_OpenPolicy2(
 #if 0
 	TODO disable access check for now
 	if ((access_mask & ~(idl::LSA_POLICY_VIEW_LOCAL_INFORMATION)) != 0) {
-		X_LOG_ERR("not supported access_mask 0x%x", arg.access_mask);
+		X_LOG(SMB, ERR, "not supported access_mask 0x%x", arg.access_mask);
 		arg.__result = NT_STATUS_ACCESS_DENIED;
 		return true;
 	}

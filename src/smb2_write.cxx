@@ -82,7 +82,7 @@ static void x_smb2_reply_write(x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ,
 		const x_smbd_requ_state_write_t &state)
 {
-	X_LOG_OP("%ld WRITE SUCCESS", smbd_requ->in_smb2_hdr.mid);
+	X_LOG(SMB, OP, "%ld WRITE SUCCESS", smbd_requ->in_smb2_hdr.mid);
 
 	x_bufref_t *bufref = x_bufref_alloc(sizeof(x_smb2_out_write_t));
 
@@ -97,7 +97,7 @@ void x_smbd_requ_state_write_t::async_done(x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ,
 		NTSTATUS status)
 {
-	X_LOG_DBG("status=0x%x", status.v);
+	X_LOG(SMB, DBG, "status=0x%x", status.v);
 	if (!smbd_conn) {
 		return;
 	}
@@ -118,7 +118,7 @@ NTSTATUS x_smb2_process_write(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ
 		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
 
-	X_LOG_OP("%ld WRITE 0x%lx, 0x%lx", smbd_requ->in_smb2_hdr.mid,
+	X_LOG(SMB, OP, "%ld WRITE 0x%lx, 0x%lx", smbd_requ->in_smb2_hdr.mid,
 			state->in_file_id_persistent, state->in_file_id_volatile);
 
 	if (state->in_buf_length > x_smbd_conn_get_negprot(smbd_conn).max_write_size) {

@@ -258,7 +258,7 @@ static std::array<uint8_t, 16> ntlmssp_make_packet_signature(x_auth_ntlmssp_t *n
 		uint8_t digest[16];
 
 		auto &crypt = ntlmssp->crypt_dirs[direction];
-		X_LOG_DBG("%s seq = %u, len = %u, pdu_len = %u\n",
+		X_LOG(AUTH, DBG, "%s seq = %u, len = %u, pdu_len = %u\n",
 					direction == 0 ? "SEND" : "RECV",
 					crypt.seq_num,
 					(unsigned int)length,
@@ -926,7 +926,7 @@ static NTSTATUS ntlmssp_post_auth(x_auth_ntlmssp_t *ntlmssp, x_auth_info_t &auth
 	auth_info.user_flags = auth.info3.user_flgs;
 	std::u16string user_name_u16;
 	if (!x_str_convert(user_name_u16, std::string_view(auth.info3.user_name))) {
-		X_LOG_WARN("invalid usesr_name '%s'", auth.info3.user_name);
+		X_LOG(AUTH, WARN, "invalid usesr_name '%s'", auth.info3.user_name);
 	}
 	auth_info.account_name = std::make_shared<std::u16string>(std::move(user_name_u16));
 	auth_info.full_name = auth.info3.full_name;
@@ -1021,14 +1021,14 @@ static NTSTATUS ntlmssp_post_auth(x_auth_ntlmssp_t *ntlmssp, x_auth_info_t &auth
 	if (ntlmssp->doing_ntlm2) {
 		X_TODO;
 		if (memcmp(auth.user_session_key, zeros, 16) == 0) {
-			X_LOG_DBG("user_session_key is zero");
+			X_LOG(AUTH, DBG, "user_session_key is zero");
 		} else {
 
 		}
 	} else if ((ntlmssp->neg_flags & idl::NTLMSSP_NEGOTIATE_LM_KEY) && (!ntlmssp->client_nt_resp || ntlmssp->client_nt_resp->val.size() == 0x18)) {
 		X_TODO;
 		if (memcmp(auth.first_8_lm_hash, zeros, 8) == 0) {
-			X_LOG_DBG("lm_session_key is zero");
+			X_LOG(AUTH, DBG, "lm_session_key is zero");
 		}
 	} else if (memcmp(auth.user_session_key, zeros, 16) != 0) {
 		session_key_data = (const uint8_t *)auth.user_session_key;
@@ -1037,7 +1037,7 @@ static NTSTATUS ntlmssp_post_auth(x_auth_ntlmssp_t *ntlmssp, x_auth_info_t &auth
 		session_key_data = (const uint8_t *)auth.first_8_lm_hash;
 		session_key_length = 8;
 	} else {
-		X_LOG_ERR("Failed to create unmodified session key.");
+		X_LOG(AUTH, ERR, "Failed to create unmodified session key.");
 	}
 
 	if ((ntlmssp->neg_flags & idl::NTLMSSP_NEGOTIATE_KEY_EXCH) != 0 && session_key_length == 16) {
@@ -1056,7 +1056,7 @@ static void ntlmssp_check_password_cb_reply(x_wbcli_t *wbcli, int err)
 {
 	x_auth_ntlmssp_t *ntlmssp = X_CONTAINER_OF(wbcli, x_auth_ntlmssp_t, wbcli);
 	X_ASSERT(ntlmssp->state_position == x_auth_ntlmssp_t::S_CHECK_PASSWORD);
-	X_LOG_DBG("err=%d", err);
+	X_LOG(AUTH, DBG, "err=%d", err);
 
 	x_auth_upcall_t *auth_upcall = ntlmssp->auth_upcall;
 	ntlmssp->auth_upcall = nullptr;
@@ -1244,7 +1244,7 @@ static void ntlmssp_domain_info_cb_reply(x_wbcli_t *wbcli, int err)
 	}
 
 	const auto &domain_info = ntlmssp->wbresp.header.data.domain_info;
-	X_LOG_DBG("err=%d, result=%d, name='%s', alt_name='%s', sid=%s, native_mode=%d, active_directory=%d, primary=%d", err, ntlmssp->wbresp.header.result,
+	X_LOG(AUTH, DBG, "err=%d, result=%d, name='%s', alt_name='%s', sid=%s, native_mode=%d, active_directory=%d, primary=%d", err, ntlmssp->wbresp.header.result,
 			domain_info.name, domain_info.alt_name,
 			domain_info.sid,
 			domain_info.native_mode,
@@ -1563,7 +1563,7 @@ static inline NTSTATUS handle_negotiate(x_auth_ntlmssp_t &auth_ntlmssp,
 	/* TODO target_name illegal charset */
 	std::string target_name_u8;
 	if (!x_str_convert(target_name_u8, target_name)) {
-		X_LOG_WARN("Invalid target_name");
+		X_LOG(AUTH, WARN, "Invalid target_name");
 	}
 	chal_msg.TargetName = std::make_shared<std::string>(std::move(target_name_u8));
 	chal_msg.NegotiateFlags = idl::NEGOTIATE(chal_flags);

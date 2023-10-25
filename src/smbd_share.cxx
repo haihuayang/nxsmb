@@ -42,7 +42,7 @@ std::shared_ptr<x_smbd_volume_t> x_smbd_volume_create(
 		const std::string &path,
 		uint32_t allocation_roundup_size)
 {
-	X_LOG_NOTICE("add volume '%s', path='%s'",
+	X_LOG(CONF, NOTICE, "add volume '%s', path='%s'",
 			name_8.c_str(), path.c_str());
 	return std::make_shared<x_smbd_volume_t>(uuid, name_8, name_l16,
 			owner_node_l16, path, allocation_roundup_size);
@@ -66,7 +66,7 @@ NTSTATUS x_smbd_volume_get_fd_path(std::string &path,
 	snprintf(fd_path, sizeof fd_path, "/proc/self/fd/%d", fd);
 	ssize_t ret = readlink(fd_path, file_path, PATH_MAX);
 	if (ret >= PATH_MAX) {
-		X_LOG_ERR("file_handle path too long");
+		X_LOG(CONF, ERR, "file_handle path too long");
 		return NT_STATUS_OBJECT_NAME_NOT_FOUND;
 	}
 
@@ -74,12 +74,12 @@ NTSTATUS x_smbd_volume_get_fd_path(std::string &path,
 	file_path[ret] = '\0';
 	if (strncmp(file_path, smbd_volume.path.c_str(),
 				smbd_volume.path.length()) != 0) {
-		X_LOG_ERR("file_handle path %s not under volume %s",
+		X_LOG(CONF, ERR, "file_handle path %s not under volume %s",
 				file_path, smbd_volume.path.c_str());
 		return NT_STATUS_OBJECT_NAME_NOT_FOUND;
 	}
 	if (strncmp(file_path + smbd_volume.path.length(), "/root/", 6) != 0) {
-		X_LOG_ERR("file_handle path %s not under volume root",
+		X_LOG(CONF, ERR, "file_handle path %s not under volume root",
 				file_path);
 		return NT_STATUS_OBJECT_NAME_NOT_FOUND;
 	}

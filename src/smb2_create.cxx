@@ -171,7 +171,7 @@ static bool decode_contexts(x_smbd_requ_state_create_t &state,
 				idl::x_ndr_off_t ret = idl::x_ndr_pull(*sd,
 						data + data_off, data_len, 0);
 				if (ret <= 0) {
-					X_LOG_WARN("failed parsing TAG_SECD, ndr %ld", ret);
+					X_LOG(SMB, WARN, "failed parsing TAG_SECD, ndr %ld", ret);
 					return false;
 				}
 				state.in_security_descriptor = sd;
@@ -204,7 +204,7 @@ static bool decode_contexts(x_smbd_requ_state_create_t &state,
 			} else if (tag == X_SMB2_CREATE_TAG_AAPL) {
 				// TODO
 			} else {
-				X_LOG_WARN("unknown create context 0x%x", tag);
+				X_LOG(SMB, WARN, "unknown create context 0x%x", tag);
 			}
 #if 0
 		} else if (tag_len == 16) {
@@ -221,16 +221,16 @@ static bool decode_contexts(x_smbd_requ_state_create_t &state,
 				// state.in_contexts |= X_SMB2_CONTEXT_FLAG_APP_INSTANCE_ID;
 				// state.in_context_app_instance_id = ctx->app_instance_id;
 			} else {
-				X_LOG_WARN("unknown create context");
+				X_LOG(SMB, WARN, "unknown create context");
 			}
 #endif
 		} else if (tag_len < 4) {
 			/* return NT_STATUS_INVALID_PARAMETER if tag_len < 4 */
-			X_LOG_WARN("unknown create context tag_len=%d", tag_len);
+			X_LOG(SMB, WARN, "unknown create context tag_len=%d", tag_len);
 			return false;
 		} else {
 			/* ignore */
-			X_LOG_WARN("unknown create context tag_len=%d", tag_len);
+			X_LOG(SMB, WARN, "unknown create context tag_len=%d", tag_len);
 		}
 
 		data += clen;
@@ -247,7 +247,7 @@ static bool decode_contexts(x_smbd_requ_state_create_t &state,
 				X_SMB2_CONTEXT_FLAG_DH2C)) ||
 			x_bit_all<uint32_t>(state.in_contexts, X_SMB2_CONTEXT_FLAG_DH2Q |
 				X_SMB2_CONTEXT_FLAG_DH2C)) {
-		X_LOG_ERR("Invalid combination of durable contexts");
+		X_LOG(SMB, ERR, "Invalid combination of durable contexts");
 		return false;
 	}
 
@@ -496,7 +496,7 @@ static NTSTATUS decode_in_create(x_smbd_requ_state_create_t &state,
 	}
 
 	if (state.in_oplock_level == X_SMB2_OPLOCK_LEVEL_LEASE && !has_RqLs) {
-		X_LOG_WARN("missing RqLs");
+		X_LOG(SMB, WARN, "missing RqLs");
 		state.in_oplock_level = X_SMB2_OPLOCK_LEVEL_NONE;
 	}
 
@@ -581,7 +581,7 @@ static void x_smb2_reply_create(x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ,
 		const x_smbd_requ_state_create_t &state)
 {
-	X_LOG_OP("%ld RESP SUCCESS 0x%lx,0x%lx", smbd_requ->in_smb2_hdr.mid,
+	X_LOG(SMB, OP, "%ld RESP SUCCESS 0x%lx,0x%lx", smbd_requ->in_smb2_hdr.mid,
 			smbd_requ->smbd_open->open_state.id_persistent,
 			smbd_requ->smbd_open->id_volatile);
 
@@ -642,7 +642,7 @@ void x_smbd_requ_state_create_t::async_done(x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ,
 		NTSTATUS status)
 {
-	X_LOG_DBG("status=0x%x", status.v);
+	X_LOG(SMB, DBG, "status=0x%x", status.v);
 	if (!smbd_conn) {
 		smb2_replay_cache_clear_if(*this);
 		return;
@@ -728,7 +728,7 @@ static NTSTATUS smb2_process_create(x_smbd_requ_t *smbd_requ,
 
 	uint32_t orig_access = state->in_desired_access;
 	state->in_desired_access = se_file_map_generic(orig_access);
-	X_LOG_DBG("map access 0x%x to 0x%x", orig_access, state->in_desired_access);
+	X_LOG(SMB, DBG, "map access 0x%x to 0x%x", orig_access, state->in_desired_access);
 
 	if (!state->in_path.empty()) {
 		auto ch = state->in_path[0];
@@ -742,7 +742,7 @@ static NTSTATUS smb2_process_create(x_smbd_requ_t *smbd_requ,
 	}
 
 	/* TODO log stream too */
-	X_LOG_OP("%ld CREATE '%s':'%s'", smbd_requ->in_smb2_hdr.mid,
+	X_LOG(SMB, OP, "%ld CREATE '%s':'%s'", smbd_requ->in_smb2_hdr.mid,
 			x_str_todebug(state->in_path).c_str(),
 			x_str_todebug(state->in_ads_name).c_str());
 

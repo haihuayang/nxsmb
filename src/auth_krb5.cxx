@@ -95,7 +95,7 @@ static void auth_krb5_domain_info_cb_reply(x_wbcli_t *wbcli, int err)
 
 	if (err == 0) {
 		const auto &domain_info = auth->wbresp.header.data.domain_info;
-		X_LOG_DBG("err=%d, result=%d, name='%s', alt_name='%s', sid=%s, native_mode=%d, active_directory=%d, primary=%d",
+		X_LOG(AUTH, DBG, "err=%d, result=%d, name='%s', alt_name='%s', sid=%s, native_mode=%d, active_directory=%d, primary=%d",
 				err, auth->wbresp.header.result,
 				domain_info.name, domain_info.alt_name,
 				domain_info.sid,
@@ -886,7 +886,7 @@ static std::string safe_utf16_ptr_to_utf8(const std::shared_ptr<std::u16string> 
 	std::string ret;
 	if (u16s) {
 		if (!x_str_convert(ret, *u16s)) {
-			X_LOG_DBG("Invalid u16string");
+			X_LOG(AUTH, DBG, "Invalid u16string");
 		}
 	}
 	return ret;
@@ -952,13 +952,13 @@ static NTSTATUS auth_krb5_accepted(x_auth_krb5_t &auth, gss_ctx_id_t gss_ctx,
 	gss_maj = gssapi_obtain_pac_blob(gss_min, gss_ctx,
 			pac_buffer_set);
 	if (gss_maj == GSS_S_UNAVAILABLE) {
-		X_LOG_DBG("unable to obtain a PAC against this GSSAPI library.  "
+		X_LOG(AUTH, DBG, "unable to obtain a PAC against this GSSAPI library.  "
 				"GSSAPI secured connections are available only with Heimdal or MIT Kerberos >= 1.8\n");
 	} else if (gss_maj != 0) {
 		DEBUG("obtaining PAC via GSSAPI gss_inqiure_sec_context_by_oid (Heimdal OID) failed: %s\n",
 				gssapi_error_string(NULL, gss_maj, gss_min, gss_mech_krb5));
 	} else if (pac_buffer_set == GSS_C_NO_BUFFER_SET) {
-		X_LOG_DBG("gss_inquire_sec_context_by_oid returned unknown "
+		X_LOG(AUTH, DBG, "gss_inquire_sec_context_by_oid returned unknown "
 				"data in results.\n");
 		return NT_STATUS_INTERNAL_ERROR;
 	}
@@ -1462,7 +1462,7 @@ static krb5_error_code create_principal(krb5_context krbctx,
 
 	krb5_error_code ret = x_krb5_parse_name(krbctx, str.c_str(), princ);
 	if (ret) {
-		X_LOG_ERR("smb_krb5_parse_name(%s) failed (%s)",
+		X_LOG(AUTH, ERR, "smb_krb5_parse_name(%s) failed (%s)",
 			  str.c_str(), error_message(ret));
 	}
 
@@ -1566,7 +1566,7 @@ static krb5_error_code fill_keytab_from_password(
 
 	ret = krb5_get_permitted_enctypes(krbctx, &enctypes);
 	if (ret) {
-		X_LOG_ERR("Can't determine permitted enctypes!");
+		X_LOG(AUTH, ERR, "Can't determine permitted enctypes!");
 		return ret;
 	}
 
@@ -1580,7 +1580,7 @@ static krb5_error_code fill_keytab_from_password(
 		if (kerberos_key_from_string(krbctx, smbd_conf, princ,
 						    &pwd_data, &key,
 						    enctypes[i], false)) {
-			X_LOG_DBG("Failed to create key for enctype %d "
+			X_LOG(AUTH, DBG, "Failed to create key for enctype %d "
 				   "(error: %s)",
 				   enctypes[i], error_message(ret));
 			continue;
@@ -1593,7 +1593,7 @@ static krb5_error_code fill_keytab_from_password(
 		ret = krb5_kt_add_entry(krbctx, keytab, &kt_entry);
 		krb5_free_keyblock_contents(krbctx, &key);
 		if (ret) {
-			X_LOG_ERR("Failed to add entry to "
+			X_LOG(AUTH, ERR, "Failed to add entry to "
 				  "keytab for enctype %d (error: %s)",
 				   enctypes[i], error_message(ret));
 			goto out;
@@ -1623,7 +1623,7 @@ static krb5_error_code fill_mem_keytab_from_secrets(
 
 	std::string pwd = smbd_conf->secrets.machine_password;
 	if (pwd.empty()) {
-		X_LOG_ERR("failed to fetch machine password");
+		X_LOG(AUTH, ERR, "failed to fetch machine password");
 		return KRB5_LIBOS_CANTREADPWD;
 	}
 
@@ -1691,7 +1691,7 @@ static krb5_error_code fill_mem_keytab_from_secrets(
 	krb5_principal princ = nullptr;
 	kerr = get_host_principal(*smbd_conf, krbctx, &princ);
 	if (kerr) {
-		X_LOG_ERR("Failed to get host principal!");
+		X_LOG(AUTH, ERR, "Failed to get host principal!");
 		return kerr;
 	}
 	auto unique_princ = x_krb5_principal_ptr_t(princ, [krbctx](krb5_principal p) {
@@ -1709,24 +1709,24 @@ static krb5_error_code fill_mem_keytab_from_secrets(
 
 	kerr = get_alias_principals(*smbd_conf, krbctx, alias_princs);
 	if (kerr) {
-		X_LOG_ERR("Failed to get cluster principals!");
+		X_LOG(AUTH, ERR, "Failed to get cluster principals!");
 		return kerr;
 	}
 	kerr = fill_keytab_from_password(*smbd_conf, krbctx, keytab,
 					princ, alias_princs, kvno, pwd);
 	if (kerr) {
-		X_LOG_ERR("Failed to fill memory keytab!");
+		X_LOG(AUTH, ERR, "Failed to fill memory keytab!");
 		return kerr;
 	}
 
 	std::string pwd_old = smbd_conf->secrets.prev_machine_password;
 	if (pwd_old.empty()) {
-		X_LOG_DBG("no prev machine password");
+		X_LOG(AUTH, DBG, "no prev machine password");
 	} else {
 		kerr = fill_keytab_from_password(*smbd_conf, krbctx, keytab,
 				princ, alias_princs, kvno -1, pwd_old);
 		if (kerr) {
-			X_LOG_ERR("Failed to fill memory keytab!");
+			X_LOG(AUTH, ERR, "Failed to fill memory keytab!");
 			return kerr;
 		}
 	}

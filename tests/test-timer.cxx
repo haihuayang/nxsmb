@@ -10,7 +10,7 @@ struct test_timer_job_t
 static long test_timer_job_func(x_timer_job_t *timer_job)
 {
 	test_timer_job_t *test_timer_job = X_CONTAINER_OF(timer_job, test_timer_job_t, timer_job);
-	X_LOG_DBG("%p %d", test_timer_job, test_timer_job->count);
+	X_LOG(UTILS, DBG, "%p %d", test_timer_job, test_timer_job->count);
 	++test_timer_job->count;
 	if (test_timer_job->count == 8) {
 		return 0;

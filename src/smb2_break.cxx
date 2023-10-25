@@ -86,7 +86,7 @@ static void x_smb2_reply_oplock_break(x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ,
 		const x_smbd_requ_state_oplock_break_t &state)
 {
-	X_LOG_OP("%ld RESP SUCCESS", smbd_requ->in_smb2_hdr.mid);
+	X_LOG(SMB, OP, "%ld RESP SUCCESS", smbd_requ->in_smb2_hdr.mid);
 
 	x_bufref_t *bufref = x_bufref_alloc(sizeof(x_smb2_oplock_break_t));
 
@@ -124,7 +124,7 @@ static void x_smb2_reply_lease_break(x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ,
 		const x_smbd_requ_state_lease_break_t &state)
 {
-	X_LOG_OP("%ld RESP SUCCESS", smbd_requ->in_smb2_hdr.mid);
+	X_LOG(SMB, OP, "%ld RESP SUCCESS", smbd_requ->in_smb2_hdr.mid);
 
 	x_bufref_t *bufref = x_bufref_alloc(sizeof(x_smb2_lease_break_t));
 
@@ -158,7 +158,7 @@ static NTSTATUS x_smb2_process_lease_break(x_smbd_conn_t *smbd_conn,
 
 NTSTATUS x_smb2_process_break(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 {
-	X_LOG_OP("%ld BREAK", smbd_requ->in_smb2_hdr.mid);
+	X_LOG(SMB, OP, "%ld BREAK", smbd_requ->in_smb2_hdr.mid);
 
 	if (smbd_requ->in_requ_len < sizeof(x_smb2_header_t) + sizeof(x_smb2_oplock_break_t)) {
 		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
@@ -241,7 +241,7 @@ void x_smb2_send_oplock_break(x_smbd_conn_t *smbd_conn, x_smbd_sess_t *smbd_sess
 		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
 
-	X_LOG_OP("%ld BREAK '%s'", smbd_requ->in_mid, x_convert_utf16_to_utf8(state->in_name).c_str());
+	X_LOG(SMB, OP, "%ld BREAK '%s'", smbd_requ->in_mid, x_convert_utf16_to_utf8(state->in_name).c_str());
 	X_TODO;
 	return NT_STATUS_NOT_SUPPORTED;
 #endif

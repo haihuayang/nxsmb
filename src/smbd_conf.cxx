@@ -174,7 +174,7 @@ static bool parse_volume_map(
 		std::string uuid_str = token.substr(0, sep);
 		x_smb2_uuid_t uuid;
 		if (!parse_uuid(uuid, uuid_str)) {
-			X_LOG_ERR("invalid uuid '%s'", uuid_str.c_str());
+			X_LOG(CONF, ERR, "invalid uuid '%s'", uuid_str.c_str());
 			return false;
 		}
 
@@ -186,7 +186,7 @@ static bool parse_volume_map(
 		std::string name = token.substr(begin, sep - begin);
 		std::u16string name_l16;
 		if (!x_str_convert(name_l16, name, x_tolower_t())) {
-			X_LOG_ERR("invalid volume name '%s'", name.c_str());
+			X_LOG(CONF, ERR, "invalid volume name '%s'", name.c_str());
 			return false;
 		}
 
@@ -198,7 +198,7 @@ static bool parse_volume_map(
 		std::string node = token.substr(begin, sep - begin);
 		std::u16string node_l16;
 		if (!x_str_convert(node_l16, node, x_tolower_t())) {
-			X_LOG_ERR("invalid node name '%s'", node.c_str());
+			X_LOG(CONF, ERR, "invalid node name '%s'", node.c_str());
 			return false;
 		}
 
@@ -245,7 +245,7 @@ static const std::shared_ptr<x_smbd_volume_t> smbd_volume_find(
 static void add_share(x_smbd_conf_t &smbd_conf,
 		const std::shared_ptr<x_smbd_share_t> &smbd_share)
 {
-	X_LOG_DBG("add share section %s", smbd_share->name.c_str());
+	X_LOG(CONF, DBG, "add share section %s", smbd_share->name.c_str());
 	smbd_conf.smbd_shares.push_back(smbd_share);
 }
 
@@ -260,7 +260,7 @@ static bool smbd_conf_add_share(x_smbd_conf_t &smbd_conf,
 	std::u16string name_16;
 	std::u16string name_l16;
 	if (!x_str_convert(name_16, share_spec.name)) {
-		X_LOG_ERR("Invalid share name '%s'", share_spec.name.c_str());
+		X_LOG(CONF, ERR, "Invalid share name '%s'", share_spec.name.c_str());
 	}
 	X_ASSERT(x_str_tolower(name_l16, name_16));
 
@@ -287,13 +287,13 @@ static bool smbd_conf_add_share(x_smbd_conf_t &smbd_conf,
 				smbd_volumes[0]);
 	}
 	if (!share) {
-		X_LOG_ERR("Failed create share '%s'", share_spec.name.c_str());
+		X_LOG(CONF, ERR, "Failed create share '%s'", share_spec.name.c_str());
 		return false;
 	}
 
 	for (auto &smbd_volume: smbd_volumes) {
 		if (smbd_volume->owner_share) {
-			X_LOG_ERR("Share '%s' cannot use volume '%s', owned by share '%s'",
+			X_LOG(CONF, ERR, "Share '%s' cannot use volume '%s', owned by share '%s'",
 					share_spec.name.c_str(),
 					smbd_volume->name_8.c_str(),
 					smbd_volume->owner_share->name.c_str());
@@ -335,32 +335,10 @@ static void load_ifaces(x_smbd_conf_t &smbd_conf)
 	}
 
 	if (ret_ifaces.size() == 0) {
-		X_LOG_ERR("WARNING: no network interfaces found");
+		X_LOG(CONF, ERR, "WARNING: no network interfaces found");
 	}
 
 	smbd_conf.local_ifaces = std::make_shared<std::vector<x_iface_t>>(std::move(ret_ifaces));
-}
-
-static bool parse_log_level(const std::string &value, unsigned int &loglevel)
-{
-	uint32_t ll;
-	if (!parse_uint32(value, ll)) {
-		return false;
-	}
-	if (ll > 10) {
-		loglevel = X_LOG_LEVEL_VERB;
-	} else if (ll > 5) {
-		loglevel = X_LOG_LEVEL_DBG;
-	} else if (ll > 3) {
-		loglevel = X_LOG_LEVEL_OP;
-	} else if (ll > 1) {
-		loglevel = X_LOG_LEVEL_NOTICE;
-	} else if (ll > 0) {
-		loglevel = X_LOG_LEVEL_WARN;
-	} else {
-		loglevel = X_LOG_LEVEL_ERR;
-	}
-	return true;
 }
 
 static bool parse_global_param(x_smbd_conf_t &smbd_conf,
@@ -369,7 +347,7 @@ static bool parse_global_param(x_smbd_conf_t &smbd_conf,
 {
 	// global parameters
 	if (name == "log level") {
-		return parse_log_level(value, smbd_conf.log_level);
+		smbd_conf.log_level = value;
 	} else if (name == "log name") {
 		smbd_conf.log_name = value;
 	} else if (name == "log file size") {
@@ -396,7 +374,7 @@ static bool parse_global_param(x_smbd_conf_t &smbd_conf,
 		smbd_conf.private_dir = value;
 	} else if (name == "node") {
 		if (!x_str_convert(smbd_conf.node_l16, value, x_tolower_t())) {
-			X_LOG_ERR("Invalid node '%s'", value.c_str());
+			X_LOG(CONF, ERR, "Invalid node '%s'", value.c_str());
 		}
 	} else if (name == "max session expiration") {
 		return parse_uint32(value, smbd_conf.max_session_expiration);
@@ -444,7 +422,7 @@ static bool parse_global_param(x_smbd_conf_t &smbd_conf,
 		return parse_uint32(value, smbd_conf.my_dev_delay_qdir_ms);
 
 	} else {
-		X_LOG_WARN("unknown global param '%s' with value '%s'",
+		X_LOG(CONF, WARN, "unknown global param '%s' with value '%s'",
 				name.c_str(), value.c_str());
 		return false;
 	}
@@ -503,7 +481,7 @@ static bool parse_share_param(x_smbd_share_spec_t &share_spec,
 	} else if (name == "dfs test") {
 		share_spec.dfs_test = parse_bool(value);
 	} else {
-		X_LOG_WARN("unknown share param '%s' with value '%s'",
+		X_LOG(CONF, WARN, "unknown share param '%s' with value '%s'",
 				name.c_str(), value.c_str());
 		return false;
 	}
@@ -602,7 +580,7 @@ static std::shared_ptr<std::u16string> make_u16string_ptr(const std::string &str
 static int parse_smbconf(x_smbd_conf_t &smbd_conf)
 {
 	const char *path = g_configfile;
-	X_LOG_DBG("Loading smbd_conf from %s", path);
+	X_LOG(CONF, DBG, "Loading smbd_conf from %s", path);
 
 	smbd_conf.capabilities = X_SMB2_CAP_DFS |
 		X_SMB2_CAP_LEASING |
@@ -668,7 +646,7 @@ static int parse_smbconf(x_smbd_conf_t &smbd_conf)
 		}
 		if (!x_str_convert(smbd_conf.node_l16, hostname, end,
 					x_tolower_t())) {
-			X_LOG_ERR("Invalid hostname '%s'\n", hostname);
+			X_LOG(CONF, ERR, "Invalid hostname '%s'\n", hostname);
 		}
 	}
 
@@ -677,16 +655,16 @@ static int parse_smbconf(x_smbd_conf_t &smbd_conf)
 	}
 
 	if (!x_str_toupper(smbd_conf.realm)) {
-		X_LOG_ERR("Invalid realm '%s'\n", smbd_conf.realm.c_str());
+		X_LOG(CONF, ERR, "Invalid realm '%s'\n", smbd_conf.realm.c_str());
 	}
 
 	if (!x_str_tolower(smbd_conf.dns_domain_l8)) {
-		X_LOG_ERR("Invalid realm '%s'\n", smbd_conf.dns_domain_l8.c_str());
+		X_LOG(CONF, ERR, "Invalid realm '%s'\n", smbd_conf.dns_domain_l8.c_str());
 	}
 
 	smbd_conf.dns_domain_l16 = make_u16string_ptr(smbd_conf.dns_domain_l8);
 	if (!smbd_conf.dns_domain_l16) {
-		X_LOG_ERR("Invalid dns_domain '%s'", smbd_conf.dns_domain_l8.c_str());
+		X_LOG(CONF, ERR, "Invalid dns_domain '%s'", smbd_conf.dns_domain_l8.c_str());
 		return -1;
 	}
 
@@ -694,7 +672,7 @@ static int parse_smbconf(x_smbd_conf_t &smbd_conf)
 	bool ret = x_str_convert(netbios_name_u8, smbd_conf.netbios_name_l8,
 			x_toupper_t());
 	if (!ret) {
-		X_LOG_ERR("Invalid netbios_name '%s'", smbd_conf.netbios_name_l8.c_str());
+		X_LOG(CONF, ERR, "Invalid netbios_name '%s'", smbd_conf.netbios_name_l8.c_str());
 		return -1;
 	}
 	smbd_conf.netbios_name_l8.clear();
@@ -703,13 +681,13 @@ static int parse_smbconf(x_smbd_conf_t &smbd_conf)
 
 	smbd_conf.netbios_name_u16 = make_u16string_ptr(smbd_conf.netbios_name_l8, x_toupper_t());
 	if (!smbd_conf.netbios_name_u16) {
-		X_LOG_ERR("Invalid netbios_name '%s'", smbd_conf.netbios_name_l8.c_str());
+		X_LOG(CONF, ERR, "Invalid netbios_name '%s'", smbd_conf.netbios_name_l8.c_str());
 		return -1;
 	}
 
 	smbd_conf.workgroup_u16 = make_u16string_ptr(smbd_conf.workgroup_8, x_toupper_t());
 	if (!smbd_conf.workgroup_u16) {
-		X_LOG_ERR("Invalid workgroup '%s'", smbd_conf.workgroup_8.c_str());
+		X_LOG(CONF, ERR, "Invalid workgroup '%s'", smbd_conf.workgroup_8.c_str());
 		return -1;
 	}
 
@@ -718,14 +696,14 @@ static int parse_smbconf(x_smbd_conf_t &smbd_conf)
 			smbd_conf.workgroup_8,
 			netbios_name_u8);
 	if (err != 0) {
-		X_LOG_ERR("Fail loading secrets");
+		X_LOG(CONF, ERR, "Fail loading secrets");
 		return err;
 	}
 
 	err = x_smbd_group_mapping_load(smbd_conf.group_mapping,
 			smbd_conf.lib_dir);
 	if (err != 0) {
-		X_LOG_ERR("Fail loading group_mapping");
+		X_LOG(CONF, ERR, "Fail loading group_mapping");
 		return err;
 	}
 
@@ -745,7 +723,7 @@ static int parse_smbconf(x_smbd_conf_t &smbd_conf)
 			int volume_idx = find_volume_by_uuid(
 					smbd_conf.volume_specs, volume.first);
 			if (volume_idx == -1) {
-				X_LOG_ERR("cannot find volume %s for share %s",
+				X_LOG(CONF, ERR, "cannot find volume %s for share %s",
 						x_tostr(volume.first).c_str(),
 						ss->name.c_str());
 				return -1;
@@ -866,7 +844,7 @@ static int reload_volumes(x_smbd_conf_t &smbd_conf,
 			if (cmp >= 0) {
 				break;
 			}
-			X_LOG_NOTICE("volume %s removed",
+			X_LOG(CONF, NOTICE, "volume %s removed",
 					x_tostr((*curr_it)->uuid).c_str());
 		}
 		if (cmp == 0) {
@@ -882,7 +860,7 @@ static int reload_volumes(x_smbd_conf_t &smbd_conf,
 		}
 	}
 	for ( ; curr_it != curr_end; ++curr_it) {
-		X_LOG_NOTICE("volume %s removed",
+		X_LOG(CONF, NOTICE, "volume %s removed",
 				x_tostr((*curr_it)->uuid).c_str());
 	}
 	return 0;
@@ -906,14 +884,14 @@ static int reload_shares(x_smbd_conf_t &smbd_conf,
 			if (cmp >= 0) {
 				break;
 			}
-			X_LOG_NOTICE("share %s removed",
+			X_LOG(CONF, NOTICE, "share %s removed",
 					x_tostr((*curr_it)->uuid).c_str());
 		}
 		if (cmp == 0) {
 			std::u16string name_16;
 			std::u16string name_l16;
 			if (!x_str_convert(name_16, spec->name)) {
-				X_LOG_ERR("Invalid share name '%s'", spec->name.c_str());
+				X_LOG(CONF, ERR, "Invalid share name '%s'", spec->name.c_str());
 				return -1;
 			}
 			X_ASSERT(x_str_tolower(name_l16, name_16));
@@ -935,7 +913,7 @@ static int reload_shares(x_smbd_conf_t &smbd_conf,
 		}
 	}
 	for ( ; curr_it != curr_end; ++curr_it) {
-		X_LOG_NOTICE("share %s removed",
+		X_LOG(CONF, NOTICE, "share %s removed",
 				x_tostr((*curr_it)->uuid).c_str());
 	}
 	return 0;
@@ -952,11 +930,11 @@ int x_smbd_conf_reload()
 
 	if (smbd_conf->log_name != g_smbd_conf->log_name) {
 		x_log_init(smbd_conf->log_name.c_str(),
-				smbd_conf->log_level,
+				smbd_conf->log_level.c_str(),
 				smbd_conf->log_file_size);
 	} else if (smbd_conf->log_level != g_smbd_conf->log_level ||
 			smbd_conf->log_file_size != g_smbd_conf->log_file_size) {
-		x_log_init(nullptr, smbd_conf->log_level,
+		x_log_init(nullptr, smbd_conf->log_level.c_str(),
 				smbd_conf->log_file_size);
 	}
 

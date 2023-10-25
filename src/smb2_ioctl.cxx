@@ -91,7 +91,7 @@ static void x_smb2_reply_ioctl(x_smbd_conn_t *smbd_conn,
 		NTSTATUS status,
 		x_smbd_requ_state_ioctl_t &state)
 {
-	X_LOG_OP("%ld IOCTL SUCCESS", smbd_requ->in_smb2_hdr.mid);
+	X_LOG(SMB, OP, "%ld IOCTL SUCCESS", smbd_requ->in_smb2_hdr.mid);
 
 	x_bufref_t *bufref = x_bufref_alloc(sizeof(x_smb2_out_ioctl_t));
 	if (state.out_buf_length) {
@@ -512,7 +512,7 @@ void x_smbd_requ_state_ioctl_t::async_done(x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ,
 		NTSTATUS status)
 {
-	X_LOG_DBG("status=0x%x", status.v);
+	X_LOG(SMB, DBG, "status=0x%x", status.v);
 	if (!smbd_conn) {
 		return;
 	}
@@ -531,7 +531,7 @@ static NTSTATUS x_smb2_ioctl_query_allocated_ranges(
 
 	auto smbd_open = smbd_requ->smbd_open;
 	if (!smbd_open->check_access_any(idl::SEC_FILE_READ_DATA)) {
-		X_LOG_NOTICE("query_allocated_ranges invalid access 0x%x",
+		X_LOG(SMB, NOTICE, "query_allocated_ranges invalid access 0x%x",
 				smbd_open->open_state.access_mask);
 		return NT_STATUS_ACCESS_DENIED;
 	}
@@ -600,7 +600,7 @@ static NTSTATUS x_smb2_ioctl_set_sparse(
 	if (!smbd_open->check_access_any(idl::SEC_FILE_WRITE_DATA |
 				idl::SEC_FILE_WRITE_ATTRIBUTE |
 				idl::SEC_FILE_APPEND_DATA)) {
-		X_LOG_NOTICE("set_sparse invalid access 0x%x",
+		X_LOG(SMB, NOTICE, "set_sparse invalid access 0x%x",
 				smbd_open->open_state.access_mask);
 		return NT_STATUS_ACCESS_DENIED;
 	}
@@ -648,7 +648,7 @@ static NTSTATUS x_smb2_ioctl_set_zero_data(
 	/* TODO check tcon writable */
 	auto smbd_open = smbd_requ->smbd_open;
 	if (!smbd_open->check_access_any(idl::SEC_FILE_WRITE_DATA)) {
-		X_LOG_NOTICE("set_sparse invalid access 0x%x",
+		X_LOG(SMB, NOTICE, "set_sparse invalid access 0x%x",
 				smbd_open->open_state.access_mask);
 		return NT_STATUS_ACCESS_DENIED;
 	}
@@ -743,7 +743,7 @@ NTSTATUS x_smb2_process_ioctl(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ
 		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
 
-	X_LOG_OP("%ld IOCTL 0x%lx, 0x%lx", smbd_requ->in_smb2_hdr.mid,
+	X_LOG(SMB, OP, "%ld IOCTL 0x%lx, 0x%lx", smbd_requ->in_smb2_hdr.mid,
 			state->in_file_id_persistent, state->in_file_id_volatile);
 
 	if ((uint64_t)state->in_max_input_length + state->in_max_output_length > UINT32_MAX) {
@@ -818,7 +818,7 @@ NTSTATUS x_smb2_process_ioctl_torture(x_smbd_conn_t *smbd_conn,
 		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
 
-	X_LOG_OP("%ld IOCTL 0x%lx, 0x%lx", smbd_requ->in_smb2_hdr.mid,
+	X_LOG(SMB, OP, "%ld IOCTL 0x%lx, 0x%lx", smbd_requ->in_smb2_hdr.mid,
 			state->in_file_id_persistent, state->in_file_id_volatile);
 
 	switch (state->ctl_code) {

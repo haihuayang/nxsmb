@@ -53,7 +53,7 @@ static void x_smb2_reply_read(x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ,
 		x_smbd_requ_state_read_t &state)
 {
-	X_LOG_OP("%ld RESP SUCCESS", smbd_requ->in_smb2_hdr.mid);
+	X_LOG(SMB, OP, "%ld RESP SUCCESS", smbd_requ->in_smb2_hdr.mid);
 
 	smbd_requ->smbd_open->open_state.current_offset =
 		state.in_offset + state.in_length;
@@ -83,7 +83,7 @@ void x_smbd_requ_state_read_t::async_done(x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ,
 		NTSTATUS status)
 {
-	X_LOG_DBG("status=0x%x", status.v);
+	X_LOG(SMB, DBG, "status=0x%x", status.v);
 	if (!smbd_conn) {
 		return;
 	}
@@ -111,7 +111,7 @@ NTSTATUS x_smb2_process_read(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 	auto state = std::make_unique<x_smbd_requ_state_read_t>();
 	decode_in_read(*state, in_hdr);
 
-	X_LOG_OP("%ld READ 0x%lx, 0x%lx", smbd_requ->in_smb2_hdr.mid,
+	X_LOG(SMB, OP, "%ld READ 0x%lx, 0x%lx", smbd_requ->in_smb2_hdr.mid,
 			state->in_file_id_persistent, state->in_file_id_volatile);
 
 	if (state->in_length > x_smbd_conn_get_negprot(smbd_conn).max_read_size) {

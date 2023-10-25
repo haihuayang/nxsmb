@@ -95,7 +95,7 @@ struct x_smbd_conf_t
 	uint32_t smb2_max_credits = 8192;
 	bool host_msdfs = true;
 
-	unsigned int log_level = X_LOG_LEVEL_DBG;
+	std::string log_level;
 	uint32_t max_connections = 512;
 	uint32_t max_opens = 1024;
 

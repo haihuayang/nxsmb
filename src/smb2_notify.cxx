@@ -32,7 +32,7 @@ static NTSTATUS x_smb2_reply_notify(x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ,
 		const x_smbd_requ_state_notify_t &state)
 {
-	X_LOG_OP("%ld RESP SUCCESS", smbd_requ->in_smb2_hdr.mid);
+	X_LOG(SMB, OP, "%ld RESP SUCCESS", smbd_requ->in_smb2_hdr.mid);
 	/* TODO seem windows server remember in_output_buffer_length */
 	uint32_t output_buffer_length = std::min(state.in_output_buffer_length,
 			smbd_requ->smbd_open->notify_buffer_length);
@@ -68,7 +68,7 @@ void x_smbd_requ_state_notify_t::async_done(x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ,
 		NTSTATUS status)
 {
-	X_LOG_DBG("status=0x%x", status.v);
+	X_LOG(SMB, DBG, "status=0x%x", status.v);
 	if (!smbd_conn) {
 		return;
 	}
@@ -102,7 +102,7 @@ static NTSTATUS smbd_open_notify(x_smbd_open_t *smbd_open,
 		return NT_STATUS_DELETE_PENDING;
 	}
 
-	X_LOG_DBG("changes count %ld", smbd_open->notify_changes.size());
+	X_LOG(SMB, DBG, "changes count %ld", smbd_open->notify_changes.size());
 	state->out_notify_changes = std::move(smbd_open->notify_changes);
 	if (!state->out_notify_changes.empty()) {
 		return NT_STATUS_OK;
@@ -139,7 +139,7 @@ NTSTATUS x_smb2_process_notify(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_req
 	uint32_t in_filter = X_LE2H32(in_notify->filter);
 
 	// TODO smbd_smb2_request_verify_creditcharge
-	X_LOG_OP("%ld NOTIFY 0x%lx,0x%lx, filter=0x%x, length=%d",
+	X_LOG(SMB, OP, "%ld NOTIFY 0x%lx,0x%lx, filter=0x%x, length=%d",
 			smbd_requ->in_smb2_hdr.mid,
 			in_file_id_persistent, in_file_id_volatile,
 			in_filter, in_output_buffer_length);

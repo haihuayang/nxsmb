@@ -70,7 +70,7 @@ static void x_smb2_reply_qdir(x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ,
 		x_smbd_requ_state_qdir_t &state)
 {
-	X_LOG_OP("%ld RESP SUCCESS", smbd_requ->in_smb2_hdr.mid);
+	X_LOG(SMB, OP, "%ld RESP SUCCESS", smbd_requ->in_smb2_hdr.mid);
 
 	x_bufref_t *bufref = x_bufref_alloc(sizeof(x_smb2_out_qdir_t));
 	if (state.out_buf_length) {
@@ -91,7 +91,7 @@ void x_smbd_requ_state_qdir_t::async_done(x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ,
 		NTSTATUS status)
 {
-	X_LOG_DBG("status=0x%x", status.v);
+	X_LOG(SMB, DBG, "status=0x%x", status.v);
 	if (!smbd_conn) {
 		return;
 	}
@@ -177,7 +177,7 @@ static NTSTATUS smbd_qdir_process_requ(x_smbd_qdir_t *smbd_qdir, x_smbd_requ_t *
 			uint32_t access = se_calculate_maximal_access(*psd, *smbd_user);
 			psd = nullptr;
 			if ((access & DIR_READ_ACCESS_MASK) != DIR_READ_ACCESS_MASK) {
-				X_LOG_DBG("entry '%s' skip by ABE",
+				X_LOG(SMB, DBG, "entry '%s' skip by ABE",
 						x_str_todebug(ent_name).c_str());
 				continue;
 			}
@@ -215,7 +215,7 @@ struct smbd_qdir_evt_t
 	{
 		smbd_qdir_evt_t *evt = X_CONTAINER_OF(fdevt_user, smbd_qdir_evt_t, base);
 		x_smbd_requ_t *smbd_requ = evt->smbd_requ;
-		X_LOG_DBG("evt=%p, requ=%p, smbd_conn=%p", evt, smbd_requ, smbd_conn);
+		X_LOG(SMB, DBG, "evt=%p, requ=%p, smbd_conn=%p", evt, smbd_requ, smbd_conn);
 		x_smbd_requ_async_done(smbd_conn, smbd_requ, evt->status);
 		delete evt;
 	}
@@ -315,7 +315,7 @@ NTSTATUS x_smb2_process_query_directory(x_smbd_conn_t *smbd_conn, x_smbd_requ_t 
 		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
 
-	X_LOG_OP("%ld FIND 0x%lx, 0x%lx", smbd_requ->in_smb2_hdr.mid,
+	X_LOG(SMB, OP, "%ld FIND 0x%lx, 0x%lx", smbd_requ->in_smb2_hdr.mid,
 			state->in_file_id_persistent, state->in_file_id_volatile);
 
 	if (state->in_output_buffer_length > x_smbd_conn_get_negprot(smbd_conn).max_trans_size) {

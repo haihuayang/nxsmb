@@ -633,7 +633,7 @@ static void posixfs_object_set_fd(posixfs_object_t *posixfs_object,
 			&file_handle.base,
 			&mount_id, AT_EMPTY_PATH);
 	if (err != 0) {
-		X_LOG_ERR("name_to_handle_at %s errno=%d",
+		X_LOG(SMB, ERR, "name_to_handle_at %s errno=%d",
 				posixfs_object->unix_path_base.c_str(), errno);
 		X_ASSERT(false);
 	}
@@ -1098,7 +1098,7 @@ struct posixfs_read_evt_t
 	{
 		posixfs_read_evt_t *evt = X_CONTAINER_OF(fdevt_user, posixfs_read_evt_t, base);
 		x_smbd_requ_t *smbd_requ = evt->smbd_requ;
-		X_LOG_DBG("evt=%p, requ=%p, smbd_conn=%p", evt, smbd_requ, smbd_conn);
+		X_LOG(SMB, DBG, "evt=%p, requ=%p, smbd_conn=%p", evt, smbd_requ, smbd_conn);
 		x_smbd_requ_async_done(smbd_conn, smbd_requ, evt->status);
 		delete evt;
 	}
@@ -1126,7 +1126,7 @@ static NTSTATUS posixfs_do_read(posixfs_object_t *posixfs_object,
 	state.out_buf = x_buf_alloc(length);
 	ssize_t ret = pread(posixfs_object->fd, state.out_buf->data,
 			length, state.in_offset);
-	X_LOG_DBG("pread %u at %lu ret %ld", length, state.in_offset, ret);
+	X_LOG(SMB, DBG, "pread %u at %lu ret %ld", length, state.in_offset, ret);
 	if (ret < 0) {
 		return NT_STATUS_INTERNAL_ERROR;
 	} else if (ret == 0) {
@@ -1329,7 +1329,7 @@ static NTSTATUS posixfs_do_write(posixfs_object_t *posixfs_object,
 	ssize_t ret = pwrite(posixfs_object->fd,
 			state.in_buf->data + state.in_buf_offset,
 			state.in_buf_length, state.in_offset);
-	X_LOG_DBG("pwrite %u at %lu ret %ld", state.in_buf_length, state.in_offset, ret);
+	X_LOG(SMB, DBG, "pwrite %u at %lu ret %ld", state.in_buf_length, state.in_offset, ret);
 	if (ret <= 0) {
 		return NT_STATUS_INTERNAL_ERROR;
 	} else {
@@ -1358,7 +1358,7 @@ struct posixfs_write_evt_t
 	{
 		posixfs_write_evt_t *evt = X_CONTAINER_OF(fdevt_user, posixfs_write_evt_t, base);
 		x_smbd_requ_t *smbd_requ = evt->smbd_requ;
-		X_LOG_DBG("evt=%p, requ=%p, smbd_conn=%p", evt, smbd_requ, smbd_conn);
+		X_LOG(SMB, DBG, "evt=%p, requ=%p, smbd_conn=%p", evt, smbd_requ, smbd_conn);
 		x_smbd_requ_async_done(smbd_conn, smbd_requ, evt->status);
 		delete evt;
 	}
@@ -1549,7 +1549,7 @@ static NTSTATUS getinfo_stream_info(const posixfs_object_t *posixfs_object,
 			if (x_str_convert(name, std::string_view(stream_name))) {
 				marshall_ret = marshall_stream_info(marshall, name, eof, alloc);
 			} else {
-				X_LOG_ERR("invalid stream_name '%s'", stream_name);
+				X_LOG(SMB, ERR, "invalid stream_name '%s'", stream_name);
 			}
 			return marshall_ret;
 		});
@@ -1864,10 +1864,10 @@ static NTSTATUS posixfs_set_ea(posixfs_object_t *posixfs_object,
 		xattr_name += name;
 		if (ea.value_length == 0) {
 			if (name != ea.name) {
-				X_LOG_DBG("remove existed ea '%s'", name);
+				X_LOG(SMB, DBG, "remove existed ea '%s'", name);
 				ret = fremovexattr(posixfs_object->fd, xattr_name.c_str());
 			} else {
-				X_LOG_DBG("skip zero ea '%s'", name);
+				X_LOG(SMB, DBG, "skip zero ea '%s'", name);
 				ret = 0;
 			}
 		} else {
@@ -2386,7 +2386,7 @@ NTSTATUS posixfs_object_op_query_allocated_ranges(
 			return x_map_nt_error_from_unix(errno);
 		}
 		if (hole_off <= data_off) {
-			X_LOG_ERR("lseek inconsistent: hole %ld at or before data %ld\n",
+			X_LOG(SMB, ERR, "lseek inconsistent: hole %ld at or before data %ld\n",
 					hole_off, data_off);
 			return NT_STATUS_INTERNAL_ERROR;
 		}
@@ -2416,7 +2416,7 @@ NTSTATUS posixfs_object_op_set_zero_data(x_smbd_object_t *smbd_object,
 			FALLOC_FL_KEEP_SIZE | FALLOC_FL_PUNCH_HOLE,
 			begin_offset, end_offset - begin_offset);
 	if (err < 0) {
-		X_LOG_ERR("fallocate %lu-%lu errno=%d",
+		X_LOG(SMB, ERR, "fallocate %lu-%lu errno=%d",
 				begin_offset, end_offset, errno);
 		return x_map_nt_error_from_unix(errno);
 	}
@@ -2531,11 +2531,11 @@ bool posixfs_qdir_get_entry(x_smbd_qdir_t *smbd_qdir,
 			qdir_pos = smbd_qdir->pos;
 			++smbd_qdir->pos.file_number;
 		}
-		X_LOG_DBG("get_entry ent_name '%s'", ent_name);
+		X_LOG(SMB, DBG, "get_entry ent_name '%s'", ent_name);
 
 		std::u16string name;
 		if (!x_str_convert(name, std::string_view(ent_name))) {
-			X_LOG_WARN("qdir_process_entry invalid name '%s'",
+			X_LOG(SMB, WARN, "qdir_process_entry invalid name '%s'",
 					ent_name);
 			continue;
 		}
@@ -2546,7 +2546,7 @@ bool posixfs_qdir_get_entry(x_smbd_qdir_t *smbd_qdir,
 
 		if (!process_entry_func(&object_meta, &stream_meta, ppsd,
 					posixfs_object, ent_name, qdir_pos.file_number)) {
-			X_LOG_WARN("qdir_process_entry %s %d,0x%lx %d errno=%d",
+			X_LOG(SMB, WARN, "qdir_process_entry %s %d,0x%lx %d errno=%d",
 					ent_name, qdir_pos.file_number, qdir_pos.filepos,
 					qdir_pos.offset_in_block, errno);
 			continue;
@@ -2755,14 +2755,14 @@ NTSTATUS posixfs_op_object_delete(x_smbd_object_t *smbd_object,
 							smbd_object->path_base + u':' + u16_name,
 							{});
 				} else {
-					X_LOG_ERR("invalid stream_name '%s'", stream_name);
+					X_LOG(SMB, ERR, "invalid stream_name '%s'", stream_name);
 				}
 				return true;
 			});
 
 		NTSTATUS status = posixfs_delete_object(posixfs_object);
 		if (!NT_STATUS_IS_OK(status)) {
-			X_LOG_WARN("fail to unlink %s status=%x",
+			X_LOG(SMB, WARN, "fail to unlink %s status=%x",
 					posixfs_object->unix_path_base.c_str(),
 					NT_STATUS_V(status));
 			return status;
@@ -3154,14 +3154,14 @@ static int smbd_volume_read(int vol_fd,
 
 	int rfd = openat(vol_fd, "root", O_RDONLY);
 	if (rfd < 0) {
-		X_LOG_ERR("cannot open rootdir, errno=%d", errno);
+		X_LOG(SMB, ERR, "cannot open rootdir, errno=%d", errno);
 		return -errno;
 	}
 
 	struct stat st;
 	X_ASSERT(fstat(rfd, &st) == 0);
 	if (!S_ISDIR(st.st_mode)) {
-		X_LOG_ERR("root is not directory");
+		X_LOG(SMB, ERR, "root is not directory");
 		close(rfd);
 		return -EINVAL;
 	}
@@ -3203,7 +3203,7 @@ int posixfs_op_init_volume(std::shared_ptr<x_smbd_volume_t> &smbd_volume)
 	if (!smbd_volume->path.empty()) {
 		int vol_fd = open(smbd_volume->path.c_str(), O_RDONLY);
 		if (vol_fd < 0) {
-			X_LOG_ERR("cannot open volume %s, %d",
+			X_LOG(SMB, ERR, "cannot open volume %s, %d",
 					smbd_volume->name_8.c_str(), errno);
 			return -1;
 		}
@@ -3211,13 +3211,13 @@ int posixfs_op_init_volume(std::shared_ptr<x_smbd_volume_t> &smbd_volume)
 		int ret = smbd_volume_read(vol_fd, vol_id, rootdir_fd, durable_db);
 		close(vol_fd);
 		if (ret < 0) {
-			X_LOG_ERR("cannot read volume %s, %d",
+			X_LOG(SMB, ERR, "cannot read volume %s, %d",
 					smbd_volume->name_8.c_str(), -ret);
 			return -1;
 		}
 	}
 
-	X_LOG_NOTICE("volume '%s' with id=0x%x",
+	X_LOG(SMB, NOTICE, "volume '%s' with id=0x%x",
 			smbd_volume->name_8.c_str(), vol_id);
 
 	smbd_volume->volume_id = vol_id;

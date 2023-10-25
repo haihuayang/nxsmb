@@ -33,7 +33,7 @@ NTSTATUS x_smb2_process_keepalive(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_
 		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
 
-	X_LOG_OP("%ld KEEPALIVE", smbd_requ->in_smb2_hdr.mid);
+	X_LOG(SMB, OP, "%ld KEEPALIVE", smbd_requ->in_smb2_hdr.mid);
 
 	x_smb2_reply_keepalive(smbd_conn, smbd_requ);
 	return NT_STATUS_OK;

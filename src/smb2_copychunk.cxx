@@ -39,7 +39,7 @@ struct copychunk_evt_t
 	{
 		copychunk_evt_t *evt = X_CONTAINER_OF(fdevt_user, copychunk_evt_t, base);
 		x_smbd_requ_t *smbd_requ = evt->smbd_requ;
-		X_LOG_DBG("evt=%p, requ=%p, smbd_conn=%p", evt, smbd_requ, smbd_conn);
+		X_LOG(SMB, DBG, "evt=%p, requ=%p, smbd_conn=%p", evt, smbd_requ, smbd_conn);
 		x_smbd_requ_async_done(smbd_conn, smbd_requ, evt->status);
 		delete evt;
 	}
@@ -157,19 +157,19 @@ static NTSTATUS copychunk_check_access(uint32_t fsctl,
 		const x_smbd_open_t *dst_open)
 {
 	if (!x_smbd_tcon_same_sess(src_open->smbd_tcon, dst_open->smbd_tcon)) {
-		X_LOG_NOTICE("copy chunk handles not in the same session");
+		X_LOG(SMB, NOTICE, "copy chunk handles not in the same session");
 		return NT_STATUS_ACCESS_DENIED;
 	}
 
 	/* TODO check closing, we do not need it for now */
 
 	if (src_open->smbd_object->type == x_smbd_object_t::type_dir && !src_open->smbd_stream) {
-		X_LOG_NOTICE("copy chunk src not regular file or data stream");
+		X_LOG(SMB, NOTICE, "copy chunk src not regular file or data stream");
 		return NT_STATUS_ACCESS_DENIED;
 	}
 
 	if (dst_open->smbd_object->type == x_smbd_object_t::type_dir && !dst_open->smbd_stream) {
-		X_LOG_NOTICE("copy chunk dst not regular file or data stream");
+		X_LOG(SMB, NOTICE, "copy chunk dst not regular file or data stream");
 		return NT_STATUS_ACCESS_DENIED;
 	}
 
@@ -186,7 +186,7 @@ static NTSTATUS copychunk_check_access(uint32_t fsctl,
 	 * A non writable dst handle also doesn't make sense for other fsctls.
 	 */
 	if (!dst_open->check_access_any(idl::SEC_FILE_WRITE_DATA | idl::SEC_FILE_APPEND_DATA)) {
-		X_LOG_NOTICE("copy chunk dst not writable");
+		X_LOG(SMB, NOTICE, "copy chunk dst not writable");
 		return NT_STATUS_ACCESS_DENIED;
 	}
 	/*
@@ -194,7 +194,7 @@ static NTSTATUS copychunk_check_access(uint32_t fsctl,
 	 *   FILE_READ_DATA, and the CtlCode is FSCTL_SRV_COPYCHUNK.
 	 */
 	if (fsctl == X_SMB2_FSCTL_SRV_COPYCHUNK && !dst_open->check_access_any(idl::SEC_FILE_READ_DATA)) {
-		X_LOG_NOTICE("copy chunk dst not readable");
+		X_LOG(SMB, NOTICE, "copy chunk dst not readable");
 		return NT_STATUS_ACCESS_DENIED;
 	}
 	/*
@@ -203,7 +203,7 @@ static NTSTATUS copychunk_check_access(uint32_t fsctl,
 	 */
 	if (!src_open->check_access_any(idl::SEC_FILE_READ_DATA |
 				idl::SEC_FILE_EXECUTE)) {
-		X_LOG_NOTICE("copy chunk src not readable");
+		X_LOG(SMB, NOTICE, "copy chunk src not readable");
 		return NT_STATUS_ACCESS_DENIED;
 	}
 

@@ -45,7 +45,7 @@ static inline socklen_t ctrl_sockaddr_init(struct sockaddr_un *sun)
 static void x_smbd_ctrl_output(x_smbd_ctrl_conn_t *smbd_ctrl_conn)
 {
 	bool have_more = smbd_ctrl_conn->handler->output(smbd_ctrl_conn->output);
-	X_LOG_DBG("have_more %d, output %s", have_more, smbd_ctrl_conn->output.c_str());
+	X_LOG(CTRL, DBG, "have_more %d, output %s", have_more, smbd_ctrl_conn->output.c_str());
 	if (!have_more) {
 		smbd_ctrl_conn->handler.reset();
 		smbd_ctrl_conn->output += END_OF_MSG;
@@ -90,7 +90,7 @@ static bool x_smbd_ctrl_post_recv(x_smbd_ctrl_conn_t *smbd_ctrl_conn)
 
 static bool x_smbd_ctrl_conn_do_recv(x_smbd_ctrl_conn_t *smbd_ctrl_conn, x_fdevents_t &fdevents)
 {
-	X_LOG_DBG("%p x%lx x%lx", smbd_ctrl_conn, smbd_ctrl_conn->ep_id, fdevents);
+	X_LOG(CTRL, DBG, "%p x%lx x%lx", smbd_ctrl_conn, smbd_ctrl_conn->ep_id, fdevents);
 	ssize_t ret = read(smbd_ctrl_conn->fd,
 			(char *)&smbd_ctrl_conn->recv_buf + smbd_ctrl_conn->recv_len,
 			sizeof(smbd_ctrl_conn->recv_buf) - smbd_ctrl_conn->recv_len - 1);
@@ -115,7 +115,7 @@ static bool x_smbd_ctrl_conn_do_recv(x_smbd_ctrl_conn_t *smbd_ctrl_conn, x_fdeve
 
 static bool x_smbd_ctrl_conn_do_send(x_smbd_ctrl_conn_t *smbd_ctrl_conn, x_fdevents_t &fdevents)
 {
-	X_LOG_DBG("%p x%lx x%lx", smbd_ctrl_conn, smbd_ctrl_conn->ep_id, fdevents);
+	X_LOG(CTRL, DBG, "%p x%lx x%lx", smbd_ctrl_conn, smbd_ctrl_conn->ep_id, fdevents);
 	for (;;) {
 		ssize_t ret = write(smbd_ctrl_conn->fd,
 				smbd_ctrl_conn->output.data() + smbd_ctrl_conn->output_off,
@@ -180,7 +180,7 @@ static bool x_smbd_ctrl_conn_handle_events(x_smbd_ctrl_conn_t *smbd_ctrl_conn, x
 static bool x_smbd_ctrl_conn_upcall_cb_getevents(x_epoll_upcall_t *upcall, x_fdevents_t &fdevents)
 {
 	x_smbd_ctrl_conn_t *smbd_ctrl_conn = x_smbd_ctrl_conn_from_upcall(upcall);
-	X_LOG_DBG("%p x%lx", smbd_ctrl_conn, fdevents);
+	X_LOG(CTRL, DBG, "%p x%lx", smbd_ctrl_conn, fdevents);
 
 	bool ret = x_smbd_ctrl_conn_handle_events(smbd_ctrl_conn, fdevents);
 	return ret;
@@ -189,7 +189,7 @@ static bool x_smbd_ctrl_conn_upcall_cb_getevents(x_epoll_upcall_t *upcall, x_fde
 static void x_smbd_ctrl_conn_upcall_cb_unmonitor(x_epoll_upcall_t *upcall)
 {
 	x_smbd_ctrl_conn_t *smbd_ctrl_conn = x_smbd_ctrl_conn_from_upcall(upcall);
-	X_LOG_CONN("%p", smbd_ctrl_conn);
+	X_LOG(CTRL, CONN, "%p", smbd_ctrl_conn);
 	X_ASSERT_SYSCALL(close(smbd_ctrl_conn->fd));
 	delete smbd_ctrl_conn;
 }
@@ -224,7 +224,7 @@ static bool x_smbd_ctrl_upcall_cb_getevents(x_epoll_upcall_t *upcall, x_fdevents
 		struct sockaddr_un sun;
 		socklen_t slen = sizeof(sun);
 		int fd = accept(smbd_ctrl->fd, (struct sockaddr *)&sun, &slen);
-		X_LOG_DBG("accept %d, %d", fd, errno);
+		X_LOG(CTRL, DBG, "accept %d, %d", fd, errno);
 		if (fd >= 0) {
 			x_smbd_ctrl_accepted(fd);
 		} else if (errno == EINTR) {
@@ -241,7 +241,7 @@ static bool x_smbd_ctrl_upcall_cb_getevents(x_epoll_upcall_t *upcall, x_fdevents
 static void x_smbd_ctrl_upcall_cb_unmonitor(x_epoll_upcall_t *upcall)
 {
 	x_smbd_ctrl_t *smbd_ctrl = x_smbd_ctrl_from_upcall(upcall);
-	X_LOG_CONN("%p", smbd_ctrl);
+	X_LOG(CTRL, CONN, "%p", smbd_ctrl);
 	X_ASSERT_SYSCALL(close(smbd_ctrl->fd));
 	smbd_ctrl->fd = -1;
 	/* TODO may close all accepted client, and notify it is freed */

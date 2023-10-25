@@ -321,7 +321,7 @@ static bool interpret_string_addr_internal(struct addrinfo **ppres,
 			ppres);
 
 	if (ret) {
-		X_LOG_WARN("interpret_string_addr_internal: "
+		X_LOG(UTILS, WARN, "interpret_string_addr_internal: "
 				"getaddrinfo failed for name %s (flags %d) [%s]",
 				str, flags, gai_strerror(ret));
 		return false;
@@ -423,12 +423,12 @@ static void query_iface_speed_from_name(const char *name, uint64_t *speed)
 
 	fd = socket(AF_INET, SOCK_DGRAM, IPPROTO_IP);
 	if (fd == -1) {
-		X_LOG_ERR("Failed to open socket.");
+		X_LOG(UTILS, ERR, "Failed to open socket.");
 		return;
 	}
 
 	if (strlen(name) >= sizeof(ifr.ifr_name)) {
-		X_LOG_ERR("Interface name %s too long.", name);
+		X_LOG(UTILS, ERR, "Interface name %s too long.", name);
 		goto done;
 	}
 
@@ -476,12 +476,12 @@ static void query_iface_rx_queues_from_name(const char *name,
 
 	fd = socket(AF_INET, SOCK_DGRAM, IPPROTO_IP);
 	if (fd == -1) {
-		X_LOG_ERR("Failed to open socket.");
+		X_LOG(UTILS, ERR, "Failed to open socket.");
 		return;
 	}
 
 	if (strlen(name) >= sizeof(ifr.ifr_name)) {
-		X_LOG_ERR("Interface name %s too long.", name);
+		X_LOG(UTILS, ERR, "Interface name %s too long.", name);
 		goto done;
 	}
 
@@ -644,14 +644,14 @@ int x_probe_ifaces(std::vector<x_iface_t> &ifaces)
 
 		unsigned int if_index = if_nametoindex(ifptr->ifa_name);
 		if (if_index == 0) {
-			X_LOG_ERR("Failed to retrieve interface index for '%s': %s",
+			X_LOG(UTILS, ERR, "Failed to retrieve interface index for '%s': %s",
 					ifptr->ifa_name, strerror(errno));
 			continue;
 		}
 
 		if (strlen(ifptr->ifa_name) >= IF_NAMESIZE) {
 			/* Truncation ! Ignore. */
-			X_LOG_ERR("ifa_name %s too long", ifptr->ifa_name);
+			X_LOG(UTILS, ERR, "ifa_name %s too long", ifptr->ifa_name);
 			continue;
 		}
 
@@ -708,7 +708,7 @@ int x_probe_ifaces(std::vector<x_iface_t> &ifaces)
 		if (true || rx_queues > 1) {
 			iface.capability |= X_FSCTL_NET_IFACE_RSS_CAPABLE;
 		}
-		X_LOG_DBG("probe iface %s", x_tostr(iface).c_str());
+		X_LOG(UTILS, DBG, "probe iface %s", x_tostr(iface).c_str());
 	}
 
 	freeifaddrs(iflist);
@@ -832,7 +832,7 @@ static void parse_extra_info(char *key, uint64_t *pspeed, uint32_t *pcap,
 				char *end;
 				uint64_t speed = strtoul(val, &end, 0);
 				if (*end) {
-					X_LOG_WARN("Invalid speed value (%s)", val);
+					X_LOG(UTILS, WARN, "Invalid speed value (%s)", val);
 				} else {
 					*pspeed = speed;
 				}
@@ -842,18 +842,18 @@ static void parse_extra_info(char *key, uint64_t *pspeed, uint32_t *pcap,
 				} else if (strequal_m(val, "RDMA")) {
 					*pcap |= X_FSCTL_NET_IFACE_RDMA_CAPABLE;
 				} else {
-					X_LOG_WARN("Capability unknown: '%s'",
+					X_LOG(UTILS, WARN, "Capability unknown: '%s'",
 							val);
 				}
 			} else if (strequal_m(key, "if_index")) {
 				char *end;
 				unsigned long if_index = strtoul(val, &end, 0);
 				if (*end) {
-					X_LOG_WARN("Invalid key value (%s)", val);
+					X_LOG(UTILS, WARN, "Invalid key value (%s)", val);
 				}
 				*pif_index = x_convert_assert<uint32_t>(if_index);
 			} else {
-				X_LOG_WARN("Key unknown: '%s'", key);
+				X_LOG(UTILS, WARN, "Key unknown: '%s'", key);
 			}
 		}
 
@@ -953,7 +953,7 @@ int x_interpret_iface(std::vector<x_iface_t> &ret, std::string token_str,
 	p = strchr_m(token,'/');
 	if (p == NULL) {
 		if (!interpret_string_addr(&ss, token, 0)) {
-			X_LOG_ERR("interpret_interface: Can't find address "
+			X_LOG(UTILS, ERR, "interpret_interface: Can't find address "
 					"for %s", token);
 			return added;
 		}
@@ -975,7 +975,7 @@ int x_interpret_iface(std::vector<x_iface_t> &ret, std::string token_str,
 				return ++added;
 			}
 		}
-		X_LOG_ERR("interpret_interface: "
+		X_LOG(UTILS, ERR, "interpret_interface: "
 				"can't determine interface for %s",
 				token);
 		return added;
@@ -987,7 +987,7 @@ int x_interpret_iface(std::vector<x_iface_t> &ret, std::string token_str,
 	*p++ = '/';
 
 	if (!goodaddr) {
-		X_LOG_ERR("interpret_interface: "
+		X_LOG(UTILS, ERR, "interpret_interface: "
 			"can't determine interface for %s",
 			token);
 		return added;
@@ -996,7 +996,7 @@ int x_interpret_iface(std::vector<x_iface_t> &ret, std::string token_str,
 	if (strlen(p) > 2) {
 		goodaddr = interpret_string_addr(&ss_mask, p, 0);
 		if (!goodaddr) {
-			X_LOG_ERR("interpret_interface: "
+			X_LOG(UTILS, ERR, "interpret_interface: "
 				"can't determine netmask from %s",
 				p);
 			return added;
@@ -1005,13 +1005,13 @@ int x_interpret_iface(std::vector<x_iface_t> &ret, std::string token_str,
 		char *end;
 		unsigned long val = strtoul(p, &end, 0);
 		if (*end) {
-			X_LOG_ERR("interpret_interface: "
+			X_LOG(UTILS, ERR, "interpret_interface: "
 				"can't determine netmask value from %s",
 				p);
 			return added;
 		}
 		if (!make_netmask(&ss_mask, &ss, val)) {
-			X_LOG_ERR("interpret_interface: "
+			X_LOG(UTILS, ERR, "interpret_interface: "
 				"can't apply netmask value %lu from %s",
 				val,
 				p);
@@ -1035,7 +1035,7 @@ int x_interpret_iface(std::vector<x_iface_t> &ret, std::string token_str,
 				ret.push_back(probed_iface);
 				auto &iface = ret.back();
 				iface.netmask = ss_mask;
-				X_LOG_ERR("interpret_interface: "
+				X_LOG(UTILS, ERR, "interpret_interface: "
 					"using netmask value %s from "
 					"config file on interface %s",
 					p,
@@ -1052,7 +1052,7 @@ int x_interpret_iface(std::vector<x_iface_t> &ret, std::string token_str,
 				return ++added;
 			}
 		}
-		X_LOG_ERR("interpret_interface: Can't determine ip for "
+		X_LOG(UTILS, ERR, "interpret_interface: Can't determine ip for "
 			"broadcast address %s",
 			token);
 		return added;
@@ -1060,7 +1060,7 @@ int x_interpret_iface(std::vector<x_iface_t> &ret, std::string token_str,
 
 	/* Just fake up the interface definition. User knows best. */
 
-	X_LOG_ERR("interpret_interface: Adding interface %s",
+	X_LOG(UTILS, ERR, "interpret_interface: Adding interface %s",
 		token);
 
 	x_iface_t ifs;

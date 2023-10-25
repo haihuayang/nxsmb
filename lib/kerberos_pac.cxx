@@ -321,7 +321,7 @@ NTSTATUS kerberos_decode_pac(gss_const_buffer_t pac_buf,
 		tgs_authtime_nttime = x_unix_to_nttime(tgs_authtime);
 
 		if (tgs_authtime_nttime.val != logon_name->logon_time.val) {
-			X_LOG_ERR("PAC Decode: "
+			X_LOG(AUTH, ERR, "PAC Decode: "
 				  "Logon time mismatch between ticket and PAC!");
 			DEBUG(3, ("PAC Decode: PAC: %s\n",
 				  nt_time_string(tmp_ctx, logon_name->logon_time)));

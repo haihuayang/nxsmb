@@ -60,7 +60,7 @@ static inline auto smbd_lease_lock(uint32_t hash)
 static inline void smbd_lease_epoch_inc(x_smbd_lease_t *smbd_lease,
 		const char *file, unsigned int line)
 {
-	X_LOG_DBG("smbd_lease=%p epoch=%u at %s:%u", smbd_lease, smbd_lease->epoch,
+	X_LOG(SMB, DBG, "smbd_lease=%p epoch=%u at %s:%u", smbd_lease, smbd_lease->epoch,
 			file, line);
 	++smbd_lease->epoch;
 }
@@ -296,7 +296,7 @@ static inline void smbd_lease_add_pending_requ(
 {
 	int32_t count = smbd_requ->async_pending.fetch_add(1, std::memory_order_relaxed);
 	X_ASSERT(count >= 0);
-	X_LOG_DBG("add requ 0x%lx %p pending %d", smbd_requ->id, smbd_requ,
+	X_LOG(SMB, DBG, "add requ 0x%lx %p pending %d", smbd_requ->id, smbd_requ,
 			count + 1);
 	smbd_lease->pending_requ_list.push_back(smbd_requ->id);
 }
@@ -321,7 +321,7 @@ uint32_t x_smbd_lease_require_break(x_smbd_lease_t *smbd_lease,
 	}
 
 	auto lock = smbd_lease_lock(smbd_lease);
-	X_LOG_DBG("lease=%p %c state=%d epoch=%u break_mask=%u",
+	X_LOG(SMB, DBG, "lease=%p %c state=%d epoch=%u break_mask=%u",
 			smbd_lease, smbd_lease->breaking ? 'B' : '-',
 			smbd_lease->lease_state, smbd_lease->epoch,
 			break_mask);
@@ -354,13 +354,13 @@ uint32_t x_smbd_lease_require_break(x_smbd_lease_t *smbd_lease,
 	// fsp_lease_update(lck, fsp);
 
 	if (break_from == X_SMB2_LEASE_NONE) {
-		X_LOG_NOTICE("Already downgraded oplock to none");
+		X_LOG(SMB, NOTICE, "Already downgraded oplock to none");
 		return 0;
 	}
 
-	X_LOG_DBG("break from=%u to=%u", break_from, break_to);
+	X_LOG(SMB, DBG, "break from=%u to=%u", break_from, break_to);
 	if (break_from == break_to) {
-		X_LOG_NOTICE("Already downgraded oplock to %u", break_to);
+		X_LOG(SMB, NOTICE, "Already downgraded oplock to %u", break_to);
 		return 0;
 	}
 
@@ -388,7 +388,7 @@ static NTSTATUS smbd_lease_process_break(x_smbd_lease_t *smbd_lease,
 	}
 
 	if ((state.in_state & smbd_lease->breaking_to_requested) != state.in_state) {
-		X_LOG_DBG("Attempt to upgrade from %d to %d - expected %d",
+		X_LOG(SMB, DBG, "Attempt to upgrade from %d to %d - expected %d",
 				(int)smbd_lease->lease_state, (int)state.in_state,
 				(int)smbd_lease->breaking_to_requested);
 		return NT_STATUS_REQUEST_NOT_ACCEPTED;
@@ -396,7 +396,7 @@ static NTSTATUS smbd_lease_process_break(x_smbd_lease_t *smbd_lease,
 
 	smbd_lease_cancel_timer(smbd_lease);
 
-	X_LOG_DBG("breaking from %d to %d - expected %d",
+	X_LOG(SMB, DBG, "breaking from %d to %d - expected %d",
 			(int)smbd_lease->lease_state, (int)state.in_state,
 			(int)smbd_lease->breaking_to_requested);
 
@@ -407,7 +407,7 @@ static NTSTATUS smbd_lease_process_break(x_smbd_lease_t *smbd_lease,
 	}
 
 	if ((state.in_state & (~smbd_lease->breaking_to_required)) != 0) {
-		X_LOG_DBG("lease state %d not fully broken from %d to %d",
+		X_LOG(SMB, DBG, "lease state %d not fully broken from %d to %d",
 				(int)state.in_state,
 				(int)smbd_lease->lease_state,
 				(int)smbd_lease->breaking_to_required);
@@ -456,7 +456,7 @@ NTSTATUS x_smbd_lease_process_break(x_smbd_requ_state_lease_break_t &state)
 
 		smbd_lease = smbd_lease_find(hash, client_guid, lease_key);
 		if (!smbd_lease) {
-			X_LOG_DBG("smbd_lease_find failed client %s lease_key %s",
+			X_LOG(SMB, DBG, "smbd_lease_find failed client %s lease_key %s",
 					x_tostr(client_guid).c_str(),
 					x_tostr(lease_key).c_str());
 			return NT_STATUS_OBJECT_NAME_NOT_FOUND;
@@ -464,7 +464,7 @@ NTSTATUS x_smbd_lease_process_break(x_smbd_requ_state_lease_break_t &state)
 		
 		if (!smbd_lease->smbd_object) {
 			/* not yet granted */
-			X_LOG_DBG("smbd_lease_find not granted %s lease_key %s",
+			X_LOG(SMB, DBG, "smbd_lease_find not granted %s lease_key %s",
 					x_tostr(client_guid).c_str(),
 					x_tostr(lease_key).c_str());
 			return NT_STATUS_OBJECT_NAME_NOT_FOUND;

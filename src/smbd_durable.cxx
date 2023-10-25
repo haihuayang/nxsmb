@@ -108,7 +108,7 @@ int x_smbd_durable_db_allocate_id(x_smbd_durable_db_t *db,
 
 int x_smbd_durable_remove(x_smbd_durable_db_t *db, uint64_t id_persistent)
 {
-	X_LOG_DBG("id_persistent=0x%lx", id_persistent);
+	X_LOG(SMB, DBG, "id_persistent=0x%lx", id_persistent);
 	uint32_t slot = get_durable_slot(id_persistent);
 
 	X_ASSERT(slot < db->capacity);
@@ -130,7 +130,7 @@ int x_smbd_durable_remove(x_smbd_durable_db_t *db, uint64_t id_persistent)
 
 int x_smbd_durable_disconnect(x_smbd_durable_db_t *db, uint64_t id_persistent)
 {
-	X_LOG_DBG("id_persistent=0x%lx", id_persistent);
+	X_LOG(SMB, DBG, "id_persistent=0x%lx", id_persistent);
 	uint32_t slot = get_durable_slot(id_persistent);
 
 	X_ASSERT(slot < db->capacity);
@@ -145,7 +145,7 @@ int x_smbd_durable_save(x_smbd_durable_db_t *db,
 		const x_smbd_open_state_t &open_state,
 		const x_smbd_file_handle_t &file_handle)
 {
-	X_LOG_DBG("id_persistent=0x%lx", open_state.id_persistent);
+	X_LOG(SMB, DBG, "id_persistent=0x%lx", open_state.id_persistent);
 	uint32_t slot = get_durable_slot(open_state.id_persistent);
 
 	X_ASSERT(slot < db->capacity);
@@ -161,7 +161,7 @@ int x_smbd_durable_save(x_smbd_durable_db_t *db,
 int x_smbd_durable_update(x_smbd_durable_db_t *db,
 		const x_smbd_open_state_t &open_state)
 {
-	X_LOG_DBG("id_persistent=0x%lx", open_state.id_persistent);
+	X_LOG(SMB, DBG, "id_persistent=0x%lx", open_state.id_persistent);
 	uint32_t slot = get_durable_slot(open_state.id_persistent);
 
 	X_ASSERT(slot < db->capacity);
@@ -194,23 +194,23 @@ static bool smbd_durable_db_check(const x_smbd_durable_db_header_t *db_header,
 		int64_t db_size)
 {
 	if (memcmp(db_header->magic, magic, sizeof magic) != 0) {
-		X_LOG_ERR("Invalid durable.db, wrong magic");
+		X_LOG(SMB, ERR, "Invalid durable.db, wrong magic");
 		return false;
 	}
 
 	if (db_header->version != X_SMBD_DURABLE_DB_VERSION_1) {
-		X_LOG_ERR("Not support durable.db version %d", db_header->version);
+		X_LOG(SMB, ERR, "Not support durable.db version %d", db_header->version);
 		return false;
 	}
 
 	if (db_header->record_size != X_SMBD_DURABLE_DB_RECORD_SIZE) {
-		X_LOG_ERR("Invalid durable.db, record_size = %u",
+		X_LOG(SMB, ERR, "Invalid durable.db, record_size = %u",
 				db_header->record_size);
 		return false;
 	}
 
 	if (db_size < (long)smbd_durable_db_size(db_header->record_size, db_header->capacity)) {
-		X_LOG_ERR("Invalid durable.db, size not match");
+		X_LOG(SMB, ERR, "Invalid durable.db, size not match");
 		return false;
 	}
 	return true;
@@ -223,7 +223,7 @@ x_smbd_durable_db_t *x_smbd_durable_db_open(int fd)
 	X_ASSERT(err == 0);
 
 	if (st.st_size < HEADER_SIZE) {
-		X_LOG_ERR("Invalid durable.db");
+		X_LOG(SMB, ERR, "Invalid durable.db");
 		return nullptr;
 	}
 
@@ -250,9 +250,9 @@ x_smbd_durable_db_t *x_smbd_durable_db_init(int fd, uint32_t capacity)
 	uint16_t generation = 0;
 	if (st.st_size == 0) {
 		/* new file */
-		X_LOG_NOTICE("new durable.db");
+		X_LOG(SMB, NOTICE, "new durable.db");
 	} else if (st.st_size < HEADER_SIZE) {
-		X_LOG_ERR("Invalid durable.db");
+		X_LOG(SMB, ERR, "Invalid durable.db");
 	} else {
 		void *ptr = mmap(NULL, st.st_size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
 		X_ASSERT(ptr);
@@ -262,13 +262,13 @@ x_smbd_durable_db_t *x_smbd_durable_db_init(int fd, uint32_t capacity)
 			munmap(ptr, st.st_size);
 			ptr = nullptr;
 		} else {
-			X_LOG_NOTICE("can reuse durable.db");
+			X_LOG(SMB, NOTICE, "can reuse durable.db");
 		}
 	}
 
 	size_t mmap_size;
 	if (!db_header) {
-		X_LOG_NOTICE("re-init durable.db");
+		X_LOG(SMB, NOTICE, "re-init durable.db");
 		if (st.st_size != 0) {
 			X_ASSERT(ftruncate(fd, 0) == 0);
 		}
@@ -340,12 +340,12 @@ void x_smbd_durable_db_restore(std::shared_ptr<x_smbd_volume_t> &smbd_volume,
 
 			NTSTATUS status = restore_fn(smbd_volume, *durable, timeout_msec);
 			if (NT_STATUS_IS_OK(status)) {
-				X_LOG_DBG("restored open %lx:%lx",
+				X_LOG(SMB, DBG, "restored open %lx:%lx",
 						durable->open_state.id_persistent,
 						durable->id_volatile);
 				continue;
 			}
-			X_LOG_WARN("failed to restore open %lx:%lx",
+			X_LOG(SMB, WARN, "failed to restore open %lx:%lx",
 					durable->open_state.id_persistent,
 					durable->id_volatile);
 		}
@@ -373,7 +373,7 @@ void x_smbd_durable_db_restore(std::shared_ptr<x_smbd_volume_t> &smbd_volume,
 		x_smbd_durable_t *durable = get_durable(durable_db, durable_db->free_region_index);
 		durable->magic = 0x0ul;
 	}
-	X_LOG_NOTICE("durable_restored %d free_region_index=%u", count,
+	X_LOG(SMB, NOTICE, "durable_restored %d free_region_index=%u", count,
 			durable_db->free_region_index);
 }
 

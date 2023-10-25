@@ -94,7 +94,7 @@ x_smbd_sess_t *x_smbd_sess_create(uint64_t &id)
 		delete smbd_sess;
 		return nullptr;
 	}
-	X_LOG_DBG("0x%lx %p", id, smbd_sess);
+	X_LOG(SMB, DBG, "0x%lx %p", id, smbd_sess);
 	return smbd_sess;
 }
 
@@ -304,7 +304,7 @@ NTSTATUS x_smbd_sess_auth_succeeded(x_smbd_sess_t *smbd_sess,
 		uint32_t time_rec)
 {
 	std::lock_guard<std::mutex> lock(smbd_sess->mutex);
-	X_LOG_DBG("bind %d, security_mode %x, time_rec %u",
+	X_LOG(SMB, DBG, "bind %d, security_mode %x, time_rec %u",
 			is_bind, security_mode, time_rec);
 
 	if (is_bind) {

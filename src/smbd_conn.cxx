@@ -93,7 +93,7 @@ x_smbd_conn_t::x_smbd_conn_t(int fd, const x_sockaddr_t &saddr,
 
 x_smbd_conn_t::~x_smbd_conn_t()
 {
-	X_LOG_DBG("x_smbd_conn_t %p destroy", this);
+	X_LOG(SMB, DBG, "x_smbd_conn_t %p destroy", this);
 	X_ASSERT(!chan_list.get_front());
 	X_ASSERT(fd == -1);
 
@@ -170,14 +170,14 @@ int x_smbd_conn_negprot(x_smbd_conn_t *smbd_conn,
 {
 	if (smb1) {
 		if (smbd_conn->negprot.dialect != X_SMB2_DIALECT_000) {
-			X_LOG_ERR("Invalid smb1 negprot, curr dialect is 0x%x",
+			X_LOG(SMB, ERR, "Invalid smb1 negprot, curr dialect is 0x%x",
 					smbd_conn->negprot.dialect);
 			return -EBADMSG;
 		}
 	} else {
 		if (smbd_conn->negprot.dialect != X_SMB2_DIALECT_000 &&
 				smbd_conn->negprot.dialect != X_SMB2_DIALECT_2FF) {
-			X_LOG_ERR("Invalid smb2 negprot, curr dialect is 0x%x",
+			X_LOG(SMB, ERR, "Invalid smb2 negprot, curr dialect is 0x%x",
 					smbd_conn->negprot.dialect);
 			return -EBADMSG;
 		}
@@ -294,7 +294,7 @@ static int x_smbd_conn_create_smb2_tf(x_smbd_conn_t *smbd_conn,
 			smbd_requ->out_buf_head, smbd_requ->out_length);
 
 	if (clen < 0) {
-		X_LOG_DBG("x_smb2_signing_encrypt(%u) error %d",
+		X_LOG(SMB, DBG, "x_smb2_signing_encrypt(%u) error %d",
 				smbd_conn->negprot.cryption_algo, clen);
 		return -1;
 	}
@@ -389,7 +389,7 @@ static void x_smb2_reply_msg(x_smbd_conn_t *smbd_conn,
 		NTSTATUS status,
 		size_t reply_size)
 {
-	X_LOG_DBG(X_SMBD_REQU_DBG_FMT " %s", X_SMBD_REQU_DBG_ARG(smbd_requ), x_ntstatus_str(status));
+	X_LOG(SMB, DBG, X_SMBD_REQU_DBG_FMT " %s", X_SMBD_REQU_DBG_ARG(smbd_requ), x_ntstatus_str(status));
 	smbd_requ->out_hdr_flags = calculate_out_hdr_flags(smbd_requ->in_smb2_hdr.flags, smbd_requ->out_hdr_flags);
 	x_smb2_header_t *smb2_hdr = (x_smb2_header_t *)buf_head->get_data();
 	smb2_hdr->protocol_id = X_H2BE32(X_SMB2_MAGIC);
@@ -490,7 +490,7 @@ static int x_smbd_reply_error(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ
 		NTSTATUS status,
 		const char *file, unsigned int line)
 {
-	X_LOG_OP("%ld RESP 0x%x at %s:%d", smbd_requ->in_smb2_hdr.mid,
+	X_LOG(SMB, OP, "%ld RESP 0x%x at %s:%d", smbd_requ->in_smb2_hdr.mid,
 			NT_STATUS_V(status), file, line);
 
 	x_buf_t *out_buf = x_buf_alloc_out_buf(sizeof(x_smb2_error_t));
@@ -521,7 +521,7 @@ static int x_smbd_reply_error(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ
 static int x_smbd_reply_interim(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ,
 		const char *file, unsigned int line)
 {
-	X_LOG_OP("%ld RESP ASYNC at %s:%d", smbd_requ->in_smb2_hdr.mid, file, line);
+	X_LOG(SMB, OP, "%ld RESP ASYNC at %s:%d", smbd_requ->in_smb2_hdr.mid, file, line);
 
 	smbd_requ->out_credit_granted = x_smb2_calculate_credit(smbd_conn, smbd_requ, NT_STATUS_PENDING);
 	smbd_requ->out_hdr_flags = calculate_out_hdr_flags(smbd_requ->in_smb2_hdr.flags, smbd_requ->out_hdr_flags);
@@ -551,7 +551,7 @@ void x_smbd_requ_async_insert(x_smbd_requ_t *smbd_requ,
 		void (*cancel_fn)(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ),
 		int64_t interim_timeout_ns)
 {
-	X_LOG_DBG("smbd_requ %p timeout=%ld", smbd_requ, interim_timeout_ns);
+	X_LOG(SMB, DBG, "smbd_requ %p timeout=%ld", smbd_requ, interim_timeout_ns);
 	X_ASSERT(!smbd_requ->cancel_fn);
 	smbd_requ->cancel_fn = cancel_fn;
 	g_smbd_conn_curr->pending_requ_list.push_back(smbd_requ);
@@ -570,7 +570,7 @@ void x_smbd_requ_async_insert(x_smbd_requ_t *smbd_requ,
 /* must be in context of smbd_conn */
 bool x_smbd_requ_async_remove(x_smbd_requ_t *smbd_requ)
 {
-	X_LOG_DBG("smbd_requ %p interim_state %d", smbd_requ,
+	X_LOG(SMB, DBG, "smbd_requ %p interim_state %d", smbd_requ,
 			smbd_requ->interim_state);
 	if (!smbd_requ->cancel_fn) {
 		return false;
@@ -598,20 +598,20 @@ static void x_smbd_conn_cancel(x_smbd_conn_t *smbd_conn,
 	}
 
 	if (!smbd_requ) {
-		X_LOG_ERR("cannot find pending requ by flags=0x%x, async_id=x%lx, mid=%lu",
+		X_LOG(SMB, ERR, "cannot find pending requ by flags=0x%x, async_id=x%lx, mid=%lu",
 				smb2_hdr.flags, smb2_hdr.async_id, smb2_hdr.mid);
 		X_SMBD_COUNTER_INC(cancel_not_exist, 1);
 		return;
 	}
 
 	if (!smbd_requ->set_cancelled()) {
-		X_LOG_DBG("cannot cancel requ %p async_id=x%lx, mid=%lu",
+		X_LOG(SMB, DBG, "cannot cancel requ %p async_id=x%lx, mid=%lu",
 				smbd_requ, smb2_hdr.async_id, smb2_hdr.mid);
 		X_SMBD_COUNTER_INC(cancel_too_late, 1);
 		return;
 	}
 
-	X_LOG_DBG("cancel requ %p async_id=x%lx, mid=%lu",
+	X_LOG(SMB, DBG, "cancel requ %p async_id=x%lx, mid=%lu",
 			smbd_requ, smb2_hdr.async_id, smb2_hdr.mid);
 	X_SMBD_COUNTER_INC(cancel_success, 1);
 	auto cancel_fn = smbd_requ->cancel_fn;
@@ -828,14 +828,14 @@ static bool x_smb2_validate_message_id(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *
 	uint16_t credit_charge = std::max(smbd_requ->in_smb2_hdr.credit_charge, uint16_t(1u));
 
 	if (smbd_conn->credit_granted < credit_charge) {
-		X_LOG_ERR("credit_charge %u > credit_granted %lu",
+		X_LOG(SMB, ERR, "credit_charge %u > credit_granted %lu",
 				credit_charge, smbd_conn->credit_granted);
 		return false;
 	}
 
 	if (!x_check_range<uint64_t>(smbd_requ->in_smb2_hdr.mid, credit_charge, smbd_conn->credit_seq_low,
 				smbd_conn->credit_seq_low + smbd_conn->credit_seq_range)) {
-		X_LOG_ERR("%lu+%u not in the credit range %lu+%lu", smbd_requ->in_smb2_hdr.mid, credit_charge,
+		X_LOG(SMB, ERR, "%lu+%u not in the credit range %lu+%lu", smbd_requ->in_smb2_hdr.mid, credit_charge,
 				smbd_conn->credit_seq_low, smbd_conn->credit_seq_range);
 		return false;
 	}
@@ -845,7 +845,7 @@ static bool x_smb2_validate_message_id(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *
 	for (uint16_t i = 0; i < credit_charge; ++i, ++id) {
 		uint64_t offset = id % seq_bitmap.size();
 		if (seq_bitmap[offset]) {
-			X_LOG_ERR("duplicated mid %lu", id);
+			X_LOG(SMB, ERR, "duplicated mid %lu", id);
 			return false;
 		}
 		seq_bitmap[offset] = true;
@@ -1143,7 +1143,7 @@ static int x_smbd_conn_process_smb2_tf(x_smbd_conn_t *smbd_conn,
 	x_smbd_ref_dec(smbd_sess);
 
 	if (plen < 0) {
-		X_LOG_DBG("x_smb2_signing_decrypt(%u) error %d",
+		X_LOG(SMB, DBG, "x_smb2_signing_decrypt(%u) error %d",
 				smbd_conn->negprot.cryption_algo, plen);
 		x_buf_release(pbuf);
 		return -EBADMSG;
@@ -1275,7 +1275,7 @@ static bool x_smbd_conn_do_recv(x_smbd_conn_t *smbd_conn, x_fdevents_t &fdevents
 {
 	X_TRACE_LOC;
 	ssize_t err;
-	X_LOG_DBG("conn %p x%lx x%lx", smbd_conn, smbd_conn->ep_id, fdevents);
+	X_LOG(SMB, DBG, "conn %p x%lx x%lx", smbd_conn, smbd_conn->ep_id, fdevents);
 	if (smbd_conn->recv_buf == NULL) {
 		X_ASSERT(smbd_conn->recv_len < sizeof(smbd_conn->nbt_hdr));
 		err = read(smbd_conn->fd, (char *)&smbd_conn->nbt_hdr + smbd_conn->recv_len,
@@ -1284,7 +1284,7 @@ static bool x_smbd_conn_do_recv(x_smbd_conn_t *smbd_conn, x_fdevents_t &fdevents
 			smbd_conn->recv_len = x_convert_assert<uint32_t>(smbd_conn->recv_len + err);
 			err = x_smbd_conn_check_nbt_hdr(smbd_conn);
 			if (err < 0) {
-				X_LOG_ERR("%p x%lx x_smbd_conn_check_nbt_hdr %ld",
+				X_LOG(SMB, ERR, "%p x%lx x_smbd_conn_check_nbt_hdr %ld",
 						smbd_conn, smbd_conn->ep_id, err);
 				return true;
 			} else if (err == 0) {
@@ -1292,7 +1292,7 @@ static bool x_smbd_conn_do_recv(x_smbd_conn_t *smbd_conn, x_fdevents_t &fdevents
 			}
 			smbd_conn->recv_msgsize = x_convert_assert<uint32_t>(err);
 		} else if (err == 0) {
-			X_LOG_CONN("%p x%lx recv nbt_hdr EOF", smbd_conn, smbd_conn->ep_id);
+			X_LOG(SMB, CONN, "%p x%lx recv nbt_hdr EOF", smbd_conn, smbd_conn->ep_id);
 			return true;
 		} else if (errno == EAGAIN) {
 			fdevents = x_fdevents_consume(fdevents, FDEVT_IN);
@@ -1300,7 +1300,7 @@ static bool x_smbd_conn_do_recv(x_smbd_conn_t *smbd_conn, x_fdevents_t &fdevents
 		} else if (errno == EINTR) {
 			return false;
 		} else {
-			X_LOG_ERR("%p x%lx do_recv errno=%d",
+			X_LOG(SMB, ERR, "%p x%lx do_recv errno=%d",
 					smbd_conn, smbd_conn->ep_id, errno);
 			return true;
 		}
@@ -1319,7 +1319,7 @@ static bool x_smbd_conn_do_recv(x_smbd_conn_t *smbd_conn, x_fdevents_t &fdevents
 			smbd_conn->recv_len -= smbd_conn->recv_msgsize;
 			int ret = x_smbd_conn_process_nbt(smbd_conn);
 			if (ret) {
-				X_LOG_ERR("%p x%lx x_smbd_conn_process_nbt %d",
+				X_LOG(SMB, ERR, "%p x%lx x_smbd_conn_process_nbt %d",
 						smbd_conn, smbd_conn->ep_id, ret);
 				return true;
 			}
@@ -1329,7 +1329,7 @@ static bool x_smbd_conn_do_recv(x_smbd_conn_t *smbd_conn, x_fdevents_t &fdevents
 
 			err = x_smbd_conn_check_nbt_hdr(smbd_conn);
 			if (err < 0) {
-				X_LOG_ERR("%p x%lx x_smbd_conn_check_nbt_hdr piggyback %ld",
+				X_LOG(SMB, ERR, "%p x%lx x_smbd_conn_check_nbt_hdr piggyback %ld",
 						smbd_conn, smbd_conn->ep_id, err);
 				return true;
 			} else if (err == 0) {
@@ -1338,13 +1338,13 @@ static bool x_smbd_conn_do_recv(x_smbd_conn_t *smbd_conn, x_fdevents_t &fdevents
 			smbd_conn->recv_msgsize = x_convert_assert<uint32_t>(err);
 		}
 	} else if (err == 0) {
-		X_LOG_CONN("%p x%lx recv nbt_body EOF", smbd_conn, smbd_conn->ep_id);
+		X_LOG(SMB, CONN, "%p x%lx recv nbt_body EOF", smbd_conn, smbd_conn->ep_id);
 		return true;
 	} else if (errno == EAGAIN) {
 		fdevents = x_fdevents_consume(fdevents, FDEVT_IN);
 	} else if (errno == EINTR) {
 	} else {
-		X_LOG_ERR("%p x%lx do_recv errno=%d",
+		X_LOG(SMB, ERR, "%p x%lx do_recv errno=%d",
 				smbd_conn, smbd_conn->ep_id, errno);
 		return true;
 	}
@@ -1353,7 +1353,7 @@ static bool x_smbd_conn_do_recv(x_smbd_conn_t *smbd_conn, x_fdevents_t &fdevents
 
 static bool x_smbd_conn_do_send(x_smbd_conn_t *smbd_conn, x_fdevents_t &fdevents)
 {
-	X_LOG_DBG("conn %p x%lx x%lx", smbd_conn, smbd_conn->ep_id, fdevents);
+	X_LOG(SMB, DBG, "conn %p x%lx x%lx", smbd_conn, smbd_conn->ep_id, fdevents);
 	for (;;) {
 		struct iovec iov[8];
 
@@ -1372,7 +1372,7 @@ static bool x_smbd_conn_do_send(x_smbd_conn_t *smbd_conn, x_fdevents_t &fdevents
 		}
 
 		ssize_t ret = writev(smbd_conn->fd, iov, niov);
-		X_LOG_DBG("conn %p send %u ret %ld, errno=%d",
+		X_LOG(SMB, DBG, "conn %p send %u ret %ld, errno=%d",
 				smbd_conn, total_write, ret, errno);
 		if (ret > 0) {
 			uint32_t bytes = x_convert_assert<uint32_t>(ret);
@@ -1418,7 +1418,7 @@ static bool x_smbd_conn_do_send(x_smbd_conn_t *smbd_conn, x_fdevents_t &fdevents
 
 static bool x_smbd_conn_do_user(x_smbd_conn_t *smbd_conn, x_fdevents_t &fdevents)
 {
-	X_LOG_DBG("%p x%lx x%lx", smbd_conn, smbd_conn->ep_id, fdevents);
+	X_LOG(SMB, DBG, "%p x%lx x%lx", smbd_conn, smbd_conn->ep_id, fdevents);
 	auto lock = std::unique_lock(smbd_conn->mutex);
 	for (;;) {
 		x_fdevt_user_t *fdevt_user = smbd_conn->fdevt_user_list.get_front();
@@ -1507,7 +1507,7 @@ std::shared_ptr<std::u16string> x_smbd_conn_curr_name()
 static bool x_smbd_conn_upcall_cb_getevents(x_epoll_upcall_t *upcall, x_fdevents_t &fdevents)
 {
 	x_smbd_conn_t *smbd_conn = x_smbd_conn_from_upcall(upcall);
-	X_LOG_DBG("%p x%lx", smbd_conn, fdevents);
+	X_LOG(SMB, DBG, "%p x%lx", smbd_conn, fdevents);
 
 	x_smbd_conf_pin();
 	x_smbd_set_notify_schedulable(true);
@@ -1525,7 +1525,7 @@ static bool x_smbd_conn_upcall_cb_getevents(x_epoll_upcall_t *upcall, x_fdevents
 static void x_smbd_conn_upcall_cb_unmonitor(x_epoll_upcall_t *upcall)
 {
 	x_smbd_conn_t *smbd_conn = x_smbd_conn_from_upcall(upcall);
-	X_LOG_CONN("%p", smbd_conn);
+	X_LOG(SMB, CONN, "%p", smbd_conn);
 	X_ASSERT_SYSCALL(close(smbd_conn->fd));
 	smbd_conn->fd = -1;
 	x_smbd_conf_pin();
@@ -1564,7 +1564,7 @@ static const x_epoll_upcall_cbs_t x_smbd_conn_upcall_cbs = {
 
 static void x_smbd_srv_accepted(x_smbd_srv_t *smbd_srv, int fd, const x_sockaddr_t &saddr)
 {
-	X_LOG_CONN("accept %d from %s", fd, saddr.tostring().c_str());
+	X_LOG(SMB, CONN, "accept %d from %s", fd, saddr.tostring().c_str());
 	set_nbio(fd, 1);
 	const x_smbd_conf_t &smbd_conf = x_smbd_conf_get_curr();
 	x_smbd_conn_t *smbd_conn = new x_smbd_conn_t(fd, saddr,
@@ -1586,7 +1586,7 @@ static bool x_smbd_srv_do_recv(x_smbd_srv_t *smbd_srv, x_fdevents_t &fdevents)
 	x_sockaddr_t saddr;
 	socklen_t slen = sizeof(saddr);
 	int fd = accept(smbd_srv->fd, &saddr.sa, &slen);
-	X_LOG_DBG("accept %d, %d", fd, errno);
+	X_LOG(SMB, DBG, "accept %d, %d", fd, errno);
 	if (fd >= 0) {
 		x_smbd_srv_accepted(smbd_srv, fd, saddr);
 	} else if (errno == EINTR) {
@@ -1602,7 +1602,7 @@ static bool x_smbd_srv_do_recv(x_smbd_srv_t *smbd_srv, x_fdevents_t &fdevents)
 
 static bool x_smbd_srv_do_user(x_smbd_srv_t *smbd_srv, x_fdevents_t &fdevents)
 {
-	X_LOG_DBG("%p x%lx x%lx", smbd_srv, smbd_srv->ep_id, fdevents);
+	X_LOG(SMB, DBG, "%p x%lx x%lx", smbd_srv, smbd_srv->ep_id, fdevents);
 	{
 		auto lock = std::lock_guard(smbd_srv->mutex);
 		for (;;) {
@@ -1637,7 +1637,7 @@ static bool x_smbd_srv_handle_events(x_smbd_srv_t *smbd_srv, x_fdevents_t &fdeve
 static bool x_smbd_srv_upcall_cb_getevents(x_epoll_upcall_t *upcall, x_fdevents_t &fdevents)
 {
 	x_smbd_srv_t *smbd_srv = x_smbd_from_upcall(upcall);
-	X_LOG_DBG("%p x%lx", smbd_srv, fdevents);
+	X_LOG(SMB, DBG, "%p x%lx", smbd_srv, fdevents);
 	x_smbd_conf_pin();
 	bool ret = x_smbd_srv_handle_events(smbd_srv, fdevents);
 	x_smbd_conf_unpin();
@@ -1647,7 +1647,7 @@ static bool x_smbd_srv_upcall_cb_getevents(x_epoll_upcall_t *upcall, x_fdevents_
 static void x_smbd_srv_upcall_cb_unmonitor(x_epoll_upcall_t *upcall)
 {
 	x_smbd_srv_t *smbd_srv = x_smbd_from_upcall(upcall);
-	X_LOG_CONN("%p", smbd_srv);
+	X_LOG(SMB, CONN, "%p", smbd_srv);
 	X_ASSERT_SYSCALL(close(smbd_srv->fd));
 	smbd_srv->fd = -1;
 	/* TODO may close all accepted client, and notify it is freed */
@@ -1695,7 +1695,7 @@ bool x_smbd_conn_post_user(x_smbd_conn_t *smbd_conn, x_fdevt_user_t *fdevt_user,
 		return false;
 	}
 	/* queued to srv's user event queue to clean up the request */
-	X_LOG_WARN("smbd_conn %p is done, queued to srv", smbd_conn);
+	X_LOG(SMB, WARN, "smbd_conn %p is done, queued to srv", smbd_conn);
 	{
 		auto lock = std::lock_guard(g_smbd_srv.mutex);
 		notify = g_smbd_srv.fdevt_user_list.get_front() == nullptr;
@@ -1762,7 +1762,7 @@ struct x_smbd_cancel_evt_t
 	{
 		x_smbd_cancel_evt_t *evt = X_CONTAINER_OF(fdevt_user, x_smbd_cancel_evt_t, base);
 		x_smbd_requ_t *smbd_requ = evt->smbd_requ;
-		X_LOG_DBG("evt=%p, requ=%p, smbd_conn=%p", evt, smbd_requ, smbd_conn);
+		X_LOG(SMB, DBG, "evt=%p, requ=%p, smbd_conn=%p", evt, smbd_requ, smbd_conn);
 
 		x_smbd_requ_async_done(smbd_conn, smbd_requ, evt->status);
 
@@ -1839,7 +1839,7 @@ struct send_interim_evt_t
 		send_interim_evt_t *evt = X_CONTAINER_OF(fdevt_user,
 				send_interim_evt_t, base);
 		x_smbd_requ_t *smbd_requ = evt->smbd_requ;
-		X_LOG_DBG("evt=%p, requ=%p, smbd_conn=%p", evt, smbd_requ, smbd_conn);
+		X_LOG(SMB, DBG, "evt=%p, requ=%p, smbd_conn=%p", evt, smbd_requ, smbd_conn);
 		if (smbd_requ->interim_state == x_smbd_requ_t::INTERIM_S_SCHEDULED) {
 			X_SMBD_REPLY_INTERIM(smbd_conn, smbd_requ);
 		} else {

@@ -10,5 +10,5 @@ void x_smb2_preauth_t::update(const void *data, size_t length)
 	SHA512_Update(&sctx, data, length);
 	SHA512_Final((unsigned char *)this->data.data(), &sctx);
 
-	X_LOG_DBG("preauth=\n%s", x_hex_dump(this->data.data(), this->data.size(), "    ").c_str());
+	X_LOG(SMB, DBG, "preauth=\n%s", x_hex_dump(this->data.data(), this->data.size(), "    ").c_str());
 }

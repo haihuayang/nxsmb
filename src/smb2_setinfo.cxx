@@ -35,7 +35,7 @@ static void encode_out_setinfo(uint8_t *out_hdr)
 static void x_smb2_reply_setinfo(x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ)
 {
-	X_LOG_OP("%ld SETINFO SUCCESS", smbd_requ->in_smb2_hdr.mid);
+	X_LOG(SMB, OP, "%ld SETINFO SUCCESS", smbd_requ->in_smb2_hdr.mid);
 
 	x_bufref_t *bufref = x_bufref_alloc(sizeof(x_smb2_out_setinfo_t));
 
@@ -92,7 +92,7 @@ void x_smbd_requ_state_rename_t::async_done(x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ,
 		NTSTATUS status)
 {
-	X_LOG_DBG("status=0x%x", status.v);
+	X_LOG(SMB, DBG, "status=0x%x", status.v);
 	if (!smbd_conn) {
 		return;
 	}
@@ -106,7 +106,7 @@ static NTSTATUS x_smb2_process_rename(x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ,
 		std::unique_ptr<x_smbd_requ_state_rename_t> &state)
 {
-	X_LOG_OP("%ld RENAME 0x%lx, 0x%lx", smbd_requ->in_smb2_hdr.mid,
+	X_LOG(SMB, OP, "%ld RENAME 0x%lx, 0x%lx", smbd_requ->in_smb2_hdr.mid,
 			state->in_file_id_persistent, state->in_file_id_volatile);
 
 	/* MS-FSA 2.1.5.14.11 */
@@ -149,7 +149,7 @@ void x_smbd_requ_state_disposition_t::async_done(x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ,
 		NTSTATUS status)
 {
-	X_LOG_DBG("status=0x%x", status.v);
+	X_LOG(SMB, DBG, "status=0x%x", status.v);
 	if (!smbd_conn) {
 		return;
 	}
@@ -163,7 +163,7 @@ static NTSTATUS x_smb2_process_disposition(x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ,
 		std::unique_ptr<x_smbd_requ_state_disposition_t> &state)
 {
-	X_LOG_OP("%ld RENAME 0x%lx, 0x%lx", smbd_requ->in_smb2_hdr.mid,
+	X_LOG(SMB, OP, "%ld RENAME 0x%lx, 0x%lx", smbd_requ->in_smb2_hdr.mid,
 			state->in_file_id_persistent, state->in_file_id_volatile);
 
 	/* MS-FSA 2.1.5.14.11 */
@@ -256,7 +256,7 @@ NTSTATUS x_smb2_process_setinfo(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_re
 	state->in_data.assign(in_hdr + in_input_buffer_offset,
 			in_hdr + in_input_buffer_offset + in_input_buffer_length);
 
-	X_LOG_OP("%ld SETINFO 0x%lx, 0x%lx", smbd_requ->in_smb2_hdr.mid,
+	X_LOG(SMB, OP, "%ld SETINFO 0x%lx, 0x%lx", smbd_requ->in_smb2_hdr.mid,
 			state->in_file_id_persistent, state->in_file_id_volatile);
 
 	status = x_smbd_open_op_setinfo(smbd_requ->smbd_open, smbd_conn, smbd_requ,

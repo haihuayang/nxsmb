@@ -9,14 +9,14 @@ int x_smbd_volume_read_id(int vol_fd, uint16_t &vol_id)
 {
 	int fd = openat(vol_fd, "id", O_RDONLY);
 	if (fd < 0) {
-		X_LOG_ERR("cannot open volume id errno=%d", errno);
+		X_LOG(CONF, ERR, "cannot open volume id errno=%d", errno);
 		return -errno;
 	}
 	uint16_t id;
 	ssize_t ret = read(fd, &id, sizeof id);
 	close(fd);
 	if (ret != sizeof(id)) {
-		X_LOG_ERR("cannot read volume id ret=%ld, errno=%d", ret, errno);
+		X_LOG(CONF, ERR, "cannot read volume id ret=%ld, errno=%d", ret, errno);
 		return -errno;
 	}
 

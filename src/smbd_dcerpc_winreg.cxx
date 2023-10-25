@@ -325,7 +325,7 @@ static idl::dcerpc_nca_status x_smbd_dcerpc_impl_winreg_OpenKey(
 		return X_SMBD_DCERPC_NCA_STATUS_OK;
 	}
 
-	X_LOG_DBG("winreg_OpenKey parent '%s' key '%s'",
+	X_LOG(SMB, DBG, "winreg_OpenKey parent '%s' key '%s'",
 			x_str_todebug(x_smbd_registry_key_get_name(*parent_key)).c_str(),
 			x_str_todebug(*arg.keyname.name).c_str());
 

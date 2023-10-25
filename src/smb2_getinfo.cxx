@@ -75,7 +75,7 @@ static void x_smb2_reply_getinfo(x_smbd_conn_t *smbd_conn,
 		const x_smbd_requ_state_getinfo_t &state,
 		NTSTATUS status)
 {
-	X_LOG_OP("%ld RESP SUCCESS", smbd_requ->in_smb2_hdr.mid);
+	X_LOG(SMB, OP, "%ld RESP SUCCESS", smbd_requ->in_smb2_hdr.mid);
 
 	x_bufref_t *bufref = x_bufref_alloc(sizeof(x_smb2_out_getinfo_t) +
 			state.out_data.size());
@@ -99,7 +99,7 @@ NTSTATUS x_smb2_process_getinfo(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_re
 		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
 
-	X_LOG_OP("%ld GETINFO 0x%lx:%lx %d:%d", smbd_requ->in_smb2_hdr.mid,
+	X_LOG(SMB, OP, "%ld GETINFO 0x%lx:%lx %d:%d", smbd_requ->in_smb2_hdr.mid,
 			state->in_file_id_persistent, state->in_file_id_volatile,
 			uint8_t(state->in_info_class), uint8_t(state->in_info_level));
 

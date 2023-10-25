@@ -7,7 +7,7 @@ struct smd_notify_evt_t
 	{
 		smd_notify_evt_t *evt = X_CONTAINER_OF(fdevt_user, smd_notify_evt_t, base);
 		x_smbd_requ_t *smbd_requ = evt->smbd_requ;
-		X_LOG_DBG("evt=%p, requ=%p, smbd_conn=%p", evt, smbd_requ, smbd_conn);
+		X_LOG(SMB, DBG, "evt=%p, requ=%p, smbd_conn=%p", evt, smbd_requ, smbd_conn);
 
 		auto state = smbd_requ->release_state<x_smbd_requ_state_notify_t>();
 		X_ASSERT(state->out_notify_changes.empty());
@@ -124,7 +124,7 @@ void x_smbd_simple_notify_change(
 	NTSTATUS status = x_smbd_open_object(&smbd_object,
 			smbd_volume, path, 0, false);
 	if (!NT_STATUS_IS_OK(status)) {
-		X_LOG_DBG("skip notify %d,x%x '%s', '%s'", notify_action,
+		X_LOG(SMB, DBG, "skip notify %d,x%x '%s', '%s'", notify_action,
 				notify_filter,
 				x_str_todebug(path).c_str(),
 				x_str_todebug(fullpath).c_str());
@@ -132,7 +132,7 @@ void x_smbd_simple_notify_change(
 	}
 
 	X_ASSERT(smbd_object);
-	X_LOG_DBG("notify object %d,x%x '%s', '%s'", notify_action,
+	X_LOG(SMB, DBG, "notify object %d,x%x '%s', '%s'", notify_action,
 			notify_filter,
 			x_str_todebug(path).c_str(),
 			x_str_todebug(fullpath).c_str());

@@ -74,15 +74,15 @@ static int collect_aliases_read_func(struct tdb_context *tdb,
 	const char *kstr = (const char *)kbuf.dptr;
 	const char *dstr = (const char *)dbuf.dptr;
 	if (kstr[kbuf.dsize - 1] != 0 || dstr[dbuf.dsize - 1] != 0) {
-		X_LOG_ERR("Invalid MEMBEROF");
+		X_LOG(CONF, ERR, "Invalid MEMBEROF");
 		return 0;
 	}
 	idl::dom_sid sid, alias;
 	if (!sid_from_string(sid, kstr + sizeof(MEMBEROF_PREFIX) - 1)) {
-		X_LOG_ERR("Invalid MEMBEROF %s", kstr);
+		X_LOG(CONF, ERR, "Invalid MEMBEROF %s", kstr);
 	}
 	if (!sid_from_string(alias, dstr)) {
-		X_LOG_ERR("Invalid alias %s", dstr);
+		X_LOG(CONF, ERR, "Invalid alias %s", dstr);
 	}
 
 	auto &mapping = state->mapping;
@@ -101,7 +101,7 @@ static auto collect_aliases(struct tdb_context *gm_ctx)
 	collect_aliases_state_t state;
 	int ret = tdb_traverse_read(gm_ctx, collect_aliases_read_func, &state);
 	if (ret < 0) {
-		X_LOG_ERR("ret = %d", ret);
+		X_LOG(CONF, ERR, "ret = %d", ret);
 	}
 	return std::move(state.mapping);
 }
@@ -112,7 +112,7 @@ static int get_priviledge_func(TDB_DATA key, TDB_DATA data,
 	uint64_t *state = (uint64_t *)private_data;
 	if (data.dsize != sizeof(uint64_t)) {
 		/* TODO for old format with size 16, samba get_privileges */
-		X_LOG_ERR("invalid dsize = %lu", data.dsize);
+		X_LOG(CONF, ERR, "invalid dsize = %lu", data.dsize);
 		return -1;
 	}
 
@@ -131,7 +131,7 @@ static uint64_t get_priviledge(struct tdb_context *ap_ctx, const idl::dom_sid &s
 	uint64_t ret = 0;
 	int err = tdb_parse_record(ap_ctx, tdb_key, get_priviledge_func, &ret);
 	if (err < 0) {
-		X_LOG_ERR("key = %s", key.c_str());
+		X_LOG(CONF, ERR, "key = %s", key.c_str());
 	}
 	return ret;
 }
@@ -142,13 +142,13 @@ int x_smbd_group_mapping_load(x_smbd_group_mapping_t *group_mapping,
 	std::string gm_path = lib_dir + "/group_mapping.tdb";
 	struct tdb_context *gm_ctx = tdb_open(gm_path.c_str(), 0, TDB_DEFAULT, O_RDONLY, 0600);
 	if (!gm_ctx) {
-		X_LOG_ERR("failed open tdb '%s'", gm_path.c_str());
+		X_LOG(CONF, ERR, "failed open tdb '%s'", gm_path.c_str());
 		return -1;
 	}
 	std::string ap_path = lib_dir + "/account_policy.tdb";
 	struct tdb_context *ap_ctx = tdb_open(ap_path.c_str(), 0, TDB_DEFAULT, O_RDONLY, 0600);
 	if (!ap_ctx) {
-		X_LOG_ERR("failed open tdb '%s'", ap_path.c_str());
+		X_LOG(CONF, ERR, "failed open tdb '%s'", ap_path.c_str());
 		tdb_close(gm_ctx);
 		return -1;
 	}

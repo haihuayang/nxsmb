@@ -215,25 +215,34 @@ enum {
 	X_LOG_LEVEL_MAX
 };
 
-extern unsigned int x_loglevel;
-void x_log(int level, const char *fmt, ...) __attribute__((format(printf, 2,3)));
-int x_log_init(const char *log_name, unsigned int loglevel, uint64_t filesize);
+#define X_LOG_CLASS_ENUM \
+	X_LOG_CLASS_DECL(UTILS) \
+	X_LOG_CLASS_DECL(EVENT) \
+	X_LOG_CLASS_DECL(CONF) \
+	X_LOG_CLASS_DECL(SMB) \
+	X_LOG_CLASS_DECL(AUTH) \
+	X_LOG_CLASS_DECL(WBC) \
+	X_LOG_CLASS_DECL(CTRL) \
+
+enum {
+#undef X_LOG_CLASS_DECL
+#define X_LOG_CLASS_DECL(x) X_LOG_CLASS_ ## x,
+	X_LOG_CLASS_ENUM
+	X_LOG_CLASS_MAX,
+};
+
+extern unsigned int x_log_level[X_LOG_CLASS_MAX];
+void x_log(int log_class, int log_level, const char *fmt, ...) __attribute__((format(printf, 3,4)));
+int x_log_init(const char *log_name, const char *log_level_param, uint64_t filesize);
 void x_log_check_size();
 
-#define X_LOG_L(level, fmt, ...) do { \
-	if ((level) <= x_loglevel) { \
-		x_log((level), X_LOG_AT_FMT " " fmt, X_LOG_AT_ARGS, ##__VA_ARGS__); \
+#define X_LOG_LC(log_class, log_level, fmt, ...) do { \
+	if ((log_level) <= x_log_level[log_class]) { \
+		x_log((log_class), (log_level), X_LOG_AT_FMT " " fmt, X_LOG_AT_ARGS, ##__VA_ARGS__); \
 	} \
 } while (0)
 
-#define X_LOG_ERR(...) X_LOG_L(X_LOG_LEVEL_ERR, __VA_ARGS__)
-#define X_LOG_WARN(...) X_LOG_L(X_LOG_LEVEL_WARN, __VA_ARGS__)
-#define X_LOG_NOTICE(...) X_LOG_L(X_LOG_LEVEL_NOTICE, __VA_ARGS__)
-#define X_LOG_CONN(...) X_LOG_L(X_LOG_LEVEL_CONN, __VA_ARGS__)
-#define X_LOG_OP(...) X_LOG_L(X_LOG_LEVEL_OP, __VA_ARGS__)
-#define X_LOG_DBG(...) X_LOG_L(X_LOG_LEVEL_DBG, __VA_ARGS__)
-#define X_LOG_VERB(...) X_LOG_L(X_LOG_LEVEL_VERB, __VA_ARGS__)
-
+#define X_LOG(lc, ll, ...) X_LOG_LC(X_LOG_CLASS_##lc, X_LOG_LEVEL_##ll, __VA_ARGS__)
 
 
 struct x_trace_t
@@ -260,9 +269,9 @@ struct x_trace_loc_t
 
 #define X_TRACE_LOC x_trace_loc_t _x_trace_loc_##__LINE__{__location__}
 
-#define X_TRACE_REPORT(level, fmt, ...) do { \
-	if ((level) <= x_loglevel) { \
-		x_log((level), X_LOG_AT_FMT " " fmt ", TRACE%s", \
+#define X_TRACE_REPORT(lc, ll, fmt, ...) do { \
+	if (X_LOG_LEVEL_##ll <= x_log_level[X_LOG_CLASS_##lc]) { \
+		x_log(X_LOG_CLASS_##lc, X_LOG_LEVEL_##ll, X_LOG_AT_FMT " " fmt ", TRACE%s", \
 				X_LOG_AT_ARGS, ##__VA_ARGS__, \
 				x_trace_string()); \
 	} \

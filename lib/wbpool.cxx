@@ -145,10 +145,10 @@ static int winbindd_open_pipe(const std::string &wbpipe)
 	if (err == 0) {
 		return fd;
 	} else if (errno == EINPROGRESS) {
-		X_LOG_DBG("connect inprogress");
+		X_LOG(WBC, DBG, "connect inprogress");
 		return fd;
 	} else {
-		X_LOG_ERR("connect error %d", errno);
+		X_LOG(WBC, ERR, "connect error %d", errno);
 		close(fd);
 		return -1;
 	}
@@ -285,7 +285,7 @@ static int wbconn_dosend(wbconn_t &wbconn)
 	if (wbconn.requ_off < sizeof(struct winbindd_request)) {
 		err = write(wbconn.fd, (uint8_t *)&requ->header + wbconn.requ_off,
 				sizeof(struct winbindd_request) - wbconn.requ_off);
-		X_LOG_DBG("requ_off=%u %u,%u err=%ld errno=%d",
+		X_LOG(WBC, DBG, "requ_off=%u %u,%u err=%ld errno=%d",
 				wbconn.requ_off, requ->header.cmd,
 				requ->header.length, err, errno);
 		if (err > 0) {
@@ -304,7 +304,7 @@ static int wbconn_dosend(wbconn_t &wbconn)
 	err = write(wbconn.fd, requ->extra.data() +
 			(wbconn.requ_off - sizeof(struct winbindd_request)),
 			requ->extra.size() + requ->header.length - wbconn.requ_off);
-	X_LOG_DBG("requ_off=%u %u,%u err=%ld errno=%d",
+	X_LOG(WBC, DBG, "requ_off=%u %u,%u err=%ld errno=%d",
 			wbconn.requ_off, requ->header.cmd,
 			requ->header.length, err, errno);
 	if (err < 0) {
@@ -413,7 +413,7 @@ static bool wbconn_upcall_cb_getevents(x_epoll_upcall_t *upcall,
 			} else if (err == -EAGAIN) {
 				fdevents = x_fdevents_consume(fdevents, FDEVT_IN);
 			} else if (err != -EINTR) {
-				X_LOG_CONN("wbconn_dorecv errno %d\n", -err);
+				X_LOG(WBC, CONN, "wbconn_dorecv errno %d\n", -err);
 				return true;
 			}
 		} else {
@@ -445,7 +445,7 @@ static bool wbconn_upcall_cb_getevents(x_epoll_upcall_t *upcall,
 static void wbconn_upcall_cb_unmonitor(x_epoll_upcall_t *upcall)
 {
 	wbconn_t *wbconn = wbconn_from_upcall(upcall);
-	X_LOG_CONN("unmonitor wbconn %p", wbconn);
+	X_LOG(WBC, CONN, "unmonitor wbconn %p", wbconn);
 	X_ASSERT(close(wbconn->fd) == 0);
 	wbconn->fd = -1;
 	x_wbcli_t *wbcli = wbconn->wbcli;
@@ -504,10 +504,10 @@ int x_wbpool_request(x_wbpool_t *wbpool, x_wbcli_t *wbcli)
 		}
 	}
 	if (!wbconn) {
-		X_LOG_DBG("no ready wbconn, queued %p", wbcli);
+		X_LOG(WBC, DBG, "no ready wbconn, queued %p", wbcli);
 	} else {
 		X_ASSERT(wbconn->state == wbconn_t::S_READY);
-		X_LOG_DBG("wbconn %p send %p", wbconn, wbcli);
+		X_LOG(WBC, DBG, "wbconn %p send %p", wbconn, wbcli);
 		wbconn_send(wbconn, wbcli);
 	}
 	return 0;

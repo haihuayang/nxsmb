@@ -268,7 +268,7 @@ static void smbd_close_open_intl(
 		int ret = x_smbd_volume_remove_durable(
 				*smbd_open->smbd_object->smbd_volume,
 				smbd_open->open_state.id_persistent);
-		X_LOG_DBG("remove_durable for %p 0x%lx, ret = %d",
+		X_LOG(SMB, DBG, "remove_durable for %p 0x%lx, ret = %d",
 				smbd_open, smbd_open->open_state.id_persistent, ret);
 	}
 
@@ -457,7 +457,7 @@ static long smbd_open_durable_timeout(x_timer_job_t *timer)
 
 	x_smbd_open_t *smbd_open = X_CONTAINER_OF(timer,
 			x_smbd_open_t, durable_timer);
-	X_LOG_DBG("durable_timeout %lx,%lx", smbd_open->open_state.id_persistent,
+	X_LOG(SMB, DBG, "durable_timeout %lx,%lx", smbd_open->open_state.id_persistent,
 			smbd_open->id_volatile);
 	auto smbd_object = smbd_open->smbd_object;
 
@@ -491,7 +491,7 @@ static long smbd_open_durable_timeout(x_timer_job_t *timer)
 
 static bool smbd_open_set_durable(x_smbd_open_t *smbd_open)
 {
-	X_LOG_DBG("set_durable %lx,%lx", smbd_open->open_state.id_persistent,
+	X_LOG(SMB, DBG, "set_durable %lx,%lx", smbd_open->open_state.id_persistent,
 			smbd_open->id_volatile);
 	auto smbd_object = smbd_open->smbd_object;
 	X_ASSERT(smbd_object);
@@ -506,7 +506,7 @@ static bool smbd_open_set_durable(x_smbd_open_t *smbd_open)
 	int ret = x_smbd_volume_disconnect_durable(
 			*smbd_object->smbd_volume,
 			smbd_open->open_state.id_persistent);
-	X_LOG_DBG("set_durable_expired for %p 0x%lx, ret = %d",
+	X_LOG(SMB, DBG, "set_durable_expired for %p 0x%lx, ret = %d",
 			smbd_open, smbd_open->open_state.id_persistent, ret);
 
 	return true;
@@ -623,7 +623,7 @@ struct defer_requ_evt_t
 		defer_requ_evt_t *evt = X_CONTAINER_OF(fdevt_user,
 				defer_requ_evt_t, base);
 		x_smbd_requ_t *smbd_requ = evt->smbd_requ;
-		X_LOG_DBG("defer_requ_evt=%p, requ=%p, smbd_conn=%p",
+		X_LOG(SMB, DBG, "defer_requ_evt=%p, requ=%p, smbd_conn=%p",
 				evt, smbd_requ, smbd_conn);
 
 		if (smbd_requ->in_smb2_hdr.opcode == X_SMB2_OP_CREATE) {
@@ -682,14 +682,14 @@ void x_smbd_wakeup_requ_list(const x_smbd_requ_id_list_t &requ_list)
 	for (auto requ_id : requ_list) {
 		x_smbd_requ_t *smbd_requ = x_smbd_requ_lookup(requ_id);
 		if (!smbd_requ) {
-			X_LOG_DBG("requ_id 0x%lx not exist", requ_id);
+			X_LOG(SMB, DBG, "requ_id 0x%lx not exist", requ_id);
 			X_SMBD_COUNTER_INC(wakeup_stale_requ, 1);
 			continue;
 		}
 
 		int32_t count = smbd_requ->async_pending.fetch_sub(1,
 				std::memory_order_relaxed);
-		X_LOG_DBG(X_SMBD_REQU_DBG_FMT, X_SMBD_REQU_DBG_ARG(smbd_requ));
+		X_LOG(SMB, DBG, X_SMBD_REQU_DBG_FMT, X_SMBD_REQU_DBG_ARG(smbd_requ));
 		X_ASSERT(count > 0);
 		if (count == 1) {
 			defer_requ_evt_t *evt = new defer_requ_evt_t(smbd_requ);
@@ -729,7 +729,7 @@ struct send_lease_break_evt_t
 	{
 		send_lease_break_evt_t *evt = X_CONTAINER_OF(fdevt_user,
 				send_lease_break_evt_t, base);
-		X_LOG_DBG("send_lease_break_evt=%p curr_state=%d new_state=%d "
+		X_LOG(SMB, DBG, "send_lease_break_evt=%p curr_state=%d new_state=%d "
 				"new_epoch=%u flags=0x%x",
 				evt, evt->curr_state, evt->new_state, evt->new_epoch,
 				evt->flags);
@@ -823,7 +823,7 @@ static bool check_ads_share_access(x_smbd_object_t *smbd_object,
 				other_open;
 				other_open = sharemode.open_list.next(other_open)) {
 			if (!(other_open->open_state.share_access & X_SMB2_FILE_SHARE_DELETE)) {
-				X_LOG_NOTICE("ads %s of %s share-access %d violate access 0x%x",
+				X_LOG(SMB, NOTICE, "ads %s of %s share-access %d violate access 0x%x",
 						x_str_todebug(smbd_stream->name).c_str(),
 						x_str_todebug(smbd_object->path_base).c_str(),
 						other_open->open_state.share_access,
@@ -930,7 +930,7 @@ static void defer_open(x_smbd_sharemode_t *sharemode,
 {
 	smbd_requ->save_requ_state(state);
 	/* TODO does it need a timer? can break timer always wake up it? */
-	X_LOG_DBG("smbd_requ %p interim_state %d", smbd_requ,
+	X_LOG(SMB, DBG, "smbd_requ %p interim_state %d", smbd_requ,
 			smbd_requ->interim_state);
 	x_smbd_requ_async_insert(smbd_requ, smbd_create_cancel, 0);
 }
@@ -1098,7 +1098,7 @@ struct send_oplock_break_evt_t
 	{
 		send_oplock_break_evt_t *evt = X_CONTAINER_OF(fdevt_user,
 				send_oplock_break_evt_t, base);
-		X_LOG_DBG("evt=%p", evt);
+		X_LOG(SMB, DBG, "evt=%p", evt);
 
 		if (smbd_conn) {
 			x_smb2_send_oplock_break(smbd_conn,
@@ -1137,7 +1137,7 @@ static void smbd_open_add_oplock_pending(x_smbd_open_t *smbd_open,
 {
 	int32_t count = smbd_requ->async_pending.fetch_add(1, std::memory_order_relaxed);
 	X_ASSERT(count >= 0);
-	X_LOG_DBG("add requ 0x%lx %p pending %d", smbd_requ->id, smbd_requ,
+	X_LOG(SMB, DBG, "add requ 0x%lx %p pending %d", smbd_requ->id, smbd_requ,
 			count + 1);
 	smbd_open->oplock_pending_list.push_back(smbd_requ->id);
 }
@@ -1160,7 +1160,7 @@ bool x_smbd_open_break_oplock(x_smbd_object_t *smbd_object,
 	/* already hold smbd_object mutex */
 	X_ASSERT(break_to == X_SMB2_LEASE_READ || break_to == X_SMB2_OPLOCK_LEVEL_NONE);
 	if (smbd_open->oplock_break_sent != x_smbd_open_t::OPLOCK_BREAK_NOT_SENT) {
-		X_LOG_DBG("smbd_open->oplock_break_sent = %d",
+		X_LOG(SMB, DBG, "smbd_open->oplock_break_sent = %d",
 				smbd_open->oplock_break_sent);
 		if (smbd_requ) {
 			smbd_open_add_oplock_pending(smbd_open, smbd_requ);
@@ -1443,7 +1443,7 @@ static NTSTATUS smbd_open_create_intl(x_smbd_open_t **psmbd_open,
 	/* check lease first */
 	if (state->smbd_lease && !x_smbd_lease_match(state->smbd_lease,
 				smbd_object, smbd_stream)) {
-		X_TRACE_REPORT(X_LOG_LEVEL_OP, "failed match lease");
+		X_TRACE_REPORT(SMB, OP, "failed match lease");
 		return NT_STATUS_INVALID_PARAMETER;
 	}
 
@@ -1566,7 +1566,7 @@ static NTSTATUS smbd_open_create_intl(x_smbd_open_t **psmbd_open,
 
 			if ((smbd_object->meta.file_attributes & X_SMB2_FILE_ATTRIBUTE_READONLY) &&
 					(state->in_desired_access & (idl::SEC_FILE_WRITE_DATA | idl::SEC_FILE_APPEND_DATA))) {
-				X_LOG_NOTICE("deny access 0x%x to '%s' due to readonly 0x%x",
+				X_LOG(SMB, NOTICE, "deny access 0x%x to '%s' due to readonly 0x%x",
 						state->in_desired_access,
 						x_str_todebug(x_smbd_object_get_path(smbd_object)).c_str(),
 						smbd_object->meta.file_attributes);
@@ -1574,7 +1574,7 @@ static NTSTATUS smbd_open_create_intl(x_smbd_open_t **psmbd_open,
 			}
 
 			if (smbd_object->meta.file_attributes & X_SMB2_FILE_ATTRIBUTE_REPARSE_POINT) {
-				X_LOG_DBG("object '%s' is reparse_point",
+				X_LOG(SMB, DBG, "object '%s' is reparse_point",
 						x_str_todebug(x_smbd_object_get_path(smbd_object)).c_str());
 				return NT_STATUS_PATH_NOT_COVERED;
 			}
@@ -1809,7 +1809,7 @@ void x_smbd_save_durable(x_smbd_open_t *smbd_open,
 				smbd_volume,
 				&smbd_open->open_state.id_persistent);
 		if (ret < 0) {
-			X_LOG_WARN("x_smbd_volume_allocate_persisten for %p, 0x%lx failed, ret = %d",
+			X_LOG(SMB, WARN, "x_smbd_volume_allocate_persisten for %p, 0x%lx failed, ret = %d",
 					smbd_open,
 					smbd_open->id_volatile, ret);
 		}
@@ -1825,7 +1825,7 @@ void x_smbd_save_durable(x_smbd_open_t *smbd_open,
 				X_SMBD_DURABLE_TIMEOUT_MAX * 1000u);
 	}
 	smbd_open->open_state.durable_timeout_msec = durable_timeout_msec;
-	X_LOG_DBG("smbd_save_durable for %p 0x%lx 0x%lx",
+	X_LOG(SMB, DBG, "smbd_save_durable for %p 0x%lx 0x%lx",
 			smbd_open, smbd_open->open_state.id_persistent,
 			smbd_open->id_volatile);
 
@@ -1842,7 +1842,7 @@ NTSTATUS x_smbd_open_op_create(x_smbd_requ_t *smbd_requ,
 {
 	X_TRACE_LOC;
 	if (!x_smbd_open_has_space()) {
-		X_LOG_WARN("too many opens, cannot allocate new");
+		X_LOG(SMB, WARN, "too many opens, cannot allocate new");
 		return NT_STATUS_INSUFFICIENT_RESOURCES;
 	}
 
@@ -1861,11 +1861,11 @@ NTSTATUS x_smbd_open_op_create(x_smbd_requ_t *smbd_requ,
 				state->smbd_share, smbd_volume, path,
 				path_priv_data, open_priv_data);
 		if (!NT_STATUS_IS_OK(status)) {
-			X_LOG_WARN("resolve_path failed");
+			X_LOG(SMB, WARN, "resolve_path failed");
 			return status;
 		}
 
-		X_LOG_DBG("resolve_path(%s) to %s, %ld, %ld",
+		X_LOG(SMB, DBG, "resolve_path(%s) to %s, %ld, %ld",
 				x_str_todebug(state->in_path).c_str(),
 				x_str_todebug(path).c_str(),
 				path_priv_data, open_priv_data);
@@ -1961,28 +1961,28 @@ static NTSTATUS smbd_open_reconnect(x_smbd_open_t *smbd_open,
 
 	if ((state.in_contexts & X_SMB2_CONTEXT_FLAG_DH2C) &&
 			!(open_state.create_guid == state.in_create_guid)) {
-		X_LOG_NOTICE("create_guid not match");
+		X_LOG(SMB, NOTICE, "create_guid not match");
 		return NT_STATUS_OBJECT_NAME_NOT_FOUND;
 	}
 	if (smbd_open->smbd_lease) {
 		if (!x_smbd_lease_match_get(smbd_open->smbd_lease,
 					x_smbd_conn_curr_client_guid(),
 					state.lease)) {
-			X_LOG_NOTICE("lease not match");
+			X_LOG(SMB, NOTICE, "lease not match");
 			return NT_STATUS_OBJECT_NAME_NOT_FOUND;
 		}
 		if (state.in_ads_name.size()) {
-			X_LOG_NOTICE("we do not support reconnect ADS");
+			X_LOG(SMB, NOTICE, "we do not support reconnect ADS");
 			return NT_STATUS_INVALID_PARAMETER;
 		}
 		/* TODO dfs path and case */
 		if (state.in_path != x_smbd_object_get_path(smbd_open->smbd_object)) {
-			X_LOG_NOTICE("path not match");
+			X_LOG(SMB, NOTICE, "path not match");
 			return NT_STATUS_INVALID_PARAMETER;
 		}
 	}
 	if (!smbd_user->match(open_state.owner)) {
-		X_LOG_NOTICE("user sid not match, STATUS_ACCESS_DENIED");
+		X_LOG(SMB, NOTICE, "user sid not match, STATUS_ACCESS_DENIED");
 		return NT_STATUS_ACCESS_DENIED;
 	}
 	if (!x_smbd_del_timer(&smbd_open->durable_timer)) {
@@ -2041,7 +2041,7 @@ NTSTATUS x_smbd_open_restore(
 		uint64_t timeout_msec)
 {
 	if (!x_smbd_open_has_space()) {
-		X_LOG_WARN("too many opens, cannot allocate new");
+		X_LOG(SMB, WARN, "too many opens, cannot allocate new");
 		return NT_STATUS_INSUFFICIENT_RESOURCES;
 	}
 
@@ -2054,7 +2054,7 @@ NTSTATUS x_smbd_open_restore(
 				open_state.create_guid,
 				false);
 		if (!NT_STATUS_EQUAL(status, NT_STATUS_FWP_RESERVED)) {
-			X_LOG_WARN("open is already in replay_cache");
+			X_LOG(SMB, WARN, "open is already in replay_cache");
 			return NT_STATUS_FILE_NOT_AVAILABLE;
 		}
 
@@ -2249,7 +2249,7 @@ static void smbd_net_file_close(x_smbd_open_t *smbd_open)
 		if (smbd_open->state == SMBD_OPEN_S_ACTIVE) {
 			/* it could happen when client tdis on other channel */
 			if (!x_smbd_tcon_unlink_open(smbd_open->smbd_tcon, &smbd_open->tcon_link)) {
-				X_LOG_NOTICE("failed to unlink open %p", smbd_open);
+				X_LOG(SMB, NOTICE, "failed to unlink open %p", smbd_open);
 				return;
 			}
 			smbd_tcon = smbd_open->smbd_tcon;
@@ -2273,7 +2273,7 @@ void x_smbd_net_file_close(uint32_t fid)
 {
 	auto [found, smbd_open] = g_smbd_open_table->lookup(fid);
 	if (!found) {
-		X_LOG_NOTICE("cannot find open by fid 0x%x", fid);
+		X_LOG(SMB, NOTICE, "cannot find open by fid 0x%x", fid);
 		return;
 	}
 	smbd_net_file_close(smbd_open);

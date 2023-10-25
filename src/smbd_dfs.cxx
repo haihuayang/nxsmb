@@ -142,7 +142,7 @@ static NTSTATUS dfs_root_resolve_path(
 	if (dfs) {
 		path_start = parse_dfs_path(in_path_begin, in_path_end);
 		if (!path_start) {
-			X_LOG_ERR("Invalid dfs_root path '%s'",
+			X_LOG(SMB, ERR, "Invalid dfs_root path '%s'",
 					x_str_todebug(in_path_begin,
 						in_path_end).c_str());
 			return NT_STATUS_INVALID_PARAMETER;
@@ -217,7 +217,7 @@ static NTSTATUS dfs_volume_resolve_path(
 	if (dfs) {
 		path_start = parse_dfs_path(in_path_begin, in_path_end);
 		if (!path_start) {
-			X_LOG_ERR("Invalid dfs_root path '%s'",
+			X_LOG(SMB, ERR, "Invalid dfs_root path '%s'",
 					x_str_todebug(in_path_begin,
 						in_path_end).c_str());
 			return NT_STATUS_INVALID_PARAMETER;
@@ -260,7 +260,7 @@ static int parse_tld_target(char *buf, x_smb2_uuid_t &volume_uuid,
 {
 	char *sep = strchr(buf, ':');
 	if (!sep) {
-		X_LOG_ERR("Invalid tld attr '%s'", buf);
+		X_LOG(SMB, ERR, "Invalid tld attr '%s'", buf);
 		return -1;
 	}
 
@@ -268,7 +268,7 @@ static int parse_tld_target(char *buf, x_smb2_uuid_t &volume_uuid,
 	uuid_t uuid;
 	if (!uuid_parse(buf, uuid)) {
 		*sep = ':';
-		X_LOG_ERR("Invalid tld attr '%s'", buf);
+		X_LOG(SMB, ERR, "Invalid tld attr '%s'", buf);
 		return -1;
 	}
 	tld_uuid = sep + 1;

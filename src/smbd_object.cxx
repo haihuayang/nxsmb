@@ -391,7 +391,7 @@ static NTSTATUS delay_rename_for_lease_break(x_smbd_object_t *smbd_object,
 
 			child_object->decref();
 
-			X_LOG_DBG("%s", x_ntstatus_str(status));
+			X_LOG(SMB, DBG, "%s", x_ntstatus_str(status));
 			if (!NT_STATUS_IS_OK(status)) {
 				return status;
 			}
@@ -448,7 +448,7 @@ static NTSTATUS parent_compatible_open(x_smbd_object_t *smbd_object)
 		if ((curr_open->open_state.access_mask & idl::SEC_STD_DELETE) ||
 				((curr_open->open_state.access_mask & idl::SEC_DIR_ADD_FILE) &&
 				 !(curr_open->open_state.share_access & X_SMB2_FILE_SHARE_WRITE))) {
-			X_LOG_DBG("access_mask=0x%x share_access=%d STATUS_SHARING_VIOLATION",
+			X_LOG(SMB, DBG, "access_mask=0x%x share_access=%d STATUS_SHARING_VIOLATION",
 					curr_open->open_state.access_mask,
 					curr_open->open_state.share_access);
 			return NT_STATUS_SHARING_VIOLATION;

@@ -24,7 +24,7 @@ struct x_smb2_out_flush_t
 static void x_smb2_reply_flush(x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ)
 {
-	X_LOG_OP("%ld FLUSH SUCCESS", smbd_requ->in_smb2_hdr.mid);
+	X_LOG(SMB, OP, "%ld FLUSH SUCCESS", smbd_requ->in_smb2_hdr.mid);
 
 	x_bufref_t *bufref = x_bufref_alloc(sizeof(x_smb2_out_flush_t));
 
@@ -48,7 +48,7 @@ NTSTATUS x_smb2_process_flush(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ
 	uint64_t in_file_id_persistent = X_LE2H64(in_flush->file_id_persistent);
 	uint64_t in_file_id_volatile = X_LE2H64(in_flush->file_id_volatile);
 
-	X_LOG_OP("%ld FLUSH 0x%lx, 0x%lx", smbd_requ->in_smb2_hdr.mid,
+	X_LOG(SMB, OP, "%ld FLUSH 0x%lx, 0x%lx", smbd_requ->in_smb2_hdr.mid,
 			in_file_id_persistent, in_file_id_volatile);
 
 	NTSTATUS status = x_smbd_requ_init_open(smbd_requ,

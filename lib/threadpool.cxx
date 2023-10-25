@@ -83,7 +83,7 @@ static void *thread_func(void *arg)
 	}
 
 	tick_now = x_tick_now();
-	X_LOG_NOTICE("started");
+	X_LOG(EVENT, NOTICE, "started");
 	for (;;) {
 		x_job_t *job = __threadpool_get(tpool);
 		if (!job) {
@@ -91,7 +91,7 @@ static void *thread_func(void *arg)
 		}
 		tick_now = x_tick_now();
 		x_job_t::retval_t status = job->run(job, tpool->private_data);
-		X_LOG_DBG("run job %p %d", job, status);
+		X_LOG(EVENT, DBG, "run job %p %d", job, status);
 		if (status == x_job_t::JOB_DONE) {
 			continue;
 		}
@@ -125,7 +125,7 @@ static void *thread_func(void *arg)
 			__threadpool_schedule_job(tpool, job);
 		}
 	}
-	X_LOG_NOTICE("stopped");
+	X_LOG(EVENT, NOTICE, "stopped");
 	return nullptr;
 }
 
@@ -161,7 +161,7 @@ void x_threadpool_destroy(x_threadpool_t *tpool)
 
 bool x_threadpool_schedule(x_threadpool_t *tpool, x_job_t *job)
 {
-	X_LOG_DBG("schedule %p", job);
+	X_LOG(EVENT, DBG, "schedule %p", job);
 	uint32_t oval = job->state.load(std::memory_order_relaxed);
 	uint32_t nval;
 

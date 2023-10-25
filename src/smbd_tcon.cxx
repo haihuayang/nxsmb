@@ -329,7 +329,7 @@ static WERROR smbd_tcon_enum(idl::srvsvc_NetConnEnum &arg, std::vector<T> &array
 	if (arg.path) {
 		smbd_share = x_smbd_find_share(smbd_conf, *arg.path);
 		if (!smbd_share) {
-			X_LOG_WARN("fail to find share '%s'",
+			X_LOG(SMB, WARN, "fail to find share '%s'",
 					x_str_todebug(*arg.path).c_str());
 			return WERR_INVALID_NAME;
 		}

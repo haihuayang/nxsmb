@@ -82,7 +82,7 @@ template <>
 void x_smbd_ref_dec(x_smbd_chan_t *smbd_chan)
 {
 	if (x_unlikely(--smbd_chan->refcnt == 0)) {
-		X_LOG_DBG("free smbd_chan %p", smbd_chan);
+		X_LOG(SMB, DBG, "free smbd_chan %p", smbd_chan);
 		delete smbd_chan;
 	}
 }
@@ -227,7 +227,7 @@ static void smbd_chan_set_keys(x_smbd_chan_t *smbd_chan,
 		derivation_application_context = &SMB2_24_application_context;
 	}
 
-	X_LOG_DBG("session_key=\n%s", x_hex_dump(auth_session_key.data(), auth_session_key.size(), "    ").c_str());
+	X_LOG(SMB, DBG, "session_key=\n%s", x_hex_dump(auth_session_key.data(), auth_session_key.size(), "    ").c_str());
 	smbd_chan->keys.signing_algo = x_smbd_conn_curr_get_signing_algo();
 	smbd_chan->keys.cryption_algo = x_smbd_conn_curr_get_cryption_algo();
 	uint32_t in_cryption_key_len = out_cryption_key_len;
@@ -258,7 +258,7 @@ static void smbd_chan_set_keys(x_smbd_chan_t *smbd_chan,
 		memcpy(keys.signing_key.data(), auth_session_key.data(), 
 				keys.signing_key.size());
 	}
-	X_LOG_DBG("signing_key=\n%s", x_hex_dump(smbd_chan->keys.signing_key.data(), smbd_chan->keys.signing_key.size(), "    ").c_str());
+	X_LOG(SMB, DBG, "signing_key=\n%s", x_hex_dump(smbd_chan->keys.signing_key.data(), smbd_chan->keys.signing_key.size(), "    ").c_str());
 }
 
 // smbd_smb2_auth_generic_return
@@ -266,7 +266,7 @@ static NTSTATUS smbd_chan_auth_succeeded(x_smbd_chan_t *smbd_chan,
 		bool is_bind, uint8_t security_mode,
 		const x_auth_info_t &auth_info)
 {
-	X_LOG_DBG("auth_info %s", x_tostr(auth_info).c_str());
+	X_LOG(SMB, DBG, "auth_info %s", x_tostr(auth_info).c_str());
 	const x_smbd_conf_t &smbd_conf = x_smbd_conf_get_curr();
 
 	X_ASSERT(auth_info.domain_sid.num_auths < auth_info.domain_sid.sub_auths.size());
@@ -305,7 +305,7 @@ static inline bool smbd_chan_set_state(x_smbd_chan_t *smbd_chan,
 			std::memory_order_release,
 			std::memory_order_relaxed);
 	if (!ret) {
-		X_LOG_WARN("smbd_chan=%p new_state=%d expected=%d but is %d",
+		X_LOG(SMB, WARN, "smbd_chan=%p new_state=%d expected=%d but is %d",
 				smbd_chan, new_state, curr_state, old_state);
 	}
 	return ret;
@@ -369,7 +369,7 @@ static NTSTATUS smbd_chan_auth_updated(x_smbd_chan_t *smbd_chan, x_smbd_requ_t *
 		bool is_bind, uint8_t security_mode,
 		const x_auth_info_t &auth_info)
 {
-	X_LOG_OP("%ld RESP 0x%x", smbd_requ->in_smb2_hdr.mid, NT_STATUS_V(status));
+	X_LOG(SMB, OP, "%ld RESP 0x%x", smbd_requ->in_smb2_hdr.mid, NT_STATUS_V(status));
 
 	if (NT_STATUS_EQUAL(status, NT_STATUS_MORE_PROCESSING_REQUIRED)) {
 		// hold ref for timer, will be dec in timer func
@@ -463,7 +463,7 @@ static void smbd_chan_auth_upcall_func(x_auth_upcall_t *auth_upcall,
 {
 	X_ASSERT(!NT_STATUS_EQUAL(status, X_NT_STATUS_INTERNAL_BLOCKED));
 	x_smbd_chan_t *smbd_chan = X_CONTAINER_OF(auth_upcall, x_smbd_chan_t, auth_upcall);
-	X_LOG_DBG("smbd_chan=%p, status=0x%x", smbd_chan, NT_STATUS_V(status));
+	X_LOG(SMB, DBG, "smbd_chan=%p, status=0x%x", smbd_chan, NT_STATUS_V(status));
 	X_SMBD_CHAN_POST_USER(smbd_chan, new smbd_chan_auth_upcall_evt_t(
 				smbd_chan, status, is_bind, security_mode,
 				out_security, auth_info));
@@ -535,7 +535,7 @@ x_smbd_chan_t *x_smbd_chan_create(x_smbd_sess_t *smbd_sess, x_smbd_conn_t *smbd_
 		smbd_chan->preauth = *preauth;
 	}
 
-	X_LOG_DBG("create smbd_chan %p, smbd_sess %p, smbd_conn %p",
+	X_LOG(SMB, DBG, "create smbd_chan %p, smbd_sess %p, smbd_conn %p",
 			smbd_chan, smbd_sess, smbd_conn);
 	smbd_chan_link_conn(smbd_chan, smbd_conn);
 	return smbd_chan;

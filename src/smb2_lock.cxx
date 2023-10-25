@@ -57,7 +57,7 @@ static void x_smb2_reply_lock(x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ,
 		const x_smbd_requ_state_lock_t &state)
 {
-	X_LOG_OP("%ld RESP SUCCESS", smbd_requ->in_smb2_hdr.mid);
+	X_LOG(SMB, OP, "%ld RESP SUCCESS", smbd_requ->in_smb2_hdr.mid);
 
 	x_bufref_t *bufref = x_bufref_alloc(sizeof(x_smb2_out_lock_t));
 
@@ -82,7 +82,7 @@ void x_smbd_requ_state_lock_t::async_done(x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ,
 		NTSTATUS status)
 {
-	X_LOG_DBG("status=0x%x", status.v);
+	X_LOG(SMB, DBG, "status=0x%x", status.v);
 	if (!smbd_conn) {
 		return;
 	}
@@ -240,7 +240,7 @@ struct lock_evt_t
 	{
 		lock_evt_t *evt = X_CONTAINER_OF(fdevt_user, lock_evt_t, base);
 		x_smbd_requ_t *smbd_requ = evt->smbd_requ;
-		X_LOG_DBG("evt=%p, requ=%p, smbd_conn=%p", evt, smbd_requ, smbd_conn);
+		X_LOG(SMB, DBG, "evt=%p, requ=%p, smbd_conn=%p", evt, smbd_requ, smbd_conn);
 		x_smbd_requ_async_done(smbd_conn, smbd_requ, NT_STATUS_OK);
 		delete evt;
 	}
@@ -341,7 +341,7 @@ static NTSTATUS smbd_open_lock(
 		return NT_STATUS_LOCK_NOT_GRANTED;
 	} else {
 		X_ASSERT(state->in_lock_elements.size() == 1);
-		X_LOG_DBG("lock conflict");
+		X_LOG(SMB, DBG, "lock conflict");
 		smbd_requ->save_requ_state(state);
 		x_smbd_ref_inc(smbd_requ);
 		smbd_open->pending_requ_list.push_back(smbd_requ);
@@ -381,7 +381,7 @@ static NTSTATUS smbd_open_unlock(
 			}
 		}
 		if (it == smbd_open->locks.end()) {
-			X_LOG_NOTICE("failed to unlock");
+			X_LOG(SMB, NOTICE, "failed to unlock");
 			status = NT_STATUS_RANGE_NOT_LOCKED;
 			break;
 		}
@@ -407,7 +407,7 @@ NTSTATUS x_smb2_process_lock(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
 
-	X_LOG_OP("%ld LOCK 0x%lx, 0x%lx", smbd_requ->in_smb2_hdr.mid,
+	X_LOG(SMB, OP, "%ld LOCK 0x%lx, 0x%lx", smbd_requ->in_smb2_hdr.mid,
 			state->in_file_id_persistent, state->in_file_id_volatile);
 
 	bool is_unlock = state->in_lock_elements[0].flags == X_SMB2_LOCK_FLAG_UNLOCK;
@@ -437,7 +437,7 @@ NTSTATUS x_smb2_process_lock(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 				lock_sequence_bucket <= x_smbd_open_t::LOCK_SEQUENCE_MAX) {
 			if (smbd_open->lock_sequence_array[lock_sequence_bucket - 1] ==
 					(state->in_lock_sequence_index & 0xf)) {
-				X_LOG_NOTICE("replayed smb2 lock request detected, sequence = 0x%x",
+				X_LOG(SMB, NOTICE, "replayed smb2 lock request detected, sequence = 0x%x",
 						state->in_lock_sequence_index);
 				x_smb2_reply_lock(smbd_conn, smbd_requ, *state);
 				return NT_STATUS_OK;

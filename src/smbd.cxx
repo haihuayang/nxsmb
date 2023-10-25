@@ -82,7 +82,7 @@ static uint32_t thread_id_allocate()
 static void x_smbd_thread_init(uint32_t no)
 {
 	thread_id = thread_id_allocate();
-	X_LOG_NOTICE("allocate thread_id %u", thread_id);
+	X_LOG(UTILS, NOTICE, "allocate thread_id %u", thread_id);
 	x_smbd_stats_init(thread_id);
 }
 
@@ -113,7 +113,7 @@ static void *signal_handler_func(void *arg)
 		} else if (ret == SIGHUP) {
 			x_smbd_conf_reload();
 		} else {
-			X_LOG_ERR("sigtimedwait ret %d, errno=%d", ret, errno);
+			X_LOG(UTILS, ERR, "sigtimedwait ret %d, errno=%d", ret, errno);
 			break;
 		}
 	}
@@ -125,7 +125,7 @@ static void init_smbd()
 {
 	auto smbd_conf = x_smbd_conf_get();
 
-	x_log_init(smbd_conf->log_name.c_str(), smbd_conf->log_level,
+	x_log_init(smbd_conf->log_name.c_str(), smbd_conf->log_level.c_str(),
 			smbd_conf->log_file_size);
 
 	struct timespec ts_now;
@@ -144,7 +144,7 @@ static void init_smbd()
 	uint32_t max_fd = max_opens + smbd_conf->max_connections + 80;
 	struct rlimit rl_nofile;
 	X_ASSERT(getrlimit(RLIMIT_NOFILE, &rl_nofile) == 0);
-	X_LOG_DBG("RLIMIT_NOFILE max=%lu cur=%lu",
+	X_LOG(UTILS, DBG, "RLIMIT_NOFILE max=%lu cur=%lu",
 			rl_nofile.rlim_max, rl_nofile.rlim_cur);
 	if (rl_nofile.rlim_cur < max_fd) {
 		rl_nofile.rlim_max = rl_nofile.rlim_cur = max_fd;
