@@ -811,7 +811,18 @@ NTSTATUS x_smb2_process_create(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_req
 	if (smbd_requ->smbd_open) {
 		// TODO create state
 		auto &open_state = smbd_requ->smbd_open->open_state;
-		if (state->in_oplock_level == X_SMB2_OPLOCK_LEVEL_LEASE &&
+		if (state->replay_operation) {
+			if (smbd_requ->smbd_open->smbd_lease) {
+				if (!x_smbd_open_match_get_lease(smbd_requ->smbd_open, state->lease)) {
+					RETURN_OP_STATUS(smbd_requ, NT_STATUS_ACCESS_DENIED);
+				}
+			} else {
+				if (state->in_oplock_level == X_SMB2_OPLOCK_LEVEL_LEASE) {
+					RETURN_OP_STATUS(smbd_requ, NT_STATUS_ACCESS_DENIED);
+				}
+			}
+
+		} else if (state->in_oplock_level == X_SMB2_OPLOCK_LEVEL_LEASE &&
 				(open_state.oplock_level != X_SMB2_OPLOCK_LEVEL_LEASE ||
 				 !x_smbd_open_match_get_lease(smbd_requ->smbd_open, state->lease))) {
 			X_SMBD_REF_DEC(smbd_requ->smbd_open);
