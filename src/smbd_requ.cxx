@@ -39,12 +39,11 @@ x_smbd_requ_t::x_smbd_requ_t(x_buf_t *in_buf, uint32_t in_msgsize,
 	, in_msgsize(in_msgsize)
 	, encrypted(encrypted)
 {
-	X_LOG(SMB, DBG, "create %p", this);
 }
 
 x_smbd_requ_t::~x_smbd_requ_t()
 {
-	X_LOG(SMB, DBG, "free %p", this);
+	X_SMBD_REQU_LOG(DBG, this, " freed");
 	x_buf_release(in_buf);
 
 	while (out_buf_head) {
@@ -81,7 +80,7 @@ x_smbd_requ_t *x_smbd_requ_create(x_buf_t *in_buf, uint32_t in_msgsize,
 		delete smbd_requ;
 		return nullptr;
 	}
-	X_LOG(SMB, DBG, X_SMBD_REQU_DBG_FMT, X_SMBD_REQU_DBG_ARG(smbd_requ));
+	X_SMBD_REQU_LOG(DBG, smbd_requ, " created");
 	return smbd_requ;
 }
 
@@ -133,7 +132,7 @@ void x_smbd_requ_async_done(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ,
 
 void x_smbd_requ_done(x_smbd_requ_t *smbd_requ)
 {
-	X_LOG(SMB, DBG, X_SMBD_REQU_DBG_FMT, X_SMBD_REQU_DBG_ARG(smbd_requ));
+	X_SMBD_REQU_LOG(DBG, smbd_requ, "");
 	smbd_requ->id = g_smbd_requ_table->remove(smbd_requ->id);
 	smbd_requ->done = true;
 }
@@ -162,9 +161,9 @@ NTSTATUS x_smbd_requ_init_open(x_smbd_requ_t *smbd_requ,
 	}
 
 	if (smbd_requ->is_compound_related() && !NT_STATUS_IS_OK(smbd_requ->status)) {
-		RETURN_OP_STATUS(smbd_requ, smbd_requ->status);
+		X_SMBD_REQU_RETURN_STATUS(smbd_requ, smbd_requ->status);
 	} else {
-		RETURN_OP_STATUS(smbd_requ, NT_STATUS_FILE_CLOSED);
+		X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_FILE_CLOSED);
 	}
 }
 

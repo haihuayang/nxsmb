@@ -581,10 +581,6 @@ static void x_smb2_reply_create(x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ,
 		const x_smbd_requ_state_create_t &state)
 {
-	X_LOG(SMB, OP, "%ld RESP SUCCESS 0x%lx,0x%lx", smbd_requ->in_smb2_hdr.mid,
-			smbd_requ->smbd_open->open_state.id_persistent,
-			smbd_requ->smbd_open->id_volatile);
-
 #if 1
 	/* TODO we assume max output context 256 */
 	size_t out_context_length = 256;
@@ -642,7 +638,10 @@ void x_smbd_requ_state_create_t::async_done(x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ,
 		NTSTATUS status)
 {
-	X_LOG(SMB, DBG, "status=0x%x", status.v);
+	X_SMBD_REQU_LOG(OP, smbd_requ, " %s open=0x%lx,0x%lx",
+			x_ntstatus_str(status),
+			smbd_requ->smbd_open ? smbd_requ->smbd_open->open_state.id_persistent : 0,
+			smbd_requ->smbd_open ? smbd_requ->smbd_open->id_volatile : 0);
 	if (!smbd_conn) {
 		smb2_replay_cache_clear_if(*this);
 		return;
@@ -678,52 +677,52 @@ static NTSTATUS smb2_process_create(x_smbd_requ_t *smbd_requ,
 	}
 
 	if (state->in_impersonation_level >= X_SMB2_IMPERSONATION_MAX) {
-		RETURN_OP_STATUS(smbd_requ, NT_STATUS_BAD_IMPERSONATION_LEVEL);
+		X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_BAD_IMPERSONATION_LEVEL);
 	}
 
 	if (state->in_create_options & (X_SMB2_CREATE_OPTION_CREATE_TREE_CONNECTION
 				| X_SMB2_CREATE_OPTION_OPEN_BY_FILE_ID
 				| X_SMB2_CREATE_OPTION_RESERVER_OPFILTER)) {
-		RETURN_OP_STATUS(smbd_requ, NT_STATUS_NOT_SUPPORTED);
+		X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_NOT_SUPPORTED);
 	}
 
 	if (state->in_create_options & (0xff000000u)) {
-		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
+		X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
 
 	if ((state->in_create_options & (X_SMB2_CREATE_OPTION_DIRECTORY_FILE
 					| X_SMB2_CREATE_OPTION_NON_DIRECTORY_FILE))
 			== (X_SMB2_CREATE_OPTION_DIRECTORY_FILE
 				| X_SMB2_CREATE_OPTION_NON_DIRECTORY_FILE)) {
-		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
+		X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
 
 	if ((state->in_create_options & X_SMB2_CREATE_OPTION_DIRECTORY_FILE) &&
 			(state->in_ads_name.size() || state->is_dollar_data)) {
-		RETURN_OP_STATUS(smbd_requ, NT_STATUS_NOT_A_DIRECTORY);
+		X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_NOT_A_DIRECTORY);
 	}
 
 	if (state->in_desired_access & idl::SEC_MASK_INVALID) {
-		RETURN_OP_STATUS(smbd_requ, NT_STATUS_ACCESS_DENIED);
+		X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_ACCESS_DENIED);
 	}
 
 	if (state->in_file_attributes & (X_SMB2_FILE_ATTRIBUTE_DEVICE
 				| X_SMB2_FILE_ATTRIBUTE_VOLUME
 				| ~X_SMB2_FILE_ATTRIBUTE_ALL_MASK)) {
-		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
+		X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
 
 	state->in_file_attributes &= X_NXSMB_FILE_ATTRIBUTE_MASK;
 
 	/* windows server deny in_desired_access == 0 */
 	if (state->in_desired_access == 0) {
-		RETURN_OP_STATUS(smbd_requ, NT_STATUS_ACCESS_DENIED);
+		X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_ACCESS_DENIED);
 	}
 
 	if ((state->in_create_options & X_SMB2_CREATE_OPTION_DELETE_ON_CLOSE) &&
 			!(state->in_desired_access & (idl::SEC_STD_DELETE |
 					0xee000000u))) {
-		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
+		X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
 
 	uint32_t orig_access = state->in_desired_access;
@@ -733,21 +732,20 @@ static NTSTATUS smb2_process_create(x_smbd_requ_t *smbd_requ,
 	if (!state->in_path.empty()) {
 		auto ch = state->in_path[0];
 		if (ch == u'\\') {
-			RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
+			X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 		}
 	}
 
 	if (!x_smbd_tcon_access_check(smbd_requ->smbd_tcon, state->in_desired_access & ~idl::SEC_FLAG_MAXIMUM_ALLOWED)) {
-		RETURN_OP_STATUS(smbd_requ, NT_STATUS_ACCESS_DENIED);
+		X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_ACCESS_DENIED);
 	}
 
-	/* TODO log stream too */
-	X_LOG(SMB, OP, "%ld CREATE '%s':'%s'", smbd_requ->in_smb2_hdr.mid,
+	X_SMBD_REQU_LOG(OP, smbd_requ,  " '%s:%s'",
 			x_str_todebug(state->in_path).c_str(),
 			x_str_todebug(state->in_ads_name).c_str());
 
 	if (x_str_has_wild(state->in_path)) {
-		RETURN_OP_STATUS(smbd_requ, NT_STATUS_OBJECT_NAME_INVALID);
+		X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_OBJECT_NAME_INVALID);
 	}
 
 	// smbd_requ->async_done_fn = x_smb2_create_async_done;
@@ -766,7 +764,7 @@ NTSTATUS x_smb2_process_create(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_req
 	X_ASSERT(!smbd_requ->smbd_open);
 
 	if (smbd_requ->in_requ_len < sizeof(x_smb2_header_t) + sizeof(x_smb2_in_create_t) + 1) {
-		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
+		X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
 
 	const uint8_t *in_hdr = smbd_requ->get_in_data();
@@ -776,7 +774,7 @@ NTSTATUS x_smb2_process_create(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_req
 	auto state = std::make_unique<x_smbd_requ_state_create_t>(x_smbd_conn_curr_client_guid());
 	NTSTATUS status = decode_in_create(*state, in_hdr, smbd_requ->in_requ_len);
 	if (!NT_STATUS_IS_OK(status)) {
-		RETURN_OP_STATUS(smbd_requ, status);
+		X_SMBD_REQU_RETURN_STATUS(smbd_requ, status);
 	}
 
 	auto dialect = x_smbd_conn_get_dialect(smbd_conn);
@@ -789,7 +787,7 @@ NTSTATUS x_smb2_process_create(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_req
 
 	if (state->in_contexts & X_SMB2_CONTEXT_FLAG_DH2Q) {
 		if (!state->in_create_guid.is_valid()) {
-			RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
+			X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 		}
 
 		status = x_smbd_replay_cache_lookup(
@@ -804,7 +802,7 @@ NTSTATUS x_smb2_process_create(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_req
 			X_ASSERT(state->replay_operation);
 			X_ASSERT(smbd_requ->smbd_open);
 		} else {
-			RETURN_OP_STATUS(smbd_requ, status);
+			X_SMBD_REQU_RETURN_STATUS(smbd_requ, status);
 		}
 	}
 
@@ -814,11 +812,11 @@ NTSTATUS x_smb2_process_create(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_req
 		if (state->replay_operation) {
 			if (smbd_requ->smbd_open->smbd_lease) {
 				if (!x_smbd_open_match_get_lease(smbd_requ->smbd_open, state->lease)) {
-					RETURN_OP_STATUS(smbd_requ, NT_STATUS_ACCESS_DENIED);
+					X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_ACCESS_DENIED);
 				}
 			} else {
 				if (state->in_oplock_level == X_SMB2_OPLOCK_LEVEL_LEASE) {
-					RETURN_OP_STATUS(smbd_requ, NT_STATUS_ACCESS_DENIED);
+					X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_ACCESS_DENIED);
 				}
 			}
 
@@ -826,7 +824,7 @@ NTSTATUS x_smb2_process_create(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_req
 				(open_state.oplock_level != X_SMB2_OPLOCK_LEVEL_LEASE ||
 				 !x_smbd_open_match_get_lease(smbd_requ->smbd_open, state->lease))) {
 			X_SMBD_REF_DEC(smbd_requ->smbd_open);
-			RETURN_OP_STATUS(smbd_requ, NT_STATUS_ACCESS_DENIED);
+			X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_ACCESS_DENIED);
 		}
 
 		state->out_oplock_level = state->in_oplock_level;
@@ -834,7 +832,7 @@ NTSTATUS x_smb2_process_create(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_req
 		if (x_bit_any<uint32_t>(state->in_contexts, X_SMB2_CONTEXT_FLAG_DHNC |
 					X_SMB2_CONTEXT_FLAG_DH2C)) {
 			if (!x_smbd_tcon_get_durable_handle(smbd_requ->smbd_tcon)) {
-				RETURN_OP_STATUS(smbd_requ, NT_STATUS_OBJECT_NAME_NOT_FOUND);
+				X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_OBJECT_NAME_NOT_FOUND);
 			}
 			status = x_smbd_open_op_reconnect(smbd_requ, state);
 		} else {
@@ -848,13 +846,16 @@ NTSTATUS x_smb2_process_create(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_req
 	}
 
 	if (NT_STATUS_IS_OK(status)) {
+		X_SMBD_REQU_LOG(OP, smbd_requ, " STATUS_SUCCESS 0x%lx,0x%lx",
+			smbd_requ->smbd_open->open_state.id_persistent,
+			smbd_requ->smbd_open->id_volatile);
 		smb2_create_success(smbd_conn, smbd_requ, *state);
 		return status;
 	} else {
 		if (!NT_STATUS_EQUAL(status, NT_STATUS_PENDING)) {
 			smb2_replay_cache_clear_if(*state);
 		}
-		RETURN_OP_STATUS(smbd_requ, status);
+		X_SMBD_REQU_RETURN_STATUS(smbd_requ, status);
 	}
 }
 

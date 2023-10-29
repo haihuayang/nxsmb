@@ -32,7 +32,6 @@ static NTSTATUS x_smb2_reply_notify(x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ,
 		const x_smbd_requ_state_notify_t &state)
 {
-	X_LOG(SMB, OP, "%ld RESP SUCCESS", smbd_requ->in_smb2_hdr.mid);
 	/* TODO seem windows server remember in_output_buffer_length */
 	uint32_t output_buffer_length = std::min(state.in_output_buffer_length,
 			smbd_requ->smbd_open->notify_buffer_length);
@@ -68,7 +67,7 @@ void x_smbd_requ_state_notify_t::async_done(x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ,
 		NTSTATUS status)
 {
-	X_LOG(SMB, DBG, "status=0x%x", status.v);
+	X_SMBD_REQU_LOG(OP, smbd_requ, " %s", x_ntstatus_str(status));
 	if (!smbd_conn) {
 		return;
 	}
@@ -121,11 +120,11 @@ static NTSTATUS smbd_open_notify(x_smbd_open_t *smbd_open,
 NTSTATUS x_smb2_process_notify(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 {
 	if (smbd_requ->in_requ_len < sizeof(x_smb2_header_t) + sizeof(x_smb2_in_notify_t)) {
-		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
+		X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
 
 	if (!smbd_requ->smbd_sess) {
-		RETURN_OP_STATUS(smbd_requ, NT_STATUS_USER_SESSION_DELETED);
+		X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_USER_SESSION_DELETED);
 	}
 
 	const uint8_t *in_hdr = smbd_requ->get_in_data();
@@ -138,20 +137,18 @@ NTSTATUS x_smb2_process_notify(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_req
 	uint32_t in_output_buffer_length = X_LE2H32(in_notify->output_buffer_length);
 	uint32_t in_filter = X_LE2H32(in_notify->filter);
 
-	// TODO smbd_smb2_request_verify_creditcharge
-	X_LOG(SMB, OP, "%ld NOTIFY 0x%lx,0x%lx, filter=0x%x, length=%d",
-			smbd_requ->in_smb2_hdr.mid,
+	X_SMBD_REQU_LOG(OP, smbd_requ,  " open=0x%lx,0x%lx filter=0x%x, length=%d",
 			in_file_id_persistent, in_file_id_volatile,
 			in_filter, in_output_buffer_length);
 
 	if (in_output_buffer_length > x_smbd_conn_get_negprot(smbd_conn).max_trans_size) {
-		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
+		X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
 
 
 	if (!x_smbd_requ_verify_creditcharge(smbd_requ,
 				in_output_buffer_length)) {
-		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
+		X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
 
 	state->in_output_buffer_length = in_output_buffer_length;
@@ -161,16 +158,16 @@ NTSTATUS x_smb2_process_notify(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_req
 			in_file_id_volatile,
 			false);
 	if (!NT_STATUS_IS_OK(status)) {
-		RETURN_OP_STATUS(smbd_requ, status);
+		X_SMBD_REQU_RETURN_STATUS(smbd_requ, status);
 	}
 
 	auto smbd_open = smbd_requ->smbd_open;
 	if (x_smbd_open_is_data(smbd_open)) {
-		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
+		X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
 
 	if (!smbd_open->check_access_any(idl::SEC_DIR_LIST)) {
-		RETURN_OP_STATUS(smbd_requ, NT_STATUS_ACCESS_DENIED);
+		X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_ACCESS_DENIED);
 	}
 
 	/* notify filter cannot be overwritten */
@@ -187,10 +184,11 @@ NTSTATUS x_smb2_process_notify(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_req
 	status = smbd_open_notify(smbd_open,
 			smbd_requ, state);
 	if (NT_STATUS_IS_OK(status)) {
+		X_SMBD_REQU_LOG(OP, smbd_requ, " STATUS_SUCCESS");
 		return x_smb2_reply_notify(smbd_conn, smbd_requ, *state);
 	}
 
-	RETURN_OP_STATUS(smbd_requ, status);
+	X_SMBD_REQU_RETURN_STATUS(smbd_requ, status);
 }
 
 

@@ -369,7 +369,7 @@ static NTSTATUS smbd_chan_auth_updated(x_smbd_chan_t *smbd_chan, x_smbd_requ_t *
 		bool is_bind, uint8_t security_mode,
 		const x_auth_info_t &auth_info)
 {
-	X_LOG(SMB, OP, "%ld RESP 0x%x", smbd_requ->in_smb2_hdr.mid, NT_STATUS_V(status));
+	X_SMBD_REQU_LOG(OP, smbd_requ,  " %s", x_ntstatus_str(status));
 
 	if (NT_STATUS_EQUAL(status, NT_STATUS_MORE_PROCESSING_REQUIRED)) {
 		// hold ref for timer, will be dec in timer func

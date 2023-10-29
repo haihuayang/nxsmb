@@ -432,13 +432,6 @@ NTSTATUS x_smb2_process_break(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ
 void x_smbd_conn_requ_done(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ,
 		NTSTATUS status);
 
-#define RETURN_OP_STATUS(smbd_requ, status) do { \
-	X_LOG(SMB, OP, "mid=%ld op=%d %s at %s:%d", (smbd_requ)->in_smb2_hdr.mid, \
-			(smbd_requ)->in_smb2_hdr.opcode, \
-			x_ntstatus_str(status), __FILE__, __LINE__); \
-	return (status); \
-} while (0)
-
 #define RETURN_STATUS(status) do { \
 	X_LOG(SMB, DBG, "%s", x_ntstatus_str(status)); \
 	return (status); \

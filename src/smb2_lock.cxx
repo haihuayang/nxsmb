@@ -57,8 +57,6 @@ static void x_smb2_reply_lock(x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ,
 		const x_smbd_requ_state_lock_t &state)
 {
-	X_LOG(SMB, OP, "%ld RESP SUCCESS", smbd_requ->in_smb2_hdr.mid);
-
 	x_bufref_t *bufref = x_bufref_alloc(sizeof(x_smb2_out_lock_t));
 
 	uint8_t *out_hdr = bufref->get_data();
@@ -82,7 +80,7 @@ void x_smbd_requ_state_lock_t::async_done(x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ,
 		NTSTATUS status)
 {
-	X_LOG(SMB, DBG, "status=0x%x", status.v);
+	X_SMBD_REQU_LOG(OP, smbd_requ, " %s", x_ntstatus_str(status));
 	if (!smbd_conn) {
 		return;
 	}
@@ -304,10 +302,10 @@ static NTSTATUS smbd_open_lock(
 		for (const auto &le: state->in_lock_elements) {
 			if (le.flags != (X_SMB2_LOCK_FLAG_SHARED | X_SMB2_LOCK_FLAG_FAIL_IMMEDIATELY) &&
 					le.flags != (X_SMB2_LOCK_FLAG_EXCLUSIVE | X_SMB2_LOCK_FLAG_FAIL_IMMEDIATELY)) {
-				RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
+				X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 			}
 			if (le.length != 0 && (le.offset + le.length - 1) < le.offset) {
-				RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_LOCK_RANGE);
+				X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_INVALID_LOCK_RANGE);
 			}
 		}
 	} else {
@@ -316,10 +314,10 @@ static NTSTATUS smbd_open_lock(
 					le.flags != X_SMB2_LOCK_FLAG_EXCLUSIVE &&
 					le.flags != (X_SMB2_LOCK_FLAG_SHARED | X_SMB2_LOCK_FLAG_FAIL_IMMEDIATELY) &&
 					le.flags != (X_SMB2_LOCK_FLAG_EXCLUSIVE | X_SMB2_LOCK_FLAG_FAIL_IMMEDIATELY)) {
-				RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
+				X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 			}
 			if (le.length != 0 && (le.offset + le.length - 1) < le.offset) {
-				RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_LOCK_RANGE);
+				X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_INVALID_LOCK_RANGE);
 			}
 		}
 	}
@@ -397,23 +395,23 @@ static NTSTATUS smbd_open_unlock(
 NTSTATUS x_smb2_process_lock(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 {
 	if (smbd_requ->in_requ_len < sizeof(x_smb2_header_t) + sizeof(x_smb2_in_lock_t)) {
-		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
+		X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
 
 	const uint8_t *in_hdr = smbd_requ->get_in_data();
 
 	auto state = std::make_unique<x_smbd_requ_state_lock_t>();
 	if (!decode_in_lock(*state, in_hdr, smbd_requ->in_requ_len)) {
-		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
+		X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
 
-	X_LOG(SMB, OP, "%ld LOCK 0x%lx, 0x%lx", smbd_requ->in_smb2_hdr.mid,
+	X_SMBD_REQU_LOG(OP, smbd_requ,  " open=0x%lx,0x%lx",
 			state->in_file_id_persistent, state->in_file_id_volatile);
 
 	bool is_unlock = state->in_lock_elements[0].flags == X_SMB2_LOCK_FLAG_UNLOCK;
 	if (!is_unlock && NT_STATUS_EQUAL(smbd_requ->sess_status,
 				NT_STATUS_NETWORK_SESSION_EXPIRED)) {
-		RETURN_OP_STATUS(smbd_requ, NT_STATUS_NETWORK_SESSION_EXPIRED);
+		X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_NETWORK_SESSION_EXPIRED);
 	}
 
 	NTSTATUS status = x_smbd_requ_init_open(smbd_requ,
@@ -421,13 +419,13 @@ NTSTATUS x_smb2_process_lock(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 			state->in_file_id_volatile,
 			false);
 	if (!NT_STATUS_IS_OK(status)) {
-		RETURN_OP_STATUS(smbd_requ, status);
+		X_SMBD_REQU_RETURN_STATUS(smbd_requ, status);
 	}
 
 	auto smbd_open = smbd_requ->smbd_open;
 
 	if (!x_smbd_open_is_data(smbd_open)) {
-		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
+		X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
 
 	if (smbd_open->open_state.dhmode != x_smbd_dhmode_t::NONE ||
@@ -462,9 +460,10 @@ NTSTATUS x_smb2_process_lock(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 
 	if (NT_STATUS_IS_OK(status)) {
 		smb2_lock_set_sequence(smbd_requ->smbd_open, *state);
+		X_SMBD_REQU_LOG(OP, smbd_requ, " STATUS_SUCCESS");
 		x_smb2_reply_lock(smbd_conn, smbd_requ, *state);
 		return status;
 	}
 
-	RETURN_OP_STATUS(smbd_requ, status);
+	X_SMBD_REQU_RETURN_STATUS(smbd_requ, status);
 }

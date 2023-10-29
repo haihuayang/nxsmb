@@ -44,7 +44,7 @@ static NTSTATUS x_smbd_conn_reply_negprot(x_smbd_conn_t *smbd_conn, x_smbd_requ_
 		uint16_t out_context_count,
 		const std::vector<uint8_t> &out_context)
 {
-	X_LOG(SMB, OP, "%ld RESP SUCCESS dialect=%x", smbd_requ->in_smb2_hdr.mid, negprot.dialect);
+	X_SMBD_REQU_LOG(OP, smbd_requ,  " dialect=%x", negprot.dialect);
 
 	const std::vector<uint8_t> &security_blob = x_smbd_get_negprot_spnego();
 	size_t dyn_len = security_blob.size();
@@ -184,6 +184,7 @@ int x_smbd_conn_process_smb1negprot(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smb
 
 	int err = x_smbd_conn_negprot(smbd_conn, negprot, true);
 	if (err) {
+		X_SMBD_REQU_LOG(ERR, smbd_requ,  "err=%d", err);
 		return err;
 	}
 
@@ -357,11 +358,11 @@ static void generate_context(uint16_t &out_context_count,
  */
 NTSTATUS x_smb2_process_negprot(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 {
-	X_LOG(SMB, OP, "%ld NEGPROT", smbd_requ->in_smb2_hdr.mid);
+	X_SMBD_REQU_LOG(OP, smbd_requ,  "");
 
 	// x_smb2_verify_size(smbd_requ, X_SMB2_NEGPROT_BODY_LEN);
 	if (smbd_requ->in_requ_len < sizeof(x_smb2_header_t) + sizeof(x_smb2_negprot_requ_t)) {
-		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
+		X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
 
 	const uint8_t *in_buf = smbd_requ->get_in_data();
@@ -370,11 +371,11 @@ NTSTATUS x_smb2_process_negprot(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_re
 	const x_smb2_negprot_requ_t *in_requ = (const x_smb2_negprot_requ_t *)in_body;
 	uint16_t dialect_count = X_LE2H16(in_requ->dialect_count);
 	if (dialect_count == 0) {
-		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
+		X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
 	if (sizeof(x_smb2_header_t) + sizeof(x_smb2_negprot_requ_t) + dialect_count * sizeof(uint16_t)
 			> smbd_requ->in_requ_len) {
-		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
+		X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
 
 	const x_smbd_conf_t &smbd_conf = x_smbd_conf_get_curr();
@@ -383,7 +384,7 @@ NTSTATUS x_smb2_process_negprot(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_re
 	negprot.dialect = x_smb2_dialect_match(smbd_conf.dialects,
 			(const uint16_t *)(in_requ + 1), dialect_count);
 	if (negprot.dialect == X_SMB2_DIALECT_000) {
-		RETURN_OP_STATUS(smbd_requ, NT_STATUS_NOT_SUPPORTED);
+		X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_NOT_SUPPORTED);
 	}
 
 	uint16_t in_security_mode = x_get_le16(in_body + 0x04);
@@ -396,7 +397,7 @@ NTSTATUS x_smb2_process_negprot(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_re
 	
 	negprot.out_dialect = x_smb2_dialect_match(smbd_conn, in_dyn, dialect_count);
 	if (negprot.out_dialect == X_SMB2_DIALECT_000) {
-		RETURN_OP_STATUS(smbd_requ, NT_STATUS_NOT_SUPPORTED);
+		X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_NOT_SUPPORTED);
 	}
 	smbd_conn->client_security_mode = in_security_mode;
 	smbd_conn->client_capabilities = in_capabilities;
@@ -411,7 +412,7 @@ NTSTATUS x_smb2_process_negprot(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_re
 		if (!x_check_range<uint32_t>(in_context_offset, 0, 
 					sizeof(x_smb2_header_t) + sizeof(x_smb2_negprot_requ_t),
 					smbd_requ->in_requ_len)) {
-			RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
+			X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 		}
 
 		const uint8_t *in_context = in_buf + in_context_offset;
@@ -422,7 +423,7 @@ NTSTATUS x_smb2_process_negprot(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_re
 				in_context_count, hash_algos,
 				encryption_algos, signing_algos);
 		if (!NT_STATUS_IS_OK(status)) {
-			RETURN_OP_STATUS(smbd_requ, status);
+			X_SMBD_REQU_RETURN_STATUS(smbd_requ, status);
 		}
 
 		if (encryption_algos & (1 << X_SMB2_ENCRYPTION_AES128_GCM)) {
@@ -448,7 +449,7 @@ NTSTATUS x_smb2_process_negprot(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_re
 		}
 
 		if (hash_algos == 0) {
-			RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
+			X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 		}
 
 		x_smbd_conn_update_preauth(smbd_conn, 

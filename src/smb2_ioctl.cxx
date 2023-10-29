@@ -91,8 +91,6 @@ static void x_smb2_reply_ioctl(x_smbd_conn_t *smbd_conn,
 		NTSTATUS status,
 		x_smbd_requ_state_ioctl_t &state)
 {
-	X_LOG(SMB, OP, "%ld IOCTL SUCCESS", smbd_requ->in_smb2_hdr.mid);
-
 	x_bufref_t *bufref = x_bufref_alloc(sizeof(x_smb2_out_ioctl_t));
 	if (state.out_buf_length) {
 		bufref->next = new x_bufref_t(state.out_buf, 0, state.out_buf_length);
@@ -512,7 +510,7 @@ void x_smbd_requ_state_ioctl_t::async_done(x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ,
 		NTSTATUS status)
 {
-	X_LOG(SMB, DBG, "status=0x%x", status.v);
+	X_SMBD_REQU_LOG(OP, smbd_requ, " %s", x_ntstatus_str(status));
 	if (!smbd_conn) {
 		return;
 	}
@@ -735,30 +733,30 @@ static NTSTATUS x_smbd_open_ioctl(x_smbd_conn_t *smbd_conn,
 NTSTATUS x_smb2_process_ioctl(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 {
 	if (smbd_requ->in_requ_len < sizeof(x_smb2_header_t) + sizeof(x_smb2_in_ioctl_t)) {
-		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
+		X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
 
 	auto state = std::make_unique<x_smbd_requ_state_ioctl_t>();
 	if (!decode_in_ioctl(*state, smbd_requ->in_buf, smbd_requ->in_offset, smbd_requ->in_requ_len)) {
-		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
+		X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
 
-	X_LOG(SMB, OP, "%ld IOCTL 0x%lx, 0x%lx", smbd_requ->in_smb2_hdr.mid,
+	X_SMBD_REQU_LOG(OP, smbd_requ,  " open=0x%lx,0x%lx",
 			state->in_file_id_persistent, state->in_file_id_volatile);
 
 	if ((uint64_t)state->in_max_input_length + state->in_max_output_length > UINT32_MAX) {
-		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
+		X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
 
 	if (!x_smbd_requ_verify_creditcharge(smbd_requ,
 				std::max(state->in_max_input_length +
 					state->in_max_output_length,
 					state->in_buf_length))) {
-		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
+		X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
 
 	if (state->in_flags != X_SMB2_IOCTL_FLAG_IS_FSCTL) {
-		RETURN_OP_STATUS(smbd_requ, NT_STATUS_NOT_SUPPORTED);
+		X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_NOT_SUPPORTED);
 	}
 
 	NTSTATUS status;
@@ -769,7 +767,7 @@ NTSTATUS x_smb2_process_ioctl(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ
 				state->in_file_id_volatile,
 				true);
 		if (!NT_STATUS_IS_OK(status)) {
-			RETURN_OP_STATUS(smbd_requ, status);
+			X_SMBD_REQU_RETURN_STATUS(smbd_requ, status);
 		}
 
 		status = x_smbd_open_ioctl(smbd_conn, smbd_requ, state);
@@ -796,6 +794,7 @@ NTSTATUS x_smb2_process_ioctl(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ
 	}
 
 	if (NT_STATUS_IS_OK(status) || (state && state->out_buf_length)) {
+		X_SMBD_REQU_LOG(OP, smbd_requ, " %s", x_ntstatus_str(status));
 		x_smb2_reply_ioctl(smbd_conn, smbd_requ, status, *state);
 		return NT_STATUS_OK;
 	}
@@ -810,20 +809,21 @@ NTSTATUS x_smb2_process_ioctl_torture(x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ)
 {
 	if (smbd_requ->in_requ_len < sizeof(x_smb2_header_t) + sizeof(x_smb2_in_ioctl_t)) {
-		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
+		X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
 
 	auto state = std::make_unique<x_smbd_requ_state_ioctl_t>();
 	if (!decode_in_ioctl(*state, smbd_requ->in_buf, smbd_requ->in_offset, smbd_requ->in_requ_len)) {
-		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
+		X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
 
-	X_LOG(SMB, OP, "%ld IOCTL 0x%lx, 0x%lx", smbd_requ->in_smb2_hdr.mid,
+	X_SMBD_REQU_LOG(OP, smbd_requ,  " open=0x%lx,0x%lx",
 			state->in_file_id_persistent, state->in_file_id_volatile);
 
 	switch (state->ctl_code) {
 	case X_FSCTL_SMBTORTURE_FORCE_UNACKED_TIMEOUT:
 		state->out_buf_length = 0;
+		X_SMBD_REQU_LOG(OP, smbd_requ, " STATUS_SUCCESS");
 		x_smb2_reply_ioctl(smbd_conn, smbd_requ, NT_STATUS_OK, *state);
 		return NT_STATUS_OK;
 	}

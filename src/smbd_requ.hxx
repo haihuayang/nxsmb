@@ -389,9 +389,19 @@ struct x_smbd_requ_t
 };
 X_DECLARE_MEMBER_TRAITS(requ_async_traits, x_smbd_requ_t, async_link)
 
-#define X_SMBD_REQU_DBG_FMT "%p 0x%lx mid=0x%lx op=%d"
+#define X_SMBD_REQU_DBG_FMT "requ(%p 0x%lx mid=%lu op=%d)"
 #define X_SMBD_REQU_DBG_ARG(smbd_requ) (smbd_requ), (smbd_requ)->id, \
 		(smbd_requ)->in_smb2_hdr.mid, (smbd_requ)->in_smb2_hdr.opcode
+
+#define X_SMBD_REQU_RETURN_STATUS(smbd_requ, status) do { \
+	X_LOG(SMB, OP, X_SMBD_REQU_DBG_FMT " %s", \
+			X_SMBD_REQU_DBG_ARG(smbd_requ), \
+			x_ntstatus_str(status)); \
+	return (status); \
+} while (0)
+
+#define X_SMBD_REQU_LOG(level, smbd_requ, fmt, ...) \
+	X_LOG(SMB, level, X_SMBD_REQU_DBG_FMT fmt, X_SMBD_REQU_DBG_ARG(smbd_requ), ##__VA_ARGS__)
 
 int x_smbd_requ_pool_init(uint32_t count);
 x_smbd_requ_t *x_smbd_requ_create(x_buf_t *in_buf, uint32_t in_msgsize, bool encrypted);

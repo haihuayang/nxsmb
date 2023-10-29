@@ -216,10 +216,10 @@ NTSTATUS x_smb2_ioctl_copychunk(
 		std::unique_ptr<x_smbd_requ_state_ioctl_t> &state)
 {
 	if (state->in_buf_length < sizeof(x_smb2_fsctl_srv_copychunk_in_t)) {
-		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
+		X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
 	if (state->in_max_output_length < sizeof(x_smb2_fsctl_srv_copychunk_out_t)) {
-		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
+		X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
 	const x_smb2_fsctl_srv_copychunk_in_t *in = (x_smb2_fsctl_srv_copychunk_in_t *)(
 			state->in_buf->data + state->in_buf_offset);
@@ -238,7 +238,7 @@ NTSTATUS x_smb2_ioctl_copychunk(
 		return copychunk_invalid_limit(*state);
 	}
 	if (in->unused1 != 0) {
-		RETURN_OP_STATUS(smbd_requ, NT_STATUS_OBJECT_NAME_NOT_FOUND);
+		X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_OBJECT_NAME_NOT_FOUND);
 	}
 
 	std::vector<x_smb2_copychunk_t> chunks;
@@ -267,7 +267,7 @@ NTSTATUS x_smb2_ioctl_copychunk(
 			src_id_volatile, nullptr);
 
 	if (!src_open) {
-		RETURN_OP_STATUS(smbd_requ, NT_STATUS_OBJECT_NAME_NOT_FOUND);
+		X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_OBJECT_NAME_NOT_FOUND);
 	}
 
 	/* vfs_offload_token_check_handles */

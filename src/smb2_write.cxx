@@ -82,8 +82,6 @@ static void x_smb2_reply_write(x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ,
 		const x_smbd_requ_state_write_t &state)
 {
-	X_LOG(SMB, OP, "%ld WRITE SUCCESS", smbd_requ->in_smb2_hdr.mid);
-
 	x_bufref_t *bufref = x_bufref_alloc(sizeof(x_smb2_out_write_t));
 
 	uint8_t *out_hdr = bufref->get_data();
@@ -97,7 +95,7 @@ void x_smbd_requ_state_write_t::async_done(x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ,
 		NTSTATUS status)
 {
-	X_LOG(SMB, DBG, "status=0x%x", status.v);
+	X_SMBD_REQU_LOG(OP, smbd_requ, " %s", x_ntstatus_str(status));
 	if (!smbd_conn) {
 		return;
 	}
@@ -110,27 +108,28 @@ void x_smbd_requ_state_write_t::async_done(x_smbd_conn_t *smbd_conn,
 NTSTATUS x_smb2_process_write(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 {
 	if (smbd_requ->in_requ_len < sizeof(x_smb2_header_t) + sizeof(x_smb2_in_write_t)) {
-		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
+		X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
 
 	auto state = std::make_unique<x_smbd_requ_state_write_t>();
 	if (!decode_in_write(*state, smbd_requ->in_buf, smbd_requ->in_offset, smbd_requ->in_requ_len)) {
-		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
+		X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
 
-	X_LOG(SMB, OP, "%ld WRITE 0x%lx, 0x%lx", smbd_requ->in_smb2_hdr.mid,
-			state->in_file_id_persistent, state->in_file_id_volatile);
+	X_SMBD_REQU_LOG(OP, smbd_requ,  " open=0x%lx,0x%lx %lu:%u",
+			state->in_file_id_persistent, state->in_file_id_volatile,
+			state->in_offset, state->in_buf_length);
 
 	if (state->in_buf_length > x_smbd_conn_get_negprot(smbd_conn).max_write_size) {
-		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
+		X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
 
 	if (!valid_write_range(state->in_offset, state->in_buf_length)) {
-		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
+		X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
 
 	if (!x_smbd_requ_verify_creditcharge(smbd_requ, state->in_buf_length)) {
-		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
+		X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
 
 	NTSTATUS status = x_smbd_requ_init_open(smbd_requ,
@@ -138,16 +137,16 @@ NTSTATUS x_smb2_process_write(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ
 			state->in_file_id_volatile,
 			true);
 	if (!NT_STATUS_IS_OK(status)) {
-		RETURN_OP_STATUS(smbd_requ, status);
+		X_SMBD_REQU_RETURN_STATUS(smbd_requ, status);
 	}
 
 	if (!smbd_requ->smbd_open->check_access_any(idl::SEC_FILE_WRITE_DATA |
 				idl::SEC_FILE_APPEND_DATA)) {
-		RETURN_OP_STATUS(smbd_requ, NT_STATUS_ACCESS_DENIED);
+		X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_ACCESS_DENIED);
 	}
 
 	if (!x_smbd_open_is_data(smbd_requ->smbd_open)) {
-		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_DEVICE_REQUEST);
+		X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_INVALID_DEVICE_REQUEST);
 	}
 
 	const x_smbd_conf_t &smbd_conf = x_smbd_conf_get_curr();
@@ -162,8 +161,9 @@ NTSTATUS x_smb2_process_write(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ
 	}
 
 	if (NT_STATUS_IS_OK(status)) {
+		X_SMBD_REQU_LOG(OP, smbd_requ, " STATUS_SUCCESS");
 		x_smb2_reply_write(smbd_conn, smbd_requ, *state);
 		return status;
 	}
-	RETURN_OP_STATUS(smbd_requ, status);
+	X_SMBD_REQU_RETURN_STATUS(smbd_requ, status);
 }

@@ -623,8 +623,7 @@ struct defer_requ_evt_t
 		defer_requ_evt_t *evt = X_CONTAINER_OF(fdevt_user,
 				defer_requ_evt_t, base);
 		x_smbd_requ_t *smbd_requ = evt->smbd_requ;
-		X_LOG(SMB, DBG, "defer_requ_evt=%p, requ=%p, smbd_conn=%p",
-				evt, smbd_requ, smbd_conn);
+		X_SMBD_REQU_LOG(DBG, smbd_requ, " smbd_conn=%p", smbd_conn);
 
 		if (smbd_requ->in_smb2_hdr.opcode == X_SMB2_OP_CREATE) {
 			auto state = smbd_requ->release_state<x_smbd_requ_state_create_t>();
@@ -689,7 +688,7 @@ void x_smbd_wakeup_requ_list(const x_smbd_requ_id_list_t &requ_list)
 
 		int32_t count = smbd_requ->async_pending.fetch_sub(1,
 				std::memory_order_relaxed);
-		X_LOG(SMB, DBG, X_SMBD_REQU_DBG_FMT, X_SMBD_REQU_DBG_ARG(smbd_requ));
+		X_SMBD_REQU_LOG(DBG, smbd_requ, " count=%d", count);
 		X_ASSERT(count > 0);
 		if (count == 1) {
 			defer_requ_evt_t *evt = new defer_requ_evt_t(smbd_requ);
@@ -1323,7 +1322,7 @@ static NTSTATUS smbd_open_create(
 #define MIS_MATCH(attr) (((smbd_object->meta.file_attributes & attr) != 0) && ((state->in_file_attributes & attr) == 0))
 		if (MIS_MATCH(X_SMB2_FILE_ATTRIBUTE_SYSTEM) ||
 				MIS_MATCH(X_SMB2_FILE_ATTRIBUTE_HIDDEN)) {
-			RETURN_OP_STATUS(smbd_requ, NT_STATUS_ACCESS_DENIED);
+			X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_ACCESS_DENIED);
 		}
 	}
 
@@ -1340,13 +1339,13 @@ static NTSTATUS smbd_open_create(
 				overwrite);
 
 		if (!NT_STATUS_IS_OK(status)) {
-			return status;
+			X_SMBD_REQU_RETURN_STATUS(smbd_requ, status);
 		}
 
 		/* TODO seems windows do not check this for folder */
 		if (granted_access & idl::SEC_STD_DELETE) {
 			if (!check_ads_share_access(smbd_object, granted_access)) {
-				return NT_STATUS_SHARING_VIOLATION;
+				X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_SHARING_VIOLATION);
 			}
 		}
 	}
@@ -1374,11 +1373,11 @@ static NTSTATUS smbd_open_create(
 		++state->open_attempt;
 		defer_open(sharemode,
 				smbd_requ, state);
-		return NT_STATUS_PENDING;
+		X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_PENDING);
 	}
 
 	if (conflict) {
-		return NT_STATUS_SHARING_VIOLATION;
+		X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_SHARING_VIOLATION);
 	}
 
 	if (!smbd_object->exists() || (smbd_stream && !smbd_stream->exists)) {
@@ -1396,7 +1395,7 @@ static NTSTATUS smbd_open_create(
 						state->in_file_attributes,
 						access_mask);
 				if (!NT_STATUS_IS_OK(status)) {
-					return status;
+					X_SMBD_REQU_RETURN_STATUS(smbd_requ, status);
 				}
 			}
 		}
@@ -1406,7 +1405,7 @@ static NTSTATUS smbd_open_create(
 				state->in_file_attributes,
 				state->in_allocation_size);
 		if (!NT_STATUS_IS_OK(status)) {
-			return status;
+			X_SMBD_REQU_RETURN_STATUS(smbd_requ, status);
 		}
 		create_action = x_smb2_create_action_t::WAS_CREATED;
 	} else {
@@ -1422,7 +1421,7 @@ static NTSTATUS smbd_open_create(
 			sharemode,
 			*state, out_oplock_level);
 	if (!NT_STATUS_IS_OK(status)) {
-		return status;
+		X_SMBD_REQU_RETURN_STATUS(smbd_requ, status);
 	}
 
 	return status;
@@ -2012,7 +2011,7 @@ NTSTATUS x_smbd_open_op_reconnect(x_smbd_requ_t *smbd_requ,
 			smbd_volume, x_smbd_tcon_get_share(smbd_requ->smbd_tcon),
 			id_persistent);
 	if (!durable) {
-		RETURN_OP_STATUS(smbd_requ, NT_STATUS_OBJECT_NAME_NOT_FOUND);
+		X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_OBJECT_NAME_NOT_FOUND);
 	}
 
 	auto smbd_tcon = smbd_requ->smbd_tcon;
@@ -2020,7 +2019,7 @@ NTSTATUS x_smbd_open_op_reconnect(x_smbd_requ_t *smbd_requ,
 
 	auto [found, smbd_open] = g_smbd_open_table->lookup(id_volatile);
 	if (!found) {
-		RETURN_OP_STATUS(smbd_requ, NT_STATUS_OBJECT_NAME_NOT_FOUND);
+		X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_OBJECT_NAME_NOT_FOUND);
 	}
 
 	NTSTATUS status = smbd_open_reconnect(smbd_open, smbd_tcon, *state);

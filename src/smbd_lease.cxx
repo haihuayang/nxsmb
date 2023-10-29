@@ -396,9 +396,10 @@ static NTSTATUS smbd_lease_process_break(x_smbd_lease_t *smbd_lease,
 
 	smbd_lease_cancel_timer(smbd_lease);
 
-	X_LOG(SMB, DBG, "breaking from %d to %d - expected %d",
+	X_LOG(SMB, DBG, "breaking from %d to %d - expected %d required %d",
 			(int)smbd_lease->lease_state, (int)state.in_state,
-			(int)smbd_lease->breaking_to_requested);
+			(int)smbd_lease->breaking_to_requested,
+			(int)smbd_lease->breaking_to_required);
 
 	if (smbd_lease->lease_state != state.in_state) {
 		/* TODO should not assert with invalid client in_state */

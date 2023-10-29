@@ -28,11 +28,12 @@ static void x_smb2_reply_tdis(x_smbd_conn_t *smbd_conn,
 
 NTSTATUS x_smb2_process_tdis(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 {
-	X_LOG(SMB, OP, "%ld TDIS", smbd_requ->in_smb2_hdr.mid);
+	X_SMBD_REQU_LOG(OP, smbd_requ,  "");
+
 	X_ASSERT(smbd_requ->smbd_chan && smbd_requ->smbd_sess && smbd_requ->smbd_tcon);
 
 	if (smbd_requ->in_requ_len < sizeof(x_smb2_header_t) + sizeof(x_smb2_tdis_requ_t)) {
-		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
+		X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
 
 	bool ret = x_smbd_tcon_disconnect(smbd_requ->smbd_tcon);

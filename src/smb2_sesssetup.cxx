@@ -108,10 +108,10 @@ void x_smb2_sesssetup_done(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ, N
 #endif
 NTSTATUS x_smb2_process_sesssetup(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 {
-	X_LOG(SMB, OP, "%ld SESSSETUP", smbd_requ->in_smb2_hdr.mid);
+	X_SMBD_REQU_LOG(OP, smbd_requ,  "");
 
 	if (smbd_requ->in_requ_len < sizeof(x_smb2_header_t) + sizeof(x_smb2_sesssetup_requ_t) + 1) {
-		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
+		X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
 
 	const uint8_t *in_hdr = smbd_requ->get_in_data();
@@ -121,7 +121,7 @@ NTSTATUS x_smb2_process_sesssetup(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_
 	uint16_t in_security_length = X_LE2H16(requ->security_buffer_length);
 
 	if (!x_check_range<uint32_t>(in_security_offset, in_security_length, sizeof(x_smb2_header_t) + sizeof(x_smb2_sesssetup_requ_t), smbd_requ->in_requ_len)) {
-		RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
+		X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
 	
 	auto state = std::make_unique<x_smbd_requ_state_sesssetup_t>();
@@ -136,7 +136,7 @@ NTSTATUS x_smb2_process_sesssetup(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_
 
 	if (state->in_flags & X_SMB2_SESSION_FLAG_BINDING) {
 		if (!smbd_requ->is_signed()) {
-			RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
+			X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 		}
 		X_ASSERT(smbd_requ->smbd_sess);
 
@@ -146,40 +146,40 @@ NTSTATUS x_smb2_process_sesssetup(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_
 		
 		if (sess_signing_algo >= X_SMB2_SIGNING_AES128_GMAC &&
 				curr_signing_algo != sess_signing_algo) {
-			RETURN_OP_STATUS(smbd_requ, NT_STATUS_REQUEST_OUT_OF_SEQUENCE);
+			X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_REQUEST_OUT_OF_SEQUENCE);
 		}
 
 		if (curr_signing_algo >= X_SMB2_SIGNING_AES128_GMAC &&
 				curr_signing_algo != sess_signing_algo) {
-			RETURN_OP_STATUS(smbd_requ, NT_STATUS_NOT_SUPPORTED);
+			X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_NOT_SUPPORTED);
 		}
 
 		if (dialect < X_SMB2_DIALECT_300) {
-			RETURN_OP_STATUS(smbd_requ, NT_STATUS_REQUEST_NOT_ACCEPTED);
+			X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_REQUEST_NOT_ACCEPTED);
 		}
 
 		if (x_smbd_sess_get_cryption_algo(smbd_requ->smbd_sess) != x_smbd_conn_curr_get_cryption_algo()) {
-			RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
+			X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 		}
 
 		if (!(x_smbd_conn_get_capabilities(smbd_conn) & X_SMB2_CAP_MULTI_CHANNEL)) {
-			RETURN_OP_STATUS(smbd_requ, NT_STATUS_REQUEST_NOT_ACCEPTED);
+			X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_REQUEST_NOT_ACCEPTED);
 		}
 
 		if (x_smbd_sess_get_dialect(smbd_requ->smbd_sess) != x_smbd_conn_curr_dialect()) {
-			RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
+			X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 		}
 
 		if (smbd_requ->smbd_chan) {
 			if (x_smbd_chan_is_active(smbd_requ->smbd_chan)) {
 				/* the chan is already setup */
-				RETURN_OP_STATUS(smbd_requ, NT_STATUS_REQUEST_NOT_ACCEPTED);
+				X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_REQUEST_NOT_ACCEPTED);
 			}
 		} else {
 			/* TODO does it allow previous session in session binding */
 			smbd_requ->smbd_chan = x_smbd_chan_create(smbd_requ->smbd_sess, smbd_conn);
 			if (!smbd_requ->smbd_chan) {
-				RETURN_OP_STATUS(smbd_requ, NT_STATUS_INSUFFICIENT_RESOURCES);
+				X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_INSUFFICIENT_RESOURCES);
 			}
 			X_SMBD_COUNTER_INC(sess_bind, 1);
 			new_auth = true;
@@ -188,15 +188,15 @@ NTSTATUS x_smb2_process_sesssetup(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_
 		uint64_t session_id;
 		smbd_requ->smbd_sess = x_smbd_sess_create(session_id);
 		if (!smbd_requ->smbd_sess) {
-			RETURN_OP_STATUS(smbd_requ, NT_STATUS_INSUFFICIENT_RESOURCES);
+			X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_INSUFFICIENT_RESOURCES);
 		}
 		smbd_requ->smbd_chan = x_smbd_chan_create(smbd_requ->smbd_sess, smbd_conn);
 		if (!smbd_requ->smbd_chan) {
-			RETURN_OP_STATUS(smbd_requ, NT_STATUS_INSUFFICIENT_RESOURCES);
+			X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_INSUFFICIENT_RESOURCES);
 		}
 		new_auth = true;
 	} else if (!smbd_requ->smbd_chan) {
-		RETURN_OP_STATUS(smbd_requ, NT_STATUS_USER_SESSION_DELETED);
+		X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_USER_SESSION_DELETED);
 	}
 
 
@@ -217,7 +217,7 @@ NTSTATUS x_smb2_process_sesssetup(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_
 		if (smbd_sess->state != x_smbd_sess_t::S_WAIT_INPUT) {
 			smbd_sess->decref();
 			/* TODO just drop the message, should we reply something for this unexpected message */
-			RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
+			X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 		}
 		smbd_sess->decref();
 		smbd_conn->session_wait_input_list.remove(smbd_sess);

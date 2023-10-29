@@ -551,7 +551,7 @@ void x_smbd_requ_async_insert(x_smbd_requ_t *smbd_requ,
 		void (*cancel_fn)(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ),
 		int64_t interim_timeout_ns)
 {
-	X_LOG(SMB, DBG, "smbd_requ %p timeout=%ld", smbd_requ, interim_timeout_ns);
+	X_SMBD_REQU_LOG(DBG, smbd_requ, " timeout=%ld", interim_timeout_ns);
 	X_ASSERT(!smbd_requ->cancel_fn);
 	smbd_requ->cancel_fn = cancel_fn;
 	g_smbd_conn_curr->pending_requ_list.push_back(smbd_requ);
@@ -570,7 +570,7 @@ void x_smbd_requ_async_insert(x_smbd_requ_t *smbd_requ,
 /* must be in context of smbd_conn */
 bool x_smbd_requ_async_remove(x_smbd_requ_t *smbd_requ)
 {
-	X_LOG(SMB, DBG, "smbd_requ %p interim_state %d", smbd_requ,
+	X_SMBD_REQU_LOG(DBG, smbd_requ, " interim_state %d",
 			smbd_requ->interim_state);
 	if (!smbd_requ->cancel_fn) {
 		return false;
@@ -605,14 +605,14 @@ static void x_smbd_conn_cancel(x_smbd_conn_t *smbd_conn,
 	}
 
 	if (!smbd_requ->set_cancelled()) {
-		X_LOG(SMB, DBG, "cannot cancel requ %p async_id=x%lx, mid=%lu",
-				smbd_requ, smb2_hdr.async_id, smb2_hdr.mid);
+		X_SMBD_REQU_LOG(DBG, smbd_requ, " cannot cancell async_id=x%lx, mid=%lu",
+				smb2_hdr.async_id, smb2_hdr.mid);
 		X_SMBD_COUNTER_INC(cancel_too_late, 1);
 		return;
 	}
 
-	X_LOG(SMB, DBG, "cancel requ %p async_id=x%lx, mid=%lu",
-			smbd_requ, smb2_hdr.async_id, smb2_hdr.mid);
+	X_SMBD_REQU_LOG(DBG, smbd_requ, " cancelled async_id=x%lx, mid=%lu",
+			smb2_hdr.async_id, smb2_hdr.mid);
 	X_SMBD_COUNTER_INC(cancel_success, 1);
 	auto cancel_fn = smbd_requ->cancel_fn;
 	smbd_requ->cancel_fn = nullptr;
@@ -939,16 +939,16 @@ static NTSTATUS x_smbd_conn_process_smb2_intl(x_smbd_conn_t *smbd_conn, x_smbd_r
 		if (NT_STATUS_EQUAL(smbd_requ->sess_status,
 					NT_STATUS_NETWORK_SESSION_EXPIRED)) {
 			if (!op.allow_sess_expired) {
-				RETURN_OP_STATUS(smbd_requ, NT_STATUS_NETWORK_SESSION_EXPIRED);
+				X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_NETWORK_SESSION_EXPIRED);
 			}
 		} else if (!NT_STATUS_IS_OK(smbd_requ->sess_status)) {
-			RETURN_OP_STATUS(smbd_requ, smbd_requ->sess_status);
+			X_SMBD_REQU_RETURN_STATUS(smbd_requ, smbd_requ->sess_status);
 		}
 		if (!smbd_requ->smbd_sess) {
-			RETURN_OP_STATUS(smbd_requ, NT_STATUS_USER_SESSION_DELETED);
+			X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_USER_SESSION_DELETED);
 		}
 		if (!smbd_requ->smbd_chan ||  !x_smbd_chan_is_active(smbd_requ->smbd_chan)) {
-			RETURN_OP_STATUS(smbd_requ, NT_STATUS_USER_SESSION_DELETED);
+			X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_USER_SESSION_DELETED);
 		}
 	}
 
@@ -959,10 +959,10 @@ static NTSTATUS x_smbd_conn_process_smb2_intl(x_smbd_conn_t *smbd_conn, x_smbd_r
 
 	if (!smbd_requ->encrypted && smbd_requ->is_signed()) {
 		if (smbd_requ->in_smb2_hdr.opcode == X_SMB2_OP_NEGPROT) {
-			RETURN_OP_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
+			X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 		}
 		if (!smbd_requ->smbd_sess) {
-			RETURN_OP_STATUS(smbd_requ, NT_STATUS_USER_SESSION_DELETED);
+			X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_USER_SESSION_DELETED);
 		}
 		x_bufref_t bufref{x_buf_get(smbd_requ->in_buf), smbd_requ->in_offset, smbd_requ->in_requ_len};
 #if 0
@@ -980,7 +980,7 @@ static NTSTATUS x_smbd_conn_process_smb2_intl(x_smbd_conn_t *smbd_conn, x_smbd_r
 		if (smbd_requ->in_smb2_hdr.opcode != X_SMB2_OP_SESSSETUP ||
 				smbd_requ->smbd_chan ||
 				!NT_STATUS_IS_OK(sess_status)) {
-			RETURN_OP_STATUS(smbd_requ, NT_STATUS_ACCESS_DENIED);
+			X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_ACCESS_DENIED);
 		}
 	}
 
