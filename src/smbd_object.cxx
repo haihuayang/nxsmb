@@ -193,7 +193,7 @@ struct x_smbd_file_handle_t
 static uint64_t hash_file_handle(const x_smbd_file_handle_t &fh)
 {
 	return SpookyHash::Hash64(&fh.base, sizeof(struct file_handle) +
-			fh.base.handle_type, 0);
+			fh.base.handle_bytes, 0);
 }
 
 static NTSTATUS smbd_object_initialize_if(x_smbd_volume_t &smbd_volume,
