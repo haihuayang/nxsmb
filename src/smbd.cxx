@@ -203,9 +203,9 @@ static void init_smbd()
 		x_auth_destroy(spnego);
 	}
 
-#define TIMER_INIT(id, sec) g_smbd.timers[static_cast<int>(id)] = X_SEC_TO_NSEC(sec)
-	TIMER_INIT(x_smbd_timer_id_t::SESSSETUP, 40);
-	TIMER_INIT(x_smbd_timer_id_t::BREAK, 35);
+#define TIMER_INIT(id, ms) g_smbd.timers[static_cast<int>(id)] = X_MSEC_TO_NSEC(ms)
+	TIMER_INIT(x_smbd_timer_id_t::SESSSETUP, smbd_conf->sess_setup_timeout_ms);
+	TIMER_INIT(x_smbd_timer_id_t::BREAK, smbd_conf->smb2_break_timeout_ms);
 
 	x_smbd_init_shares(*smbd_conf);
 

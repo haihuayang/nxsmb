@@ -370,6 +370,10 @@ static bool parse_global_param(x_smbd_conf_t &smbd_conf,
 		}
 	} else if (name == "smb2 max credits") {
 		return parse_uint32(value, smbd_conf.smb2_max_credits);
+	} else if (name == "smb2 break timeout ms") {
+		return parse_uint32(value, smbd_conf.smb2_break_timeout_ms);
+	} else if (name == "sess setup timeout ms") {
+		return parse_uint32(value, smbd_conf.sess_setup_timeout_ms);
 	} else if (name == "private dir") {
 		smbd_conf.private_dir = value;
 	} else if (name == "node") {

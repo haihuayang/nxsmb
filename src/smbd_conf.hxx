@@ -101,6 +101,9 @@ struct x_smbd_conf_t
 
 	uint32_t allocation_roundup_size = 4096; // TODO should be volume param
 
+	uint32_t smb2_break_timeout_ms = 35000;
+	uint32_t sess_setup_timeout_ms = 40000;
+
 	uint32_t my_dev_delay_read_ms = 0;
 	uint32_t my_dev_delay_write_ms = 0;
 	uint32_t my_dev_delay_qdir_ms = 0;

@@ -41,7 +41,8 @@
 #endif
 
 #define X_NSEC_PER_SEC 1000000000ul
-#define X_SEC_TO_NSEC(s) (X_NSEC_PER_SEC * s)
+#define X_SEC_TO_NSEC(s) (X_NSEC_PER_SEC * (s))
+#define X_MSEC_TO_NSEC(ms) (1000000ul * (ms))
 
 #define PROJECT_NAME XSTR2(PROJECT)
 
