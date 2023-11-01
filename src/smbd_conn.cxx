@@ -1534,6 +1534,7 @@ static void x_smbd_conn_upcall_cb_unmonitor(x_epoll_upcall_t *upcall)
 
 	x_smbd_conn_terminate_chans(smbd_conn);
 	while (x_smbd_requ_t *smbd_requ = smbd_conn->pending_requ_list.get_front()) {
+		x_smbd_requ_done(smbd_requ);
 		X_ASSERT(x_smbd_requ_async_remove(smbd_requ));
 	}
 

@@ -625,38 +625,33 @@ struct defer_requ_evt_t
 		x_smbd_requ_t *smbd_requ = evt->smbd_requ;
 		X_SMBD_REQU_LOG(DBG, smbd_requ, " smbd_conn=%p", smbd_conn);
 
-		if (smbd_requ->in_smb2_hdr.opcode == X_SMB2_OP_CREATE) {
-			auto state = smbd_requ->release_state<x_smbd_requ_state_create_t>();
-			if (x_smbd_requ_async_remove(smbd_requ) && smbd_conn) {
+		if (x_smbd_requ_async_remove(smbd_requ) && smbd_conn) {
+			if (smbd_requ->in_smb2_hdr.opcode == X_SMB2_OP_CREATE) {
+				auto state = smbd_requ->release_state<x_smbd_requ_state_create_t>();
 				NTSTATUS status = x_smbd_open_op_create(smbd_requ, state);
 				if (!NT_STATUS_EQUAL(status, NT_STATUS_PENDING)) {
 					state->async_done(smbd_conn, smbd_requ, status);
 				}
-			} else {
-				if (state->replay_reserved) {
-					x_smbd_replay_cache_clear(state->in_client_guid,
-							state->in_create_guid);
-				}
-			}
-		} else if (smbd_requ->in_smb2_hdr.opcode == X_SMB2_OP_SETINFO) {
-			/* TODO polymorphism */
-			if (smbd_requ->get_requ_state<x_smbd_requ_state_rename_t>()) {
-				auto state = smbd_requ->release_state<x_smbd_requ_state_rename_t>();
-				if (x_smbd_requ_async_remove(smbd_requ) && smbd_conn) {
+
+			} else if (smbd_requ->in_smb2_hdr.opcode == X_SMB2_OP_SETINFO) {
+				/* TODO polymorphism */
+				if (smbd_requ->get_requ_state<x_smbd_requ_state_rename_t>()) {
+					auto state = smbd_requ->release_state<x_smbd_requ_state_rename_t>();
 					NTSTATUS status = x_smbd_open_rename(smbd_requ, state);
 					if (!NT_STATUS_EQUAL(status, NT_STATUS_PENDING)) {
 						state->async_done(smbd_conn, smbd_requ, status);
 					}
-				}
-			} else {
-				auto state = smbd_requ->release_state<x_smbd_requ_state_disposition_t>();
-				if (x_smbd_requ_async_remove(smbd_requ) && smbd_conn) {
+
+				} else {
+					auto state = smbd_requ->release_state<x_smbd_requ_state_disposition_t>();
 					NTSTATUS status = x_smbd_open_set_delete_pending(smbd_requ, state);
 					if (!NT_STATUS_EQUAL(status, NT_STATUS_PENDING)) {
 						state->async_done(smbd_conn, smbd_requ, status);
 					}
 				}
 			}
+		} else {
+			x_smbd_requ_done(smbd_requ);
 		}
 
 		delete evt;

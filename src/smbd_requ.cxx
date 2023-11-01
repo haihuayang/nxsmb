@@ -3,6 +3,7 @@
 #include "smbd_stats.hxx"
 #include "smbd_ctrl.hxx"
 #include "smbd_open.hxx"
+#include "smbd_replay.hxx"
 #include "include/idtable.hxx"
 
 using smbd_requ_table_t = x_idtable_t<x_smbd_requ_t, x_idtable_64_traits_t>;
@@ -15,6 +16,9 @@ x_smbd_requ_state_create_t::x_smbd_requ_state_create_t(const x_smb2_uuid_t &clie
 
 x_smbd_requ_state_create_t::~x_smbd_requ_state_create_t()
 {
+	if (replay_reserved) {
+		x_smbd_replay_cache_clear(in_client_guid, in_create_guid);
+	}
 	if (smbd_object) {
 		x_smbd_release_object_and_stream(smbd_object, smbd_stream);
 	}
