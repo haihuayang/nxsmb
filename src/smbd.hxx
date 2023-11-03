@@ -280,6 +280,7 @@ uint16_t x_smbd_sess_get_dialect(const x_smbd_sess_t *smbd_sess);
 bool x_smbd_sess_is_signing_required(const x_smbd_sess_t *smbd_sess);
 x_smbd_chan_t *x_smbd_sess_lookup_chan(x_smbd_sess_t *smbd_sess, x_smbd_conn_t *smbd_conn);
 x_smbd_chan_t *x_smbd_sess_get_active_chan(x_smbd_sess_t *smbd_sess);
+uint32_t x_smbd_sess_get_chan_count(const x_smbd_sess_t *smbd_sess);
 bool x_smbd_sess_link_chan(x_smbd_sess_t *smbd_sess, x_dlink_t *link);
 bool x_smbd_sess_unlink_chan(x_smbd_sess_t *smbd_sess, x_dlink_t *link,
 		bool shutdown);

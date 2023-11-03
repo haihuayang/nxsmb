@@ -276,6 +276,11 @@ x_smbd_chan_t *x_smbd_sess_get_active_chan(x_smbd_sess_t *smbd_sess)
 	return nullptr;
 }
 
+uint32_t x_smbd_sess_get_chan_count(const x_smbd_sess_t *smbd_sess)
+{
+	return smbd_sess->chan_count;
+}
+
 bool x_smbd_sess_link_tcon(x_smbd_sess_t *smbd_sess, x_dlink_t *link)
 {
 	std::lock_guard<std::mutex> lock(smbd_sess->mutex);

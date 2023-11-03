@@ -567,7 +567,7 @@ void x_smbd_requ_async_insert(x_smbd_requ_t *smbd_requ,
 	}
 }
 
-/* must be in context of smbd_conn */
+/* must be in context of smbd_conn or smbd_srv if smbd_conn is died */
 bool x_smbd_requ_async_remove(x_smbd_requ_t *smbd_requ)
 {
 	X_SMBD_REQU_LOG(DBG, smbd_requ, " interim_state %d",
@@ -575,7 +575,9 @@ bool x_smbd_requ_async_remove(x_smbd_requ_t *smbd_requ)
 	if (!smbd_requ->cancel_fn) {
 		return false;
 	}
-	g_smbd_conn_curr->pending_requ_list.remove(smbd_requ);
+	x_smbd_conn_t *smbd_conn = x_smbd_chan_get_conn(smbd_requ->smbd_chan);
+	X_ASSERT(!g_smbd_conn_curr || g_smbd_conn_curr == smbd_conn);
+	smbd_conn->pending_requ_list.remove(smbd_requ);
 	smbd_requ->cancel_fn = nullptr;
 	x_smbd_ref_dec(smbd_requ);
 	return true;
@@ -1533,9 +1535,20 @@ static void x_smbd_conn_upcall_cb_unmonitor(x_epoll_upcall_t *upcall)
 	g_smbd_conn_curr = x_smbd_ref_inc(smbd_conn);
 
 	x_smbd_conn_terminate_chans(smbd_conn);
-	while (x_smbd_requ_t *smbd_requ = smbd_conn->pending_requ_list.get_front()) {
-		x_smbd_requ_done(smbd_requ);
-		X_ASSERT(x_smbd_requ_async_remove(smbd_requ));
+	x_smbd_requ_t *smbd_requ, *next_requ;
+	for (smbd_requ = smbd_conn->pending_requ_list.get_front(); smbd_requ;
+			smbd_requ = next_requ) {
+		next_requ = smbd_conn->pending_requ_list.next(smbd_requ);
+		uint32_t chan_count;
+		if (smbd_requ->in_smb2_hdr.opcode != X_SMB2_OP_CREATE ||
+				!smbd_requ->smbd_sess ||
+				(chan_count = x_smbd_sess_get_chan_count(smbd_requ->smbd_sess)) == 0) {
+			x_smbd_requ_done(smbd_requ);
+			X_ASSERT(x_smbd_requ_async_remove(smbd_requ));
+		} else {
+			X_SMBD_REQU_LOG(DBG, smbd_requ, " with %u alternate channels",
+					chan_count);
+		}
 	}
 
 	{
