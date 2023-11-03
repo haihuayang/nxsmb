@@ -11,11 +11,25 @@ static const uint8_t X_SMB2_CREATE_TAG_APP_INSTANCE_ID[] = {
 	0x90, 0x08, 0xFA, 0x46, 0x2E, 0x14, 0x4D, 0x74,
 };
 
+static const uint8_t X_SMB2_CREATE_TAG_APP_INSTANCE_VERSION[] = {
+	0xB9, 0x82, 0xD0, 0xB7, 0x3B, 0x56, 0x07, 0x4F,
+	0xA0, 0x7B, 0x52, 0x4A, 0x81, 0x16, 0xA0, 0x10,
+};
+
 struct x_smb2_create_requ_app_instance_id_t
 {
 	uint16_t struct_size;
 	uint16_t reserved0;
 	x_smb2_uuid_bytes_t app_instance_id;
+};
+
+struct x_smb2_create_requ_app_instance_version_t
+{
+	uint16_t struct_size;
+	uint16_t reserved0;
+	uint32_t reserved1;
+	uint64_t app_instance_version_high;
+	uint64_t app_instance_version_low;
 };
 
 struct x_smb2_in_create_t
@@ -106,7 +120,7 @@ static inline bool x_bit_all(T v1, T v2)
 	return (v1 & v2) == v2;
 }
 
-static bool decode_contexts(x_smbd_requ_state_create_t &state,
+static bool decode_contexts(uint16_t dialect, x_smbd_requ_state_create_t &state,
 		const uint8_t *data, uint32_t length, bool &has_RqLs)
 {
 	const x_smb2_create_dhnc_requ_t *dhnc = nullptr;
@@ -206,24 +220,39 @@ static bool decode_contexts(x_smbd_requ_state_create_t &state,
 			} else {
 				X_LOG(SMB, WARN, "unknown create context 0x%x", tag);
 			}
-#if 0
+
 		} else if (tag_len == 16) {
 			if (memcmp(data + tag_off, X_SMB2_CREATE_TAG_APP_INSTANCE_ID, 16) == 0) {
-				if (data_len != sizeof(x_smb2_create_requ_app_instance_id_t)) {
-					return false;
+				if (dialect >= X_SMB2_DIALECT_300) {
+					if (data_len != sizeof(x_smb2_create_requ_app_instance_id_t)) {
+						return false;
+					}
+					auto ctx = (const x_smb2_create_requ_app_instance_id_t *)(data + data_off);
+					uint16_t struct_size = X_LE2H16(ctx->struct_size);
+					if (struct_size != sizeof(x_smb2_create_requ_app_instance_id_t)) {
+						return false;
+					}
+					state.valid_flags |= x_smbd_open_state_t::F_APP_INSTANCE_ID;
+					state.in_context_app_instance_id.from_bytes(ctx->app_instance_id);
 				}
-				auto ctx = (const x_smb2_create_requ_app_instance_id_t *)(data + data_off);
-				uint16_t struct_size = X_LE2H16(ctx->struct_size);
-				if (struct_size != sizeof(x_smb2_create_requ_app_instance_id_t)) {
-					return false;
+			} else if (memcmp(data + tag_off, X_SMB2_CREATE_TAG_APP_INSTANCE_VERSION, 16) == 0) {
+				if (dialect >= X_SMB2_DIALECT_311) {
+					if (data_len != sizeof(x_smb2_create_requ_app_instance_version_t)) {
+						return false;
+					}
+					auto ctx = (const x_smb2_create_requ_app_instance_version_t *)(data + data_off);
+					uint16_t struct_size = X_LE2H16(ctx->struct_size);
+					if (struct_size != sizeof(x_smb2_create_requ_app_instance_version_t)) {
+						return false;
+					}
+					state.valid_flags |= x_smbd_open_state_t::F_APP_INSTANCE_VERSION;
+					state.in_context_app_instance_version_high = ctx->app_instance_version_high;
+					state.in_context_app_instance_version_low = ctx->app_instance_version_low;
 				}
-				// TODO skip for now since not very clear how it is used
-				// state.in_contexts |= X_SMB2_CONTEXT_FLAG_APP_INSTANCE_ID;
-				// state.in_context_app_instance_id = ctx->app_instance_id;
 			} else {
 				X_LOG(SMB, WARN, "unknown create context");
 			}
-#endif
+
 		} else if (tag_len < 4) {
 			/* return NT_STATUS_INVALID_PARAMETER if tag_len < 4 */
 			X_LOG(SMB, WARN, "unknown create context tag_len=%d", tag_len);
@@ -260,6 +289,11 @@ static bool decode_contexts(x_smbd_requ_state_create_t &state,
 		state.in_dh_id_volatile = X_LE2H64(dh2c->file_id_volatile);
 		state.in_create_guid = dh2c->create_guid;
 		state.in_dh_flags = X_LE2H32(dh2c->flags);
+		state.valid_flags &= ~(x_smbd_open_state_t::F_APP_INSTANCE_ID |
+				x_smbd_open_state_t::F_APP_INSTANCE_VERSION);
+		state.in_context_app_instance_id = {};
+		state.in_context_app_instance_version_high = 0;
+		state.in_context_app_instance_version_low = 0;
 	} else if (state.in_contexts & X_SMB2_CONTEXT_FLAG_DHNC) {
 		state.in_contexts &= ~X_SMB2_CONTEXT_FLAG_DHNQ;
 		state.in_dh_id_persistent = X_LE2H64(dhnc->file_id_persistent);
@@ -433,7 +467,7 @@ static bool normalize_path(std::u16string &path,
 	return true;
 }
 
-static NTSTATUS decode_in_create(x_smbd_requ_state_create_t &state,
+static NTSTATUS decode_in_create(uint16_t dialect, x_smbd_requ_state_create_t &state,
 		const uint8_t *in_hdr, uint32_t in_len)
 {
 	const x_smb2_in_create_t *in_create = (const x_smb2_in_create_t *)(in_hdr + sizeof(x_smb2_header_t));
@@ -489,7 +523,7 @@ static NTSTATUS decode_in_create(x_smbd_requ_state_create_t &state,
 	}
 
 	bool has_RqLs = false;
-	if (in_context_length != 0 && !decode_contexts(state,
+	if (in_context_length != 0 && !decode_contexts(dialect, state,
 				in_hdr + in_context_offset,
 				in_context_length, has_RqLs)) {
 		return NT_STATUS_INVALID_PARAMETER;
@@ -761,13 +795,13 @@ NTSTATUS x_smb2_process_create(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_req
 
 	/* TODO check limit of open for both total and per conn*/
 
+	auto dialect = x_smbd_conn_get_dialect(smbd_conn);
 	auto state = std::make_unique<x_smbd_requ_state_create_t>(x_smbd_conn_curr_client_guid());
-	NTSTATUS status = decode_in_create(*state, in_hdr, smbd_requ->in_requ_len);
+	NTSTATUS status = decode_in_create(dialect, *state, in_hdr, smbd_requ->in_requ_len);
 	if (!NT_STATUS_IS_OK(status)) {
 		X_SMBD_REQU_RETURN_STATUS(smbd_requ, status);
 	}
 
-	auto dialect = x_smbd_conn_get_dialect(smbd_conn);
 	if (dialect < X_SMB2_DIALECT_210 &&
 			state->in_oplock_level == X_SMB2_OPLOCK_LEVEL_LEASE) {
 		state->in_oplock_level = X_SMB2_OPLOCK_LEVEL_NONE;

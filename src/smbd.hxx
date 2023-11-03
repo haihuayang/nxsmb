@@ -153,10 +153,18 @@ enum {
 
 struct x_smbd_open_state_t
 {
+	enum {
+		F_APP_INSTANCE_ID = 0x1,
+		F_APP_INSTANCE_VERSION = 0x2,
+	};
 	uint64_t id_persistent;
+	const uint32_t flags;
 	const uint32_t access_mask, share_access;
 	const x_smb2_uuid_t client_guid;
 	const x_smb2_uuid_t create_guid;
+	const x_smb2_uuid_t app_instance_id;
+	const uint64_t app_instance_version_high;
+	const uint64_t app_instance_version_low;
 	const idl::dom_sid owner;
 	const x_smb2_lease_key_t parent_lease_key;
 	const long priv_data;

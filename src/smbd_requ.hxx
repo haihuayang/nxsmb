@@ -254,11 +254,15 @@ struct x_smbd_requ_state_create_t : x_smbd_requ_state_async_t
 	std::shared_ptr<x_smbd_share_t> smbd_share;
 	long open_priv_data;
 
+	uint32_t valid_flags = 0;
 	uint64_t in_dh_id_persistent;
 	uint64_t in_dh_id_volatile;
 	uint32_t in_dh_timeout;
 	uint32_t in_dh_flags;
 	x_smb2_uuid_t in_create_guid;
+	x_smb2_uuid_t in_context_app_instance_id;
+	uint64_t in_context_app_instance_version_high = 0;
+	uint64_t in_context_app_instance_version_low = 0;
 };
 
 enum {
@@ -269,7 +273,6 @@ enum {
 	X_SMB2_CONTEXT_FLAG_DHNC = 0x10,
 	X_SMB2_CONTEXT_FLAG_DH2Q = 0x20,
 	X_SMB2_CONTEXT_FLAG_DH2C = 0x40,
-	X_SMB2_CONTEXT_FLAG_APP_INSTANCE_ID = 0x80,
 };
 
 struct x_smbd_requ_state_sesssetup_t : x_smbd_requ_state_async_t
