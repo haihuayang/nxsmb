@@ -180,6 +180,36 @@ static void fill_out_info(x_smb2_create_close_info_t &info,
 	info.out_end_of_file = stream_meta.end_of_file;
 }
 
+struct x_smbd_close_cleanup_t
+{
+	~x_smbd_close_cleanup_t();
+
+	std::vector<x_smbd_open_t *> smbd_opens;
+	std::vector<x_smbd_lease_t *> smbd_leases;
+	x_tp_ddlist_t<requ_async_traits> pending_requ_list;
+	x_smbd_requ_id_list_t oplock_pending_list;
+};
+
+x_smbd_close_cleanup_t::~x_smbd_close_cleanup_t()
+{
+	x_smbd_requ_t *smbd_requ;
+	while ((smbd_requ = pending_requ_list.get_front()) != nullptr) {
+		pending_requ_list.remove(smbd_requ);
+		x_smbd_conn_post_cancel(x_smbd_chan_get_conn(smbd_requ->smbd_chan),
+				smbd_requ, smbd_requ->status);
+	}
+
+	for (auto smbd_lease: smbd_leases) {
+		x_smbd_lease_close(smbd_lease);
+	}
+
+	x_smbd_wakeup_requ_list(oplock_pending_list);
+
+	for (auto smbd_open: smbd_opens) {
+		x_smbd_ref_dec(smbd_open);
+	}
+}
+
 static NTSTATUS smbd_object_remove(
 		x_smbd_object_t *smbd_object,
 		x_smbd_open_t *smbd_open)
@@ -260,9 +290,7 @@ static void smbd_close_open_intl(
 		x_smbd_open_t *smbd_open,
 		x_smbd_requ_t *smbd_requ,
 		std::unique_ptr<x_smbd_requ_state_close_t> &state,
-		x_smbd_lease_t *&smbd_lease,
-		x_tp_ddlist_t<requ_async_traits> &pending_requ_list,
-		x_smbd_requ_id_list_t &oplock_pending_list)
+		x_smbd_close_cleanup_t &close_cleanup)
 {
 	if (smbd_open->open_state.dhmode != x_smbd_dhmode_t::NONE) {
 		int ret = x_smbd_volume_remove_durable(
@@ -281,8 +309,10 @@ static void smbd_close_open_intl(
 		smbd_open->oplock_break_sent = x_smbd_open_t::OPLOCK_BREAK_NOT_SENT;
 	}
 
-       	smbd_lease = smbd_open->smbd_lease;
-	smbd_open->smbd_lease = nullptr;
+	if (smbd_open->smbd_lease) {
+		close_cleanup.smbd_leases.push_back(smbd_open->smbd_lease);
+		smbd_open->smbd_lease = nullptr;
+	}
 
 	if (smbd_open->smbd_qdir) {
 		x_smbd_qdir_close(smbd_open->smbd_qdir);
@@ -299,14 +329,14 @@ static void smbd_close_open_intl(
 		X_ASSERT(smbd_object->smbd_volume->watch_tree_cnt > 0);
 		--smbd_object->smbd_volume->watch_tree_cnt;
 	}
-	pending_requ_list = std::move(smbd_open->pending_requ_list);
+	close_cleanup.pending_requ_list.concat(smbd_open->pending_requ_list);
 	if (smbd_open->oplock_pending_list.empty()) {
-	} else if (oplock_pending_list.empty()) {
-		std::swap(oplock_pending_list, smbd_open->oplock_pending_list);
+	} else if (close_cleanup.oplock_pending_list.empty()) {
+		std::swap(close_cleanup.oplock_pending_list, smbd_open->oplock_pending_list);
 	} else {
 		std::move(smbd_open->oplock_pending_list.begin(),
 				smbd_open->oplock_pending_list.end(),
-				std::back_inserter(oplock_pending_list));
+				std::back_inserter(close_cleanup.oplock_pending_list));
 	}
 
 	if (smbd_open->update_write_time) {
@@ -345,14 +375,8 @@ static void smbd_close_open_intl(
 static bool smbd_open_close_disconnected_if(
 		x_smbd_object_t *smbd_object,
 		x_smbd_open_t *smbd_open,
-		std::vector<x_smbd_lease_t *> &smbd_leases,
-		x_tp_ddlist_t<requ_async_traits> &pending_requ_list,
-		x_smbd_requ_id_list_t &oplock_pending_list)
+		x_smbd_close_cleanup_t &close_cleanup)
 {
-	x_smbd_lease_t *smbd_lease = nullptr;
-	x_tp_ddlist_t<requ_async_traits> tmp_requ_list;
-	std::unique_ptr<x_smbd_requ_state_close_t> state;
-
 	if (smbd_open->state != SMBD_OPEN_S_DISCONNECTED) {
 		return false;
 	}
@@ -361,18 +385,15 @@ static bool smbd_open_close_disconnected_if(
 		return false;
 	}
 	smbd_open->state = SMBD_OPEN_S_DONE;
+	std::unique_ptr<x_smbd_requ_state_close_t> state;
+
 	smbd_close_open_intl(smbd_object, smbd_open, nullptr, state,
-			smbd_lease, tmp_requ_list, oplock_pending_list);
+			close_cleanup);
 
 	x_smbd_ref_dec(smbd_open); // durable timer ref
 
 	g_smbd_open_table->remove(smbd_open->id_volatile);
 
-	if (smbd_lease) {
-		smbd_leases.push_back(smbd_lease);
-	}
-
-	pending_requ_list.concat(tmp_requ_list);
 	return true;
 }
 
@@ -385,26 +406,10 @@ bool x_smbd_open_match_get_lease(const x_smbd_open_t *smbd_open,
 }
 
 static void smbd_open_post_close(x_smbd_open_t *smbd_open,
-		x_smbd_object_t *smbd_object,
-		x_smbd_lease_t *smbd_lease,
-		x_tp_ddlist_t<requ_async_traits> &pending_requ_list,
-		const x_smbd_requ_id_list_t &oplock_pending_list)
+		x_smbd_object_t *smbd_object)
 {
 	g_smbd_open_table->remove(smbd_open->id_volatile);
 	x_smbd_ref_dec(smbd_open);
-
-	x_smbd_requ_t *pending_requ;
-	while ((pending_requ = pending_requ_list.get_front()) != nullptr) {
-		pending_requ_list.remove(pending_requ);
-		x_smbd_conn_post_cancel(x_smbd_chan_get_conn(pending_requ->smbd_chan),
-				pending_requ, pending_requ->status);
-	}
-
-	if (smbd_lease) {
-		x_smbd_lease_close(smbd_lease);
-	}
-
-	x_smbd_wakeup_requ_list(oplock_pending_list);
 }
 
 // caller hold the object mutex
@@ -413,41 +418,23 @@ static void smbd_open_close(
 		x_smbd_object_t *smbd_object,
 		x_smbd_requ_t *smbd_requ,
 		std::unique_ptr<x_smbd_requ_state_close_t> &state,
-		x_smbd_lease_t * &smbd_lease,
-		x_tp_ddlist_t<requ_async_traits> &pending_requ_list,
-		x_smbd_requ_id_list_t &oplock_pending_list)
+		x_smbd_close_cleanup_t &close_cleanup)
 {
 	smbd_open->state = SMBD_OPEN_S_DONE;
 
 	if (smbd_object->type != x_smbd_object_t::type_pipe) {
 		smbd_close_open_intl(smbd_object, smbd_open, smbd_requ, state,
-				smbd_lease, pending_requ_list, oplock_pending_list);
+				close_cleanup);
 	}
 }
 
 static void smbd_open_close_disconnected(x_smbd_open_t *smbd_open)
 {
 	/* TODO */
-	std::vector<x_smbd_lease_t *> smbd_leases;
-	x_tp_ddlist_t<requ_async_traits> pending_requ_list;
-	x_smbd_requ_id_list_t oplock_pending_list;
+	x_smbd_close_cleanup_t close_cleanup;
 	smbd_open_close_disconnected_if(smbd_open->smbd_object,
-			smbd_open, smbd_leases,
-			pending_requ_list,
-			oplock_pending_list);
+			smbd_open, close_cleanup);
 
-	x_smbd_requ_t *requ_notify;
-	while ((requ_notify = pending_requ_list.get_front()) != nullptr) {
-		pending_requ_list.remove(requ_notify);
-		x_smbd_conn_post_cancel(x_smbd_chan_get_conn(requ_notify->smbd_chan),
-				requ_notify, NT_STATUS_NOTIFY_CLEANUP);
-	}
-
-	for (auto smbd_lease: smbd_leases) {
-		x_smbd_lease_close(smbd_lease);
-	}
-
-	x_smbd_wakeup_requ_list(oplock_pending_list);
 	x_smbd_ref_dec(smbd_open);
 }
 
@@ -462,29 +449,25 @@ static long smbd_open_durable_timeout(x_timer_job_t *timer)
 	auto smbd_object = smbd_open->smbd_object;
 
 	std::unique_ptr<x_smbd_requ_state_close_t> state;
-	x_smbd_lease_t *smbd_lease = nullptr;
-	x_tp_ddlist_t<requ_async_traits> pending_requ_list;
-	x_smbd_requ_id_list_t oplock_pending_list;
+	x_smbd_close_cleanup_t close_cleanup;
 
 	bool closed = false;
 	{
 		auto lock = smbd_object_lock(smbd_object);
 		if (smbd_open->state == SMBD_OPEN_S_DISCONNECTED) {
 			smbd_open_close(smbd_open, smbd_object, nullptr, state,
-					smbd_lease, pending_requ_list,
-					oplock_pending_list);
+					close_cleanup);
 			closed = true;
 		}
 	}
 
+	X_LOG(SMB, DBG, "open=%lx,%lx closed=%d", smbd_open->open_state.id_persistent,
+			smbd_open->id_volatile, closed);
 	if (closed) {
-		smbd_open_post_close(smbd_open, smbd_object,
-				smbd_lease, pending_requ_list,
-				oplock_pending_list);
+		smbd_open_post_close(smbd_open, smbd_object);
 	}
 
 	x_smbd_ref_dec(smbd_open); // ref by timer
-
 	return -1;
 }
 
@@ -519,9 +502,7 @@ NTSTATUS x_smbd_open_op_close(
 	x_smbd_object_t *smbd_object = smbd_open->smbd_object;
 	x_smbd_tcon_t *smbd_tcon = nullptr;
 
-	x_smbd_lease_t *smbd_lease = nullptr;
-	x_tp_ddlist_t<requ_async_traits> pending_requ_list;
-	x_smbd_requ_id_list_t oplock_pending_list;
+	x_smbd_close_cleanup_t close_cleanup;
 
 	{
 		auto lock = smbd_object_lock(smbd_object);
@@ -536,15 +517,13 @@ NTSTATUS x_smbd_open_op_close(
 		smbd_tcon = smbd_open->smbd_tcon;
 		smbd_open->smbd_tcon = nullptr;
 		smbd_open_close(smbd_open, smbd_object, smbd_requ, state,
-				smbd_lease, pending_requ_list,
-				oplock_pending_list);
+				close_cleanup);
 	}
 
 	X_ASSERT(smbd_tcon);
 	x_smbd_ref_dec(smbd_tcon);
 
-	smbd_open_post_close(smbd_open, smbd_object, smbd_lease,
-			pending_requ_list, oplock_pending_list);
+	smbd_open_post_close(smbd_open, smbd_object);
 	x_smbd_ref_dec(smbd_open); // ref by smbd_tcon open_list
 
 	return NT_STATUS_OK;
@@ -558,9 +537,7 @@ void x_smbd_open_unlinked(x_dlink_t *link,
 	std::unique_ptr<x_smbd_requ_state_close_t> state;
 	x_smbd_tcon_t *smbd_tcon = nullptr;
 
-	x_smbd_lease_t *smbd_lease = nullptr;
-	x_tp_ddlist_t<requ_async_traits> pending_requ_list;
-	x_smbd_requ_id_list_t oplock_pending_list;
+	x_smbd_close_cleanup_t close_cleanup;
 
 	bool closed = true;
 	{
@@ -575,8 +552,7 @@ void x_smbd_open_unlinked(x_dlink_t *link,
 			closed = false;
 		} else {
 			smbd_open_close(smbd_open, smbd_object, nullptr, state,
-					smbd_lease, pending_requ_list,
-					oplock_pending_list);
+					close_cleanup);
 			closed = true;
 		}
 	}
@@ -585,8 +561,7 @@ void x_smbd_open_unlinked(x_dlink_t *link,
 	x_smbd_ref_dec(smbd_tcon);
 
 	if (closed) {
-		smbd_open_post_close(smbd_open, smbd_object, smbd_lease,
-				pending_requ_list, oplock_pending_list);
+		smbd_open_post_close(smbd_open, smbd_object);
 		/* dec ref only closed, otherwise the ref is used by timer */
 		x_smbd_ref_dec(smbd_open); // ref by smbd_tcon open_list
 	}
@@ -870,11 +845,7 @@ static bool share_conflict(const x_smbd_open_t *smbd_open,
 static bool open_mode_check(x_smbd_object_t *smbd_object,
 		x_smbd_sharemode_t *sharemode,
 		uint32_t access_mask, uint32_t share_access,
-		uint32_t &num_disconnected,
-		std::vector<x_smbd_open_t *> &smbd_opens,
-		std::vector<x_smbd_lease_t *> &smbd_leases,
-		x_tp_ddlist_t<requ_async_traits> &pending_requ_list,
-		x_smbd_requ_id_list_t &oplock_pending_list)
+		x_smbd_close_cleanup_t &close_cleanup)
 {
 	if (is_stat_open(access_mask)) {
 		/* Stat open that doesn't trigger oplock breaks or share mode
@@ -900,10 +871,8 @@ static bool open_mode_check(x_smbd_object_t *smbd_object,
 		next_open = open_list.next(curr_open);
 		if (share_conflict(curr_open, access_mask, share_access)) {
 			if (smbd_open_close_disconnected_if(smbd_object, curr_open,
-						smbd_leases, pending_requ_list,
-						oplock_pending_list)) {
-				++num_disconnected;
-				smbd_opens.push_back(curr_open);
+						close_cleanup)) {
+				close_cleanup.smbd_opens.push_back(curr_open);
 				continue;
 			}
 			return true;
@@ -1201,10 +1170,7 @@ static bool delay_for_oplock(x_smbd_object_t *smbd_object,
 		uint32_t desired_access,
 		bool have_sharing_violation,
 		uint32_t open_attempt,
-		uint32_t &num_disconnected,
-		std::vector<x_smbd_open_t *> &smbd_opens,
-		std::vector<x_smbd_lease_t *> &smbd_leases,
-		x_tp_ddlist_t<requ_async_traits> &pending_requ_list)
+		x_smbd_close_cleanup_t &close_cleanup)
 {
 	if (is_stat_open(desired_access)) {
 		return false;
@@ -1305,11 +1271,7 @@ static NTSTATUS smbd_open_create(
 		x_smb2_create_action_t &create_action,
 		uint8_t &out_oplock_level,
 		bool overwrite,
-		uint32_t &num_disconnected,
-		std::vector<x_smbd_open_t *> &smbd_opens,
-		std::vector<x_smbd_lease_t *> &smbd_leases,
-		x_tp_ddlist_t<requ_async_traits> &pending_requ_list,
-		x_smbd_requ_id_list_t &oplock_pending_list)
+		x_smbd_close_cleanup_t &close_cleanup)
 {
 	if (smbd_object->type == x_smbd_object_t::type_file && overwrite) {
 		// open_match_attributes
@@ -1350,10 +1312,7 @@ static NTSTATUS smbd_open_create(
 	bool conflict = open_mode_check(smbd_object,
 			sharemode,
 			granted_access, state->in_share_access,
-			num_disconnected,
-			smbd_opens, smbd_leases,
-			pending_requ_list,
-			oplock_pending_list);
+			close_cleanup);
 	if (delay_for_oplock(smbd_object,
 				sharemode,
 				smbd_requ,
@@ -1361,9 +1320,7 @@ static NTSTATUS smbd_open_create(
 				state->in_create_disposition,
 				overwrite ? granted_access | idl::SEC_FILE_WRITE_DATA : granted_access,
 				conflict, state->open_attempt,
-				num_disconnected,
-				smbd_opens, smbd_leases,
-				pending_requ_list)) {
+				close_cleanup)) {
 		++state->open_attempt;
 		defer_open(sharemode,
 				smbd_requ, state);
@@ -1424,10 +1381,7 @@ static NTSTATUS smbd_open_create(
 static NTSTATUS smbd_open_create_intl(x_smbd_open_t **psmbd_open,
 		x_smbd_requ_t *smbd_requ,
 		std::unique_ptr<x_smbd_requ_state_create_t> &state,
-		std::vector<x_smbd_open_t *> &smbd_opens,
-		std::vector<x_smbd_lease_t *> &smbd_leases,
-		x_tp_ddlist_t<requ_async_traits> &pending_requ_list,
-		x_smbd_requ_id_list_t &oplock_pending_list)
+		x_smbd_close_cleanup_t &close_cleanup)
 {
 	x_smbd_object_t *smbd_object = state->smbd_object;
 	x_smbd_stream_t *smbd_stream = state->smbd_stream;
@@ -1440,7 +1394,6 @@ static NTSTATUS smbd_open_create_intl(x_smbd_open_t **psmbd_open,
 		return NT_STATUS_INVALID_PARAMETER;
 	}
 
-	uint32_t num_disconnected = 0;
 	auto in_disposition = state->in_create_disposition;
 	auto lock = smbd_object_lock(smbd_object);
 
@@ -1584,11 +1537,7 @@ static NTSTATUS smbd_open_create_intl(x_smbd_open_t **psmbd_open,
 				create_action,
 				oplock_level,
 				overwrite,
-				num_disconnected,
-				smbd_opens,
-				smbd_leases,
-				pending_requ_list,
-				oplock_pending_list);
+				close_cleanup);
 		if (!NT_STATUS_IS_OK(status)) {
 			return status;
 		}
@@ -1636,38 +1585,6 @@ static NTSTATUS smbd_open_create_intl(x_smbd_open_t **psmbd_open,
 		(state->in_create_options & X_SMB2_CREATE_OPTION_DELETE_ON_CLOSE) != 0;
 
 	return NT_STATUS_OK;
-}
-
-static NTSTATUS smbd_open_op_create(x_smbd_open_t **psmbd_open,
-		x_smbd_requ_t *smbd_requ,
-		std::unique_ptr<x_smbd_requ_state_create_t> &state)
-{
-	std::vector<x_smbd_open_t *> smbd_opens;
-	std::vector<x_smbd_lease_t *> smbd_leases;
-	x_tp_ddlist_t<requ_async_traits> pending_requ_list;
-	x_smbd_requ_id_list_t oplock_pending_list;
-	NTSTATUS status = smbd_open_create_intl(psmbd_open, smbd_requ,
-			state, smbd_opens,
-			smbd_leases, pending_requ_list,
-			oplock_pending_list);
-	x_smbd_requ_t *requ_notify;
-	while ((requ_notify = pending_requ_list.get_front()) != nullptr) {
-		pending_requ_list.remove(requ_notify);
-		x_smbd_conn_post_cancel(x_smbd_chan_get_conn(requ_notify->smbd_chan),
-				requ_notify, NT_STATUS_NOTIFY_CLEANUP);
-	}
-
-	for (auto smbd_lease: smbd_leases) {
-		x_smbd_lease_close(smbd_lease);
-	}
-
-	x_smbd_wakeup_requ_list(oplock_pending_list);
-
-	for (auto smbd_open: smbd_opens) {
-		x_smbd_ref_dec(smbd_open);
-	}
-
-	return status;
 }
 
 NTSTATUS x_smbd_break_oplock(
@@ -1888,11 +1805,13 @@ NTSTATUS x_smbd_open_op_create(x_smbd_requ_t *smbd_requ,
 		state->open_priv_data = open_priv_data;
 	}
 
+	x_smbd_close_cleanup_t close_cleanup;
+
 	x_smbd_open_t *smbd_open = nullptr;
 	/* TODO should we check the open limit before create the open */
-	status = smbd_open_op_create(
+	status = smbd_open_create_intl(
 			&smbd_open, smbd_requ,
-			state);
+			state, close_cleanup);
 
 	if (!NT_STATUS_IS_OK(status)) {
 		X_ASSERT(!smbd_open);
@@ -1900,10 +1819,6 @@ NTSTATUS x_smbd_open_op_create(x_smbd_requ_t *smbd_requ,
 	}
 
 	X_ASSERT(smbd_open);
-
-	x_smbd_lease_t *smbd_lease;
-	x_tp_ddlist_t<requ_async_traits> pending_requ_list;
-	x_smbd_requ_id_list_t oplock_pending_list;
 
 	/* if client access the open from other channel now, it does not have
 	 * link into smbd_tcon, probably we should call x_smbd_open_store in the last
@@ -1919,7 +1834,7 @@ NTSTATUS x_smbd_open_op_create(x_smbd_requ_t *smbd_requ,
 		} else {
 			std::unique_ptr<x_smbd_requ_state_close_t> close_state;
 			smbd_open_close(smbd_open, state->smbd_object, nullptr, close_state,
-					smbd_lease, pending_requ_list, oplock_pending_list);
+					close_cleanup);
 		}
 	}
 
@@ -1928,12 +1843,8 @@ NTSTATUS x_smbd_open_op_create(x_smbd_requ_t *smbd_requ,
 		x_smbd_ref_inc(smbd_open); // ref tcon link
 		smbd_requ->smbd_open = x_smbd_ref_inc(smbd_open);
 	} else {
-		if (smbd_lease) {
-			x_smbd_lease_close(smbd_lease);
-		}
 		status = NT_STATUS_NETWORK_NAME_DELETED;
 	}
-	/* TODO pending_requ_list and oplock_pending_list */
 
 	return status;
 }
@@ -2232,9 +2143,7 @@ static void smbd_net_file_close(x_smbd_open_t *smbd_open)
 	x_smbd_object_t *smbd_object = smbd_open->smbd_object;
 	x_smbd_tcon_t *smbd_tcon = nullptr;
 
-	x_smbd_lease_t *smbd_lease = nullptr;
-	x_tp_ddlist_t<requ_async_traits> pending_requ_list;
-	x_smbd_requ_id_list_t oplock_pending_list;
+	x_smbd_close_cleanup_t close_cleanup;
 	std::unique_ptr<x_smbd_requ_state_close_t> state;
 
 	{
@@ -2250,12 +2159,10 @@ static void smbd_net_file_close(x_smbd_open_t *smbd_open)
 		} else if (smbd_open->state != SMBD_OPEN_S_DISCONNECTED) {
 			return;
 		}
-		smbd_open_close(smbd_open, smbd_object, nullptr, state,
-				smbd_lease, pending_requ_list, oplock_pending_list);
+		smbd_open_close(smbd_open, smbd_object, nullptr, state, close_cleanup);
 	}
 
-	smbd_open_post_close(smbd_open, smbd_object, smbd_lease,
-			pending_requ_list, oplock_pending_list);
+	smbd_open_post_close(smbd_open, smbd_object);
 	if (smbd_tcon) {
 		x_smbd_ref_dec(smbd_tcon);
 		x_smbd_ref_dec(smbd_open); // ref by smbd_tcon open_list
