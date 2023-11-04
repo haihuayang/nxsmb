@@ -452,32 +452,14 @@ void x_smbd_conn_requ_done(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ,
 extern x_evtmgmt_t *g_evtmgmt;
 int x_smbd_ctrl_init(x_evtmgmt_t *evtmgmt);
 
-void x_smbd_schedule_notify(
-		uint32_t notify_action,
-		uint32_t notify_filter,
-		const x_smb2_lease_key_t &ignore_lease_key,
-		const x_smb2_uuid_t &client_guid,
-		x_smbd_object_t *parent_object,
-		x_smbd_object_t *new_parent_object,
-		const std::u16string &path_base,
-		const std::u16string &new_path_base);
-
-struct x_smbd_notify_scheduler_t
-{
-	x_smbd_notify_scheduler_t();
-	~x_smbd_notify_scheduler_t();
-};
-
-void x_smbd_object_notify_change(x_smbd_object_t *smbd_object,
-		uint32_t notify_action,
-		uint32_t notify_filter,
-		uint32_t prefix_length,
-		const std::u16string &fullpath,
-		const std::u16string *new_name_path,
-		const x_smb2_lease_key_t &ignore_lease_key,
-		const x_smb2_uuid_t &client_guid,
-		bool last_level,
-		long open_priv_data);
+void x_smbd_notify_change(
+		x_smbd_object_t *smbd_object,
+		uint32_t action,
+		uint32_t filter,
+		x_smb2_lease_key_t &ignore_lease_key,
+		x_smb2_uuid_t &client_guid,
+		std::u16string &path_base,
+		std::u16string &new_path_base);
 
 void x_smbd_simple_notify_change(const std::shared_ptr<x_smbd_volume_t> &smbd_volume,
 		const std::u16string &path,

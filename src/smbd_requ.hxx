@@ -406,6 +406,8 @@ X_DECLARE_MEMBER_TRAITS(requ_async_traits, x_smbd_requ_t, async_link)
 #define X_SMBD_REQU_LOG(level, smbd_requ, fmt, ...) \
 	X_LOG(SMB, level, X_SMBD_REQU_DBG_FMT fmt, X_SMBD_REQU_DBG_ARG(smbd_requ), ##__VA_ARGS__)
 
+using x_smbd_requ_id_list_t = std::vector<uint64_t>;
+
 int x_smbd_requ_pool_init(uint32_t count);
 x_smbd_requ_t *x_smbd_requ_create(x_buf_t *in_buf, uint32_t in_msgsize, bool encrypted);
 uint64_t x_smbd_requ_get_async_id(const x_smbd_requ_t *smbd_requ);
@@ -430,6 +432,26 @@ static inline bool x_smbd_requ_verify_creditcharge(
 	uint16_t needed_charge = x_convert<uint16_t>((data_length - 1) / 65536 + 1);
 	return needed_charge <= credit_charge;
 }
+
+struct x_smbd_scheduler_t
+{
+	x_smbd_scheduler_t();
+	~x_smbd_scheduler_t();
+};
+
+void x_smbd_schedule_release_open(x_smbd_open_t *smbd_open);
+void x_smbd_schedule_release_lease(x_smbd_lease_t *smbd_lease);
+void x_smbd_schedule_wakeup_oplock_pending_list(x_smbd_requ_id_list_t &oplock_pending_list);
+void x_smbd_schedule_clean_pending_requ_list(x_tp_ddlist_t<requ_async_traits> &pending_requ_list);
+void x_smbd_schedule_notify(
+		uint32_t notify_action,
+		uint32_t notify_filter,
+		const x_smb2_lease_key_t &ignore_lease_key,
+		const x_smb2_uuid_t &client_guid,
+		x_smbd_object_t *parent_object,
+		x_smbd_object_t *new_parent_object,
+		const std::u16string &path_base,
+		const std::u16string &new_path_base);
 
 
 

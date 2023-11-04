@@ -203,3 +203,179 @@ x_smbd_ctrl_handler_t *x_smbd_requ_list_create()
 	return new x_smbd_requ_list_t;
 }
 
+struct x_smbd_notify_t
+{
+	x_smbd_object_t *smbd_object;
+	uint32_t action;
+	uint32_t filter;
+	x_smb2_lease_key_t ignore_lease_key;
+	x_smb2_uuid_t client_guid;
+	std::u16string path_base;
+	std::u16string new_path_base;
+};
+
+struct x_smbd_defer_t
+{
+	uint32_t seqno = 0, last_seqno = 0;
+	bool is_schedulable = false;
+	std::vector<x_smbd_open_t *> smbd_opens;
+	std::vector<x_smbd_lease_t *> smbd_leases;
+	x_tp_ddlist_t<requ_async_traits> pending_requ_list;
+	x_smbd_requ_id_list_t oplock_pending_list;
+	std::vector<x_smbd_notify_t> smbd_notifies;
+};
+
+static thread_local x_smbd_defer_t g_smbd_defer;
+
+static void x_smbd_set_schedulable(bool f)
+{
+	X_ASSERT(g_smbd_defer.is_schedulable != f);
+	g_smbd_defer.is_schedulable = f;
+}
+
+x_smbd_scheduler_t::x_smbd_scheduler_t()
+{
+	x_smbd_set_schedulable(true);
+}
+
+static void smbd_defer_exec()
+{
+	x_tp_ddlist_t<requ_async_traits> pending_requ_list =
+		std::move(g_smbd_defer.pending_requ_list);
+	x_smbd_requ_t *smbd_requ;
+	while ((smbd_requ = pending_requ_list.get_front()) != nullptr) {
+		pending_requ_list.remove(smbd_requ);
+		x_smbd_conn_post_cancel(x_smbd_chan_get_conn(smbd_requ->smbd_chan),
+				smbd_requ, smbd_requ->status);
+	}
+
+	std::vector<x_smbd_lease_t *> smbd_leases = std::move(g_smbd_defer.smbd_leases);
+	for (auto smbd_lease: smbd_leases) {
+		x_smbd_lease_close(smbd_lease);
+	}
+
+	std::vector<x_smbd_open_t *> smbd_opens = std::move(g_smbd_defer.smbd_opens);
+	for (auto smbd_open: smbd_opens) {
+		x_smbd_ref_dec(smbd_open);
+	}
+
+	std::vector<x_smbd_notify_t> smbd_notifies = std::move(g_smbd_defer.smbd_notifies);
+	for (auto &notify: smbd_notifies) {
+		x_smbd_notify_change(notify.smbd_object,
+				notify.action,
+				notify.filter,
+				notify.ignore_lease_key,
+				notify.client_guid,
+				notify.path_base,
+				notify.new_path_base);
+		x_smbd_release_object(notify.smbd_object);
+	}
+
+	x_smbd_requ_id_list_t oplock_pending_list = std::move(g_smbd_defer.oplock_pending_list);
+	x_smbd_wakeup_requ_list(oplock_pending_list);
+}
+
+void x_smbd_schedule_release_open(x_smbd_open_t *smbd_open)
+{
+	X_ASSERT(g_smbd_defer.is_schedulable);
+	g_smbd_defer.smbd_opens.push_back(smbd_open);
+	++g_smbd_defer.seqno;
+}
+
+void x_smbd_schedule_release_lease(x_smbd_lease_t *smbd_lease)
+{
+	X_ASSERT(g_smbd_defer.is_schedulable);
+	g_smbd_defer.smbd_leases.push_back(smbd_lease);
+	++g_smbd_defer.seqno;
+}
+
+void x_smbd_schedule_wakeup_oplock_pending_list(x_smbd_requ_id_list_t &oplock_pending_list)
+{
+	X_ASSERT(g_smbd_defer.is_schedulable);
+	if (!oplock_pending_list.empty()) {
+		if (g_smbd_defer.oplock_pending_list.empty()) {
+			std::swap(g_smbd_defer.oplock_pending_list, oplock_pending_list);
+		} else {
+			std::move(oplock_pending_list.begin(),
+					oplock_pending_list.end(),
+					std::back_inserter(g_smbd_defer.oplock_pending_list));
+			oplock_pending_list.clear(); // TODO needed after std::move?
+		}
+		++g_smbd_defer.seqno;
+	}
+}
+
+void x_smbd_schedule_clean_pending_requ_list(x_tp_ddlist_t<requ_async_traits> &pending_requ_list)
+{
+	X_ASSERT(g_smbd_defer.is_schedulable);
+	if (!pending_requ_list.empty()) {
+		g_smbd_defer.pending_requ_list.concat(pending_requ_list);
+		++g_smbd_defer.seqno;
+	}
+}
+
+void x_smbd_schedule_notify(
+		uint32_t notify_action,
+		uint32_t notify_filter,
+		const x_smb2_lease_key_t &ignore_lease_key,
+		const x_smb2_uuid_t &client_guid,
+		x_smbd_object_t *parent_object,
+		x_smbd_object_t *new_parent_object,
+		const std::u16string &path_base,
+		const std::u16string &new_path_base)
+{
+	X_ASSERT(g_smbd_defer.is_schedulable);
+	if (!parent_object) {
+		return;
+	}
+
+	if (new_parent_object) {
+		X_ASSERT(notify_action == NOTIFY_ACTION_OLD_NAME);
+
+		if (new_parent_object == parent_object) {
+			parent_object->incref();
+			g_smbd_defer.smbd_notifies.push_back(x_smbd_notify_t{parent_object,
+					notify_action,
+					notify_filter,
+					ignore_lease_key,
+					client_guid,
+					path_base, new_path_base});
+		} else {
+			parent_object->incref();
+			new_parent_object->incref();
+			g_smbd_defer.smbd_notifies.push_back(x_smbd_notify_t{parent_object,
+					NOTIFY_ACTION_REMOVED,
+					notify_filter,
+					ignore_lease_key,
+					client_guid,
+					path_base, u""});
+			g_smbd_defer.smbd_notifies.push_back(x_smbd_notify_t{new_parent_object,
+					NOTIFY_ACTION_ADDED,
+					notify_filter,
+					{},
+					{},
+					new_path_base, u""});
+		}
+	} else {
+		X_ASSERT(new_path_base.empty());
+		X_ASSERT(notify_action != NOTIFY_ACTION_OLD_NAME);
+		parent_object->incref();
+		g_smbd_defer.smbd_notifies.push_back(x_smbd_notify_t{parent_object,
+				notify_action,
+				notify_filter,
+				ignore_lease_key,
+				client_guid,
+				path_base, new_path_base});
+	}
+	++g_smbd_defer.seqno;
+}
+
+x_smbd_scheduler_t::~x_smbd_scheduler_t()
+{
+	while (g_smbd_defer.seqno != g_smbd_defer.last_seqno) {
+		g_smbd_defer.last_seqno = g_smbd_defer.seqno;
+		smbd_defer_exec();
+	}
+	x_smbd_set_schedulable(false);
+}
+

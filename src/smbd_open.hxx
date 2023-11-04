@@ -52,8 +52,6 @@ struct x_smbd_qdir_t
 	x_fnmatch_t *fnmatch = nullptr;
 };
 
-using x_smbd_requ_id_list_t = std::vector<uint64_t>;
-
 struct x_smbd_open_t
 {
 	x_smbd_open_t(x_smbd_object_t *so, x_smbd_stream_t *ss,

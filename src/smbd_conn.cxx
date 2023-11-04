@@ -1521,7 +1521,7 @@ static bool x_smbd_conn_upcall_cb_getevents(x_epoll_upcall_t *upcall, x_fdevents
 	X_LOG(SMB, DBG, "%p x%lx", smbd_conn, fdevents);
 
 	x_smbd_conf_pin_t smbd_conf_pin;
-	x_smbd_notify_scheduler_t smbd_notify_scheduler;
+	x_smbd_scheduler_t smbd_scheduler;
 	smbd_conn_curr_t smbd_conn_curr(smbd_conn);
 
 	return x_smbd_conn_handle_events(smbd_conn, fdevents);
@@ -1535,7 +1535,7 @@ static void x_smbd_conn_upcall_cb_unmonitor(x_epoll_upcall_t *upcall)
 	smbd_conn->fd = -1;
 
 	x_smbd_conf_pin_t smbd_conf_pin;
-	x_smbd_notify_scheduler_t smbd_notify_scheduler;
+	x_smbd_scheduler_t smbd_scheduler;
 	smbd_conn_curr_t smbd_conn_curr(smbd_conn);
 
 	x_smbd_conn_terminate_chans(smbd_conn);
