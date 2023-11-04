@@ -453,7 +453,7 @@ static void smbd_open_close_disconnected(x_smbd_open_t *smbd_open)
 
 static long smbd_open_durable_timeout(x_timer_job_t *timer)
 {
-	x_smbd_set_notify_schedulable(true);
+	x_smbd_notify_scheduler_t smbd_notify_scheduler;
 
 	x_smbd_open_t *smbd_open = X_CONTAINER_OF(timer,
 			x_smbd_open_t, durable_timer);
@@ -485,7 +485,6 @@ static long smbd_open_durable_timeout(x_timer_job_t *timer)
 
 	x_smbd_ref_dec(smbd_open); // ref by timer
 
-	x_smbd_flush_notifies();
 	return -1;
 }
 

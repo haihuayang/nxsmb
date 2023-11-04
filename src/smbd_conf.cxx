@@ -1023,11 +1023,14 @@ std::shared_ptr<x_smbd_volume_t> x_smbd_find_volume(const x_smbd_conf_t &smbd_co
 }
 
 thread_local std::shared_ptr<x_smbd_conf_t> x_smbd_conf_curr;
+thread_local int x_smbd_conf_curr_count = 0;
 
-void x_smbd_conf_pin()
+x_smbd_conf_pin_t::x_smbd_conf_pin_t()
 {
-	X_ASSERT(!x_smbd_conf_curr);
-	x_smbd_conf_curr = g_smbd_conf;
+	if (x_smbd_conf_curr_count++ == 0) {
+		X_ASSERT(!x_smbd_conf_curr);
+		x_smbd_conf_curr = g_smbd_conf;
+	}
 }
 
 

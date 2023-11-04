@@ -211,13 +211,18 @@ static void notify_change(x_smbd_notify_t &notify)
 static thread_local std::vector<x_smbd_notify_t> g_smbd_notifies;
 static thread_local bool is_notify_schedulable = false;
 
-void x_smbd_set_notify_schedulable(bool f)
+static void x_smbd_set_notify_schedulable(bool f)
 {
 	X_ASSERT(is_notify_schedulable != f);
 	is_notify_schedulable = f;
 }
 
-void x_smbd_flush_notifies()
+x_smbd_notify_scheduler_t::x_smbd_notify_scheduler_t()
+{
+	x_smbd_set_notify_schedulable(true);
+}
+
+x_smbd_notify_scheduler_t::~x_smbd_notify_scheduler_t()
 {
 	x_smbd_set_notify_schedulable(false);
 	for (auto &notify: g_smbd_notifies) {

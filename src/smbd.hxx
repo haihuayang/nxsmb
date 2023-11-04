@@ -462,8 +462,11 @@ void x_smbd_schedule_notify(
 		const std::u16string &path_base,
 		const std::u16string &new_path_base);
 
-void x_smbd_set_notify_schedulable(bool f);
-void x_smbd_flush_notifies();
+struct x_smbd_notify_scheduler_t
+{
+	x_smbd_notify_scheduler_t();
+	~x_smbd_notify_scheduler_t();
+};
 
 void x_smbd_object_notify_change(x_smbd_object_t *smbd_object,
 		uint32_t notify_action,

@@ -123,6 +123,16 @@ void x_smbd_ref_dec(x_smbd_conn_t *smbd_conn)
 	}
 }
 
+struct smbd_conn_curr_t
+{
+	smbd_conn_curr_t(x_smbd_conn_t *smbd_conn) {
+		g_smbd_conn_curr = x_smbd_ref_inc(smbd_conn);
+	}
+	~smbd_conn_curr_t() {
+		X_SMBD_REF_DEC(g_smbd_conn_curr);
+	}
+};
+
 void x_smbd_conn_update_preauth(x_smbd_conn_t *smbd_conn,
 		const void *data, size_t length)
 {
@@ -1505,23 +1515,16 @@ std::shared_ptr<std::u16string> x_smbd_conn_curr_name()
 	return g_smbd_conn_curr->machine_name;
 }
 
-
 static bool x_smbd_conn_upcall_cb_getevents(x_epoll_upcall_t *upcall, x_fdevents_t &fdevents)
 {
 	x_smbd_conn_t *smbd_conn = x_smbd_conn_from_upcall(upcall);
 	X_LOG(SMB, DBG, "%p x%lx", smbd_conn, fdevents);
 
-	x_smbd_conf_pin();
-	x_smbd_set_notify_schedulable(true);
+	x_smbd_conf_pin_t smbd_conf_pin;
+	x_smbd_notify_scheduler_t smbd_notify_scheduler;
+	smbd_conn_curr_t smbd_conn_curr(smbd_conn);
 
-	g_smbd_conn_curr = x_smbd_ref_inc(smbd_conn);
-	bool ret = x_smbd_conn_handle_events(smbd_conn, fdevents);
-
-	X_SMBD_REF_DEC(g_smbd_conn_curr);
-	x_smbd_flush_notifies();
-
-	x_smbd_conf_unpin();
-	return ret;
+	return x_smbd_conn_handle_events(smbd_conn, fdevents);
 }
 
 static void x_smbd_conn_upcall_cb_unmonitor(x_epoll_upcall_t *upcall)
@@ -1530,9 +1533,10 @@ static void x_smbd_conn_upcall_cb_unmonitor(x_epoll_upcall_t *upcall)
 	X_LOG(SMB, CONN, "%p", smbd_conn);
 	X_ASSERT_SYSCALL(close(smbd_conn->fd));
 	smbd_conn->fd = -1;
-	x_smbd_conf_pin();
-	x_smbd_set_notify_schedulable(true);
-	g_smbd_conn_curr = x_smbd_ref_inc(smbd_conn);
+
+	x_smbd_conf_pin_t smbd_conf_pin;
+	x_smbd_notify_scheduler_t smbd_notify_scheduler;
+	smbd_conn_curr_t smbd_conn_curr(smbd_conn);
 
 	x_smbd_conn_terminate_chans(smbd_conn);
 	x_smbd_requ_t *smbd_requ, *next_requ;
@@ -1564,11 +1568,7 @@ static void x_smbd_conn_upcall_cb_unmonitor(x_epoll_upcall_t *upcall)
 		}
 	}
 
-	X_SMBD_REF_DEC(g_smbd_conn_curr);
 	x_smbd_ref_dec(smbd_conn);
-	x_smbd_flush_notifies();
-
-	x_smbd_conf_unpin();
 }
 
 static const x_epoll_upcall_cbs_t x_smbd_conn_upcall_cbs = {
@@ -1652,10 +1652,8 @@ static bool x_smbd_srv_upcall_cb_getevents(x_epoll_upcall_t *upcall, x_fdevents_
 {
 	x_smbd_srv_t *smbd_srv = x_smbd_from_upcall(upcall);
 	X_LOG(SMB, DBG, "%p x%lx", smbd_srv, fdevents);
-	x_smbd_conf_pin();
-	bool ret = x_smbd_srv_handle_events(smbd_srv, fdevents);
-	x_smbd_conf_unpin();
-	return ret;
+	x_smbd_conf_pin_t smbd_conf_pin;
+	return x_smbd_srv_handle_events(smbd_srv, fdevents);
 }
 
 static void x_smbd_srv_upcall_cb_unmonitor(x_epoll_upcall_t *upcall)
