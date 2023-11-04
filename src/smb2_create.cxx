@@ -529,9 +529,17 @@ static NTSTATUS decode_in_create(uint16_t dialect, x_smbd_requ_state_create_t &s
 		return NT_STATUS_INVALID_PARAMETER;
 	}
 
-	if (state.in_oplock_level == X_SMB2_OPLOCK_LEVEL_LEASE && !has_RqLs) {
-		X_LOG(SMB, WARN, "missing RqLs");
-		state.in_oplock_level = X_SMB2_OPLOCK_LEVEL_NONE;
+	if (has_RqLs) {
+		if (state.in_oplock_level != X_SMB2_OPLOCK_LEVEL_LEASE) {
+			X_LOG(SMB, WARN, "inconsistenct oplock_level %d with RqLs",
+					state.in_oplock_level);
+			state.in_oplock_level = X_SMB2_OPLOCK_LEVEL_LEASE;
+		}
+	} else {
+		if (state.in_oplock_level == X_SMB2_OPLOCK_LEVEL_LEASE) {
+			X_LOG(SMB, WARN, "missing RqLs");
+			state.in_oplock_level = X_SMB2_OPLOCK_LEVEL_NONE;
+		}
 	}
 
 #if 0
