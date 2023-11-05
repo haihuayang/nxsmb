@@ -266,7 +266,7 @@ static void smbd_close_open_intl(
 		x_smbd_object_t *smbd_object,
 		x_smbd_open_t *smbd_open,
 		x_smbd_requ_t *smbd_requ,
-		std::unique_ptr<x_smbd_requ_state_close_t> &state)
+		const std::unique_ptr<x_smbd_requ_state_close_t> &state)
 {
 	if (smbd_open->open_state.dhmode != x_smbd_dhmode_t::NONE) {
 		int ret = x_smbd_volume_remove_durable(
@@ -346,7 +346,7 @@ static void smbd_open_close(
 		x_smbd_open_t *smbd_open,
 		x_smbd_object_t *smbd_object,
 		x_smbd_requ_t *smbd_requ,
-		std::unique_ptr<x_smbd_requ_state_close_t> &state)
+		const std::unique_ptr<x_smbd_requ_state_close_t> &state)
 {
 	smbd_open->state = SMBD_OPEN_S_DONE;
 
@@ -365,8 +365,7 @@ static bool smbd_open_close_disconnected(
 	if (!x_smbd_del_timer(&smbd_open->durable_timer)) {
 		return false;
 	}
-	std::unique_ptr<x_smbd_requ_state_close_t> state;
-	smbd_open_close(smbd_open, smbd_open->smbd_object, nullptr, state);
+	smbd_open_close(smbd_open, smbd_open->smbd_object, nullptr, {});
 
 	x_smbd_schedule_release_open(smbd_open);
 	return true;
@@ -382,13 +381,11 @@ static long smbd_open_durable_timeout(x_timer_job_t *timer)
 			smbd_open->id_volatile);
 	auto smbd_object = smbd_open->smbd_object;
 
-	std::unique_ptr<x_smbd_requ_state_close_t> state;
-
 	bool closed = false;
 	{
 		auto lock = smbd_object_lock(smbd_object);
 		if (smbd_open->state == SMBD_OPEN_S_DISCONNECTED) {
-			smbd_open_close(smbd_open, smbd_object, nullptr, state);
+			smbd_open_close(smbd_open, smbd_object, nullptr, {});
 			closed = true;
 		}
 	}
@@ -461,7 +458,6 @@ void x_smbd_open_unlinked(x_dlink_t *link,
 {
 	x_smbd_open_t *smbd_open = X_CONTAINER_OF(link, x_smbd_open_t, tcon_link);
 	auto smbd_object = smbd_open->smbd_object;
-	std::unique_ptr<x_smbd_requ_state_close_t> state;
 	x_smbd_tcon_t *smbd_tcon = nullptr;
 
 	bool closed = true;
@@ -476,7 +472,7 @@ void x_smbd_open_unlinked(x_dlink_t *link,
 				smbd_open_set_durable(smbd_open)) {
 			closed = false;
 		} else {
-			smbd_open_close(smbd_open, smbd_object, nullptr, state);
+			smbd_open_close(smbd_open, smbd_object, nullptr, {});
 			closed = true;
 		}
 	}
@@ -1750,8 +1746,7 @@ NTSTATUS x_smbd_open_op_create(x_smbd_requ_t *smbd_requ,
 			smbd_open->smbd_tcon = smbd_tcon;
 			linked = true;
 		} else {
-			std::unique_ptr<x_smbd_requ_state_close_t> close_state;
-			smbd_open_close(smbd_open, state->smbd_object, nullptr, close_state);
+			smbd_open_close(smbd_open, state->smbd_object, nullptr, {});
 		}
 	}
 
@@ -2060,8 +2055,6 @@ static void smbd_net_file_close(x_smbd_open_t *smbd_open)
 	x_smbd_object_t *smbd_object = smbd_open->smbd_object;
 	x_smbd_tcon_t *smbd_tcon = nullptr;
 
-	std::unique_ptr<x_smbd_requ_state_close_t> state;
-
 	{
 		auto lock = smbd_object_lock(smbd_object);
 		if (smbd_open->state == SMBD_OPEN_S_ACTIVE) {
@@ -2075,7 +2068,7 @@ static void smbd_net_file_close(x_smbd_open_t *smbd_open)
 		} else if (smbd_open->state != SMBD_OPEN_S_DISCONNECTED) {
 			return;
 		}
-		smbd_open_close(smbd_open, smbd_object, nullptr, state);
+		smbd_open_close(smbd_open, smbd_object, nullptr, {});
 	}
 
 	if (smbd_tcon) {
