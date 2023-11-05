@@ -341,33 +341,6 @@ static void smbd_close_open_intl(
 	}
 }
 
-static bool smbd_open_close_disconnected_if(
-		x_smbd_object_t *smbd_object,
-		x_smbd_open_t *smbd_open)
-{
-	if (smbd_open->state != SMBD_OPEN_S_DISCONNECTED) {
-		return false;
-	}
-
-	if (!x_smbd_del_timer(&smbd_open->durable_timer)) {
-		return false;
-	}
-	smbd_open->state = SMBD_OPEN_S_DONE;
-	std::unique_ptr<x_smbd_requ_state_close_t> state;
-
-	smbd_close_open_intl(smbd_object, smbd_open, nullptr, state);
-
-	return true;
-}
-
-bool x_smbd_open_match_get_lease(const x_smbd_open_t *smbd_open,
-		x_smb2_lease_t &lease)
-{
-	return x_smbd_lease_match_get(smbd_open->smbd_lease,
-			x_smbd_conn_curr_client_guid(),
-			lease);
-}
-
 // caller hold the object mutex
 static void smbd_open_close(
 		x_smbd_open_t *smbd_open,
@@ -382,12 +355,21 @@ static void smbd_open_close(
 	}
 }
 
-static void smbd_open_close_disconnected(x_smbd_open_t *smbd_open)
+static bool smbd_open_close_disconnected(
+		x_smbd_open_t *smbd_open)
 {
-	if (smbd_open_close_disconnected_if(smbd_open->smbd_object,
-				smbd_open)) {
-		x_smbd_schedule_release_open(smbd_open);
+	if (smbd_open->state != SMBD_OPEN_S_DISCONNECTED) {
+		return false;
 	}
+
+	if (!x_smbd_del_timer(&smbd_open->durable_timer)) {
+		return false;
+	}
+	std::unique_ptr<x_smbd_requ_state_close_t> state;
+	smbd_open_close(smbd_open, smbd_open->smbd_object, nullptr, state);
+
+	x_smbd_schedule_release_open(smbd_open);
+	return true;
 }
 
 static long smbd_open_durable_timeout(x_timer_job_t *timer)
@@ -682,6 +664,14 @@ struct send_lease_break_evt_t
 	const uint32_t flags;
 };
 
+bool x_smbd_open_match_get_lease(const x_smbd_open_t *smbd_open,
+		x_smb2_lease_t &lease)
+{
+	return x_smbd_lease_match_get(smbd_open->smbd_lease,
+			x_smbd_conn_curr_client_guid(),
+			lease);
+}
+
 /* smbd_object is locked */
 bool x_smbd_open_break_lease(x_smbd_open_t *smbd_open,
 		const x_smb2_lease_key_t *ignore_lease_key,
@@ -809,10 +799,9 @@ static bool open_mode_check(x_smbd_object_t *smbd_object,
 			curr_open = next_open) {
 		next_open = open_list.next(curr_open);
 		if (share_conflict(curr_open, access_mask, share_access)) {
-			if (!smbd_open_close_disconnected_if(smbd_object, curr_open)) {
+			if (!smbd_open_close_disconnected(curr_open)) {
 				return true;
 			}
-			x_smbd_schedule_release_open(curr_open);
 		}
 	}
 	return false;
