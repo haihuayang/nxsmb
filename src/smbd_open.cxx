@@ -371,6 +371,24 @@ static bool smbd_open_close_disconnected(
 	return true;
 }
 
+static bool smbd_open_close_non_requ(x_smbd_open_t *smbd_open,
+		x_smbd_tcon_t **p_smbd_tcon)
+{
+	if (smbd_open->state == SMBD_OPEN_S_ACTIVE) {
+		/* it could happen when client tdis on other channel */
+		if (!x_smbd_tcon_unlink_open(smbd_open->smbd_tcon, &smbd_open->tcon_link)) {
+			X_LOG(SMB, NOTICE, "failed to unlink open %p", smbd_open);
+			return false;
+		}
+		*p_smbd_tcon = smbd_open->smbd_tcon;
+		smbd_open->smbd_tcon = nullptr;
+	} else if (smbd_open->state != SMBD_OPEN_S_DISCONNECTED) {
+		return false;
+	}
+	smbd_open_close(smbd_open, smbd_open->smbd_object, nullptr, {});
+	return true;
+}
+
 static long smbd_open_durable_timeout(x_timer_job_t *timer)
 {
 	x_smbd_scheduler_t smbd_scheduler;
@@ -725,6 +743,54 @@ static bool check_ads_share_access(x_smbd_object_t *smbd_object,
 
 				return false;
 			}
+		}
+	}
+	return true;
+}
+
+/* caller locked smbd_object */
+static bool check_app_instance(x_smbd_object_t *smbd_object,
+		x_smbd_sharemode_t *sharemode,
+		const x_smbd_requ_state_create_t &state)
+{
+	X_LOG(SMB, DBG, "valid_flags=0x%x app_instance_id=%s app_instance_version=%lu.%lu",
+			state.valid_flags, x_tostr(state.in_context_app_instance_id).c_str(),
+			state.in_context_app_instance_version_high,
+			state.in_context_app_instance_version_low);
+
+	if ((state.valid_flags & x_smbd_open_state_t::F_APP_INSTANCE_ID) == 0) {
+		return true;
+	}
+
+	auto &open_list = sharemode->open_list;
+	x_smbd_open_t *curr_open, *next_open;
+	for (curr_open = open_list.get_front(); curr_open;
+			curr_open = next_open) {
+		next_open = open_list.next(curr_open);
+		auto &open_state = curr_open->open_state;
+		if ((open_state.flags & x_smbd_open_state_t::F_APP_INSTANCE_ID) == 0 ||
+				!(open_state.app_instance_id == state.in_context_app_instance_id)) {
+			continue;
+		}
+		if (open_state.client_guid == x_smbd_conn_curr_client_guid()) {
+			continue;
+		}
+		if ((open_state.app_instance_version_high != 0 ||
+					open_state.app_instance_version_low != 0) &&
+				(open_state.app_instance_version_high >
+				 state.in_context_app_instance_version_high ||
+				 (open_state.app_instance_version_high ==
+				  state.in_context_app_instance_version_high &&
+				  open_state.app_instance_version_low >=
+				  state.in_context_app_instance_version_low))) {
+			return false;
+		}
+		x_smbd_tcon_t *smbd_tcon;
+		if (smbd_open_close_non_requ(curr_open, &smbd_tcon)) {
+			if (smbd_tcon) {
+				x_smbd_ref_dec(smbd_tcon);
+			}
+			x_smbd_open_release(curr_open);
 		}
 	}
 	return true;
@@ -1228,6 +1294,10 @@ static NTSTATUS smbd_open_create(
 
 	x_smbd_sharemode_t *sharemode = get_sharemode(
 			smbd_object, smbd_stream);
+
+	if (!check_app_instance(smbd_object, sharemode, *state)) {
+		X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_FILE_FORCED_CLOSED);
+	}
 
 	bool conflict = open_mode_check(smbd_object,
 			sharemode,
@@ -2054,27 +2124,19 @@ static void smbd_net_file_close(x_smbd_open_t *smbd_open)
 {
 	x_smbd_object_t *smbd_object = smbd_open->smbd_object;
 	x_smbd_tcon_t *smbd_tcon = nullptr;
+	bool closed;
 
 	{
 		auto lock = smbd_object_lock(smbd_object);
-		if (smbd_open->state == SMBD_OPEN_S_ACTIVE) {
-			/* it could happen when client tdis on other channel */
-			if (!x_smbd_tcon_unlink_open(smbd_open->smbd_tcon, &smbd_open->tcon_link)) {
-				X_LOG(SMB, NOTICE, "failed to unlink open %p", smbd_open);
-				return;
-			}
-			smbd_tcon = smbd_open->smbd_tcon;
-			smbd_open->smbd_tcon = nullptr;
-		} else if (smbd_open->state != SMBD_OPEN_S_DISCONNECTED) {
-			return;
-		}
-		smbd_open_close(smbd_open, smbd_object, nullptr, {});
+		closed = smbd_open_close_non_requ(smbd_open, &smbd_tcon);
 	}
 
-	if (smbd_tcon) {
-		x_smbd_ref_dec(smbd_tcon);
+	if (closed) {
+		if (smbd_tcon) {
+			x_smbd_ref_dec(smbd_tcon);
+		}
+		x_smbd_open_release(smbd_open);
 	}
-	x_smbd_open_release(smbd_open);
 }
 
 void x_smbd_net_file_close(uint32_t fid)
