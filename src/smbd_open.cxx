@@ -180,6 +180,13 @@ static void fill_out_info(x_smb2_create_close_info_t &info,
 	info.out_end_of_file = stream_meta.end_of_file;
 }
 
+void x_smbd_open_release(x_smbd_open_t *smbd_open)
+{
+	g_smbd_open_table->remove(smbd_open->id_volatile);
+	x_smbd_ref_dec(smbd_open);
+	x_smbd_ref_dec(smbd_open);
+}
+
 static NTSTATUS smbd_object_remove(
 		x_smbd_object_t *smbd_object,
 		x_smbd_open_t *smbd_open)
@@ -350,10 +357,6 @@ static bool smbd_open_close_disconnected_if(
 
 	smbd_close_open_intl(smbd_object, smbd_open, nullptr, state);
 
-	x_smbd_ref_dec(smbd_open); // durable timer ref
-
-	g_smbd_open_table->remove(smbd_open->id_volatile);
-
 	return true;
 }
 
@@ -363,13 +366,6 @@ bool x_smbd_open_match_get_lease(const x_smbd_open_t *smbd_open,
 	return x_smbd_lease_match_get(smbd_open->smbd_lease,
 			x_smbd_conn_curr_client_guid(),
 			lease);
-}
-
-static void smbd_open_post_close(x_smbd_open_t *smbd_open,
-		x_smbd_object_t *smbd_object)
-{
-	g_smbd_open_table->remove(smbd_open->id_volatile);
-	x_smbd_ref_dec(smbd_open);
 }
 
 // caller hold the object mutex
@@ -388,11 +384,10 @@ static void smbd_open_close(
 
 static void smbd_open_close_disconnected(x_smbd_open_t *smbd_open)
 {
-	/* TODO */
-	smbd_open_close_disconnected_if(smbd_open->smbd_object,
-			smbd_open);
-
-	x_smbd_ref_dec(smbd_open);
+	if (smbd_open_close_disconnected_if(smbd_open->smbd_object,
+				smbd_open)) {
+		x_smbd_schedule_release_open(smbd_open);
+	}
 }
 
 static long smbd_open_durable_timeout(x_timer_job_t *timer)
@@ -419,10 +414,9 @@ static long smbd_open_durable_timeout(x_timer_job_t *timer)
 	X_LOG(SMB, DBG, "open=%lx,%lx closed=%d", smbd_open->open_state.id_persistent,
 			smbd_open->id_volatile, closed);
 	if (closed) {
-		smbd_open_post_close(smbd_open, smbd_object);
+		x_smbd_open_release(smbd_open);
 	}
 
-	x_smbd_ref_dec(smbd_open); // ref by timer
 	return -1;
 }
 
@@ -475,8 +469,7 @@ NTSTATUS x_smbd_open_op_close(
 	X_ASSERT(smbd_tcon);
 	x_smbd_ref_dec(smbd_tcon);
 
-	smbd_open_post_close(smbd_open, smbd_object);
-	x_smbd_ref_dec(smbd_open); // ref by smbd_tcon open_list
+	x_smbd_open_release(smbd_open);
 
 	return NT_STATUS_OK;
 }
@@ -510,9 +503,7 @@ void x_smbd_open_unlinked(x_dlink_t *link,
 	x_smbd_ref_dec(smbd_tcon);
 
 	if (closed) {
-		smbd_open_post_close(smbd_open, smbd_object);
-		/* dec ref only closed, otherwise the ref is used by timer */
-		x_smbd_ref_dec(smbd_open); // ref by smbd_tcon open_list
+		x_smbd_open_release(smbd_open);
 	}
 }
 
@@ -818,11 +809,10 @@ static bool open_mode_check(x_smbd_object_t *smbd_object,
 			curr_open = next_open) {
 		next_open = open_list.next(curr_open);
 		if (share_conflict(curr_open, access_mask, share_access)) {
-			if (smbd_open_close_disconnected_if(smbd_object, curr_open)) {
-				x_smbd_schedule_release_open(curr_open);
-				continue;
+			if (!smbd_open_close_disconnected_if(smbd_object, curr_open)) {
+				return true;
 			}
-			return true;
+			x_smbd_schedule_release_open(curr_open);
 		}
 	}
 	return false;
@@ -2099,11 +2089,10 @@ static void smbd_net_file_close(x_smbd_open_t *smbd_open)
 		smbd_open_close(smbd_open, smbd_object, nullptr, state);
 	}
 
-	smbd_open_post_close(smbd_open, smbd_object);
 	if (smbd_tcon) {
 		x_smbd_ref_dec(smbd_tcon);
-		x_smbd_ref_dec(smbd_open); // ref by smbd_tcon open_list
 	}
+	x_smbd_open_release(smbd_open);
 }
 
 void x_smbd_net_file_close(uint32_t fid)

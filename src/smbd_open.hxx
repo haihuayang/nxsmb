@@ -711,6 +711,8 @@ void x_smbd_save_durable(x_smbd_open_t *smbd_open,
 		x_smbd_tcon_t *smbd_tcon,
 		const x_smbd_requ_state_create_t &state);
 
+void x_smbd_open_release(x_smbd_open_t *smbd_open);
+
 void x_smbd_wakeup_requ_list(const x_smbd_requ_id_list_t &requ_list);
 
 #endif /* __smbd_open__hxx__ */

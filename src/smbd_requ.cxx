@@ -256,7 +256,7 @@ static void smbd_defer_exec()
 
 	std::vector<x_smbd_open_t *> smbd_opens = std::move(g_smbd_defer.smbd_opens);
 	for (auto smbd_open: smbd_opens) {
-		x_smbd_ref_dec(smbd_open);
+		x_smbd_open_release(smbd_open);
 	}
 
 	std::vector<x_smbd_notify_t> smbd_notifies = std::move(g_smbd_defer.smbd_notifies);
