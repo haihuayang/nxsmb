@@ -66,6 +66,8 @@ all: $(TARGET_SET_tests:%=$(TARGET_DIR_out)/tests/%) \
 	$(TARGET_DIR_out)/bin/nxutils
 
 SET_src_smbd_nx := \
+	main event \
+	smbd \
 	smbd_registry \
 	smbd_replay \
 	smbd_volume \
@@ -80,7 +82,6 @@ SET_src_smbd_nx := \
 	smbd_secrets \
 	smbd_group_mapping \
 	smbd_ipc \
-	smbd \
 	smbd_stats \
 	smbd_requ \
 	smbd_conn \

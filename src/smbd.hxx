@@ -6,7 +6,7 @@
 #error "Must be c++"
 #endif
 
-#include "include/evtmgmt.hxx"
+#include "event.hxx"
 #include "include/wbpool.hxx"
 #include <vector>
 #include <list>
@@ -472,6 +472,8 @@ void x_smbd_simple_notify_change(const std::shared_ptr<x_smbd_volume_t> &smbd_vo
 		bool last_level);
 
 void x_smbd_schedule_async(x_job_t *job);
+
+void x_smbd_init();
 
 #endif /* __smbd__hxx__ */
 
