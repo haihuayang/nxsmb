@@ -10,14 +10,12 @@
 
 struct x_smbd_ctrl_t
 {
-	x_epoll_upcall_t upcall;
-	uint64_t ep_id;
-	int fd;
+	x_strm_srv_t base;
 };
 
 struct x_smbd_ctrl_conn_t
 {
-	x_smbd_ctrl_conn_t(int fd) : fd(fd) { }
+	x_smbd_ctrl_conn_t(int fd);
 	x_epoll_upcall_t upcall;
 	uint64_t ep_id;
 	std::unique_ptr<x_smbd_ctrl_handler_t> handler;
@@ -199,77 +197,50 @@ static const x_epoll_upcall_cbs_t x_smbd_ctrl_conn_upcall_cbs = {
 	x_smbd_ctrl_conn_upcall_cb_unmonitor,
 };
 
-static void x_smbd_ctrl_accepted(int fd)
+x_smbd_ctrl_conn_t::x_smbd_ctrl_conn_t(int fd)
+	: upcall{&x_smbd_ctrl_conn_upcall_cbs}, fd{fd}
 {
+}
+
+static void ctrl_srv_cb_accepted(x_strm_srv_t *strm_srv, int fd,
+			const struct sockaddr *sa, socklen_t slen)
+{
+	X_LOG(CTRL, DBG, "accept %d", fd);
 	set_nbio(fd, 1);
 	x_smbd_ctrl_conn_t *smbd_ctrl_conn = new x_smbd_ctrl_conn_t(fd);
 	X_ASSERT(smbd_ctrl_conn != NULL);
-	smbd_ctrl_conn->upcall.cbs = &x_smbd_ctrl_conn_upcall_cbs;
 	smbd_ctrl_conn->ep_id = x_evtmgmt_monitor(g_evtmgmt, fd, FDEVT_IN | FDEVT_OUT, &smbd_ctrl_conn->upcall);
 	x_evtmgmt_enable_events(g_evtmgmt, smbd_ctrl_conn->ep_id,
 			FDEVT_IN | FDEVT_ERR | FDEVT_SHUTDOWN | FDEVT_USER);
 }
 
-static inline x_smbd_ctrl_t *x_smbd_ctrl_from_upcall(x_epoll_upcall_t *upcall)
+static void ctrl_srv_cb_shutdown(x_strm_srv_t *strm_srv)
 {
-	return X_CONTAINER_OF(upcall, x_smbd_ctrl_t, upcall);
+	X_LOG(CTRL, CONN, "%p", strm_srv);
 }
 
-static bool x_smbd_ctrl_upcall_cb_getevents(x_epoll_upcall_t *upcall, x_fdevents_t &fdevents)
+static bool ctrl_srv_cb_user(x_strm_srv_t *strm_srv)
 {
-	x_smbd_ctrl_t *smbd_ctrl = x_smbd_ctrl_from_upcall(upcall);
-	uint32_t events = x_fdevents_processable(fdevents);
-
-	if (events & FDEVT_IN) {
-		struct sockaddr_un sun;
-		socklen_t slen = sizeof(sun);
-		int fd = accept(smbd_ctrl->fd, (struct sockaddr *)&sun, &slen);
-		X_LOG(CTRL, DBG, "accept %d, %d", fd, errno);
-		if (fd >= 0) {
-			x_smbd_ctrl_accepted(fd);
-		} else if (errno == EINTR) {
-		} else if (errno == EMFILE) {
-		} else if (errno == EAGAIN) {
-			fdevents = x_fdevents_consume(fdevents, FDEVT_IN);
-		} else {
-			X_PANIC("accept errno=", errno);
-		}
-	}
-	return false;
+	X_ASSERT(false);
+	return true;
 }
 
-static void x_smbd_ctrl_upcall_cb_unmonitor(x_epoll_upcall_t *upcall)
+static inline x_smbd_ctrl_t *x_smbd_ctrl_from_strm_srv(x_strm_srv_t *strm_srv)
 {
-	x_smbd_ctrl_t *smbd_ctrl = x_smbd_ctrl_from_upcall(upcall);
-	X_LOG(CTRL, CONN, "%p", smbd_ctrl);
-	X_ASSERT_SYSCALL(close(smbd_ctrl->fd));
-	smbd_ctrl->fd = -1;
-	/* TODO may close all accepted client, and notify it is freed */
+	return X_CONTAINER_OF(strm_srv, x_smbd_ctrl_t, base);
 }
 
-static const x_epoll_upcall_cbs_t x_smbd_ctrl_upcall_cbs = {
-	x_smbd_ctrl_upcall_cb_getevents,
-	x_smbd_ctrl_upcall_cb_unmonitor,
+static const x_strm_srv_cbs_t ctrl_srv_cbs = {
+	ctrl_srv_cb_accepted,
+	ctrl_srv_cb_shutdown,
+	ctrl_srv_cb_user,
 };
 
 static x_smbd_ctrl_t g_smbd_ctrl;
 
-int x_smbd_ctrl_init(x_evtmgmt_t *evtmgmt)
+void x_smbd_ctrl_init()
 {
-	int sock = socket(AF_UNIX, SOCK_STREAM, 0);
-	X_ASSERT(sock >= 0);
-	struct sockaddr_un sun;
-	socklen_t slen = ctrl_sockaddr_init(&sun);
-	int ret = bind(sock, (const struct sockaddr *)&sun, slen);
-	X_ASSERT(ret == 0);
-	ret = listen(sock, 5);
-	set_nbio(sock, 1);
-
-	g_smbd_ctrl.fd = sock;
-	g_smbd_ctrl.upcall.cbs = &x_smbd_ctrl_upcall_cbs;
-
-	g_smbd_ctrl.ep_id = x_evtmgmt_monitor(evtmgmt, sock, FDEVT_IN, &g_smbd_ctrl.upcall);
-	x_evtmgmt_enable_events(evtmgmt, g_smbd_ctrl.ep_id, FDEVT_IN | FDEVT_ERR | FDEVT_SHUTDOWN);
-
-	return 0;
+	int err = x_unix_srv_init(&g_smbd_ctrl.base, "nxsmbctrl", true,
+			&ctrl_srv_cbs);
+	X_ASSERT(err == 0);
 }

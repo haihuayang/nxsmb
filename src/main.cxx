@@ -130,7 +130,7 @@ static void nxfsd_init()
 	g_evtmgmt = x_evtmgmt_create(tpool, max_fd, 1000, 100);
 
 	x_smbd_init();
-	X_ASSERT(x_smbd_ctrl_init(g_evtmgmt) == 0);
+	x_smbd_ctrl_init();
 }
 
 int main(int argc, char **argv)

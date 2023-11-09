@@ -449,8 +449,7 @@ void x_smbd_conn_requ_done(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ,
 /* TODO */
 #define DEBUG(...) do { } while (0)
 
-extern x_evtmgmt_t *g_evtmgmt;
-int x_smbd_ctrl_init(x_evtmgmt_t *evtmgmt);
+void x_smbd_ctrl_init();
 
 void x_smbd_notify_change(
 		x_smbd_object_t *smbd_object,

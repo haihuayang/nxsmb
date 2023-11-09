@@ -1,5 +1,6 @@
 
 #include "smbd.hxx"
+#include "network.hxx"
 #include "smbd_stats.hxx"
 #include "smbd_conf.hxx"
 #include "smbd_open.hxx"
@@ -11,9 +12,7 @@ enum {
 
 struct x_smbd_srv_t
 {
-	x_epoll_upcall_t upcall;
-	uint64_t ep_id;
-	int fd;
+	x_strm_srv_t base;
 	std::mutex mutex;
 	x_tp_ddlist_t<fdevt_user_conn_traits> fdevt_user_list;
 };
@@ -78,34 +77,6 @@ static std::u16string machine_name_from_saddr(const x_sockaddr_t &saddr)
 		X_ASSERT(false);
 	}
 	return x_str_convert_assert<std::u16string>(std::string_view(buf));
-}
-
-x_smbd_conn_t::x_smbd_conn_t(int fd, const x_sockaddr_t &saddr,
-		uint32_t max_credits)
-	: fd(fd), saddr(saddr)
-	, machine_name{std::make_shared<std::u16string>(machine_name_from_saddr(saddr))}
-	, tick_create(tick_now)
-	, seq_bitmap(max_credits)
-{
-	X_SMBD_COUNTER_INC_CREATE(conn, 1);
-	negprot.dialect = X_SMB2_DIALECT_000;
-}
-
-x_smbd_conn_t::~x_smbd_conn_t()
-{
-	X_LOG(SMB, DBG, "x_smbd_conn_t %p destroy", this);
-	X_ASSERT(!chan_list.get_front());
-	X_ASSERT(fd == -1);
-
-	if (recv_buf) {
-		x_buf_release(recv_buf);
-	}
-	while (send_buf_head) {
-		auto next = send_buf_head->next;
-		delete send_buf_head;
-		send_buf_head = next;
-	}
-	X_SMBD_COUNTER_INC_DELETE(conn, 1);
 }
 
 template <>
@@ -1576,113 +1547,88 @@ static const x_epoll_upcall_cbs_t x_smbd_conn_upcall_cbs = {
 	x_smbd_conn_upcall_cb_unmonitor,
 };
 
-static void x_smbd_srv_accepted(x_smbd_srv_t *smbd_srv, int fd, const x_sockaddr_t &saddr)
+x_smbd_conn_t::x_smbd_conn_t(int fd, const x_sockaddr_t &saddr,
+		uint32_t max_credits)
+	: upcall{&x_smbd_conn_upcall_cbs}, fd(fd), saddr(saddr)
+	, machine_name{std::make_shared<std::u16string>(machine_name_from_saddr(saddr))}
+	, tick_create(tick_now)
+	, seq_bitmap(max_credits)
 {
-	X_LOG(SMB, CONN, "accept %d from %s", fd, saddr.tostring().c_str());
+	X_SMBD_COUNTER_INC_CREATE(conn, 1);
+	negprot.dialect = X_SMB2_DIALECT_000;
+}
+
+x_smbd_conn_t::~x_smbd_conn_t()
+{
+	X_LOG(SMB, DBG, "x_smbd_conn_t %p destroy", this);
+	X_ASSERT(!chan_list.get_front());
+	X_ASSERT(fd == -1);
+
+	if (recv_buf) {
+		x_buf_release(recv_buf);
+	}
+	while (send_buf_head) {
+		auto next = send_buf_head->next;
+		delete send_buf_head;
+		send_buf_head = next;
+	}
+	X_SMBD_COUNTER_INC_DELETE(conn, 1);
+}
+
+static inline x_smbd_srv_t *x_smbd_from_strm_srv(x_strm_srv_t *strm_srv)
+{
+	return X_CONTAINER_OF(strm_srv, x_smbd_srv_t, base);
+}
+
+static void x_smbd_srv_cb_accepted(x_strm_srv_t *strm_srv, int fd,
+			const struct sockaddr *sa, socklen_t slen)
+{
+	x_sockaddr_t *saddr = (x_sockaddr_t *)sa;
+	X_ASSERT(slen <= sizeof(*saddr));
+	X_LOG(SMB, CONN, "accept %d from %s", fd, saddr->tostring().c_str());
 	set_nbio(fd, 1);
+	x_smbd_conf_pin_t smbd_conf_pin;
 	const x_smbd_conf_t &smbd_conf = x_smbd_conf_get_curr();
-	x_smbd_conn_t *smbd_conn = new x_smbd_conn_t(fd, saddr,
+	x_smbd_conn_t *smbd_conn = new x_smbd_conn_t(fd, *saddr,
 			smbd_conf.smb2_max_credits);
 	X_ASSERT(smbd_conn != NULL);
-	smbd_conn->upcall.cbs = &x_smbd_conn_upcall_cbs;
 	smbd_conn->ep_id = x_evtmgmt_monitor(g_evtmgmt, fd, FDEVT_IN | FDEVT_OUT, &smbd_conn->upcall);
 	x_evtmgmt_enable_events(g_evtmgmt, smbd_conn->ep_id,
 			FDEVT_IN | FDEVT_ERR | FDEVT_SHUTDOWN | FDEVT_USER);
 }
 
-static inline x_smbd_srv_t *x_smbd_from_upcall(x_epoll_upcall_t *upcall)
+static void x_smbd_srv_cb_shutdown(x_strm_srv_t *strm_srv)
 {
-	return X_CONTAINER_OF(upcall, x_smbd_srv_t, upcall);
-}
-
-static bool x_smbd_srv_do_recv(x_smbd_srv_t *smbd_srv, x_fdevents_t &fdevents)
-{
-	x_sockaddr_t saddr;
-	socklen_t slen = sizeof(saddr);
-	int fd = accept(smbd_srv->fd, &saddr.sa, &slen);
-	X_LOG(SMB, DBG, "accept %d, %d", fd, errno);
-	if (fd >= 0) {
-		x_smbd_srv_accepted(smbd_srv, fd, saddr);
-	} else if (errno == EINTR) {
-	} else if (errno == EMFILE) {
-	} else if (errno == EAGAIN) {
-		fdevents = x_fdevents_consume(fdevents, FDEVT_IN);
-	} else {
-		X_PANIC("accept errno=", errno);
-	}
-
-	return false;
-}
-
-static bool x_smbd_srv_do_user(x_smbd_srv_t *smbd_srv, x_fdevents_t &fdevents)
-{
-	X_LOG(SMB, DBG, "%p x%lx x%lx", smbd_srv, smbd_srv->ep_id, fdevents);
-	{
-		auto lock = std::lock_guard(smbd_srv->mutex);
-		for (;;) {
-			x_fdevt_user_t *fdevt_user = smbd_srv->fdevt_user_list.get_front();
-			if (!fdevt_user) {
-				break;
-			}
-			smbd_srv->fdevt_user_list.remove(fdevt_user);
-			fdevt_user->func(nullptr, fdevt_user);
-		}
-	}
-
-	fdevents = x_fdevents_consume(fdevents, FDEVT_USER);
-	return false;
-}
-
-static bool x_smbd_srv_handle_events(x_smbd_srv_t *smbd_srv, x_fdevents_t &fdevents)
-{
-	uint32_t events = x_fdevents_processable(fdevents);
-	if (events & FDEVT_USER) {
-		if (x_smbd_srv_do_user(smbd_srv, fdevents)) {
-			return true;
-		}
-		events = x_fdevents_processable(fdevents);
-	}
-	if (events & FDEVT_IN) {
-		return x_smbd_srv_do_recv(smbd_srv, fdevents);
-	}
-	return false;
-}
-
-static bool x_smbd_srv_upcall_cb_getevents(x_epoll_upcall_t *upcall, x_fdevents_t &fdevents)
-{
-	x_smbd_srv_t *smbd_srv = x_smbd_from_upcall(upcall);
-	X_LOG(SMB, DBG, "%p x%lx", smbd_srv, fdevents);
-	x_smbd_conf_pin_t smbd_conf_pin;
-	return x_smbd_srv_handle_events(smbd_srv, fdevents);
-}
-
-static void x_smbd_srv_upcall_cb_unmonitor(x_epoll_upcall_t *upcall)
-{
-	x_smbd_srv_t *smbd_srv = x_smbd_from_upcall(upcall);
+	x_smbd_srv_t *smbd_srv = x_smbd_from_strm_srv(strm_srv);
 	X_LOG(SMB, CONN, "%p", smbd_srv);
-	X_ASSERT_SYSCALL(close(smbd_srv->fd));
-	smbd_srv->fd = -1;
 	/* TODO may close all accepted client, and notify it is freed */
 }
 
-static const x_epoll_upcall_cbs_t x_smbd_srv_upcall_cbs = {
-	x_smbd_srv_upcall_cb_getevents,
-	x_smbd_srv_upcall_cb_unmonitor,
+static bool x_smbd_srv_cb_user(x_strm_srv_t *strm_srv)
+{
+	x_smbd_srv_t *smbd_srv = x_smbd_from_strm_srv(strm_srv);
+	auto lock = std::lock_guard(smbd_srv->mutex);
+	for (;;) {
+		x_fdevt_user_t *fdevt_user = smbd_srv->fdevt_user_list.get_front();
+		if (!fdevt_user) {
+			break;
+		}
+		smbd_srv->fdevt_user_list.remove(fdevt_user);
+		fdevt_user->func(nullptr, fdevt_user);
+	}
+	return false;
+}
+
+static const x_strm_srv_cbs_t smbd_srv_cbs = {
+	x_smbd_srv_cb_accepted,
+	x_smbd_srv_cb_shutdown,
+	x_smbd_srv_cb_user,
 };
 
 static x_smbd_srv_t g_smbd_srv;
 int x_smbd_conn_srv_init(int port)
 {
-	int fd = tcplisten(port);
-	assert(fd >= 0);
-
-	g_smbd_srv.fd = fd;
-	g_smbd_srv.upcall.cbs = &x_smbd_srv_upcall_cbs;
-
-	g_smbd_srv.ep_id = x_evtmgmt_monitor(g_evtmgmt, fd, FDEVT_IN, &g_smbd_srv.upcall);
-	x_evtmgmt_enable_events(g_evtmgmt, g_smbd_srv.ep_id,
-			FDEVT_IN | FDEVT_ERR | FDEVT_SHUTDOWN | FDEVT_USER);
-	return 0;
+	return x_tcp_srv_init(&g_smbd_srv.base, port, &smbd_srv_cbs);
 }
 
 bool x_smbd_conn_post_user(x_smbd_conn_t *smbd_conn, x_fdevt_user_t *fdevt_user,
@@ -1714,7 +1660,7 @@ bool x_smbd_conn_post_user(x_smbd_conn_t *smbd_conn, x_fdevt_user_t *fdevt_user,
 		g_smbd_srv.fdevt_user_list.push_back(fdevt_user);
 	}
 	if (notify) {
-		x_evtmgmt_post_events(g_evtmgmt, g_smbd_srv.ep_id, FDEVT_USER);
+		x_evtmgmt_post_events(g_evtmgmt, g_smbd_srv.base.ep_id, FDEVT_USER);
 	}
 	return true;
 }
