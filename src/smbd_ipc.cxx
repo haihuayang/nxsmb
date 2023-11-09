@@ -147,7 +147,7 @@ static NTSTATUS named_pipe_read(
 	if (named_pipe->output.size() == 0) {
 		named_pipe->is_transceive = false;
 		return NT_STATUS_OK;
-	} else if (named_pipe->is_transceive) {
+	} else if (!named_pipe->is_transceive) {
 		return NT_STATUS_OK;
 	} else {
 		return NT_STATUS_BUFFER_OVERFLOW;
