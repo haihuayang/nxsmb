@@ -24,7 +24,7 @@ struct x_smb2_out_flush_t
 static void x_smb2_reply_flush(x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ)
 {
-	x_bufref_t *bufref = x_bufref_alloc(sizeof(x_smb2_out_flush_t));
+	x_bufref_t *bufref = x_smb2_bufref_alloc(sizeof(x_smb2_out_flush_t));
 
 	uint8_t *out_hdr = bufref->get_data();
 	x_smb2_out_flush_t *out_flush = (x_smb2_out_flush_t *)(out_hdr + sizeof(x_smb2_header_t));

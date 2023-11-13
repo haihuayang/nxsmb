@@ -77,7 +77,7 @@ static void x_smb2_reply_getinfo(x_smbd_conn_t *smbd_conn,
 {
 	X_SMBD_REQU_LOG(OP, smbd_requ,  " %s", x_ntstatus_str(status));
 
-	x_bufref_t *bufref = x_bufref_alloc(sizeof(x_smb2_out_getinfo_t) +
+	x_bufref_t *bufref = x_smb2_bufref_alloc(sizeof(x_smb2_out_getinfo_t) +
 			state.out_data.size());
 
 	uint8_t *out_hdr = bufref->get_data();

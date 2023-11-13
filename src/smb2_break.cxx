@@ -86,7 +86,7 @@ static void x_smb2_reply_oplock_break(x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ,
 		const x_smbd_requ_state_oplock_break_t &state)
 {
-	x_bufref_t *bufref = x_bufref_alloc(sizeof(x_smb2_oplock_break_t));
+	x_bufref_t *bufref = x_smb2_bufref_alloc(sizeof(x_smb2_oplock_break_t));
 
 	uint8_t *out_hdr = bufref->get_data();
 	encode_oplock_break_resp(state, out_hdr);
@@ -129,7 +129,7 @@ static void x_smb2_reply_lease_break(x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ,
 		const x_smbd_requ_state_lease_break_t &state)
 {
-	x_bufref_t *bufref = x_bufref_alloc(sizeof(x_smb2_lease_break_t));
+	x_bufref_t *bufref = x_smb2_bufref_alloc(sizeof(x_smb2_lease_break_t));
 
 	uint8_t *out_hdr = bufref->get_data();
 	encode_lease_break_resp(state, out_hdr);
@@ -206,7 +206,7 @@ void x_smb2_send_lease_break(x_smbd_conn_t *smbd_conn, x_smbd_sess_t *smbd_sess,
 		uint16_t new_epoch,
 		uint32_t flags)
 {
-	x_bufref_t *bufref = x_bufref_alloc(sizeof(x_smb2_lease_break_noti_t));
+	x_bufref_t *bufref = x_smb2_bufref_alloc(sizeof(x_smb2_lease_break_noti_t));
 	uint8_t *out_hdr = bufref->get_data();
 
 	x_smb2_lease_break_noti_t *noti = (x_smb2_lease_break_noti_t *)(out_hdr + sizeof(x_smb2_header_t));
@@ -228,7 +228,7 @@ void x_smb2_send_lease_break(x_smbd_conn_t *smbd_conn, x_smbd_sess_t *smbd_sess,
 void x_smb2_send_oplock_break(x_smbd_conn_t *smbd_conn, x_smbd_sess_t *smbd_sess,
 		uint64_t id_persistent, uint64_t id_volatile, uint8_t oplock_level)
 {
-	x_bufref_t *bufref = x_bufref_alloc(sizeof(x_smb2_oplock_break_t));
+	x_bufref_t *bufref = x_smb2_bufref_alloc(sizeof(x_smb2_oplock_break_t));
 	uint8_t *out_hdr = bufref->get_data();
 
 	x_smb2_oplock_break_t *noti = (x_smb2_oplock_break_t *)(out_hdr + sizeof(x_smb2_header_t));

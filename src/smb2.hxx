@@ -9,6 +9,7 @@
 #include "include/xdefines.h"
 #include <atomic>
 #include <memory>
+#include "buf.hxx"
 #include "misc.hxx"
 #include "include/ntstatus.hxx"
 
@@ -645,90 +646,26 @@ struct x_smb2_create_dh2c_requ_t
 	uint32_t flags;
 } __attribute__ ((packed));
 
-struct x_buf_t
-{
-	std::atomic<int32_t> ref;
-	uint32_t size;
-	uint8_t data[];
-};
 
-/* every buf's capacity is time of 8,
-   and the length is also time of 8 except the last one
- */
-static inline x_buf_t *x_buf_alloc(size_t size)
-{
-	size = x_pad_len(size, 8);
-	X_ASSERT(size < 0x100000000ul);
-	x_buf_t *buf = (x_buf_t *)malloc(sizeof(x_buf_t) + size);
-	new (&buf->ref) std::atomic<uint32_t>(1);
-	buf->size = x_convert_assert<uint32_t>(size);
-	return buf;
-}
-
-static inline x_buf_t *x_buf_get(x_buf_t *buf)
-{
-	X_ASSERT(buf->ref > 0);
-	++buf->ref;
-	return buf;
-}
-
-static inline void x_buf_release(x_buf_t *buf)
-{
-	X_ASSERT(buf->ref > 0);
-	if (--buf->ref == 0) {
-		free(buf);
-	}
-}
-
-static inline x_buf_t *x_buf_alloc_out_buf(size_t body_size)
+static inline x_buf_t *x_smb2_alloc_out_buf(size_t body_size)
 {
 	return x_buf_alloc(8 + sizeof(x_smb2_header_t) + body_size);
 }
 
-static inline uint8_t *x_buf_get_out_hdr(x_buf_t *buf)
+static inline uint8_t *x_smb2_get_out_hdr(x_buf_t *buf)
 {
 	X_ASSERT(buf->size >= sizeof(x_smb2_header_t) + 8);
 	return buf->data + 8;
 }
 
-
-struct x_bufref_t
-{
-	x_bufref_t(x_buf_t *buf, uint32_t offset, uint32_t length) :
-		buf(buf), offset(offset), length(length) { }
-
-	~x_bufref_t() {
-		if (buf) {
-			x_buf_release(buf);
-		}
-	}
-	const uint8_t *get_data() const {
-		return buf->data + offset;
-	}
-	uint8_t *get_data() {
-		return buf->data + offset;
-	}
-
-	x_buf_t *buf;
-	uint32_t offset, length;
-	x_bufref_t *next{};
-};
-
-static inline x_bufref_t *x_bufref_alloc(size_t body_size)
+static inline x_bufref_t *x_smb2_bufref_alloc(size_t body_size)
 {
 	X_ASSERT(body_size + sizeof(x_smb2_header_t) < 0x100000000ul);
-	x_buf_t *out_buf = x_buf_alloc_out_buf(body_size);
+	x_buf_t *out_buf = x_smb2_alloc_out_buf(body_size);
 	x_bufref_t *bufref = new x_bufref_t{out_buf, 8,
 		x_convert_assert<uint32_t>(sizeof(x_smb2_header_t) + body_size)};
 	return bufref;
 }
-
-struct x_buflist_t
-{
-	void merge(x_buflist_t &other);
-	void pop();
-	x_bufref_t *head{}, *tail{};
-};
 
 bool x_smb2_signing_check(uint16_t algo,
 		const x_smb2_key_t *key,

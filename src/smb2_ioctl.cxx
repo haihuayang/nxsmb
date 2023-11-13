@@ -91,7 +91,7 @@ static void x_smb2_reply_ioctl(x_smbd_conn_t *smbd_conn,
 		NTSTATUS status,
 		x_smbd_requ_state_ioctl_t &state)
 {
-	x_bufref_t *bufref = x_bufref_alloc(sizeof(x_smb2_out_ioctl_t));
+	x_bufref_t *bufref = x_smb2_bufref_alloc(sizeof(x_smb2_out_ioctl_t));
 	if (state.out_buf_length) {
 		bufref->next = new x_bufref_t(state.out_buf, 0, state.out_buf_length);
 		state.out_buf = nullptr;

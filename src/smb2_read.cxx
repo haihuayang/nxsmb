@@ -56,7 +56,7 @@ static void x_smb2_reply_read(x_smbd_conn_t *smbd_conn,
 	smbd_requ->smbd_open->open_state.current_offset =
 		state.in_offset + state.in_length;
 
-	x_bufref_t *bufref = x_bufref_alloc(sizeof(x_smb2_out_read_t));
+	x_bufref_t *bufref = x_smb2_bufref_alloc(sizeof(x_smb2_out_read_t));
 	if (state.out_buf) {
 		bufref->next = new x_bufref_t(state.out_buf, 0, state.out_buf_length);
 		state.out_buf = nullptr;

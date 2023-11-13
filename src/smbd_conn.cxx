@@ -47,7 +47,8 @@ struct x_smbd_conn_t
 	uint32_t nbt_hdr;
 	uint32_t recv_len = 0, recv_msgsize = 0;
 	x_buf_t *recv_buf{};
-	x_bufref_t *send_buf_head{}, *send_buf_tail{};
+	x_strm_send_queue_t send_queue;
+	// x_bufref_t *send_buf_head{}, *send_buf_tail{};
 
 	x_ddlist_t chan_list;
 	x_tp_ddlist_t<requ_conn_traits> pending_requ_list;
@@ -180,24 +181,10 @@ int x_smbd_conn_negprot(x_smbd_conn_t *smbd_conn,
 static void x_smbd_conn_queue_buf(x_smbd_conn_t *smbd_conn, x_bufref_t *buf_head,
 		x_bufref_t *buf_tail, uint32_t length)
 {
-	x_bufref_t *bufref = buf_head;
-	X_ASSERT(bufref->buf->ref == 1);
-	X_ASSERT(bufref->offset >= 4);
+	uint32_t *outnbt = (uint32_t *)buf_head->back(4);
+	*outnbt = X_H2BE32(length);
 
-	bufref->offset -= 4;
-	bufref->length += 4;
-	uint8_t *outnbt = bufref->get_data();
-	x_put_be32(outnbt, length);
-
-	bool orig_empty = smbd_conn->send_buf_head == nullptr;
-	if (orig_empty) {
-		smbd_conn->send_buf_head = buf_head;
-	} else {
-		smbd_conn->send_buf_tail->next = buf_head;
-	}
-	smbd_conn->send_buf_tail = buf_tail;
-
-	if (orig_empty) {
+	if (smbd_conn->send_queue.append(buf_head, buf_tail)) {
 		x_evtmgmt_enable_events(g_evtmgmt, smbd_conn->ep_id, FDEVT_OUT);
 	}
 }
@@ -474,9 +461,9 @@ static int x_smbd_reply_error(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ
 	X_LOG(SMB, OP, "%ld RESP 0x%x at %s:%d", smbd_requ->in_smb2_hdr.mid,
 			NT_STATUS_V(status), file, line);
 
-	x_buf_t *out_buf = x_buf_alloc_out_buf(sizeof(x_smb2_error_t));
+	x_buf_t *out_buf = x_smb2_alloc_out_buf(sizeof(x_smb2_error_t));
 
-	uint8_t *out_hdr = x_buf_get_out_hdr(out_buf);
+	uint8_t *out_hdr = x_smb2_get_out_hdr(out_buf);
 
 	uint8_t *out_body = out_hdr + sizeof(x_smb2_header_t);
 	x_smb2_error_t *smb2_err = (x_smb2_error_t *)out_body;
@@ -507,9 +494,9 @@ static int x_smbd_reply_interim(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_re
 	smbd_requ->out_credit_granted = x_smb2_calculate_credit(smbd_conn, smbd_requ, NT_STATUS_PENDING);
 	smbd_requ->out_hdr_flags = calculate_out_hdr_flags(smbd_requ->in_smb2_hdr.flags, smbd_requ->out_hdr_flags);
 
-	x_buf_t *out_buf = x_buf_alloc_out_buf(8);
+	x_buf_t *out_buf = x_smb2_alloc_out_buf(8);
 
-	uint8_t *out_hdr = x_buf_get_out_hdr(out_buf);
+	uint8_t *out_hdr = x_smb2_get_out_hdr(out_buf);
 
 	uint8_t *out_body = out_hdr + sizeof(x_smb2_header_t);
 	memset(out_body, 0, 8);
@@ -1337,66 +1324,11 @@ static bool x_smbd_conn_do_recv(x_smbd_conn_t *smbd_conn, x_fdevents_t &fdevents
 static bool x_smbd_conn_do_send(x_smbd_conn_t *smbd_conn, x_fdevents_t &fdevents)
 {
 	X_LOG(SMB, DBG, "conn %p x%lx x%lx", smbd_conn, smbd_conn->ep_id, fdevents);
-	for (;;) {
-		struct iovec iov[8];
-
-		x_bufref_t *bufref = smbd_conn->send_buf_head;
-		if (!bufref) {
-			break;
-		}
-
-		uint32_t niov;
-		uint32_t total_write = 0;
-		for (niov = 0; niov < 8 && bufref; ++niov) {
-			iov[niov].iov_base = bufref->get_data();
-			iov[niov].iov_len = bufref->length;
-			total_write += bufref->length;
-			bufref = bufref->next;
-		}
-
-		ssize_t ret = writev(smbd_conn->fd, iov, niov);
-		X_LOG(SMB, DBG, "conn %p send %u ret %ld, errno=%d",
-				smbd_conn, total_write, ret, errno);
-		if (ret > 0) {
-			uint32_t bytes = x_convert_assert<uint32_t>(ret);
-			for ( ; bytes > 0; ) {
-				bufref = smbd_conn->send_buf_head;
-				if (bufref->length <= bytes) {
-					smbd_conn->send_buf_head = bufref->next;
-					if (!bufref->next) {
-						smbd_conn->send_buf_tail = nullptr;
-					}
-					bytes -= bufref->length;
-					delete bufref;
-				} else {
-					bufref->offset += bytes;
-					bufref->length -= bytes;
-					/* writev does not write all bytes,
-					 * should it break to outside?
-					 * do not find document if epoll will
-					 * trigger without one more writev
-					 */
-					break;
-				}
-			}
-		} else {
-			X_ASSERT(ret != 0);
-			if (errno == EAGAIN) {
-				fdevents = x_fdevents_consume(fdevents, FDEVT_OUT);
-				break;
-			} else if (errno == EINTR) {
-			} else {
-				return true;
-			}
-		}
-	}
-	if (!smbd_conn->send_buf_head) {
-		fdevents = x_fdevents_disable(fdevents, FDEVT_OUT);
-	}
-	if (smbd_conn->count_msg < x_smbd_conn_t::MAX_MSG) {
+	bool ret = smbd_conn->send_queue.send(smbd_conn->fd, fdevents);
+	if (!ret && smbd_conn->count_msg < x_smbd_conn_t::MAX_MSG) {
 		fdevents = x_fdevents_enable(fdevents, FDEVT_IN);
 	}
-	return false;
+	return ret;
 }
 
 static bool x_smbd_conn_do_user(x_smbd_conn_t *smbd_conn, x_fdevents_t &fdevents)
@@ -1566,11 +1498,6 @@ x_smbd_conn_t::~x_smbd_conn_t()
 
 	if (recv_buf) {
 		x_buf_release(recv_buf);
-	}
-	while (send_buf_head) {
-		auto next = send_buf_head->next;
-		delete send_buf_head;
-		send_buf_head = next;
 	}
 	X_SMBD_COUNTER_INC_DELETE(conn, 1);
 }

@@ -36,7 +36,7 @@ static NTSTATUS x_smb2_reply_notify(x_smbd_conn_t *smbd_conn,
 	uint32_t output_buffer_length = std::min(state.in_output_buffer_length,
 			smbd_requ->smbd_open->notify_buffer_length);
 
-	x_bufref_t *bufref = x_bufref_alloc(sizeof(x_smb2_out_notify_t) +
+	x_bufref_t *bufref = x_smb2_bufref_alloc(sizeof(x_smb2_out_notify_t) +
 			output_buffer_length);
 
 	uint8_t *out_hdr = bufref->get_data();

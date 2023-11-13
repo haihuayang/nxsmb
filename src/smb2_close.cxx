@@ -59,7 +59,7 @@ static void x_smb2_reply_close(x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ,
 		const x_smbd_requ_state_close_t &state)
 {
-	x_bufref_t *bufref = x_bufref_alloc(X_SMB2_CLOSE_RESP_BODY_LEN);
+	x_bufref_t *bufref = x_smb2_bufref_alloc(X_SMB2_CLOSE_RESP_BODY_LEN);
 
 	uint8_t *out_hdr = bufref->get_data();
 	

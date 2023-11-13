@@ -146,7 +146,7 @@ static void x_smb2_reply_tcon(x_smbd_conn_t *smbd_conn,
 {
 	X_SMBD_REQU_LOG(OP, smbd_requ,  " tid=%x", x_smbd_tcon_get_id(smbd_tcon));
 
-	x_bufref_t *bufref = x_bufref_alloc(sizeof(x_smb2_tcon_resp_t));
+	x_bufref_t *bufref = x_smb2_bufref_alloc(sizeof(x_smb2_tcon_resp_t));
 
 	uint8_t *out_hdr = bufref->get_data();
 	x_smb2_tcon_resp_t *out_resp = (x_smb2_tcon_resp_t *)(out_hdr + sizeof(x_smb2_header_t));

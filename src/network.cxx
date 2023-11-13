@@ -46,6 +46,65 @@ std::string x_sockaddr_t::tostring() const
 	return buf;
 }
 
+bool x_strm_send_queue_t::send(int fd, x_fdevents_t &fdevents)
+{
+	for (;;) {
+		struct iovec iov[8];
+
+		x_bufref_t *bufref = head;
+		if (!bufref) {
+			break;
+		}
+
+		uint32_t niov;
+		uint32_t total_write = 0;
+		for (niov = 0; niov < 8 && bufref; ++niov) {
+			iov[niov].iov_base = bufref->get_data();
+			iov[niov].iov_len = bufref->length;
+			total_write += bufref->length;
+			bufref = bufref->next;
+		}
+
+		ssize_t ret = writev(fd, iov, niov);
+		if (ret > 0) {
+			uint32_t bytes = x_convert_assert<uint32_t>(ret);
+			for ( ; bytes > 0; ) {
+				bufref = head;
+				if (bufref->length <= bytes) {
+					head = bufref->next;
+					if (!bufref->next) {
+						tail = nullptr;
+					}
+					bytes -= bufref->length;
+					delete bufref;
+				} else {
+					bufref->offset += bytes;
+					bufref->length -= bytes;
+					/* writev does not write all bytes,
+					 * should it break to outside?
+					 * do not find document if epoll will
+					 * trigger without one more writev
+					 */
+					break;
+				}
+			}
+		} else {
+			X_ASSERT(ret != 0);
+			if (errno == EAGAIN) {
+				fdevents = x_fdevents_consume(fdevents, FDEVT_OUT);
+				break;
+			} else if (errno == EINTR) {
+			} else {
+				return true;
+			}
+		}
+	}
+	if (!head) {
+		fdevents = x_fdevents_disable(fdevents, FDEVT_OUT);
+	}
+	return false;
+}
+
 static inline x_strm_srv_t *x_strm_srv_from_upcall(x_epoll_upcall_t *upcall)
 {
 	return X_CONTAINER_OF(upcall, x_strm_srv_t, upcall);

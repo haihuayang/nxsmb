@@ -36,7 +36,7 @@ static void x_smb2_reply_sesssetup(x_smbd_conn_t *smbd_conn,
 		NTSTATUS status,
 		const std::vector<uint8_t> &out_security)
 {
-	x_bufref_t *bufref = x_bufref_alloc(sizeof(x_smb2_sesssetup_resp_t) +
+	x_bufref_t *bufref = x_smb2_bufref_alloc(sizeof(x_smb2_sesssetup_resp_t) +
 			out_security.size());
 	uint8_t *out_hdr = bufref->get_data();
 	uint8_t *out_body = out_hdr + sizeof(x_smb2_header_t);

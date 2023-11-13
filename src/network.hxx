@@ -7,6 +7,7 @@
 #endif
 
 #include "include/utils.hxx"
+#include "buf.hxx"
 #include "event.hxx"
 #include <string>
 #include <sys/socket.h>
@@ -37,6 +38,34 @@ static inline void set_nbio(int s, unsigned long on)
 {
 	X_ASSERT_SYSCALL(ioctl(s, FIONBIO, &on));
 }
+
+struct x_strm_send_queue_t
+{
+	~x_strm_send_queue_t()
+	{
+		while (head) {
+			auto next = head->next;
+			delete head;
+			head = next;
+		}
+	}
+
+	bool append(x_bufref_t *buf_head, x_bufref_t *buf_tail)
+	{
+		bool orig_empty = (head == nullptr);
+		if (orig_empty) {
+			head = buf_head;
+		} else {
+			tail->next = buf_head;
+		}
+		tail = buf_tail;
+		return orig_empty;
+	}
+
+	bool send(int fd, x_fdevents_t &fdevents);
+
+	x_bufref_t *head{}, *tail{};
+};
 
 struct x_strm_srv_t;
 struct x_strm_srv_cbs_t

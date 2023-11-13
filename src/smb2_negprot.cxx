@@ -69,7 +69,7 @@ static NTSTATUS x_smbd_conn_reply_negprot(x_smbd_conn_t *smbd_conn, x_smbd_requ_
 
 #endif	
 
-	x_bufref_t *bufref = x_bufref_alloc(sizeof(x_smb2_negprot_resp_t) + dyn_len);
+	x_bufref_t *bufref = x_smb2_bufref_alloc(sizeof(x_smb2_negprot_resp_t) + dyn_len);
 	uint8_t *out_hdr = bufref->get_data();
 	x_smb2_negprot_resp_t *out_resp = (x_smb2_negprot_resp_t *)(out_hdr + sizeof(x_smb2_header_t));
 

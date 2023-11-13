@@ -632,7 +632,7 @@ static void x_smb2_reply_create(x_smbd_conn_t *smbd_conn,
 		out_context_length += 0x18 + 56;
 	}
 #endif
-	x_bufref_t *bufref = x_bufref_alloc(sizeof(x_smb2_out_create_t) + out_context_length);
+	x_bufref_t *bufref = x_smb2_bufref_alloc(sizeof(x_smb2_out_create_t) + out_context_length);
 
 	uint8_t *out_hdr = bufref->get_data();
 
