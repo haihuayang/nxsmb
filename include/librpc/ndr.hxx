@@ -47,19 +47,6 @@
 
 namespace idl {
 
-/* begin C++ helpers */
-template <typename T, typename... Args>
-void construct(T &t, Args&&... args)
-{
-	new (&t) T{std::forward<Args>(args)...};
-}
-
-template <typename T>
-void destruct(T &t) noexcept
-{
-	t.~T();
-}
-
 enum x_ndr_err_code_t : int {
 	NDR_ERR_SUCCESS = 0,
 	NDR_ERR_ARRAY_SIZE,

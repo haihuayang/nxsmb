@@ -1911,13 +1911,13 @@ template <> struct ndr_traits_t<{self.get_ctype()}> {{
 	def ndrcxx(self, out):
 		if any([not field.is_trivial() for field in self.fields]):
 			union_output_function(out, self.fields, f'void {self.get_ctype()}::__init(x_ndr_switch_t __level)',
-				lambda n: f'construct({n});')
+				lambda n: f'x_construct({n});')
 			union_output_function(out, self.fields, f'void {self.get_ctype()}::__init(x_ndr_switch_t __level, {self.get_ctype()} &&other)',
-				lambda n: f'construct({n}, std::move(other.{n}));')
+				lambda n: f'x_construct({n}, std::move(other.{n}));')
 			union_output_function(out, self.fields, f'void {self.get_ctype()}::__init(x_ndr_switch_t __level, const {self.get_ctype()} &other)',
-				lambda n: f'construct({n}, other.{n});')
+				lambda n: f'x_construct({n}, other.{n});')
 			union_output_function(out, self.fields, f'void {self.get_ctype()}::__uninit(x_ndr_switch_t __level)',
-				lambda n: f'destruct({n});')
+				lambda n: f'x_destruct({n});')
 
 		for func, constness in (("push", "const "), ("pull", "")):
 			if self.has_property("no" + func):

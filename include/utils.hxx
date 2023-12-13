@@ -290,6 +290,19 @@ inline T& operator|= (T& a, T b) { return reinterpret_cast<T&>( reinterpret_cast
 inline T& operator&= (T& a, T b) { return reinterpret_cast<T&>( reinterpret_cast<std::underlying_type<T>::type&>(a) &= static_cast<std::underlying_type<T>::type>(b) ); } \
 inline T& operator^= (T& a, T b) { return reinterpret_cast<T&>( reinterpret_cast<std::underlying_type<T>::type&>(a) ^= static_cast<std::underlying_type<T>::type>(b) ); }
 
+/* begin C++ helpers */
+template <typename T, typename... Args>
+void x_construct(T &t, Args&&... args)
+{
+	new (&t) T{std::forward<Args>(args)...};
+}
+
+template <typename T>
+void x_destruct(T &t) noexcept
+{
+	t.~T();
+}
+
 
 #endif /* __utils__hxx__ */
 
