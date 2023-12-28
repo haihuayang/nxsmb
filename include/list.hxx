@@ -208,6 +208,9 @@ struct x_tp_sdlist_t
 	bool empty(void) const {
 		return list.empty();
 	}
+	void remove(item_type *item) {
+		list.remove(LinkTraits::member(item));
+	}
 	void push_front(item_type *item) {
 		list.push_front(LinkTraits::member(item));
 	}
@@ -454,7 +457,7 @@ struct x_tp_sdqueue_t
 		return link_2_item(LinkTraits::member(t)->get_next());
 	}
 
-	x_sdlist_t list;
+	x_sdqueue_t list;
 };
 
 
