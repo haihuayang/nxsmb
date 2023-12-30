@@ -275,7 +275,7 @@ void x_smbd_conn_post_interim(x_smbd_requ_t *smbd_requ);
 
 int x_smbd_sess_table_init(uint32_t count);
 uint32_t x_smbd_sess_get_count();
-x_smbd_sess_t *x_smbd_sess_create(uint64_t &id);
+x_smbd_sess_t *x_smbd_sess_create();
 x_smbd_sess_t *x_smbd_sess_lookup(NTSTATUS &status,
 		uint64_t id, const x_smb2_uuid_t &client_guid);
 NTSTATUS x_smbd_sess_auth_succeeded(x_smbd_sess_t *smbd_sess,

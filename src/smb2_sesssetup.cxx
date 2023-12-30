@@ -185,8 +185,7 @@ NTSTATUS x_smb2_process_sesssetup(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_
 			new_auth = true;
 		}
 	} else if (!smbd_requ->smbd_sess) {
-		uint64_t session_id;
-		smbd_requ->smbd_sess = x_smbd_sess_create(session_id);
+		smbd_requ->smbd_sess = x_smbd_sess_create();
 		if (!smbd_requ->smbd_sess) {
 			X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_INSUFFICIENT_RESOURCES);
 		}

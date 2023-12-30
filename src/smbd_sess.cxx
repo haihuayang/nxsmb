@@ -87,14 +87,14 @@ static bool match_user(const x_smbd_user_t &u1, const x_smbd_user_t &u2)
 	return u1.uid == u2.uid && u1.domain_sid == u2.domain_sid;
 }
 
-x_smbd_sess_t *x_smbd_sess_create(uint64_t &id)
+x_smbd_sess_t *x_smbd_sess_create()
 {
 	x_smbd_sess_t *smbd_sess = new x_smbd_sess_t;
 	if (!g_smbd_sess_table->store(smbd_sess, smbd_sess->id)) {
 		delete smbd_sess;
 		return nullptr;
 	}
-	X_LOG(SMB, DBG, "0x%lx %p", id, smbd_sess);
+	X_LOG(SMB, DBG, "0x%lx %p", smbd_sess->id, smbd_sess);
 	return smbd_sess;
 }
 
