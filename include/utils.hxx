@@ -14,6 +14,11 @@
 
 /* unit is nsec */
 
+static inline uint64_t x_timespec_to_nsecs(const struct timespec &ts)
+{
+	return ts.tv_sec * X_NSEC_PER_SEC + ts.tv_nsec;
+}
+
 typedef int64_t x_tick_diff_t;
 
 struct x_tick_t
@@ -37,12 +42,12 @@ static constexpr x_tick_diff_t x_tick_diff_max = INT64_MAX / 2;
 
 static inline x_tick_diff_t x_tick_diff_from_ms(int ms)
 {
-	return {ms * 1000000l};
+	return {X_MSEC_TO_NSEC(ms)};
 }
 
 static inline x_tick_t x_tick_from_timespec(const struct timespec &ts)
 {
-	return x_tick_t{ts.tv_sec * 1000000000ul + ts.tv_nsec};
+	return x_tick_t{x_timespec_to_nsecs(ts)};
 }
 
 static inline x_tick_t x_tick_now(void)
