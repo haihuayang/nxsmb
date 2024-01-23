@@ -36,6 +36,13 @@ struct x_smb2_negprot_resp_t
 	uint32_t context_offset;
 };
 
+struct x_smb2_negprot_context_header_t
+{
+	uint16_t type;
+	uint16_t length;
+	uint32_t unused0;
+};
+
 }
 
 static NTSTATUS x_smbd_conn_reply_negprot(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ,
@@ -199,17 +206,19 @@ static NTSTATUS parse_context(const uint8_t *in_context, uint32_t in_context_len
 {
 	size_t offset = 0;
 	for (uint32_t ci = 0; ci < in_context_count; ++ci) {
-		if (offset + 8 > in_context_length) {
+		if (offset + sizeof(x_smb2_negprot_context_header_t) > in_context_length) {
 			return NT_STATUS_INVALID_PARAMETER;
 		}
-		uint16_t type = x_get_le16(in_context + offset);
-		uint16_t length = x_get_le16(in_context + offset + 2);
-		size_t end = offset + 8 + length;
+		auto ctx_hdr = (const x_smb2_negprot_context_header_t *)(in_context + offset);
+		offset += sizeof(x_smb2_negprot_context_header_t);
+
+		uint16_t type = X_LE2H16(ctx_hdr->type);
+		uint16_t length = X_LE2H16(ctx_hdr->length);
+		size_t end = offset + length;
 		if (end > in_context_length) {
 			return NT_STATUS_INVALID_PARAMETER;
 		}
 		
-		offset += 8;
 		if (type == X_SMB2_PREAUTH_INTEGRITY_CAPABILITIES) {
 			if (length < 4) {
 				return NT_STATUS_INVALID_PARAMETER;
@@ -304,12 +313,12 @@ static void generate_context(uint16_t &out_context_count,
 	output.resize(128); // 128 should be enough
 	uint16_t context_count = 0;
 	uint8_t *data = output.data();
+	x_smb2_negprot_context_header_t *ctx_hdr;
 
-	x_put_le16(data, X_SMB2_PREAUTH_INTEGRITY_CAPABILITIES);
-	data += 2;
-	x_put_le16(data, 38);
-	data += 2;
-	data += 4;
+	ctx_hdr = (x_smb2_negprot_context_header_t *)data;
+	ctx_hdr->type = X_H2LE16(X_SMB2_PREAUTH_INTEGRITY_CAPABILITIES);
+	ctx_hdr->unused0 = 0;
+	data = (uint8_t *)(ctx_hdr + 1);
 	x_put_le16(data, 1);
 	data += 2;
 	x_put_le16(data, 32);
@@ -318,16 +327,18 @@ static void generate_context(uint16_t &out_context_count,
 	data += 2;
 	x_rand_bytes(data, 32);
 	data += 32;
+	ctx_hdr->length = X_H2LE16(uint16_t(data - (uint8_t *)(ctx_hdr + 1)));
 	++context_count;
 
 	if (encryption_algo != X_SMB2_ENCRYPTION_INVALID_ALGO) {
 		size_t ctx_len = x_pad_len(data - output.data(), 8);
 		data = output.data() + ctx_len;
-		x_put_le16(data, X_SMB2_ENCRYPTION_CAPABILITIES);
-		data += 2;
-		x_put_le16(data, 4);
-		data += 2;
-		data += 4;
+		ctx_hdr = (x_smb2_negprot_context_header_t *)data;
+		ctx_hdr->type = X_H2LE16(X_SMB2_ENCRYPTION_CAPABILITIES);
+		ctx_hdr->length = X_H2LE16(4);
+		ctx_hdr->unused0 = 0;
+
+		data = (uint8_t *)(ctx_hdr + 1);
 		x_put_le16(data, 1);
 		data += 2;
 		x_put_le16(data, encryption_algo);
@@ -338,11 +349,12 @@ static void generate_context(uint16_t &out_context_count,
 	if (signing_algo != X_SMB2_SIGNING_INVALID_ALGO) {
 		size_t ctx_len = x_pad_len(data - output.data(), 8);
 		data = output.data() + ctx_len;
-		x_put_le16(data, X_SMB2_SIGNING_CAPABILITIES);
-		data += 2;
-		x_put_le16(data, 4);
-		data += 2;
-		data += 4;
+		ctx_hdr = (x_smb2_negprot_context_header_t *)data;
+		ctx_hdr->type = X_H2LE16(X_SMB2_SIGNING_CAPABILITIES);
+		ctx_hdr->length = X_H2LE16(4);
+		ctx_hdr->unused0 = 0;
+
+		data = (uint8_t *)(ctx_hdr + 1);
 		x_put_le16(data, 1);
 		data += 2;
 		x_put_le16(data, signing_algo);
