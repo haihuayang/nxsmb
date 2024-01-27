@@ -43,6 +43,7 @@ TARGET_SET_tests := \
 	test-idtable \
 	test-sid \
 	test-signing \
+	test-compression \
 	test-timeout \
 	test-charset \
 
@@ -121,6 +122,7 @@ SET_src_smbd_nx := \
 	smb2_break \
 	smb2_copychunk \
 	smb2_signing smb2_preauth \
+	smb2_compression \
 	smb2 \
 	auth_ntlmssp auth_krb5 auth_spnego auth \
 	network misc fnmatch \
@@ -154,6 +156,9 @@ $(TARGET_SET_tests:%=$(TARGET_DIR_out)/tests/%) : %: %.o
 
 $(TARGET_DIR_out)/tests/test-signing : $(TARGET_DIR_out)/src/smb2_signing.o
 TESTS_LDFLAGS_test-signing := -lcrypto
+
+$(TARGET_DIR_out)/tests/test-compression : $(TARGET_DIR_out)/src/smb2_compression.o
+
 $(TARGET_SET_tests:%=$(TARGET_DIR_out)/tests/%) : $(TARGET_SET_lib:%=$(TARGET_DIR_out)/lib%.a) $(COMMON_LIBS)
 
 TARGET_SET_asn1 := spnego gssapi

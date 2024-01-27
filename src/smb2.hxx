@@ -17,6 +17,7 @@ enum {
 	X_SMB1_MAGIC = '\xffSMB',
 	X_SMB2_MAGIC = '\xfeSMB',
 	X_SMB2_TF_MAGIC = '\xfdSMB',
+	X_SMB2_CTF_MAGIC = '\xfcSMB',
 };
 
 #define X_SMB2_OP_ENUM \
@@ -132,6 +133,15 @@ enum {
 	X_SMB2_TF_FLAGS_ENCRYPTED		= 0x0001,
 };
 
+struct x_smb2_ctf_header_t
+{
+	uint32_t protocol_id;
+	uint32_t original_segment_size;
+	uint16_t compression_algorithm;
+	uint16_t flags;
+	uint32_t offset;
+};
+
 /* Types of SMB2 Negotiate Contexts - only in dialect >= 0x310 */
 enum {
 	X_SMB2_PREAUTH_INTEGRITY_CAPABILITIES	= 0x0001,
@@ -166,6 +176,21 @@ enum {
 	X_SMB2_ENCRYPTION_AES128_GCM	= 0x0002, /* only in dialect >= 0x311 */
 	X_SMB2_ENCRYPTION_AES256_CCM	= 0x0003, /* only in dialect >= 0x311 */
 	X_SMB2_ENCRYPTION_AES256_GCM	= 0x0004, /* only in dialect >= 0x311 */
+};
+
+/* Values for the SMB2_COMPRESSION_CAPABILITIES Context (>= 0x311) */
+enum {
+	X_SMB2_COMPRESSION_INVALID_ALGO	= 0xffff, /* only used internally */
+	X_SMB2_COMPRESSION_NONE		= 0x0000, /* only used internally */
+	X_SMB2_COMPRESSION_LZNT1	= 0x0001, /* only in dialect >= 0x224 */
+	X_SMB2_COMPRESSION_LZ77		= 0x0002, /* only in dialect >= 0x311 */
+	X_SMB2_COMPRESSION_LZ77HUFF	= 0x0003, /* only in dialect >= 0x311 */
+	X_SMB2_COMPRESSION_PATTERN_V1	= 0x0004, /* only in dialect >= 0x311 */
+	X_SMB2_COMPRESSION_MAX,
+};
+
+enum {
+	X_SMB2_COMPRESSION_CAPABILITIES_FLAG_CHAINED	= 0x1,
 };
 
 /* SMB2 session (request) flags */
@@ -334,6 +359,12 @@ enum {
 	X_SMB2_CONTINUE_FLAG_SINGLE	= 0x02,
 	X_SMB2_CONTINUE_FLAG_INDEX	= 0x04,
 	X_SMB2_CONTINUE_FLAG_REOPEN	= 0x10,
+};
+
+
+enum {
+	X_SMB2_READFLAG_READ_UNBUFFERED		= 0x01,
+	X_SMB2_READFLAG_REQUEST_COMPRESSED	= 0x02,
 };
 
 /* getinfo classes */
@@ -691,6 +722,9 @@ int x_smb2_signing_get_nonce_size(uint16_t algo);
 
 int x_smb2_signing_get_key_size(uint16_t algo);
 
+int x_smb2_decompress(uint16_t algo,
+		const uint8_t *in_data, uint32_t in_size,
+		uint8_t *out_data, uint32_t out_size);
 #if 0
 struct x_nbt_t
 {
