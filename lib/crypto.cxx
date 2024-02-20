@@ -43,4 +43,11 @@ unsigned int x_hmac(void *digest, unsigned int dlen,
 	return ret;
 }
 
-
+unsigned int x_hmac(void *digest, unsigned int dlen,
+		const EVP_MD *md,
+		const void *KI, unsigned int KI_len,
+		const void *data, size_t size)
+{
+	struct iovec vec = { (void *)data, size };
+	return x_hmac(digest, dlen, md, KI, KI_len, &vec, 1);
+}
