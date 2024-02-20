@@ -225,6 +225,7 @@ TARGET_SRC_libnxsmb := \
 		lib/ntstatus \
 		lib/werror \
 		lib/SpookyV2 \
+		lib/ntlmssp \
 
 
 $(TARGET_DIR_out)/libnxsmb.a: \
@@ -303,3 +304,5 @@ test: $(TARGET_SET_tests:%=$(TARGET_DIR_out)/tests/%)
 	$(TARGET_DIR_out)/tests/test-ntlmssp
 	$(TARGET_DIR_out)/tests/test-timeout
 	
+TESTS_LDFLAGS_test-ntlmssp := -lcrypto
+
