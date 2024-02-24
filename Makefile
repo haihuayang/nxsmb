@@ -226,6 +226,7 @@ TARGET_SRC_libnxsmb := \
 		lib/werror \
 		lib/SpookyV2 \
 		lib/ntlmssp \
+		lib/spnego \
 
 
 $(TARGET_DIR_out)/libnxsmb.a: \

@@ -7,11 +7,12 @@
 #endif
 
 #include "xdefines.h"
+#include "utils.hxx"
 #include <vector>
 #include <stdint.h>
 
 #define X_ASN1_METHOD(type_name) \
-inline int x_asn1_encode(const type_name &arg, std::vector<uint8_t> &out) \
+static inline int x_asn1_encode(const type_name &arg, std::vector<uint8_t> &out) \
 { \
 	size_t size = length_##type_name(&arg); \
 	out.resize(size); \
@@ -21,11 +22,12 @@ inline int x_asn1_encode(const type_name &arg, std::vector<uint8_t> &out) \
 	return ret; \
 } \
  \
-inline int x_asn1_decode(type_name &arg, const uint8_t *data, size_t size, size_t *pconsumed) \
+static inline int x_asn1_decode(type_name &arg, const uint8_t *data, size_t size, size_t *pconsumed) \
 { \
 	return decode_##type_name(data, size, &arg, pconsumed); \
 } \
-inline void x_asn1_free(type_name &arg) \
+ \
+static inline void x_asn1_free(type_name &arg) \
 { \
 	free_##type_name(&arg); \
 }
