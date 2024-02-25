@@ -134,7 +134,8 @@ static x_job_t::retval_t epoll_job_run(x_job_t *job, void *data)
 
 	x_fdevents_t oval, nval;
 	entry->modify_fdevents(fdevents, &oval, &nval);
-	X_LOG(EVENT, DBG, "fdevents=0x%lx, oval=0x%lx, nval=0x%lx", fdevents, oval, nval);
+	X_LOG(EVENT, DBG, "%d fdevents=0x%lx, oval=0x%lx, nval=0x%lx",
+			evtmgmt->get_entry_fd(entry), fdevents, oval, nval);
 	uint32_t ret = x_fdevents_processable(nval);
 	if (ret == 0) {
 		return x_job_t::JOB_BLOCKED;
@@ -172,6 +173,7 @@ static bool x_evtmgmt_modify_fdevents(x_evtmgmt_t *ep, uint64_t id, x_fdevents_t
 {
 	x_epoll_entry_t *entry = ep->find_by_id(id);
 	if (!entry) {
+		X_LOG(EVENT, DBG, "id=x%lx not found", id);
 		return false;
 	}
 	__evtmgmt_modify_fdevents(ep, entry, fdevents);

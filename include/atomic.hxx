@@ -7,6 +7,7 @@
 #endif
 
 #include "xdefines.h"
+#include "utils.hxx"
 #include <assert.h>
 #include <atomic>
 
