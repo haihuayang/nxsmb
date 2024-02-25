@@ -269,7 +269,7 @@ x_ndr_off_t ndr_traits_t<AUTHENTICATE_MESSAGE>::scalars(const AUTHENTICATE_MESSA
 	NTLMSSP_SCALARS_RELATIVE_PTR();
 	NTLMSSP_SCALARS_RELATIVE_PTR();
 	X_NDR_SCALARS_DEFAULT(val.NegotiateFlags, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
-	X_NDR_SCALARS_DEFAULT(val.Version, ndr, bpos, epos, flags, val.NegotiateFlags&NTLMSSP_NEGOTIATE_VERSION);
+	X_NDR_SCALARS_DEFAULT(val.Version, ndr, bpos, epos, flags, NTLMSSP_NEGOTIATE_VERSION);
 	X_NDR_SCALARS_DEFAULT(val.mic, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
 	X_NDR_TRAILER_ALIGN(5, ndr, bpos, epos, flags);
 	return bpos;
@@ -305,7 +305,7 @@ x_ndr_off_t ndr_traits_t<AUTHENTICATE_MESSAGE>::scalars(AUTHENTICATE_MESSAGE &va
 	NTLMSSP_SCALARS_RELATIVE_PTR();
 	NTLMSSP_SCALARS_RELATIVE_PTR();
 	X_NDR_SCALARS_DEFAULT(val.NegotiateFlags, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
-	X_NDR_SCALARS_DEFAULT(val.Version, ndr, bpos, epos, flags, val.NegotiateFlags&NTLMSSP_NEGOTIATE_VERSION);
+	X_NDR_SCALARS_DEFAULT(val.Version, ndr, bpos, epos, flags, val.NegotiateFlags);
 	X_NDR_SCALARS_DEFAULT(val.mic, ndr, bpos, epos, flags, X_NDR_SWITCH_NONE);
 	X_NDR_TRAILER_ALIGN(5, ndr, bpos, epos, flags);
 	return bpos;
@@ -335,7 +335,7 @@ void ndr_traits_t<AUTHENTICATE_MESSAGE>::ostr(const AUTHENTICATE_MESSAGE &val,
 	X_NDR_OSTR_FIELD_PTR_DEFAULT(Workstation, val, ndr, x_ndr_set_flags(flags, ndr_ntlmssp_negotiated_string_flags(val.NegotiateFlags)), X_NDR_SWITCH_NONE);
 	X_NDR_OSTR_FIELD_PTR_DEFAULT(EncryptedRandomSessionKey, val, ndr, flags, X_NDR_SWITCH_NONE);
 	X_NDR_OSTR_FIELD_DEFAULT(NegotiateFlags, val, ndr, flags, X_NDR_SWITCH_NONE);
-	X_NDR_OSTR_FIELD_DEFAULT(Version, val, ndr, flags, val.NegotiateFlags&NTLMSSP_NEGOTIATE_VERSION);
+	X_NDR_OSTR_FIELD_DEFAULT(Version, val, ndr, flags, val.NegotiateFlags);
 	X_NDR_OSTR_FIELD_DEFAULT(mic, val, ndr, flags, X_NDR_SWITCH_NONE);
 	(ndr) << leave;
 }
