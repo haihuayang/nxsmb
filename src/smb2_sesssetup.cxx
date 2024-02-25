@@ -8,26 +8,6 @@ enum {
 	SESSSETUP_TIMEOUT = 60 * 1000000000l,
 };
 
-struct x_smb2_sesssetup_requ_t
-{
-	uint16_t struct_size;
-	uint8_t flags;
-	uint8_t security_mode;
-	uint32_t capabilities;
-	uint32_t channel;
-	uint16_t security_buffer_offset;
-	uint16_t security_buffer_length;
-	uint64_t previous_session;
-};
-
-struct x_smb2_sesssetup_resp_t
-{
-	uint16_t struct_size;
-	uint16_t session_flags;
-	uint16_t security_buffer_offset;
-	uint16_t security_buffer_length;
-};
-
 
 static void x_smb2_reply_sesssetup(x_smbd_conn_t *smbd_conn,
 		x_smbd_chan_t *smbd_chan,

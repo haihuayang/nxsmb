@@ -5,24 +5,6 @@
 #include "smbd_conf.hxx"
 #include "smbd_requ.hxx"
 
-struct x_smb2_tcon_requ_t
-{
-	uint16_t struct_size;
-	uint16_t flags;
-	uint16_t path_offset;
-	uint16_t path_length;
-};
-
-struct x_smb2_tcon_resp_t
-{
-	uint16_t struct_size;
-	uint8_t share_type;
-	uint8_t unused0;
-	uint32_t share_flags;
-	uint32_t share_capabilities;
-	uint32_t access_mask;
-};
-
 
 #if 0
 static x_smbd_tcon_t *make_tcon(x_smbd_sess_t *smbd_sess,

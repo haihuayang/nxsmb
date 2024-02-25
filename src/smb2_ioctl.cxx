@@ -10,33 +10,16 @@
 #include <fcntl.h>
 #include <sys/types.h>
 
-struct x_smb2_in_ioctl_t
-{
-	uint16_t struct_size;
-	uint16_t reserved0;
-	uint32_t ctl_code;
-	uint64_t file_id_persistent;
-	uint64_t file_id_volatile;
-	uint32_t input_offset;
-	uint32_t input_length;
-	uint32_t max_input_length;
-	uint32_t output_offset;
-	uint32_t output_length;
-	uint32_t max_output_length;
-	uint32_t flags;
-	uint32_t reserved1;
-};
-
 static bool decode_in_ioctl(x_smbd_requ_state_ioctl_t &state,
 		x_buf_t *in_buf, uint32_t in_offset, uint32_t in_len)
 {
 	const uint8_t *in_hdr = in_buf->data + in_offset;
-	const x_smb2_in_ioctl_t *in_ioctl = (const x_smb2_in_ioctl_t *)(in_hdr + sizeof(x_smb2_header_t));
+	const x_smb2_ioctl_requ_t *in_ioctl = (const x_smb2_ioctl_requ_t *)(in_hdr + sizeof(x_smb2_header_t));
 	uint32_t in_input_offset = X_LE2H16(in_ioctl->input_offset);
 	uint32_t in_input_length = X_LE2H32(in_ioctl->input_length);
 
 	if (!x_check_range<uint32_t>(in_input_offset, in_input_length,
-				sizeof(x_smb2_header_t) + sizeof(x_smb2_in_ioctl_t), in_len)) {
+				sizeof(x_smb2_header_t) + sizeof(x_smb2_ioctl_requ_t), in_len)) {
 		return false;
 	}
 
@@ -55,33 +38,19 @@ static bool decode_in_ioctl(x_smbd_requ_state_ioctl_t &state,
 	return true;
 }
 
-struct x_smb2_out_ioctl_t
-{
-	uint16_t struct_size;
-	uint16_t reserved0;
-	uint32_t ctl_code;
-	uint64_t file_id_persistent;
-	uint64_t file_id_volatile;
-	uint32_t input_offset;
-	uint32_t input_length;
-	uint32_t output_offset;
-	uint32_t output_length;
-	uint64_t reserved1;
-};
-
 static void encode_out_ioctl(const x_smbd_requ_state_ioctl_t &state,
 		uint8_t *out_hdr)
 {
-	x_smb2_out_ioctl_t *out_ioctl = (x_smb2_out_ioctl_t *)(out_hdr + sizeof(x_smb2_header_t));
-	out_ioctl->struct_size = X_H2LE16(sizeof(x_smb2_out_ioctl_t) + 1);
+	x_smb2_ioctl_resp_t *out_ioctl = (x_smb2_ioctl_resp_t *)(out_hdr + sizeof(x_smb2_header_t));
+	out_ioctl->struct_size = X_H2LE16(sizeof(x_smb2_ioctl_resp_t) + 1);
 
 	out_ioctl->reserved0 = 0;
 	out_ioctl->ctl_code = X_H2LE32(state.ctl_code);
 	out_ioctl->file_id_persistent = X_H2LE64(state.in_file_id_persistent);
 	out_ioctl->file_id_volatile = X_H2LE64(state.in_file_id_volatile);
-	out_ioctl->input_offset = X_H2LE32(sizeof(x_smb2_header_t) + sizeof(x_smb2_out_ioctl_t));
+	out_ioctl->input_offset = X_H2LE32(sizeof(x_smb2_header_t) + sizeof(x_smb2_ioctl_resp_t));
 	out_ioctl->input_length = 0;
-	out_ioctl->output_offset = X_H2LE32(sizeof(x_smb2_header_t) + sizeof(x_smb2_out_ioctl_t));
+	out_ioctl->output_offset = X_H2LE32(sizeof(x_smb2_header_t) + sizeof(x_smb2_ioctl_resp_t));
 	out_ioctl->output_length = X_H2LE32(state.out_buf_length);
 	out_ioctl->reserved1 = 0;
 }
@@ -91,7 +60,7 @@ static void x_smb2_reply_ioctl(x_smbd_conn_t *smbd_conn,
 		NTSTATUS status,
 		x_smbd_requ_state_ioctl_t &state)
 {
-	x_bufref_t *bufref = x_smb2_bufref_alloc(sizeof(x_smb2_out_ioctl_t));
+	x_bufref_t *bufref = x_smb2_bufref_alloc(sizeof(x_smb2_ioctl_resp_t));
 	if (state.out_buf_length) {
 		bufref->next = new x_bufref_t(state.out_buf, 0, state.out_buf_length);
 		state.out_buf = nullptr;
@@ -102,7 +71,7 @@ static void x_smb2_reply_ioctl(x_smbd_conn_t *smbd_conn,
 
 	x_smb2_reply(smbd_conn, smbd_requ, bufref,
 			bufref->next ? bufref->next : bufref, status, 
-			sizeof(x_smb2_header_t) + sizeof(x_smb2_out_ioctl_t) + state.out_buf_length);
+			sizeof(x_smb2_header_t) + sizeof(x_smb2_ioctl_resp_t) + state.out_buf_length);
 }
 
 
@@ -307,7 +276,7 @@ static NTSTATUS x_smb2_fsctl_dfs_get_referrals(
 			in_data + 2, state.in_buf_length - 2);
 }
 
-struct x_smb2_in_refers_ex_t
+struct x_smb2_refers_ex_requ_t
 {
 	uint16_t max_referral_level;
 	uint16_t request_flags;
@@ -322,11 +291,11 @@ static NTSTATUS x_smb2_fsctl_dfs_get_referrals_ex(
 		return NT_STATUS_INVALID_PARAMETER;
 	}
 
-	if (state.in_buf_length < sizeof(x_smb2_in_refers_ex_t) + 2) {
+	if (state.in_buf_length < sizeof(x_smb2_refers_ex_requ_t) + 2) {
 		return NT_STATUS_INVALID_PARAMETER;
 	}
 	const uint8_t *in_data = state.in_buf->data + state.in_buf_offset;
-	x_smb2_in_refers_ex_t in_refers_ex;
+	x_smb2_refers_ex_requ_t in_refers_ex;
 	memcpy(&in_refers_ex, in_data, sizeof(in_refers_ex));
 
 	in_refers_ex.max_referral_level = X_LE2H16(in_refers_ex.max_referral_level);
@@ -336,7 +305,7 @@ static NTSTATUS x_smb2_fsctl_dfs_get_referrals_ex(
 		return NT_STATUS_INVALID_PARAMETER;
 	}
 
-	if (in_refers_ex.request_size > state.in_buf_length - sizeof(x_smb2_in_refers_ex_t)) {
+	if (in_refers_ex.request_size > state.in_buf_length - sizeof(x_smb2_refers_ex_requ_t)) {
 		return NT_STATUS_INVALID_PARAMETER;
 	}
 
@@ -348,7 +317,7 @@ static NTSTATUS x_smb2_fsctl_dfs_get_referrals_ex(
 
 	return fsctl_dfs_get_refers_internal(smbd_conn, state,
 			in_refers_ex.max_referral_level,
-			in_data + sizeof(x_smb2_in_refers_ex_t) + 2,
+			in_data + sizeof(x_smb2_refers_ex_requ_t) + 2,
 			in_file_name_size);
 }
 
@@ -732,7 +701,7 @@ static NTSTATUS x_smbd_open_ioctl(x_smbd_conn_t *smbd_conn,
 
 NTSTATUS x_smb2_process_ioctl(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 {
-	if (smbd_requ->in_requ_len < sizeof(x_smb2_header_t) + sizeof(x_smb2_in_ioctl_t)) {
+	if (smbd_requ->in_requ_len < sizeof(x_smb2_header_t) + sizeof(x_smb2_ioctl_requ_t)) {
 		X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
 
@@ -808,7 +777,7 @@ enum {
 NTSTATUS x_smb2_process_ioctl_torture(x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ)
 {
-	if (smbd_requ->in_requ_len < sizeof(x_smb2_header_t) + sizeof(x_smb2_in_ioctl_t)) {
+	if (smbd_requ->in_requ_len < sizeof(x_smb2_header_t) + sizeof(x_smb2_ioctl_requ_t)) {
 		X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
 

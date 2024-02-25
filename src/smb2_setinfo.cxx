@@ -8,40 +8,22 @@ enum {
 };
 }
 
-struct x_smb2_in_setinfo_t
-{
-	uint16_t struct_size;
-	uint8_t  info_class;
-	uint8_t  info_level;
-	uint32_t input_buffer_length;
-	uint16_t input_buffer_offset;
-	uint16_t reserve;
-	uint32_t additional;
-	uint64_t file_id_persistent;
-	uint64_t file_id_volatile;
-};
-
-struct x_smb2_out_setinfo_t
-{
-	uint16_t struct_size;
-};
-
 static void encode_out_setinfo(uint8_t *out_hdr)
 {
-	x_smb2_out_setinfo_t *out_setinfo = (x_smb2_out_setinfo_t *)(out_hdr + sizeof(x_smb2_header_t));
-	out_setinfo->struct_size = X_H2LE16(sizeof(x_smb2_out_setinfo_t));
+	x_smb2_setinfo_resp_t *out_setinfo = (x_smb2_setinfo_resp_t *)(out_hdr + sizeof(x_smb2_header_t));
+	out_setinfo->struct_size = X_H2LE16(sizeof(x_smb2_setinfo_resp_t));
 }
 
 static void x_smb2_reply_setinfo(x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ)
 {
-	x_bufref_t *bufref = x_smb2_bufref_alloc(sizeof(x_smb2_out_setinfo_t));
+	x_bufref_t *bufref = x_smb2_bufref_alloc(sizeof(x_smb2_setinfo_resp_t));
 
 	uint8_t *out_hdr = bufref->get_data();
 	encode_out_setinfo(out_hdr);
 
 	x_smb2_reply(smbd_conn, smbd_requ, bufref, bufref, NT_STATUS_OK, 
-			sizeof(x_smb2_header_t) + sizeof(x_smb2_out_setinfo_t));
+			sizeof(x_smb2_header_t) + sizeof(x_smb2_setinfo_resp_t));
 }
 
 static NTSTATUS decode_in_rename(x_smbd_requ_state_rename_t &state,
@@ -185,18 +167,18 @@ static NTSTATUS x_smb2_process_disposition(x_smbd_conn_t *smbd_conn,
 
 NTSTATUS x_smb2_process_setinfo(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 {
-	if (smbd_requ->in_requ_len < sizeof(x_smb2_header_t) + sizeof(x_smb2_in_setinfo_t)) {
+	if (smbd_requ->in_requ_len < sizeof(x_smb2_header_t) + sizeof(x_smb2_setinfo_requ_t)) {
 		X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
 
 	const uint8_t *in_hdr = smbd_requ->get_in_data();
 	uint32_t in_len = smbd_requ->in_requ_len;
-	const x_smb2_in_setinfo_t *in_setinfo = (const x_smb2_in_setinfo_t *)(in_hdr + sizeof(x_smb2_header_t));
+	const x_smb2_setinfo_requ_t *in_setinfo = (const x_smb2_setinfo_requ_t *)(in_hdr + sizeof(x_smb2_header_t));
 	uint16_t in_input_buffer_offset = X_LE2H16(in_setinfo->input_buffer_offset);
 	uint32_t in_input_buffer_length = X_LE2H32(in_setinfo->input_buffer_length);
 
 	if (!x_check_range<uint32_t>(in_input_buffer_offset, in_input_buffer_length,
-				sizeof(x_smb2_header_t) + sizeof(x_smb2_in_setinfo_t), in_len)) {
+				sizeof(x_smb2_header_t) + sizeof(x_smb2_setinfo_requ_t), in_len)) {
 		X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
 

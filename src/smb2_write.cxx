@@ -11,31 +11,16 @@ enum {
 };
 }
 
-struct x_smb2_in_write_t
-{
-	uint16_t struct_size;
-	uint16_t data_offset;
-	uint32_t length;
-	uint64_t offset;
-	uint64_t file_id_persistent;
-	uint64_t file_id_volatile;
-	uint32_t channel;
-	uint32_t remaining_bytes;
-	uint16_t write_channel_info_offset;
-	uint16_t write_channel_info_length;
-	uint32_t flags;
-};
-
 static bool decode_in_write(x_smbd_requ_state_write_t &state,
 		x_buf_t *in_buf, uint32_t in_offset, uint32_t in_len)
 {
 	const uint8_t *in_hdr = in_buf->data + in_offset;
-	const x_smb2_in_write_t *in_write = (const x_smb2_in_write_t *)(in_hdr  + sizeof(x_smb2_header_t));
+	const x_smb2_write_requ_t *in_write = (const x_smb2_write_requ_t *)(in_hdr  + sizeof(x_smb2_header_t));
 	uint16_t in_data_offset = X_LE2H16(in_write->data_offset);
 	uint32_t in_length = X_LE2H32(in_write->length);
 
 	if (!x_check_range<uint32_t>(in_data_offset, in_length,
-				sizeof(x_smb2_header_t) + sizeof(x_smb2_in_write_t), in_len)) {
+				sizeof(x_smb2_header_t) + sizeof(x_smb2_write_requ_t), in_len)) {
 		return false;
 	}
 
@@ -56,21 +41,11 @@ static bool decode_in_write(x_smbd_requ_state_write_t &state,
 	return true;
 }
 
-struct x_smb2_out_write_t
-{
-	uint16_t struct_size;
-	uint16_t reserved0;
-	uint32_t count;
-	uint32_t remaining;
-	uint16_t write_channel_info_offset;
-	uint16_t write_channel_info_length;
-};
-
 static void encode_out_write(const x_smbd_requ_state_write_t &state,
 		uint8_t *out_hdr)
 {
-	x_smb2_out_write_t *out_write = (x_smb2_out_write_t *)(out_hdr + sizeof(x_smb2_header_t));
-	out_write->struct_size = X_H2LE16(sizeof(x_smb2_out_write_t) + 1);
+	x_smb2_write_resp_t *out_write = (x_smb2_write_resp_t *)(out_hdr + sizeof(x_smb2_header_t));
+	out_write->struct_size = X_H2LE16(sizeof(x_smb2_write_resp_t) + 1);
 	out_write->reserved0 = 0;
 	out_write->count = X_H2LE32(state.out_count);
 	out_write->remaining = X_H2LE32(state.out_remaining);
@@ -82,13 +57,13 @@ static void x_smb2_reply_write(x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ,
 		const x_smbd_requ_state_write_t &state)
 {
-	x_bufref_t *bufref = x_smb2_bufref_alloc(sizeof(x_smb2_out_write_t));
+	x_bufref_t *bufref = x_smb2_bufref_alloc(sizeof(x_smb2_write_resp_t));
 
 	uint8_t *out_hdr = bufref->get_data();
 	encode_out_write(state, out_hdr);
 
 	x_smb2_reply(smbd_conn, smbd_requ, bufref, bufref, NT_STATUS_OK, 
-			sizeof(x_smb2_header_t) + sizeof(x_smb2_out_write_t));
+			sizeof(x_smb2_header_t) + sizeof(x_smb2_write_resp_t));
 }
 
 void x_smbd_requ_state_write_t::async_done(x_smbd_conn_t *smbd_conn,
@@ -107,7 +82,7 @@ void x_smbd_requ_state_write_t::async_done(x_smbd_conn_t *smbd_conn,
 
 NTSTATUS x_smb2_process_write(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 {
-	if (smbd_requ->in_requ_len < sizeof(x_smb2_header_t) + sizeof(x_smb2_in_write_t)) {
+	if (smbd_requ->in_requ_len < sizeof(x_smb2_header_t) + sizeof(x_smb2_write_requ_t)) {
 		X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
 

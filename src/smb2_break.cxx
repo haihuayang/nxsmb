@@ -2,42 +2,6 @@
 #include "smbd_open.hxx"
 #include "smbd_lease.hxx"
 
-/* oplock break notification, acknowledgement, response */
-struct x_smb2_oplock_break_t
-{
-	uint16_t struct_size;
-	uint8_t oplock_level;
-	uint8_t reserved0;
-	uint32_t reserved1;
-	uint64_t file_id_persistent;
-	uint64_t file_id_volatile;
-};
-
-/* lease break acknowledgement, response */
-struct x_smb2_lease_break_t
-{
-	uint16_t struct_size;
-	uint16_t reserved0;
-	uint32_t flags;
-	x_smb2_lease_key_t key;
-	uint32_t state;
-	uint32_t duration_low; // duration is not 8-byte aligned, so split into 2
-	uint32_t duration_high;
-} __attribute__((packed));
-
-struct x_smb2_lease_break_noti_t
-{
-	uint16_t struct_size;
-	uint16_t new_epoch;
-	uint32_t flags;
-	x_smb2_lease_key_t key;
-	uint32_t current_state;
-	uint32_t new_state;
-	uint32_t reason;
-	uint32_t access_mask_hint;
-	uint32_t share_mask_hint;
-} __attribute__((packed));
-
 static void decode_in_lease_break(x_smbd_requ_state_lease_break_t &state,
 		const x_smb2_lease_break_t *in_lease_break)
 {

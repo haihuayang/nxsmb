@@ -5,37 +5,6 @@
 
 namespace {
 
-struct x_smb2_negprot_requ_t
-{
-	uint16_t struct_size;
-	uint16_t dialect_count;
-	uint16_t security_mode;
-	uint16_t unused0;
-	uint32_t capabilities;
-	x_smb2_uuid_bytes_t client_guid;
-	uint32_t context_offset;
-	uint16_t context_count;
-	uint16_t unused1;
-};
-
-struct x_smb2_negprot_resp_t
-{
-	uint16_t struct_size;
-	uint16_t security_mode;
-	uint16_t dialect;
-	uint16_t context_count;
-	x_smb2_uuid_bytes_t server_guid;
-	uint32_t capabilities;
-	uint32_t max_trans_size;
-	uint32_t max_read_size;
-	uint32_t max_write_size;
-	uint64_t system_time;
-	uint64_t server_start_time;
-	uint16_t security_buffer_offset;
-	uint16_t security_buffer_length;
-	uint32_t context_offset;
-};
-
 struct x_smb2_negprot_context_header_t
 {
 	uint16_t type;

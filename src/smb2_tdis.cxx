@@ -2,15 +2,6 @@
 #include "smbd.hxx"
 #include "smbd_requ.hxx"
 
-struct x_smb2_tdis_t
-{
-	uint16_t struct_size;
-	uint16_t unused0;
-};
-
-using x_smb2_tdis_requ_t = x_smb2_tdis_t;
-using x_smb2_tdis_resp_t = x_smb2_tdis_t;
-
 static void x_smb2_reply_tdis(x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ, NTSTATUS status)
 {

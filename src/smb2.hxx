@@ -624,6 +624,138 @@ struct x_smb2_preauth_t
 	void update(const void *data, size_t length);
 };
 
+struct x_smb2_negprot_requ_t
+{
+	uint16_t struct_size;
+	uint16_t dialect_count;
+	uint16_t security_mode;
+	uint16_t unused0;
+	uint32_t capabilities;
+	x_smb2_uuid_bytes_t client_guid;
+	uint32_t context_offset;
+	uint16_t context_count;
+	uint16_t unused1;
+};
+
+struct x_smb2_negprot_resp_t
+{
+	uint16_t struct_size;
+	uint16_t security_mode;
+	uint16_t dialect;
+	uint16_t context_count;
+	x_smb2_uuid_bytes_t server_guid;
+	uint32_t capabilities;
+	uint32_t max_trans_size;
+	uint32_t max_read_size;
+	uint32_t max_write_size;
+	uint64_t system_time;
+	uint64_t server_start_time;
+	uint16_t security_buffer_offset;
+	uint16_t security_buffer_length;
+	uint32_t context_offset;
+};
+
+struct x_smb2_sesssetup_requ_t
+{
+	uint16_t struct_size;
+	uint8_t flags;
+	uint8_t security_mode;
+	uint32_t capabilities;
+	uint32_t channel;
+	uint16_t security_buffer_offset;
+	uint16_t security_buffer_length;
+	uint64_t previous_session;
+};
+
+struct x_smb2_sesssetup_resp_t
+{
+	uint16_t struct_size;
+	uint16_t session_flags;
+	uint16_t security_buffer_offset;
+	uint16_t security_buffer_length;
+};
+
+struct x_smb2_logoff_requ_t
+{
+	uint16_t struct_size;
+	uint16_t unused0;
+};
+
+struct x_smb2_logoff_resp_t
+{
+	uint16_t struct_size;
+	uint16_t unused0;
+};
+
+struct x_smb2_tcon_requ_t
+{
+	uint16_t struct_size;
+	uint16_t flags;
+	uint16_t path_offset;
+	uint16_t path_length;
+};
+
+struct x_smb2_tcon_resp_t
+{
+	uint16_t struct_size;
+	uint8_t share_type;
+	uint8_t unused0;
+	uint32_t share_flags;
+	uint32_t share_capabilities;
+	uint32_t access_mask;
+};
+
+struct x_smb2_tdis_requ_t
+{
+	uint16_t struct_size;
+	uint16_t unused0;
+};
+
+struct x_smb2_tdis_resp_t
+{
+	uint16_t struct_size;
+	uint16_t unused0;
+};
+
+struct x_smb2_create_requ_t
+{
+	uint16_t struct_size;
+	uint8_t reserved0;
+	uint8_t oplock_level;
+	uint32_t impersonation_level;
+	uint64_t create_flags;
+	uint64_t reserved1;
+	uint32_t desired_access;
+	uint32_t file_attributes;
+	uint32_t share_access;
+	uint32_t create_disposition;
+	uint32_t create_options;
+	uint16_t name_offset;
+	uint16_t name_length;
+	uint32_t context_offset;
+	uint32_t context_length;
+};
+
+struct x_smb2_create_resp_t
+{
+	uint16_t struct_size;
+	uint8_t oplock_level;
+	uint8_t create_flags;
+	uint32_t create_action;
+	uint64_t create_ts;
+	uint64_t last_access_ts;
+	uint64_t last_write_ts;
+	uint64_t change_ts;
+	uint64_t allocation_size;
+	uint64_t end_of_file;
+	uint32_t file_attributes;
+	uint32_t reserved0;
+	uint64_t file_id_persistent;
+	uint64_t file_id_volatile;
+	uint32_t context_offset;
+	uint32_t context_length;
+};
+
 using x_smb2_key_t = std::array<uint8_t, 16>;
 using x_smb2_cryption_key_t = std::array<uint8_t, 32>;
 
@@ -676,6 +808,281 @@ struct x_smb2_create_dh2c_requ_t
 	x_smb2_uuid_t create_guid;
 	uint32_t flags;
 } __attribute__ ((packed));
+
+struct x_smb2_create_close_info_t
+{
+	idl::NTTIME out_create_ts;
+	idl::NTTIME out_last_access_ts;
+	idl::NTTIME out_last_write_ts;
+	idl::NTTIME out_change_ts;
+	uint64_t out_allocation_size{0};
+	uint64_t out_end_of_file{0};
+	uint32_t out_file_attributes{0};
+};
+
+struct x_smb2_close_requ_t
+{
+	uint16_t struct_size;
+	uint16_t flags;
+	uint32_t reserved0;
+	uint64_t file_id_persistent;
+	uint64_t file_id_volatile;
+};
+
+struct x_smb2_close_resp_t
+{
+	uint16_t struct_size;
+	uint16_t flags;
+	uint32_t reserved0;
+	x_smb2_create_close_info_t info;
+};
+
+struct x_smb2_flush_requ_t
+{
+	uint16_t struct_size;
+	uint16_t reserved0;
+	uint32_t reserved1;
+	uint64_t file_id_persistent;
+	uint64_t file_id_volatile;
+};
+
+struct x_smb2_flush_resp_t
+{
+	uint16_t struct_size;
+	uint16_t reserved0;
+};
+
+struct x_smb2_read_requ_t
+{
+	uint16_t struct_size;
+	uint8_t reserved0;
+	uint8_t flags;
+	uint32_t length;
+	uint64_t offset;
+	uint64_t file_id_persistent;
+	uint64_t file_id_volatile;
+	uint32_t minimum_count;
+	uint32_t channel;
+	uint32_t remaining_bytes;
+	uint16_t read_channel_info_offset;
+	uint16_t read_channel_info_length;
+};
+
+struct x_smb2_read_resp_t
+{
+	uint16_t struct_size;
+	uint8_t data_offset;
+	uint8_t reserved0;
+	uint32_t data_length;
+	uint32_t data_remaining;
+	uint32_t reserved1;
+};
+
+struct x_smb2_write_requ_t
+{
+	uint16_t struct_size;
+	uint16_t data_offset;
+	uint32_t length;
+	uint64_t offset;
+	uint64_t file_id_persistent;
+	uint64_t file_id_volatile;
+	uint32_t channel;
+	uint32_t remaining_bytes;
+	uint16_t write_channel_info_offset;
+	uint16_t write_channel_info_length;
+	uint32_t flags;
+};
+
+struct x_smb2_write_resp_t
+{
+	uint16_t struct_size;
+	uint16_t reserved0;
+	uint32_t count;
+	uint32_t remaining;
+	uint16_t write_channel_info_offset;
+	uint16_t write_channel_info_length;
+};
+
+struct x_smb2_lock_element_t
+{
+	uint64_t offset;
+	uint64_t length;
+	uint32_t flags;
+	uint32_t unused;
+};
+
+struct x_smb2_lock_requ_t
+{
+	uint16_t struct_size;
+	uint16_t lock_count;
+	uint32_t lock_sequence_index;
+	uint64_t file_id_persistent;
+	uint64_t file_id_volatile;
+	x_smb2_lock_element_t lock_elements[1];
+};
+
+struct x_smb2_lock_resp_t
+{
+	uint16_t struct_size;
+	uint16_t reserved0;
+};
+
+struct x_smb2_ioctl_requ_t
+{
+	uint16_t struct_size;
+	uint16_t reserved0;
+	uint32_t ctl_code;
+	uint64_t file_id_persistent;
+	uint64_t file_id_volatile;
+	uint32_t input_offset;
+	uint32_t input_length;
+	uint32_t max_input_length;
+	uint32_t output_offset;
+	uint32_t output_length;
+	uint32_t max_output_length;
+	uint32_t flags;
+	uint32_t reserved1;
+};
+
+struct x_smb2_ioctl_resp_t
+{
+	uint16_t struct_size;
+	uint16_t reserved0;
+	uint32_t ctl_code;
+	uint64_t file_id_persistent;
+	uint64_t file_id_volatile;
+	uint32_t input_offset;
+	uint32_t input_length;
+	uint32_t output_offset;
+	uint32_t output_length;
+	uint64_t reserved1;
+};
+
+struct x_smb2_keepalive_requ_t
+{
+	uint16_t struct_size;
+	uint16_t reserved0;
+};
+
+struct x_smb2_keepalive_resp_t
+{
+	uint16_t struct_size;
+	uint16_t reserved0;
+};
+
+struct x_smb2_qdir_requ_t
+{
+	uint16_t struct_size;
+	uint8_t info_level;
+	uint8_t flags;
+	uint32_t file_index;
+	uint64_t file_id_persistent;
+	uint64_t file_id_volatile;
+	uint16_t name_offset;
+	uint16_t name_length;
+	uint32_t output_buffer_length;
+};
+
+struct x_smb2_qdir_resp_t
+{
+	uint16_t struct_size;
+	uint16_t offset;
+	uint32_t length;
+};
+
+struct x_smb2_notify_requ_t
+{
+	uint16_t struct_size;
+	uint16_t flags;
+	uint32_t output_buffer_length;
+	uint64_t file_id_persistent;
+	uint64_t file_id_volatile;
+	uint32_t filter;
+	uint32_t reserved;
+};
+
+struct x_smb2_notify_resp_t
+{
+	uint16_t struct_size;
+	uint16_t output_buffer_offset;
+	uint32_t output_buffer_length;
+};
+
+struct x_smb2_getinfo_requ_t
+{
+	uint16_t struct_size;
+	uint8_t info_class;
+	uint8_t info_level;
+	uint32_t output_buffer_length;
+	uint16_t input_buffer_offset;
+	uint16_t reserved0;
+	uint32_t input_buffer_length;
+	uint32_t additional;
+	uint32_t flags;
+	uint64_t file_id_persistent;
+	uint64_t file_id_volatile;
+};
+
+struct x_smb2_getinfo_resp_t
+{
+	uint16_t struct_size;
+	uint16_t output_buffer_offset;
+	uint32_t output_buffer_length;
+};
+
+struct x_smb2_setinfo_requ_t
+{
+	uint16_t struct_size;
+	uint8_t  info_class;
+	uint8_t  info_level;
+	uint32_t input_buffer_length;
+	uint16_t input_buffer_offset;
+	uint16_t reserve;
+	uint32_t additional;
+	uint64_t file_id_persistent;
+	uint64_t file_id_volatile;
+};
+
+struct x_smb2_setinfo_resp_t
+{
+	uint16_t struct_size;
+};
+
+/* oplock break notification, acknowledgement, response */
+struct x_smb2_oplock_break_t
+{
+	uint16_t struct_size;
+	uint8_t oplock_level;
+	uint8_t reserved0;
+	uint32_t reserved1;
+	uint64_t file_id_persistent;
+	uint64_t file_id_volatile;
+};
+
+/* lease break acknowledgement, response */
+struct x_smb2_lease_break_t
+{
+	uint16_t struct_size;
+	uint16_t reserved0;
+	uint32_t flags;
+	x_smb2_lease_key_t key;
+	uint32_t state;
+	uint32_t duration_low; // duration is not 8-byte aligned, so split into 2
+	uint32_t duration_high;
+} __attribute__((packed));
+
+struct x_smb2_lease_break_noti_t
+{
+	uint16_t struct_size;
+	uint16_t new_epoch;
+	uint32_t flags;
+	x_smb2_lease_key_t key;
+	uint32_t current_state;
+	uint32_t new_state;
+	uint32_t reason;
+	uint32_t access_mask_hint;
+	uint32_t share_mask_hint;
+} __attribute__((packed));
 
 
 static inline x_buf_t *x_smb2_alloc_out_buf(size_t body_size)
@@ -773,17 +1180,6 @@ NTSTATUS x_smb2_parse_stream_name(std::u16string &stream_name,
 
 struct x_smb2_state_negprot_t
 {
-};
-
-struct x_smb2_create_close_info_t
-{
-	idl::NTTIME out_create_ts;
-	idl::NTTIME out_last_access_ts;
-	idl::NTTIME out_last_write_ts;
-	idl::NTTIME out_change_ts;
-	uint64_t out_allocation_size{0};
-	uint64_t out_end_of_file{0};
-	uint32_t out_file_attributes{0};
 };
 
 struct x_smb2_file_standard_info_t
@@ -1115,14 +1511,6 @@ static inline bool x_smb2_file_id_is_nul(uint64_t file_id_persistent,
 	return file_id_persistent == UINT64_MAX &&
 		file_id_volatile == UINT64_MAX;
 }
-
-struct x_smb2_lock_element_t
-{
-	uint64_t offset;
-	uint64_t length;
-	uint32_t flags;
-	uint32_t unused;
-};
 
 #endif /* __smb2__hxx__ */
 

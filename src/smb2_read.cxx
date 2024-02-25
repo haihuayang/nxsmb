@@ -11,26 +11,10 @@ enum {
 };
 }
 
-struct x_smb2_in_read_t
-{
-	uint16_t struct_size;
-	uint8_t reserved0;
-	uint8_t flags;
-	uint32_t length;
-	uint64_t offset;
-	uint64_t file_id_persistent;
-	uint64_t file_id_volatile;
-	uint32_t minimum_count;
-	uint32_t channel;
-	uint32_t remaining_bytes;
-	uint16_t read_channel_info_offset;
-	uint16_t read_channel_info_length;
-};
-
 static void decode_in_read(x_smbd_requ_state_read_t &state,
 		const uint8_t *in_hdr)
 {
-	const x_smb2_in_read_t *in_read = (const x_smb2_in_read_t *)(in_hdr + sizeof(x_smb2_header_t));
+	const x_smb2_read_requ_t *in_read = (const x_smb2_read_requ_t *)(in_hdr + sizeof(x_smb2_header_t));
 	state.in_flags = X_LE2H8(in_read->flags);
 	state.in_length = X_LE2H32(in_read->length);
 	state.in_offset = X_LE2H64(in_read->offset);
@@ -39,16 +23,6 @@ static void decode_in_read(x_smbd_requ_state_read_t &state,
 	state.in_minimum_count = X_LE2H32(in_read->minimum_count);
 }
 
-struct x_smb2_out_read_t
-{
-	uint16_t struct_size;
-	uint8_t data_offset;
-	uint8_t reserved0;
-	uint32_t data_length;
-	uint32_t data_remaining;
-	uint32_t reserved1;
-};
-
 static void x_smb2_reply_read(x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ,
 		x_smbd_requ_state_read_t &state)
@@ -56,7 +30,7 @@ static void x_smb2_reply_read(x_smbd_conn_t *smbd_conn,
 	smbd_requ->smbd_open->open_state.current_offset =
 		state.in_offset + state.in_length;
 
-	x_bufref_t *bufref = x_smb2_bufref_alloc(sizeof(x_smb2_out_read_t));
+	x_bufref_t *bufref = x_smb2_bufref_alloc(sizeof(x_smb2_read_resp_t));
 	if (state.out_buf) {
 		bufref->next = new x_bufref_t(state.out_buf, 0, state.out_buf_length);
 		state.out_buf = nullptr;
@@ -64,9 +38,9 @@ static void x_smb2_reply_read(x_smbd_conn_t *smbd_conn,
 
 	uint8_t *out_hdr = bufref->get_data();
 
-	x_smb2_out_read_t *out_read = (x_smb2_out_read_t *)(out_hdr + sizeof(x_smb2_header_t));
-	out_read->struct_size = X_H2LE16(sizeof(x_smb2_out_read_t) + 1);
-	out_read->data_offset = sizeof(x_smb2_header_t) + sizeof(x_smb2_out_read_t);
+	x_smb2_read_resp_t *out_read = (x_smb2_read_resp_t *)(out_hdr + sizeof(x_smb2_header_t));
+	out_read->struct_size = X_H2LE16(sizeof(x_smb2_read_resp_t) + 1);
+	out_read->data_offset = sizeof(x_smb2_header_t) + sizeof(x_smb2_read_resp_t);
 	out_read->reserved0 = 0;
 	out_read->data_length = X_H2LE32(state.out_buf_length);
 	out_read->data_remaining = 0;
@@ -74,7 +48,7 @@ static void x_smb2_reply_read(x_smbd_conn_t *smbd_conn,
 
 	x_smb2_reply(smbd_conn, smbd_requ, bufref,
 			bufref->next ? bufref->next : bufref, NT_STATUS_OK, 
-			sizeof(x_smb2_header_t) + sizeof(x_smb2_out_read_t) + state.out_buf_length);
+			sizeof(x_smb2_header_t) + sizeof(x_smb2_read_resp_t) + state.out_buf_length);
 }
 
 void x_smbd_requ_state_read_t::async_done(x_smbd_conn_t *smbd_conn,
@@ -101,7 +75,7 @@ NTSTATUS x_smb2_process_read(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 	X_ASSERT(smbd_requ->smbd_chan && smbd_requ->smbd_sess);
 
 	// TODO smbd_smb2_request_verify_creditcharge
-	if (smbd_requ->in_requ_len < sizeof(x_smb2_header_t) + sizeof(x_smb2_in_read_t)) {
+	if (smbd_requ->in_requ_len < sizeof(x_smb2_header_t) + sizeof(x_smb2_read_requ_t)) {
 		X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
 

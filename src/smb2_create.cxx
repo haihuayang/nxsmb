@@ -32,25 +32,6 @@ struct x_smb2_create_requ_app_instance_version_t
 	uint64_t app_instance_version_low;
 };
 
-struct x_smb2_in_create_t
-{
-	uint16_t struct_size;
-	uint8_t reserved0;
-	uint8_t oplock_level;
-	uint32_t impersonation_level;
-	uint64_t create_flags;
-	uint64_t reserved1;
-	uint32_t desired_access;
-	uint32_t file_attributes;
-	uint32_t share_access;
-	uint32_t create_disposition;
-	uint32_t create_options;
-	uint16_t name_offset;
-	uint16_t name_length;
-	uint32_t context_offset;
-	uint32_t context_length;
-};
-
 static bool decode_smb2_lease(x_smb2_lease_t &lease,
 		const uint8_t *data, uint32_t length)
 {
@@ -470,7 +451,7 @@ static bool normalize_path(std::u16string &path,
 static NTSTATUS decode_in_create(uint16_t dialect, x_smbd_requ_state_create_t &state,
 		const uint8_t *in_hdr, uint32_t in_len)
 {
-	const x_smb2_in_create_t *in_create = (const x_smb2_in_create_t *)(in_hdr + sizeof(x_smb2_header_t));
+	const x_smb2_create_requ_t *in_create = (const x_smb2_create_requ_t *)(in_hdr + sizeof(x_smb2_header_t));
 	uint16_t in_struct_size		 = X_LE2H16(in_create->struct_size);
 	if (in_struct_size != sizeof(*in_create) + 1) {
 		return NT_STATUS_INVALID_PARAMETER;
@@ -482,12 +463,12 @@ static NTSTATUS decode_in_create(uint16_t dialect, x_smbd_requ_state_create_t &s
 	uint32_t in_context_length       = X_LE2H32(in_create->context_length);
 
 	if (in_name_length % 2 != 0 || !x_check_range<uint32_t>(in_name_offset, in_name_length, 
-				sizeof(x_smb2_header_t) + sizeof(x_smb2_in_create_t), in_len)) {
+				sizeof(x_smb2_header_t) + sizeof(x_smb2_create_requ_t), in_len)) {
 		return NT_STATUS_INVALID_PARAMETER;
 	}
 
 	if (!x_check_range<uint32_t>(in_context_offset, in_context_length, 
-				sizeof(x_smb2_header_t) + sizeof(x_smb2_in_create_t), in_len)) {
+				sizeof(x_smb2_header_t) + sizeof(x_smb2_create_requ_t), in_len)) {
 		return NT_STATUS_INVALID_PARAMETER;
 	}
 
@@ -560,36 +541,16 @@ static NTSTATUS decode_in_create(uint16_t dialect, x_smbd_requ_state_create_t &s
 	return NT_STATUS_OK;
 }
 
-struct x_smb2_out_create_t
-{
-	uint16_t struct_size;
-	uint8_t oplock_level;
-	uint8_t create_flags;
-	uint32_t create_action;
-	uint64_t create_ts;
-	uint64_t last_access_ts;
-	uint64_t last_write_ts;
-	uint64_t change_ts;
-	uint64_t allocation_size;
-	uint64_t end_of_file;
-	uint32_t file_attributes;
-	uint32_t reserved0;
-	uint64_t file_id_persistent;
-	uint64_t file_id_volatile;
-	uint32_t context_offset;
-	uint32_t context_length;
-};
-
 /* it assume output has enough space */
 static uint32_t encode_out_create(const x_smbd_requ_state_create_t &state,
 		x_smbd_open_t *smbd_open, uint8_t *out_hdr)
 {
 	/* TODO we assume max output context 256 */
-	x_smb2_out_create_t *out_create = (x_smb2_out_create_t *)(out_hdr + sizeof(x_smb2_header_t));
+	x_smb2_create_resp_t *out_create = (x_smb2_create_resp_t *)(out_hdr + sizeof(x_smb2_header_t));
 
 	auto [object_meta, stream_meta] = x_smbd_open_op_get_meta(smbd_open);
 
-	out_create->struct_size = X_H2LE16(sizeof(x_smb2_out_create_t) + 1);
+	out_create->struct_size = X_H2LE16(sizeof(x_smb2_create_resp_t) + 1);
 	out_create->oplock_level = state.out_oplock_level;
 	out_create->create_flags = state.out_create_flags;
 	out_create->create_action = X_H2LE32(uint32_t(smbd_open->open_state.create_action));
@@ -605,18 +566,18 @@ static uint32_t encode_out_create(const x_smbd_requ_state_create_t &state,
 	out_create->file_id_persistent = X_H2LE64(id_persistent);
 	out_create->file_id_volatile = X_H2LE64(id_volatile);
 
-	static_assert((sizeof(x_smb2_out_create_t) % 8) == 0);
+	static_assert((sizeof(x_smb2_create_resp_t) % 8) == 0);
 	uint32_t out_context_length = encode_contexts(state,
 			smbd_open->open_state,
 			(uint8_t *)(out_create + 1));
 	if (out_context_length == 0) {
 		out_create->context_offset = out_create->context_length = 0;
 	} else {
-		out_create->context_offset = X_H2LE32(sizeof(x_smb2_header_t) + sizeof(x_smb2_out_create_t));
+		out_create->context_offset = X_H2LE32(sizeof(x_smb2_header_t) + sizeof(x_smb2_create_resp_t));
 		out_create->context_length = X_H2LE32(out_context_length);
 	}
 
-	return x_convert_assert<uint32_t>(sizeof(x_smb2_out_create_t) + out_context_length);
+	return x_convert_assert<uint32_t>(sizeof(x_smb2_create_resp_t) + out_context_length);
 }
 
 static void x_smb2_reply_create(x_smbd_conn_t *smbd_conn,
@@ -632,7 +593,7 @@ static void x_smb2_reply_create(x_smbd_conn_t *smbd_conn,
 		out_context_length += 0x18 + 56;
 	}
 #endif
-	x_bufref_t *bufref = x_smb2_bufref_alloc(sizeof(x_smb2_out_create_t) + out_context_length);
+	x_bufref_t *bufref = x_smb2_bufref_alloc(sizeof(x_smb2_create_resp_t) + out_context_length);
 
 	uint8_t *out_hdr = bufref->get_data();
 
@@ -795,7 +756,7 @@ NTSTATUS x_smb2_process_create(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_req
 	X_ASSERT(smbd_requ->smbd_chan && smbd_requ->smbd_sess);
 	X_ASSERT(!smbd_requ->smbd_open);
 
-	if (smbd_requ->in_requ_len < sizeof(x_smb2_header_t) + sizeof(x_smb2_in_create_t) + 1) {
+	if (smbd_requ->in_requ_len < sizeof(x_smb2_header_t) + sizeof(x_smb2_create_requ_t) + 1) {
 		X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
 

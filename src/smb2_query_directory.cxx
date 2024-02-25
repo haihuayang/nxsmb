@@ -10,29 +10,16 @@ enum {
 	X_SMB2_FIND_RESP_BODY_LEN = 0x08,
 };
 
-struct x_smb2_in_qdir_t
-{
-	uint16_t struct_size;
-	uint8_t info_level;
-	uint8_t flags;
-	uint32_t file_index;
-	uint64_t file_id_persistent;
-	uint64_t file_id_volatile;
-	uint16_t name_offset;
-	uint16_t name_length;
-	uint32_t output_buffer_length;
-};
-
 static bool decode_in_qdir(x_smbd_requ_state_qdir_t &state,
 		const uint8_t *in_hdr, uint32_t in_len)
 {
-	const x_smb2_in_qdir_t *in_qdir = (const x_smb2_in_qdir_t *)(in_hdr + sizeof(x_smb2_header_t));
+	const x_smb2_qdir_requ_t *in_qdir = (const x_smb2_qdir_requ_t *)(in_hdr + sizeof(x_smb2_header_t));
 
 	uint16_t in_name_offset             = X_LE2H16(in_qdir->name_offset);
 	uint16_t in_name_length             = X_LE2H16(in_qdir->name_length);
 
 	if (in_name_length % 2 != 0 || !x_check_range<uint32_t>(in_name_offset, in_name_length, 
-				sizeof(x_smb2_header_t) + sizeof(x_smb2_in_qdir_t), in_len)) {
+				sizeof(x_smb2_header_t) + sizeof(x_smb2_qdir_requ_t), in_len)) {
 		return false;
 	}
 
@@ -49,20 +36,13 @@ static bool decode_in_qdir(x_smbd_requ_state_qdir_t &state,
 	return true;
 }
 
-struct x_smb2_out_qdir_t
-{
-	uint16_t struct_size;
-	uint16_t offset;
-	uint32_t length;
-};
-
 static void encode_out_qdir(const x_smbd_requ_state_qdir_t &state,
 		uint8_t *out_hdr)
 {
-	x_smb2_out_qdir_t *out_qdir = (x_smb2_out_qdir_t *)(out_hdr + sizeof(x_smb2_header_t));
+	x_smb2_qdir_resp_t *out_qdir = (x_smb2_qdir_resp_t *)(out_hdr + sizeof(x_smb2_header_t));
 
-	out_qdir->struct_size = X_H2LE16(sizeof(x_smb2_out_qdir_t) + 1);
-	out_qdir->offset = X_H2LE16(sizeof(x_smb2_header_t) + sizeof(x_smb2_out_qdir_t));
+	out_qdir->struct_size = X_H2LE16(sizeof(x_smb2_qdir_resp_t) + 1);
+	out_qdir->offset = X_H2LE16(sizeof(x_smb2_header_t) + sizeof(x_smb2_qdir_resp_t));
 	out_qdir->length = X_H2LE32(x_convert_assert<uint32_t>(state.out_buf_length));
 }
 
@@ -70,7 +50,7 @@ static void x_smb2_reply_qdir(x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ,
 		x_smbd_requ_state_qdir_t &state)
 {
-	x_bufref_t *bufref = x_smb2_bufref_alloc(sizeof(x_smb2_out_qdir_t));
+	x_bufref_t *bufref = x_smb2_bufref_alloc(sizeof(x_smb2_qdir_resp_t));
 	if (state.out_buf_length) {
 		bufref->next = new x_bufref_t(state.out_buf, 0, state.out_buf_length);
 		state.out_buf = nullptr;
@@ -81,7 +61,7 @@ static void x_smb2_reply_qdir(x_smbd_conn_t *smbd_conn,
 
 	x_smb2_reply(smbd_conn, smbd_requ, bufref,
 			bufref->next ? bufref->next : bufref, NT_STATUS_OK, 
-			sizeof(x_smb2_header_t) + sizeof(x_smb2_out_qdir_t) + state.out_buf_length);
+			sizeof(x_smb2_header_t) + sizeof(x_smb2_qdir_resp_t) + state.out_buf_length);
 }
 
 
@@ -302,7 +282,7 @@ static void smbd_qdir_cancel(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 
 NTSTATUS x_smb2_process_query_directory(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 {
-	if (smbd_requ->in_requ_len < sizeof(x_smb2_header_t) + sizeof(x_smb2_in_qdir_t)) {
+	if (smbd_requ->in_requ_len < sizeof(x_smb2_header_t) + sizeof(x_smb2_qdir_requ_t)) {
 		X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
 

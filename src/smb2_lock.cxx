@@ -1,33 +1,17 @@
 
 #include "smbd_open.hxx"
 
-struct x_smb2_in_lock_t
-{
-	uint16_t struct_size;
-	uint16_t lock_count;
-	uint32_t lock_sequence_index;
-	uint64_t file_id_persistent;
-	uint64_t file_id_volatile;
-	x_smb2_lock_element_t lock_elements[1];
-};
-
-struct x_smb2_out_lock_t
-{
-	uint16_t struct_size;
-	uint16_t reserved0;
-};
-
 static bool decode_in_lock(x_smbd_requ_state_lock_t &state,
 		const uint8_t *in_hdr, uint32_t in_len)
 {
-	const x_smb2_in_lock_t *in_lock = (const x_smb2_in_lock_t *)(in_hdr + sizeof(x_smb2_header_t));
+	const x_smb2_lock_requ_t *in_lock = (const x_smb2_lock_requ_t *)(in_hdr + sizeof(x_smb2_header_t));
 
 	uint16_t lock_count = X_LE2H16(in_lock->lock_count);
 	if (lock_count == 0) {
 		return false;
 	}
 	
-	if ((lock_count - 1) * sizeof(x_smb2_lock_element_t) + sizeof(x_smb2_in_lock_t) + sizeof(x_smb2_header_t) > in_len) {
+	if ((lock_count - 1) * sizeof(x_smb2_lock_element_t) + sizeof(x_smb2_lock_requ_t) + sizeof(x_smb2_header_t) > in_len) {
 		return false;
 	}
 
@@ -47,9 +31,9 @@ static bool decode_in_lock(x_smbd_requ_state_lock_t &state,
 
 static void encode_out_lock(uint8_t *out_hdr)
 {
-	x_smb2_out_lock_t *out_lock = (x_smb2_out_lock_t *)(out_hdr + sizeof(x_smb2_header_t));
+	x_smb2_lock_resp_t *out_lock = (x_smb2_lock_resp_t *)(out_hdr + sizeof(x_smb2_header_t));
 
-	out_lock->struct_size = X_H2LE16(sizeof(x_smb2_out_lock_t));
+	out_lock->struct_size = X_H2LE16(sizeof(x_smb2_lock_resp_t));
 	out_lock->reserved0 = 0;
 }
 
@@ -57,12 +41,12 @@ static void x_smb2_reply_lock(x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ,
 		const x_smbd_requ_state_lock_t &state)
 {
-	x_bufref_t *bufref = x_smb2_bufref_alloc(sizeof(x_smb2_out_lock_t));
+	x_bufref_t *bufref = x_smb2_bufref_alloc(sizeof(x_smb2_lock_resp_t));
 
 	uint8_t *out_hdr = bufref->get_data();
 	encode_out_lock(out_hdr);
 	x_smb2_reply(smbd_conn, smbd_requ, bufref, bufref, NT_STATUS_OK, 
-			sizeof(x_smb2_header_t) + sizeof(x_smb2_out_lock_t));
+			sizeof(x_smb2_header_t) + sizeof(x_smb2_lock_resp_t));
 }
 
 static void smb2_lock_set_sequence(x_smbd_open_t *smbd_open,
@@ -394,7 +378,7 @@ static NTSTATUS smbd_open_unlock(
 
 NTSTATUS x_smb2_process_lock(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 {
-	if (smbd_requ->in_requ_len < sizeof(x_smb2_header_t) + sizeof(x_smb2_in_lock_t)) {
+	if (smbd_requ->in_requ_len < sizeof(x_smb2_header_t) + sizeof(x_smb2_lock_requ_t)) {
 		X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
 
