@@ -11,7 +11,7 @@ struct x_smb2_negprot_requ_t
 	uint16_t dialect_count;
 	uint16_t security_mode;
 	uint16_t unused0;
-	uint32_t capabilites;
+	uint32_t capabilities;
 	x_smb2_uuid_bytes_t client_guid;
 	uint32_t context_offset;
 	uint16_t context_count;
@@ -25,7 +25,7 @@ struct x_smb2_negprot_resp_t
 	uint16_t dialect;
 	uint16_t context_count;
 	x_smb2_uuid_bytes_t server_guid;
-	uint32_t capabilites;
+	uint32_t capabilities;
 	uint32_t max_trans_size;
 	uint32_t max_read_size;
 	uint32_t max_write_size;
@@ -43,7 +43,19 @@ struct x_smb2_negprot_context_header_t
 	uint32_t unused0;
 };
 
+struct x_smb2_negprot_context_compression_t
+{
+	uint16_t count;
+	uint16_t unused0;
+	uint32_t flags;
+};
+
 }
+
+static const uint16_t preferred_compression_algos[] = {
+	X_SMB2_COMPRESSION_LZ77,
+};
+
 
 static NTSTATUS x_smbd_conn_reply_negprot(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ,
 		const x_smbd_conf_t &smbd_conf,
@@ -87,7 +99,7 @@ static NTSTATUS x_smbd_conn_reply_negprot(x_smbd_conn_t *smbd_conn, x_smbd_requ_
 	out_resp->dialect = X_H2LE16(negprot.dialect);
 	out_resp->context_count = X_H2LE16(out_context_count);
 	memcpy(&out_resp->server_guid, &smbd_conf.guid, 16);
-	out_resp->capabilites = X_H2LE32(negprot.server_capabilities);
+	out_resp->capabilities = X_H2LE32(negprot.server_capabilities);
 	out_resp->max_trans_size = X_H2LE32(negprot.max_trans_size);
 	out_resp->max_read_size = X_H2LE32(negprot.max_read_size);
 	out_resp->max_write_size = X_H2LE32(negprot.max_write_size);
@@ -202,7 +214,9 @@ int x_smbd_conn_process_smb1negprot(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smb
 static NTSTATUS parse_context(const uint8_t *in_context, uint32_t in_context_length,
 		uint32_t in_context_count, uint32_t &hash_algos,
 		uint32_t &encryption_algos,
-		uint32_t &signing_algos)
+		uint32_t &signing_algos,
+		uint32_t &compression_algos,
+		uint32_t &compression_flags)
 {
 	size_t offset = 0;
 	for (uint32_t ci = 0; ci < in_context_count; ++ci) {
@@ -298,6 +312,34 @@ static NTSTATUS parse_context(const uint8_t *in_context, uint32_t in_context_len
 				offset += 2;
 			}
 			signing_algos = algos;
+
+		} else if (type == X_SMB2_COMPRESSION_CAPABILITIES) {
+			if (length < sizeof(x_smb2_negprot_context_compression_t)) {
+				return NT_STATUS_INVALID_PARAMETER;
+			}
+			auto ctx = (const x_smb2_negprot_context_compression_t *)(in_context + offset);
+			uint32_t flags = X_LE2H32(ctx->flags);
+			if (flags > 1) {
+				return NT_STATUS_INVALID_PARAMETER;
+			}
+
+			uint16_t count = X_LE2H16(ctx->count);
+			if (count == 0) {
+				return NT_STATUS_INVALID_PARAMETER;
+			}
+			if (sizeof(x_smb2_negprot_context_compression_t) +  count * 2 > length) {
+				return NT_STATUS_INVALID_PARAMETER;
+			}
+			auto ptr = (const uint16_t *)(ctx + 1);
+			uint32_t algos = 0;
+			for (uint16_t i = 0; i < count; ++i, ++ptr) {
+				uint16_t algo = X_LE2H16(*ptr);
+				if (algo < X_SMB2_COMPRESSION_MAX) {
+					algos |= (1 << algo);
+				}
+			}
+			compression_algos = algos;
+			compression_flags = flags;
 		}
 
 		offset = x_pad_len(end, 8);
@@ -307,7 +349,8 @@ static NTSTATUS parse_context(const uint8_t *in_context, uint32_t in_context_len
 
 static void generate_context(uint16_t &out_context_count,
 		std::vector<uint8_t> &out_context,
-		uint16_t encryption_algo, uint16_t signing_algo)
+		uint16_t encryption_algo, uint16_t signing_algo,
+		uint32_t compression_algos, uint32_t compression_flags)
 {
 	auto &output = out_context;
 	output.resize(128); // 128 should be enough
@@ -359,6 +402,34 @@ static void generate_context(uint16_t &out_context_count,
 		data += 2;
 		x_put_le16(data, signing_algo);
 		data += 2;
+		++context_count;
+	}
+
+	if (compression_algos != 0) {
+		size_t ctx_len = x_pad_len(data - output.data(), 8);
+		data = output.data() + ctx_len;
+		ctx_hdr = (x_smb2_negprot_context_header_t *)data;
+		ctx_hdr->type = X_H2LE16(X_SMB2_COMPRESSION_CAPABILITIES);
+		ctx_hdr->unused0 = 0;
+
+		x_put_le16(data, X_SMB2_COMPRESSION_CAPABILITIES);
+		data += 2;
+		auto ctx = (x_smb2_negprot_context_compression_t *)(ctx_hdr + 1);
+		ctx->unused0 = 0;
+		ctx->flags = X_H2LE32(compression_flags);
+		uint16_t *p = (uint16_t *)(ctx + 1);
+		uint16_t count = 0;
+		for (auto algo: preferred_compression_algos) {
+			if (compression_algos & (1 << algo)) {
+				*p++ = X_H2LE16(algo);
+				++count;
+			}
+		}
+		X_ASSERT(count != 0);
+		ctx->count = X_H2LE16(count);
+		ctx_hdr->length = X_H2LE16(uint16_t((uint8_t *)p - (uint8_t *)ctx));
+
+		data = (uint8_t *)p;
 		++context_count;
 	}
 
@@ -430,10 +501,12 @@ NTSTATUS x_smb2_process_negprot(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_re
 		const uint8_t *in_context = in_buf + in_context_offset;
 
 		uint32_t hash_algos = 0, encryption_algos = 0, signing_algos = 0;
+		uint32_t compression_algos = 0, compression_flags = 0;
 		NTSTATUS status = parse_context(in_context,
 				smbd_requ->in_requ_len - in_context_offset,
 				in_context_count, hash_algos,
-				encryption_algos, signing_algos);
+				encryption_algos, signing_algos,
+				compression_algos, compression_flags);
 		if (!NT_STATUS_IS_OK(status)) {
 			X_SMBD_REQU_RETURN_STATUS(smbd_requ, status);
 		}
@@ -464,12 +537,26 @@ NTSTATUS x_smb2_process_negprot(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_re
 			X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 		}
 
+
+		if (compression_algos) {
+			negprot.compression_algos = 0;
+			for (auto algo: preferred_compression_algos) {
+				if (compression_algos & (1 << algo)) {
+					negprot.compression_algos |= (1 << algo);
+				}
+			}
+			negprot.compression_flags = compression_flags;
+		}
+
 		x_smbd_conn_update_preauth(smbd_conn, 
 				in_buf, smbd_requ->in_requ_len);
 
 		generate_context(out_context_count, out_context,
 				negprot.cryption_algo,
-				negprot.signing_algo);
+				negprot.signing_algo,
+				negprot.compression_algos,
+				negprot.compression_flags);
+
 	} else if (negprot.dialect >= X_SMB2_DIALECT_300) {
 		negprot.cryption_algo = X_SMB2_ENCRYPTION_AES128_CCM;
 	}
