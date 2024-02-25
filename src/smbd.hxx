@@ -232,6 +232,8 @@ struct x_smbd_negprot_t
 	uint16_t server_security_mode;
 	uint16_t cryption_algo = X_SMB2_ENCRYPTION_INVALID_ALGO;
 	uint16_t signing_algo = X_SMB2_SIGNING_INVALID_ALGO;
+	uint32_t compression_algos = 0;
+	uint32_t compression_flags = 0;
 	uint32_t client_capabilities;
 	uint32_t server_capabilities;
 	uint32_t max_trans_size, max_read_size, max_write_size;

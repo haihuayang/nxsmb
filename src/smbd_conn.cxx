@@ -1123,6 +1123,71 @@ static int x_smbd_conn_process_smb2_tf(x_smbd_conn_t *smbd_conn,
 	return plen;
 }
 
+static int x_smbd_conn_process_smb2_ctf_unchained(x_smbd_conn_t *smbd_conn,
+		x_buf_t *buf, uint32_t total_size,
+		x_buf_t **out_buf,
+		uint32_t original_size,
+		uint16_t algo,
+		uint32_t offset)
+{
+	if (algo >= X_SMB2_COMPRESSION_MAX ||
+			!(smbd_conn->negprot.compression_algos & (1 << algo))) {
+		return -EBADMSG;
+	}
+	uint32_t data_size = total_size - (uint32_t)sizeof(x_smb2_ctf_header_t);
+	if (offset >= original_size || offset >= data_size) {
+		return -EBADMSG;
+	}
+
+	const uint8_t *in_data = buf->data + sizeof(x_smb2_ctf_header_t);
+	x_buf_t *pbuf = x_buf_alloc(original_size);
+	uint8_t *out_data = pbuf->data;
+	memcpy(out_data, in_data, offset);
+	int ret = x_smb2_decompress(algo, in_data + offset, data_size - offset,
+			out_data + offset, original_size - offset);
+	if (ret < 0) {
+		x_buf_release(pbuf);
+		return ret;
+	}
+	*out_buf = pbuf;
+	return ret;
+}
+
+static int x_smbd_conn_process_smb2_ctf(x_smbd_conn_t *smbd_conn,
+		x_buf_t *buf, uint32_t total_size,
+		x_buf_t **out_buf)
+{
+	if (total_size < sizeof(x_smb2_ctf_header_t)) {
+		return -EBADMSG;
+	}
+	const x_smb2_ctf_header_t *smb2_ctf = (x_smb2_ctf_header_t *)buf->data;
+	uint32_t original_size = X_LE2H32(smb2_ctf->original_segment_size);
+	if (original_size > (256 + sizeof(x_smb2_ctf_header_t) + 
+				std::max(std::max(smbd_conn->negprot.max_trans_size,
+					smbd_conn->negprot.max_read_size),
+					smbd_conn->negprot.max_write_size))) {
+		return -EBADMSG;
+	}
+
+	uint16_t algo = X_LE2H16(smb2_ctf->compression_algorithm);
+	uint16_t flags = X_LE2H16(smb2_ctf->flags);
+
+	if (flags == 0) {
+		return x_smbd_conn_process_smb2_ctf_unchained(smbd_conn,
+				buf, total_size, out_buf,
+				original_size, algo,
+				X_LE2H32(smb2_ctf->offset));
+	} else {
+		return -EBADMSG;
+#if 0
+		return x_smbd_conn_process_smb2_ctf_chained(smbd_conn,
+				buf, total_size, out_buf,
+				original_size, algo,
+				X_LE2H32(smb2_ctf->offset));
+#endif
+	}
+}
+
 #define SMBnegprot    0x72   /* negotiate protocol */
 static int x_smbd_conn_process_smb(x_smbd_conn_t *smbd_conn, x_buf_t *buf, uint32_t msgsize)
 {
@@ -1157,6 +1222,24 @@ static int x_smbd_conn_process_smb(x_smbd_conn_t *smbd_conn, x_buf_t *buf, uint3
 		encrypted = true;
 	}
 
+	if (smbhdr == X_SMB2_CTF_MAGIC) {
+		x_buf_t *pbuf;
+		int plen = x_smbd_conn_process_smb2_ctf(smbd_conn, buf, msgsize,
+				&pbuf);
+		if (plen < 0) {
+			return plen;
+		}
+		if (len < 4) {
+			x_buf_release(pbuf);
+			return -EBADMSG;
+		}
+
+		x_buf_release(buf);
+		buf = pbuf;
+		msgsize = plen;
+		smbhdr = x_get_be32(buf->data + offset);
+	}
+
 	x_smbd_ptr_t<x_smbd_requ_t> smbd_requ{x_smbd_requ_create(buf,
 			msgsize, encrypted)};
 	
@@ -1166,6 +1249,8 @@ static int x_smbd_conn_process_smb(x_smbd_conn_t *smbd_conn, x_buf_t *buf, uint3
 		}
 		return x_smbd_conn_process_smb2(smbd_conn, smbd_requ, 0);
 	} else if (smbhdr == X_SMB2_TF_MAGIC) {
+		return -EBADMSG;
+	} else if (smbhdr == X_SMB2_CTF_MAGIC) {
 		return -EBADMSG;
 	} else if (smbhdr == X_SMB1_MAGIC) {
 		uint8_t cmd = buf->data[4];
