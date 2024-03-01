@@ -363,7 +363,7 @@ static void x_smb2_reply_msg(x_smbd_conn_t *smbd_conn,
 	smb2_hdr->protocol_id = X_H2BE32(X_SMB2_MAGIC);
 	smb2_hdr->length = X_H2LE32(sizeof(x_smb2_header_t));
 	smb2_hdr->credit_charge = X_H2LE16(smbd_requ->in_smb2_hdr.credit_charge);
-	smb2_hdr->status = X_H2LE32(NT_STATUS_V(status));
+	smb2_hdr->status = { X_H2LE32(NT_STATUS_V(status)) };
 	smb2_hdr->opcode = X_H2LE16(smbd_requ->in_smb2_hdr.opcode);
 	smb2_hdr->credit = X_H2LE16(smbd_requ->out_credit_granted);
 	smb2_hdr->next_command = 0;
@@ -599,7 +599,7 @@ void x_smbd_conn_send_unsolicited(x_smbd_conn_t *smbd_conn, x_smbd_sess_t *smbd_
 	smb2_hdr->protocol_id = X_H2BE32(X_SMB2_MAGIC);
 	smb2_hdr->length = X_H2LE32(sizeof(x_smb2_header_t));
 	smb2_hdr->credit_charge = 0;
-	smb2_hdr->status = 0;
+	smb2_hdr->status = { 0 };
 	smb2_hdr->opcode = X_H2LE16(opcode);
 	smb2_hdr->credit = 0;
 	smb2_hdr->flags = X_H2LE32(X_SMB2_HDR_FLAG_REDIRECT);

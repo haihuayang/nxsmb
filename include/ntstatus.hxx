@@ -21,6 +21,9 @@ enum
 
 struct NTSTATUS
 {
+	bool operator==(NTSTATUS o) const { return v == o.v; }
+	bool operator!=(NTSTATUS o) const { return v != o.v; }
+	inline bool ok() const { return v == 0; }
 	uint32_t v;
 };
 

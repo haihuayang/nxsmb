@@ -65,7 +65,7 @@ struct x_smb2_header_t
 			uint16_t channel_sequence;
 			uint16_t unused0;
 		};
-		uint32_t status;
+		NTSTATUS status;
 	};
 	uint16_t opcode;
 	uint16_t credit;
