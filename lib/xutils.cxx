@@ -291,7 +291,7 @@ static bool set_log_level(const char *log_level_param)
 
 	if (log_level_all != X_LOG_LEVEL_MAX) {
 		for (i = 0; i < X_LOG_CLASS_MAX; ++i) {
-			if (log_level[i] != X_LOG_LEVEL_MAX) {
+			if (log_level[i] == X_LOG_LEVEL_MAX) {
 				log_level[i] = log_level_all;
 			}
 		}
