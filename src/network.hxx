@@ -14,6 +14,8 @@
 #include <netinet/in.h>
 #include <sys/ioctl.h>
 
+std::string x_sockaddr_tostr(const struct sockaddr *sa, size_t slen);
+
 union x_sockaddr_t
 {
 	uint16_t family;

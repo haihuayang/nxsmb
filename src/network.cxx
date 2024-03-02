@@ -28,23 +28,58 @@ static int tcp_bind(int port)
 	return sock;
 }
 
-std::string x_sockaddr_t::tostring() const
+static std::string x_sockaddr_in_tostr(const struct sockaddr_in &sin)
 {
 	char buf[INET6_ADDRSTRLEN + 16] = "";
-	if (family == AF_INET) {
-		snprintf(buf, sizeof buf, "%d.%d.%d.%d:%d",
+	snprintf(buf, sizeof buf, "%d.%d.%d.%d:%d",
 			X_IPQUAD_BE(sin.sin_addr), ntohs(sin.sin_port));
-	} else if (family == AF_INET6) {
-		buf[0] = '[';
-		size_t len = strlen(inet_ntop(AF_INET6, &sin6.sin6_addr, buf + 1, sizeof buf - 1));
-		len += 1;
-		snprintf(buf + len, sizeof buf - len, "]:%d",
-				ntohs(sin6.sin6_port));
+	return buf;
+}
+
+static std::string x_sockaddr_in6_tostr(const struct sockaddr_in6 &sin6)
+{
+	char buf[INET6_ADDRSTRLEN + 16] = "";
+	buf[0] = '[';
+	size_t len = strlen(inet_ntop(AF_INET6, &sin6.sin6_addr, buf + 1, sizeof buf - 1));
+	len += 1;
+	snprintf(buf + len, sizeof buf - len, "]:%d",
+			ntohs(sin6.sin6_port));
+	return buf;
+}
+
+std::string x_sockaddr_tostr(const struct sockaddr *sa, size_t slen)
+{
+	if (sa->sa_family == AF_INET) {
+		const struct sockaddr_in *sin = (const struct sockaddr_in *)sa;
+		if (slen < sizeof (*sin)) {
+			return "INVALID-INET-ADDR";
+		} else {
+			return x_sockaddr_in_tostr(*sin);
+		}
+	} else if (sa->sa_family == AF_INET6) {
+		const struct sockaddr_in6 *sin6 = (const struct sockaddr_in6 *)sa;
+		if (slen < sizeof (*sin6)) {
+			return "INVALID-INET6-ADDR";
+		} else {
+			return x_sockaddr_in6_tostr(*sin6);
+		}
 	} else {
 		X_ASSERT(0);
+		return {};
 	}
 
-	return buf;
+}
+
+std::string x_sockaddr_t::tostring() const
+{
+	if (family == AF_INET) {
+		return x_sockaddr_in_tostr(sin);
+	} else if (family == AF_INET6) {
+		return x_sockaddr_in6_tostr(sin6);
+	} else {
+		X_ASSERT(0);
+		return {};
+	}
 }
 
 bool x_strm_send_queue_t::send(int fd, x_fdevents_t &fdevents)
