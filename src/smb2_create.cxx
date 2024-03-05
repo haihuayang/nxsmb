@@ -264,11 +264,11 @@ static bool decode_contexts(uint16_t dialect, x_smbd_requ_state_create_t &state,
 	if (state.in_contexts & X_SMB2_CONTEXT_FLAG_DH2Q) {
 		state.in_dh_timeout = X_LE2H32(dh2q->timeout);
 		state.in_dh_flags = X_LE2H32(dh2q->flags);
-		state.in_create_guid = dh2q->create_guid;
+		state.in_create_guid = {dh2q->create_guid[0], dh2q->create_guid[1]};
 	} else if (state.in_contexts & X_SMB2_CONTEXT_FLAG_DH2C) {
 		state.in_dh_id_persistent = X_LE2H64(dh2c->file_id_persistent);
 		state.in_dh_id_volatile = X_LE2H64(dh2c->file_id_volatile);
-		state.in_create_guid = dh2c->create_guid;
+		state.in_create_guid = {dh2c->create_guid[0], dh2c->create_guid[1]};
 		state.in_dh_flags = X_LE2H32(dh2c->flags);
 		state.valid_flags &= ~(x_smbd_open_state_t::F_APP_INSTANCE_ID |
 				x_smbd_open_state_t::F_APP_INSTANCE_VERSION);

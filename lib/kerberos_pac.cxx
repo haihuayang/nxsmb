@@ -38,7 +38,7 @@ static krb5_error_code check_pac_checksum(const void *input_data, size_t input_l
 	krb5_checksum cksum;
 	krb5_boolean checksum_valid = false;
 
-	switch (sig->type) {
+	switch (int(sig->type)) {
 	case CKSUMTYPE_HMAC_MD5:
 		/* ignores the key type */
 		break;

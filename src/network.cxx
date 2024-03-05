@@ -4,6 +4,7 @@
 #include <unistd.h>
 #include <arpa/inet.h>
 #include <sys/un.h>
+#include <sys/uio.h>
 
 
 static int tcp_bind(int port)

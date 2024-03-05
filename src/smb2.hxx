@@ -788,7 +788,7 @@ struct x_smb2_create_dh2q_requ_t
 	uint32_t timeout;
 	uint32_t flags;
 	uint64_t unused0;
-	x_smb2_uuid_t create_guid;
+	uint64_t create_guid[2];
 };
 
 struct x_smb2_create_dh2q_resp_t
@@ -805,16 +805,16 @@ struct x_smb2_create_dh2c_requ_t
 {
 	uint64_t file_id_persistent;
 	uint64_t file_id_volatile;
-	x_smb2_uuid_t create_guid;
+	uint64_t create_guid[2];
 	uint32_t flags;
 } __attribute__ ((packed));
 
 struct x_smb2_create_close_info_t
 {
-	idl::NTTIME out_create_ts;
-	idl::NTTIME out_last_access_ts;
-	idl::NTTIME out_last_write_ts;
-	idl::NTTIME out_change_ts;
+	uint64_t out_create_ts;
+	uint64_t out_last_access_ts;
+	uint64_t out_last_write_ts;
+	uint64_t out_change_ts;
 	uint64_t out_allocation_size{0};
 	uint64_t out_end_of_file{0};
 	uint32_t out_file_attributes{0};
@@ -1065,7 +1065,7 @@ struct x_smb2_lease_break_t
 	uint16_t struct_size;
 	uint16_t reserved0;
 	uint32_t flags;
-	x_smb2_lease_key_t key;
+	uint64_t key[2];
 	uint32_t state;
 	uint32_t duration_low; // duration is not 8-byte aligned, so split into 2
 	uint32_t duration_high;
@@ -1076,7 +1076,7 @@ struct x_smb2_lease_break_noti_t
 	uint16_t struct_size;
 	uint16_t new_epoch;
 	uint32_t flags;
-	x_smb2_lease_key_t key;
+	uint64_t key[2];
 	uint32_t current_state;
 	uint32_t new_state;
 	uint32_t reason;
@@ -1337,10 +1337,10 @@ struct x_smb2_file_dir_info_t
 {
 	uint32_t next_offset;
 	uint32_t file_index;
-	idl::NTTIME creation;
-	idl::NTTIME last_access;
-	idl::NTTIME last_write;
-	idl::NTTIME change;
+	uint64_t creation;
+	uint64_t last_access;
+	uint64_t last_write;
+	uint64_t change;
 	uint64_t end_of_file;
 	uint64_t allocation_size;
 	uint32_t file_attributes;
@@ -1352,10 +1352,10 @@ struct x_smb2_file_both_dir_info_t
 {
 	uint32_t next_offset;
 	uint32_t file_index;
-	idl::NTTIME creation;
-	idl::NTTIME last_access;
-	idl::NTTIME last_write;
-	idl::NTTIME change;
+	uint64_t creation;
+	uint64_t last_access;
+	uint64_t last_write;
+	uint64_t change;
 	uint64_t end_of_file;
 	uint64_t allocation_size;
 	uint32_t file_attributes;
@@ -1370,10 +1370,10 @@ struct x_smb2_file_full_dir_info_t
 {
 	uint32_t next_offset;
 	uint32_t file_index;
-	idl::NTTIME creation;
-	idl::NTTIME last_access;
-	idl::NTTIME last_write;
-	idl::NTTIME change;
+	uint64_t creation;
+	uint64_t last_access;
+	uint64_t last_write;
+	uint64_t change;
 	uint64_t end_of_file;
 	uint64_t allocation_size;
 	uint32_t file_attributes;
@@ -1387,10 +1387,10 @@ struct x_smb2_file_id_full_dir_info_t
 {
 	uint32_t next_offset;
 	uint32_t file_index;
-	idl::NTTIME creation;
-	idl::NTTIME last_access;
-	idl::NTTIME last_write;
-	idl::NTTIME change;
+	uint64_t creation;
+	uint64_t last_access;
+	uint64_t last_write;
+	uint64_t change;
 	uint64_t end_of_file;
 	uint64_t allocation_size;
 	uint32_t file_attributes;
@@ -1405,10 +1405,10 @@ struct x_smb2_file_id_both_dir_info_t
 {
 	uint32_t next_offset;
 	uint32_t file_index;
-	idl::NTTIME creation;
-	idl::NTTIME last_access;
-	idl::NTTIME last_write;
-	idl::NTTIME change;
+	uint64_t creation;
+	uint64_t last_access;
+	uint64_t last_write;
+	uint64_t change;
 	uint64_t end_of_file;
 	uint64_t allocation_size;
 	uint32_t file_attributes;

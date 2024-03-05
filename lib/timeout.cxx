@@ -28,6 +28,7 @@
 #include <limits.h>    /* CHAR_BIT */
 
 #include <stddef.h>    /* NULL */
+#include <stdio.h>
 
 #if TIMEOUT_DEBUG - 0
 #include "timeout-debug.h"

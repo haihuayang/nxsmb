@@ -6,7 +6,7 @@ static void decode_in_lease_break(x_smbd_requ_state_lease_break_t &state,
 		const x_smb2_lease_break_t *in_lease_break)
 {
 	state.in_flags = X_LE2H32(in_lease_break->flags);
-	state.in_key = in_lease_break->key;
+	state.in_key = {in_lease_break->key[0], in_lease_break->key[1]};
 	state.in_state = X_LE2H32(in_lease_break->state);
 	uint64_t duration_low = X_LE2H32(in_lease_break->duration_low);
 	uint64_t duration_high = X_LE2H32(in_lease_break->duration_high);
@@ -20,7 +20,8 @@ static void encode_lease_break_resp(const x_smbd_requ_state_lease_break_t &state
 	resp->struct_size = X_H2LE16(sizeof(x_smb2_lease_break_t));
 	resp->reserved0 = 0;
 	resp->flags = X_H2LE32(state.in_flags);
-	resp->key = state.in_key;
+	resp->key[0] = state.in_key.data[0];
+	resp->key[1] = state.in_key.data[1];
 	resp->state = X_H2LE32(state.in_state); // TODO should have out_state
 	resp->duration_low = 0;
 	resp->duration_high = 0;
@@ -178,7 +179,8 @@ void x_smb2_send_lease_break(x_smbd_conn_t *smbd_conn, x_smbd_sess_t *smbd_sess,
 	noti->new_epoch = X_H2LE16(new_epoch);
 	// noti->flags = X_H2LE32(SMB2_NOTIFY_BREAK_LEASE_FLAG_ACK_REQUIRED); // TODO
 	noti->flags = X_H2LE32(flags);
-	noti->key = *lease_key;
+	noti->key[0] = lease_key->data[0];
+	noti->key[1] = lease_key->data[1];
 	noti->current_state = X_H2LE32(current_state);
 	noti->new_state = X_H2LE32(new_state);
 	noti->reason = 0;

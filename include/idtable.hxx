@@ -10,6 +10,7 @@
 #include "include/bits.hxx"
 #include <atomic>
 #include <memory>
+#include <utility>
 
 struct x_idtable_64_traits_t
 {

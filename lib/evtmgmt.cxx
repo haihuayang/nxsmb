@@ -304,7 +304,9 @@ void x_evtmgmt_dispatch(x_evtmgmt_t *ep)
 #define EFD_CLOEXEC O_CLOEXEC
 #define EFD_NONBLOCK O_NONBLOCK
 
+#ifndef SYS_eventfd2
 #define SYS_eventfd2	290
+#endif
 #define eventfd(count, flags) syscall(SYS_eventfd2, (count), (flags))
 	
 x_evtmgmt_t *x_evtmgmt_create(x_threadpool_t *tpool, uint32_t max_fd,
