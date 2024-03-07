@@ -308,6 +308,22 @@ void x_destruct(T &t) noexcept
 	t.~T();
 }
 
+template <class T>
+T *x_ref_inc(T *);
+
+template <class T>
+void x_ref_dec(T *);
+
+template <class T>
+inline void x_ref_dec_if(T *t)
+{
+	if (t) {
+		x_ref_dec(t);
+	}
+}
+
+#define X_REF_DEC(t) do { x_ref_dec(t); (t) = nullptr; } while (0)
+
 
 #endif /* __utils__hxx__ */
 

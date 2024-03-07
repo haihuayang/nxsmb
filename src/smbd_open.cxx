@@ -64,14 +64,14 @@ bool x_smbd_open_has_space()
 }
 
 template <>
-x_smbd_open_t *x_smbd_ref_inc(x_smbd_open_t *smbd_open)
+x_smbd_open_t *x_ref_inc(x_smbd_open_t *smbd_open)
 {
 	g_smbd_open_table->incref(smbd_open->id_volatile);
 	return smbd_open;
 }
 
 template <>
-void x_smbd_ref_dec(x_smbd_open_t *smbd_open)
+void x_ref_dec(x_smbd_open_t *smbd_open)
 {
 	g_smbd_open_table->decref(smbd_open->id_volatile);
 }
@@ -140,7 +140,7 @@ x_smbd_open_t *x_smbd_open_lookup(uint64_t id_persistent, uint64_t id_volatile,
 				return smbd_open;
 			}
 		}
-		x_smbd_ref_dec(smbd_open);
+		x_ref_dec(smbd_open);
 	}
 	return nullptr;
 }
@@ -183,8 +183,8 @@ static void fill_out_info(x_smb2_create_close_info_t &info,
 void x_smbd_open_release(x_smbd_open_t *smbd_open)
 {
 	g_smbd_open_table->remove(smbd_open->id_volatile);
-	x_smbd_ref_dec(smbd_open);
-	x_smbd_ref_dec(smbd_open);
+	x_ref_dec(smbd_open);
+	x_ref_dec(smbd_open);
 }
 
 static NTSTATUS smbd_object_remove(
@@ -280,7 +280,7 @@ static void smbd_close_open_intl(
 
 	if (smbd_open->oplock_break_sent != x_smbd_open_t::OPLOCK_BREAK_NOT_SENT) {
 		if (x_smbd_del_timer(&smbd_open->oplock_break_timer)) {
-			x_smbd_ref_dec(smbd_open);
+			x_ref_dec(smbd_open);
 		}
 		smbd_open->oplock_break_sent = x_smbd_open_t::OPLOCK_BREAK_NOT_SENT;
 	}
@@ -464,7 +464,7 @@ NTSTATUS x_smbd_open_op_close(
 	}
 
 	X_ASSERT(smbd_tcon);
-	x_smbd_ref_dec(smbd_tcon);
+	x_ref_dec(smbd_tcon);
 
 	x_smbd_open_release(smbd_open);
 
@@ -496,7 +496,7 @@ void x_smbd_open_unlinked(x_dlink_t *link,
 	}
 
 	X_ASSERT(smbd_tcon);
-	x_smbd_ref_dec(smbd_tcon);
+	x_ref_dec(smbd_tcon);
 
 	if (closed) {
 		x_smbd_open_release(smbd_open);
@@ -574,7 +574,7 @@ struct defer_requ_evt_t
 
 	~defer_requ_evt_t()
 	{
-		x_smbd_ref_dec(smbd_requ);
+		x_ref_dec(smbd_requ);
 	}
 
 	x_fdevt_user_t base;
@@ -599,7 +599,7 @@ void x_smbd_wakeup_requ_list(const x_smbd_requ_id_list_t &requ_list)
 			defer_requ_evt_t *evt = new defer_requ_evt_t(smbd_requ);
 			X_SMBD_CHAN_POST_USER(smbd_requ->smbd_chan, evt);
 		} else {
-			x_smbd_ref_dec(smbd_requ);
+			x_ref_dec(smbd_requ);
 		}
 	}
 }
@@ -622,7 +622,7 @@ static long oplock_break_timeout(x_timer_job_t *timer)
 		}
 		std::swap(oplock_pending_list, smbd_open->oplock_pending_list);
 	}
-	x_smbd_ref_dec(smbd_open);
+	x_ref_dec(smbd_open);
 	x_smbd_wakeup_requ_list(oplock_pending_list);
 	return -1;
 }
@@ -667,7 +667,7 @@ struct send_lease_break_evt_t
 
 	~send_lease_break_evt_t()
 	{
-		x_smbd_ref_dec(smbd_sess);
+		x_ref_dec(smbd_sess);
 	}
 
 	x_fdevt_user_t base;
@@ -788,7 +788,7 @@ static bool check_app_instance(x_smbd_object_t *smbd_object,
 		x_smbd_tcon_t *smbd_tcon;
 		if (smbd_open_close_non_requ(curr_open, &smbd_tcon)) {
 			if (smbd_tcon) {
-				x_smbd_ref_dec(smbd_tcon);
+				x_ref_dec(smbd_tcon);
 			}
 			x_smbd_open_release(curr_open);
 		}
@@ -1073,7 +1073,7 @@ struct send_oplock_break_evt_t
 
 	~send_oplock_break_evt_t()
 	{
-		x_smbd_ref_dec(smbd_sess);
+		x_ref_dec(smbd_sess);
 	}
 
 	x_fdevt_user_t base;
@@ -1142,7 +1142,7 @@ bool x_smbd_open_break_oplock(x_smbd_object_t *smbd_object,
 		smbd_open->oplock_break_sent = (break_to == X_SMB2_LEASE_READ ?
 				x_smbd_open_t::OPLOCK_BREAK_TO_LEVEL_II_SENT :
 				x_smbd_open_t::OPLOCK_BREAK_TO_NONE_SENT);
-		x_smbd_ref_inc(smbd_open);
+		x_ref_inc(smbd_open);
 		x_smbd_add_timer(&smbd_open->oplock_break_timer, x_smbd_timer_id_t::BREAK);
 	} else {
 		smbd_open_close_disconnected(smbd_open);
@@ -1588,7 +1588,7 @@ NTSTATUS x_smbd_break_oplock(
 	if (smbd_open->oplock_break_sent == x_smbd_open_t::OPLOCK_BREAK_NOT_SENT) {
 		return NT_STATUS_INVALID_OPLOCK_PROTOCOL;
 	} else if (x_smbd_del_timer(&smbd_open->oplock_break_timer)) {
-		x_smbd_ref_dec(smbd_open);
+		x_ref_dec(smbd_open);
 	}
 
 	if (smbd_open->oplock_break_sent == x_smbd_open_t::OPLOCK_BREAK_TO_NONE_SENT
@@ -1821,9 +1821,9 @@ NTSTATUS x_smbd_open_op_create(x_smbd_requ_t *smbd_requ,
 	}
 
 	if (linked) {
-		x_smbd_ref_inc(smbd_tcon); // ref by open
-		x_smbd_ref_inc(smbd_open); // ref tcon link
-		smbd_requ->smbd_open = x_smbd_ref_inc(smbd_open);
+		x_ref_inc(smbd_tcon); // ref by open
+		x_ref_inc(smbd_open); // ref tcon link
+		smbd_requ->smbd_open = x_ref_inc(smbd_open);
 	} else {
 		status = NT_STATUS_NETWORK_NAME_DELETED;
 	}
@@ -1911,11 +1911,11 @@ NTSTATUS x_smbd_open_op_reconnect(x_smbd_requ_t *smbd_requ,
 
 	NTSTATUS status = smbd_open_reconnect(smbd_open, smbd_tcon, *state);
 	if (!NT_STATUS_IS_OK(status)) {
-		x_smbd_ref_dec(smbd_open);
+		x_ref_dec(smbd_open);
 		return status;
 	}
 
-	x_smbd_ref_inc(smbd_tcon); // ref by smbd_open
+	x_ref_inc(smbd_tcon); // ref by smbd_open
 	smbd_requ->smbd_open = smbd_open; // TODO ref count
 
 	return status;
@@ -1960,7 +1960,7 @@ NTSTATUS x_smbd_open_restore(
 				smbd_open);
 	}
 
-	x_smbd_ref_inc(smbd_open); // durable timer
+	x_ref_inc(smbd_open); // durable timer
 	{
 		auto lock = smbd_object_lock(smbd_open->smbd_object);
 		X_ASSERT(smbd_open->state == SMBD_OPEN_S_INIT);
@@ -2001,7 +2001,7 @@ x_smbd_open_t::x_smbd_open_t(x_smbd_object_t *so,
 
 x_smbd_open_t::~x_smbd_open_t()
 {
-	x_smbd_ref_dec_if(smbd_tcon);
+	x_ref_dec_if(smbd_tcon);
 	x_smbd_release_object_and_stream(smbd_object, smbd_stream);
 	X_SMBD_COUNTER_INC_DELETE(open, 1);
 }
@@ -2133,7 +2133,7 @@ static void smbd_net_file_close(x_smbd_open_t *smbd_open)
 
 	if (closed) {
 		if (smbd_tcon) {
-			x_smbd_ref_dec(smbd_tcon);
+			x_ref_dec(smbd_tcon);
 		}
 		x_smbd_open_release(smbd_open);
 	}
@@ -2147,7 +2147,7 @@ void x_smbd_net_file_close(uint32_t fid)
 		return;
 	}
 	smbd_net_file_close(smbd_open);
-	x_smbd_ref_dec(smbd_open);
+	x_ref_dec(smbd_open);
 }
 
 

@@ -51,7 +51,7 @@ struct copychunk_evt_t
 
 	~copychunk_evt_t()
 	{
-		x_smbd_ref_dec(smbd_requ);
+		x_ref_dec(smbd_requ);
 	}
 
 	x_fdevt_user_t base;
@@ -66,7 +66,7 @@ struct copychunk_job_t
 	~copychunk_job_t()
 	{
 		X_ASSERT(!smbd_requ);
-		x_smbd_ref_dec(src_open);
+		x_ref_dec(src_open);
 	}
 	x_job_t base;
 	x_smbd_requ_t *smbd_requ;
@@ -273,11 +273,11 @@ NTSTATUS x_smb2_ioctl_copychunk(
 	/* vfs_offload_token_check_handles */
 	NTSTATUS status = copychunk_check_access(state->ctl_code, src_open, smbd_requ->smbd_open);
 	if (!NT_STATUS_IS_OK(status)) {
-		x_smbd_ref_dec(src_open);
+		x_ref_dec(src_open);
 		return status;
 	}
 
-	copychunk_job_t *copychunk_job = new copychunk_job_t(x_smbd_ref_inc(smbd_requ),
+	copychunk_job_t *copychunk_job = new copychunk_job_t(x_ref_inc(smbd_requ),
 			src_open, std::move(chunks));
 	smbd_requ->save_requ_state(state);
 	x_smbd_requ_async_insert(smbd_requ, copychunk_cancel, X_NSEC_PER_SEC);

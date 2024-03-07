@@ -56,22 +56,22 @@ x_smbd_requ_t::~x_smbd_requ_t()
 		out_buf_head = next;
 	}
 
-	x_smbd_ref_dec_if(smbd_open);
-	x_smbd_ref_dec_if(smbd_tcon);
-	x_smbd_ref_dec_if(smbd_chan);
-	x_smbd_ref_dec_if(smbd_sess);
+	x_ref_dec_if(smbd_open);
+	x_ref_dec_if(smbd_tcon);
+	x_ref_dec_if(smbd_chan);
+	x_ref_dec_if(smbd_sess);
 	X_SMBD_COUNTER_INC_DELETE(requ, 1);
 }
 
 template <>
-x_smbd_requ_t *x_smbd_ref_inc(x_smbd_requ_t *smbd_requ)
+x_smbd_requ_t *x_ref_inc(x_smbd_requ_t *smbd_requ)
 {
 	g_smbd_requ_table->incref(smbd_requ->id);
 	return smbd_requ;
 }
 
 template <>
-void x_smbd_ref_dec(x_smbd_requ_t *smbd_requ)
+void x_ref_dec(x_smbd_requ_t *smbd_requ)
 {
 	g_smbd_requ_table->decref(smbd_requ->id);
 }
@@ -114,12 +114,12 @@ x_smbd_requ_t *x_smbd_requ_async_lookup(uint64_t id, const x_smbd_conn_t *smbd_c
 	}
 
 	if (x_smbd_chan_get_conn(smbd_requ->smbd_chan) != smbd_conn || !smbd_requ->cancel_fn) {
-		x_smbd_ref_dec(smbd_requ);
+		x_ref_dec(smbd_requ);
 		return nullptr;
 	}
 
 	if (remove) {
-		x_smbd_ref_dec(smbd_requ);
+		x_ref_dec(smbd_requ);
 	}
 	return smbd_requ;
 }

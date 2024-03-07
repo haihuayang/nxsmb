@@ -82,7 +82,7 @@ void x_smbd_requ_state_qdir_t::async_done(x_smbd_conn_t *smbd_conn,
 static bool smbd_qdir_queue_req(x_smbd_qdir_t *smbd_qdir, x_smbd_requ_t *smbd_requ)
 {
 	auto &requ_list = smbd_qdir->requ_list;
-	x_smbd_ref_inc(smbd_requ);
+	x_ref_inc(smbd_requ);
 	for (auto curr_requ = requ_list.get_back(); curr_requ;
 			curr_requ = requ_list.prev(curr_requ)) {
 		X_ASSERT(smbd_requ->compound_id != curr_requ->compound_id);
@@ -204,7 +204,7 @@ struct smbd_qdir_evt_t
 	}
 	~smbd_qdir_evt_t()
 	{
-		x_smbd_ref_dec(smbd_requ);
+		x_ref_dec(smbd_requ);
 	}
 	x_fdevt_user_t base;
 	x_smbd_requ_t * const smbd_requ;
@@ -248,7 +248,7 @@ static x_job_t::retval_t smbd_qdir_job_run(x_job_t *job, void *sche)
 }
 
 x_smbd_qdir_t::x_smbd_qdir_t(x_smbd_open_t *smbd_open, const x_smbd_qdir_ops_t *ops)
-	: base(smbd_qdir_job_run), ops(ops), smbd_open(x_smbd_ref_inc(smbd_open))
+	: base(smbd_qdir_job_run), ops(ops), smbd_open(x_ref_inc(smbd_open))
 	, delay_ms(x_smbd_conf_get_curr().my_dev_delay_qdir_ms)
 {
 	X_SMBD_COUNTER_INC_CREATE(qdir, 1);
@@ -260,7 +260,7 @@ x_smbd_qdir_t::~x_smbd_qdir_t()
 	if (fnmatch) {
 		x_fnmatch_destroy(fnmatch);
 	}
-	x_smbd_ref_dec(smbd_open);
+	x_ref_dec(smbd_open);
 	X_SMBD_COUNTER_INC_DELETE(qdir, 1);
 }
 

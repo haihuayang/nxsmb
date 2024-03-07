@@ -28,7 +28,7 @@ NTSTATUS x_smb2_process_tdis(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 	}
 
 	bool ret = x_smbd_tcon_disconnect(smbd_requ->smbd_tcon);
-	X_SMBD_REF_DEC(smbd_requ->smbd_tcon);
+	X_REF_DEC(smbd_requ->smbd_tcon);
 
 	if (!ret) {
 		return NT_STATUS_NETWORK_NAME_DELETED;

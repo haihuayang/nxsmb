@@ -86,34 +86,18 @@ struct x_smbd_share_t;
 struct x_smbd_volume_t;
 
 template <class T>
-T *x_smbd_ref_inc(T *);
-
-template <class T>
-void x_smbd_ref_dec(T *);
-
-template <class T>
-inline void x_smbd_ref_dec_if(T *t)
-{
-	if (t) {
-		x_smbd_ref_dec(t);
-	}
-}
-
-#define X_SMBD_REF_DEC(t) do { x_smbd_ref_dec(t); (t) = nullptr; } while (0)
-
-template <class T>
 struct x_smbd_ptr_t
 {
 	explicit x_smbd_ptr_t(T *t) noexcept : val(t) { }
 	~x_smbd_ptr_t() noexcept {
-		x_smbd_ref_dec_if(val);
+		x_ref_dec_if(val);
 	}
 	x_smbd_ptr_t(x_smbd_ptr_t<T> &&o) noexcept {
 		val = std::exchange(o.val, nullptr);
 	}
 	x_smbd_ptr_t<T> &operator=(x_smbd_ptr_t<T> &&o) noexcept {
 		if (this != &o) {
-			x_smbd_ref_dec_if(val);
+			x_ref_dec_if(val);
 			val = std::exchange(o.val, nullptr);
 		}
 		return *this;

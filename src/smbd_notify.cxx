@@ -24,7 +24,7 @@ struct smd_notify_evt_t
 
 	~smd_notify_evt_t()
 	{
-		x_smbd_ref_dec(smbd_requ);
+		x_ref_dec(smbd_requ);
 	}
 
 	x_fdevt_user_t base;

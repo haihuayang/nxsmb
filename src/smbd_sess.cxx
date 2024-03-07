@@ -70,14 +70,14 @@ struct x_smbd_sess_t
 };
 
 template <>
-x_smbd_sess_t *x_smbd_ref_inc(x_smbd_sess_t *smbd_sess)
+x_smbd_sess_t *x_ref_inc(x_smbd_sess_t *smbd_sess)
 {
 	g_smbd_sess_table->incref(smbd_sess->id);
 	return smbd_sess;
 }
 
 template <>
-void x_smbd_ref_dec(x_smbd_sess_t *smbd_sess)
+void x_ref_dec(x_smbd_sess_t *smbd_sess)
 {
 	g_smbd_sess_table->decref(smbd_sess->id);
 }
@@ -376,7 +376,7 @@ void x_smbd_sess_close_previous(const x_smbd_sess_t *curr_sess, uint64_t prev_se
 	if (prev_sess->smbd_user && match_user(*curr_sess->smbd_user, *prev_sess->smbd_user)) {
 		smbd_sess_logoff(prev_sess, true);
 	}
-	x_smbd_ref_dec(prev_sess);
+	x_ref_dec(prev_sess);
 }
 
 void x_smbd_sess_update_num_open(x_smbd_sess_t *smbd_sess, int opens)
@@ -395,7 +395,7 @@ bool x_smbd_sess_post_user(x_smbd_sess_t *smbd_sess, x_fdevt_user_t *evt)
 			continue;
 		}
 		posted = x_smbd_chan_post_user(smbd_chan, evt, false);
-		x_smbd_ref_dec(smbd_chan);
+		x_ref_dec(smbd_chan);
 		if (posted) {
 			return true;
 		}

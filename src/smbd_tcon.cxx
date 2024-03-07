@@ -20,14 +20,14 @@ struct x_smbd_tcon_t
 			uint32_t share_access)
 		: tick_create(tick_now), share_access(share_access)
 		, encrypted(share->smb_encrypt == x_smbd_feature_option_t::required)
-		, smbd_sess(x_smbd_ref_inc(smbd_sess)), smbd_share(share)
+		, smbd_sess(x_ref_inc(smbd_sess)), smbd_share(share)
 		, smbd_volume(volume)
        	{
 		X_SMBD_COUNTER_INC_CREATE(tcon, 1);
 	}
 	~x_smbd_tcon_t()
 	{
-		x_smbd_ref_dec(smbd_sess);
+		x_ref_dec(smbd_sess);
 		X_SMBD_COUNTER_INC_DELETE(tcon, 1);
 	}
 
@@ -49,14 +49,14 @@ struct x_smbd_tcon_t
 };
 
 template <>
-x_smbd_tcon_t *x_smbd_ref_inc(x_smbd_tcon_t *smbd_tcon)
+x_smbd_tcon_t *x_ref_inc(x_smbd_tcon_t *smbd_tcon)
 {
 	g_smbd_tcon_table->incref(smbd_tcon->tid);
 	return smbd_tcon;
 }
 
 template <>
-void x_smbd_ref_dec(x_smbd_tcon_t *smbd_tcon)
+void x_ref_dec(x_smbd_tcon_t *smbd_tcon)
 {
 	g_smbd_tcon_table->decref(smbd_tcon->tid);
 }
@@ -74,10 +74,10 @@ x_smbd_tcon_t *x_smbd_tcon_create(x_smbd_sess_t *smbd_sess,
 	}
 	if (!x_smbd_sess_link_tcon(smbd_sess, &smbd_tcon->sess_link)) {
 		g_smbd_tcon_table->remove(smbd_tcon->tid);
-		x_smbd_ref_dec(smbd_tcon);
+		x_ref_dec(smbd_tcon);
 		return nullptr;
 	}
-	x_smbd_ref_inc(smbd_tcon); // ref by smbd_sess list
+	x_ref_inc(smbd_tcon); // ref by smbd_sess list
 
 	return smbd_tcon;
 }
@@ -134,7 +134,7 @@ bool x_smbd_tcon_match(const x_smbd_tcon_t *smbd_tcon, const x_smbd_sess_t *smbd
 
 x_smbd_sess_t *x_smbd_tcon_get_sess(const x_smbd_tcon_t *smbd_tcon)
 {
-	return x_smbd_ref_inc(smbd_tcon->smbd_sess);
+	return x_ref_inc(smbd_tcon->smbd_sess);
 }
 
 bool x_smbd_tcon_same_sess(const x_smbd_tcon_t *smbd_tcon1, const x_smbd_tcon_t *smbd_tcon2)
@@ -202,7 +202,7 @@ static bool smbd_tcon_terminate(x_smbd_tcon_t *smbd_tcon, bool shutdown)
 	lock.unlock();
 
 	g_smbd_tcon_table->remove(smbd_tcon->tid);
-	x_smbd_ref_dec(smbd_tcon);
+	x_ref_dec(smbd_tcon);
 
 	x_dlink_t *link;
 	lock.lock();
@@ -214,7 +214,7 @@ static bool smbd_tcon_terminate(x_smbd_tcon_t *smbd_tcon, bool shutdown)
 	}
 	lock.unlock();
 
-	x_smbd_ref_dec(smbd_tcon); // ref by smbd_sess tcon_list
+	x_ref_dec(smbd_tcon); // ref by smbd_sess tcon_list
 	return true;
 }
 

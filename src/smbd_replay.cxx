@@ -75,7 +75,7 @@ NTSTATUS x_smbd_replay_cache_lookup(
 		if (!replay_operation) {
 			return NT_STATUS_DUPLICATE_OBJECTID;
 		} else {
-			*psmbd_open = x_smbd_ref_inc(replay_item->smbd_open);
+			*psmbd_open = x_ref_inc(replay_item->smbd_open);
 			return NT_STATUS_OK;
 		}
 	} else {
@@ -98,7 +98,7 @@ void x_smbd_replay_cache_clear(
 	}
 
 	if (replay_item->smbd_open) {
-		x_smbd_ref_dec(replay_item->smbd_open);
+		x_ref_dec(replay_item->smbd_open);
 	}
 	delete replay_item;
 }
@@ -115,7 +115,7 @@ void x_smbd_replay_cache_set(
 			create_guid);
 	X_ASSERT(replay_item);
 	X_ASSERT(!replay_item->smbd_open);
-	replay_item->smbd_open = x_smbd_ref_inc(smbd_open);
+	replay_item->smbd_open = x_ref_inc(smbd_open);
 }
 #if 0
 bool x_smbd_replay_cache_add(
@@ -132,7 +132,7 @@ bool x_smbd_replay_cache_add(
 		return false;
 	}
 	replay_item = new replay_item_t(client_guid, create_guid);
-	replay_item->smbd_open = x_smbd_ref_inc(smbd_open);
+	replay_item->smbd_open = x_ref_inc(smbd_open);
 	g_replay_cache.hashtable.insert(replay_item, hash);
 	return true;
 }

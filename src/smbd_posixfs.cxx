@@ -1113,7 +1113,7 @@ struct posixfs_read_evt_t
 	}
 	~posixfs_read_evt_t()
 	{
-		x_smbd_ref_dec(smbd_requ);
+		x_ref_dec(smbd_requ);
 	}
 	x_fdevt_user_t base;
 	x_smbd_requ_t * const smbd_requ;
@@ -1313,7 +1313,7 @@ NTSTATUS posixfs_object_op_read(
 				delay_ms);
 	}
 	posixfs_object_incref(posixfs_object);
-	x_smbd_ref_inc(smbd_requ);
+	x_ref_inc(smbd_requ);
 	posixfs_read_job_t *read_job = new posixfs_read_job_t(posixfs_object, smbd_requ,
 			delay_ms);
 	smbd_requ->save_requ_state(state);
@@ -1373,7 +1373,7 @@ struct posixfs_write_evt_t
 	}
 	~posixfs_write_evt_t()
 	{
-		x_smbd_ref_dec(smbd_requ);
+		x_ref_dec(smbd_requ);
 	}
 	x_fdevt_user_t base;
 	x_smbd_requ_t * const smbd_requ;
@@ -1463,7 +1463,7 @@ NTSTATUS posixfs_object_op_write(
 				delay_ms);
 	}
 	posixfs_object_incref(posixfs_object);
-	x_smbd_ref_inc(smbd_requ);
+	x_ref_inc(smbd_requ);
 	posixfs_write_job_t *write_job = new posixfs_write_job_t(posixfs_object, smbd_requ,
 			delay_ms);
 	smbd_requ->save_requ_state(state);

@@ -18,7 +18,7 @@ static x_smbd_tcon_t *make_tcon(x_smbd_sess_t *smbd_sess,
 	}
 
 	x_smbd_tcon_insert(smbd_tcon);
-	x_smbd_ref_inc(smbd_tcon);
+	x_ref_inc(smbd_tcon);
 	x_smbd_sess_link_tcon(smbd_sess, &smbd_tcon->sess_link);
 	return smbd_tcon;
 }
@@ -258,7 +258,7 @@ NTSTATUS x_smb2_process_tcon(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 
 	/* make_connection_snum *out_maximal_access = tcon->compat->share_access; */
 
-	smbd_requ->smbd_tcon = x_smbd_ref_inc(smbd_tcon);
+	smbd_requ->smbd_tcon = x_ref_inc(smbd_tcon);
 	x_smb2_reply_tcon(smbd_conn, smbd_tcon, smbd_requ, NT_STATUS_OK,
 			smbd_share->get_type(),
 			out_share_flags,
