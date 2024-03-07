@@ -191,6 +191,11 @@ NTSTATUS x_smb2_process_tcon(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 		X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_BAD_NETWORK_NAME);
 	}
 
+	if (smbd_share->smb_encrypt == x_smbd_feature_option_t::required &&
+			x_smbd_conn_get_negprot(smbd_conn).cryption_algo == X_SMB2_ENCRYPTION_INVALID_ALGO) {
+		X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_ACCESS_DENIED);
+	}
+
 	bool is_dfs = false;
 	if (smbd_share->is_dfs()) {
 		is_dfs = true;
