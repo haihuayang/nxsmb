@@ -58,6 +58,23 @@ static bool parse_share_flags(uint32_t &share_flags, uint32_t flag,
 	return true;
 }
 
+static bool parse_feature_option(x_smbd_feature_option_t &option,
+		const std::string &value)
+{
+	if (value == "required") {
+		option = x_smbd_feature_option_t::required;
+	} else if (value == "desired") {
+		option = x_smbd_feature_option_t::desired;
+	} else if (value == "enabled") {
+		option = x_smbd_feature_option_t::enabled;
+	} else if (value == "disabled") {
+		option = x_smbd_feature_option_t::disabled;
+	} else {
+		return false;
+	}
+	return true;
+}
+
 static bool parse_uint32(const std::string &str, uint32_t &ret)
 {
 	char *end;
@@ -284,6 +301,7 @@ static bool smbd_conf_add_share(x_smbd_conf_t &smbd_conf,
 				std::move(name_16),
 				std::move(name_l16),
 				share_spec.share_flags,
+				share_spec.smb_encrypt,
 				smbd_volumes[0]);
 	}
 	if (!share) {
@@ -464,6 +482,11 @@ static bool parse_share_param(x_smbd_share_spec_t &share_spec,
 		if (!parse_share_flags(share_spec.share_flags,
 					x_smbd_share_t::f_read_only, value)) {
 			X_PANIC("Unexpected boolean %s at %s:%u",
+					value.c_str(), path, lineno);
+		}
+	} else if (name == "smb encrypt") {
+		if (!parse_feature_option(share_spec.smb_encrypt, value)) {
+			X_PANIC("Unexpected feature option %s at %s:%u",
 					value.c_str(), path, lineno);
 		}
 	} else if (name == "continuously available") {

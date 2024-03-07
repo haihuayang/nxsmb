@@ -57,6 +57,13 @@ bool x_smbd_del_timer(x_timer_job_t *entry);
 
 std::array<x_tick_t, 2> x_smbd_get_time();
 
+enum class x_smbd_feature_option_t {
+	disabled,
+	enabled,
+	desired,
+	required,
+};
+
 #if 0
 enum class x_smbd_tcon_type_t {
 	DEFAULT,
@@ -355,6 +362,7 @@ bool x_smbd_tcon_get_read_only(const x_smbd_tcon_t *smbd_tcon);
 bool x_smbd_tcon_get_durable_handle(const x_smbd_tcon_t *smbd_tcon);
 bool x_smbd_tcon_get_continuously_available(const x_smbd_tcon_t *smbd_tcon);
 bool x_smbd_tcon_get_abe(const x_smbd_tcon_t *smbd_tcon);
+bool x_smbd_tcon_encrypted(const x_smbd_tcon_t *smbd_tcon);
 bool x_smbd_tcon_match(const x_smbd_tcon_t *smbd_tcon, const x_smbd_sess_t *smbd_sess, uint32_t tid);
 x_smbd_sess_t *x_smbd_tcon_get_sess(const x_smbd_tcon_t *smbd_tcon);
 bool x_smbd_tcon_same_sess(const x_smbd_tcon_t *smbd_tcon1, const x_smbd_tcon_t *smbd_tcon2);

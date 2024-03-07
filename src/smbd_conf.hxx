@@ -32,6 +32,7 @@ struct x_smbd_share_spec_t
 	x_smb2_uuid_t uuid;
 	const std::string name;
 	uint32_t share_flags = x_smbd_share_t::f_durable_handle;
+	x_smbd_feature_option_t smb_encrypt = x_smbd_feature_option_t::enabled;
 	bool dfs_test = false;
 	uint32_t dfs_referral_ttl = default_dfs_referral_ttl;
 	std::vector<std::pair<x_smb2_uuid_t, int>> volumes;

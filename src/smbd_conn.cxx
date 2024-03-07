@@ -968,6 +968,10 @@ static NTSTATUS x_smbd_conn_process_smb2_intl(x_smbd_conn_t *smbd_conn, x_smbd_r
 				return NT_STATUS_NETWORK_NAME_DELETED;
 			}
 		}
+
+		if (!smbd_requ->encrypted && x_smbd_tcon_encrypted(smbd_requ->smbd_tcon)) {
+			return NT_STATUS_ACCESS_DENIED;
+		}
 	}
 
 	X_ASSERT(smbd_requ->interim_state == x_smbd_requ_t::INTERIM_S_NONE);

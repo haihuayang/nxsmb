@@ -19,6 +19,7 @@ struct x_smbd_tcon_t
 			std::shared_ptr<x_smbd_volume_t> &&volume,
 			uint32_t share_access)
 		: tick_create(tick_now), share_access(share_access)
+		, encrypted(share->smb_encrypt == x_smbd_feature_option_t::required)
 		, smbd_sess(x_smbd_ref_inc(smbd_sess)), smbd_share(share)
 		, smbd_volume(volume)
        	{
@@ -33,6 +34,7 @@ struct x_smbd_tcon_t
 	x_dlink_t sess_link; // protected by smbd_sess' mutex
 	const x_tick_t tick_create;
 	const uint32_t share_access;
+	const bool encrypted;
 	enum {
 		S_ACTIVE,
 		S_DONE,
@@ -118,6 +120,11 @@ bool x_smbd_tcon_get_continuously_available(const x_smbd_tcon_t *smbd_tcon)
 bool x_smbd_tcon_get_abe(const x_smbd_tcon_t *smbd_tcon)
 {
 	return smbd_tcon->smbd_share->abe_enabled();
+}
+
+bool x_smbd_tcon_encrypted(const x_smbd_tcon_t *smbd_tcon)
+{
+	return smbd_tcon->encrypted;
 }
 
 bool x_smbd_tcon_match(const x_smbd_tcon_t *smbd_tcon, const x_smbd_sess_t *smbd_sess, uint32_t tid)

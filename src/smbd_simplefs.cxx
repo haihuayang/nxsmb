@@ -135,8 +135,11 @@ struct simplefs_share_t : x_smbd_share_t
 			std::u16string &&name_16,
 			std::u16string &&name_l16,
 			uint32_t share_flags,
+			x_smbd_feature_option_t smb_encrypt,
 			const std::shared_ptr<x_smbd_volume_t> &smbd_volume)
-		: x_smbd_share_t(uuid, name, std::move(name_16), std::move(name_l16), share_flags)
+		: x_smbd_share_t(uuid, name, std::move(name_16),
+				std::move(name_l16), share_flags,
+				smb_encrypt)
 		, smbd_volume(smbd_volume)
 	{
 	}
@@ -198,12 +201,13 @@ std::shared_ptr<x_smbd_share_t> x_smbd_simplefs_share_create(
 		std::u16string &&name_16,
 		std::u16string &&name_l16,
 		uint32_t share_flags,
+		x_smbd_feature_option_t smb_encrypt,
 		std::shared_ptr<x_smbd_volume_t> &smbd_volume)
 {
 	int err = x_smbd_volume_init(smbd_volume, &simplefs_object_ops);
 	X_TODO_ASSERT(err == 0);
 	return std::make_shared<simplefs_share_t>(uuid, name,
 			std::move(name_16), std::move(name_l16),
-			share_flags, smbd_volume);
+			share_flags, smb_encrypt, smbd_volume);
 }
 

@@ -527,7 +527,11 @@ NTSTATUS x_smb2_process_negprot(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_re
 				negprot.compression_flags);
 
 	} else if (negprot.dialect >= X_SMB2_DIALECT_300) {
-		negprot.cryption_algo = X_SMB2_ENCRYPTION_AES128_CCM;
+		if (in_capabilities & X_SMB2_CAP_ENCRYPTION) {
+			negprot.cryption_algo = X_SMB2_ENCRYPTION_AES128_CCM;
+		} else {
+			negprot.cryption_algo = X_SMB2_ENCRYPTION_INVALID_ALGO;
+		}
 	}
 
 	negprot.client_security_mode = in_security_mode;
