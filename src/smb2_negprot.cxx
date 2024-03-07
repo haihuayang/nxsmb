@@ -547,6 +547,10 @@ NTSTATUS x_smb2_process_negprot(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_re
 
 	negprot.server_capabilities = smbd_conf.capabilities &
 		((bits_300 & in_capabilities) | ~(bits_300));
+	/* [MS-SMB2] 3.3.5.4: CAP_ENCRYPTION is set only in 3.0 or 3.0.2 */
+	if (negprot.dialect >= X_SMB2_DIALECT_310) {
+		negprot.server_capabilities &= ~X_SMB2_CAP_ENCRYPTION;
+	}
 	if (negprot.dialect < X_SMB2_DIALECT_300) {
 		negprot.server_capabilities &= ~bits_300;
 	}
