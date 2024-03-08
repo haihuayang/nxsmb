@@ -5,6 +5,7 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <uuid/uuid.h>
+#include <sys/sysinfo.h>
 
 #define PARSE_FATAL(fmt, ...) do { \
 	X_PANIC(fmt "\n", __VA_ARGS__); \
@@ -661,6 +662,26 @@ static int parse_smbconf(x_smbd_conf_t &smbd_conf)
 	// override global params by argv
 	for (const auto &[name, value]: g_cmdline_options) {
 		parse_global_param(smbd_conf, smbd_conf.volume_specs, name, value);
+	}
+
+	if (smbd_conf.client_thread_count == 0 || smbd_conf.async_thread_count == 0) {
+		int ncpu = get_nprocs();
+		if (ncpu <= 0) {
+			X_LOG(CONF, ERR, "get_nprocs return %d, errno=%d",
+					ncpu, errno);
+			ncpu = 1;
+		}
+		if (smbd_conf.client_thread_count == 0) {
+			X_LOG(CONF, NOTICE, "set client_thread_count to 4 * %d",
+					ncpu);
+			smbd_conf.client_thread_count = 4 * ncpu;
+		}
+
+		if (smbd_conf.async_thread_count == 0) {
+			X_LOG(CONF, NOTICE, "set async_thread_count to 4 * %d",
+					ncpu);
+			smbd_conf.async_thread_count = 4 * ncpu;
+		}
 	}
 
 	if (smbd_conf.node_l16.empty()) {

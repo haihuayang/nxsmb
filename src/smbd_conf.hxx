@@ -77,8 +77,8 @@ struct x_smbd_conf_t
 
 	x_smb2_uuid_t guid; // uint8_t guid[16];
 	int port = 445;
-	uint32_t client_thread_count = 1;
-	uint32_t async_thread_count = 1;
+	uint32_t client_thread_count = 0;
+	uint32_t async_thread_count = 0;
 
 	uint32_t max_trans_size = 1024 * 1024;
 	uint32_t max_read_size = 1024 * 1024;
