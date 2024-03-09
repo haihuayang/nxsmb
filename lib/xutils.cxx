@@ -139,10 +139,11 @@ static int open_base(int dirfd, const char *base)
 	char name[PATH_MAX];
 	snprintf(name, sizeof name, "%s-%s", base, tmbuf);
 	int fd = openat(dirfd, name, O_WRONLY | O_APPEND | O_CREAT, 0644);
-	if (fd >= 0) {
-		unlinkat(dirfd, base, 0);
-		symlinkat(name, dirfd, base);
+	if (fd < 0) {
+		return -errno;
 	}
+	unlinkat(dirfd, base, 0);
+	symlinkat(name, dirfd, base);
 	return fd;
 }
 
@@ -155,17 +156,15 @@ static int open_dir(int &dirfd, int &fd, std::string &basebuf, char *path)
 		return -errno;
 	}
 
-	int ret = 0;
 	int tmp_fd = open_base(tmp_dirfd, base);
-	if (tmp_fd == -1) {
-		ret = -errno;
+	if (tmp_fd < 0) {
 		close(tmp_dirfd);
-		return ret;
+		return tmp_fd;
 	}
 	dirfd = tmp_dirfd;
 	fd = tmp_fd;
 	basebuf = base;
-	return ret;
+	return 0;
 }
 
 static std::shared_ptr<x_logger_t> log_init_file(const char *log_name, uint64_t filesize)
@@ -176,7 +175,7 @@ static std::shared_ptr<x_logger_t> log_init_file(const char *log_name, uint64_t 
 		return nullptr;
 	}
 
-	int dirfd, logfd;
+	int dirfd = -1, logfd = -1;
 	std::string base;
 	int err = open_dir(dirfd, logfd, base, tmp);
 	free(tmp);

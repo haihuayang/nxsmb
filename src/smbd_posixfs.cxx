@@ -2652,7 +2652,7 @@ NTSTATUS posixfs_op_open_durable(x_smbd_open_t *&smbd_open,
 		std::shared_ptr<x_smbd_volume_t> &smbd_volume,
 		const x_smbd_durable_t &smbd_durable)
 {
-	posixfs_object_t *posixfs_object;
+	posixfs_object_t *posixfs_object = nullptr;
 	NTSTATUS status = posixfs_open_object_by_handle(&posixfs_object,
 			smbd_volume, smbd_durable.file_handle);
 	if (!NT_STATUS_IS_OK(status)) {
@@ -3202,7 +3202,7 @@ int posixfs_op_init_volume(std::shared_ptr<x_smbd_volume_t> &smbd_volume)
 {
 	uint16_t vol_id = 0xffffu;
 	int rootdir_fd = -1;
-	x_smbd_durable_db_t *durable_db;
+	x_smbd_durable_db_t *durable_db = nullptr;
 
 	if (!smbd_volume->path.empty()) {
 		int vol_fd = open(smbd_volume->path.c_str(), O_RDONLY);

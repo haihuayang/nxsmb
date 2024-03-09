@@ -198,7 +198,12 @@ static void smbd_chan_set_keys(x_smbd_chan_t *smbd_chan,
 	const x_array_const_t<char> *derivation_sign_label, *derivation_sign_context,
 	      *derivation_encryption_label, *derivation_encryption_context,
 	      *derivation_decryption_label, *derivation_decryption_context,
-	      *derivation_application_label, *derivation_application_context;
+	      /* gcc warn derivation_application_label and derivation_application_context
+	       * may be used uninitialized, but why it does not complain other
+	       * variables?
+	       */
+	      *derivation_application_label = nullptr,
+	      *derivation_application_context = nullptr;
 
 	uint16_t dialect = x_smbd_conn_get_dialect(smbd_chan->smbd_conn);
 	uint16_t cryption_algo = x_smbd_conn_get_cryption_algo(smbd_chan->smbd_conn);

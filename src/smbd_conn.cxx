@@ -282,6 +282,7 @@ static void x_smbd_conn_queue(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ
 		int clen = x_smbd_conn_create_smb2_tf(smbd_conn, smbd_requ, &out_buf);
 		if (clen < 0) {
 			X_TODO;
+			return;
 		}
 		x_bufref_t *bufref = new x_bufref_t{out_buf, 4, (uint32_t)clen};
 		x_bufref_t *out_buf_head = smbd_requ->out_buf_head;

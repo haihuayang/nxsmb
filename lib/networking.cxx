@@ -1066,6 +1066,8 @@ int x_interpret_iface(std::vector<x_iface_t> &ret, std::string token_str,
 	x_iface_t ifs;
 	ZERO_STRUCT(ifs);
 	(void)strncpy(ifs.name, token, sizeof(ifs.name));
+	ifs.name[sizeof(ifs.name) - 1] = '\0';
+
 	ifs.flags = IFF_BROADCAST;
 	ifs.ip = ss;
 	ifs.netmask = ss_mask;
