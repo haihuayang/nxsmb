@@ -3,10 +3,6 @@
 #include "smbd_open.hxx"
 #include "smbd_stats.hxx"
 
-enum {
-	X_SMB2_CLOSE_REQU_BODY_LEN = 0x18,
-	X_SMB2_CLOSE_RESP_BODY_LEN = 0x3c,
-};
 
 static bool decode_in_close(x_smbd_requ_state_close_t &state,
 		const uint8_t *in_hdr)
@@ -25,16 +21,27 @@ static void encode_out_close(const x_smbd_requ_state_close_t &state,
 {
 	x_smb2_close_resp_t *out_close = (x_smb2_close_resp_t *)(out_hdr + sizeof(x_smb2_header_t));
 
-	out_close->struct_size = X_H2LE16(X_SMB2_CLOSE_RESP_BODY_LEN);
+	out_close->struct_size = X_H2LE16(sizeof(x_smb2_close_resp_t));
 	out_close->flags = X_H2LE16(state.out_flags);
 	out_close->reserved0 = 0;
 	/* TODO x_smb2_close_resp_t is not 8 bytes aligned, sizeof() is not 0x3c */
 	if (state.out_flags & X_SMB2_CLOSE_FLAGS_FULL_INFORMATION) {
 		/* TODO not work for big-endian */
-		memcpy(&out_close->info, &state.out_info, sizeof(state.out_info));
+		out_close->info.out_create_ts = X_H2LE64(state.out_info.out_create_ts);
+		out_close->info.out_last_access_ts = X_H2LE64(state.out_info.out_last_access_ts);
+		out_close->info.out_last_write_ts = X_H2LE64(state.out_info.out_last_write_ts);
+		out_close->info.out_change_ts = X_H2LE64(state.out_info.out_change_ts);
+		out_close->info.out_allocation_size = X_H2LE64(state.out_info.out_allocation_size);
+		out_close->info.out_end_of_file = X_H2LE64(state.out_info.out_end_of_file);
+		out_close->info.out_file_attributes = X_H2LE64(state.out_info.out_file_attributes);
 	} else {
-		out_close->info = x_smb2_create_close_info_t{};
-		// memset(&out_close->info, 0, sizeof(out_close->info));
+		out_close->info.out_create_ts = 0;
+		out_close->info.out_last_access_ts = 0;
+		out_close->info.out_last_write_ts = 0;
+		out_close->info.out_change_ts = 0;
+		out_close->info.out_allocation_size = 0;
+		out_close->info.out_end_of_file = 0;
+		out_close->info.out_file_attributes = 0;
 	}
 }
 
@@ -42,14 +49,14 @@ static void x_smb2_reply_close(x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ,
 		const x_smbd_requ_state_close_t &state)
 {
-	x_bufref_t *bufref = x_smb2_bufref_alloc(X_SMB2_CLOSE_RESP_BODY_LEN);
+	x_bufref_t *bufref = x_smb2_bufref_alloc(sizeof(x_smb2_close_resp_t));
 
 	uint8_t *out_hdr = bufref->get_data();
 	
 	encode_out_close(state, out_hdr);
 
 	x_smb2_reply(smbd_conn, smbd_requ, bufref, bufref, NT_STATUS_OK, 
-			sizeof(x_smb2_header_t) + X_SMB2_CLOSE_RESP_BODY_LEN);
+			sizeof(x_smb2_header_t) + sizeof(x_smb2_close_resp_t));
 }
 
 NTSTATUS x_smb2_process_close(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)

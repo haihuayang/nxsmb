@@ -818,7 +818,7 @@ struct x_smb2_create_close_info_t
 	uint64_t out_allocation_size{0};
 	uint64_t out_end_of_file{0};
 	uint32_t out_file_attributes{0};
-};
+} __attribute__ ((packed));
 
 struct x_smb2_close_requ_t
 {
