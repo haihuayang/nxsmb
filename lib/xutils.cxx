@@ -251,7 +251,7 @@ static std::array<unsigned int, 2> parse_log_class(const char *p, const char *en
 
 static bool set_log_level(const char *log_level_param)
 {
-	unsigned int log_level[X_LOG_LEVEL_MAX];
+	unsigned int log_level[X_LOG_CLASS_MAX];
 	unsigned int log_level_all = X_LOG_LEVEL_MAX;
 	unsigned int i;
 	for (i = 0; i < X_LOG_CLASS_MAX; ++i) {
