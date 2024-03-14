@@ -653,7 +653,8 @@ NTSTATUS x_smbd_object_lookup(x_smbd_object_t **p_smbd_object,
 		const std::u16string &path_base,
 		uint64_t path_data,
 		bool create_if,
-		uint64_t path_hash);
+		uint64_t path_hash,
+		bool ncase);
 
 void x_smbd_release_object_and_stream(x_smbd_object_t *smbd_object,
 		x_smbd_stream_t *smbd_stream);

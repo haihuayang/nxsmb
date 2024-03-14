@@ -912,7 +912,7 @@ static int ipc_op_init_volume(std::shared_ptr<x_smbd_volume_t> &smbd_volume)
 		x_smbd_object_t *smbd_object;
 		NTSTATUS status = x_smbd_object_lookup(&smbd_object,
 				smbd_volume, parent_object, item.name,
-				priv_data, true, hash);
+				priv_data, true, hash, true);
 		X_ASSERT(NT_STATUS_IS_OK(status));
 		x_smbd_release_object(parent_object);
 		++priv_data;

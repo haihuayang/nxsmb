@@ -75,14 +75,22 @@ static x_smbd_object_t *smbd_object_lookup_intl(
 		smbd_object_pool_t::bucket_t &bucket,
 		x_smbd_object_t *parent_object,
 		const std::u16string &path_base,
-		uint64_t path_hash)
+		uint64_t path_hash,
+		bool ncase)
 {
 	for (auto *link = bucket.head.get_front(); link; link = link->get_next()) {
 		x_smbd_object_t *elem = X_CONTAINER_OF(link, x_smbd_object_t, path_hash_link);
 		if (elem->path_hash == path_hash && elem->parent_object == parent_object
-				&& elem->smbd_volume == smbd_volume
-				&& x_strcase_equal(elem->path_base, path_base)) {
-			return elem;
+				&& elem->smbd_volume == smbd_volume) {
+			if (ncase) {
+				if (x_strcase_equal(elem->path_base, path_base)) {
+					return elem;
+				}
+			} else {
+				if (elem->path_base == path_base) {
+					return elem;
+				}
+			}
 		}
 	}
 	return nullptr;
@@ -103,7 +111,8 @@ NTSTATUS x_smbd_object_lookup(x_smbd_object_t **p_smbd_object,
 		const std::u16string &path_base,
 		uint64_t path_data,
 		bool create_if,
-		uint64_t path_hash)
+		uint64_t path_hash,
+		bool ncase)
 {
 	auto &pool = smbd_object_pool;
 	auto bucket_idx = path_hash % pool.bucket_size;
@@ -111,7 +120,7 @@ NTSTATUS x_smbd_object_lookup(x_smbd_object_t **p_smbd_object,
 
 	auto lock = std::lock_guard(bucket.mutex);
 	x_smbd_object_t *smbd_object = smbd_object_lookup_intl(
-			smbd_volume, bucket, parent_object, path_base, path_hash);
+			smbd_volume, bucket, parent_object, path_base, path_hash, ncase);
 
 	if (!smbd_object) {
 		if (!create_if) {
@@ -228,7 +237,7 @@ static NTSTATUS smbd_object_openat(
 
 	x_smbd_object_t *smbd_object;
 	NTSTATUS status = x_smbd_object_lookup(&smbd_object, smbd_volume,
-			parent_object, path_base, 0, true, path_hash);
+			parent_object, path_base, 0, true, path_hash, true);
 	if (!NT_STATUS_IS_OK(status)) {
 		return status;
 	}
@@ -311,7 +320,7 @@ NTSTATUS x_smbd_open_object(x_smbd_object_t **p_smbd_object,
 
 	status = x_smbd_object_lookup(&smbd_object, smbd_volume,
 			parent_object, path_base,
-			path_priv_data, create_if, path_hash);
+			path_priv_data, create_if, path_hash, true);
 	x_smbd_release_object(parent_object);
 	if (!NT_STATUS_IS_OK(status)) {
 		return status;
@@ -340,7 +349,7 @@ static NTSTATUS rename_object_intl(
 		uint64_t new_hash)
 {
 	x_smbd_object_t *new_object = smbd_object_lookup_intl(smbd_volume,
-			new_bucket, new_parent_object, new_path_base, new_hash);
+			new_bucket, new_parent_object, new_path_base, new_hash, true);
 	if (new_object && new_object->exists()) {
 		/* TODO replace forced */
 		return NT_STATUS_OBJECT_NAME_COLLISION;
