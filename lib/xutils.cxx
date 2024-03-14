@@ -249,6 +249,23 @@ static std::array<unsigned int, 2> parse_log_class(const char *p, const char *en
 	}
 }
 
+static bool foreach(const char *p, char sep, auto func)
+{
+	const char *pos;
+	for (;;) {
+		pos = strchr(p, ',');
+		if (!pos) {
+			break;
+		}
+
+		if (!func(p, pos)) {
+			return false;
+		}
+		p = pos + 1;
+	}
+	return func(p, p + strlen(p));
+}
+
 static bool set_log_level(const char *log_level_param)
 {
 	unsigned int log_level[X_LOG_CLASS_MAX];
@@ -258,35 +275,18 @@ static bool set_log_level(const char *log_level_param)
 		log_level[i] = X_LOG_LEVEL_MAX;
 	}
 
-	const char *p = log_level_param;
-	const char *sep;
-	for (;;) {
-		sep = strchr(p, ',');
-		if (!sep) {
-			break;
-		}
-		auto [ lc, ll ] = parse_log_class(p, sep);
-		if (ll >= X_LOG_LEVEL_MAX) {
-			X_LOG(UTILS, ERR, "Invalid log_level '%s'", log_level_param);
-			return false;
-		}
-		if (lc == X_LOG_CLASS_MAX) {
-			log_level_all = ll;
-		} else {
-			log_level[lc] = ll;
-		}
-		p = sep + 1;
-	}
-	auto [ lc, ll ] = parse_log_class(p, p + strlen(p));
-	if (ll >= X_LOG_LEVEL_MAX) {
-		X_LOG(UTILS, ERR, "Invalid log_level '%s'", log_level_param);
-		return false;
-	}
-	if (lc == X_LOG_CLASS_MAX) {
-		log_level_all = ll;
-	} else {
-		log_level[lc] = ll;
-	}
+	foreach(log_level_param, ',',
+		[&log_level, &log_level_all](const char *b, const char *e) {
+			auto [ lc, ll ] = parse_log_class(b, e);
+			if (ll >= X_LOG_LEVEL_MAX) {
+				X_LOG(UTILS, ERR, "Invalid log '%.*s'", int(e-b), b);
+			} else if (lc == X_LOG_CLASS_MAX) {
+				log_level_all = ll;
+			} else {
+				log_level[lc] = ll;
+			}
+			return true;
+		});
 
 	if (log_level_all != X_LOG_LEVEL_MAX) {
 		for (i = 0; i < X_LOG_CLASS_MAX; ++i) {
