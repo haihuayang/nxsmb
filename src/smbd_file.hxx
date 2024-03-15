@@ -17,10 +17,10 @@ struct x_smbd_object_meta_t
 	uint64_t fsid;
 	uint64_t inode;
 	uint64_t nlink = 0;
-	idl::NTTIME creation;
-	idl::NTTIME last_access;
-	idl::NTTIME last_write;
-	idl::NTTIME change;
+	struct timespec creation;
+	struct timespec last_access;
+	struct timespec last_write;
+	struct timespec change;
 	uint32_t file_attributes;
 };
 

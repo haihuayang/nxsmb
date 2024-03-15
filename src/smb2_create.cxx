@@ -5,6 +5,7 @@
 #include "smbd_ntacl.hxx"
 #include "smbd_stats.hxx"
 #include "include/charset.hxx"
+#include "include/nttime.hxx"
 
 static const uint8_t X_SMB2_CREATE_TAG_APP_INSTANCE_ID[] = {
 	0x45, 0xBC, 0xA6, 0x6A, 0xEF, 0xA7, 0xF7, 0x4A,
@@ -554,10 +555,10 @@ static uint32_t encode_out_create(const x_smbd_requ_state_create_t &state,
 	out_create->oplock_level = state.out_oplock_level;
 	out_create->create_flags = state.out_create_flags;
 	out_create->create_action = X_H2LE32(uint32_t(smbd_open->open_state.create_action));
-	out_create->create_ts = X_H2LE64(object_meta->creation.val);
-	out_create->last_access_ts = X_H2LE64(object_meta->last_access.val);
-	out_create->last_write_ts = X_H2LE64(object_meta->last_write.val);
-	out_create->change_ts = X_H2LE64(object_meta->change.val);
+	out_create->create_ts = X_H2LE64(x_timespec_to_nttime_val(object_meta->creation));
+	out_create->last_access_ts = X_H2LE64(x_timespec_to_nttime_val(object_meta->last_access));
+	out_create->last_write_ts = X_H2LE64(x_timespec_to_nttime_val(object_meta->last_write));
+	out_create->change_ts = X_H2LE64(x_timespec_to_nttime_val(object_meta->change));
 	out_create->allocation_size = X_H2LE64(stream_meta->allocation_size);
 	out_create->end_of_file = X_H2LE64(stream_meta->end_of_file);
 	out_create->file_attributes = X_H2LE32(object_meta->file_attributes);

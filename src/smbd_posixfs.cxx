@@ -77,7 +77,7 @@ static NTSTATUS posixfs_set_basic_info(int fd,
 		dos_attr.create_time = x_nttime_to_timespec(basic_info.creation);
 		notify_actions |= FILE_NOTIFY_CHANGE_CREATION;
 	} else {
-		dos_attr.create_time = x_nttime_to_timespec(object_meta->creation);
+		dos_attr.create_time = object_meta->creation;
 	}
 
 	if (dos_attr.attr_mask != 0) {
@@ -3089,7 +3089,7 @@ NTSTATUS x_smbd_posixfs_create_open(x_smbd_open_t **psmbd_open,
 				dos_attr_t dos_attr = { 0 };
 				dos_attr.attr_mask = DOS_SET_FILE_ATTR;
 				dos_attr.file_attrs = file_attr;
-				dos_attr.create_time = x_nttime_to_timespec(meta.creation);
+				dos_attr.create_time = meta.creation;
 				posixfs_dos_attr_set(posixfs_object->fd, &dos_attr);
 				notify_actions |= FILE_NOTIFY_CHANGE_ATTRIBUTES;
 			}

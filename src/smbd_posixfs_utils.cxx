@@ -37,11 +37,11 @@ static void fill_statex(x_smbd_object_meta_t *object_meta,
 {
 	object_meta->fsid = fsid;
 	object_meta->inode = kst.ino;
-	object_meta->creation = x_timespec_to_nttime(dos_attr.create_time);
-	object_meta->last_access = x_timespec_to_nttime(kst.atime);
-	object_meta->last_write = x_timespec_to_nttime(kst.mtime);
+	object_meta->creation = dos_attr.create_time;
+	object_meta->last_access = kst.atime;
+	object_meta->last_write = kst.mtime;
 	/* samba use mtime for change time */
-	object_meta->change = x_timespec_to_nttime(kst.mtime);
+	object_meta->change = kst.mtime;
 	stream_meta->end_of_file = S_ISDIR(kst.mode) ? 0 : kst.size;
 	object_meta->file_attributes = dos_attr.file_attrs;
 	object_meta->nlink = kst.nlink;

@@ -5,6 +5,7 @@
 #include "smbd_open.hxx"
 #include "smbd_replay.hxx"
 #include "include/idtable.hxx"
+#include "include/nttime.hxx"
 #include "smbd_access.hxx"
 #include "smbd_dcerpc_srvsvc.hxx"
 
@@ -171,10 +172,10 @@ static void fill_out_info(x_smb2_create_close_info_t &info,
 		const x_smbd_object_meta_t &object_meta,
 		const x_smbd_stream_meta_t &stream_meta)
 {
-	info.out_create_ts = object_meta.creation.val;
-	info.out_last_access_ts = object_meta.last_access.val;
-	info.out_last_write_ts = object_meta.last_write.val;
-	info.out_change_ts = object_meta.change.val;
+	info.out_create_ts = x_timespec_to_nttime_val(object_meta.creation);
+	info.out_last_access_ts = x_timespec_to_nttime_val(object_meta.last_access);
+	info.out_last_write_ts = x_timespec_to_nttime_val(object_meta.last_write);
+	info.out_change_ts = x_timespec_to_nttime_val(object_meta.change);
 	info.out_file_attributes = object_meta.file_attributes;
 	info.out_allocation_size = stream_meta.allocation_size;
 	info.out_end_of_file = stream_meta.end_of_file;

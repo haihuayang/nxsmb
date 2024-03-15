@@ -211,9 +211,8 @@ static inline void output_timespec(const char *name, const struct timespec *ts)
 			ts->tv_sec, ts->tv_nsec);
 }
 
-static void output_nttime(const char *name, const idl::NTTIME nttime)
+static void output_timespec(const char *name, const struct timespec ts)
 {
-	struct timespec ts = x_nttime_to_timespec(nttime);
 	struct tm *lt = localtime(&ts.tv_sec);
 	printf("%s: %d-%02d-%02d %02d:%02d:%02d %c%ld %ld.%09ld\n",
 			name,
@@ -249,10 +248,10 @@ static int show_attrex(char **argv)
 	printf("Fsid: 0x%lx\n", object_meta.fsid);
 	printf("Inode: %lu\n", object_meta.inode);
 	printf("Nlink: %lu\n", object_meta.nlink);
-	output_nttime("Birth", object_meta.creation);
-	output_nttime("Access", object_meta.last_access);
-	output_nttime("Modify", object_meta.last_write);
-	output_nttime("Change", object_meta.change);
+	output_timespec("Birth", object_meta.creation);
+	output_timespec("Access", object_meta.last_access);
+	output_timespec("Modify", object_meta.last_write);
+	output_timespec("Change", object_meta.change);
 	printf("Size: %lu\n", stream_meta.end_of_file);
 	printf("Allocation: %lu\n", stream_meta.allocation_size);
 	printf("DosAttr: 0x%x\n", object_meta.file_attributes);

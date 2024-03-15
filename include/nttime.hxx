@@ -28,12 +28,16 @@ static inline idl::NTTIME x_tick_to_nttime(x_tick_t tick)
 	return idl::NTTIME{(tick.val / 100) + idl::NTTIME::TIME_FIXUP_CONSTANT * 1000 * 1000 * 10};
 }
 
-static inline idl::NTTIME x_timespec_to_nttime(const struct timespec &ts)
+static inline uint64_t x_timespec_to_nttime_val(const struct timespec &ts)
 {
 	uint64_t val = ts.tv_sec + idl::NTTIME::TIME_FIXUP_CONSTANT;
 	val *= 1000 * 1000 * 10;
-	val += ts.tv_nsec / 100;
-	return idl::NTTIME{val};
+	return val + ts.tv_nsec / 100;
+}
+
+static inline idl::NTTIME x_timespec_to_nttime(const struct timespec &ts)
+{
+	return { x_timespec_to_nttime_val(ts) };
 }
 
 static inline struct timespec x_nttime_to_timespec(idl::NTTIME nt)
