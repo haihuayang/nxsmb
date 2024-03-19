@@ -97,8 +97,11 @@ struct x_smbd_conf_t
 	bool host_msdfs = true;
 
 	std::string log_level;
-	uint32_t max_connections = 512;
-	uint32_t max_opens = 1024;
+	uint32_t max_connections = 64 * 1024;
+	uint32_t max_sessions = 64 * 1024;
+	/* TODO table_tcon use x_idtable_32_traits_t, so max is 64 * 1024 - 9 */
+	uint32_t max_tcons = 64 * 1024 - 9;
+	uint32_t max_opens = 64 * 1024;
 
 	uint32_t allocation_roundup_size = 4096; // TODO should be volume param
 

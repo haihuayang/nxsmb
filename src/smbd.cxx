@@ -37,12 +37,6 @@ x_auth_t *x_smbd_create_auth(const void *sec_buf, size_t sec_len)
 	return x_auth_create_by_oid(g_smbd.auth_context, GSS_SPNEGO_MECHANISM);
 }
 
-enum {
-	X_SMBD_MAX_SESSION = 1024,
-	X_SMBD_MAX_TCON = 1024,
-	X_SMBD_MAX_REQUEST = 64 * 1024,
-};
-
 void x_smbd_init()
 {
 	auto smbd_conf = x_smbd_conf_get();
@@ -55,8 +49,8 @@ void x_smbd_init()
 	uint32_t max_opens = std::max(smbd_conf->max_opens, 1024u);
 	x_smbd_object_pool_init(max_opens);
 	x_smbd_open_table_init(max_opens);
-	x_smbd_tcon_table_init(X_SMBD_MAX_TCON);
-	x_smbd_sess_table_init(X_SMBD_MAX_SESSION);
+	x_smbd_tcon_table_init(std::max(smbd_conf->max_tcons, 1024u));
+	x_smbd_sess_table_init(std::max(smbd_conf->max_sessions, 1024u));
 	x_smbd_requ_pool_init(max_opens); // TODO use max_opens for now
 	x_smbd_lease_pool_init(max_opens, max_opens / 16); // TODO use max_opens for now
 	x_smbd_replay_cache_init(max_opens, max_opens / 16); // TODO use max_opens for now
