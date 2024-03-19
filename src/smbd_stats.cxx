@@ -136,8 +136,8 @@ static void output_histogram_header(std::ostream &os,
 {
 	char buf[512];
 	char bbuf[24];
-	snprintf(buf, sizeof buf, "    %-20s %10s %15s %15s %9s %12s",
-			"Histogram", "total", "sum", "average", "min", "max");
+	snprintf(buf, sizeof buf, "    %-20s %10s %15s %9s %12s",
+			"Histogram", "total", "average", "min", "max");
 	os << buf;
 	uint32_t band = band_start;
 	for (uint32_t i = 0; i < band_group; ++i, band += band_step) {
@@ -150,7 +150,7 @@ static void output_histogram_header(std::ostream &os,
 	os << buf << std::endl;
 }
 
-#define HISTOGRAM_FMT	"%-20s %10lu %15lu %15.3f %9lu %12lu"
+#define HISTOGRAM_FMT	"%-20s %10lu %15.3f %9lu %12lu"
 static void output_histogram(std::ostream &os,
 		uint32_t band_start, uint32_t band_group, uint32_t band_step,
 		const x_smbd_histogram_t<single_threaded_t> &hist, uint64_t total,
@@ -158,7 +158,7 @@ static void output_histogram(std::ostream &os,
 {
 	char buf[512];
 	snprintf(buf, sizeof buf, "    " HISTOGRAM_FMT, name,
-			total, uint64_t(hist.sum), double(hist.sum) / double(total),
+			total, double(hist.sum) / double(total),
 			uint64_t(hist.min), uint64_t(hist.max));
 	os << buf;
 	uint32_t band;
