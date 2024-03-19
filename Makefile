@@ -10,8 +10,8 @@ include functions.mk
 
 TARGET_BUILD_CFLAGS_dbg := -g3
 TARGET_BUILD_LDFLAGS_dbg := -g3
-TARGET_BUILD_CFLAGS_opt := -O2
-TARGET_BUILD_LDFLAGS_opt := -O2
+TARGET_BUILD_CFLAGS_opt := -O2 -g3
+TARGET_BUILD_LDFLAGS_opt := -O2 -g3
 TARGET_BUILD_CFLAGS_dev := -g3 -fsanitize=address
 TARGET_BUILD_LDFLAGS_dev := -g3 -fsanitize=address
 
