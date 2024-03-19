@@ -1740,6 +1740,7 @@ NTSTATUS x_smbd_open_op_create(x_smbd_requ_t *smbd_requ,
 	X_TRACE_LOC;
 	if (!x_smbd_open_has_space()) {
 		X_LOG(SMB, WARN, "too many opens, cannot allocate new");
+		X_SMBD_COUNTER_INC(toomany_open, 1);
 		return NT_STATUS_INSUFFICIENT_RESOURCES;
 	}
 
@@ -1929,6 +1930,7 @@ NTSTATUS x_smbd_open_restore(
 {
 	if (!x_smbd_open_has_space()) {
 		X_LOG(SMB, WARN, "too many opens, cannot allocate new");
+		X_SMBD_COUNTER_INC(toomany_open, 1);
 		return NT_STATUS_INSUFFICIENT_RESOURCES;
 	}
 

@@ -69,6 +69,7 @@ x_smbd_tcon_t *x_smbd_tcon_create(x_smbd_sess_t *smbd_sess,
 	x_smbd_tcon_t *smbd_tcon = new x_smbd_tcon_t(smbd_sess, smbshare,
 			std::move(volume), share_access);
 	if (!g_smbd_tcon_table->store(smbd_tcon, smbd_tcon->tid)) {
+		X_SMBD_COUNTER_INC(toomany_tcon, 1);
 		delete smbd_tcon;
 		return nullptr;
 	}

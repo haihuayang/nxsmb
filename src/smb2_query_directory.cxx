@@ -345,6 +345,7 @@ NTSTATUS x_smb2_process_query_directory(x_smbd_conn_t *smbd_conn, x_smbd_requ_t 
 		if (!smbd_open->smbd_qdir) {
 			smbd_open->smbd_qdir = x_smbd_qdir_create(smbd_open);
 			if (!smbd_open->smbd_qdir) {
+				X_SMBD_COUNTER_INC(fail_create_qdir, 1);
 				return NT_STATUS_INSUFFICIENT_RESOURCES;
 			}
 		}

@@ -10,6 +10,7 @@
 #include "include/librpc/security.hxx"
 #include "smbd_share.hxx"
 #include "smbd_conf.hxx"
+#include "smbd_stats.hxx"
 
 /* this guid indicates NDR encoding in a protocol tower */
 static const idl::ndr_syntax_id ndr_transfer_syntax_ndr = {
@@ -854,6 +855,7 @@ static NTSTATUS ipc_create_open(x_smbd_open_t **psmbd_open,
 				X_SMB2_OPLOCK_LEVEL_NONE});
 	ipc_object->base.incref();
 	if (!x_smbd_open_store(&named_pipe->base)) {
+		X_SMBD_COUNTER_INC(toomany_open, 1);
 		delete named_pipe;
 		*psmbd_open = nullptr;
 		return NT_STATUS_INSUFFICIENT_RESOURCES;

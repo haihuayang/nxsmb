@@ -525,6 +525,7 @@ x_smbd_chan_t *x_smbd_chan_create(x_smbd_sess_t *smbd_sess, x_smbd_conn_t *smbd_
 {
 	x_smbd_chan_t *smbd_chan = new x_smbd_chan_t(smbd_conn, smbd_sess);
 	if (!smbd_chan) {
+		X_SMBD_COUNTER_INC(fail_alloc_chan, 1);
 		return nullptr;
 	}
 

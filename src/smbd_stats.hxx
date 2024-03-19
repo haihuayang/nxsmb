@@ -17,6 +17,13 @@
 	X_SMBD_COUNTER_DECL(cancel_too_late) \
 	X_SMBD_COUNTER_DECL(cancel_not_exist) \
 	X_SMBD_COUNTER_DECL(wakeup_stale_requ) \
+	X_SMBD_COUNTER_DECL(toomany_open) \
+	X_SMBD_COUNTER_DECL(toomany_tcon) \
+	X_SMBD_COUNTER_DECL(toomany_sess) \
+	X_SMBD_COUNTER_DECL(stale_sess) \
+	X_SMBD_COUNTER_DECL(toomany_chan) \
+	X_SMBD_COUNTER_DECL(fail_alloc_chan) \
+	X_SMBD_COUNTER_DECL(fail_create_qdir) \
 
 enum {
 #undef X_SMBD_COUNTER_DECL

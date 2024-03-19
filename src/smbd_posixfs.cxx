@@ -692,6 +692,7 @@ static posixfs_open_t *posixfs_open_create_intl(
 	posixfs_open->base.smbd_lease = smbd_lease;
 
 	if (!x_smbd_open_store(&posixfs_open->base)) {
+		X_SMBD_COUNTER_INC(toomany_open, 1);
 		if (posixfs_open->base.smbd_lease) {
 			x_smbd_lease_close(posixfs_open->base.smbd_lease);
 			posixfs_open->base.smbd_lease = nullptr;

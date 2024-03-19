@@ -92,6 +92,7 @@ x_smbd_sess_t *x_smbd_sess_create()
 	x_smbd_sess_t *smbd_sess = new x_smbd_sess_t;
 	if (!g_smbd_sess_table->store(smbd_sess, smbd_sess->id)) {
 		delete smbd_sess;
+		X_SMBD_COUNTER_INC(toomany_sess, 1);
 		return nullptr;
 	}
 	X_LOG(SMB, DBG, "0x%lx %p", smbd_sess->id, smbd_sess);
@@ -197,9 +198,11 @@ bool x_smbd_sess_link_chan(x_smbd_sess_t *smbd_sess, x_dlink_t *link)
 {
 	std::lock_guard<std::mutex> lock(smbd_sess->mutex);
 	if (smbd_sess->state == x_smbd_sess_t::S_DONE) {
+		X_SMBD_COUNTER_INC(stale_sess, 1);
 		return false;
 	}
 	if (smbd_sess->chan_count >= x_smbd_sess_t::MAX_CHAN_COUNT) {
+		X_SMBD_COUNTER_INC(toomany_chan, 1);
 		return false;
 	}
 	
