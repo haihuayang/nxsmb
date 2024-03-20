@@ -392,9 +392,10 @@ struct x_smbd_requ_t
 };
 X_DECLARE_MEMBER_TRAITS(requ_async_traits, x_smbd_requ_t, async_link)
 
-#define X_SMBD_REQU_DBG_FMT "requ(%p 0x%lx mid=%lu op=%d)"
+#define X_SMBD_REQU_DBG_FMT "requ(%p 0x%lx mid=%lu sid=0x%lx tid=0x%x op=%d)"
 #define X_SMBD_REQU_DBG_ARG(smbd_requ) (smbd_requ), (smbd_requ)->id, \
-		(smbd_requ)->in_smb2_hdr.mid, (smbd_requ)->in_smb2_hdr.opcode
+		(smbd_requ)->in_smb2_hdr.mid, (smbd_requ)->in_smb2_hdr.sess_id, \
+		(smbd_requ)->in_smb2_hdr.tid, (smbd_requ)->in_smb2_hdr.opcode
 
 #define X_SMBD_REQU_RETURN_STATUS(smbd_requ, status) do { \
 	X_LOG(SMB, OP, X_SMBD_REQU_DBG_FMT " %s", \
