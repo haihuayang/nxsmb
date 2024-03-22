@@ -49,6 +49,9 @@ static void *signal_handler_func(void *arg)
 	x_thread_init("SIGHAND");
 	x_nxfsd_thread_init(0);
 
+	x_tick_t last = x_tick_now();
+	auto smbd_conf = x_smbd_conf_get();
+
 	for (;;) {
 		sigset_t sigmask;
 		sigemptyset(&sigmask);
@@ -56,14 +59,37 @@ static void *signal_handler_func(void *arg)
 		sigaddset(&sigmask, SIGHUP);
 
 		siginfo_t siginfo;
-		struct timespec timeout = { 60, 0 };
-		int ret = sigtimedwait(&sigmask, &siginfo, &timeout);
+		uint64_t timeout;
+		if (smbd_conf->my_stats_interval_ms > 0) {
+			x_tick_t now = x_tick_now();
+			x_tick_t next = last +
+				X_MSEC_TO_NSEC(smbd_conf->my_stats_interval_ms);
+			if (now >= next) {
+				x_smbd_stats_report();
+				last = now;
+				timeout = X_MSEC_TO_NSEC(smbd_conf->my_stats_interval_ms);
+			} else {
+				timeout = next - last;
+			}
+		}
+		struct timespec ts;
+		if (timeout > X_SEC_TO_NSEC(60)) {
+			ts = { 60, 0, };
+		} else if (timeout < 1000) {
+			ts = { 0, 1000, };
+		} else {
+			ts = { long(timeout / X_NSEC_PER_SEC),
+				long(timeout % X_NSEC_PER_SEC), };
+		}
+
+		int ret = sigtimedwait(&sigmask, &siginfo, &ts);
 		if (ret == -1) {
 			if (errno == EAGAIN) {
 				x_log_check_size();
 			}
 		} else if (ret == SIGHUP) {
 			x_smbd_conf_reload();
+			smbd_conf = x_smbd_conf_get();
 		} else {
 			X_LOG(UTILS, ERR, "sigtimedwait ret %d, errno=%d", ret, errno);
 			break;

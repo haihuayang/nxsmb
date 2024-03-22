@@ -58,6 +58,8 @@ struct single_threaded_t
 	}
 };
 
+static x_smbd_stats_t<single_threaded_t> g_stats;
+
 struct x_smbd_stats_report_t : x_smbd_ctrl_handler_t
 {
 	x_smbd_stats_report_t() {
@@ -233,5 +235,106 @@ bool x_smbd_stats_report_t::output(std::string &data)
 x_smbd_ctrl_handler_t *x_smbd_stats_report_create()
 {
 	return new x_smbd_stats_report_t;
+}
+
+void x_smbd_stats_report()
+{
+	x_smbd_stats_t<single_threaded_t> stats;
+	std::array<uint64_t, X_SMBD_HISTOGRAM_ID_MAX> histogram_totals{};
+	uint32_t max_thread = g_max_thread.load(MO);
+	for (uint32_t ti = 0; ti < max_thread; ++ti) {
+		auto &thread_stats = g_smbd_stats_table[ti];
+		for (uint32_t ci = 0; ci < X_SMBD_COUNTER_ID_MAX; ++ci) {
+			stats.counters[ci] += thread_stats.counters[ci].reset(0);
+		}
+
+		for (uint32_t pi = 0; pi < X_SMBD_PAIR_COUNTER_ID_MAX; ++pi) {
+			stats.pair_counters[pi][0] += thread_stats.pair_counters[pi][0].reset(0);
+			stats.pair_counters[pi][1] += thread_stats.pair_counters[pi][1].reset(0);
+		}
+
+		for (uint32_t hi = 0; hi < X_SMBD_HISTOGRAM_ID_MAX; ++hi) {
+			auto &dst = stats.histograms[hi];
+			auto &src = thread_stats.histograms[hi];
+			dst.sum += src.sum.reset(0);
+			auto max = src.max.reset(0);
+			auto min = src.min.reset(-1);
+			if (dst.max < max) {
+				dst.max = max;
+			}
+			if (dst.min > min) {
+				dst.min = min;
+			}
+			for (uint32_t bi = 0; bi < X_SMBD_HISTOGRAM_BAND_NUMBER; ++bi) {
+				auto val = src.bands[bi].reset(0);
+				dst.bands[bi] += val;
+				histogram_totals[hi] += val;
+			}
+		}
+	}
+
+	std::ostringstream os;
+	bool first = true;
+	/* keep in g_stats */
+	for (uint32_t ci = 0; ci < X_SMBD_COUNTER_ID_MAX; ++ci) {
+		auto total = stats.counters[ci];
+		if (total) {
+			if (first) {
+				output_counter_header(os);
+				first = false;
+			}
+			output_counter(os, total, smbd_counter_names[ci]);
+		}
+		g_stats.counters[ci] += total;
+	}
+
+	first = true;
+	for (uint32_t pi = 0; pi < X_SMBD_PAIR_COUNTER_ID_MAX; ++pi) {
+		auto total_create = stats.pair_counters[pi][0];
+		auto total_delete = stats.pair_counters[pi][1];
+		if (total_create != 0 || total_delete != 0) {
+			if (first) {
+				output_pair_header(os);
+				first = false;
+			}
+			output_pair(os, total_create, total_delete, smbd_pair_counter_names[pi]);
+		}
+		g_stats.pair_counters[pi][0] += total_create;
+		g_stats.pair_counters[pi][1] += total_delete;
+	}
+
+	const uint32_t band_start = 3, band_group = 8, band_step = 3;
+	first = true;
+	for (uint32_t hi = 0; hi < X_SMBD_HISTOGRAM_ID_MAX; ++hi) {
+		if (histogram_totals[hi] > 0) {
+			if (first) {
+				output_histogram_header(os, band_start, band_group, band_step);
+				first = false;
+			}
+			output_histogram(os, band_start, band_group, band_step,
+					stats.histograms[hi], histogram_totals[hi],
+					smbd_histogram_names[hi]);
+		}
+		auto &dst = g_stats.histograms[hi];
+		auto &src = stats.histograms[hi];
+		dst.sum += src.sum;
+		auto max = src.max;
+		auto min = src.min;
+		if (dst.max < max) {
+			dst.max = max;
+		}
+		if (dst.min > min) {
+			dst.min = min;
+		}
+		for (uint32_t bi = 0; bi < X_SMBD_HISTOGRAM_BAND_NUMBER; ++bi) {
+			auto val = src.bands[bi];
+			dst.bands[bi] += val;
+		}
+	}
+
+	auto data = os.str();
+	if (!data.empty()) {
+		X_LOG(SMB, NOTICE, "stats:\n%s", data.c_str());
+	}
 }
 

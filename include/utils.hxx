@@ -26,6 +26,9 @@ struct x_tick_t
 	bool operator>(x_tick_t other) const {
 		return int64_t(val - other.val) > 0;
 	}
+	bool operator>=(x_tick_t other) const {
+		return int64_t(val - other.val) >= 0;
+	}
 	x_tick_diff_t operator-(x_tick_t other) const {
 		return int64_t(val - other.val);
 	}

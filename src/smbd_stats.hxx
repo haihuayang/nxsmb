@@ -98,6 +98,9 @@ struct atomic_relaxed_t
 	void operator=(T v) {
 		return val.store(v, std::memory_order_relaxed);
 	}
+	T reset(T v) {
+		return val.exchange(v, std::memory_order_relaxed);
+	}
 };
 
 enum {
@@ -157,6 +160,7 @@ extern thread_local x_smbd_stats_t<atomic_relaxed_t> *g_smbd_stats;
 } while (0)
 
 int x_smbd_stats_init(uint32_t thread_id);
+void x_smbd_stats_report();
 
 
 #endif /* __smbd_stats__hxx__ */
