@@ -143,6 +143,7 @@ int x_smbd_durable_disconnect(x_smbd_durable_db_t *db, uint64_t id_persistent)
 int x_smbd_durable_save(x_smbd_durable_db_t *db,
 		uint64_t id_volatile,
 		const x_smbd_open_state_t &open_state,
+		const x_smbd_lease_data_t &lease_data,
 		const x_smbd_file_handle_t &file_handle)
 {
 	X_LOG(SMB, DBG, "id_persistent=0x%lx", open_state.id_persistent);
@@ -153,7 +154,7 @@ int x_smbd_durable_save(x_smbd_durable_db_t *db,
 	new (db_rec)x_smbd_durable_t{
 		X_SMBD_DURABLE_MAGIC_ACTIVE,
 		uint64_t(-1),
-		id_volatile, open_state, file_handle};
+		id_volatile, open_state, lease_data, file_handle};
 	msync(db_rec, sizeof *db_rec, MS_SYNC);
 	return 0;
 }

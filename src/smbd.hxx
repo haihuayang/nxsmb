@@ -210,7 +210,7 @@ struct x_smbd_durable_t
 	uint64_t expired_msec;
 	uint64_t id_volatile;
 	x_smbd_open_state_t open_state;
-	// x_smbd_lease_state_t lease_state;
+	x_smbd_lease_data_t lease_data;
 	x_smbd_file_handle_t file_handle;
 };
 

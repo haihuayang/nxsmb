@@ -8,7 +8,7 @@
 
 #include "include/librpc/misc.hxx"
 #include "include/list.hxx"
-#include "smb2.hxx"
+#include "smbd.hxx"
 
 struct x_smbd_conn_t;
 struct x_smbd_requ_t;
@@ -43,6 +43,8 @@ bool x_smbd_lease_grant(x_smbd_lease_t *smbd_lease,
 void x_smbd_lease_close(x_smbd_lease_t *smbd_lease);
 
 uint8_t x_smbd_lease_get_state(const x_smbd_lease_t *smbd_lease);
+
+x_smbd_lease_data_t x_smbd_lease_get_data(const x_smbd_lease_t *smbd_lease);
 
 enum {
 	X_SMBD_BREAK_ACTION_SEND = 0x1,

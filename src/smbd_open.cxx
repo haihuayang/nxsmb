@@ -1726,11 +1726,14 @@ void x_smbd_save_durable(x_smbd_open_t *smbd_open,
 			smbd_open, smbd_open->open_state.id_persistent,
 			smbd_open->id_volatile);
 
-	/* TODO lease */
+	x_smbd_lease_data_t lease_data =
+		(smbd_open->open_state.oplock_level == X_SMB2_OPLOCK_LEVEL_LEASE) ?
+		x_smbd_lease_get_data(smbd_open->smbd_lease) : x_smbd_lease_data_t{};
 
 	x_smbd_volume_save_durable(smbd_volume,
 			smbd_open->id_volatile,
 			smbd_open->open_state,
+			lease_data,
 			smbd_open->smbd_object->file_handle);
 }
 

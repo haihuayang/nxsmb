@@ -26,6 +26,7 @@ int x_smbd_durable_update(x_smbd_durable_db_t *db,
 int x_smbd_durable_save(x_smbd_durable_db_t *db,
 		uint64_t id_volatile,
 		const x_smbd_open_state_t &open_state,
+		const x_smbd_lease_data_t &lease_data,
 		const x_smbd_file_handle_t &file_handle);
 
 int x_smbd_durable_remove(x_smbd_durable_db_t *db, uint64_t id_persistent);

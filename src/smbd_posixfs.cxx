@@ -2649,6 +2649,44 @@ static NTSTATUS posixfs_open_object_by_handle(posixfs_object_t **ret,
 	return NT_STATUS_OK;
 }
 
+static x_smbd_lease_t *create_durable_lease(posixfs_object_t *posixfs_object,
+		const x_smbd_durable_t &smbd_durable)
+{
+	auto &lease_data = smbd_durable.lease_data;
+	x_smb2_lease_t smb2_lease{lease_data.key, 
+		lease_data.state, 0, 0,
+		smbd_durable.open_state.parent_lease_key,
+		lease_data.epoch,
+		lease_data.version, 0};
+	x_smbd_lease_t *smbd_lease = x_smbd_lease_find(
+			smbd_durable.open_state.client_guid,
+			smb2_lease,
+			true);
+	if (!smbd_lease) {
+		X_LOG(SMB, ERR, "x_smbd_lease_find failed client=%s key=%s",
+				x_tostr(smbd_durable.open_state.client_guid).c_str(),
+				x_tostr(lease_data.key).c_str());
+		return nullptr;
+	}
+	bool new_lease = false;
+	bool ret = x_smbd_lease_grant(smbd_lease,
+			smb2_lease,
+			lease_data.state, lease_data.state,
+			&posixfs_object->base, nullptr,
+			new_lease);
+	if (!ret) {
+		x_smbd_lease_release(smbd_lease);
+		return nullptr;
+	}
+	if (new_lease) {
+		/* it hold the ref of object, so it is ok the incref after lease
+		 * TODO eventually it should incref inside x_smbd_lease_grant
+		 */
+		posixfs_object_incref(posixfs_object);
+	}
+	return smbd_lease;
+}
+
 NTSTATUS posixfs_op_open_durable(x_smbd_open_t *&smbd_open,
 		std::shared_ptr<x_smbd_volume_t> &smbd_volume,
 		const x_smbd_durable_t &smbd_durable)
@@ -2659,57 +2697,29 @@ NTSTATUS posixfs_op_open_durable(x_smbd_open_t *&smbd_open,
 	if (!NT_STATUS_IS_OK(status)) {
 		return status;
 	}
-#if 0
-	TODO lease
+
 	x_smbd_lease_t *smbd_lease = nullptr;
-	if (smbd_durable->oplock_level == X_SMB2_OPLOCK_LEVEL_LEASE) {
-		smbd_lease = x_smbd_lease_find(
-				smbd_durable.client_guid,
-				smbd_durable.lease_key,
-				smbd_durable.lease.version,
-				true);
-		bool new_lease = false;
-		posixfs_stream_t *posixfs_stream = posixfs_object->default_stream;
-		bool ret = x_smbd_lease_grant(smbd_lease,
-				smbd_durable.lease,
-				smbd_durable.lease.state,
-				smbd_durable.lease.state,
-				&posixfs_object->base, &posixfs_stream->base,
-				new_lease);
-		if (new_lease) {
-			/* it hold the ref of object, so it is ok the incref after lease
-			 * TODO eventually it should incref inside x_smbd_lease_grant
-			 */
-			posixfs_object_incref(posixfs_object);
-			posixfs_stream_incref(posixfs_stream);
+	if (smbd_durable.open_state.oplock_level == X_SMB2_OPLOCK_LEVEL_LEASE) {
+		smbd_lease = create_durable_lease(posixfs_object, smbd_durable);
+		if (!smbd_lease) {
+			x_smbd_release_object(&posixfs_object->base);
+			return NT_STATUS_INTERNAL_ERROR;
 		}
 	}
-	x_smbd_open_state_t open_state{
-		smbd_durable.open_state.client_guid,
-		smbd_durable.open_state.create_guid,
-		smbd_durable.open_state.owner,
-		smbd_durable.open_state.parent_lease_key,
-		smbd_durable.open_state.priv_data,
-		X_SMB2_OPLOCK_LEVEL_NONE, // TODO
-		smbd_durable.open_state.delete_on_close,
-		smbd_durable.open_state.durable_timeout_msec,
-		smbd_durable.open_state.current_offset};
-#endif
 
 	posixfs_open_t *posixfs_open = posixfs_open_create_intl(&status,
 			nullptr,
 			posixfs_object, nullptr,
-			nullptr, smbd_durable.open_state, 0);
+			smbd_lease, smbd_durable.open_state, 0);
 	
 	if (posixfs_open) {
 		smbd_open = &posixfs_open->base;
 		return NT_STATUS_OK;
 	} else {
 		smbd_open = nullptr;
-		return status;
+		x_smbd_release_object(&posixfs_object->base);
+		return NT_STATUS_INTERNAL_ERROR;
 	}
-
-	return NT_STATUS_INTERNAL_ERROR;
 }
 
 

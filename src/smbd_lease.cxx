@@ -40,6 +40,11 @@ using smbd_lease_pool_t = x_smbd_hashtable_t<smbd_lease_hash_traits>;
 
 static smbd_lease_pool_t g_smbd_lease_pool;
 
+x_smbd_lease_data_t x_smbd_lease_get_data(const x_smbd_lease_t *smbd_lease)
+{
+	return smbd_lease->data;
+}
+
 uint8_t x_smbd_lease_get_state(const x_smbd_lease_t *smbd_lease)
 {
 	return smbd_lease->data.state;

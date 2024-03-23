@@ -103,11 +103,12 @@ int x_smbd_volume_allocate_persistent(x_smbd_volume_t &smbd_volume,
 int x_smbd_volume_save_durable(x_smbd_volume_t &smbd_volume,
 		uint64_t id_volatile,
 		const x_smbd_open_state_t &open_state,
+		const x_smbd_lease_data_t &lease_data,
 		const x_smbd_file_handle_t &file_handle)
 {
 	return x_smbd_durable_save(smbd_volume.smbd_durable_db,
 			id_volatile,
-			open_state, file_handle);
+			open_state, lease_data, file_handle);
 }
 
 int x_smbd_volume_update_durable(x_smbd_volume_t &smbd_volume,
