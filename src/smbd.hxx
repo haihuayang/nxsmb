@@ -194,14 +194,24 @@ enum {
 	X_SMBD_DURABLE_MAGIC_DEAD	= 0x656c626172756444ul,
 };
 
+struct x_smbd_lease_data_t
+{
+	const x_smb2_uuid_t key;
+	const uint8_t version;
+	uint8_t state{0};
+	uint16_t epoch;
+	bool breaking{false};
+	uint8_t breaking_to_requested{0}, breaking_to_required{0};
+};
+
 struct x_smbd_durable_t
 {
 	uint64_t magic;
 	uint64_t expired_msec;
 	uint64_t id_volatile;
 	x_smbd_open_state_t open_state;
+	// x_smbd_lease_state_t lease_state;
 	x_smbd_file_handle_t file_handle;
-	/* TODO lease state */
 };
 
 

@@ -15,17 +15,12 @@ struct x_smbd_lease_t
 	x_dqlink_t hash_link;
 	x_timer_job_t timer{smbd_lease_break_timeout};
 	const x_smb2_uuid_t client_guid;
-	const x_smb2_lease_key_t lease_key;
 	x_smbd_object_t * smbd_object{}; // protected by bucket mutex
 	x_smbd_stream_t * smbd_stream{}; // protected by bucket mutex
+	x_smbd_lease_data_t data;
 	const uint32_t hash;
 	uint32_t refcnt{1}; // protected by bucket mutex
 	uint32_t open_cnt{0};
-	const uint8_t version;
-	uint8_t lease_state{0};
-	uint16_t epoch;
-	bool breaking{false};
-	uint8_t breaking_to_requested{0}, breaking_to_required{0};
 	x_smbd_requ_id_list_t pending_requ_list;
 };
 
@@ -47,7 +42,7 @@ static smbd_lease_pool_t g_smbd_lease_pool;
 
 uint8_t x_smbd_lease_get_state(const x_smbd_lease_t *smbd_lease)
 {
-	return smbd_lease->lease_state;
+	return smbd_lease->data.state;
 }
 
 static inline auto smbd_lease_lock(uint32_t hash)
@@ -60,9 +55,10 @@ static inline auto smbd_lease_lock(uint32_t hash)
 static inline void smbd_lease_epoch_inc(x_smbd_lease_t *smbd_lease,
 		const char *file, unsigned int line)
 {
-	X_LOG(SMB, DBG, "smbd_lease=%p epoch=%u at %s:%u", smbd_lease, smbd_lease->epoch,
+	X_LOG(SMB, DBG, "smbd_lease=%p epoch=%u at %s:%u", smbd_lease,
+			smbd_lease->data.epoch,
 			file, line);
-	++smbd_lease->epoch;
+	++smbd_lease->data.epoch;
 }
 
 static inline auto smbd_lease_lock(const x_smbd_lease_t *smbd_lease)
@@ -86,7 +82,7 @@ static bool smbd_lease_match(const x_smbd_lease_t *smbd_lease,
 		const x_smb2_uuid_t &client_guid,
 		const x_smb2_lease_key_t &lkey)
 {
-	return smbd_lease->client_guid == client_guid && smbd_lease->lease_key == lkey;
+	return smbd_lease->client_guid == client_guid && smbd_lease->data.key == lkey;
 }
 
 static inline void smbd_lease_incref(x_smbd_lease_t *smbd_lease)
@@ -106,7 +102,7 @@ static void smbd_lease_decref(x_smbd_lease_t *smbd_lease)
 
 	if (smbd_lease->refcnt == 0) {
 		X_ASSERT(smbd_lease->open_cnt == 0);
-		X_ASSERT(!smbd_lease->breaking);
+		X_ASSERT(!smbd_lease->data.breaking);
 		if (smbd_lease->smbd_object) {
 			x_smbd_release_object_and_stream(smbd_lease->smbd_object, smbd_lease->smbd_stream);
 		}
@@ -134,10 +130,10 @@ void x_smbd_lease_close(x_smbd_lease_t *smbd_lease)
 		auto lock = smbd_lease_lock(smbd_lease);
 		X_ASSERT(smbd_lease->open_cnt > 0);
 		if (--smbd_lease->open_cnt == 0) {
-			if (smbd_lease->breaking) {
+			if (smbd_lease->data.breaking) {
 				smbd_lease_cancel_timer(smbd_lease);
-				smbd_lease->breaking = false;
-				smbd_lease->lease_state = 0;
+				smbd_lease->data.breaking = false;
+				smbd_lease->data.state = 0;
 			}
 			std::swap(requ_list, smbd_lease->pending_requ_list);
 		}
@@ -180,15 +176,15 @@ bool x_smbd_lease_match_get(const x_smbd_lease_t *smbd_lease,
 		const x_smb2_uuid_t &client_guid,
 		x_smb2_lease_t &lease)
 {
-	if (lease.version != smbd_lease->version) {
+	if (lease.version != smbd_lease->data.version) {
 		return false;
 	}
 	if (!smbd_lease_match(smbd_lease, client_guid, lease.key)) {
 		return false;
 	}
-	lease.state = smbd_lease->lease_state;
-	lease.epoch = smbd_lease->epoch;
-	if (smbd_lease->breaking) {
+	lease.state = smbd_lease->data.state;
+	lease.epoch = smbd_lease->data.epoch;
+	if (smbd_lease->data.breaking) {
 		lease.flags = X_SMB2_LEASE_FLAG_BREAK_IN_PROGRESS;
 	} else {
 		lease.flags = 0;
@@ -208,8 +204,8 @@ bool x_smbd_lease_grant(x_smbd_lease_t *smbd_lease,
 	if (!smbd_lease->smbd_object) {
 		smbd_lease->smbd_object = smbd_object;
 		smbd_lease->smbd_stream = smbd_stream;
-		lease.state = smbd_lease->lease_state = granted;
-		lease.epoch = smbd_lease->epoch;
+		lease.state = smbd_lease->data.state = granted;
+		lease.epoch = smbd_lease->data.epoch;
 		new_lease = true;
 		++smbd_lease->open_cnt;
 		++smbd_lease->refcnt;
@@ -221,7 +217,7 @@ bool x_smbd_lease_grant(x_smbd_lease_t *smbd_lease,
 		return false;
 	}
 
-	uint32_t existing = smbd_lease->lease_state;
+	uint32_t existing = smbd_lease->data.state;
 
 	/*
 	 * Tricky: This test makes sure that "requested" is a
@@ -243,18 +239,18 @@ bool x_smbd_lease_grant(x_smbd_lease_t *smbd_lease,
 	/*
 	 * only upgrade if we are not in breaking state
 	 */
-	do_upgrade &= !smbd_lease->breaking;
+	do_upgrade &= !smbd_lease->data.breaking;
 
 	if (do_upgrade) {
-		smbd_lease->lease_state = granted;
+		smbd_lease->data.state = granted;
 		SMBD_LEASE_EPOCH_INC(smbd_lease);
 	}
 
-	lease.version = smbd_lease->version;
-	lease.state = smbd_lease->lease_state;
-	lease.epoch = smbd_lease->epoch;
+	lease.version = smbd_lease->data.version;
+	lease.state = smbd_lease->data.state;
+	lease.epoch = smbd_lease->data.epoch;
 
-	if (smbd_lease->breaking) {
+	if (smbd_lease->data.breaking) {
 		lease.flags |= X_SMB2_LEASE_FLAG_BREAK_IN_PROGRESS;
 	} else {
 		lease.flags &= ~X_SMB2_LEASE_FLAG_BREAK_IN_PROGRESS;
@@ -271,22 +267,22 @@ static bool require_break(x_smbd_lease_t *smbd_lease,
 		uint16_t &epoch,
 		uint32_t &flags)
 {
-	epoch = (smbd_lease->version > 1) ? smbd_lease->epoch : 0;
-	if (smbd_lease->lease_state == X_SMB2_LEASE_READ) {
-		smbd_lease->lease_state = X_SMB2_LEASE_NONE;
-		smbd_lease->breaking = false;
-		smbd_lease->breaking_to_required = 0;
-		smbd_lease->breaking_to_requested = 0;
+	epoch = (smbd_lease->data.version > 1) ? smbd_lease->data.epoch : 0;
+	if (smbd_lease->data.state == X_SMB2_LEASE_READ) {
+		smbd_lease->data.state = X_SMB2_LEASE_NONE;
+		smbd_lease->data.breaking = false;
+		smbd_lease->data.breaking_to_required = 0;
+		smbd_lease->data.breaking_to_requested = 0;
 		flags = 0;
 		return false;
 	} else {
-		smbd_lease->breaking = true;
-		smbd_lease->breaking_to_required = break_to;
-		smbd_lease->breaking_to_requested = break_to;
+		smbd_lease->data.breaking = true;
+		smbd_lease->data.breaking_to_required = break_to;
+		smbd_lease->data.breaking_to_requested = break_to;
 		smbd_lease_incref(smbd_lease);
 		flags = X_SMB2_NOTIFY_BREAK_LEASE_FLAG_ACK_REQUIRED;
 		x_smbd_add_timer(&smbd_lease->timer, x_smbd_timer_id_t::BREAK);
-		return smbd_lease->lease_state & delay_mask;
+		return smbd_lease->data.state & delay_mask;
 	}
 }
 
@@ -322,29 +318,29 @@ uint32_t x_smbd_lease_require_break(x_smbd_lease_t *smbd_lease,
 
 	auto lock = smbd_lease_lock(smbd_lease);
 	X_LOG(SMB, DBG, "lease=%p %c state=%d epoch=%u break_mask=%u",
-			smbd_lease, smbd_lease->breaking ? 'B' : '-',
-			smbd_lease->lease_state, smbd_lease->epoch,
+			smbd_lease, smbd_lease->data.breaking ? 'B' : '-',
+			smbd_lease->data.state, smbd_lease->data.epoch,
 			break_mask);
 
-	uint8_t break_from = smbd_lease->lease_state;
+	uint8_t break_from = smbd_lease->data.state;
 	uint8_t break_to = break_from & x_convert<uint8_t>(~break_mask);
-	if (smbd_lease->breaking) {
-		break_to &= smbd_lease->breaking_to_required;
-		if (smbd_lease->breaking_to_required != break_to) {
+	if (smbd_lease->data.breaking) {
+		break_to &= smbd_lease->data.breaking_to_required;
+		if (smbd_lease->data.breaking_to_required != break_to) {
 			/*
 			 * Note we don't increment the epoch
 			 * here, which might be a bug in
 			 * Windows too...
 			 */
-			smbd_lease->breaking_to_required = break_to;
+			smbd_lease->data.breaking_to_required = break_to;
 		}
-		if (smbd_requ && ((smbd_lease->lease_state & delay_mask) ||
+		if (smbd_requ && ((smbd_lease->data.state & delay_mask) ||
 					block_breaking)) {
 			smbd_lease_add_pending_requ(smbd_lease, smbd_requ);
 			return X_SMBD_BREAK_ACTION_BLOCKED;
 		}
 		return 0;
-	} else if (smbd_lease->lease_state == break_to) {
+	} else if (smbd_lease->data.state == break_to) {
 		return 0;
 	}
 	
@@ -365,7 +361,7 @@ uint32_t x_smbd_lease_require_break(x_smbd_lease_t *smbd_lease,
 	}
 
 	bool block = require_break(smbd_lease, break_to, delay_mask, epoch, flags);
-	lease_key = smbd_lease->lease_key;
+	lease_key = smbd_lease->data.key;
 	new_state = break_to;
 	curr_state = break_from;
 	if (block && smbd_requ != 0) {
@@ -383,37 +379,37 @@ static NTSTATUS smbd_lease_process_break(x_smbd_lease_t *smbd_lease,
 {
 	bool modified = false;
 	auto lock = smbd_lease_lock(smbd_lease);
-	if (!smbd_lease->breaking) {
+	if (!smbd_lease->data.breaking) {
 		return NT_STATUS_UNSUCCESSFUL;
 	}
 
-	if ((state.in_state & smbd_lease->breaking_to_requested) != state.in_state) {
+	if ((state.in_state & smbd_lease->data.breaking_to_requested) != state.in_state) {
 		X_LOG(SMB, DBG, "Attempt to upgrade from %d to %d - expected %d",
-				(int)smbd_lease->lease_state, (int)state.in_state,
-				(int)smbd_lease->breaking_to_requested);
+				(int)smbd_lease->data.state, (int)state.in_state,
+				(int)smbd_lease->data.breaking_to_requested);
 		return NT_STATUS_REQUEST_NOT_ACCEPTED;
 	}
 
 	smbd_lease_cancel_timer(smbd_lease);
 
 	X_LOG(SMB, DBG, "breaking from %d to %d - expected %d required %d",
-			(int)smbd_lease->lease_state, (int)state.in_state,
-			(int)smbd_lease->breaking_to_requested,
-			(int)smbd_lease->breaking_to_required);
+			(int)smbd_lease->data.state, (int)state.in_state,
+			(int)smbd_lease->data.breaking_to_requested,
+			(int)smbd_lease->data.breaking_to_required);
 
-	if (smbd_lease->lease_state != state.in_state) {
+	if (smbd_lease->data.state != state.in_state) {
 		/* TODO should not assert with invalid client in_state */
-		smbd_lease->lease_state = x_convert_assert<uint8_t>(state.in_state);
+		smbd_lease->data.state = x_convert_assert<uint8_t>(state.in_state);
 		modified = true;
 	}
 
-	if ((state.in_state & (~smbd_lease->breaking_to_required)) != 0) {
+	if ((state.in_state & (~smbd_lease->data.breaking_to_required)) != 0) {
 		X_LOG(SMB, DBG, "lease state %d not fully broken from %d to %d",
 				(int)state.in_state,
-				(int)smbd_lease->lease_state,
-				(int)smbd_lease->breaking_to_required);
-		uint8_t break_to = smbd_lease->breaking_to_required;
-		if (smbd_lease->lease_state & (~X_SMB2_LEASE_READ)) {
+				(int)smbd_lease->data.state,
+				(int)smbd_lease->data.breaking_to_required);
+		uint8_t break_to = smbd_lease->data.breaking_to_required;
+		if (smbd_lease->data.state & (~X_SMB2_LEASE_READ)) {
 			/*
 			 * Here we break in steps, as windows does
 			 * see the breaking3 and v2_breaking3 tests.
@@ -423,19 +419,19 @@ static NTSTATUS smbd_lease_process_break(x_smbd_lease_t *smbd_lease,
 		/* for unknown reason windows server does not increase epoch
 		 * when it break RH -> R, see v2_breaking3
 		 */
-		if (smbd_lease->lease_state & X_SMB2_LEASE_WRITE) {
+		if (smbd_lease->data.state & X_SMB2_LEASE_WRITE) {
 			SMBD_LEASE_EPOCH_INC(smbd_lease);
 		}
-		state.more_break_from = smbd_lease->lease_state;
+		state.more_break_from = smbd_lease->data.state;
 		state.more_break_to = break_to;
 		require_break(smbd_lease, break_to, 0,
 				state.more_epoch, state.more_flags);
 		state.more_break = true;
 		modified = true;
 	} else {
-		smbd_lease->breaking_to_requested = 0;
-		smbd_lease->breaking_to_required = 0;
-		smbd_lease->breaking = false;
+		smbd_lease->data.breaking_to_requested = 0;
+		smbd_lease->data.breaking_to_required = 0;
+		smbd_lease->data.breaking = false;
 	}
 	if (modified) {
 		std::swap(requ_list, smbd_lease->pending_requ_list);
@@ -490,11 +486,11 @@ static long smbd_lease_break_timeout(x_timer_job_t *timer)
 	{
 		auto lock = smbd_lease_lock(smbd_lease);
 		/* down grade lease  TODO */
-		smbd_lease->breaking_to_requested = 0;
-		smbd_lease->breaking_to_required = 0;
-		smbd_lease->breaking = false;
-		if (smbd_lease->lease_state != X_SMB2_LEASE_NONE) {
-			smbd_lease->lease_state = X_SMB2_LEASE_NONE;
+		smbd_lease->data.breaking_to_requested = 0;
+		smbd_lease->data.breaking_to_required = 0;
+		smbd_lease->data.breaking = false;
+		if (smbd_lease->data.state != X_SMB2_LEASE_NONE) {
+			smbd_lease->data.state = X_SMB2_LEASE_NONE;
 			std::swap(requ_list, smbd_lease->pending_requ_list);
 		}
 	}
@@ -508,8 +504,8 @@ inline x_smbd_lease_t::x_smbd_lease_t(const x_smb2_uuid_t &client_guid,
 		const x_smb2_lease_key_t &lease_key,
 		uint32_t hash, uint8_t version,
 		uint16_t epoch)
-	: client_guid(client_guid), lease_key(lease_key)
-	, hash(hash), version(version), epoch(uint16_t(epoch + 1))
+	: client_guid(client_guid), data{lease_key, version, 0, uint16_t(epoch + 1)}
+	, hash(hash)
 {
 	X_SMBD_COUNTER_INC_CREATE(lease, 1);
 }
@@ -539,11 +535,11 @@ bool x_smbd_lease_list_t::output(std::string &data)
 				link; link = link->get_next()) {
 			auto item = smbd_lease_hash_traits::container(link);
 			os << next_bucket_idx << ' ' << item->refcnt << ' '
-				<< item->lease_key << ' '
-				<< item->client_guid << ' ' << int(item->version) << ' '
-				<< int(item->lease_state) << ' ' << int(item->epoch) << ' '
-				<< (item->breaking ? 'B' : '-') << ' ' << int(item->breaking_to_requested) << ' '
-				<< int(item->breaking_to_required) << std::endl;
+				<< item->data.key << ' '
+				<< item->client_guid << ' ' << int(item->data.version) << ' '
+				<< int(item->data.state) << ' ' << int(item->data.epoch) << ' '
+				<< (item->data.breaking ? 'B' : '-') << ' ' << int(item->data.breaking_to_requested) << ' '
+				<< int(item->data.breaking_to_required) << std::endl;
 			++count;
 		}
 		++next_bucket_idx;
