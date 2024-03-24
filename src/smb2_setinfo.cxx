@@ -241,9 +241,10 @@ NTSTATUS x_smb2_process_setinfo(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_re
 	state->in_data.assign(in_hdr + in_input_buffer_offset,
 			in_hdr + in_input_buffer_offset + in_input_buffer_length);
 
-	X_SMBD_REQU_LOG(OP, smbd_requ,  " open=0x%lx,0x%lx %d:%d",
+	X_SMBD_REQU_LOG(OP, smbd_requ,  " open=0x%lx,0x%lx %d:%d 0x%x input=%u",
 			state->in_file_id_persistent, state->in_file_id_volatile,
-			uint8_t(state->in_info_class), uint8_t(state->in_info_level));
+			uint8_t(state->in_info_class), uint8_t(state->in_info_level),
+			state->in_additional, in_input_buffer_length);
 
 	status = x_smbd_open_op_setinfo(smbd_requ->smbd_open, smbd_conn, smbd_requ,
 			state);

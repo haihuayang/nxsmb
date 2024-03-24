@@ -73,9 +73,10 @@ NTSTATUS x_smb2_process_getinfo(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_re
 		X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
 
-	X_SMBD_REQU_LOG(OP, smbd_requ,  " open=0x%lx,0x%lx %d:%d",
+	X_SMBD_REQU_LOG(OP, smbd_requ,  " open=0x%lx,0x%lx %d:%d input=%u output=%u",
 			state->in_file_id_persistent, state->in_file_id_volatile,
-			uint8_t(state->in_info_class), uint8_t(state->in_info_level));
+			uint8_t(state->in_info_class), uint8_t(state->in_info_level),
+			state->in_input_buffer_length, state->in_output_buffer_length);
 
 	if (state->in_input_buffer_length > x_smbd_conn_get_negprot(smbd_conn).max_trans_size) {
 		X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);

@@ -1852,7 +1852,9 @@ static NTSTATUS smbd_open_reconnect(x_smbd_open_t *smbd_open,
 
 	if ((state.in_contexts & X_SMB2_CONTEXT_FLAG_DH2C) &&
 			!(open_state.create_guid == state.in_create_guid)) {
-		X_LOG(SMB, NOTICE, "create_guid not match");
+		X_LOG(SMB, NOTICE, "create_guid %s!=%s",
+				x_tostr(open_state.create_guid).c_str(),
+				x_tostr(state.in_create_guid).c_str());
 		return NT_STATUS_OBJECT_NAME_NOT_FOUND;
 	}
 	if (smbd_open->smbd_lease) {
