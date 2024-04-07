@@ -59,7 +59,7 @@ static void *signal_handler_func(void *arg)
 		sigaddset(&sigmask, SIGHUP);
 
 		siginfo_t siginfo;
-		uint64_t timeout;
+		uint64_t timeout = X_SEC_TO_NSEC(60);
 		if (smbd_conf->my_stats_interval_ms > 0) {
 			x_tick_t now = x_tick_now();
 			x_tick_t next = last +
