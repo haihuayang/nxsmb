@@ -17,29 +17,15 @@ static struct {
 } g_nxfsd;
 
 static __thread int thread_id = -1;
-static std::array<uint64_t, X_SMBD_MAX_THREAD / sizeof(uint64_t) / 8> g_thread_id_bitmap{};
+static x_bitmap_t g_thread_id_bitmap{X_SMBD_MAX_THREAD};
 static std::mutex g_thread_id_mutex;
-
-static uint32_t thread_id_allocate()
-{
-	auto lock = std::lock_guard(g_thread_id_mutex);
-	uint32_t ret = 0;
-	for (auto &bitmap : g_thread_id_bitmap) {
-		int index = __builtin_ffsl(~bitmap);
-		if (index != 0) {
-			int bit = index - 1;
-			bitmap |= (1ul << bit);
-			return ret + bit;
-		}
-		ret += 64;
-	}
-	X_ASSERT(false);
-	return -1;
-}
 
 static void x_nxfsd_thread_init(uint32_t no)
 {
-	thread_id = thread_id_allocate();
+	{
+		auto lock = std::lock_guard(g_thread_id_mutex);
+		thread_id = g_thread_id_bitmap.alloc();
+	}
 	X_LOG(UTILS, NOTICE, "allocate thread_id %u", thread_id);
 	x_smbd_stats_init(thread_id);
 }

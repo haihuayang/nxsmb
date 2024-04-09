@@ -9,6 +9,7 @@
 #include "xdefines.h"
 #include <string>
 #include <array>
+#include <vector>
 #include <cstring>
 #include <sstream>
 
@@ -326,6 +327,32 @@ inline void x_ref_dec_if(T *t)
 }
 
 #define X_REF_DEC(t) do { x_ref_dec(t); (t) = nullptr; } while (0)
+
+struct x_bitmap_t
+{
+	enum { invalid = (uint32_t)-1, };
+	x_bitmap_t(uint32_t max) : data((max + 63) / 64), max(max) {}
+	uint32_t alloc()
+	{
+		uint32_t ret = 0;
+		for (auto &bitmap : data) {
+			int index = __builtin_ffsl(~bitmap);
+			if (index != 0) {
+				int bit = index - 1;
+				bitmap |= (1ul << bit);
+				if (ret < max) {
+					return ret + bit;
+				}
+				break;
+			}
+			ret += 64;
+		}
+		return invalid;
+	}
+
+	std::vector<uint64_t> data;
+	uint32_t max;
+};
 
 
 #endif /* __utils__hxx__ */
