@@ -1339,8 +1339,10 @@ static NTSTATUS posixfs_do_write(posixfs_object_t *posixfs_object,
 		return NT_STATUS_INTERNAL_ERROR;
 	} else {
 		/* TODO atomic */
-		posixfs_object->statex_modified = true;
 		posixfs_open->base.update_write_time = true;
+		if (!posixfs_open->base.sticky_write_time) {
+			clock_gettime(CLOCK_REALTIME, &posixfs_object->base.meta.last_write);
+		}
 		uint64_t end_of_write = state.in_offset + ret;
 		if (posixfs_object->base.sharemode.meta.end_of_file < end_of_write) {
 			posixfs_object->base.sharemode.meta.end_of_file = end_of_write;
@@ -1906,6 +1908,9 @@ static NTSTATUS setinfo_file(posixfs_object_t *posixfs_object,
 				notify_actions, basic_info,
 				&posixfs_object->get_meta());
 		if (NT_STATUS_IS_OK(status)) {
+			if (!is_null_ntime(basic_info.last_write)) {
+				smbd_open->sticky_write_time = true;
+			}
 			if (notify_actions) {
 				x_smbd_schedule_notify(
 						NOTIFY_ACTION_MODIFIED,
