@@ -68,6 +68,7 @@ NTSTATUS posixfs_object_op_set_attribute(x_smbd_object_t *smbd_object,
 		uint32_t attributes_modify,
 		uint32_t attributes_value,
 		bool &modified);
+NTSTATUS posixfs_object_op_update_mtime(x_smbd_object_t *smbd_object);
 NTSTATUS posixfs_object_op_set_delete_on_close(
 		x_smbd_object_t *smbd_object,
 		x_smbd_open_t *smbd_open,

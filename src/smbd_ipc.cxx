@@ -775,6 +775,11 @@ static NTSTATUS ipc_object_op_set_attribute(x_smbd_object_t *smbd_object,
 	return NT_STATUS_NOT_SUPPORTED;
 }
 
+static NTSTATUS ipc_object_op_update_mtime(x_smbd_object_t *smbd_object)
+{
+	return NT_STATUS_NOT_SUPPORTED;
+}
+
 static struct x_smbd_ipc_iface_t
 {
 	const std::u16string name;
@@ -1010,6 +1015,7 @@ static const x_smbd_object_ops_t x_smbd_ipc_object_ops = {
 	ipc_object_op_query_allocated_ranges,
 	ipc_object_op_set_zero_data,
 	ipc_object_op_set_attribute,
+	ipc_object_op_update_mtime,
 	nullptr, // op_qdir_create
 	nullptr, // op_set_delete_on_close
 	nullptr, // notify_fname

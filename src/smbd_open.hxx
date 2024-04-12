@@ -112,7 +112,7 @@ struct x_smbd_open_t
 
 	uint8_t lock_sequency_array[64];
 	uint32_t mode = 0; // [MS-FSCC] 2.4.26
-	bool update_write_time = false;
+	bool update_write_time_on_close = false;
 	bool sticky_write_time = false;
 	/* pending_requ_list and notify_changes protected by posixfs_object->mutex */
 	x_tp_ddlist_t<requ_async_traits> pending_requ_list;
@@ -185,6 +185,7 @@ struct x_smbd_object_ops_t
 			uint32_t attributes_modify,
 			uint32_t attributes_value,
 			bool &modified);
+	NTSTATUS (*update_mtime)(x_smbd_object_t *smbd_object);
 	x_smbd_qdir_t *(*qdir_create)(x_smbd_open_t *smbd_open);
 #if 0
 	bool (*qdir_get_entry)(x_smbd_qdir_t *smbd_qdir,
@@ -579,6 +580,11 @@ static inline NTSTATUS x_smbd_object_set_attribute(x_smbd_object_t *smbd_object,
 	return smbd_object->smbd_volume->ops->set_attribute(smbd_object,
 			smbd_stream, attributes_modify, attributes_value,
 			modified);
+}
+
+static inline NTSTATUS x_smbd_object_update_mtime(x_smbd_object_t *smbd_object)
+{
+	return smbd_object->smbd_volume->ops->update_mtime(smbd_object);
 }
 
 bool x_smbd_open_has_space();

@@ -1339,7 +1339,7 @@ static NTSTATUS posixfs_do_write(posixfs_object_t *posixfs_object,
 		return NT_STATUS_INTERNAL_ERROR;
 	} else {
 		/* TODO atomic */
-		posixfs_open->base.update_write_time = true;
+		posixfs_open->base.update_write_time_on_close = true;
 		if (!posixfs_open->base.sticky_write_time) {
 			clock_gettime(CLOCK_REALTIME, &posixfs_object->base.meta.last_write);
 		}
@@ -1451,7 +1451,7 @@ NTSTATUS posixfs_object_op_write(
 			posixfs_ads_t *ads = posixfs_ads_from_smbd_stream(smbd_open->smbd_stream);
 			NTSTATUS status =  posixfs_ads_write(posixfs_object, ads, *state);
 			if (NT_STATUS_IS_OK(status)) {
-				smbd_open->update_write_time = true;
+				smbd_open->update_write_time_on_close = true;
 			}
 			return status;
 		}
@@ -1910,6 +1910,7 @@ static NTSTATUS setinfo_file(posixfs_object_t *posixfs_object,
 		if (NT_STATUS_IS_OK(status)) {
 			if (!is_null_ntime(basic_info.last_write)) {
 				smbd_open->sticky_write_time = true;
+				smbd_open->update_write_time_on_close = false;
 			}
 			if (notify_actions) {
 				x_smbd_schedule_notify(
@@ -2459,6 +2460,22 @@ NTSTATUS posixfs_object_op_set_attribute(x_smbd_object_t *smbd_object,
 		posixfs_statex_get(posixfs_object->fd, &object_meta, &stream_meta);
 	}
 
+	return NT_STATUS_OK;
+}
+
+NTSTATUS posixfs_object_op_update_mtime(x_smbd_object_t *smbd_object)
+{
+	struct timespec uts[2] = {
+		{ 0, UTIME_OMIT },
+		smbd_object->meta.last_write,
+	};
+
+	posixfs_object_t *posixfs_object = posixfs_object_from_base_t::container(smbd_object);
+	int err = futimens(posixfs_object->fd, uts);
+	X_TODO_ASSERT(err == 0);
+	
+	x_smbd_stream_meta_t stream_meta;
+	posixfs_statex_get(posixfs_object->fd, &smbd_object->meta, &stream_meta);
 	return NT_STATUS_OK;
 }
 

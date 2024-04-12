@@ -309,7 +309,8 @@ static void smbd_close_open_intl(
 	x_smbd_schedule_clean_pending_requ_list(smbd_open->pending_requ_list);
 	x_smbd_schedule_wakeup_oplock_pending_list(smbd_open->oplock_pending_list);
 
-	if (smbd_open->update_write_time) {
+	if (smbd_open->update_write_time_on_close) {
+		x_smbd_object_update_mtime(smbd_object);
 		if (smbd_open->smbd_stream) {
 			x_smbd_schedule_notify(
 					NOTIFY_ACTION_MODIFIED_STREAM,
@@ -327,7 +328,7 @@ static void smbd_close_open_intl(
 					smbd_object->parent_object, nullptr,
 					smbd_object->path_base, {});
 		}
-		smbd_open->update_write_time = false;
+		smbd_open->update_write_time_on_close = false;
 	}
 
 	smbd_object_remove(smbd_object, smbd_open);
