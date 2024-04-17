@@ -27,7 +27,7 @@ static void x_nxfsd_thread_init(uint32_t no)
 		thread_id = g_thread_id_bitmap.alloc();
 	}
 	X_LOG(UTILS, NOTICE, "allocate thread_id %u", thread_id);
-	x_smbd_stats_init(thread_id);
+	x_smbd_stats_register(thread_id);
 }
 
 static void *signal_handler_func(void *arg)
@@ -100,6 +100,10 @@ static void nxfsd_init()
 	x_log_init(smbd_conf->log_name.c_str(), smbd_conf->log_level.c_str(),
 			smbd_conf->log_file_size);
 
+	x_smbd_stats_init();
+
+	x_nxfsd_thread_init(0);
+
 	struct timespec ts_now;
 	x_tick_t tick_now1 = x_tick_now();
 	clock_gettime(CLOCK_REALTIME, &ts_now);
@@ -148,7 +152,6 @@ static void nxfsd_init()
 int main(int argc, char **argv)
 {
 	x_thread_init("MAIN");
-	x_nxfsd_thread_init(0);
 
 	const char *configfile = nullptr;
 

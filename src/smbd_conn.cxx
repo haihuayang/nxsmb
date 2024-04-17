@@ -144,7 +144,7 @@ uint32_t x_smbd_conn_get_capabilities(const x_smbd_conn_t *smbd_conn)
 	auto __now = x_tick_now(); \
 	auto __elapsed = __now - (smbd_requ)->start; \
 	X_ASSERT(__elapsed >= 0); \
-	g_smbd_stats->histograms[(smbd_requ)->in_smb2_hdr.opcode].update(__elapsed / 1000); \
+	X_STATS_HISTOGRAM_UPDATE((smbd_requ)->in_smb2_hdr.opcode, __elapsed / 1000); \
 } while (0)
 
 int x_smbd_conn_negprot(x_smbd_conn_t *smbd_conn,
