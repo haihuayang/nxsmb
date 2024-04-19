@@ -23,7 +23,6 @@ static int tcp_bind(int port)
 	X_ASSERT_SYSCALL(bind(sock, (struct sockaddr*) &sa, sizeof sa));
 
 	set_tcpkeepalive(sock, 1);
-	set_nbio(sock, 1);
 
 	return sock;
 }
@@ -262,6 +261,7 @@ int x_unix_srv_init(x_strm_srv_t *strm_srv, const char *name, bool abstract,
 		return -errno;
 	}
 
+	set_nbio(sock, 1);
 	int err = x_strm_srv_init(strm_srv, sock, cbs);
 	if (err < 0) {
 		close(sock);
@@ -277,6 +277,7 @@ int x_tcp_srv_init(x_strm_srv_t *strm_srv, int port,
 		return -errno;
 	}
 
+	set_nbio(sock, 1);
 	int err = x_strm_srv_init(strm_srv, sock, cbs);
 	if (err < 0) {
 		close(sock);
