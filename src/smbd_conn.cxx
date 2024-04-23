@@ -1200,6 +1200,7 @@ static int x_smbd_conn_process_smb(x_smbd_conn_t *smbd_conn, x_buf_t *buf, uint3
 	// uint8_t *inbuf = buf->data + offset;
 	size_t len = msgsize - offset;
 	if (len < 4) {
+		x_buf_release(buf);
 		return -EBADMSG;
 	}
 	int32_t smbhdr = x_get_be32(buf->data + offset);
@@ -1207,11 +1208,13 @@ static int x_smbd_conn_process_smb(x_smbd_conn_t *smbd_conn, x_buf_t *buf, uint3
 
 	if (smbhdr == X_SMB2_TF_MAGIC) {
 		if (len < sizeof(x_smb2_tf_header_t)) {
+			x_buf_release(buf);
 			return -EBADMSG;
 		}
 		x_buf_t *pbuf;
 		int plen = x_smbd_conn_process_smb2_tf(smbd_conn, buf, msgsize,
 				&pbuf);
+		x_buf_release(buf);
 		if (plen < 0) {
 			return plen;
 		}
@@ -1220,7 +1223,6 @@ static int x_smbd_conn_process_smb(x_smbd_conn_t *smbd_conn, x_buf_t *buf, uint3
 			return -EBADMSG;
 		}
 
-		x_buf_release(buf);
 		buf = pbuf;
 		msgsize = plen;
 		smbhdr = x_get_be32(buf->data + offset);
@@ -1231,6 +1233,7 @@ static int x_smbd_conn_process_smb(x_smbd_conn_t *smbd_conn, x_buf_t *buf, uint3
 		x_buf_t *pbuf;
 		int plen = x_smbd_conn_process_smb2_ctf(smbd_conn, buf, msgsize,
 				&pbuf);
+		x_buf_release(buf);
 		if (plen < 0) {
 			return plen;
 		}
@@ -1239,7 +1242,6 @@ static int x_smbd_conn_process_smb(x_smbd_conn_t *smbd_conn, x_buf_t *buf, uint3
 			return -EBADMSG;
 		}
 
-		x_buf_release(buf);
 		buf = pbuf;
 		msgsize = plen;
 		smbhdr = x_get_be32(buf->data + offset);

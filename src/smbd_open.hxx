@@ -110,7 +110,6 @@ struct x_smbd_open_t
 
 	x_smbd_qdir_t *smbd_qdir{};
 
-	uint8_t lock_sequency_array[64];
 	uint32_t mode = 0; // [MS-FSCC] 2.4.26
 	bool update_write_time_on_close = false;
 	bool sticky_write_time = false;
