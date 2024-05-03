@@ -10,67 +10,44 @@
 #include <mutex>
 #include <queue>
 #include <stdlib.h>
+#include <dirent.h>
 
 #define ALIGN(s, a) (((s) + (a) - 1) & ~(a))
 
-enum {
-	X_SMBD_DURABLE_DB_VERSION_1 = 1,
-	X_SMBD_DURABLE_DB_RECORD_SIZE = 512,
-	X_SMBD_DURABLE_TORELANT = 10,
+struct x_smbd_durable_slot_t
+{
+	std::atomic<uint64_t> id_volatile;
 };
 
-static const char magic[8] = "DURABLE";
-
-static_assert(X_SMBD_DURABLE_DB_RECORD_SIZE >= sizeof(x_smbd_durable_t));
-
-/* reserve 4k for the header */
-#define HEADER_SIZE 4096
-struct x_smbd_durable_db_header_t
+struct x_smbd_durable_fd_t
 {
-	uint8_t magic[8];
-	uint32_t version;
-	uint32_t record_size;
-	uint32_t capacity;
-	uint16_t generation;
-	uint16_t unused1;
-	uint64_t unused2;
+	x_smbd_durable_fd_t(int fd) : fd(fd) { }
+	~x_smbd_durable_fd_t() { X_ASSERT(close(fd) == 0); }
+
+	const int fd;
+	std::atomic<uint64_t> num_record{};
 };
 
 struct x_smbd_durable_db_t
 {
-	x_smbd_durable_db_t(int fd, x_smbd_durable_db_header_t *header,
-			uint64_t msize)
-		: fd(fd), generation(header->generation), capacity(header->capacity)
-		, header(header), map_size(msize)
-	{
-	}
+	x_smbd_durable_db_t(int fd, uint32_t capacity, uint32_t max_record_per_file);
 
 	~x_smbd_durable_db_t()
 	{
-		X_ASSERT(munmap(header, map_size) == 0);
-		X_ASSERT(close(fd) == 0);
+		X_ASSERT(close(dir_fd) == 0);
 	}
 
-	const int fd;
-	const uint16_t generation; /* increase every restart */
-	const uint32_t capacity;
+	x_job_t job;
 
-	std::mutex mutex;
-	x_smbd_durable_db_header_t *const header;
-	uint64_t const map_size;
-	uint32_t free_region_index;
-	std::priority_queue<uint32_t, std::vector<uint32_t>, std::greater<uint32_t>> free_slots;
+	std::atomic<int> refcnt{1};
+	const int dir_fd;
+	const uint32_t max_record_per_file;
+	std::shared_ptr<x_smbd_durable_fd_t> log_fd;
+	uint64_t next_file_no;
+
+	std::atomic<int64_t> num_durable;
+	std::vector<x_smbd_durable_slot_t> slots;
 };
-
-static int64_t smbd_durable_db_size(uint32_t record_size, uint32_t capacity)
-{
-	return HEADER_SIZE + (record_size * capacity);
-}
-
-static x_smbd_durable_t *get_durable(x_smbd_durable_db_t *db, uint64_t slot)
-{
-	return (x_smbd_durable_t *)((uint8_t *)db->header + HEADER_SIZE + slot * X_SMBD_DURABLE_DB_RECORD_SIZE);
-}
 
 static inline uint64_t get_epoch_msec()
 {
@@ -79,238 +56,170 @@ static inline uint64_t get_epoch_msec()
 	return ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
 };
 
-
 static inline uint32_t get_durable_slot(uint64_t id_persistent)
 {
 	return x_convert<uint32_t>(id_persistent);
 }
 
 int x_smbd_durable_db_allocate_id(x_smbd_durable_db_t *db,
-		uint64_t *p_id_persistent)
+		uint64_t *p_id_persistent, uint64_t id_volatile)
 {
-	uint32_t slot;
-	{
-		auto lock = std::lock_guard(db->mutex);
-		if (!db->free_slots.empty()) {
-			slot = db->free_slots.top();
-			db->free_slots.pop();
-		} else if (db->free_region_index >= db->capacity) {
-			return -ENOSPC;
-		} else {
-			slot = db->free_region_index++;
+	X_ASSERT(id_volatile != 0);
+	if (db->num_durable.load(std::memory_order_relaxed) >=
+			int64_t(db->slots.size() / 2)) {
+		return -ENOSPC;
+	}
+	uint64_t slot_id;
+	uint64_t rval;
+	std::uniform_int_distribution<uint64_t> distrib(0ul, (1ul << 48) - 1);
+
+	for (uint32_t i = 0; ; ++i) {
+		rval = distrib(rand_engine);
+		slot_id = rval % db->slots.size();
+		auto &slot = db->slots[slot_id];
+		
+		uint64_t old_val = 0ul;
+		if (std::atomic_compare_exchange_weak_explicit(
+					&slot.id_volatile,
+					&old_val, id_volatile,
+					std::memory_order_relaxed,
+					std::memory_order_relaxed)) {
+			break;
 		}
 	}
-	uint64_t id = db->generation;
-	id = (id << 32) | slot;
+	X_ASSERT(db->num_durable.fetch_add(1, std::memory_order_relaxed) >= 0);
+	uint64_t id = (rval & (0xffff00000000)) | slot_id;
 	*p_id_persistent = id;
 	return 0;
+}
+
+static void smbd_durable_output_log(x_smbd_durable_db_t *db,
+		x_smbd_durable_record_t *rec,
+		uint32_t type, uint32_t size,
+		uint64_t id_persistent)
+{
+	auto log_fd = db->log_fd;
+	bool ret = x_smbd_durable_log_output(log_fd->fd, rec, type, size, id_persistent);
+	X_ASSERT(ret);
+	/* shall it call fsync only for persistent handle? */
+	fsync(log_fd->fd);
+	if (log_fd->num_record.fetch_add(1, std::memory_order_relaxed) ==
+			db->max_record_per_file) {
+		X_LOG(SMB, NOTICE, "schedule create new durable log for dirfd %d",
+				db->dir_fd);
+		db->refcnt.fetch_add(1, std::memory_order_relaxed);
+		x_smbd_schedule_async(&db->job);
+	}
 }
 
 int x_smbd_durable_remove(x_smbd_durable_db_t *db, uint64_t id_persistent)
 {
 	X_LOG(SMB, DBG, "id_persistent=0x%lx", id_persistent);
-	uint32_t slot = get_durable_slot(id_persistent);
+	uint32_t slot_id = get_durable_slot(id_persistent);
 
-	X_ASSERT(slot < db->capacity);
-	x_smbd_durable_t *durable = get_durable(db, slot);
-	{
-		auto lock = std::lock_guard(db->mutex);
-		if (db->free_region_index == slot + 1) {
-			db->free_region_index = slot;
-			durable->magic = 0ul;
-		} else {
-			db->free_slots.push(slot);
-			durable->magic = X_SMBD_DURABLE_MAGIC_DEAD;
-		}
-	}
+	X_ASSERT(slot_id < db->slots.size());
+	uint64_t id_volatile = db->slots[slot_id].id_volatile.exchange(0, std::memory_order_relaxed);
+	X_ASSERT(id_volatile != 0);
+	X_ASSERT(db->num_durable.fetch_sub(1, std::memory_order_relaxed) > 0);
 
-	msync(durable, sizeof *durable, MS_SYNC); // can we avoid msync ?
+	x_smbd_durable_record_t record;
+	smbd_durable_output_log(db, &record,
+			x_smbd_durable_record_t::type_close,
+			sizeof record, id_persistent);
 	return 0;
 }
 
 int x_smbd_durable_disconnect(x_smbd_durable_db_t *db, uint64_t id_persistent)
 {
 	X_LOG(SMB, DBG, "id_persistent=0x%lx", id_persistent);
-	uint32_t slot = get_durable_slot(id_persistent);
+	uint32_t slot_id = get_durable_slot(id_persistent);
 
-	X_ASSERT(slot < db->capacity);
-	x_smbd_durable_t *durable = get_durable(db, slot);
-	durable->expired_msec = get_epoch_msec() + durable->open_state.durable_timeout_msec;
-	msync(durable, sizeof *durable, MS_SYNC); // can we avoid msync ?
+	X_ASSERT(slot_id < db->slots.size());
+	struct {
+		x_smbd_durable_record_t record;
+		uint64_t disconnect_msec;
+	} record;
+	record.disconnect_msec = get_epoch_msec();
+
+	smbd_durable_output_log(db, &record.record,
+			x_smbd_durable_record_t::type_disconnect,
+			sizeof record, id_persistent);
 	return 0;
 }
 
 int x_smbd_durable_save(x_smbd_durable_db_t *db,
+		uint64_t id_persistent,
 		uint64_t id_volatile,
 		const x_smbd_open_state_t &open_state,
 		const x_smbd_lease_data_t &lease_data,
 		const x_smbd_file_handle_t &file_handle)
 {
-	X_LOG(SMB, DBG, "id_persistent=0x%lx", open_state.id_persistent);
-	uint32_t slot = get_durable_slot(open_state.id_persistent);
+	X_LOG(SMB, DBG, "id_persistent=0x%lx", id_persistent);
 
-	X_ASSERT(slot < db->capacity);
-	x_smbd_durable_t *db_rec = get_durable(db, slot);
-	new (db_rec)x_smbd_durable_t{
-		X_SMBD_DURABLE_MAGIC_ACTIVE,
+	auto record = (x_smbd_durable_record_t *)malloc(sizeof(x_smbd_durable_record_t)
+			+ sizeof(x_smbd_durable_t));
+	/* TODO serialize */
+	new (record + 1)x_smbd_durable_t{
 		uint64_t(-1),
 		id_volatile, open_state, lease_data, file_handle};
-	msync(db_rec, sizeof *db_rec, MS_SYNC);
+	smbd_durable_output_log(db, record, x_smbd_durable_record_t::type_create,
+			sizeof(x_smbd_durable_record_t) + sizeof(x_smbd_durable_t),
+			id_persistent);
+	free(record);
 	return 0;
 }
 
 int x_smbd_durable_update(x_smbd_durable_db_t *db,
+		uint64_t id_persistent,
 		const x_smbd_open_state_t &open_state)
 {
-	X_LOG(SMB, DBG, "id_persistent=0x%lx", open_state.id_persistent);
-	uint32_t slot = get_durable_slot(open_state.id_persistent);
+	X_LOG(SMB, DBG, "id_persistent=0x%lx", id_persistent);
 
-	X_ASSERT(slot < db->capacity);
-	x_smbd_durable_t *db_rec = get_durable(db, slot);
-	/* TODO only update replay_cached */
-	db_rec->open_state.replay_cached = open_state.replay_cached;
-	msync(db_rec, sizeof *db_rec, MS_SYNC);
+	/* only update replay_cached */
+	struct {
+		x_smbd_durable_record_t record;
+		uint64_t replay_cached;
+	} record;
+
+	record.replay_cached = open_state.replay_cached ? 1 : 0;
+	smbd_durable_output_log(db, &record.record,
+			x_smbd_durable_record_t::type_update_replay,
+			sizeof(record),
+			id_persistent);
 	return 0;
 }
 
-x_smbd_durable_t *x_smbd_durable_lookup(x_smbd_durable_db_t *db,
+uint64_t x_smbd_durable_lookup(x_smbd_durable_db_t *db,
 		uint64_t id_persistent)
 {
-	uint32_t slot = get_durable_slot(id_persistent);
-	if (slot >= db->capacity) {
-		return nullptr;
+	uint32_t slot_id = get_durable_slot(id_persistent);
+	if (slot_id >= db->slots.size()) {
+		return 0;
 	}
 
-	x_smbd_durable_t *durable = get_durable(db, slot);
-	if (durable->magic != X_SMBD_DURABLE_MAGIC_ACTIVE ||
-			durable->open_state.id_persistent != id_persistent ||
-			durable->expired_msec < get_epoch_msec()) {
-		return nullptr;
-	}
-
-	return durable;
+	return db->slots[slot_id].id_volatile.load(std::memory_order_relaxed);
 }
 
-static bool smbd_durable_db_check(const x_smbd_durable_db_header_t *db_header,
-		int64_t db_size)
+x_smbd_durable_db_t *x_smbd_durable_db_init(int dir_fd, uint32_t capacity,
+		uint32_t max_record_per_file)
 {
-	if (memcmp(db_header->magic, magic, sizeof magic) != 0) {
-		X_LOG(SMB, ERR, "Invalid durable.db, wrong magic");
-		return false;
-	}
-
-	if (db_header->version != X_SMBD_DURABLE_DB_VERSION_1) {
-		X_LOG(SMB, ERR, "Not support durable.db version %d", db_header->version);
-		return false;
-	}
-
-	if (db_header->record_size != X_SMBD_DURABLE_DB_RECORD_SIZE) {
-		X_LOG(SMB, ERR, "Invalid durable.db, record_size = %u",
-				db_header->record_size);
-		return false;
-	}
-
-	if (db_size < (long)smbd_durable_db_size(db_header->record_size, db_header->capacity)) {
-		X_LOG(SMB, ERR, "Invalid durable.db, size not match");
-		return false;
-	}
-	return true;
-}
-
-x_smbd_durable_db_t *x_smbd_durable_db_open(int fd)
-{
-	struct stat st;
-	int err = fstat(fd, &st);
-	X_ASSERT(err == 0);
-
-	if (st.st_size < HEADER_SIZE) {
-		X_LOG(SMB, ERR, "Invalid durable.db");
-		return nullptr;
-	}
-
-	void *ptr = mmap(NULL, st.st_size, PROT_READ, MAP_SHARED, fd, 0);
-	X_ASSERT(ptr);
-	x_smbd_durable_db_header_t *db_header = (x_smbd_durable_db_header_t *)ptr;
-
-	if (!smbd_durable_db_check(db_header, st.st_size)) {
-		munmap(ptr, st.st_size);
-		return nullptr;
-	}
-
-	x_smbd_durable_db_t *db = new x_smbd_durable_db_t(fd,
-			db_header, st.st_size);
+	x_smbd_durable_db_t *db = new x_smbd_durable_db_t(dir_fd, capacity,
+			max_record_per_file);
+	X_ASSERT(db);
 	return db;
 }
 
-x_smbd_durable_db_t *x_smbd_durable_db_init(int fd, uint32_t capacity)
+static int smbd_durable_open_log(x_smbd_durable_db_t *durable_db, uint64_t next_file_no)
 {
-	struct stat st;
-	int err = fstat(fd, &st);
-	X_ASSERT(err == 0);
-	x_smbd_durable_db_header_t *db_header = nullptr;
-	uint16_t generation = 0;
-	if (st.st_size == 0) {
-		/* new file */
-		X_LOG(SMB, NOTICE, "new durable.db");
-	} else if (st.st_size < HEADER_SIZE) {
-		X_LOG(SMB, ERR, "Invalid durable.db");
-	} else {
-		void *ptr = mmap(NULL, st.st_size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
-		X_ASSERT(ptr);
-		db_header = (x_smbd_durable_db_header_t *)ptr;
-		generation = x_convert<uint16_t>(db_header->generation + 1);
-		if (!smbd_durable_db_check(db_header, st.st_size)) {
-			munmap(ptr, st.st_size);
-			ptr = nullptr;
-		} else {
-			X_LOG(SMB, NOTICE, "can reuse durable.db");
-		}
-	}
+	char name[128];
+	snprintf(name, sizeof name, X_SMBD_DURABLE_LOG "--%016lx", durable_db->next_file_no);
+	++durable_db->next_file_no;
+	int fd = openat(durable_db->dir_fd, name,
+			O_WRONLY | O_CREAT | O_EXCL | O_APPEND, 0644);
+	X_ASSERT(fd != -1);
 
-	size_t mmap_size;
-	if (!db_header) {
-		X_LOG(SMB, NOTICE, "re-init durable.db");
-		if (st.st_size != 0) {
-			X_ASSERT(ftruncate(fd, 0) == 0);
-		}
-		mmap_size = smbd_durable_db_size(X_SMBD_DURABLE_DB_RECORD_SIZE,
-				capacity);
-		X_ASSERT(ftruncate(fd, mmap_size) == 0);
-		void *ptr = mmap(NULL, mmap_size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
-		X_ASSERT(ptr);
-		db_header = (x_smbd_durable_db_header_t *)ptr;
-		memcpy(db_header->magic, magic, 8);
-		db_header->version = X_SMBD_DURABLE_DB_VERSION_1;
-		db_header->record_size = X_SMBD_DURABLE_DB_RECORD_SIZE;
-		db_header->capacity = capacity;
-	} else {
-		mmap_size = st.st_size;
-		/* TODO restore durable opens */
-	}
-	db_header->generation = generation;
-	msync(db_header, sizeof *db_header, MS_SYNC);
-
-	x_smbd_durable_db_t *db = new x_smbd_durable_db_t(fd, db_header,
-			mmap_size);
-	return db;
-}
-
-void x_smbd_durable_db_traverse(x_smbd_durable_db_t *durable_db,
-		x_smbd_durable_db_visitor_t &visitor)
-{
-	uint8_t *rec = (uint8_t *)durable_db->header + HEADER_SIZE;
-	uint32_t i;
-	for (i = 0; i < durable_db->capacity; ++i, rec += X_SMBD_DURABLE_DB_RECORD_SIZE) {
-		x_smbd_durable_t *durable = (x_smbd_durable_t *)rec;
-		if (durable->magic == 0) {
-			/* no valid record beyond this */
-			break;
-		}
-		if (durable->magic == X_SMBD_DURABLE_MAGIC_ACTIVE &&
-				visitor(*durable)) {
-			break;
-		}
-	}
+	x_smbd_durable_log_init_header(fd, next_file_no);
+	return fd;
 }
 
 void x_smbd_durable_db_restore(std::shared_ptr<x_smbd_volume_t> &smbd_volume,
@@ -318,69 +227,150 @@ void x_smbd_durable_db_restore(std::shared_ptr<x_smbd_volume_t> &smbd_volume,
 		NTSTATUS (*restore_fn)(std::shared_ptr<x_smbd_volume_t> &smbd_volume,
 			x_smbd_durable_t &durable, uint64_t timeout_msec))
 {
-	uint64_t epoch = get_epoch_msec();
-	uint8_t *rec = (uint8_t *)durable_db->header + HEADER_SIZE;
-	std::array<uint32_t, 2> free_range{ 0, 0 };
-	uint32_t i, count = 0;
-	for (i = 0; i < durable_db->capacity; ++i, rec += X_SMBD_DURABLE_DB_RECORD_SIZE) {
-		x_smbd_durable_t *durable = (x_smbd_durable_t *)rec;
-		if (durable->magic == 0) {
-			/* no valid record beyond this */
-			break;
-		}
-		if (durable->magic == X_SMBD_DURABLE_MAGIC_ACTIVE &&
-				durable->expired_msec > epoch) {
-			uint64_t timeout_msec;
-			if (durable->expired_msec == (uint64_t)-1) {
-				durable->expired_msec = epoch + durable->open_state.durable_timeout_msec;
-				timeout_msec = durable->open_state.durable_timeout_msec;
-			} else {
-				timeout_msec = durable->expired_msec - epoch;
-			}
-			++count;
+	uint64_t next_file_no;
+	std::map<uint64_t, x_smbd_durable_t> durables;
+	std::vector<std::string> log_files;
+	ssize_t ret = x_smbd_durable_log_read(durable_db->dir_fd, uint64_t(-1),
+			next_file_no, durables, log_files);
+	X_LOG(SMB, DBG, "x_smbd_durable_log_read ret %ld", ret);
 
-			NTSTATUS status = restore_fn(smbd_volume, *durable, timeout_msec);
-			if (NT_STATUS_IS_OK(status)) {
-				X_LOG(SMB, DBG, "restored open %lx:%lx",
-						durable->open_state.id_persistent,
-						durable->id_volatile);
+	int fd = openat(durable_db->dir_fd, X_SMBD_DURABLE_LOG_TMP,
+			O_WRONLY | O_CREAT | O_TRUNC, 0644);
+	x_smbd_durable_log_init_header(fd, next_file_no);
+
+	uint64_t epoch = get_epoch_msec();
+	size_t count = 0;
+	for (auto &[id_persistent, durable]: durables) {
+		uint64_t timeout_msec;
+		if (durable.disconnect_msec == (uint64_t)-1) {
+			durable.disconnect_msec = epoch;
+			timeout_msec = durable.open_state.durable_timeout_msec;
+		} else {
+			uint64_t expired_msec = durable.disconnect_msec + durable.open_state.durable_timeout_msec;
+		       	if (expired_msec < epoch) {
 				continue;
 			}
+			timeout_msec = expired_msec - epoch;
+		}
+		uint64_t slot_id = get_durable_slot(id_persistent);
+		if (slot_id >= durable_db->slots.size()) {
+			X_LOG(SMB, ERR, "invalid id_persistent 0x%lx",
+					id_persistent);
+			continue;
+		}
+		NTSTATUS status = restore_fn(smbd_volume, durable, timeout_msec);
+		if (!NT_STATUS_IS_OK(status)) {
 			X_LOG(SMB, WARN, "failed to restore open %lx:%lx",
-					durable->open_state.id_persistent,
-					durable->id_volatile);
+					id_persistent,
+					durable.id_volatile);
+			continue;
 		}
+		X_LOG(SMB, DBG, "restored open %lx:%lx",
+				id_persistent,
+				durable.id_volatile);
 
-		durable->magic = X_SMBD_DURABLE_MAGIC_DEAD;
-		if (i == free_range[1]) {
-			++free_range[1];
-		} else {
-			for (uint32_t f = free_range[0]; f < free_range[1]; ++f) {
-				durable_db->free_slots.push(f);
-			}
-			free_range = { i, i + 1 };
-		}
+		durable_db->slots[slot_id].id_volatile.store(durable.id_volatile, std::memory_order_relaxed);
+		durable_db->num_durable.fetch_add(1, std::memory_order_relaxed);
+		struct {
+			x_smbd_durable_record_t record;
+			x_smbd_durable_t durable;
+		} record = { {}, durable };
+		x_smbd_durable_log_output(fd, &record.record,
+				x_smbd_durable_record_t::type_create,
+				sizeof record, id_persistent);
+		++count;
+	}
+	fsync(fd);
+	close(fd);
+	renameat(durable_db->dir_fd, X_SMBD_DURABLE_LOG_TMP,
+			durable_db->dir_fd, X_SMBD_DURABLE_LOG_MERGED);
+
+	for (auto &log_file: log_files) {
+		unlinkat(durable_db->dir_fd, log_file.c_str(), 0);
 	}
 
-	if (i != free_range[1]) {
-		for (uint32_t f = free_range[0]; f < free_range[1]; ++f) {
-			durable_db->free_slots.push(f);
-		}
-		durable_db->free_region_index = i;
-	} else {
-		durable_db->free_region_index = free_range[0];
-	}
-	if (durable_db->free_region_index != durable_db->capacity) {
-		x_smbd_durable_t *durable = get_durable(durable_db, durable_db->free_region_index);
-		durable->magic = 0x0ul;
-	}
-	X_LOG(SMB, NOTICE, "durable_restored %d free_region_index=%u", count,
-			durable_db->free_region_index);
+	durable_db->next_file_no = next_file_no;
+	fd = smbd_durable_open_log(durable_db, 0);
+	durable_db->log_fd = std::make_shared<x_smbd_durable_fd_t>(fd);
+	X_LOG(SMB, NOTICE, "durable_restored %ld", count);
 }
 
-void x_smbd_durable_db_close(x_smbd_durable_db_t *durable_db)
+void x_smbd_durable_db_release(x_smbd_durable_db_t *durable_db)
 {
-	delete durable_db;
+	if (durable_db->refcnt.fetch_sub(1, std::memory_order_acq_rel) == 1) {
+		delete durable_db;
+	}
+}
+
+static void smbd_durable_merge_log(x_smbd_durable_db_t *durable_db)
+{
+	uint64_t max_file_no = durable_db->next_file_no;
+	int fd = smbd_durable_open_log(durable_db, 0);
+	auto log_fd = std::make_shared<x_smbd_durable_fd_t>(fd);
+	std::swap(durable_db->log_fd, log_fd);
+
+	if ((max_file_no % 3) != 0) {
+		return;
+	}
+
+	X_LOG(SMB, DBG, "merge durable log file for dirfd %d, next_file_no %lx",
+			durable_db->dir_fd, max_file_no);
+
+	if (log_fd.use_count() > 1) {
+		--max_file_no;
+		X_LOG(SMB, DBG, "some thread still write into 0x%016lx, skip it",
+				max_file_no);
+	}
+
+	uint64_t next_file_no;
+	std::map<uint64_t, x_smbd_durable_t> durables;
+	std::vector<std::string> log_files;
+
+	ssize_t ret = x_smbd_durable_log_read(durable_db->dir_fd, max_file_no,
+			next_file_no, durables, log_files);
+	X_LOG(SMB, DBG, "x_smbd_durable_log_read ret %ld", ret);
+
+	fd = openat(durable_db->dir_fd, X_SMBD_DURABLE_LOG_TMP,
+			O_WRONLY | O_CREAT | O_TRUNC, 0644);
+	x_smbd_durable_log_init_header(fd, next_file_no);
+
+	size_t count = 0;
+	for (auto &[id_persistent, durable]: durables) {
+		struct {
+			x_smbd_durable_record_t record;
+			x_smbd_durable_t durable;
+		} record = { {}, durable };
+		x_smbd_durable_log_output(fd, &record.record,
+				x_smbd_durable_record_t::type_create,
+				sizeof record, id_persistent);
+		++count;
+	}
+	fsync(fd);
+	close(fd);
+	renameat(durable_db->dir_fd, X_SMBD_DURABLE_LOG_TMP,
+			durable_db->dir_fd, X_SMBD_DURABLE_LOG_MERGED);
+
+	for (auto &log_file: log_files) {
+		X_LOG(SMB, NOTICE, "remove durable log %s",
+				log_file.c_str());
+		unlinkat(durable_db->dir_fd, log_file.c_str(), 0);
+	}
+}
+
+static x_job_t::retval_t durable_job_run(x_job_t *job, void *sche)
+{
+	x_smbd_durable_db_t *durable_db = X_CONTAINER_OF(job, x_smbd_durable_db_t, job);
+	smbd_durable_merge_log(durable_db);
+	x_smbd_durable_db_release(durable_db);
+	return x_job_t::JOB_BLOCKED;
+}
+
+x_smbd_durable_db_t::x_smbd_durable_db_t(int fd, uint32_t capacity,
+		uint32_t max_record_per_file)
+	: job(durable_job_run), dir_fd(dup(fd))
+	, max_record_per_file(max_record_per_file), slots(capacity << 1)
+{
+	X_ASSERT(dir_fd >= 0);
 }
 
 

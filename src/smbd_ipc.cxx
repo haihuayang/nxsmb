@@ -843,7 +843,7 @@ static NTSTATUS ipc_create_open(x_smbd_open_t **psmbd_open,
 	x_smbd_ipc_object_t *ipc_object = from_smbd_object(state->smbd_object);
 	named_pipe_t *named_pipe = new named_pipe_t(&ipc_object->base,
 			smbd_requ->smbd_tcon,
-			x_smbd_open_state_t{X_SMBD_OPEN_ID_NON_DURABLE,
+			x_smbd_open_state_t{
 				state->valid_flags,
 				state->in_desired_access,
 				state->in_share_access,

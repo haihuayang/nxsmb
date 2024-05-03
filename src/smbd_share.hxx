@@ -147,13 +147,15 @@ NTSTATUS x_smbd_volume_get_fd_path(std::string &ret,
 		const x_smbd_volume_t &smbd_volumen,
 		int fd);
 int x_smbd_volume_allocate_persistent(x_smbd_volume_t &smbd_volume,
-		uint64_t *p_id_persistent);
+		uint64_t *p_id_persistent, uint64_t id_volatile);
 int x_smbd_volume_save_durable(x_smbd_volume_t &smbd_volume,
+		uint64_t id_persistent,
 		uint64_t id_volatile,
 		const x_smbd_open_state_t &open_state,
 		const x_smbd_lease_data_t &lease_data,
 		const x_smbd_file_handle_t &file_handle);
 int x_smbd_volume_update_durable(x_smbd_volume_t &smbd_volume,
+		uint64_t id_persistent,
 		const x_smbd_open_state_t &open_state);
 int x_smbd_volume_remove_durable(x_smbd_volume_t &smbd_volume,
 		uint64_t id_persistent);
@@ -191,7 +193,10 @@ NTSTATUS x_smbd_open_restore(
 
 int x_smbd_volume_restore_durable(std::shared_ptr<x_smbd_volume_t> &smbd_volume);
 
-x_smbd_durable_t *x_smbd_share_lookup_durable(
+/* return id_volatile
+ * 0 if no such durable
+ */
+uint64_t x_smbd_share_lookup_durable(
 		std::shared_ptr<x_smbd_volume_t> &smbd_volume,
 		const std::shared_ptr<x_smbd_share_t> &smbd_share,
 		uint64_t id_persistent);

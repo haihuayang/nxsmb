@@ -148,7 +148,6 @@ struct x_smbd_open_state_t
 		F_APP_INSTANCE_ID = 0x1,
 		F_APP_INSTANCE_VERSION = 0x2,
 	};
-	uint64_t id_persistent;
 	const uint32_t flags;
 	const uint32_t access_mask, share_access;
 	const x_smb2_uuid_t client_guid;
@@ -189,11 +188,6 @@ struct x_smbd_file_handle_t
 	unsigned char f_handle[MAX_HANDLE_SZ];
 };
 
-enum {
-	X_SMBD_DURABLE_MAGIC_ACTIVE	= 0x656c626172756441ul,
-	X_SMBD_DURABLE_MAGIC_DEAD	= 0x656c626172756444ul,
-};
-
 struct x_smbd_lease_data_t
 {
 	const x_smb2_uuid_t key;
@@ -206,8 +200,7 @@ struct x_smbd_lease_data_t
 
 struct x_smbd_durable_t
 {
-	uint64_t magic;
-	uint64_t expired_msec;
+	uint64_t disconnect_msec;
 	uint64_t id_volatile;
 	x_smbd_open_state_t open_state;
 	x_smbd_lease_data_t lease_data;

@@ -73,6 +73,7 @@ SET_src_smbd_nx := \
 	smbd_replay \
 	smbd_volume \
 	smbd_durable \
+	smbd_durable_log \
 	smbd_file_info \
 	smbd_access \
 	smbd_posixfs \
@@ -136,7 +137,7 @@ SET_src_nxutils := \
 	smbd_posixfs_utils \
 	smbd_ntacl \
 	smbd_volume \
-	smbd_durable \
+	smbd_durable_log \
 	smbd_string \
 	util_sid \
 	misc \

@@ -159,3 +159,7 @@ NTSTATUS x_map_nt_error_from_ndr_err(idl::x_ndr_err_code_t ndr_err)
 	/* we should map all error codes to different status codes */
 	return NT_STATUS_INVALID_PARAMETER;
 }
+
+static thread_local std::random_device rd;
+thread_local std::mt19937 rand_engine{rd()};
+

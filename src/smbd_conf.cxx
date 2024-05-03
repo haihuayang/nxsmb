@@ -1036,7 +1036,7 @@ int x_smbd_init_shares(x_smbd_conf_t &smbd_conf)
 	return 0;
 }
 
-x_smbd_durable_t *x_smbd_share_lookup_durable(
+uint64_t x_smbd_share_lookup_durable(
 		std::shared_ptr<x_smbd_volume_t> &smbd_volume,
 		const std::shared_ptr<x_smbd_share_t> &smbd_share,
 		uint64_t id_persistent)
@@ -1047,18 +1047,18 @@ x_smbd_durable_t *x_smbd_share_lookup_durable(
 	for (auto &vol: smbd_conf.smbd_volumes) {
 		if (vol->volume_id == vol_id &&
 				vol->owner_share == smbd_share) {
-			x_smbd_durable_t *durable = x_smbd_durable_lookup(
+			uint64_t id_volatile = x_smbd_durable_lookup(
 					vol->smbd_durable_db,
 					id_persistent);
-			if (durable) {
+			if (id_volatile != 0) {
 				smbd_volume = vol;
-				return durable;
+				return id_volatile;
 			}
 			break;
 		}
 	}
 
-	return nullptr;
+	return 0;
 }
 
 std::shared_ptr<x_smbd_volume_t> x_smbd_find_volume(const x_smbd_conf_t &smbd_conf,

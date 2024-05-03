@@ -8,6 +8,7 @@
 
 #include "include/utils.hxx"
 #include "include/librpc/ndr_smb.hxx"
+#include <random>
 
 template <class T>
 struct x_array_const_t
@@ -72,6 +73,8 @@ struct x_fnmatch_t;
 bool x_fnmatch_match(const x_fnmatch_t &fnmatch, const char *name);
 x_fnmatch_t *x_fnmatch_create(const std::u16string &pattern, bool icase);
 void x_fnmatch_destroy(x_fnmatch_t *fnmatch);
+
+extern thread_local std::mt19937 rand_engine;
 
 #endif /* __misc__hxx__ */
 

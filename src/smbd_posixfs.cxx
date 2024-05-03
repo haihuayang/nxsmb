@@ -727,7 +727,7 @@ static posixfs_open_t *posixfs_open_create(
 			state.smbd_stream,
 			oplock_level == X_SMB2_OPLOCK_LEVEL_LEASE ?
 				state.smbd_lease : nullptr,
-			x_smbd_open_state_t{X_SMBD_OPEN_ID_NON_DURABLE,
+			x_smbd_open_state_t{
 				state.valid_flags,
 				state.granted_access,
 				state.in_share_access,
@@ -3203,11 +3203,8 @@ static int smbd_volume_read(int vol_fd,
 		return -EINVAL;
 	}
 
-	int durable_fd = openat(vol_fd, "durable.db", O_RDWR | O_CREAT, 0644);
-	X_ASSERT(durable_fd != 0);
-
-	durable_db = x_smbd_durable_db_init(durable_fd,
-			0x100000); /* TODO the number */
+	durable_db = x_smbd_durable_db_init(vol_fd,
+			0x100000, 300); /* TODO the number */
 
 	vol_id = id;
 	rootdir_fd = rfd;

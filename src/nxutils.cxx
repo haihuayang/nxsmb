@@ -281,65 +281,79 @@ static int set_dos_attr(char **argv)
 	return 0;
 }
 
-struct smbd_durable_db_printer_t : x_smbd_durable_db_visitor_t
+static int list_volume_durable(const char *volume, const char *log_file)
 {
-	bool operator()(const x_smbd_durable_t &durable) override
-	{
+	int dirfd = open(volume, O_RDONLY);
+	if (dirfd < 0) {
+		fprintf(stderr, "cannot open volume %s\n", volume);
+		return 1;
+	}
+	std::map<uint64_t, x_smbd_durable_t> durables;
+	std::vector<std::string> log_files;
+	uint64_t skip_file_no;
+	ssize_t ret;
+	if (log_file) {
+		ret = x_smbd_durable_log_read_file(dirfd, log_file,
+				false, skip_file_no,
+				durables);
+	} else {
+		ret = x_smbd_durable_log_read(dirfd, uint64_t(-1),
+				skip_file_no, durables,
+				log_files);
+	}
+	close(dirfd);
+
+	if (ret < 0) {
+		fprintf(stderr, "Error in read durable log, %ld\n", ret);
+		return int(ret);
+	}
+	for (auto &[id_persistent, durable]: durables) {
 		printf("0x%lx 0x%lx %c%c 0x%x %s %u ",
-				durable.open_state.id_persistent,
+				id_persistent,
 				durable.id_volatile,
 				x_smbd_dhmode_to_name(durable.open_state.dhmode),
 				durable.open_state.replay_cached ? 'R' : '-',
 				durable.open_state.access_mask,
 				x_tostr(durable.open_state.owner).c_str(),
 				durable.open_state.durable_timeout_msec);
-		if (durable.expired_msec == (uint64_t)-1) {
+		if (durable.disconnect_msec == (uint64_t)-1) {
 			printf("active");
 		} else {
 			struct timespec ts;
-			ts.tv_sec = durable.expired_msec / 1000;
-			ts.tv_nsec = (durable.expired_msec % 1000) * 1000000;
-			output_timespec("expire", &ts);
+			ts.tv_sec = durable.disconnect_msec / 1000;
+			ts.tv_nsec = (durable.disconnect_msec % 1000) * 1000000;
+			output_timespec("disconnect", &ts);
 		}
 
 		printf("\n");
-		return false;
 	}
-};
-
-static void output_durable_db(int fd)
-{
-	x_smbd_durable_db_t *durable_db = x_smbd_durable_db_open(fd);
-	smbd_durable_db_printer_t printer;
-	x_smbd_durable_db_traverse(durable_db, printer);
-	x_smbd_durable_db_close(durable_db);
+	printf("total record: %ld, merged: %lu\n", ret, durables.size());
+	return 0;
 }
 
-static void list_durable_one(const char *volume)
+static void list_durable_usage(const char *cmd)
 {
-	int dirfd = open(volume, O_RDONLY);
-	if (dirfd < 0) {
-		fprintf(stderr, "cannot open volume %s\n", volume);
-		return;
-	}
-	int dbfd = openat(dirfd, "durable.db", O_RDONLY);
-	if (dbfd < 0) {
-		fprintf(stderr, "cannot open durable.db for volume %s\n", volume);
-	} else {
-		output_durable_db(dbfd);
-		close(dbfd);
-	}
-
-	close(dirfd);
+	fprintf(stderr, "Usage: %s [-f log_file] volume\n", cmd);
+	exit(EXIT_FAILURE);
 }
 
 static int list_durable(int argc, char **argv)
 {
-	char **volumes = argv + 1;
-	for ( ; *volumes; ++volumes) {
-		list_durable_one(*volumes);
+	const char *log_file = nullptr;
+	int opt;
+	while ((opt = getopt(argc, argv, "f:")) != -1) {
+		switch (opt) {
+			case 'f':
+				log_file = optarg;
+				break;
+			default: /* '?' */
+				list_durable_usage(argv[0]);
+		}
 	}
-	return 0;
+	if (optind + 1 !=  argc) {
+		list_durable_usage(argv[0]);
+	}
+	return list_volume_durable(argv[optind], log_file);
 }
 
 int main(int argc, char **argv)

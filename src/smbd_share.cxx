@@ -32,6 +32,9 @@ x_smbd_volume_t::x_smbd_volume_t(const x_smb2_uuid_t &uuid,
 
 x_smbd_volume_t::~x_smbd_volume_t()
 {
+	if (smbd_durable_db) {
+		x_smbd_durable_db_release(smbd_durable_db);
+	}
 	x_smbd_release_object(root_object);
 }
 
@@ -89,11 +92,11 @@ NTSTATUS x_smbd_volume_get_fd_path(std::string &path,
 }
 
 int x_smbd_volume_allocate_persistent(x_smbd_volume_t &smbd_volume,
-		uint64_t *p_id_persistent)
+		uint64_t *p_id_persistent, uint64_t id_volatile)
 {
 	uint64_t id;
 	int err = x_smbd_durable_db_allocate_id(smbd_volume.smbd_durable_db,
-			&id);
+			&id, id_volatile);
 	if (err == 0) {
 		*p_id_persistent = ((uint64_t)smbd_volume.volume_id) << 48 | id;
 	}
@@ -101,20 +104,24 @@ int x_smbd_volume_allocate_persistent(x_smbd_volume_t &smbd_volume,
 }
 
 int x_smbd_volume_save_durable(x_smbd_volume_t &smbd_volume,
+		uint64_t id_persistent,
 		uint64_t id_volatile,
 		const x_smbd_open_state_t &open_state,
 		const x_smbd_lease_data_t &lease_data,
 		const x_smbd_file_handle_t &file_handle)
 {
 	return x_smbd_durable_save(smbd_volume.smbd_durable_db,
+			id_persistent,
 			id_volatile,
 			open_state, lease_data, file_handle);
 }
 
 int x_smbd_volume_update_durable(x_smbd_volume_t &smbd_volume,
+		uint64_t id_persistent,
 		const x_smbd_open_state_t &open_state)
 {
 	return x_smbd_durable_update(smbd_volume.smbd_durable_db,
+			id_persistent,
 			open_state);
 }
 

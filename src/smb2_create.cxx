@@ -637,7 +637,7 @@ void x_smbd_requ_state_create_t::async_done(x_smbd_conn_t *smbd_conn,
 {
 	X_SMBD_REQU_LOG(OP, smbd_requ, " %s open=0x%lx,0x%lx",
 			x_ntstatus_str(status),
-			smbd_requ->smbd_open ? smbd_requ->smbd_open->open_state.id_persistent : 0,
+			smbd_requ->smbd_open ? smbd_requ->smbd_open->id_persistent : 0,
 			smbd_requ->smbd_open ? smbd_requ->smbd_open->id_volatile : 0);
 	if (!smbd_conn) {
 		return;
@@ -841,7 +841,7 @@ NTSTATUS x_smb2_process_create(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_req
 
 	if (NT_STATUS_IS_OK(status)) {
 		X_SMBD_REQU_LOG(OP, smbd_requ, " STATUS_SUCCESS 0x%lx,0x%lx",
-			smbd_requ->smbd_open->open_state.id_persistent,
+			smbd_requ->smbd_open->id_persistent,
 			smbd_requ->smbd_open->id_volatile);
 		smb2_create_success(smbd_conn, smbd_requ, *state);
 		return status;
