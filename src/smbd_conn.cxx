@@ -1230,7 +1230,7 @@ static int x_smbd_conn_process_smb(x_smbd_conn_t *smbd_conn, x_buf_t *buf, uint3
 	}
 
 	if (smbhdr == X_SMB2_CTF_MAGIC) {
-		x_buf_t *pbuf;
+		x_buf_t *pbuf = nullptr;
 		int plen = x_smbd_conn_process_smb2_ctf(smbd_conn, buf, msgsize,
 				&pbuf);
 		x_buf_release(buf);
