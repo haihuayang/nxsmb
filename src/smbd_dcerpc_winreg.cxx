@@ -185,6 +185,10 @@ static idl::dcerpc_nca_status x_smbd_dcerpc_impl_winreg_DeleteKey(
 		return X_SMBD_DCERPC_NCA_STATUS_OK;
 	}
 
+	X_LOG(SMB, DBG, "parent '%s' key '%s'",
+			x_str_todebug(x_smbd_registry_key_get_name(*parent_key)).c_str(),
+			x_str_todebug(*arg.key.name).c_str());
+
 	std::u16string name;
 	if (!normalize_reg_path(name, *arg.key.name)) {
 		arg.__result = WERR_FILE_NOT_FOUND;
@@ -264,6 +268,9 @@ static idl::dcerpc_nca_status x_smbd_dcerpc_impl_winreg_EnumValue(
 	x_smbd_registry_value_t reg_val;
 	if (!x_smbd_registry_enum_value(*key, arg.enum_index, reg_val)) {
 		arg.__result = WERR_NO_MORE_ITEMS;
+	} else if (*arg.size < reg_val.value.size()) {
+		arg.size = std::make_shared<uint32_t>(reg_val.value.size());
+		arg.__result = WERR_MORE_DATA;
 	} else {
 		arg.name.name = std::make_shared<std::u16string>(std::move(reg_val.name));
 		arg.type = std::make_shared<idl::winreg_Type>(reg_val.type);
@@ -325,7 +332,7 @@ static idl::dcerpc_nca_status x_smbd_dcerpc_impl_winreg_OpenKey(
 		return X_SMBD_DCERPC_NCA_STATUS_OK;
 	}
 
-	X_LOG(SMB, DBG, "winreg_OpenKey parent '%s' key '%s'",
+	X_LOG(SMB, DBG, "parent '%s' key '%s'",
 			x_str_todebug(x_smbd_registry_key_get_name(*parent_key)).c_str(),
 			x_str_todebug(*arg.keyname.name).c_str());
 
