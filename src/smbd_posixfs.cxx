@@ -2404,6 +2404,8 @@ NTSTATUS posixfs_object_op_query_allocated_ranges(
 		ranges.push_back({uint64_t(data_off), std::min(uint64_t(hole_off), max_off) - data_off});
 		off = hole_off;
 	}
+	X_LOG(SMB, DBG, "collect %lu ranges from %ld to %ld",
+			ranges.size(), off, max_off);
 	return NT_STATUS_OK;
 }
 
