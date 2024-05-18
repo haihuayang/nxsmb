@@ -208,7 +208,7 @@ static NTSTATUS smbd_object_remove(
 				nullptr, state);
 	}
 
-	if (smbd_open->locks.size()) {
+	if (smbd_open->open_state.locks.size()) {
 		x_smbd_lock_retry(sharemode);
 	}
 
@@ -2087,7 +2087,7 @@ static inline void smbd_open_to_open_info(std::vector<idl::srvsvc_NetFileInfo3> 
 		if (smbd_open->smbd_tcon) {
 			smbd_user = x_smbd_tcon_get_user(smbd_open->smbd_tcon);
 		}
-		lock_count = smbd_open->locks.size();
+		lock_count = smbd_open->open_state.locks.size();
 	}
 
 	std::shared_ptr<std::u16string> user_name;

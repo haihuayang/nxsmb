@@ -117,7 +117,6 @@ struct x_smbd_open_t
 	/* pending_requ_list and notify_changes protected by posixfs_object->mutex */
 	x_tp_ddlist_t<requ_async_traits> pending_requ_list;
 	std::vector<std::pair<uint32_t, std::u16string>> notify_changes;
-	std::vector<x_smb2_lock_element_t> locks;
 
 	enum { LOCK_SEQUENCE_MAX = 64 };
 	uint8_t lock_sequence_array[LOCK_SEQUENCE_MAX] = { 0 };

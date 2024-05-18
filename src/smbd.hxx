@@ -45,6 +45,10 @@ enum {
 	X_SMBD_DURABLE_TIMEOUT_MAX = (5 * 60),
 };
 
+enum {
+	X_SMBD_MAX_LOCKS_PER_OPEN = 10000,
+};
+
 enum class x_smbd_timer_id_t {
 	SESSSETUP,
 	BREAK,
@@ -169,6 +173,7 @@ struct x_smbd_open_state_t
 	uint32_t durable_timeout_msec = 0;
 	uint64_t current_offset = 0;
 	uint64_t channel_generation;
+	std::vector<x_smb2_lock_element_t> locks;
 };
 
 struct x_smbd_file_handle_t
