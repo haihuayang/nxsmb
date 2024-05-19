@@ -245,6 +245,14 @@ static void smbd_lock_insert(x_smbd_open_t *smbd_open,
 	auto &locks = smbd_open->open_state.locks;
 	locks.insert(locks.end(), in_lock_elements.begin(), in_lock_elements.end());
 	/* update durable db if durable */
+	if (smbd_open->open_state.dhmode != x_smbd_dhmode_t::NONE) {
+		int ret = x_smbd_volume_update_durable_locks(
+				*smbd_open->smbd_object->smbd_volume,
+				smbd_open->id_persistent,
+				locks);
+		X_LOG(SMB, DBG, "durable_update_locks for %p 0x%lx, ret = %d",
+				smbd_open, smbd_open->id_persistent, ret);
+	}
 }
 
 void x_smbd_lock_retry(x_smbd_sharemode_t *sharemode)
@@ -377,10 +385,18 @@ static NTSTATUS smbd_open_unlock(
 			break;
 		}
 		locks.erase(it);
-		/* update durable db if durable */
 		++unlocked;
 	}
 	if (unlocked > 0) {
+		/* update durable db if durable */
+		if (smbd_open->open_state.dhmode != x_smbd_dhmode_t::NONE) {
+			int ret = x_smbd_volume_update_durable_locks(
+					*smbd_open->smbd_object->smbd_volume,
+					smbd_open->id_persistent,
+					locks);
+			X_LOG(SMB, DBG, "durable_update_locks for %p 0x%lx, ret = %d",
+					smbd_open, smbd_open->id_persistent, ret);
+		}
 		x_smbd_lock_retry(sharemode);
 	}
 	return status;

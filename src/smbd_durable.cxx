@@ -165,6 +165,18 @@ int x_smbd_durable_update_flags(x_smbd_durable_db_t *db,
 				flags));
 }
 
+int x_smbd_durable_update_locks(x_smbd_durable_db_t *db,
+		uint64_t id_persistent,
+		const std::vector<x_smb2_lock_element_t> &locks)
+{
+	X_LOG(SMB, DBG, "id_persistent=0x%lx", id_persistent);
+
+	auto log_fd = db->log_fd;
+	return smbd_durable_post_output(db, *log_fd,
+			x_smbd_durable_log_locks(log_fd->fd, id_persistent,
+				locks));
+}
+
 uint64_t x_smbd_durable_lookup(x_smbd_durable_db_t *db,
 		uint64_t id_persistent)
 {

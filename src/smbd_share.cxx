@@ -125,6 +125,14 @@ int x_smbd_volume_update_durable_flags(x_smbd_volume_t &smbd_volume,
 			open_state.flags);
 }
 
+int x_smbd_volume_update_durable_locks(x_smbd_volume_t &smbd_volume,
+		uint64_t id_persistent,
+		const std::vector<x_smb2_lock_element_t> &locks)
+{
+	return x_smbd_durable_update_locks(smbd_volume.smbd_durable_db,
+			id_persistent, locks);
+}
+
 int x_smbd_volume_disconnect_durable(x_smbd_volume_t &smbd_volume,
 		uint64_t id_persistent)
 {

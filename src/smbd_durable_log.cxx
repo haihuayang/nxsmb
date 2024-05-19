@@ -22,6 +22,7 @@ struct x_smbd_durable_record_t
 		type_close,
 		type_disconnect,
 		type_update_flags,
+		type_update_locks,
 	};
 	uint32_t cksum;
 	uint32_t type_size;
@@ -399,7 +400,7 @@ static ssize_t smbd_durable_read(int fd,
 				return -EINVAL;
 			}
 			if (size != sizeof(x_smbd_durable_record_t) + sizeof(uint64_t)) {
-				REPORT_ERR("invalid type_update_replay record size %u", size);
+				REPORT_ERR("invalid type_update_flags record size %u", size);
 				return -EINVAL;
 			}
 			uint32_t flags = X_LE2H32(*(uint32_t *)(record + 1));
@@ -409,6 +410,40 @@ static ssize_t smbd_durable_read(int fd,
 						record->id_persistent);
 			} else {
 				it->second->open_state.flags = flags;
+			}
+		} else if (type == x_smbd_durable_record_t::type_update_locks) {
+			if (is_merged) {
+				REPORT_ERR("unexpect type %u in merged log", type);
+				return -EINVAL;
+			}
+			if (size < sizeof(x_smbd_durable_record_t) + sizeof(uint64_t)) {
+				REPORT_ERR("invalid type_update_locks record size %u", size);
+				return -EINVAL;
+			}
+			const uint8_t *ptr = (const uint8_t *)(record + 1);
+			uint32_t num_lock = PULL_LE32(ptr);
+			if (size != sizeof(x_smbd_durable_record_t) + sizeof(uint64_t)
+					+ num_lock * sizeof(x_smb2_lock_element_t)) {
+				REPORT_ERR("invalid type_update_locks record size %u", size);
+				return -EINVAL;
+			}
+
+			std::vector<x_smb2_lock_element_t> locks;
+			locks.resize(num_lock);
+			for (uint32_t i = 0; i < num_lock; ++i) {
+				auto &lock = locks[i];
+				lock.offset = PULL_LE64(ptr);
+				lock.length = PULL_LE64(ptr);
+				lock.flags = PULL_LE32(ptr);
+				ptr += sizeof(uint32_t);
+			}
+
+			auto it = durables.find(record->id_persistent);
+			if (it == durables.end()) {
+				X_LOG(SMB, ERR, "cannot update, id 0x%lx not exist",
+						record->id_persistent);
+			} else {
+				std::swap(it->second->open_state.locks, locks);
 			}
 		} else {
 			REPORT_ERR("unexpect type %u", type);
@@ -614,5 +649,35 @@ int x_smbd_durable_log_flags(int fd, uint64_t id_persistent, uint32_t flags)
 	return smbd_durable_log_output(fd, &record.record,
 			x_smbd_durable_record_t::type_update_flags,
 			sizeof record, id_persistent);
+}
+
+int x_smbd_durable_log_locks(int fd, uint64_t id_persistent,
+		const std::vector<x_smb2_lock_element_t> &locks)
+{
+	X_LOG(SMB, DBG, "id_persistent=0x%lx", id_persistent);
+
+	X_ASSERT(locks.size() <= X_SMBD_MAX_LOCKS_PER_OPEN);
+
+	size_t size = sizeof(x_smbd_durable_record_t);
+	size += sizeof(uint64_t); // num of locks
+	size += locks.size() * sizeof(x_smb2_lock_element_t);
+
+	auto buf = std::make_unique<uint8_t[]>(size);
+	x_smbd_durable_record_t *rec = (x_smbd_durable_record_t *)buf.get();
+
+	uint8_t *ptr = (uint8_t *)(rec + 1);
+	PUSH_LE32(ptr, 0);
+	uint32_t num_locks = x_convert_assert<uint32_t>(locks.size());
+	PUSH_LE32(ptr, num_locks);
+	for (auto &lock : locks) {
+		PUSH_LE64(ptr, lock.offset);
+		PUSH_LE64(ptr, lock.length);
+		PUSH_LE32(ptr, lock.flags);
+		PUSH_LE32(ptr, 0);
+	}
+
+	return smbd_durable_log_output(fd, rec,
+			x_smbd_durable_record_t::type_update_locks,
+			x_convert<uint32_t>(size), id_persistent);
 }
 
