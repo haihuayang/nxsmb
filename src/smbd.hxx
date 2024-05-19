@@ -151,25 +151,25 @@ struct x_smbd_open_state_t
 	enum {
 		F_APP_INSTANCE_ID = 0x1,
 		F_APP_INSTANCE_VERSION = 0x2,
+		F_REPLAY_CACHED = 0x4,
+		F_INITIAL_DELETE_ON_CLOSE = 0x08,
 	};
-	const uint32_t flags;
 	const uint32_t access_mask, share_access;
 	const x_smb2_uuid_t client_guid;
 	const x_smb2_uuid_t create_guid;
 	const x_smb2_uuid_t app_instance_id;
 	const uint64_t app_instance_version_high;
 	const uint64_t app_instance_version_low;
-	const idl::dom_sid owner;
 	const x_smb2_lease_key_t parent_lease_key;
 	const long priv_data;
 
+	const idl::dom_sid owner;
+
+	uint32_t flags;
 	uint16_t channel_sequence;
 	x_smb2_create_action_t create_action;
 	uint8_t oplock_level{X_SMB2_OPLOCK_LEVEL_NONE};
 	x_smbd_dhmode_t dhmode;
-	bool replay_cached = false;
-
-	bool initial_delete_on_close = false;
 	uint32_t durable_timeout_msec = 0;
 	uint64_t current_offset = 0;
 	uint64_t channel_generation;
@@ -207,9 +207,9 @@ struct x_smbd_durable_t
 {
 	uint64_t disconnect_msec;
 	uint64_t id_volatile;
-	x_smbd_open_state_t open_state;
 	x_smbd_lease_data_t lease_data;
 	x_smbd_file_handle_t file_handle;
+	x_smbd_open_state_t open_state;
 };
 
 

@@ -288,7 +288,7 @@ static int list_volume_durable(const char *volume, const char *log_file)
 		fprintf(stderr, "cannot open volume %s\n", volume);
 		return 1;
 	}
-	std::map<uint64_t, x_smbd_durable_t> durables;
+	std::map<uint64_t, std::unique_ptr<x_smbd_durable_t>> durables;
 	std::vector<std::string> log_files;
 	uint64_t skip_file_no;
 	ssize_t ret;
@@ -310,18 +310,18 @@ static int list_volume_durable(const char *volume, const char *log_file)
 	for (auto &[id_persistent, durable]: durables) {
 		printf("0x%lx 0x%lx %c%c 0x%x %s %u ",
 				id_persistent,
-				durable.id_volatile,
-				x_smbd_dhmode_to_name(durable.open_state.dhmode),
-				durable.open_state.replay_cached ? 'R' : '-',
-				durable.open_state.access_mask,
-				x_tostr(durable.open_state.owner).c_str(),
-				durable.open_state.durable_timeout_msec);
-		if (durable.disconnect_msec == (uint64_t)-1) {
+				durable->id_volatile,
+				x_smbd_dhmode_to_name(durable->open_state.dhmode),
+				(durable->open_state.flags & x_smbd_open_state_t::F_REPLAY_CACHED) ? 'R' : '-',
+				durable->open_state.access_mask,
+				x_tostr(durable->open_state.owner).c_str(),
+				durable->open_state.durable_timeout_msec);
+		if (durable->disconnect_msec == (uint64_t)-1) {
 			printf("active");
 		} else {
 			struct timespec ts;
-			ts.tv_sec = durable.disconnect_msec / 1000;
-			ts.tv_nsec = (durable.disconnect_msec % 1000) * 1000000;
+			ts.tv_sec = durable->disconnect_msec / 1000;
+			ts.tv_nsec = (durable->disconnect_msec % 1000) * 1000000;
 			output_timespec("disconnect", &ts);
 		}
 

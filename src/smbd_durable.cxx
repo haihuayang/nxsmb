@@ -93,23 +93,17 @@ int x_smbd_durable_db_allocate_id(x_smbd_durable_db_t *db,
 	return 0;
 }
 
-static void smbd_durable_output_log(x_smbd_durable_db_t *db,
-		x_smbd_durable_record_t *rec,
-		uint32_t type, uint32_t size,
-		uint64_t id_persistent)
+static int smbd_durable_post_output(x_smbd_durable_db_t *db,
+		x_smbd_durable_fd_t &log_fd, int ret)
 {
-	auto log_fd = db->log_fd;
-	bool ret = x_smbd_durable_log_output(log_fd->fd, rec, type, size, id_persistent);
-	X_ASSERT(ret);
-	/* shall it call fsync only for persistent handle? */
-	fsync(log_fd->fd);
-	if (log_fd->num_record.fetch_add(1, std::memory_order_relaxed) ==
+	if (log_fd.num_record.fetch_add(1, std::memory_order_relaxed) ==
 			db->max_record_per_file) {
 		X_LOG(SMB, NOTICE, "schedule create new durable log for dirfd %d",
 				db->dir_fd);
 		db->refcnt.fetch_add(1, std::memory_order_relaxed);
 		x_smbd_schedule_async(&db->job);
 	}
+	return ret;
 }
 
 int x_smbd_durable_remove(x_smbd_durable_db_t *db, uint64_t id_persistent)
@@ -122,11 +116,9 @@ int x_smbd_durable_remove(x_smbd_durable_db_t *db, uint64_t id_persistent)
 	X_ASSERT(id_volatile != 0);
 	X_ASSERT(db->num_durable.fetch_sub(1, std::memory_order_relaxed) > 0);
 
-	x_smbd_durable_record_t record;
-	smbd_durable_output_log(db, &record,
-			x_smbd_durable_record_t::type_close,
-			sizeof record, id_persistent);
-	return 0;
+	auto log_fd = db->log_fd;
+	return smbd_durable_post_output(db, *log_fd,
+			x_smbd_durable_log_close(log_fd->fd, id_persistent));
 }
 
 int x_smbd_durable_disconnect(x_smbd_durable_db_t *db, uint64_t id_persistent)
@@ -135,16 +127,11 @@ int x_smbd_durable_disconnect(x_smbd_durable_db_t *db, uint64_t id_persistent)
 	uint32_t slot_id = get_durable_slot(id_persistent);
 
 	X_ASSERT(slot_id < db->slots.size());
-	struct {
-		x_smbd_durable_record_t record;
-		uint64_t disconnect_msec;
-	} record;
-	record.disconnect_msec = get_epoch_msec();
 
-	smbd_durable_output_log(db, &record.record,
-			x_smbd_durable_record_t::type_disconnect,
-			sizeof record, id_persistent);
-	return 0;
+	auto log_fd = db->log_fd;
+	return smbd_durable_post_output(db, *log_fd,
+			x_smbd_durable_log_disconnect(log_fd->fd, id_persistent,
+				get_epoch_msec()));
 }
 
 int x_smbd_durable_save(x_smbd_durable_db_t *db,
@@ -156,37 +143,26 @@ int x_smbd_durable_save(x_smbd_durable_db_t *db,
 {
 	X_LOG(SMB, DBG, "id_persistent=0x%lx", id_persistent);
 
-	auto record = (x_smbd_durable_record_t *)malloc(sizeof(x_smbd_durable_record_t)
-			+ sizeof(x_smbd_durable_t));
-	/* TODO serialize */
-	new (record + 1)x_smbd_durable_t{
-		uint64_t(-1),
-		id_volatile, open_state, lease_data, file_handle};
-	smbd_durable_output_log(db, record, x_smbd_durable_record_t::type_create,
-			sizeof(x_smbd_durable_record_t) + sizeof(x_smbd_durable_t),
-			id_persistent);
-	free(record);
-	return 0;
+	auto log_fd = db->log_fd;
+	return smbd_durable_post_output(db, *log_fd,
+			x_smbd_durable_log_durable(log_fd->fd, id_persistent,
+				uint64_t(-1),
+				id_volatile,
+				open_state,
+				lease_data,
+				file_handle));
 }
 
-int x_smbd_durable_update(x_smbd_durable_db_t *db,
+int x_smbd_durable_update_flags(x_smbd_durable_db_t *db,
 		uint64_t id_persistent,
-		const x_smbd_open_state_t &open_state)
+		uint32_t flags)
 {
 	X_LOG(SMB, DBG, "id_persistent=0x%lx", id_persistent);
 
-	/* only update replay_cached */
-	struct {
-		x_smbd_durable_record_t record;
-		uint64_t replay_cached;
-	} record;
-
-	record.replay_cached = open_state.replay_cached ? 1 : 0;
-	smbd_durable_output_log(db, &record.record,
-			x_smbd_durable_record_t::type_update_replay,
-			sizeof(record),
-			id_persistent);
-	return 0;
+	auto log_fd = db->log_fd;
+	return smbd_durable_post_output(db, *log_fd,
+			x_smbd_durable_log_flags(log_fd->fd, id_persistent,
+				flags));
 }
 
 uint64_t x_smbd_durable_lookup(x_smbd_durable_db_t *db,
@@ -228,7 +204,7 @@ void x_smbd_durable_db_restore(std::shared_ptr<x_smbd_volume_t> &smbd_volume,
 			x_smbd_durable_t &durable, uint64_t timeout_msec))
 {
 	uint64_t next_file_no;
-	std::map<uint64_t, x_smbd_durable_t> durables;
+	std::map<uint64_t, std::unique_ptr<x_smbd_durable_t>> durables;
 	std::vector<std::string> log_files;
 	ssize_t ret = x_smbd_durable_log_read(durable_db->dir_fd, uint64_t(-1),
 			next_file_no, durables, log_files);
@@ -242,11 +218,13 @@ void x_smbd_durable_db_restore(std::shared_ptr<x_smbd_volume_t> &smbd_volume,
 	size_t count = 0;
 	for (auto &[id_persistent, durable]: durables) {
 		uint64_t timeout_msec;
-		if (durable.disconnect_msec == (uint64_t)-1) {
-			durable.disconnect_msec = epoch;
-			timeout_msec = durable.open_state.durable_timeout_msec;
+		uint64_t disconnect_msec = durable->disconnect_msec;
+		if (disconnect_msec == (uint64_t)-1) {
+			disconnect_msec = epoch;
+			timeout_msec = durable->open_state.durable_timeout_msec;
 		} else {
-			uint64_t expired_msec = durable.disconnect_msec + durable.open_state.durable_timeout_msec;
+			uint64_t expired_msec = durable->disconnect_msec +
+				durable->open_state.durable_timeout_msec;
 		       	if (expired_msec < epoch) {
 				continue;
 			}
@@ -258,26 +236,26 @@ void x_smbd_durable_db_restore(std::shared_ptr<x_smbd_volume_t> &smbd_volume,
 					id_persistent);
 			continue;
 		}
-		NTSTATUS status = restore_fn(smbd_volume, durable, timeout_msec);
+		NTSTATUS status = restore_fn(smbd_volume, *durable, timeout_msec);
 		if (!NT_STATUS_IS_OK(status)) {
 			X_LOG(SMB, WARN, "failed to restore open %lx:%lx",
 					id_persistent,
-					durable.id_volatile);
+					durable->id_volatile);
 			continue;
 		}
 		X_LOG(SMB, DBG, "restored open %lx:%lx",
 				id_persistent,
-				durable.id_volatile);
+				durable->id_volatile);
 
-		durable_db->slots[slot_id].id_volatile.store(durable.id_volatile, std::memory_order_relaxed);
+		durable_db->slots[slot_id].id_volatile.store(durable->id_volatile, std::memory_order_relaxed);
 		durable_db->num_durable.fetch_add(1, std::memory_order_relaxed);
-		struct {
-			x_smbd_durable_record_t record;
-			x_smbd_durable_t durable;
-		} record = { {}, durable };
-		x_smbd_durable_log_output(fd, &record.record,
-				x_smbd_durable_record_t::type_create,
-				sizeof record, id_persistent);
+
+		x_smbd_durable_log_durable(fd, id_persistent,
+				disconnect_msec,
+				durable->id_volatile,
+				durable->open_state,
+				durable->lease_data,
+				durable->file_handle);
 		++count;
 	}
 	fsync(fd);
@@ -323,7 +301,7 @@ static void smbd_durable_merge_log(x_smbd_durable_db_t *durable_db)
 	}
 
 	uint64_t next_file_no;
-	std::map<uint64_t, x_smbd_durable_t> durables;
+	std::map<uint64_t, std::unique_ptr<x_smbd_durable_t>> durables;
 	std::vector<std::string> log_files;
 
 	ssize_t ret = x_smbd_durable_log_read(durable_db->dir_fd, max_file_no,
@@ -336,13 +314,13 @@ static void smbd_durable_merge_log(x_smbd_durable_db_t *durable_db)
 
 	size_t count = 0;
 	for (auto &[id_persistent, durable]: durables) {
-		struct {
-			x_smbd_durable_record_t record;
-			x_smbd_durable_t durable;
-		} record = { {}, durable };
-		x_smbd_durable_log_output(fd, &record.record,
-				x_smbd_durable_record_t::type_create,
-				sizeof record, id_persistent);
+		int err = x_smbd_durable_log_durable(fd, id_persistent,
+				durable->disconnect_msec,
+				durable->id_volatile,
+				durable->open_state,
+				durable->lease_data,
+				durable->file_handle);
+		X_TODO_ASSERT(err == 0);
 		++count;
 	}
 	fsync(fd);

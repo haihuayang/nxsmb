@@ -312,7 +312,7 @@ enum class x_smb2_create_disposition_t : uint32_t {
 };
 
 /* Responses when opening a file. */
-enum class x_smb2_create_action_t : uint32_t {
+enum class x_smb2_create_action_t : uint8_t {
 	WAS_SUPERSEDED	= 0,
 	WAS_OPENED	= 1,
 	WAS_CREATED	= 2,

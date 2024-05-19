@@ -6,8 +6,9 @@
 #error "Must be c++"
 #endif
 
-enum class x_smbd_dhmode_t
-{
+#include <stdint.h>
+
+enum class x_smbd_dhmode_t : uint8_t {
 	NONE,
 	DURABLE,
 	PERSISTENT,

@@ -728,7 +728,6 @@ static posixfs_open_t *posixfs_open_create(
 			oplock_level == X_SMB2_OPLOCK_LEVEL_LEASE ?
 				state.smbd_lease : nullptr,
 			x_smbd_open_state_t{
-				state.valid_flags,
 				state.granted_access,
 				state.in_share_access,
 				x_smbd_conn_curr_client_guid(),
@@ -736,9 +735,10 @@ static posixfs_open_t *posixfs_open_create(
 				state.in_context_app_instance_id,
 				state.in_context_app_instance_version_high,
 				state.in_context_app_instance_version_low,
-				x_smbd_tcon_get_user(smbd_tcon)->get_owner_sid(),
 				state.lease.parent_key,
 				state.open_priv_data,
+				x_smbd_tcon_get_user(smbd_tcon)->get_owner_sid(),
+				state.valid_flags,
 				0,
 				create_action,
 				oplock_level},

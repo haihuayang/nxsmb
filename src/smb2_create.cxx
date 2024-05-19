@@ -615,7 +615,7 @@ static void smb2_create_success(x_smbd_conn_t *smbd_conn,
 		x_smbd_replay_cache_set(state.in_client_guid,
 				state.in_create_guid,
 				smbd_open);
-		smbd_open->open_state.replay_cached = true;
+		smbd_open->open_state.flags |= x_smbd_open_state_t::F_REPLAY_CACHED;
 		state.replay_reserved = false;
 	}
 

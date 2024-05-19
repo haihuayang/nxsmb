@@ -109,10 +109,10 @@ static bool clear_replay_cache(x_smbd_open_state_t &open_state)
 	 */
 
 	/* TODO atomic */
-	if (open_state.replay_cached) {
+	if (open_state.flags & x_smbd_open_state_t::F_REPLAY_CACHED) {
 		x_smbd_replay_cache_clear(open_state.client_guid,
 				open_state.create_guid);
-		open_state.replay_cached = false;
+		open_state.flags &= ~(x_smbd_open_state_t::F_REPLAY_CACHED);
 		return true;
 	}
 	return false;
@@ -134,7 +134,8 @@ x_smbd_open_t *x_smbd_open_lookup(uint64_t id_persistent, uint64_t id_volatile,
 						smbd_open->open_state.dhmode !=
 						x_smbd_dhmode_t::NONE) {
 					/* update durable */
-					x_smbd_volume_update_durable(*smbd_object->smbd_volume,
+					x_smbd_volume_update_durable_flags(
+							*smbd_object->smbd_volume,
 							smbd_open->id_persistent,
 							smbd_open->open_state);
 				}
@@ -201,7 +202,7 @@ static NTSTATUS smbd_object_remove(
 	auto sharemode = x_smbd_open_get_sharemode(smbd_open);
 	sharemode->open_list.remove(smbd_open);
 	--smbd_object->num_active_open;
-	if (smbd_open->open_state.initial_delete_on_close) {
+	if (smbd_open->open_state.flags & x_smbd_open_state_t::F_INITIAL_DELETE_ON_CLOSE) {
 		auto state = std::make_unique<x_smbd_requ_state_disposition_t>();
 		state->delete_pending = true;
 		x_smbd_object_set_delete_pending_intl(smbd_object, smbd_open,
@@ -1570,8 +1571,9 @@ static NTSTATUS smbd_open_create_intl(x_smbd_open_t **psmbd_open,
 		state->out_contexts |= X_SMB2_CONTEXT_FLAG_QFID;
 	}
 
-	(*psmbd_open)->open_state.initial_delete_on_close =
-		(state->in_create_options & X_SMB2_CREATE_OPTION_DELETE_ON_CLOSE) != 0;
+	if (state->in_create_options & X_SMB2_CREATE_OPTION_DELETE_ON_CLOSE) {
+		(*psmbd_open)->open_state.flags |= x_smbd_open_state_t::F_INITIAL_DELETE_ON_CLOSE;
+	}
 
 	return NT_STATUS_OK;
 }
@@ -1965,7 +1967,8 @@ NTSTATUS x_smbd_open_restore(
 		return status;
 	}
 
-	if (open_state.replay_cached && open_state.create_guid.is_valid()) {
+	if ((open_state.flags & x_smbd_open_state_t::F_REPLAY_CACHED) &&
+			open_state.create_guid.is_valid()) {
 		/* TODO atomic */
 		x_smbd_replay_cache_set(open_state.client_guid,
 				open_state.create_guid,
@@ -2036,7 +2039,7 @@ bool x_smbd_open_list_t::output(std::string &data)
 			<< idl::x_hex_t<uint32_t>(smbd_open->open_state.access_mask) << ' '
 			<< idl::x_hex_t<uint32_t>(smbd_open->open_state.share_access) << ' '
 			<< x_smbd_dhmode_to_name(smbd_open->open_state.dhmode)
-			<< (smbd_open->open_state.replay_cached ? 'R' : '-') << ' '
+			<< ((smbd_open->open_state.flags & x_smbd_open_state_t::F_REPLAY_CACHED) ? 'R' : '-') << ' '
 			<< idl::x_hex_t<uint32_t>(smbd_open->notify_filter) << ' '
 			<< idl::x_hex_t<uint32_t>(x_smbd_tcon_get_id(smbd_open->smbd_tcon)) << " '"
 			<< x_smbd_open_get_path(smbd_open) << "'" << std::endl;
