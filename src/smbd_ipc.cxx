@@ -71,6 +71,7 @@ struct named_pipe_t
 
 	bool allow_bind = true;
 	bool allow_alter = false;
+	bool is_dcerpc_response = false;
 
 	uint32_t packet_read = 0;
 	uint32_t offset = 0;
@@ -121,6 +122,71 @@ static inline named_pipe_t *from_smbd_open(x_smbd_open_t *smbd_open)
 	return X_CONTAINER_OF(smbd_open, named_pipe_t, base);
 }
 
+static NTSTATUS named_pipe_read_dcerpc_response(
+		named_pipe_t *named_pipe,
+		uint32_t requ_length,
+		x_buf_t *&out_buf,
+		uint32_t &out_buf_length)
+{
+	const uint32_t ncacn_packet_header_size = 16;
+	const uint32_t dcerpc_response_size = 8;
+
+	if (requ_length < ncacn_packet_header_size + dcerpc_response_size) {
+		return NT_STATUS_BUFFER_OVERFLOW;
+	}
+	if (requ_length > UINT16_MAX) {
+		requ_length = UINT16_MAX;
+	}
+
+	uint32_t remain_length = x_convert_assert<uint32_t>(named_pipe->output.size() -
+			named_pipe->offset);
+	uint8_t pfc_flags = 0;
+	uint32_t copy_len = requ_length - ncacn_packet_header_size - dcerpc_response_size;
+	if (named_pipe->offset == 0) {
+		pfc_flags |= idl::DCERPC_PFC_FLAG_FIRST;
+	}
+	if (copy_len >= remain_length) {
+		pfc_flags |= idl::DCERPC_PFC_FLAG_LAST;
+		copy_len = remain_length;
+	}
+
+	uint16_t frag_len = x_convert_assert<uint16_t>(copy_len + ncacn_packet_header_size + dcerpc_response_size);
+	out_buf = x_buf_alloc(frag_len);
+	uint8_t *p = out_buf->data;
+	x_ncacn_packet_t *resp_header = (x_ncacn_packet_t *)p;
+	*resp_header = named_pipe->pkt;
+	resp_header->type = idl::DCERPC_PKT_RESPONSE;
+	resp_header->pfc_flags = pfc_flags;
+	resp_header->auth_length = 0;
+
+	idl::dcerpc_response *response = (idl::dcerpc_response *)(resp_header + 1);
+	if (named_pipe->pkt.little_endian()) {
+		resp_header->frag_length = X_H2LE16(frag_len);
+		response->alloc_hint = X_H2LE32(remain_length);
+	} else {
+		resp_header->frag_length = X_H2BE16(frag_len);
+		response->alloc_hint = X_H2BE32(remain_length);
+	}
+	response->context_id = 0;
+	response->cancel_count = 0;
+
+	memcpy(p + ncacn_packet_header_size + dcerpc_response_size,
+			named_pipe->output.data() + named_pipe->offset,
+			copy_len);
+	out_buf_length = frag_len;
+
+	named_pipe->got_first = false;
+	named_pipe->offset += copy_len;
+	if (named_pipe->offset == named_pipe->output.size()) {
+		named_pipe->output.clear();
+		named_pipe->offset = 0;
+		named_pipe->is_transceive = false;
+		named_pipe->is_dcerpc_response = false;
+	}
+
+	return NT_STATUS_OK;
+}
+
 static NTSTATUS named_pipe_read(
 		x_smbd_ipc_object_t *ipc_object,
 		named_pipe_t *named_pipe,
@@ -131,6 +197,10 @@ static NTSTATUS named_pipe_read(
 	if (named_pipe->output.size() == 0) {
 		X_TODO;
 		return NT_STATUS_PENDING; // should keep the original request
+	}
+	if (named_pipe->is_dcerpc_response) {
+		return named_pipe_read_dcerpc_response(named_pipe,
+				requ_length, out_buf, out_buf_length);
 	}
 	uint32_t data_copy = x_convert_assert<uint32_t>(named_pipe->output.size()) - named_pipe->offset;
 	if (data_copy > requ_length) {
@@ -497,6 +567,9 @@ static NTSTATUS process_dcerpc_request(
 				request, resp_type, output, ndr_flags);
 		if (dce_status == X_SMBD_DCERPC_NCA_STATUS_OK) {
 			X_TODO_ASSERT(resp_type == idl::DCERPC_PKT_RESPONSE);
+			named_pipe->is_dcerpc_response = true;
+			std::swap(body_output, output);
+#if 0
 			idl::dcerpc_response response;
 			response.alloc_hint = x_convert_assert<uint32_t>(output.size());
 			response.context_id = 0;
@@ -504,6 +577,7 @@ static NTSTATUS process_dcerpc_request(
 			response.stub_and_verifier.val.swap(output);
 
 			x_ndr_push(response, body_output, ndr_flags);
+#endif
 		}
 	}
 
@@ -542,20 +616,23 @@ static inline NTSTATUS process_ncacn_pdu(
 			X_TODO;
 	}
 
-	x_ncacn_packet_t resp_header = named_pipe->pkt;
-	resp_header.type = resp_type;
-	resp_header.pfc_flags = idl::DCERPC_PFC_FLAG_FIRST | idl::DCERPC_PFC_FLAG_LAST;
-	resp_header.frag_length = x_convert_assert<uint16_t>(sizeof(x_ncacn_packet_t) + body_output.size());
-	resp_header.auth_length = 0;
+	if (named_pipe->is_dcerpc_response) {
+		std::swap(named_pipe->output, body_output);
+	} else {
+		x_ncacn_packet_t resp_header = named_pipe->pkt;
+		resp_header.type = resp_type;
+		resp_header.pfc_flags = idl::DCERPC_PFC_FLAG_FIRST | idl::DCERPC_PFC_FLAG_LAST;
+		resp_header.frag_length = x_convert_assert<uint16_t>(sizeof(x_ncacn_packet_t) + body_output.size());
+		resp_header.auth_length = 0;
 
-	named_pipe->output.resize(resp_header.frag_length);
+		named_pipe->output.resize(resp_header.frag_length);
 
-	if (!named_pipe->pkt.little_endian()) {
-		resp_header.frag_length = htons(resp_header.frag_length);
+		if (!named_pipe->pkt.little_endian()) {
+			resp_header.frag_length = htons(resp_header.frag_length);
+		}
+		memcpy(named_pipe->output.data(), &resp_header, sizeof(resp_header));
+		memcpy(named_pipe->output.data() + sizeof(resp_header), body_output.data(), body_output.size());
 	}
-	memcpy(named_pipe->output.data(), &resp_header, sizeof(resp_header));
-	memcpy(named_pipe->output.data() + sizeof(resp_header), body_output.data(), body_output.size());
-	/* TODO */
 
 	named_pipe->packet_read = 0;
 	named_pipe->input.clear();
@@ -644,8 +721,11 @@ static NTSTATUS ipc_object_op_read(
 		uint32_t delay_ms,
 		bool all)
 {
+	named_pipe_t *named_pipe = from_smbd_open(smbd_requ->smbd_open);
+	X_SMBD_REQU_LOG(DBG, smbd_requ, "requ_length = %u, output = %lu - %u",
+			state->in_length, named_pipe->output.size(), named_pipe->offset);
 	return named_pipe_read(from_smbd_object(smbd_object),
-			from_smbd_open(smbd_requ->smbd_open),
+			named_pipe,
 			state->in_length, state->out_buf,
 			state->out_buf_length);
 }
@@ -739,6 +819,9 @@ static NTSTATUS ipc_object_op_ioctl(
 				smbd_requ->smbd_sess,
 				state->in_buf->data + state->in_buf_offset,
 				state->in_buf_length);
+		X_SMBD_REQU_LOG(DBG, smbd_requ, "requ_length = %u, output = %lu - %u",
+				state->in_max_output_length,
+				named_pipe->output.size(), named_pipe->offset);
 		return named_pipe_read(ipc_object, named_pipe,
 				state->in_max_output_length,
 				state->out_buf,
