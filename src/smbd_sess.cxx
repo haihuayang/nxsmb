@@ -412,7 +412,7 @@ int x_smbd_sess_table_init(uint32_t count)
 	return 0;
 }
 
-struct x_smbd_sess_list_t : x_smbd_ctrl_handler_t
+struct x_smbd_sess_list_t : x_ctrl_handler_t
 {
 	x_smbd_sess_list_t() : iter(g_smbd_sess_table->iter_start()) {
 	}
@@ -444,7 +444,7 @@ bool x_smbd_sess_list_t::output(std::string &data)
 	}
 }
 
-x_smbd_ctrl_handler_t *x_smbd_sess_list_create()
+x_ctrl_handler_t *x_smbd_sess_list_create()
 {
 	return new x_smbd_sess_list_t;
 }

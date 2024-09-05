@@ -38,7 +38,7 @@ int x_smbd_stats_register(uint32_t thread_id)
 }
 
 static const uint32_t band_start = 3, band_group = 8, band_step = 3;
-struct x_smbd_stats_report_t : x_smbd_ctrl_handler_t
+struct x_smbd_stats_report_t : x_ctrl_handler_t
 {
 	x_smbd_stats_report_t() {
 		x_stats_store_t stats;
@@ -67,7 +67,7 @@ bool x_smbd_stats_report_t::output(std::string &data)
 	return false;
 }
 
-x_smbd_ctrl_handler_t *x_smbd_stats_report_create()
+x_ctrl_handler_t *x_smbd_stats_report_create()
 {
 	return new x_smbd_stats_report_t;
 }

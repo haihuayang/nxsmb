@@ -521,7 +521,7 @@ int x_smbd_lease_pool_init(uint32_t count, uint32_t mutex_count)
 	return 0;
 }
 
-struct x_smbd_lease_list_t : x_smbd_ctrl_handler_t
+struct x_smbd_lease_list_t : x_ctrl_handler_t
 {
 	bool output(std::string &data) override;
 	uint32_t next_bucket_idx = 0;
@@ -557,7 +557,7 @@ bool x_smbd_lease_list_t::output(std::string &data)
 	}
 }
 
-x_smbd_ctrl_handler_t *x_smbd_lease_list_create()
+x_ctrl_handler_t *x_smbd_lease_list_create()
 {
 	return new x_smbd_lease_list_t;
 }

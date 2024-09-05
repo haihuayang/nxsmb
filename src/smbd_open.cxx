@@ -2021,7 +2021,7 @@ x_smbd_open_t::~x_smbd_open_t()
 	X_SMBD_COUNTER_INC_DELETE(open, 1);
 }
 
-struct x_smbd_open_list_t : x_smbd_ctrl_handler_t
+struct x_smbd_open_list_t : x_ctrl_handler_t
 {
 	x_smbd_open_list_t() : iter(g_smbd_open_table->iter_start()) {
 	}
@@ -2053,7 +2053,7 @@ bool x_smbd_open_list_t::output(std::string &data)
 	}
 }
 
-x_smbd_ctrl_handler_t *x_smbd_open_list_create()
+x_ctrl_handler_t *x_smbd_open_list_create()
 {
 	return new x_smbd_open_list_t;
 }

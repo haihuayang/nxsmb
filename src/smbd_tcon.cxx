@@ -271,7 +271,7 @@ std::u16string x_smbd_tcon_get_volume_label(const x_smbd_tcon_t *smbd_tcon)
 	}
 }
 
-struct x_smbd_tcon_list_t : x_smbd_ctrl_handler_t
+struct x_smbd_tcon_list_t : x_ctrl_handler_t
 {
 	x_smbd_tcon_list_t() : iter(g_smbd_tcon_table->iter_start()) {
 	}
@@ -298,7 +298,7 @@ bool x_smbd_tcon_list_t::output(std::string &data)
 	}
 }
 
-x_smbd_ctrl_handler_t *x_smbd_tcon_list_create()
+x_ctrl_handler_t *x_smbd_tcon_list_create()
 {
 	return new x_smbd_tcon_list_t;
 }
