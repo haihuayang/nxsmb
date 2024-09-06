@@ -1735,8 +1735,9 @@ void x_smbd_conn_requ_done(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ,
 
 struct x_smbd_cancel_evt_t
 {
-	static void func(x_smbd_conn_t *smbd_conn, x_fdevt_user_t *fdevt_user)
+	static void func(void *arg, x_fdevt_user_t *fdevt_user)
 	{
+		x_smbd_conn_t *smbd_conn = (x_smbd_conn_t *)arg;
 		x_smbd_cancel_evt_t *evt = X_CONTAINER_OF(fdevt_user, x_smbd_cancel_evt_t, base);
 		x_smbd_requ_t *smbd_requ = evt->smbd_requ;
 		X_LOG(SMB, DBG, "evt=%p, requ=%p, smbd_conn=%p", evt, smbd_requ, smbd_conn);
@@ -1811,8 +1812,9 @@ NTSTATUS x_smbd_conn_validate_negotiate_info(const x_smbd_conn_t *smbd_conn,
 
 struct send_interim_evt_t
 {
-	static void func(x_smbd_conn_t *smbd_conn, x_fdevt_user_t *fdevt_user)
+	static void func(void *arg, x_fdevt_user_t *fdevt_user)
 	{
+		x_smbd_conn_t *smbd_conn = (x_smbd_conn_t *)arg;
 		send_interim_evt_t *evt = X_CONTAINER_OF(fdevt_user,
 				send_interim_evt_t, base);
 		x_smbd_requ_t *smbd_requ = evt->smbd_requ;

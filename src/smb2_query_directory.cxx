@@ -189,8 +189,9 @@ static NTSTATUS smbd_qdir_process_requ(x_smbd_qdir_t *smbd_qdir, x_smbd_requ_t *
 
 struct smbd_qdir_evt_t
 {
-	static void func(x_smbd_conn_t *smbd_conn, x_fdevt_user_t *fdevt_user)
+	static void func(void *arg, x_fdevt_user_t *fdevt_user)
 	{
+		x_smbd_conn_t *smbd_conn = (x_smbd_conn_t *)arg;
 		smbd_qdir_evt_t *evt = X_CONTAINER_OF(fdevt_user, smbd_qdir_evt_t, base);
 		x_smbd_requ_t *smbd_requ = evt->smbd_requ;
 		X_LOG(SMB, DBG, "evt=%p, requ=%p, smbd_conn=%p", evt, smbd_requ, smbd_conn);

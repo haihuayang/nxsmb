@@ -532,8 +532,9 @@ static bool is_lease_stat_open(uint32_t access_mask)
 
 struct defer_requ_evt_t
 {
-	static void func(x_smbd_conn_t *smbd_conn, x_fdevt_user_t *fdevt_user)
+	static void func(void *arg, x_fdevt_user_t *fdevt_user)
 	{
+		x_smbd_conn_t *smbd_conn = (x_smbd_conn_t *)arg;
 		defer_requ_evt_t *evt = X_CONTAINER_OF(fdevt_user,
 				defer_requ_evt_t, base);
 		x_smbd_requ_t *smbd_requ = evt->smbd_requ;
@@ -633,8 +634,9 @@ static long oplock_break_timeout(x_timer_job_t *timer)
 
 struct send_lease_break_evt_t
 {
-	static void func(x_smbd_conn_t *smbd_conn, x_fdevt_user_t *fdevt_user)
+	static void func(void *arg, x_fdevt_user_t *fdevt_user)
 	{
+		x_smbd_conn_t *smbd_conn = (x_smbd_conn_t *)arg;
 		send_lease_break_evt_t *evt = X_CONTAINER_OF(fdevt_user,
 				send_lease_break_evt_t, base);
 		X_LOG(SMB, DBG, "send_lease_break_evt=%p curr_state=%d new_state=%d "
@@ -1048,8 +1050,9 @@ static NTSTATUS grant_oplock(x_smbd_object_t *smbd_object,
 
 struct send_oplock_break_evt_t
 {
-	static void func(x_smbd_conn_t *smbd_conn, x_fdevt_user_t *fdevt_user)
+	static void func(void *arg, x_fdevt_user_t *fdevt_user)
 	{
+		x_smbd_conn_t *smbd_conn = (x_smbd_conn_t *)arg;
 		send_oplock_break_evt_t *evt = X_CONTAINER_OF(fdevt_user,
 				send_oplock_break_evt_t, base);
 		X_LOG(SMB, DBG, "evt=%p", evt);

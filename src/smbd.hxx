@@ -131,17 +131,6 @@ struct x_smbd_key_set_t
 };
 
 
-struct x_fdevt_user_t
-{
-	typedef void func_t(x_smbd_conn_t *smbd_conn, x_fdevt_user_t *);
-	x_fdevt_user_t(func_t f) : func(f) {}
-	x_fdevt_user_t(const x_fdevt_user_t &) = delete;
-	x_fdevt_user_t &operator=(const x_fdevt_user_t &) = delete;
-	x_dlink_t link;
-	func_t *const func;
-};
-X_DECLARE_MEMBER_TRAITS(fdevt_user_conn_traits, x_fdevt_user_t, link)
-
 enum {
 	X_SMBD_OPEN_ID_NON_DURABLE = 0xfffffffeu, // resolve id for non durable
 };
