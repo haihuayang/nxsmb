@@ -199,8 +199,10 @@ NTSTATUS x_smb2_process_tcon(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 	bool is_dfs = false;
 	if (smbd_share->is_dfs()) {
 		is_dfs = true;
+#if 0
 	} else if (!smbd_volume) {
 		X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_BAD_NETWORK_NAME);
+#endif
 	}
 
 	uint32_t share_access = create_share_access_mask(smbd_share,

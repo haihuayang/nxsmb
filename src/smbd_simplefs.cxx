@@ -137,11 +137,11 @@ struct simplefs_share_t : x_smbd_share_t
 			std::u16string &&name_l16,
 			uint32_t share_flags,
 			x_smbd_feature_option_t smb_encrypt,
-			const std::shared_ptr<x_smbd_volume_t> &smbd_volume)
+			const std::vector<std::shared_ptr<x_smbd_volume_t>> &smbd_volumes)
 		: x_smbd_share_t(uuid, name, std::move(name_16),
 				std::move(name_l16), share_flags,
 				smb_encrypt)
-		, smbd_volume(smbd_volume)
+		, smbd_volumes(smbd_volumes)
 	{
 	}
 					
@@ -170,13 +170,17 @@ struct simplefs_share_t : x_smbd_share_t
 	}
 	std::shared_ptr<x_smbd_volume_t> find_volume(const char16_t *in_share_s, const char16_t *in_share_e) const override
 	{
+		X_TODO;
+		return nullptr;
+#if 0
 		if (in_share_s[0] == u'-') {
 			return nullptr;
 		}
 		return smbd_volume;
+#endif
 	}
 
-	std::shared_ptr<x_smbd_volume_t> smbd_volume;
+	std::vector<std::shared_ptr<x_smbd_volume_t>> smbd_volumes;
 };
 
 NTSTATUS simplefs_share_t::resolve_path(
@@ -190,25 +194,33 @@ NTSTATUS simplefs_share_t::resolve_path(
 		const std::shared_ptr<x_smbd_volume_t> &tcon_volume)
 {
 	out_path.assign(in_path_begin, in_path_end);
+#if 0
 	smbd_volume = this->smbd_volume;
 	path_priv_data = 0;
 	open_priv_data = 0;
+#endif
 	return NT_STATUS_OK;
 }
 
 std::shared_ptr<x_smbd_share_t> x_smbd_simplefs_share_create(
+		const std::string &node_name,
 		const x_smb2_uuid_t &uuid,
 		const std::string &name,
 		std::u16string &&name_16,
 		std::u16string &&name_l16,
 		uint32_t share_flags,
 		x_smbd_feature_option_t smb_encrypt,
-		std::shared_ptr<x_smbd_volume_t> &smbd_volume)
+		std::vector<std::shared_ptr<x_smbd_volume_t>> &&smbd_volumes)
 {
-	int err = x_smbd_volume_init(smbd_volume, &simplefs_object_ops);
-	X_TODO_ASSERT(err == 0);
+	for (auto &smbd_volume: smbd_volumes) {
+		/* only init local volumes */
+		if (node_name == smbd_volume->owner_node) {
+			int err = x_smbd_volume_init(smbd_volume, &simplefs_object_ops);
+			X_TODO_ASSERT(err == 0);
+		}
+	}
 	return std::make_shared<simplefs_share_t>(uuid, name,
 			std::move(name_16), std::move(name_l16),
-			share_flags, smb_encrypt, smbd_volume);
+			share_flags, smb_encrypt, std::move(smbd_volumes));
 }
 

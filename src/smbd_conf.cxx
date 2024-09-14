@@ -180,6 +180,76 @@ static bool parse_version(std::tuple<uint8_t, uint8_t, uint16_t> &ver,
 	return true;
 }
 
+static bool parse_ip(int af, void *buf, const std::string &str)
+{
+	return inet_pton(af, str.c_str(), buf) == 1;
+}
+
+static bool parse_ip(struct sockaddr_storage &ss, const std::string &str)
+{
+	struct in_addr tmp4;
+	struct in6_addr tmp6;
+	if (parse_ip(AF_INET, &tmp4, str)) {
+		struct sockaddr_in *sin = (struct sockaddr_in *)&ss;
+		memset(sin, 0, sizeof *sin);
+		sin->sin_family = AF_INET;
+		sin->sin_addr = tmp4;
+	} else if (parse_ip(AF_INET6, &tmp6, str)) {
+		struct sockaddr_in6 *sin6 = (struct sockaddr_in6 *)&ss;
+		memset(sin6, 0, sizeof *sin6);
+		sin6->sin6_family = AF_INET;
+		sin6->sin6_addr = tmp6;
+	} else {
+		return false;
+	}
+	return true;
+}
+
+static bool parse_nodes(std::vector<x_smbd_node_t> &nodes,
+		const std::string &str)
+{
+	const char delim = ',';
+	for (auto &token: split_string(str)) {
+		auto sep = token.find(delim);
+		if (sep == std::string::npos) {
+			return false;
+		}
+		std::string node_name = token.substr(0, sep);
+
+		auto begin = sep + 1;
+		sep = token.find(delim, begin);
+		if (sep == std::string::npos) {
+			return false;
+		}
+		struct in_addr ip_int;
+		if (!parse_ip(AF_INET, &ip_int, token.substr(begin, sep - begin))) {
+			return false;
+		}
+		
+		std::vector<struct sockaddr_storage> ss_ext;
+		for (;;) {
+			begin = sep + 1;
+			sep = token.find(delim, begin);
+			if (sep == std::string::npos) {
+				break;
+			}
+			struct sockaddr_storage ss;
+			if (!parse_ip(ss, token.substr(begin, sep - begin))) {
+				return false;
+			}
+			ss_ext.push_back(ss);
+		}
+		struct sockaddr_storage ss;
+		if (!parse_ip(ss, token.substr(begin))) {
+			return false;
+		}
+		ss_ext.push_back(ss);
+
+		nodes.push_back({node_name, ip_int, std::move(ss_ext)});
+	}
+	return true;
+}
+
 static bool parse_volume_map(
 		std::vector<std::unique_ptr<x_smbd_volume_spec_t>> &volumes,
 		const std::string &str)
@@ -214,15 +284,10 @@ static bool parse_volume_map(
 			return false;
 		}
 		std::string node = token.substr(begin, sep - begin);
-		std::u16string node_l16;
-		if (!x_str_convert(node_l16, node, x_tolower_t())) {
-			X_LOG(CONF, ERR, "invalid node name '%s'", node.c_str());
-			return false;
-		}
 
 		volumes.push_back(std::make_unique<x_smbd_volume_spec_t>(uuid, std::move(name),
 				std::move(name_l16),
-				std::move(node_l16),
+				std::move(node),
 				token.substr(sep + 1)));
 	}
 	return true;
@@ -242,7 +307,7 @@ static std::string::size_type rskip(const std::string &s, std::string::size_type
 	}
 	return pos + 1;
 }
-
+#if 0
 static const std::shared_ptr<x_smbd_volume_t> smbd_volume_find(
 		const x_smbd_conf_t &smbd_conf,
 		const char16_t *vol_s, const char16_t *vol_e)
@@ -259,7 +324,7 @@ static const std::shared_ptr<x_smbd_volume_t> smbd_volume_find(
 	}
 	return nullptr;
 }
-
+#endif
 static void add_share(x_smbd_conf_t &smbd_conf,
 		const std::shared_ptr<x_smbd_share_t> &smbd_share)
 {
@@ -274,6 +339,7 @@ static bool smbd_conf_add_share(x_smbd_conf_t &smbd_conf,
 	for (auto [uuid, volume_idx]: share_spec.volumes) {
 		smbd_volumes.push_back(smbd_conf.smbd_volumes[volume_idx]);
 	}
+	X_ASSERT(smbd_volumes.size() != 0);
 
 	std::u16string name_16;
 	std::u16string name_l16;
@@ -282,29 +348,16 @@ static bool smbd_conf_add_share(x_smbd_conf_t &smbd_conf,
 	}
 	X_ASSERT(x_str_tolower(name_l16, name_16));
 
-	std::shared_ptr<x_smbd_share_t> share;
-	if (false) {
-	} else if (smbd_volumes.size() > 1) {
-		X_TODO_ASSERT(false);
-#if 0
-		share = x_smbd_dfs_share_create(smbd_conf,
-				share_spec.uuid,
-				share_spec.name,
-				std::move(name_16),
-				std::move(name_l16),
-				share_spec.share_flags,
-				std::move(smbd_volumes));
-#endif
-	} else {
-		share = x_smbd_simplefs_share_create(
-				share_spec.uuid,
-				share_spec.name,
-				std::move(name_16),
-				std::move(name_l16),
-				share_spec.share_flags,
-				share_spec.smb_encrypt,
-				smbd_volumes[0]);
-	}
+	std::shared_ptr<x_smbd_share_t> share = x_smbd_simplefs_share_create(
+			smbd_conf.node,
+			share_spec.uuid,
+			share_spec.name,
+			std::move(name_16),
+			std::move(name_l16),
+			share_spec.share_flags,
+			share_spec.smb_encrypt,
+			std::move(smbd_volumes));
+
 	if (!share) {
 		X_LOG(CONF, ERR, "Failed create share '%s'", share_spec.name.c_str());
 		return false;
@@ -396,9 +449,7 @@ static bool parse_global_param(x_smbd_conf_t &smbd_conf,
 	} else if (name == "private dir") {
 		smbd_conf.private_dir = value;
 	} else if (name == "node") {
-		if (!x_str_convert(smbd_conf.node_l16, value, x_tolower_t())) {
-			X_LOG(CONF, ERR, "Invalid node '%s'", value.c_str());
-		}
+		smbd_conf.node = value;
 	} else if (name == "max session expiration") {
 		return parse_uint32(value, smbd_conf.max_session_expiration);
 	} else if (name == "interfaces") {
@@ -438,7 +489,7 @@ static bool parse_global_param(x_smbd_conf_t &smbd_conf,
 	} else if (name == "my:samba locks dir") {
 		smbd_conf.samba_locks_dir = value;
 	} else if (name == "my:nodes") {
-		smbd_conf.nodes = parse_stringlist(value);
+		return parse_nodes(smbd_conf.nodes, value);
 	} else if (name == "my:volume map") {
 		return parse_volume_map(volume_specs, value);
 	} else if (name == "my:stats interval ms") {
@@ -449,6 +500,8 @@ static bool parse_global_param(x_smbd_conf_t &smbd_conf,
 		return parse_uint32(value, smbd_conf.my_dev_delay_write_ms);
 	} else if (name == "my:dev delay qdir ms") {
 		return parse_uint32(value, smbd_conf.my_dev_delay_qdir_ms);
+	} else if (name == "node port") {
+		return parse_uint32(value, smbd_conf.node_port);
 
 	} else {
 		X_LOG(CONF, WARN, "unknown global param '%s' with value '%s'",
@@ -690,18 +743,16 @@ static int parse_smbconf(x_smbd_conf_t &smbd_conf)
 		}
 	}
 
-	if (smbd_conf.node_l16.empty()) {
+	if (smbd_conf.node.empty()) {
 		char hostname[1024];
 		int err = gethostname(hostname, sizeof hostname);
 		X_ASSERT(err == 0);
+		X_LOG(CONF, NOTICE, "derive node from hostname '%s'", hostname);
 		char *end = hostname;
 		while (*end && *end != '.') {
 			++end;
 		}
-		if (!x_str_convert(smbd_conf.node_l16, hostname, end,
-					x_tolower_t())) {
-			X_LOG(CONF, ERR, "Invalid hostname '%s'\n", hostname);
-		}
+		smbd_conf.node.assign(hostname, end);
 	}
 
 	if (smbd_conf.dns_domain_l8.empty()) {
@@ -826,6 +877,7 @@ x_smbd_resolve_share(const char16_t *in_share_s, const char16_t *in_share_e)
 	if (in_share_s == in_share_e) {
 		return {nullptr, nullptr};
 	}
+#if 0
 	if (*in_share_s == u'-') {
 		++in_share_s;
 		if (in_share_s == in_share_e) {
@@ -840,17 +892,20 @@ x_smbd_resolve_share(const char16_t *in_share_s, const char16_t *in_share_e)
 			return {smbd_volume->owner_share, smbd_volume};
 		}
 	}
-
+#endif
 	std::shared_ptr<x_smbd_share_t> smbd_share = x_smbd_find_share(smbd_conf,
 			in_share_s, in_share_e);
 	if (!smbd_share) {
 		return {nullptr, nullptr};
 	}
 
+	return { smbd_share, nullptr };
+#if 0
 	std::shared_ptr<x_smbd_volume_t> smbd_volume = smbd_share->find_volume(in_share_s, in_share_e);
 	return {smbd_share, smbd_volume};
 
 	/* TODO USER_SHARE */
+#endif
 }
 
 int x_smbd_conf_init(const char *configfile,
@@ -909,7 +964,7 @@ static int reload_volumes(x_smbd_conf_t &smbd_conf,
 			/* new volume */
 			smbd_conf.smbd_volumes.push_back(x_smbd_volume_create(spec->uuid,
 						spec->name_8, spec->name_l16,
-						spec->owner_node_l16, spec->path,
+						spec->owner_node, spec->path,
 						smbd_conf.allocation_roundup_size));
 		}
 	}
@@ -1021,7 +1076,7 @@ int x_smbd_init_shares(x_smbd_conf_t &smbd_conf)
 	for (auto &vs: smbd_conf.volume_specs) {
 		smbd_conf.smbd_volumes.push_back(x_smbd_volume_create(vs->uuid,
 					vs->name_8, vs->name_l16,
-					vs->owner_node_l16, vs->path,
+					vs->owner_node, vs->path,
 					smbd_conf.allocation_roundup_size));
 	}
 

@@ -43,20 +43,27 @@ struct x_smbd_volume_spec_t
 	x_smbd_volume_spec_t(const x_smb2_uuid_t &uuid,
 			std::string &&name_8,
 			std::u16string &&name_l16,
-			std::u16string &&node_l16,
+			std::string &&node,
 			std::string &&path)
 		: uuid(uuid), name_8(name_8), name_l16(name_l16)
-		, owner_node_l16(node_l16), path(path)
+		, owner_node(node), path(path)
 	{
 	}
 
 	const x_smb2_uuid_t uuid;
 	const std::string name_8;
 	const std::u16string name_l16;
-	const std::u16string owner_node_l16;
+	const std::string owner_node;
 	const std::string path;
 
 	x_smbd_share_spec_t *share_spec = nullptr;
+};
+
+struct x_smbd_node_t
+{
+	std::string name;
+	struct in_addr ip_int;
+	std::vector<struct sockaddr_storage> ss_ext;
 };
 
 struct x_smbd_conf_t
@@ -76,7 +83,8 @@ struct x_smbd_conf_t
 	}
 
 	x_smb2_uuid_t guid; // uint8_t guid[16];
-	int port = 445;
+	uint32_t port = 445;
+	uint32_t node_port = 7526;
 	uint32_t client_thread_count = 0;
 	uint32_t async_thread_count = 0;
 
@@ -94,7 +102,7 @@ struct x_smbd_conf_t
 	uint32_t max_session_expiration = X_INFINITE; // in seconds
 
 	uint32_t smb2_max_credits = 8192;
-	bool host_msdfs = true;
+	bool host_msdfs = false;
 
 	std::string log_level;
 	uint32_t max_connections = 64 * 1024;
@@ -121,13 +129,12 @@ struct x_smbd_conf_t
 	std::shared_ptr<std::u16string> netbios_name_u16, workgroup_u16, dns_domain_l16;
 	std::string private_dir, lib_dir;
 	std::string samba_locks_dir;
-	std::vector<std::string> cluster_nodes;
 	std::vector<std::string> interfaces;
 	std::shared_ptr<const std::vector<x_iface_t>> local_ifaces;
 
 	std::vector<uint16_t> dialects{0x311, 0x302, 0x300, 0x210, 0x202};
-	std::u16string node_l16;
-	std::vector<std::string> nodes;
+	std::string node;
+	std::vector<x_smbd_node_t> nodes;
 	std::vector<std::shared_ptr<x_smbd_volume_t>> smbd_volumes;
 	std::vector<std::shared_ptr<x_smbd_share_t>> smbd_shares;
 

@@ -1487,7 +1487,7 @@ static krb5_error_code get_alias_principals(
 	}
 
 	for (auto &node: smbd_conf.nodes) {
-		kerr = create_principal(krbctx, &princ, node,
+		kerr = create_principal(krbctx, &princ, node.name,
 				smbd_conf.dns_domain_l8, smbd_conf.realm);
 		if (kerr) {
 			return kerr;

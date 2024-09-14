@@ -42,7 +42,7 @@ struct x_smbd_volume_t
 	x_smbd_volume_t(const x_smb2_uuid_t &uuid,
 			const std::string &name,
 			const std::u16string &name_l16,
-			const std::u16string &owner_node,
+			const std::string &owner_node,
 			const std::string &path,
 			uint32_t allocation_roundup_size);
 
@@ -52,7 +52,7 @@ struct x_smbd_volume_t
 	const x_smb2_uuid_t uuid;
 	const std::string name_8;
 	const std::u16string name_l16;
-	const std::u16string owner_node_l16;
+	const std::string owner_node;
 	const std::string path;
 
 	const uint32_t allocation_roundup_size;
@@ -137,7 +137,7 @@ struct x_smbd_share_t
 std::shared_ptr<x_smbd_volume_t> x_smbd_volume_create(
 		const x_smb2_uuid_t &uuid,
 		const std::string &name_8, const std::u16string &name_l16,
-		const std::u16string &owner_node_l16,
+		const std::string &owner_node,
 		const std::string &path,
 		uint32_t allocation_roundup_size);
 int x_smbd_volume_init(std::shared_ptr<x_smbd_volume_t> &smbd_volume,
@@ -165,8 +165,8 @@ int x_smbd_volume_remove_durable(x_smbd_volume_t &smbd_volume,
 int x_smbd_volume_disconnect_durable(x_smbd_volume_t &smbd_volume,
 		uint64_t id_persistent);
 std::shared_ptr<x_smbd_share_t> x_smbd_ipc_share_create();
-std::shared_ptr<x_smbd_share_t> x_smbd_dfs_share_create(
-		const x_smbd_conf_t &smbd_conf,
+std::shared_ptr<x_smbd_share_t> x_smbd_simplefs_share_create(
+		const std::string &node_name,
 		const x_smb2_uuid_t &uuid,
 		const std::string &name,
 		std::u16string &&name_16,
@@ -174,14 +174,6 @@ std::shared_ptr<x_smbd_share_t> x_smbd_dfs_share_create(
 		uint32_t share_flags,
 		x_smbd_feature_option_t smb_encrypt,
 		std::vector<std::shared_ptr<x_smbd_volume_t>> &&smbd_volumes);
-std::shared_ptr<x_smbd_share_t> x_smbd_simplefs_share_create(
-		const x_smb2_uuid_t &uuid,
-		const std::string &name,
-		std::u16string &&name_16,
-		std::u16string &&name_l16,
-		uint32_t share_flags,
-		x_smbd_feature_option_t smb_encrypt,
-		std::shared_ptr<x_smbd_volume_t> &smbd_volume);
 int x_smbd_simplefs_mktld(const std::shared_ptr<x_smbd_user_t> &smbd_user,
 		std::shared_ptr<x_smbd_share_t> &smbd_share,
 		const std::string &name,
