@@ -56,8 +56,6 @@ enum class x_smbd_timer_id_t {
 };
 
 void x_smbd_add_timer(x_timer_job_t *entry, x_smbd_timer_id_t timer_id);
-void x_smbd_add_timer(x_timer_job_t *entry, x_tick_diff_t expires);
-bool x_smbd_del_timer(x_timer_job_t *entry);
 
 std::array<x_tick_t, 2> x_smbd_get_time();
 
@@ -88,37 +86,6 @@ struct x_smbd_stream_t;
 struct x_smbd_requ_t;
 struct x_smbd_share_t;
 struct x_smbd_volume_t;
-
-template <class T>
-struct x_smbd_ptr_t
-{
-	explicit x_smbd_ptr_t(T *t) noexcept : val(t) { }
-	~x_smbd_ptr_t() noexcept {
-		x_ref_dec_if(val);
-	}
-	x_smbd_ptr_t(x_smbd_ptr_t<T> &&o) noexcept {
-		val = std::exchange(o.val, nullptr);
-	}
-	x_smbd_ptr_t<T> &operator=(x_smbd_ptr_t<T> &&o) noexcept {
-		if (this != &o) {
-			x_ref_dec_if(val);
-			val = std::exchange(o.val, nullptr);
-		}
-		return *this;
-	}
-
-	x_smbd_ptr_t(const x_smbd_ptr_t<T> &o) = delete;
-	x_smbd_ptr_t<T> &operator=(const x_smbd_ptr_t<T> &t) = delete;
-
-	operator T*() const noexcept {
-		return val;
-	}
-	T *operator->() const noexcept {
-		return val;
-	}
-
-	T *val;
-};
 
 struct x_smbd_key_set_t
 {

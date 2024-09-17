@@ -95,16 +95,6 @@ void x_smbd_add_timer(x_timer_job_t *entry, x_smbd_timer_id_t timer_id)
 			g_smbd.timers[static_cast<int>(timer_id)]);
 }
 
-void x_smbd_add_timer(x_timer_job_t *entry, x_tick_diff_t expires)
-{
-	x_evtmgmt_add_timer(g_evtmgmt, entry, expires);
-}
-
-bool x_smbd_del_timer(x_timer_job_t *entry)
-{
-	return x_evtmgmt_del_timer(g_evtmgmt, entry);
-}
-
 void x_smbd_wbpool_request(x_wbcli_t *wbcli)
 {
 	x_wbpool_request(g_smbd.wbpool, wbcli);

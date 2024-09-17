@@ -318,7 +318,7 @@ static inline bool smbd_chan_set_state(x_smbd_chan_t *smbd_chan,
 
 static bool smbd_chan_cancel_timer(x_smbd_chan_t *smbd_chan)
 {
-	if (x_smbd_del_timer(&smbd_chan->timer)) {
+	if (x_nxfsd_del_timer(&smbd_chan->timer)) {
 		x_ref_dec(smbd_chan);
 		return true;
 	}

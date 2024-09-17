@@ -123,7 +123,7 @@ void x_smbd_lease_release(x_smbd_lease_t *smbd_lease)
 
 static inline void smbd_lease_cancel_timer(x_smbd_lease_t *smbd_lease)
 {
-	if (x_smbd_del_timer(&smbd_lease->timer)) {
+	if (x_nxfsd_del_timer(&smbd_lease->timer)) {
 		X_ASSERT(--smbd_lease->refcnt > 0);
 	}
 }

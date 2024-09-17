@@ -10,6 +10,7 @@
 #include <string>
 #include <array>
 #include <vector>
+#include <utility>
 #include <cstring>
 #include <sstream>
 
@@ -327,6 +328,37 @@ inline void x_ref_dec_if(T *t)
 }
 
 #define X_REF_DEC(t) do { x_ref_dec(t); (t) = nullptr; } while (0)
+
+template <class T>
+struct x_ref_ptr_t
+{
+	explicit x_ref_ptr_t(T *t) noexcept : val(t) { }
+	~x_ref_ptr_t() noexcept {
+		x_ref_dec_if(val);
+	}
+	x_ref_ptr_t(x_ref_ptr_t<T> &&o) noexcept {
+		val = std::exchange(o.val, nullptr);
+	}
+	x_ref_ptr_t<T> &operator=(x_ref_ptr_t<T> &&o) noexcept {
+		if (this != &o) {
+			x_ref_dec_if(val);
+			val = std::exchange(o.val, nullptr);
+		}
+		return *this;
+	}
+
+	x_ref_ptr_t(const x_ref_ptr_t<T> &o) = delete;
+	x_ref_ptr_t<T> &operator=(const x_ref_ptr_t<T> &t) = delete;
+
+	operator T*() const noexcept {
+		return val;
+	}
+	T *operator->() const noexcept {
+		return val;
+	}
+
+	T *val;
+};
 
 struct x_bitmap_t
 {

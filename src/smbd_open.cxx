@@ -282,7 +282,7 @@ static void smbd_close_open_intl(
 	clear_replay_cache(smbd_open->open_state);
 
 	if (smbd_open->oplock_break_sent != x_smbd_open_t::OPLOCK_BREAK_NOT_SENT) {
-		if (x_smbd_del_timer(&smbd_open->oplock_break_timer)) {
+		if (x_nxfsd_del_timer(&smbd_open->oplock_break_timer)) {
 			x_ref_dec(smbd_open);
 		}
 		smbd_open->oplock_break_sent = x_smbd_open_t::OPLOCK_BREAK_NOT_SENT;
@@ -366,7 +366,7 @@ static bool smbd_open_close_disconnected(
 		return false;
 	}
 
-	if (!x_smbd_del_timer(&smbd_open->durable_timer)) {
+	if (!x_nxfsd_del_timer(&smbd_open->durable_timer)) {
 		return false;
 	}
 	smbd_open_close(smbd_open, smbd_open->smbd_object, nullptr, {});
@@ -432,7 +432,7 @@ static bool smbd_open_set_durable(x_smbd_open_t *smbd_open)
 	/* TODO save durable info to volume so it can restore open
 	 * when new smbd take over
 	 */
-	x_smbd_add_timer(&smbd_open->durable_timer,
+	x_nxfsd_add_timer(&smbd_open->durable_timer,
 			smbd_open->open_state.durable_timeout_msec * 1000000ul);
 
 	int ret = x_smbd_volume_disconnect_durable(
@@ -1595,7 +1595,7 @@ NTSTATUS x_smbd_break_oplock(
 
 	if (smbd_open->oplock_break_sent == x_smbd_open_t::OPLOCK_BREAK_NOT_SENT) {
 		return NT_STATUS_INVALID_OPLOCK_PROTOCOL;
-	} else if (x_smbd_del_timer(&smbd_open->oplock_break_timer)) {
+	} else if (x_nxfsd_del_timer(&smbd_open->oplock_break_timer)) {
 		x_ref_dec(smbd_open);
 	}
 
@@ -1888,7 +1888,7 @@ static NTSTATUS smbd_open_reconnect(x_smbd_open_t *smbd_open,
 		X_LOG(SMB, NOTICE, "user sid not match, STATUS_ACCESS_DENIED");
 		return NT_STATUS_ACCESS_DENIED;
 	}
-	if (!x_smbd_del_timer(&smbd_open->durable_timer)) {
+	if (!x_nxfsd_del_timer(&smbd_open->durable_timer)) {
 		return NT_STATUS_OBJECT_NAME_NOT_FOUND;
 	}
 
@@ -1984,7 +1984,7 @@ NTSTATUS x_smbd_open_restore(
 		X_ASSERT(smbd_open->state == SMBD_OPEN_S_INIT);
 		X_ASSERT(!smbd_open->smbd_tcon);
 		smbd_open->state = SMBD_OPEN_S_DISCONNECTED;
-		x_smbd_add_timer(&smbd_open->durable_timer,
+		x_nxfsd_add_timer(&smbd_open->durable_timer,
 				timeout_msec * 1000000ul);
 	}
 

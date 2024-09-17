@@ -21,5 +21,16 @@ X_DECLARE_MEMBER_TRAITS(fdevt_user_conn_traits, x_fdevt_user_t, link)
 
 extern x_evtmgmt_t *g_evtmgmt;
 
+static inline void x_nxfsd_add_timer(x_timer_job_t *entry, x_tick_diff_t expires)
+{
+	x_evtmgmt_add_timer(g_evtmgmt, entry, expires);
+}
+
+static inline bool x_nxfsd_del_timer(x_timer_job_t *entry)
+{
+	return x_evtmgmt_del_timer(g_evtmgmt, entry);
+}
+
+
 #endif /* __event__hxx__ */
 
