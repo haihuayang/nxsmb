@@ -20,7 +20,7 @@ BUILD ?= dbg
 TARGET_BUILD_CFLAGS := $(TARGET_BUILD_CFLAGS_$(BUILD))
 TARGET_BUILD_LDFLAGS := $(TARGET_BUILD_LDFLAGS_$(BUILD))
 
-TARGET_PROJECT_CFLAGS := -Wall -DPROJECT=$(PROJECT) $(TARGET_BUILD_CFLAGS)
+TARGET_PROJECT_CFLAGS := -Wall -Wextra -Wno-unused-parameter -Wno-missing-field-initializers -DPROJECT=$(PROJECT) $(TARGET_BUILD_CFLAGS)
 TARGET_CFLAGS = $(TARGET_PROJECT_CFLAGS) -Wstrict-prototypes -MT $@ -MMD -MP -MF $@.d
 TARGET_CXXFLAGS = $(TARGET_PROJECT_CFLAGS) -std=c++2a -Werror -Wunused -Wconversion -Wmissing-declarations -Wno-invalid-offsetof -Wno-multichar -MT $@ -MMD -MP -MF $@.d
 TARGET_LDFLAGS := $(TARGET_LDFLAGS) $(TARGET_BUILD_LDFLAGS)
