@@ -7,8 +7,8 @@ static struct {
 	uint32_t num_counter;
 	uint32_t num_pair_counter;
 	uint32_t num_histogram;
-	std::vector<x_stats_t *> stats_table;
-	bool initialized = false;
+	uint32_t num_thread;
+	x_stats_t **stats_table{};
 } g_stats;
 
 thread_local x_stats_t local_stats;
@@ -16,17 +16,17 @@ thread_local x_stats_t local_stats;
 void x_stats_init(uint32_t num_thread, uint32_t num_counter,
 		uint32_t num_pair_counter, uint32_t num_histogram)
 {
-	X_ASSERT(g_stats.stats_table.empty());
-	g_stats.stats_table.resize(num_thread);
+	X_ASSERT(!g_stats.stats_table);
 	g_stats.num_counter = num_counter;
 	g_stats.num_pair_counter = num_pair_counter;
 	g_stats.num_histogram = num_histogram;
-	g_stats.initialized = true;
+	g_stats.num_thread = num_thread;
+	g_stats.stats_table = new x_stats_t*[num_thread]{};
 }
 
 int x_stats_register(uint32_t thread_id)
 {
-	X_ASSERT(thread_id < g_stats.stats_table.size());
+	X_ASSERT(thread_id < g_stats.num_thread);
 	if (g_stats.stats_table[thread_id]) {
 		return 0;
 	}
@@ -61,7 +61,8 @@ void x_stats_unregister(uint32_t thread_id)
 template <class LR>
 void x_stats_cumulate(x_stats_store_t &store, const LR &load_reset)
 {
-	for (auto thread_stats : g_stats.stats_table) {
+	for (uint32_t ti = 0; ti < g_stats.num_thread; ++ti) {
+		auto thread_stats = g_stats.stats_table[ti];
 		if (!thread_stats) {
 			continue;
 		}
@@ -110,7 +111,7 @@ void x_stats_collect(x_stats_store_t &store)
 
 void x_stats_store_t::init()
 {
-	X_ASSERT(g_stats.initialized);
+	X_ASSERT(g_stats.stats_table);
 	counters.resize(g_stats.num_counter);
 	pair_counters.resize(g_stats.num_pair_counter * 2);
 	histogram_totals.resize(g_stats.num_histogram);
