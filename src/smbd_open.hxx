@@ -325,6 +325,12 @@ struct x_smbd_object_t
 		ads_list.remove(smbd_stream);
 	}
 
+	auto lock()
+	{
+		/* we use smbd_object mutex to protect open */
+		return std::lock_guard(mutex);
+	}
+
 	std::shared_ptr<x_smbd_volume_t> smbd_volume;
 	const long priv_data;
 	std::mutex mutex;

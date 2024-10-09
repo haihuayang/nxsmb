@@ -77,12 +77,6 @@ void x_ref_dec(x_smbd_open_t *smbd_open)
 	g_smbd_open_table->decref(smbd_open->id_volatile);
 }
 
-/* we use smbd_object mutex to protect open */
-static inline auto smbd_object_lock(x_smbd_object_t *smbd_object)
-{
-	return std::lock_guard(smbd_object->mutex);
-}
-
 
 int x_smbd_open_table_init(uint32_t count)
 {
@@ -125,7 +119,7 @@ x_smbd_open_t *x_smbd_open_lookup(uint64_t id_persistent, uint64_t id_volatile,
 	if (found) {
 		auto smbd_object = smbd_open->smbd_object;
 		{
-			auto lock = smbd_object_lock(smbd_object);
+			auto lock = smbd_object->lock();
 			if (smbd_open->id_persistent == id_persistent &&
 					smbd_open->state == SMBD_OPEN_S_ACTIVE &&
 					(smbd_open->smbd_tcon == smbd_tcon ||
@@ -405,7 +399,7 @@ static long smbd_open_durable_timeout(x_timer_job_t *timer)
 
 	bool closed = false;
 	{
-		auto lock = smbd_object_lock(smbd_object);
+		auto lock = smbd_object->lock();
 		if (smbd_open->state == SMBD_OPEN_S_DISCONNECTED) {
 			smbd_open_close(smbd_open, smbd_object, nullptr, {});
 			closed = true;
@@ -453,7 +447,7 @@ NTSTATUS x_smbd_open_op_close(
 	x_smbd_tcon_t *smbd_tcon = nullptr;
 
 	{
-		auto lock = smbd_object_lock(smbd_object);
+		auto lock = smbd_object->lock();
 		if (smbd_open->state != SMBD_OPEN_S_ACTIVE) {
 			return NT_STATUS_FILE_CLOSED;
 		}
@@ -484,7 +478,7 @@ void x_smbd_open_unlinked(x_dlink_t *link,
 
 	bool closed = true;
 	{
-		auto lock = smbd_object_lock(smbd_object);
+		auto lock = smbd_object->lock();
 		if (smbd_open->state != SMBD_OPEN_S_ACTIVE) {
 			return;
 		}
@@ -617,7 +611,7 @@ static long oplock_break_timeout(x_timer_job_t *timer)
 	x_smbd_object_t *smbd_object = smbd_open->smbd_object;
 	x_smbd_requ_id_list_t oplock_pending_list;
 	{
-		auto lock = smbd_object_lock(smbd_object);
+		auto lock = smbd_object->lock();
 		if (smbd_open->oplock_break_sent == x_smbd_open_t::OPLOCK_BREAK_TO_NONE_SENT) {
 			smbd_open->oplock_break_sent = x_smbd_open_t::OPLOCK_BREAK_NOT_SENT;
 			smbd_open->open_state.oplock_level = X_SMB2_OPLOCK_LEVEL_NONE;
@@ -1390,7 +1384,7 @@ static NTSTATUS smbd_open_create_intl(x_smbd_open_t **psmbd_open,
 	}
 
 	auto in_disposition = state->in_create_disposition;
-	auto lock = smbd_object_lock(smbd_object);
+	auto lock = smbd_object->lock();
 
 	if (in_disposition == x_smb2_create_disposition_t::CREATE) {
 		if (!smbd_object->exists()) {
@@ -1592,7 +1586,7 @@ NTSTATUS x_smbd_break_oplock(
 	x_smbd_requ_id_list_t oplock_pending_list;
 
 	{
-	auto lock = smbd_object_lock(smbd_object);
+	auto lock = smbd_object->lock();
 
 	if (smbd_open->oplock_break_sent == x_smbd_open_t::OPLOCK_BREAK_NOT_SENT) {
 		return NT_STATUS_INVALID_OPLOCK_PROTOCOL;
@@ -1825,7 +1819,7 @@ NTSTATUS x_smbd_open_op_create(x_smbd_requ_t *smbd_requ,
 	 */
 	bool linked = false;
 	{
-		auto lock = smbd_object_lock(state->smbd_object);
+		auto lock = state->smbd_object->lock();
 		if (smbd_open->state == SMBD_OPEN_S_INIT &&
 				x_smbd_tcon_link_open(smbd_tcon, &smbd_open->tcon_link)) {
 			smbd_open->state = SMBD_OPEN_S_ACTIVE;
@@ -1855,7 +1849,7 @@ static NTSTATUS smbd_open_reconnect(x_smbd_open_t *smbd_open,
 	auto &open_state = smbd_open->open_state;
 	auto smbd_user = x_smbd_tcon_get_user(smbd_tcon);
 
-	auto lock = smbd_object_lock(smbd_object);
+	auto lock = smbd_object->lock();
 	if (smbd_open->state != SMBD_OPEN_S_DISCONNECTED) {
 		return NT_STATUS_OBJECT_NAME_NOT_FOUND;
 	}
@@ -1982,7 +1976,7 @@ NTSTATUS x_smbd_open_restore(
 
 	x_ref_inc(smbd_open); // durable timer
 	{
-		auto lock = smbd_object_lock(smbd_open->smbd_object);
+		auto lock = smbd_open->smbd_object->lock();
 		X_ASSERT(smbd_open->state == SMBD_OPEN_S_INIT);
 		X_ASSERT(!smbd_open->smbd_tcon);
 		smbd_open->state = SMBD_OPEN_S_DISCONNECTED;
@@ -2091,7 +2085,7 @@ static inline void smbd_open_to_open_info(std::vector<idl::srvsvc_NetFileInfo3> 
 	size_t lock_count;
 	auto &open_state = smbd_open->open_state;
 	{
-		auto lock = smbd_object_lock(smbd_object);
+		auto lock = smbd_object->lock();
 		if (smbd_open->smbd_tcon) {
 			smbd_user = x_smbd_tcon_get_user(smbd_open->smbd_tcon);
 		}
@@ -2147,7 +2141,7 @@ static void smbd_net_file_close(x_smbd_open_t *smbd_open)
 	bool closed;
 
 	{
-		auto lock = smbd_object_lock(smbd_object);
+		auto lock = smbd_object->lock();
 		closed = smbd_open_close_non_requ(smbd_open, &smbd_tcon);
 	}
 
