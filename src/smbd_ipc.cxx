@@ -936,26 +936,23 @@ static NTSTATUS ipc_create_object(x_smbd_object_t *smbd_object,
 	return NT_STATUS_ACCESS_DENIED;
 }
 
-static NTSTATUS ipc_create_open(x_smbd_open_t **psmbd_open,
+static NTSTATUS ipc_op_create_open(x_smbd_open_t **psmbd_open,
 		x_smbd_requ_t *smbd_requ,
-		x_smbd_share_t &smbd_share,
-		std::unique_ptr<x_smbd_requ_state_create_t> &state,
-		bool overwrite,
-		x_smb2_create_action_t create_action,
-		uint8_t oplock_level)
+		std::unique_ptr<x_smbd_requ_state_create_t> &state)
 {
-	X_ASSERT(!overwrite);
-	X_ASSERT(state->open_priv_data == 0);
-	X_ASSERT(oplock_level == X_SMB2_OPLOCK_LEVEL_NONE);
-	X_ASSERT(create_action == x_smb2_create_action_t::WAS_OPENED);
-	if (state->end_with_sep) {
-		return NT_STATUS_OBJECT_NAME_INVALID;
-	}
-
 	if (state->in_ads_name.size() > 0 || state->is_dollar_data) {
 		return NT_STATUS_OBJECT_NAME_NOT_FOUND;
 	}
 
+	if (state->end_with_sep) {
+		return NT_STATUS_OBJECT_NAME_INVALID;
+	}
+
+	X_ASSERT(state->open_priv_data == 0);
+#if 0
+	X_ASSERT(oplock_level == X_SMB2_OPLOCK_LEVEL_NONE);
+	X_ASSERT(create_action == x_smb2_create_action_t::WAS_OPENED);
+#endif
 	if (state->in_desired_access & idl::SEC_STD_DELETE) {
 		*psmbd_open = nullptr;
 		return NT_STATUS_ACCESS_DENIED;
@@ -1095,13 +1092,6 @@ static NTSTATUS ipc_op_rename_object(
 	return NT_STATUS_INTERNAL_ERROR;
 }
 
-static NTSTATUS ipc_op_open_stream(x_smbd_object_t *smbd_object,
-		x_smbd_stream_t **p_smbd_stream,
-		const std::u16string &ads_name)
-{
-	return NT_STATUS_OBJECT_NAME_NOT_FOUND;
-}
-
 static NTSTATUS ipc_op_rename_stream(
 		x_smbd_object_t *smbd_object,
 		x_smbd_stream_t *smbd_stream,
@@ -1128,7 +1118,7 @@ static void ipc_op_destroy_open(x_smbd_open_t *smbd_open)
 static const x_smbd_object_ops_t x_smbd_ipc_object_ops = {
 	ipc_op_open_root_object,
 	ipc_create_object,
-	ipc_create_open,
+	ipc_op_create_open,
 	nullptr,
 	ipc_object_op_read,
 	ipc_object_op_write,
@@ -1151,7 +1141,6 @@ static const x_smbd_object_ops_t x_smbd_ipc_object_ops = {
 	ipc_op_destroy_object,
 	ipc_op_initialize_object,
 	ipc_op_rename_object,
-	ipc_op_open_stream,
 	ipc_op_rename_stream,
 	ipc_op_release_stream,
 	ipc_op_destroy_open,

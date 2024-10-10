@@ -140,11 +140,7 @@ struct x_smbd_object_ops_t
 
 	NTSTATUS (*create_open)(x_smbd_open_t **psmbd_open,
 			x_smbd_requ_t *smbd_requ,
-			x_smbd_share_t &smbd_share,
-			std::unique_ptr<x_smbd_requ_state_create_t> &state,
-			bool overwrite,
-			x_smb2_create_action_t create_action,
-			uint8_t oplock_level);
+			std::unique_ptr<x_smbd_requ_state_create_t> &state);
 
 	NTSTATUS (*open_durable)(x_smbd_open_t *&smbd_open,
 			std::shared_ptr<x_smbd_share_t> &smbd_share,
@@ -252,10 +248,6 @@ struct x_smbd_object_ops_t
 			bool replace_if_exists,
 			x_smbd_object_t *new_parent_object,
 			const std::u16string &new_path);
-
-	NTSTATUS (*open_stream)(x_smbd_object_t *smbd_object,
-			x_smbd_stream_t **p_smbd_stream,
-			const std::u16string &ads_name);
 
 	NTSTATUS (*rename_stream)(
 			x_smbd_object_t *smbd_object,
@@ -698,6 +690,15 @@ static inline NTSTATUS x_smbd_open_rename(
 	return x_smbd_object_rename(smbd_object, smbd_open, smbd_requ,
 			state);
 }
+
+NTSTATUS x_smbd_open_create(
+		x_smbd_object_t *smbd_object,
+		x_smbd_stream_t *smbd_stream,
+		x_smbd_requ_t *smbd_requ,
+		std::unique_ptr<x_smbd_requ_state_create_t> &state,
+		x_smb2_create_action_t &create_action,
+		uint8_t &out_oplock_level,
+		bool overwrite);
 
 NTSTATUS x_smbd_object_set_delete_pending_intl(x_smbd_object_t *smbd_object,
 		x_smbd_open_t *smbd_open,

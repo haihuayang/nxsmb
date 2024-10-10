@@ -85,22 +85,10 @@ static NTSTATUS simplefs_object_op_qdir(
 			simplefs_process_entry);
 }
 #endif
-static NTSTATUS simplefs_op_create_open(x_smbd_open_t **psmbd_open,
-		x_smbd_requ_t *smbd_requ,
-		x_smbd_share_t &smbd_share,
-		std::unique_ptr<x_smbd_requ_state_create_t> &state,
-		bool overwrite,
-		x_smb2_create_action_t create_action,
-		uint8_t oplock_level)
-{
-	return x_smbd_posixfs_create_open(psmbd_open, smbd_requ,
-			state, overwrite, create_action, oplock_level);
-}
-
 static const x_smbd_object_ops_t simplefs_object_ops = {
 	posixfs_op_open_root_object,
 	x_smbd_posixfs_create_object,
-	simplefs_op_create_open,
+	posixfs_op_create_open,
 	posixfs_op_open_durable,
 	posixfs_object_op_read,
 	posixfs_object_op_write,
@@ -123,7 +111,6 @@ static const x_smbd_object_ops_t simplefs_object_ops = {
 	posixfs_op_destroy_object,
 	posixfs_op_initialize_object,
 	posixfs_op_rename_object,
-	posixfs_op_open_stream,
 	posixfs_op_rename_stream,
 	posixfs_op_release_stream,
 	posixfs_op_destroy_open,
