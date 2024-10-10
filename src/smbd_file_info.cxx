@@ -85,6 +85,25 @@ void x_smbd_get_file_info(x_smb2_file_network_open_info_t &info,
 	info.unused = 0;
 }
 
+void x_smbd_get_file_info(x_smb2_file_compression_info_t &info,
+		const x_smbd_stream_meta_t &stream_meta)
+{
+	info.file_size = X_H2LE64(stream_meta.end_of_file);
+	info.format = 0;
+	info.unit_shift = 0;
+	info.chunk_shift = 0;
+	info.cluster_shift = 0;
+	info.unused0 = 0;
+	info.unused1 = 0;
+}
+
+void x_smbd_get_file_info(x_smb2_file_attribute_tag_info_t &info,
+		const x_smbd_object_meta_t &object_meta)
+{
+	info.file_attributes = X_H2LE32(object_meta.file_attributes);
+	info.reparse_tag = 0; // TODO not support for now
+}
+
 bool x_smbd_marshall_dir_entry(x_smb2_chain_marshall_t &marshall,
 		const x_smbd_object_meta_t &object_meta,
 		const x_smbd_stream_meta_t &stream_meta,

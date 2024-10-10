@@ -733,5 +733,211 @@ void x_smbd_open_release(x_smbd_open_t *smbd_open);
 
 void x_smbd_wakeup_requ_list(const x_smbd_requ_id_list_t &requ_list);
 
+template <typename T>
+static inline T *x_smbd_getinfo_alloc(std::vector<uint8_t> &out_data)
+{
+	out_data.resize(sizeof(T));
+	return (T *)out_data.data();
+}
+
+template<typename T>
+static NTSTATUS x_smbd_getinfo_encode_le(T val,
+		x_smbd_requ_state_getinfo_t &state)
+{
+	if (state.in_output_buffer_length < sizeof(T)) {
+		return NT_STATUS_INFO_LENGTH_MISMATCH;
+	}
+
+	state.out_data.resize(sizeof(T));
+	T *info = (T *)state.out_data.data();
+	*info = x_h2le(val);
+	return NT_STATUS_OK;
+}
+
+template <typename T>
+NTSTATUS x_smbd_open_getinfo_file(x_smbd_open_t *smbd_open,
+		x_smbd_requ_state_getinfo_t &state, const T &op)
+{
+	if (state.in_info_level == x_smb2_info_level_t::FILE_BASIC_INFORMATION) {
+		if (state.in_output_buffer_length < sizeof(x_smb2_file_basic_info_t)) {
+			RETURN_STATUS(NT_STATUS_INFO_LENGTH_MISMATCH);
+		}
+		if (!smbd_open->check_access_any(idl::SEC_FILE_READ_ATTRIBUTE)) {
+			RETURN_STATUS(NT_STATUS_ACCESS_DENIED);
+		}
+		auto info = x_smbd_getinfo_alloc<x_smb2_file_basic_info_t>(state.out_data);
+		x_smbd_get_file_info(*info, op.get_object_meta(smbd_open));
+
+	} else if (state.in_info_level == x_smb2_info_level_t::FILE_STANDARD_INFORMATION) {
+		if (state.in_output_buffer_length < sizeof(x_smb2_file_standard_info_t)) {
+			RETURN_STATUS(NT_STATUS_INFO_LENGTH_MISMATCH);
+		}
+		auto info = x_smbd_getinfo_alloc<x_smb2_file_standard_info_t>(state.out_data);
+		x_smbd_get_file_info(*info, op.get_object_meta(smbd_open),
+				op.get_stream_meta(smbd_open),
+				smbd_open->open_state.access_mask,
+				smbd_open->mode,
+				smbd_open->open_state.current_offset);
+
+	} else if (state.in_info_level == x_smb2_info_level_t::FILE_INTERNAL_INFORMATION) {
+		if (state.in_output_buffer_length < sizeof(uint64_t)) {
+			RETURN_STATUS(NT_STATUS_INFO_LENGTH_MISMATCH);
+		}
+		return x_smbd_getinfo_encode_le(uint64_t(op.get_object_meta(smbd_open).inode), state);
+
+	} else if (state.in_info_level == x_smb2_info_level_t::FILE_EA_INFORMATION) {
+		/* TODO we do not support EA for now */
+		return x_smbd_getinfo_encode_le(uint32_t(0), state);
+
+	} else if (state.in_info_level == x_smb2_info_level_t::FILE_ACCESS_INFORMATION) {
+		return x_smbd_getinfo_encode_le(smbd_open->open_state.access_mask, state);
+
+	} else if (state.in_info_level == x_smb2_info_level_t::FILE_POSITION_INFORMATION) {
+		return x_smbd_getinfo_encode_le(smbd_open->open_state.current_offset, state);
+
+	} else if (state.in_info_level == x_smb2_info_level_t::FILE_MODE_INFORMATION) {
+		return x_smbd_getinfo_encode_le(smbd_open->mode, state);
+
+	} else if (state.in_info_level == x_smb2_info_level_t::FILE_ALIGNMENT_INFORMATION) {
+		/* No alignment needed. */
+		return x_smbd_getinfo_encode_le(uint32_t(0), state);
+
+	} else if (state.in_info_level == x_smb2_info_level_t::FILE_FULL_EA_INFORMATION) {
+		/* TODO we do not support EA for now */
+		RETURN_STATUS(NT_STATUS_NO_EAS_ON_FILE);
+
+	} else if (state.in_info_level == x_smb2_info_level_t::FILE_ALL_INFORMATION) {
+		if (state.in_output_buffer_length < sizeof(x_smb2_file_all_info_t)) {
+			RETURN_STATUS(NT_STATUS_INFO_LENGTH_MISMATCH);
+		}
+		if (!smbd_open->check_access_any(idl::SEC_FILE_READ_ATTRIBUTE)) {
+			RETURN_STATUS(NT_STATUS_ACCESS_DENIED);
+		}
+		auto info = x_smbd_getinfo_alloc<x_smb2_file_all_info_t>(state.out_data);
+		x_smbd_get_file_info(*info, op.get_object_meta(smbd_open),
+				op.get_stream_meta(smbd_open),
+				smbd_open->open_state.access_mask,
+				smbd_open->mode,
+				smbd_open->open_state.current_offset);
+
+	} else if (state.in_info_level == x_smb2_info_level_t::FILE_ALTERNATE_NAME_INFORMATION) {
+		if (state.in_output_buffer_length < sizeof(x_smb2_file_alternate_name_info_t)) {
+			RETURN_STATUS(NT_STATUS_INFO_LENGTH_MISMATCH);
+		}
+		/* TODO not support 8.3 name for now */
+		RETURN_STATUS(NT_STATUS_OBJECT_NAME_NOT_FOUND);
+
+	} else if (state.in_info_level == x_smb2_info_level_t::FILE_STREAM_INFORMATION) {
+		if (state.in_output_buffer_length < sizeof(x_smb2_file_stream_name_info_t) + 8) {
+			RETURN_STATUS(NT_STATUS_INFO_LENGTH_MISMATCH);
+		}
+		return op.get_stream_info(smbd_open, state);
+
+	} else if (state.in_info_level == x_smb2_info_level_t::FILE_COMPRESSION_INFORMATION) {
+		if (state.in_output_buffer_length < sizeof(x_smb2_file_compression_info_t)) {
+			RETURN_STATUS(NT_STATUS_INFO_LENGTH_MISMATCH);
+		}
+		auto info = x_smbd_getinfo_alloc<x_smb2_file_compression_info_t>(state.out_data);
+		x_smbd_get_file_info(*info, op.get_stream_meta(smbd_open));
+
+	} else if (state.in_info_level == x_smb2_info_level_t::FILE_NETWORK_OPEN_INFORMATION) {
+		if (state.in_output_buffer_length < sizeof(x_smb2_file_network_open_info_t)) {
+			RETURN_STATUS(NT_STATUS_INFO_LENGTH_MISMATCH);
+		}
+		if (!smbd_open->check_access_any(idl::SEC_FILE_READ_ATTRIBUTE)) {
+			RETURN_STATUS(NT_STATUS_ACCESS_DENIED);
+		}
+		auto info = x_smbd_getinfo_alloc<x_smb2_file_network_open_info_t>(state.out_data);
+		x_smbd_get_file_info(*info, op.get_object_meta(smbd_open),
+				op.get_stream_meta(smbd_open));
+
+	} else if (state.in_info_level == x_smb2_info_level_t::FILE_ATTRIBUTE_TAG_INFORMATION) {
+		if (state.in_output_buffer_length < sizeof(x_smb2_file_attribute_tag_info_t)) {
+			RETURN_STATUS(NT_STATUS_INFO_LENGTH_MISMATCH);
+		}
+		auto info = x_smbd_getinfo_alloc<x_smb2_file_attribute_tag_info_t>(state.out_data);
+		x_smbd_get_file_info(*info, op.get_object_meta(smbd_open));
+
+	} else if (state.in_info_level == x_smb2_info_level_t::FILE_NORMALIZED_NAME_INFORMATION) {
+		if (x_smbd_conn_curr_dialect() < 0x311) {
+			RETURN_STATUS(NT_STATUS_NOT_SUPPORTED);
+		}
+		if (state.in_output_buffer_length < sizeof(x_smb2_file_normalized_name_info_t)) {
+			RETURN_STATUS(NT_STATUS_INFO_LENGTH_MISMATCH);
+		}
+		
+		std::u16string path = x_smbd_object_get_path(smbd_open->smbd_object);
+
+		size_t name_length = path.length();
+		if (smbd_open->smbd_stream) {
+			name_length += 1 + smbd_open->smbd_stream->name.length();
+		}
+		name_length <<= 1;
+
+		uint32_t output_buffer_length = state.in_output_buffer_length & ~1;
+		size_t buf_size = std::min(size_t(output_buffer_length),
+				offsetof(x_smb2_file_normalized_name_info_t, name) +
+				name_length);
+		state.out_data.resize(buf_size);
+		x_smb2_file_normalized_name_info_t *info =
+			(x_smb2_file_normalized_name_info_t *)state.out_data.data();
+		info->name_length = X_H2LE32(x_convert_assert<uint32_t>(name_length));
+
+		char16_t *buf = info->name;
+		char16_t *buf_end = (char16_t *)((char *)info + buf_size);
+		buf = x_utf16le_encode(path, buf, buf_end);
+		if (!buf) {
+			return NT_STATUS_BUFFER_OVERFLOW;
+		}
+
+		if (smbd_open->smbd_stream) {
+			if (buf == buf_end) {
+				return NT_STATUS_BUFFER_OVERFLOW;
+			}
+			*buf++ = X_H2LE16(u':');
+			buf = x_utf16le_encode(smbd_open->smbd_stream->name, buf, buf_end);
+			if (!buf) {
+				return NT_STATUS_BUFFER_OVERFLOW;
+			}
+		}
+
+	} else {
+		RETURN_STATUS(NT_STATUS_INVALID_LEVEL);
+	}
+	return NT_STATUS_OK;
+}
+
+template <typename T>
+NTSTATUS x_smbd_open_getinfo_security(x_smbd_open_t *smbd_open,
+		x_smbd_requ_state_getinfo_t &state, const T &op)
+{
+	if ((state.in_additional & idl::SECINFO_SACL) &&
+			!smbd_open->check_access_any(idl::SEC_FLAG_SYSTEM_SECURITY)) {
+		return NT_STATUS_ACCESS_DENIED;
+	}
+
+	if ((state.in_additional & (idl::SECINFO_DACL|idl::SECINFO_OWNER|idl::SECINFO_GROUP)) &&
+			!smbd_open->check_access_any(idl::SEC_STD_READ_CONTROL)) {
+		return NT_STATUS_ACCESS_DENIED;
+	}
+
+	std::shared_ptr<idl::security_descriptor> psd;
+	NTSTATUS status = op(psd, smbd_open, state.in_additional);
+	if (status != NT_STATUS_OK) {
+		return status;
+	}
+
+	/* TODO ndr_push should fail when buffer is not enough */
+	auto ndr_ret = idl::x_ndr_push(*psd, state.out_data, 0);
+	if (ndr_ret < 0) {
+		return x_map_nt_error_from_ndr_err(idl::x_ndr_err_code_t(-ndr_ret));
+	}
+	if (state.out_data.size() > state.in_output_buffer_length) {
+		return NT_STATUS_BUFFER_TOO_SMALL;
+	}
+	return NT_STATUS_OK;
+}
+
+
 #endif /* __smbd_open__hxx__ */
 

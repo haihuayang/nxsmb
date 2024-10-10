@@ -10,6 +10,7 @@
 #include "include/librpc/security.hxx"
 #include "smbd_share.hxx"
 #include "smbd_conf.hxx"
+#include "smbd_ntacl.hxx"
 #include "smbd_stats.hxx"
 
 /* this guid indicates NDR encoding in a protocol tower */
@@ -31,7 +32,9 @@ static const idl::ndr_syntax_id PNIO = {
 static const x_smbd_object_meta_t ipc_object_meta{0, 0, 1, 0, 0, 0, 0, 
 	X_SMB2_FILE_ATTRIBUTE_NORMAL};
 
-static const x_smbd_stream_meta_t ipc_stream_meta{0, 4096, false};
+static const x_smbd_stream_meta_t ipc_stream_meta{0, 4096, true};
+
+static std::shared_ptr<idl::security_descriptor> ipc_psd;
 
 struct x_ncacn_packet_t
 {
@@ -760,6 +763,51 @@ static NTSTATUS ipc_object_op_flush(
 	return NT_STATUS_NOT_IMPLEMENTED;
 }
 
+struct ipc_get_file_info_t
+{
+	const x_smbd_object_meta_t &get_object_meta(x_smbd_open_t *smbd_open) const
+	{
+		return ipc_object_meta;
+	}
+	const x_smbd_stream_meta_t &get_stream_meta(x_smbd_open_t *smbd_open) const
+	{
+		return ipc_stream_meta;
+	}
+	NTSTATUS get_stream_info(x_smbd_open_t *smbd_open, x_smbd_requ_state_getinfo_t &state) const
+	{
+		return NT_STATUS_INVALID_PARAMETER;
+	}
+};
+
+struct ipc_get_security_descriptor_t
+{
+	NTSTATUS operator()(std::shared_ptr<idl::security_descriptor> &ret,
+			x_smbd_open_t *smbd_open,
+			uint32_t in_additional) const
+	{
+		if (in_additional == (idl::SECINFO_DACL|idl::SECINFO_OWNER|idl::SECINFO_GROUP)) {
+			ret = ipc_psd;
+		} else {
+			ret = std::make_shared<idl::security_descriptor>();
+			ret->revision = idl::SECURITY_DESCRIPTOR_REVISION_1;
+			ret->type = idl::SEC_DESC_DACL_PRESENT;
+			if ((in_additional & idl::SECINFO_OWNER)) {
+				ret->owner_sid = ipc_psd->owner_sid;
+			}
+
+			if ((in_additional & idl::SECINFO_GROUP)) {
+				ret->group_sid = ipc_psd->group_sid;
+			}
+
+			if ((in_additional & idl::SECINFO_DACL)) {
+				ret->dacl = ipc_psd->dacl;
+				ret->type |= idl::SEC_DESC_DACL_PRESENT;
+			}
+		}
+		return NT_STATUS_OK;
+	}
+};
+
 static NTSTATUS ipc_object_op_getinfo(
 		x_smbd_object_t *smbd_object,
 		x_smbd_open_t *smbd_open,
@@ -767,28 +815,11 @@ static NTSTATUS ipc_object_op_getinfo(
 		x_smbd_requ_t *smbd_requ,
 		std::unique_ptr<x_smbd_requ_state_getinfo_t> &state)
 {
-	/* TODO should access check ? */
-	/* SMB2_GETINFO_FILE, SMB2_FILE_STANDARD_INFO */
 	if (state->in_info_class == x_smb2_info_class_t::FILE) {
-		if (state->in_info_level == x_smb2_info_level_t::FILE_STANDARD_INFORMATION) {
-			if (state->in_output_buffer_length < sizeof(x_smb2_file_standard_info_t)) {
-				return NT_STATUS_BUFFER_OVERFLOW;
-			}
-			state->out_data.resize(sizeof(x_smb2_file_standard_info_t));
-			x_smb2_file_standard_info_t *info =
-				(x_smb2_file_standard_info_t *)state->out_data.data();
-			
-			info->allocation_size = X_H2LE64(4096);
-			info->end_of_file = 0;
-			info->nlinks = X_H2LE32(1);
-			info->delete_pending = 1; // not sure why samba assign 1
-			info->directory = 0;
-			info->unused = 0;
-			return NT_STATUS_OK;
-		} else if (state->in_info_level == x_smb2_info_level_t::FILE_STREAM_INFORMATION) {
-			return NT_STATUS_INVALID_PARAMETER;
-		}
-	} 
+		return x_smbd_open_getinfo_file(smbd_open, *state, ipc_get_file_info_t());
+	} else if (state->in_info_class == x_smb2_info_class_t::SECURITY) {
+		return x_smbd_open_getinfo_security(smbd_open, *state, ipc_get_security_descriptor_t());
+	}
 	return NT_STATUS_NOT_SUPPORTED;
 }
 
@@ -1236,5 +1267,27 @@ std::shared_ptr<x_smbd_share_t> x_smbd_ipc_share_create()
 
 int x_smbd_ipc_init()
 {
+	auto psd = std::make_shared<idl::security_descriptor>();
+	psd->revision = idl::SECURITY_DESCRIPTOR_REVISION_1;
+	psd->type = idl::security_descriptor_type(idl::SEC_DESC_SELF_RELATIVE|idl::SEC_DESC_DACL_PRESENT);
+	psd->owner_sid = psd->group_sid = std::make_shared<idl::dom_sid>(global_sid_System);
+	psd->dacl = std::make_shared<idl::security_acl>();
+	psd->dacl->revision = idl::security_acl_revision(idl::NT4_ACL_REVISION);
+	append_ace(psd->dacl->aces,
+			idl::SEC_ACE_TYPE_ACCESS_ALLOWED,
+			idl::security_ace_flags(0x0),
+			0x12019b,
+			global_sid_Anonymous);
+	append_ace(psd->dacl->aces,
+			idl::SEC_ACE_TYPE_ACCESS_ALLOWED,
+			idl::security_ace_flags(0x0),
+			0x12019b,
+			global_sid_World);
+	append_ace(psd->dacl->aces,
+			idl::SEC_ACE_TYPE_ACCESS_ALLOWED,
+			idl::security_ace_flags(0x0),
+			0x1f01ff, // TODO
+			global_sid_System);
+	ipc_psd = psd;
 	return 0;
 }

@@ -52,6 +52,12 @@ void x_smbd_get_file_info(x_smb2_file_network_open_info_t &info,
 		const x_smbd_object_meta_t &object_meta,
 		const x_smbd_stream_meta_t &stream_meta);
 
+void x_smbd_get_file_info(x_smb2_file_compression_info_t &info,
+		const x_smbd_stream_meta_t &stream_meta);
+
+void x_smbd_get_file_info(x_smb2_file_attribute_tag_info_t &info,
+		const x_smbd_object_meta_t &object_meta);
+
 bool x_smbd_marshall_dir_entry(x_smb2_chain_marshall_t &marshall,
 		const x_smbd_object_meta_t &object_meta,
 		const x_smbd_stream_meta_t &stream_meta,
