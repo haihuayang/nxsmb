@@ -118,6 +118,10 @@ static const x_smbd_object_ops_t simplefs_object_ops = {
 	posixfs_op_destroy_open,
 };
 
+static void x_smbd_volume_init_local(std::shared_ptr<x_smbd_volume_t> &smbd_volume)
+{
+	smbd_volume->ops = &simplefs_object_ops;
+}
 
 struct simplefs_share_t : x_smbd_share_t
 {
@@ -202,10 +206,13 @@ std::shared_ptr<x_smbd_share_t> x_smbd_simplefs_share_create(
 		x_smbd_feature_option_t smb_encrypt,
 		std::vector<std::shared_ptr<x_smbd_volume_t>> &&smbd_volumes)
 {
-	X_ASSERT(smbd_volumes.size() > 0);
+	/* only support one volume for now */
+	X_TODO_ASSERT(smbd_volumes.size() == 1);
 	for (auto &smbd_volume: smbd_volumes) {
-		int err = x_smbd_volume_init(smbd_volume, &simplefs_object_ops,
-				node_name == smbd_volume->owner_node);
+		X_TODO_ASSERT(node_name == smbd_volume->owner_node);
+		x_smbd_volume_init_local(smbd_volume);
+
+		int err = smbd_volume->ops->init_volume(smbd_volume);
 		X_TODO_ASSERT(err == 0);
 	}
 	std::shared_ptr<simplefs_share_t> ret =
@@ -215,12 +222,7 @@ std::shared_ptr<x_smbd_share_t> x_smbd_simplefs_share_create(
 
 	auto &volumes = ret->smbd_volumes;
 	auto &root_volume = volumes[0];
-	if (root_volume->owner_node == node_name) {
-		ret->root_object = root_volume->ops->open_root_object(root_volume);
-	} else {
-		/* TODO */
-		ret->root_object = nullptr;
-	}
+	ret->root_object = root_volume->ops->open_root_object(root_volume);
 
 	for (auto &volume: volumes) {
 		if (node_name == volume->owner_node) {

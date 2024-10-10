@@ -1111,7 +1111,7 @@ static std::shared_ptr<x_smbd_volume_t> ipc_create_volume()
 {
 	std::shared_ptr<x_smbd_volume_t> smbd_volume = 
 		x_smbd_volume_create({0, 0}, 0, {}, {}, 0);
-	x_smbd_volume_init(smbd_volume, &x_smbd_ipc_object_ops, true);
+	smbd_volume->ops = &x_smbd_ipc_object_ops;
 	return smbd_volume;
 }
 

@@ -54,20 +54,6 @@ std::shared_ptr<x_smbd_volume_t> x_smbd_volume_create(
 			owner_node, path, allocation_roundup_size);
 }
 
-int x_smbd_volume_init(std::shared_ptr<x_smbd_volume_t> &smbd_volume,
-		const x_smbd_object_ops_t *ops,
-		bool is_local)
-{
-	X_ASSERT(!smbd_volume->ops);
-	smbd_volume->ops = ops;
-	smbd_volume->is_local = is_local;
-
-	if (is_local) {
-		return ops->init_volume(smbd_volume);
-	}
-	return 0;
-}
-
 NTSTATUS x_smbd_volume_get_fd_path(std::string &path,
 		const x_smbd_volume_t &smbd_volume,
 		int fd)
