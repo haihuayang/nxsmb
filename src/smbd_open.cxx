@@ -759,12 +759,13 @@ static bool check_app_instance(x_smbd_object_t *smbd_object,
 		x_smbd_sharemode_t *sharemode,
 		const x_smbd_requ_state_create_t &state)
 {
-	X_LOG(SMB, DBG, "valid_flags=0x%x app_instance_id=%s app_instance_version=%lu.%lu",
-			state.valid_flags, x_tostr(state.in_context_app_instance_id).c_str(),
-			state.in_context_app_instance_version_high,
-			state.in_context_app_instance_version_low);
+	X_LOG(SMB, DBG, "contexts=0x%x app_instance_id=%s app_instance_version=%lu.%lu",
+			state.in_context.bits,
+			x_tostr(state.in_context.app_instance_id).c_str(),
+			state.in_context.app_instance_version_high,
+			state.in_context.app_instance_version_low);
 
-	if ((state.valid_flags & x_smbd_open_state_t::F_APP_INSTANCE_ID) == 0) {
+	if ((state.in_context.bits & X_SMB2_CONTEXT_FLAG_APP_INSTANCE_ID) == 0) {
 		return true;
 	}
 
@@ -775,7 +776,7 @@ static bool check_app_instance(x_smbd_object_t *smbd_object,
 		next_open = open_list.next(curr_open);
 		auto &open_state = curr_open->open_state;
 		if ((open_state.flags & x_smbd_open_state_t::F_APP_INSTANCE_ID) == 0 ||
-				!(open_state.app_instance_id == state.in_context_app_instance_id)) {
+				!(open_state.app_instance_id == state.in_context.app_instance_id)) {
 			continue;
 		}
 		if (open_state.client_guid == x_smbd_conn_curr_client_guid()) {
@@ -784,11 +785,11 @@ static bool check_app_instance(x_smbd_object_t *smbd_object,
 		if ((open_state.app_instance_version_high != 0 ||
 					open_state.app_instance_version_low != 0) &&
 				(open_state.app_instance_version_high >
-				 state.in_context_app_instance_version_high ||
+				 state.in_context.app_instance_version_high ||
 				 (open_state.app_instance_version_high ==
-				  state.in_context_app_instance_version_high &&
+				  state.in_context.app_instance_version_high &&
 				  open_state.app_instance_version_low >=
-				  state.in_context_app_instance_version_low))) {
+				  state.in_context.app_instance_version_low))) {
 			return false;
 		}
 		x_smbd_tcon_t *smbd_tcon;
@@ -918,7 +919,7 @@ static NTSTATUS grant_oplock(x_smbd_object_t *smbd_object,
 
 	x_smb2_lease_t *lease = nullptr;
 	if (oplock_level == X_SMB2_OPLOCK_LEVEL_LEASE) {
-		lease = &state.lease;
+		lease = &state.in_context.lease;
 		requested = x_convert<uint8_t>(lease->state);
 	}
 
@@ -1012,7 +1013,7 @@ static NTSTATUS grant_oplock(x_smbd_object_t *smbd_object,
 		out_oplock_level = X_SMB2_OPLOCK_LEVEL_LEASE;
 		bool new_lease = false;
 		if (!x_smbd_lease_grant(state.smbd_lease,
-					state.lease,
+					state.in_context.lease,
 					granted, requested,
 					smbd_object,
 					smbd_stream,
@@ -1349,7 +1350,7 @@ static NTSTATUS smbd_open_create(
 				smbd_stream,
 				*smbd_user, *state,
 				state->in_file_attributes,
-				state->in_allocation_size);
+				state->in_context.allocation_size);
 		if (!NT_STATUS_IS_OK(status)) {
 			X_SMBD_REQU_RETURN_STATUS(smbd_requ, status);
 		}
@@ -1403,7 +1404,7 @@ static NTSTATUS smbd_open_create_intl(x_smbd_open_t **psmbd_open,
 		}
 
 	} else if (in_disposition == x_smb2_create_disposition_t::OPEN) {
-		if (state->in_timestamp != 0) {
+		if (state->in_context.twrp != 0) {
 			X_TODO; /* TODO snapshot */
 			return NT_STATUS_OBJECT_NAME_NOT_FOUND;
 		}
@@ -1425,7 +1426,7 @@ static NTSTATUS smbd_open_create_intl(x_smbd_open_t **psmbd_open,
 		}
 
 	} else if (in_disposition == x_smb2_create_disposition_t::OPEN_IF) {
-		if (state->in_timestamp != 0) {
+		if (state->in_context.twrp != 0) {
 			/* TODO snapshot */
 			return NT_STATUS_OBJECT_NAME_NOT_FOUND;
 		} else if (!smbd_object->exists()) {
@@ -1461,7 +1462,7 @@ static NTSTATUS smbd_open_create_intl(x_smbd_open_t **psmbd_open,
 		 * different. FILE_SUPERSEDE deletes an existing file
 		 * (requiring delete access) then recreates it.
 		 */
-		if (state->in_timestamp != 0) {
+		if (state->in_context.twrp != 0) {
 			/* TODO */
 			return NT_STATUS_OBJECT_NAME_NOT_FOUND;
 		} else if (!smbd_object->exists()) {
@@ -1534,7 +1535,7 @@ static NTSTATUS smbd_open_create_intl(x_smbd_open_t **psmbd_open,
 		if (!NT_STATUS_IS_OK(status)) {
 			return status;
 		}
-		if (state->in_contexts & X_SMB2_CONTEXT_FLAG_MXAC) {
+		if (state->in_context.bits & X_SMB2_CONTEXT_FLAG_MXAC) {
 			state->out_contexts |= X_SMB2_CONTEXT_FLAG_MXAC;
 		}
 	}
@@ -1567,7 +1568,7 @@ static NTSTATUS smbd_open_create_intl(x_smbd_open_t **psmbd_open,
 	 * without QFID Windows 10 client query
 	 * couple getinfo x_smb2_info_level_t::FILE_NETWORK_OPEN_INFORMATION
 	 */
-	if (state->in_contexts & X_SMB2_CONTEXT_FLAG_QFID) {
+	if (state->in_context.bits & X_SMB2_CONTEXT_FLAG_QFID) {
 		x_put_le64(state->out_qfid_info, smbd_object->meta.inode);
 		x_put_le64(state->out_qfid_info + 8, smbd_object->meta.fsid);
 		memset(state->out_qfid_info + 16, 0, 16);
@@ -1687,17 +1688,17 @@ void x_smbd_save_durable(x_smbd_open_t *smbd_open,
 
 	x_smbd_dhmode_t mode = x_smbd_dhmode_t::NONE;
 	uint32_t durable_timeout_msec = 0;
-	if (state.in_contexts & X_SMB2_CONTEXT_FLAG_DH2Q) {
-		if ((state.in_dh_flags & X_SMB2_DHANDLE_FLAG_PERSISTENT) &&
+	if (state.in_context.bits & X_SMB2_CONTEXT_FLAG_DH2Q) {
+		if ((state.in_context.dh_flags & X_SMB2_DHANDLE_FLAG_PERSISTENT) &&
 				x_smbd_tcon_get_continuously_available(smbd_tcon)) {
 			mode = x_smbd_dhmode_t::PERSISTENT;
-			durable_timeout_msec = state.in_dh_timeout;
+			durable_timeout_msec = state.in_context.dh_timeout;
 		} else if (x_smbd_tcon_get_durable_handle(smbd_tcon)) {
 			mode = x_smbd_dhmode_t::DURABLE;
-			durable_timeout_msec = state.in_dh_timeout;
+			durable_timeout_msec = state.in_context.dh_timeout;
 		}
 
-	} else if (state.in_contexts & X_SMB2_CONTEXT_FLAG_DHNQ) {
+	} else if (state.in_context.bits & X_SMB2_CONTEXT_FLAG_DHNQ) {
 		if (x_smbd_tcon_get_durable_handle(smbd_tcon)) {
 			mode = x_smbd_dhmode_t::DURABLE;
 		}
@@ -1860,17 +1861,17 @@ static NTSTATUS smbd_open_reconnect(x_smbd_open_t *smbd_open,
 	}
 	X_ASSERT(!smbd_open->smbd_tcon);
 
-	if ((state.in_contexts & X_SMB2_CONTEXT_FLAG_DH2C) &&
-			!(open_state.create_guid == state.in_create_guid)) {
+	if ((state.in_context.bits & X_SMB2_CONTEXT_FLAG_DH2C) &&
+			!(open_state.create_guid == state.in_context.create_guid)) {
 		X_LOG(SMB, NOTICE, "create_guid %s!=%s",
 				x_tostr(open_state.create_guid).c_str(),
-				x_tostr(state.in_create_guid).c_str());
+				x_tostr(state.in_context.create_guid).c_str());
 		return NT_STATUS_OBJECT_NAME_NOT_FOUND;
 	}
 	if (smbd_open->smbd_lease) {
 		if (!x_smbd_lease_match_get(smbd_open->smbd_lease,
 					x_smbd_conn_curr_client_guid(),
-					state.lease)) {
+					state.in_context.lease)) {
 			X_LOG(SMB, NOTICE, "lease not match");
 			return NT_STATUS_OBJECT_NAME_NOT_FOUND;
 		}
@@ -1909,7 +1910,7 @@ static NTSTATUS smbd_open_reconnect(x_smbd_open_t *smbd_open,
 NTSTATUS x_smbd_open_op_reconnect(x_smbd_requ_t *smbd_requ,
 		std::unique_ptr<x_smbd_requ_state_create_t> &state)
 {
-	uint64_t id_persistent = state->in_dh_id_persistent;
+	uint64_t id_persistent = state->in_context.dh_id_persistent;
 	std::shared_ptr<x_smbd_volume_t> smbd_volume;
 	uint64_t id_volatile = x_smbd_share_lookup_durable(
 			smbd_volume, x_smbd_tcon_get_share(smbd_requ->smbd_tcon),

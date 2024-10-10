@@ -10,14 +10,14 @@ using smbd_requ_table_t = x_idtable_t<x_smbd_requ_t, x_idtable_64_traits_t>;
 static smbd_requ_table_t *g_smbd_requ_table;
 
 x_smbd_requ_state_create_t::x_smbd_requ_state_create_t(const x_smb2_uuid_t &client_guid)
-	: in_client_guid(client_guid), in_create_guid{0, 0}
+	: in_client_guid(client_guid)
 {
 }
 
 x_smbd_requ_state_create_t::~x_smbd_requ_state_create_t()
 {
 	if (replay_reserved) {
-		x_smbd_replay_cache_clear(in_client_guid, in_create_guid);
+		x_smbd_replay_cache_clear(in_client_guid, in_context.create_guid);
 	}
 	if (smbd_object) {
 		x_smbd_release_object_and_stream(smbd_object, smbd_stream);

@@ -12,6 +12,7 @@
 #include "buf.hxx"
 #include "misc.hxx"
 #include "include/ntstatus.hxx"
+#include "include/librpc/security.hxx"
 
 enum {
 	X_SMB1_MAGIC = '\xffSMB',
@@ -601,6 +602,20 @@ enum {
 	X_SMB2_CREATE_TAG_AAPL = 'AAPL',
 };
 
+enum {
+	X_SMB2_CONTEXT_FLAG_MXAC = 1,
+	X_SMB2_CONTEXT_FLAG_QFID = 2,
+	X_SMB2_CONTEXT_FLAG_ALSI = 4,
+	X_SMB2_CONTEXT_FLAG_RQLS = 8,
+	X_SMB2_CONTEXT_FLAG_DHNQ = 0x10,
+	X_SMB2_CONTEXT_FLAG_DHNC = 0x20,
+	X_SMB2_CONTEXT_FLAG_DH2Q = 0x40,
+	X_SMB2_CONTEXT_FLAG_DH2C = 0x80,
+	X_SMB2_CONTEXT_FLAG_APP_INSTANCE_ID = 0x100,
+	X_SMB2_CONTEXT_FLAG_APP_INSTANCE_VERSION = 0x200,
+};
+
+
 using x_smb2_uuid_bytes_t = std::array<uint8_t, 16>;
 
 struct x_smb2_uuid_t
@@ -773,7 +788,7 @@ struct x_smb2_lease_t
 	uint64_t duration;
 	x_smb2_lease_key_t parent_key;
 	uint16_t epoch;
-	uint8_t version;
+	uint8_t version{0};
 	uint8_t unused;
 };
 
@@ -1511,6 +1526,34 @@ static inline bool x_smb2_file_id_is_nul(uint64_t file_id_persistent,
 	return file_id_persistent == UINT64_MAX &&
 		file_id_volatile == UINT64_MAX;
 }
+
+struct x_smb2_create_requ_context_t
+{
+	uint32_t bits = 0;
+	x_smb2_lease_t lease;
+	uint64_t allocation_size;
+	uint64_t twrp = 0;
+	uint64_t dh_id_persistent;
+	uint64_t dh_id_volatile;
+	uint32_t dh_timeout;
+	uint32_t dh_flags;
+	x_smb2_uuid_t create_guid{0,0};
+	x_smb2_uuid_t app_instance_id;
+	uint64_t app_instance_version_high = 0;
+	uint64_t app_instance_version_low = 0;
+	std::shared_ptr<idl::security_descriptor> security_descriptor;
+
+	bool decode(uint16_t dialect, const uint8_t *data, uint32_t length);
+};
+
+uint32_t x_smb2_create_resp_context_encode(
+		uint8_t *out_ptr,
+		const x_smb2_lease_t *lease,
+		const uint32_t *maximal_access,
+		const uint8_t *qfid_info,
+		uint32_t out_contexts,
+		uint32_t durable_flags,
+		uint32_t durable_timeout_msec);
 
 #endif /* __smb2__hxx__ */
 

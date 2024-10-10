@@ -723,6 +723,14 @@ static posixfs_open_t *posixfs_open_create(
 		x_smb2_create_action_t create_action,
 		uint8_t oplock_level)
 {
+	uint32_t valid_flags = state.valid_flags;
+	if (state.in_context.bits & X_SMB2_CONTEXT_FLAG_APP_INSTANCE_ID) {
+		valid_flags |= x_smbd_open_state_t::F_APP_INSTANCE_ID;
+	}
+	if (state.in_context.bits & X_SMB2_CONTEXT_FLAG_APP_INSTANCE_VERSION) {
+		valid_flags |= x_smbd_open_state_t::F_APP_INSTANCE_VERSION;
+	}
+
 	return posixfs_open_create_intl(pstatus, smbd_tcon, posixfs_object,
 			state.smbd_stream,
 			oplock_level == X_SMB2_OPLOCK_LEVEL_LEASE ?
@@ -731,14 +739,14 @@ static posixfs_open_t *posixfs_open_create(
 				state.granted_access,
 				state.in_share_access,
 				x_smbd_conn_curr_client_guid(),
-				state.in_create_guid,
-				state.in_context_app_instance_id,
-				state.in_context_app_instance_version_high,
-				state.in_context_app_instance_version_low,
-				state.lease.parent_key,
+				state.in_context.create_guid,
+				state.in_context.app_instance_id,
+				state.in_context.app_instance_version_high,
+				state.in_context.app_instance_version_low,
+				state.in_context.lease.parent_key,
 				state.open_priv_data,
 				x_smbd_tcon_get_user(smbd_tcon)->get_owner_sid(),
-				state.valid_flags,
+				valid_flags,
 				0,
 				create_action,
 				oplock_level},
@@ -802,7 +810,7 @@ static NTSTATUS posixfs_new_object(
 		return status;
 	}
 
-	if (state.in_security_descriptor) {
+	if (state.in_context.security_descriptor) {
 		/* From samba create_file_unixpath
 		 * According to the MS documentation, the only time the security
 		 * descriptor is applied to the opened file is iff we *created* the
@@ -813,11 +821,11 @@ static NTSTATUS posixfs_new_object(
 		 * the granted access before we call set_sd
 		 * Patch for bug #2242 from Tom Lackemann <cessnatomny@yahoo.com>.
 		 */
-		status = normalize_sec_desc(*state.in_security_descriptor,
+		status = normalize_sec_desc(*state.in_context.security_descriptor,
 				smbd_user,
 				FILE_GENERIC_ALL,
 				state.in_create_options & X_SMB2_CREATE_OPTION_DIRECTORY_FILE);
-		psd = state.in_security_descriptor;
+		psd = state.in_context.security_descriptor;
 	} else {
 		status = make_child_sec_desc(psd, parent_psd,
 				smbd_user,
@@ -2928,7 +2936,7 @@ NTSTATUS x_smbd_posixfs_create_object(x_smbd_object_t *smbd_object,
 		x_smbd_schedule_notify(
 				NOTIFY_ACTION_ADDED,
 				uint16_t((state.in_create_options & X_SMB2_CREATE_OPTION_DIRECTORY_FILE) ? FILE_NOTIFY_CHANGE_DIR_NAME : FILE_NOTIFY_CHANGE_FILE_NAME),
-				state.lease.parent_key,
+				state.in_context.lease.parent_key,
 				x_smbd_conn_curr_client_guid(),
 				smbd_object->parent_object,
 				nullptr,
@@ -2946,7 +2954,7 @@ NTSTATUS x_smbd_posixfs_create_object(x_smbd_object_t *smbd_object,
 		// TODO should it fail for large in_allocation_size?
 		++create_count;
 		uint32_t allocation_size = x_convert_assert<uint32_t>(
-				std::min(state.in_allocation_size, posixfs_ads_max_length));
+				std::min(state.in_context.allocation_size, posixfs_ads_max_length));
 		posixfs_ads_t *posixfs_ads = posixfs_ads_from_smbd_stream(smbd_stream);
 		posixfs_ads->xattr_name = posixfs_get_ads_xattr_name(
 				x_str_convert_assert<std::string>(smbd_stream->name));
@@ -2955,7 +2963,7 @@ NTSTATUS x_smbd_posixfs_create_object(x_smbd_object_t *smbd_object,
 		x_smbd_schedule_notify(
 				NOTIFY_ACTION_ADDED_STREAM,
 				FILE_NOTIFY_CHANGE_STREAM_NAME,
-				state.lease.parent_key,
+				state.in_context.lease.parent_key,
 				x_smbd_conn_curr_client_guid(),
 				smbd_object->parent_object,
 				nullptr,
@@ -3134,16 +3142,16 @@ NTSTATUS x_smbd_posixfs_create_open(x_smbd_open_t **psmbd_open,
 		x_smbd_schedule_notify(
 				NOTIFY_ACTION_MODIFIED,
 				notify_actions,
-				state->lease.parent_key,
+				state->in_context.lease.parent_key,
 				x_smbd_conn_curr_client_guid(),
 				state->smbd_object->parent_object, nullptr,
 				posixfs_object->base.path_base, {});
 		reload_meta = true;
 	} else if (create_action != x_smb2_create_action_t::WAS_CREATED
-			&& (state->in_contexts & X_SMB2_CONTEXT_FLAG_ALSI)) {
+			&& (state->in_context.bits & X_SMB2_CONTEXT_FLAG_ALSI)) {
 		status = posixfs_set_allocation_size_intl(posixfs_object,
 				nullptr,
-				state->in_allocation_size,
+				state->in_context.allocation_size,
 				state->smbd_lease,
 				oplock_level);
 		X_TODO_ASSERT(NT_STATUS_IS_OK(status));
@@ -3154,9 +3162,9 @@ NTSTATUS x_smbd_posixfs_create_open(x_smbd_open_t **psmbd_open,
 				&posixfs_object->get_meta(),
 				&posixfs_object->base.sharemode.meta);
 		X_TODO_ASSERT(err == 0);
-		if ((state->in_contexts & X_SMB2_CONTEXT_FLAG_ALSI)) {
+		if ((state->in_context.bits & X_SMB2_CONTEXT_FLAG_ALSI)) {
 			posixfs_object->base.sharemode.meta.allocation_size =
-				state->in_allocation_size;
+				state->in_context.allocation_size;
 		}
 		posixfs_object->statex_modified = false;
 	}

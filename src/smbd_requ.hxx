@@ -219,7 +219,6 @@ struct x_smbd_requ_state_create_t : x_smbd_requ_state_async_t
 
 	uint8_t in_oplock_level;
 	uint8_t out_oplock_level;
-	uint32_t in_contexts{0};
 	uint32_t out_contexts{0};
 
 	uint32_t in_impersonation_level;
@@ -228,11 +227,6 @@ struct x_smbd_requ_state_create_t : x_smbd_requ_state_async_t
 	uint32_t in_share_access;
 	x_smb2_create_disposition_t in_create_disposition;
 	uint32_t in_create_options;
-	std::shared_ptr<idl::security_descriptor> in_security_descriptor;
-
-	x_smb2_lease_t lease;
-	uint64_t in_allocation_size{0};
-	uint64_t in_timestamp{0};
 
 	bool is_dollar_data = false;
 	bool end_with_sep = false;
@@ -255,24 +249,7 @@ struct x_smbd_requ_state_create_t : x_smbd_requ_state_async_t
 	long open_priv_data;
 
 	uint32_t valid_flags = 0;
-	uint64_t in_dh_id_persistent;
-	uint64_t in_dh_id_volatile;
-	uint32_t in_dh_timeout;
-	uint32_t in_dh_flags;
-	x_smb2_uuid_t in_create_guid;
-	x_smb2_uuid_t in_context_app_instance_id;
-	uint64_t in_context_app_instance_version_high = 0;
-	uint64_t in_context_app_instance_version_low = 0;
-};
-
-enum {
-	X_SMB2_CONTEXT_FLAG_MXAC = 1,
-	X_SMB2_CONTEXT_FLAG_QFID = 2,
-	X_SMB2_CONTEXT_FLAG_ALSI = 4,
-	X_SMB2_CONTEXT_FLAG_DHNQ = 8,
-	X_SMB2_CONTEXT_FLAG_DHNC = 0x10,
-	X_SMB2_CONTEXT_FLAG_DH2Q = 0x20,
-	X_SMB2_CONTEXT_FLAG_DH2C = 0x40,
+	x_smb2_create_requ_context_t in_context;
 };
 
 struct x_smbd_requ_state_sesssetup_t : x_smbd_requ_state_async_t
