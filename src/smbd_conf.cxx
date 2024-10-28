@@ -868,6 +868,18 @@ x_smbd_find_share(const x_smbd_conf_t &smbd_conf,
 	/* TODO USER_SHARE */
 }
 
+std::shared_ptr<x_smbd_share_t>
+x_smbd_find_share(const x_smbd_conf_t &smbd_conf, const x_smb2_uuid_t &uuid)
+{
+	for (auto &smbd_share: smbd_conf.smbd_shares) {
+		if (smbd_share->uuid == uuid) {
+			return smbd_share;
+		}
+	}
+	return nullptr;
+	/* TODO USER_SHARE */
+}
+
 std::pair<std::shared_ptr<x_smbd_share_t>, std::shared_ptr<x_smbd_volume_t>>
 x_smbd_resolve_share(const char16_t *in_share_s, const char16_t *in_share_e)
 {

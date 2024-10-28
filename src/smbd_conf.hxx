@@ -149,6 +149,8 @@ std::shared_ptr<x_smbd_conf_t> x_smbd_conf_get();
 std::pair<std::shared_ptr<x_smbd_share_t>, std::shared_ptr<x_smbd_volume_t>>
 x_smbd_resolve_share(const char16_t *in_share_s, const char16_t *in_share_e);
 
+std::shared_ptr<x_smbd_share_t>
+x_smbd_find_share(const x_smbd_conf_t &smbd_conf, const x_smb2_uuid_t &uuid);
 std::shared_ptr<x_smbd_share_t> x_smbd_find_share(const x_smbd_conf_t &smbd_conf,
 		const char16_t *in_share_s, const char16_t *in_share_e);
 static inline std::shared_ptr<x_smbd_share_t> x_smbd_find_share(
