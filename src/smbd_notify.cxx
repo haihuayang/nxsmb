@@ -167,8 +167,8 @@ void x_smbd_notify_change(
 		x_smbd_object_t *smbd_object,
 		uint32_t action,
 		uint32_t filter,
-		x_smb2_lease_key_t &ignore_lease_key,
-		x_smb2_uuid_t &client_guid,
+		const x_smb2_lease_key_t &ignore_lease_key,
+		const x_smb2_uuid_t &client_guid,
 		std::u16string &path_base,
 		std::u16string &new_path_base)
 {
