@@ -411,12 +411,6 @@ static inline bool x_smbd_requ_verify_creditcharge(
 	return needed_charge <= credit_charge;
 }
 
-struct x_smbd_scheduler_t
-{
-	x_smbd_scheduler_t();
-	~x_smbd_scheduler_t();
-};
-
 void x_smbd_schedule_release_open(x_smbd_open_t *smbd_open);
 void x_smbd_schedule_release_lease(x_smbd_lease_t *smbd_lease);
 void x_smbd_schedule_wakeup_oplock_pending_list(x_smbd_requ_id_list_t &oplock_pending_list);

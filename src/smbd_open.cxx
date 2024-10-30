@@ -8,6 +8,7 @@
 #include "include/nttime.hxx"
 #include "smbd_access.hxx"
 #include "smbd_dcerpc_srvsvc.hxx"
+#include "nxfsd_sched.hxx"
 
 enum {
 	SMBD_OPEN_S_INIT,
@@ -389,7 +390,7 @@ static bool smbd_open_close_non_requ(x_smbd_open_t *smbd_open,
 
 static long smbd_open_durable_timeout(x_timer_job_t *timer)
 {
-	x_smbd_scheduler_t smbd_scheduler;
+	x_nxfsd_scheduler_t smbd_scheduler;
 
 	x_smbd_open_t *smbd_open = X_CONTAINER_OF(timer,
 			x_smbd_open_t, durable_timer);
