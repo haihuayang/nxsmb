@@ -128,6 +128,9 @@ struct x_smbd_open_t
 struct x_smbd_object_t;
 struct x_smbd_object_ops_t
 {
+	x_smbd_object_t *(*open_root_object)(
+			std::shared_ptr<x_smbd_volume_t> &smbd_volume);
+
 	NTSTATUS (*create_object)(x_smbd_object_t *smbd_object,
 			x_smbd_stream_t *smbd_stream,
 			const x_smbd_user_t &smbd_user,
@@ -144,6 +147,7 @@ struct x_smbd_object_ops_t
 			uint8_t oplock_level);
 
 	NTSTATUS (*open_durable)(x_smbd_open_t *&smbd_open,
+			std::shared_ptr<x_smbd_share_t> &smbd_share,
 			std::shared_ptr<x_smbd_volume_t> &smbd_volume,
 			const x_smbd_durable_t &durable);
 	NTSTATUS (*read)(x_smbd_object_t *smbd_object,
@@ -534,10 +538,11 @@ static inline NTSTATUS x_smbd_create_object(x_smbd_object_t *smbd_object,
 }
 
 static inline NTSTATUS x_smbd_open_durable(x_smbd_open_t *&smbd_open,
+		std::shared_ptr<x_smbd_share_t> &smbd_share,
 		std::shared_ptr<x_smbd_volume_t> &smbd_volume,
 		const x_smbd_durable_t &durable)
 {
-	return smbd_volume->ops->open_durable(smbd_open, smbd_volume, durable);
+	return smbd_volume->ops->open_durable(smbd_open, smbd_share, smbd_volume, durable);
 }
 
 static inline void x_smbd_object_lease_granted(x_smbd_object_t *smbd_object,
@@ -668,7 +673,7 @@ void x_smbd_release_object_and_stream(x_smbd_object_t *smbd_object,
 void x_smbd_release_object(x_smbd_object_t *smbd_object);
 
 NTSTATUS x_smbd_open_object(x_smbd_object_t **psmbd_object,
-		const std::shared_ptr<x_smbd_volume_t> &smbd_volume,
+		const std::shared_ptr<x_smbd_share_t> &smbd_share,
 		const std::u16string &path,
 		long path_priv_data,
 		bool create_if);

@@ -887,6 +887,13 @@ static const x_dcerpc_iface_t *find_iface_by_syntax(
 	return nullptr;
 }
 
+static x_smbd_object_t *ipc_op_open_root_object(
+		std::shared_ptr<x_smbd_volume_t> &smbd_volume)
+{
+	X_TODO;
+	return nullptr;
+}
+
 static NTSTATUS ipc_create_object(x_smbd_object_t *smbd_object,
 		x_smbd_stream_t *smbd_stream,
 		const x_smbd_user_t &smbd_user,
@@ -989,6 +996,7 @@ static void ipc_op_lease_granted(x_smbd_object_t *smbd_object,
 
 static int ipc_op_init_volume(std::shared_ptr<x_smbd_volume_t> &smbd_volume)
 {
+#if 0
 	auto ipc_root = new x_smbd_ipc_root_t(smbd_volume);
 	smbd_volume->root_object = &ipc_root->base;
 
@@ -1007,6 +1015,7 @@ static int ipc_op_init_volume(std::shared_ptr<x_smbd_volume_t> &smbd_volume)
 		x_smbd_release_object(parent_object);
 		++priv_data;
 	}
+#endif
 	return 0;
 }
 
@@ -1086,6 +1095,7 @@ static void ipc_op_destroy_open(x_smbd_open_t *smbd_open)
 
 
 static const x_smbd_object_ops_t x_smbd_ipc_object_ops = {
+	ipc_op_open_root_object,
 	ipc_create_object,
 	ipc_create_open,
 	nullptr,
@@ -1120,7 +1130,7 @@ static std::shared_ptr<x_smbd_volume_t> ipc_create_volume()
 {
 	std::shared_ptr<x_smbd_volume_t> smbd_volume = 
 		x_smbd_volume_create({0, 0}, "IPC$", u"IPC$", {}, {}, 0);
-	x_smbd_volume_init(smbd_volume, &x_smbd_ipc_object_ops);
+	x_smbd_volume_init(smbd_volume, &x_smbd_ipc_object_ops, true);
 	return smbd_volume;
 }
 
@@ -1198,7 +1208,29 @@ struct ipc_share_t : x_smbd_share_t
 
 std::shared_ptr<x_smbd_share_t> x_smbd_ipc_share_create()
 {
-	return std::make_shared<ipc_share_t>();
+	auto ipc_share = std::make_shared<ipc_share_t>();
+	auto &smbd_volume = ipc_share->smbd_volume;
+
+	auto ipc_root = new x_smbd_ipc_root_t(smbd_volume);
+	ipc_share->root_object = &ipc_root->base;
+
+	long priv_data = 0;
+	/* TODO create root_object */
+	x_smbd_object_t *parent_object = ipc_share->root_object;
+	for (auto &item: ipc_tbl) {
+		auto [ ok, hash ] = x_smbd_hash_path(*smbd_volume,
+				parent_object, item.name);
+		X_ASSERT(ok);
+		x_smbd_object_t *smbd_object;
+		NTSTATUS status = x_smbd_object_lookup(&smbd_object,
+				smbd_volume, parent_object, item.name,
+				priv_data, true, hash, true);
+		X_ASSERT(NT_STATUS_IS_OK(status));
+		x_smbd_release_object(parent_object);
+		++priv_data;
+	}
+
+	return ipc_share;
 }
 
 int x_smbd_ipc_init()

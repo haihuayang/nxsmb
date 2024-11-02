@@ -210,9 +210,13 @@ static int smbd_durable_open_log(x_smbd_durable_db_t *durable_db, uint64_t next_
 	return fd;
 }
 
-void x_smbd_durable_db_restore(std::shared_ptr<x_smbd_volume_t> &smbd_volume,
+void x_smbd_durable_db_restore(
+		std::shared_ptr<x_smbd_share_t> &smbd_share,
+		std::shared_ptr<x_smbd_volume_t> &smbd_volume,
 		x_smbd_durable_db_t *durable_db,
-		NTSTATUS (*restore_fn)(std::shared_ptr<x_smbd_volume_t> &smbd_volume,
+		NTSTATUS (*restore_fn)(
+			std::shared_ptr<x_smbd_share_t> &smbd_share,
+			std::shared_ptr<x_smbd_volume_t> &smbd_volume,
 			x_smbd_durable_t &durable, uint64_t timeout_msec))
 {
 	uint64_t next_file_no;
@@ -248,7 +252,7 @@ void x_smbd_durable_db_restore(std::shared_ptr<x_smbd_volume_t> &smbd_volume,
 					id_persistent);
 			continue;
 		}
-		NTSTATUS status = restore_fn(smbd_volume, *durable, timeout_msec);
+		NTSTATUS status = restore_fn(smbd_share, smbd_volume, *durable, timeout_msec);
 		if (!NT_STATUS_IS_OK(status)) {
 			X_LOG(SMB, WARN, "failed to restore open %lx:%lx",
 					id_persistent,

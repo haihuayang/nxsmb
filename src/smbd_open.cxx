@@ -1762,15 +1762,15 @@ NTSTATUS x_smbd_open_op_create(x_smbd_requ_t *smbd_requ,
 	x_smbd_tcon_t *smbd_tcon = smbd_requ->smbd_tcon;
 
 	if (!state->smbd_object) {
-		std::shared_ptr<x_smbd_volume_t> smbd_volume;
-		std::u16string path;
 		long path_priv_data{};
 		long open_priv_data{};
 
+		state->smbd_share = x_smbd_tcon_get_share(smbd_requ->smbd_tcon);
+#if 0
 		status = x_smbd_tcon_resolve_path(smbd_requ->smbd_tcon,
 				state->in_path,
 				smbd_requ->in_smb2_hdr.flags & X_SMB2_HDR_FLAG_DFS,
-				state->smbd_share, smbd_volume, path,
+				state->smbd_share, path,
 				path_priv_data, open_priv_data);
 		if (!NT_STATUS_IS_OK(status)) {
 			X_LOG(SMB, WARN, "resolve_path failed");
@@ -1781,18 +1781,18 @@ NTSTATUS x_smbd_open_op_create(x_smbd_requ_t *smbd_requ,
 				x_str_todebug(state->in_path).c_str(),
 				x_str_todebug(path).c_str(),
 				path_priv_data, open_priv_data);
-
+#endif
 		x_smbd_object_t *smbd_object = nullptr;
 		x_smbd_stream_t *smbd_stream = nullptr;
 		status = x_smbd_open_object(&smbd_object,
-				smbd_volume, path,
+				state->smbd_share, state->in_path,
 				path_priv_data, true);
 		if (!NT_STATUS_IS_OK(status)) {
 			return status;
 		}
 
 		if (!state->in_ads_name.empty()) {
-			status = smbd_volume->ops->open_stream(smbd_object,
+			status = smbd_object->smbd_volume->ops->open_stream(smbd_object,
 				&smbd_stream,
 				state->in_ads_name);
 			if (!NT_STATUS_IS_OK(status)) {
@@ -1939,6 +1939,7 @@ NTSTATUS x_smbd_open_op_reconnect(x_smbd_requ_t *smbd_requ,
 }
 
 NTSTATUS x_smbd_open_restore(
+		std::shared_ptr<x_smbd_share_t> &smbd_share,
 		std::shared_ptr<x_smbd_volume_t> &smbd_volume,
 		x_smbd_durable_t &smbd_durable,
 		uint64_t timeout_msec)
@@ -1965,7 +1966,7 @@ NTSTATUS x_smbd_open_restore(
 		X_ASSERT(!smbd_open);
 	}
 
-	status = x_smbd_open_durable(smbd_open, smbd_volume,
+	status = x_smbd_open_durable(smbd_open, smbd_share, smbd_volume,
 			smbd_durable);
 	if (!NT_STATUS_IS_OK(status)) {
 		return status;

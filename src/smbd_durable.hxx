@@ -53,9 +53,13 @@ x_smbd_durable_db_t *x_smbd_durable_db_open(int fd);
 
 void x_smbd_durable_db_release(x_smbd_durable_db_t *durable_db);
 
-void x_smbd_durable_db_restore(std::shared_ptr<x_smbd_volume_t> &smbd_volume,
+void x_smbd_durable_db_restore(
+		std::shared_ptr<x_smbd_share_t> &smbd_share,
+		std::shared_ptr<x_smbd_volume_t> &smbd_volume,
 		x_smbd_durable_db_t *durable_db,
-		NTSTATUS (*restore_fn)(std::shared_ptr<x_smbd_volume_t> &smbd_volume,
+		NTSTATUS (*restore_fn)(
+			std::shared_ptr<x_smbd_share_t> &smbd_share,
+			std::shared_ptr<x_smbd_volume_t> &smbd_volume,
 			x_smbd_durable_t &durable, uint64_t timeout_msec));
 
 struct x_smbd_durable_db_visitor_t

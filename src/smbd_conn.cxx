@@ -17,7 +17,7 @@ struct x_smbd_srv_t
 	x_tp_ddlist_t<fdevt_user_conn_traits> fdevt_user_list;
 };
 
-X_DECLARE_MEMBER_TRAITS(requ_conn_traits, x_smbd_requ_t, conn_link)
+X_DECLARE_MEMBER_TRAITS(smbd_requ_conn_traits, x_smbd_requ_t, conn_link)
 struct x_smbd_conn_t
 {
 	enum { MAX_MSG = 4 };
@@ -51,7 +51,7 @@ struct x_smbd_conn_t
 	// x_bufref_t *send_buf_head{}, *send_buf_tail{};
 
 	x_ddlist_t chan_list;
-	x_tp_ddlist_t<requ_conn_traits> pending_requ_list;
+	x_tp_ddlist_t<smbd_requ_conn_traits> pending_requ_list;
 	x_tp_ddlist_t<fdevt_user_conn_traits> fdevt_user_list;
 };
 

@@ -98,6 +98,7 @@ static NTSTATUS simplefs_op_create_open(x_smbd_open_t **psmbd_open,
 }
 
 static const x_smbd_object_ops_t simplefs_object_ops = {
+	posixfs_op_open_root_object,
 	x_smbd_posixfs_create_object,
 	simplefs_op_create_open,
 	posixfs_op_open_durable,
@@ -212,15 +213,32 @@ std::shared_ptr<x_smbd_share_t> x_smbd_simplefs_share_create(
 		x_smbd_feature_option_t smb_encrypt,
 		std::vector<std::shared_ptr<x_smbd_volume_t>> &&smbd_volumes)
 {
+	X_ASSERT(smbd_volumes.size() > 0);
 	for (auto &smbd_volume: smbd_volumes) {
-		/* only init local volumes */
-		if (node_name == smbd_volume->owner_node) {
-			int err = x_smbd_volume_init(smbd_volume, &simplefs_object_ops);
-			X_TODO_ASSERT(err == 0);
-		}
+		int err = x_smbd_volume_init(smbd_volume, &simplefs_object_ops,
+				node_name == smbd_volume->owner_node);
+		X_TODO_ASSERT(err == 0);
 	}
-	return std::make_shared<simplefs_share_t>(uuid, name,
+	std::shared_ptr<simplefs_share_t> ret =
+		std::make_shared<simplefs_share_t>(uuid, name,
 			std::move(name_16), std::move(name_l16),
 			share_flags, smb_encrypt, std::move(smbd_volumes));
+
+	auto &volumes = ret->smbd_volumes;
+	auto &root_volume = volumes[0];
+	if (root_volume->owner_node == node_name) {
+		ret->root_object = root_volume->ops->open_root_object(root_volume);
+	} else {
+		/* TODO */
+		ret->root_object = nullptr;
+	}
+
+	for (auto &volume: volumes) {
+		if (node_name == volume->owner_node) {
+			x_smbd_volume_restore_durable(ret, volume);
+		}
+	}
+
+	return ret;
 }
 

@@ -12,6 +12,8 @@
 struct posixfs_open_t;
 struct posixfs_object_t;
 
+x_smbd_object_t *posixfs_op_open_root_object(
+		std::shared_ptr<x_smbd_volume_t> &smbd_volume);
 NTSTATUS posixfs_create_open(x_smbd_open_t **psmbd_open,
 		std::shared_ptr<x_smbd_volume_t> &smbd_volume,
 		const std::u16string &path, uint64_t path_data,
@@ -87,6 +89,7 @@ NTSTATUS posixfs_op_object_delete(
 		x_smbd_stream_t *smbd_stream,
 		x_smbd_open_t *smbd_open);
 NTSTATUS posixfs_op_open_durable(x_smbd_open_t *&smbd_open,
+		std::shared_ptr<x_smbd_share_t> &smbd_share,
 		std::shared_ptr<x_smbd_volume_t> &smbd_volume,
 		const x_smbd_durable_t &durable);
 

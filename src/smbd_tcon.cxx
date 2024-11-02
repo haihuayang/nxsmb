@@ -161,7 +161,7 @@ x_smbd_tcon_t *x_smbd_tcon_lookup(uint32_t id, const x_smbd_sess_t *smbd_sess)
 		return nullptr;
 	}
 }
-
+#if 0
 NTSTATUS x_smbd_tcon_resolve_path(x_smbd_tcon_t *smbd_tcon,
 		const std::u16string &in_path,
 		bool dfs,
@@ -182,7 +182,7 @@ NTSTATUS x_smbd_tcon_resolve_path(x_smbd_tcon_t *smbd_tcon,
 	}
 	return status;
 }
-
+#endif
 static inline void smbd_tcon_unlink_open(x_smbd_tcon_t *smbd_tcon, x_dlink_t *link)
 {
 	smbd_tcon->open_list.remove(link);

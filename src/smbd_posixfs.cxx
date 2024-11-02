@@ -228,7 +228,8 @@ static int posixfs_object_get_fd(x_smbd_object_t *smbd_object)
 
 static inline int posixfs_get_root_fd(x_smbd_volume_t &smbd_volume)
 {
-	return posixfs_object_get_fd(smbd_volume.root_object);
+	return smbd_volume.root_fd;
+	// return posixfs_object_get_fd(smbd_volume.root_object);
 }
 
 static uint64_t roundup_allocation_size(uint64_t allocation_size,
@@ -311,7 +312,7 @@ static bool convert_to_unix(std::string &ret, const std::u16string &req_path)
 		});
 }
 
-static bool convert_from_unix(std::u16string &ret, const std::string &req_path)
+static inline bool convert_from_unix(std::u16string &ret, const std::string &req_path)
 {
 	/* we suppose file system support case insenctive */
 	/* TODO does smb allow leading '/'? if so need to remove it */
@@ -2642,6 +2643,7 @@ static void posixfs_object_release_stream(posixfs_object_t *posixfs_object,
 }
 
 static NTSTATUS posixfs_open_object_by_handle(posixfs_object_t **ret,
+		std::shared_ptr<x_smbd_share_t> &smbd_share,
 		std::shared_ptr<x_smbd_volume_t> &smbd_volume,
 		const x_smbd_file_handle_t &file_handle)
 {
@@ -2666,7 +2668,7 @@ static NTSTATUS posixfs_open_object_by_handle(posixfs_object_t **ret,
 
 	/* TODO reuse the fd previous opened */
 	x_smbd_object_t *smbd_object;
-       	status = x_smbd_open_object(&smbd_object, smbd_volume, path, 0, true);
+	status = x_smbd_open_object(&smbd_object, smbd_share, path, 0, true);
 	if (!NT_STATUS_IS_OK(status)) {
 		close(fd);
 		return status;
@@ -2722,12 +2724,13 @@ static x_smbd_lease_t *create_durable_lease(posixfs_object_t *posixfs_object,
 }
 
 NTSTATUS posixfs_op_open_durable(x_smbd_open_t *&smbd_open,
+		std::shared_ptr<x_smbd_share_t> &smbd_share,
 		std::shared_ptr<x_smbd_volume_t> &smbd_volume,
 		const x_smbd_durable_t &smbd_durable)
 {
 	posixfs_object_t *posixfs_object = nullptr;
 	NTSTATUS status = posixfs_open_object_by_handle(&posixfs_object,
-			smbd_volume, smbd_durable.file_handle);
+			smbd_share, smbd_volume, smbd_durable.file_handle);
 	if (!NT_STATUS_IS_OK(status)) {
 		return status;
 	}
@@ -3223,7 +3226,7 @@ static int smbd_volume_read(int vol_fd,
 	return 0;
 }
 
-static posixfs_object_t *posixfs_create_root_object(
+static inline posixfs_object_t *posixfs_create_root_object(
 		std::shared_ptr<x_smbd_volume_t> &smbd_volume,
 		int rootdir_fd)
 {
@@ -3239,6 +3242,24 @@ static posixfs_object_t *posixfs_create_root_object(
 	posixfs_object->base.flags = x_smbd_object_t::flag_initialized;
 	return posixfs_object;
 }
+
+x_smbd_object_t *posixfs_op_open_root_object(
+		std::shared_ptr<x_smbd_volume_t> &smbd_volume)
+{
+	X_ASSERT(smbd_volume->is_local);
+	posixfs_object_t *posixfs_object = new posixfs_object_t(0, smbd_volume, nullptr,
+			u"", 0);
+
+	auto lock = std::lock_guard(posixfs_object->base.mutex);
+	int err = posixfs_statex_get(smbd_volume->root_fd,
+			&posixfs_object->get_meta(),
+			&posixfs_object->base.sharemode.meta);
+	X_ASSERT(err == 0);
+	posixfs_object_set_fd(posixfs_object, smbd_volume->root_fd);
+	posixfs_object->base.flags = x_smbd_object_t::flag_initialized;
+	return &posixfs_object->base;
+}
+
 
 int posixfs_op_init_volume(std::shared_ptr<x_smbd_volume_t> &smbd_volume)
 {
@@ -3269,10 +3290,7 @@ int posixfs_op_init_volume(std::shared_ptr<x_smbd_volume_t> &smbd_volume)
 	smbd_volume->volume_id = vol_id;
 	smbd_volume->smbd_durable_db = durable_db;
 
-	posixfs_object_t *posixfs_root_object = posixfs_create_root_object(smbd_volume, rootdir_fd);
-	smbd_volume->root_object = &posixfs_root_object->base;
-
-	x_smbd_volume_restore_durable(smbd_volume);
+	smbd_volume->root_fd = rootdir_fd;
 	return 0;
 }
 

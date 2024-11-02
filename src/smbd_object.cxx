@@ -197,7 +197,7 @@ struct x_smbd_file_handle_t
 	unsigned char f_handle[MAX_HANDLE_SZ];
 };
 */
-static uint64_t hash_file_handle(const x_smbd_file_handle_t &fh)
+static inline uint64_t hash_file_handle(const x_smbd_file_handle_t &fh)
 {
 	return SpookyHash::Hash64(&fh.base, sizeof(struct file_handle) +
 			fh.base.handle_bytes, 0);
@@ -251,16 +251,15 @@ static NTSTATUS smbd_object_openat(
 	return NT_STATUS_OK;
 }
 
-
 static NTSTATUS open_parent_object(x_smbd_object_t **p_smbd_object,
 		std::u16string &base_name,
-		const std::shared_ptr<x_smbd_volume_t> &smbd_volume,
+		x_smbd_object_t *root_object,
 		const std::u16string &path)
 {
 	X_ASSERT(!path.empty());
 
 	std::u16string::size_type pos, last_pos = 0;
-	x_smbd_object_t *dir_object = smbd_volume->root_object;
+	x_smbd_object_t *dir_object = root_object;
 	x_smbd_object_t *sub_object = nullptr;
 	dir_object->incref();
 	NTSTATUS status;
@@ -273,7 +272,7 @@ static NTSTATUS open_parent_object(x_smbd_object_t **p_smbd_object,
 		}
 		std::u16string comp = path.substr(last_pos, pos - last_pos);
 		status = smbd_object_openat(&sub_object,
-				smbd_volume, dir_object, comp);
+				dir_object->smbd_volume, dir_object, comp);
 		x_smbd_release_object(dir_object);
 		if (!NT_STATUS_IS_OK(status)) {
 			return status;
@@ -291,34 +290,34 @@ static NTSTATUS open_parent_object(x_smbd_object_t **p_smbd_object,
 	return NT_STATUS_OK;
 }
 
-
 NTSTATUS x_smbd_open_object(x_smbd_object_t **p_smbd_object,
-		const std::shared_ptr<x_smbd_volume_t> &smbd_volume,
+		const std::shared_ptr<x_smbd_share_t> &smbd_share,
 		const std::u16string &path,
 		long path_priv_data,
 		bool create_if)
 {
 	if (path.empty()) {
-		smbd_volume->root_object->incref();
-		*p_smbd_object = smbd_volume->root_object;
+		smbd_share->root_object->incref();
+		*p_smbd_object = smbd_share->root_object;
 		return NT_STATUS_OK;
 	}
 
 	x_smbd_object_t *parent_object, *smbd_object;
 	std::u16string path_base;
 	NTSTATUS status = open_parent_object(&parent_object, path_base,
-			smbd_volume, path);
+			smbd_share->root_object, path);
 	if (!NT_STATUS_IS_OK(status)) {
 		return status;
 	}
 
-	auto [ ok, path_hash ] = x_smbd_hash_path(*smbd_volume, parent_object, path_base);
+	auto [ ok, path_hash ] = x_smbd_hash_path(*parent_object->smbd_volume,
+			parent_object, path_base);
 	if (!ok) {
 		x_smbd_release_object(parent_object);
 		return NT_STATUS_ILLEGAL_CHARACTER;
 	}
 
-	status = x_smbd_object_lookup(&smbd_object, smbd_volume,
+	status = x_smbd_object_lookup(&smbd_object, parent_object->smbd_volume,
 			parent_object, path_base,
 			path_priv_data, create_if, path_hash, true);
 	x_smbd_release_object(parent_object);
@@ -326,7 +325,7 @@ NTSTATUS x_smbd_open_object(x_smbd_object_t **p_smbd_object,
 		return status;
 	}
 
-	status = smbd_object_initialize_if(*smbd_volume, smbd_object);
+	status = smbd_object_initialize_if(*parent_object->smbd_volume, smbd_object);
 
 	if (!NT_STATUS_IS_OK(status)) {
 		x_smbd_release_object(smbd_object);
@@ -335,7 +334,6 @@ NTSTATUS x_smbd_open_object(x_smbd_object_t **p_smbd_object,
 	*p_smbd_object = smbd_object;
 	return status;
 }
-
 
 /* rename_internals_fsp */
 static NTSTATUS rename_object_intl(
@@ -448,7 +446,7 @@ static void smbd_rename_cancel(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_req
 	x_smbd_conn_post_cancel(smbd_conn, smbd_requ, NT_STATUS_CANCELLED);
 }
 
-static NTSTATUS parent_compatible_open(x_smbd_object_t *smbd_object)
+static inline NTSTATUS parent_compatible_open(x_smbd_object_t *smbd_object)
 {
 	const x_smbd_open_t *curr_open;
 	auto &open_list = smbd_object->sharemode.open_list;
@@ -466,7 +464,7 @@ static NTSTATUS parent_compatible_open(x_smbd_object_t *smbd_object)
 	return NT_STATUS_OK;
 }
 
-static void smbd_object_set_parent(x_smbd_object_t *smbd_object,
+static inline void smbd_object_set_parent(x_smbd_object_t *smbd_object,
 		x_smbd_object_t *new_parent_object)
 {
 	auto old_parent_object = smbd_object->parent_object;
@@ -498,8 +496,10 @@ NTSTATUS x_smbd_object_rename(x_smbd_object_t *smbd_object,
 	NTSTATUS status;
 
 	if (!smbd_open->smbd_stream) {
+		auto smbd_share = x_smbd_tcon_get_share(smbd_open->smbd_tcon);
 		status = open_parent_object(&new_parent_object, new_path_base,
-				smbd_volume, state->in_path);
+				smbd_share->root_object,
+				state->in_path);
 		if (!NT_STATUS_IS_OK(status)) {
 			return status;
 		}

@@ -35,7 +35,10 @@ x_smbd_volume_t::~x_smbd_volume_t()
 	if (smbd_durable_db) {
 		x_smbd_durable_db_release(smbd_durable_db);
 	}
-	x_smbd_release_object(root_object);
+	if (root_fd != -1) {
+		close(root_fd);
+	}
+	// x_smbd_release_object(root_object);
 }
 
 std::shared_ptr<x_smbd_volume_t> x_smbd_volume_create(
@@ -52,12 +55,17 @@ std::shared_ptr<x_smbd_volume_t> x_smbd_volume_create(
 }
 
 int x_smbd_volume_init(std::shared_ptr<x_smbd_volume_t> &smbd_volume,
-		const x_smbd_object_ops_t *ops)
+		const x_smbd_object_ops_t *ops,
+		bool is_local)
 {
 	X_ASSERT(!smbd_volume->ops);
 	smbd_volume->ops = ops;
+	smbd_volume->is_local = is_local;
 
-	return ops->init_volume(smbd_volume);
+	if (is_local) {
+		return ops->init_volume(smbd_volume);
+	}
+	return 0;
 }
 
 NTSTATUS x_smbd_volume_get_fd_path(std::string &path,
@@ -147,9 +155,11 @@ int x_smbd_volume_remove_durable(x_smbd_volume_t &smbd_volume,
 			id_persistent);
 }
 
-int x_smbd_volume_restore_durable(std::shared_ptr<x_smbd_volume_t> &smbd_volume)
+int x_smbd_volume_restore_durable(std::shared_ptr<x_smbd_share_t> smbd_share,
+		std::shared_ptr<x_smbd_volume_t> &smbd_volume)
 {
-	x_smbd_durable_db_restore(smbd_volume, smbd_volume->smbd_durable_db,
+	x_smbd_durable_db_restore(smbd_share, smbd_volume,
+			smbd_volume->smbd_durable_db,
 			x_smbd_open_restore);
 	return 0;
 }
