@@ -41,18 +41,16 @@ struct x_smbd_share_spec_t
 struct x_smbd_volume_spec_t
 {
 	x_smbd_volume_spec_t(const x_smb2_uuid_t &uuid,
-			std::string &&name_8,
-			std::u16string &&name_l16,
+			uint16_t volume_id,
 			std::string &&node,
 			std::string &&path)
-		: uuid(uuid), name_8(name_8), name_l16(name_l16)
+		: uuid(uuid), volume_id(volume_id)
 		, owner_node(node), path(path)
 	{
 	}
 
 	const x_smb2_uuid_t uuid;
-	const std::string name_8;
-	const std::u16string name_l16;
+	const uint16_t volume_id;
 	const std::string owner_node;
 	const std::string path;
 

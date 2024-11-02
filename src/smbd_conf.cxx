@@ -254,8 +254,9 @@ static bool parse_volume_map(
 		std::vector<std::unique_ptr<x_smbd_volume_spec_t>> &volumes,
 		const std::string &str)
 {
+	const char delim = ':';
 	for (auto &token: split_string(str)) {
-		auto sep = token.find(':');
+		auto sep = token.find(delim);
 		if (sep == std::string::npos) {
 			return false;
 		}
@@ -267,26 +268,24 @@ static bool parse_volume_map(
 		}
 
 		auto begin = ++sep;
-		sep = token.find(':', begin);
-		if (sep == std::string::npos) {
+		char *end;
+		unsigned long volume_id = strtoul(token.c_str() + begin, &end, 0);
+		if (*end != delim) {
 			return false;
 		}
-		std::string name = token.substr(begin, sep - begin);
-		std::u16string name_l16;
-		if (!x_str_convert(name_l16, name, x_tolower_t())) {
-			X_LOG(CONF, ERR, "invalid volume name '%s'", name.c_str());
+		if (volume_id > 0xffff) {
+			X_LOG(CONF, ERR, "invalid volume id %lu", volume_id);
 			return false;
 		}
 
-		begin = ++sep;
-		sep = token.find(':', begin);
+		begin = end - token.c_str() + 1;
+		sep = token.find(delim, begin);
 		if (sep == std::string::npos) {
 			return false;
 		}
 		std::string node = token.substr(begin, sep - begin);
 
-		volumes.push_back(std::make_unique<x_smbd_volume_spec_t>(uuid, std::move(name),
-				std::move(name_l16),
+		volumes.push_back(std::make_unique<x_smbd_volume_spec_t>(uuid, uint16_t(volume_id),
 				std::move(node),
 				token.substr(sep + 1)));
 	}
@@ -365,9 +364,9 @@ static bool smbd_conf_add_share(x_smbd_conf_t &smbd_conf,
 
 	for (auto &smbd_volume: smbd_volumes) {
 		if (smbd_volume->owner_share) {
-			X_LOG(CONF, ERR, "Share '%s' cannot use volume '%s', owned by share '%s'",
+			X_LOG(CONF, ERR, "Share '%s' cannot use volume %u, owned by share '%s'",
 					share_spec.name.c_str(),
-					smbd_volume->name_8.c_str(),
+					smbd_volume->volume_id,
 					smbd_volume->owner_share->name.c_str());
 			return false;
 		}
@@ -963,7 +962,7 @@ static int reload_volumes(x_smbd_conf_t &smbd_conf,
 		} else {
 			/* new volume */
 			smbd_conf.smbd_volumes.push_back(x_smbd_volume_create(spec->uuid,
-						spec->name_8, spec->name_l16,
+						spec->volume_id,
 						spec->owner_node, spec->path,
 						smbd_conf.allocation_roundup_size));
 		}
@@ -1075,7 +1074,7 @@ int x_smbd_init_shares(x_smbd_conf_t &smbd_conf)
 {
 	for (auto &vs: smbd_conf.volume_specs) {
 		smbd_conf.smbd_volumes.push_back(x_smbd_volume_create(vs->uuid,
-					vs->name_8, vs->name_l16,
+					vs->volume_id,
 					vs->owner_node, vs->path,
 					smbd_conf.allocation_roundup_size));
 	}

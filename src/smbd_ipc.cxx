@@ -1129,7 +1129,7 @@ static const x_smbd_object_ops_t x_smbd_ipc_object_ops = {
 static std::shared_ptr<x_smbd_volume_t> ipc_create_volume()
 {
 	std::shared_ptr<x_smbd_volume_t> smbd_volume = 
-		x_smbd_volume_create({0, 0}, "IPC$", u"IPC$", {}, {}, 0);
+		x_smbd_volume_create({0, 0}, 0, {}, {}, 0);
 	x_smbd_volume_init(smbd_volume, &x_smbd_ipc_object_ops, true);
 	return smbd_volume;
 }
@@ -1157,10 +1157,10 @@ x_smbd_ipc_object_t::x_smbd_ipc_object_t(const std::shared_ptr<x_smbd_volume_t> 
 
 struct ipc_share_t : x_smbd_share_t
 {
-	ipc_share_t()
+	ipc_share_t(const std::shared_ptr<x_smbd_volume_t> &smbd_volume)
 		: x_smbd_share_t({0, 0}, "ipc$", u"IPC$", u"ipc$", 0,
 				x_smbd_feature_option_t::disabled)
-		, smbd_volume(ipc_get_volume())
+		, smbd_volume(smbd_volume)
 	{
 	}
 	uint8_t get_type() const override {
@@ -1208,8 +1208,9 @@ struct ipc_share_t : x_smbd_share_t
 
 std::shared_ptr<x_smbd_share_t> x_smbd_ipc_share_create()
 {
-	auto ipc_share = std::make_shared<ipc_share_t>();
-	auto &smbd_volume = ipc_share->smbd_volume;
+	auto smbd_volume = ipc_get_volume();
+	auto ipc_share = std::make_shared<ipc_share_t>(smbd_volume);
+	smbd_volume->owner_share = ipc_share;
 
 	auto ipc_root = new x_smbd_ipc_root_t(smbd_volume);
 	ipc_share->root_object = &ipc_root->base;

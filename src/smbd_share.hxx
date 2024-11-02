@@ -40,8 +40,7 @@ struct x_smbd_object_ops_t;
 struct x_smbd_volume_t
 {
 	x_smbd_volume_t(const x_smb2_uuid_t &uuid,
-			const std::string &name,
-			const std::u16string &name_l16,
+			uint16_t volume_id,
 			const std::string &owner_node,
 			const std::string &path,
 			uint32_t allocation_roundup_size);
@@ -50,19 +49,18 @@ struct x_smbd_volume_t
 
 	const x_smbd_object_ops_t *ops = nullptr;
 	const x_smb2_uuid_t uuid;
-	const std::string name_8;
-	const std::u16string name_l16;
 	const std::string owner_node;
 	const std::string path;
 
+	std::shared_ptr<x_smbd_share_t> owner_share;
+
 	const uint32_t allocation_roundup_size;
 
-	std::shared_ptr<x_smbd_share_t> owner_share;
-	uint16_t volume_id;
+	const uint16_t volume_id;
 	bool is_local;
 	std::atomic<uint32_t> watch_tree_cnt{0};
-
 	int root_fd = -1;
+
 	// x_smbd_object_t *root_object = nullptr;
 
 	x_smbd_durable_db_t *smbd_durable_db;
@@ -140,7 +138,7 @@ struct x_smbd_share_t
 
 std::shared_ptr<x_smbd_volume_t> x_smbd_volume_create(
 		const x_smb2_uuid_t &uuid,
-		const std::string &name_8, const std::u16string &name_l16,
+		uint16_t volume_id,
 		const std::string &owner_node,
 		const std::string &path,
 		uint32_t allocation_roundup_size);

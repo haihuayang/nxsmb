@@ -3195,15 +3195,8 @@ ssize_t posixfs_object_getxattr(x_smbd_object_t *smbd_object,
 }
 
 static int smbd_volume_read(int vol_fd,
-		uint16_t &vol_id,
 		int &rootdir_fd, x_smbd_durable_db_t *&durable_db)
 {
-	uint16_t id;
-	int err = x_smbd_volume_read_id(vol_fd, id);
-	if (err) {
-		return err;
-	}
-
 	int rfd = openat(vol_fd, "root", O_RDONLY);
 	if (rfd < 0) {
 		X_LOG(SMB, ERR, "cannot open rootdir, errno=%d", errno);
@@ -3221,7 +3214,6 @@ static int smbd_volume_read(int vol_fd,
 	durable_db = x_smbd_durable_db_init(vol_fd,
 			0x100000, 300); /* TODO the number */
 
-	vol_id = id;
 	rootdir_fd = rfd;
 	return 0;
 }
@@ -3263,31 +3255,26 @@ x_smbd_object_t *posixfs_op_open_root_object(
 
 int posixfs_op_init_volume(std::shared_ptr<x_smbd_volume_t> &smbd_volume)
 {
-	uint16_t vol_id = 0xffffu;
 	int rootdir_fd = -1;
 	x_smbd_durable_db_t *durable_db = nullptr;
 
 	if (!smbd_volume->path.empty()) {
 		int vol_fd = open(smbd_volume->path.c_str(), O_RDONLY);
 		if (vol_fd < 0) {
-			X_LOG(SMB, ERR, "cannot open volume %s, %d",
-					smbd_volume->name_8.c_str(), errno);
+			X_LOG(SMB, ERR, "cannot open volume %u, %d",
+					smbd_volume->volume_id, errno);
 			return -1;
 		}
 
-		int ret = smbd_volume_read(vol_fd, vol_id, rootdir_fd, durable_db);
+		int ret = smbd_volume_read(vol_fd, rootdir_fd, durable_db);
 		close(vol_fd);
 		if (ret < 0) {
-			X_LOG(SMB, ERR, "cannot read volume %s, %d",
-					smbd_volume->name_8.c_str(), -ret);
+			X_LOG(SMB, ERR, "cannot read volume %u, %d",
+					smbd_volume->volume_id, -ret);
 			return -1;
 		}
 	}
 
-	X_LOG(SMB, NOTICE, "volume '%s' with id=0x%x",
-			smbd_volume->name_8.c_str(), vol_id);
-
-	smbd_volume->volume_id = vol_id;
 	smbd_volume->smbd_durable_db = durable_db;
 
 	smbd_volume->root_fd = rootdir_fd;

@@ -2067,7 +2067,7 @@ static std::u16string get_path(const x_smbd_open_t *smbd_open)
 {
 	auto smbd_object = smbd_open->smbd_object;
 	std::u16string ret =  u"C:\\"
-		+ smbd_object->smbd_volume->name_l16
+		+ smbd_object->smbd_volume->owner_share->name_16
 		+ u"\\" + x_smbd_object_get_path(smbd_object);
 	if (smbd_open->smbd_stream) {
 		ret += u":" + smbd_open->smbd_stream->name;

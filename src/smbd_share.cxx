@@ -19,14 +19,14 @@ static x_smb2_uuid_t create_volume_id(const std::string &name)
 }
 #endif
 x_smbd_volume_t::x_smbd_volume_t(const x_smb2_uuid_t &uuid,
-		const std::string &name_8,
-		const std::u16string &name_l16,
+		uint16_t volume_id,
 		const std::string &owner_node,
 		const std::string &path,
 		uint32_t allocation_roundup_size)
-	: uuid(uuid), name_8(name_8), name_l16(name_l16)
+	: uuid(uuid)
 	, owner_node(owner_node), path(path)
 	, allocation_roundup_size(allocation_roundup_size)
+	, volume_id(volume_id)
 {
 }
 
@@ -43,14 +43,14 @@ x_smbd_volume_t::~x_smbd_volume_t()
 
 std::shared_ptr<x_smbd_volume_t> x_smbd_volume_create(
 		const x_smb2_uuid_t &uuid,
-		const std::string &name_8, const std::u16string &name_l16,
+		uint16_t volume_id,
 		const std::string &owner_node,
 		const std::string &path,
 		uint32_t allocation_roundup_size)
 {
-	X_LOG(CONF, NOTICE, "add volume '%s', path='%s'",
-			name_8.c_str(), path.c_str());
-	return std::make_shared<x_smbd_volume_t>(uuid, name_8, name_l16,
+	X_LOG(CONF, NOTICE, "add volume %u '%s', path='%s'",
+			volume_id, x_tostr(uuid).c_str(), path.c_str());
+	return std::make_shared<x_smbd_volume_t>(uuid, volume_id,
 			owner_node, path, allocation_roundup_size);
 }
 

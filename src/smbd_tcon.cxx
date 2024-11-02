@@ -264,11 +264,7 @@ int x_smbd_tcon_table_init(uint32_t count)
 
 std::u16string x_smbd_tcon_get_volume_label(const x_smbd_tcon_t *smbd_tcon)
 {
-	if (smbd_tcon->smbd_volume) {
-		return smbd_tcon->smbd_volume->name_l16;
-	} else {
-		return smbd_tcon->smbd_share->name_16;
-	}
+	return smbd_tcon->smbd_share->name_16;
 }
 
 struct x_smbd_tcon_list_t : x_ctrl_handler_t
