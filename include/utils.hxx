@@ -386,6 +386,18 @@ struct x_bitmap_t
 	uint32_t max;
 };
 
+template <class T>
+static inline bool x_bit_any(T v1, T v2)
+{
+	return (v1 & v2) != 0;
+}
+
+template <class T>
+static inline bool x_bit_all(T v1, T v2)
+{
+	return (v1 & v2) == v2;
+}
+
 
 #endif /* __utils__hxx__ */
 

@@ -90,18 +90,6 @@ struct x_smb2_create_context_header_t
 	// uint32_t unused1;
 };
 
-template <class T>
-static inline bool x_bit_any(T v1, T v2)
-{
-	return (v1 & v2) != 0;
-}
-
-template <class T>
-static inline bool x_bit_all(T v1, T v2)
-{
-	return (v1 & v2) == v2;
-}
-
 static bool decode_contexts(uint16_t dialect, x_smbd_requ_state_create_t &state,
 		const uint8_t *data, uint32_t length, bool &has_RqLs)
 {
