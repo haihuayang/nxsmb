@@ -64,9 +64,9 @@ struct x_bufref_t
 	uint8_t *back(uint32_t l) {
 		/* only one ref, so we can modify it */
 		X_ASSERT(buf->ref == 1);
-		X_ASSERT(offset >= 4);
-		offset -= 4;
-		length += 4;
+		X_ASSERT(offset >= l);
+		offset -= l;
+		length += l;
 		return buf->data + offset;
 	}
 
