@@ -41,7 +41,7 @@ static bool decode_smb2_lease(x_smb2_lease_t &lease,
 		lease.key = in_lease->key;
 		lease.state = X_LE2H32(in_lease->state);
 		lease.flags = X_LE2H32(in_lease->flags) & X_SMB2_LEASE_FLAG_PARENT_LEASE_KEY_SET;
-		lease.duration = X_LE2H32(in_lease->duration);
+		lease.duration = X_LE2H64(in_lease->duration);
 		if (lease.flags & X_SMB2_LEASE_FLAG_PARENT_LEASE_KEY_SET) {
 			lease.parent_key = in_lease->parent_key;
 		}
@@ -51,7 +51,7 @@ static bool decode_smb2_lease(x_smb2_lease_t &lease,
 		lease.key = in_lease->key;
 		lease.state = X_LE2H32(in_lease->state);
 		lease.flags = 0;
-		lease.duration = X_LE2H32(in_lease->duration);
+		lease.duration = X_LE2H64(in_lease->duration);
 		lease.version = 1;
 	} else {
 		return false;
