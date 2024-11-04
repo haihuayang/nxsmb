@@ -14,8 +14,6 @@ enum {
 struct x_smbd_srv_t
 {
 	x_strm_srv_t base;
-	std::mutex mutex;
-	x_tp_ddlist_t<fdevt_user_conn_traits> fdevt_user_list;
 };
 
 X_DECLARE_MEMBER_TRAITS(smbd_requ_conn_traits, x_smbd_requ_t, conn_link)
@@ -1626,16 +1624,6 @@ static void x_smbd_srv_cb_shutdown(x_strm_srv_t *strm_srv)
 
 static bool x_smbd_srv_cb_user(x_strm_srv_t *strm_srv)
 {
-	x_smbd_srv_t *smbd_srv = x_smbd_from_strm_srv(strm_srv);
-	auto lock = std::lock_guard(smbd_srv->mutex);
-	for (;;) {
-		x_fdevt_user_t *fdevt_user = smbd_srv->fdevt_user_list.get_front();
-		if (!fdevt_user) {
-			break;
-		}
-		smbd_srv->fdevt_user_list.remove(fdevt_user);
-		fdevt_user->func(nullptr, fdevt_user);
-	}
 	return false;
 }
 
@@ -1671,16 +1659,8 @@ bool x_smbd_conn_post_user(x_smbd_conn_t *smbd_conn, x_fdevt_user_t *fdevt_user,
 		return true;
 	} else if (!always) {
 		return false;
-	}
-	/* queued to srv's user event queue to clean up the request */
-	X_LOG(SMB, WARN, "smbd_conn %p is done, queued to srv", smbd_conn);
-	{
-		auto lock = std::lock_guard(g_smbd_srv.mutex);
-		notify = g_smbd_srv.fdevt_user_list.get_front() == nullptr;
-		g_smbd_srv.fdevt_user_list.push_back(fdevt_user);
-	}
-	if (notify) {
-		x_evtmgmt_post_events(g_evtmgmt, g_smbd_srv.base.ep_id, FDEVT_USER);
+	} else {
+		fdevt_user->func(nullptr, fdevt_user);
 	}
 	return true;
 }
@@ -1844,6 +1824,8 @@ struct send_interim_evt_t
 void x_smbd_conn_post_interim(x_smbd_requ_t *smbd_requ)
 {
 	send_interim_evt_t *evt = new send_interim_evt_t(smbd_requ);
-	x_smbd_chan_post_user(smbd_requ->smbd_chan, &evt->base, false);
+	if (!x_smbd_chan_post_user(smbd_requ->smbd_chan, &evt->base, false)) {
+		delete evt;
+	}
 }
 

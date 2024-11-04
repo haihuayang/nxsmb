@@ -230,14 +230,10 @@ static x_job_t::retval_t smbd_qdir_job_run(x_job_t *job, void *sche)
 			smbd_qdir->requ_list.remove(smbd_requ);
 			lock.unlock();
 
-			if (!smbd_qdir->closed) {
-				NTSTATUS status = smbd_qdir_process_requ(smbd_qdir, smbd_requ);
-				X_SMBD_CHAN_POST_USER(smbd_requ->smbd_chan,
-						new smbd_qdir_evt_t(smbd_requ, status));
-			} else {
-				X_SMBD_CHAN_POST_USER(smbd_requ->smbd_chan,
-						new smbd_qdir_evt_t(smbd_requ, NT_STATUS_FILE_CLOSED));
-			}
+			NTSTATUS status = smbd_qdir->closed ? NT_STATUS_FILE_CLOSED :
+				smbd_qdir_process_requ(smbd_qdir, smbd_requ);
+			X_SMBD_CHAN_POST_USER(smbd_requ->smbd_chan,
+					new smbd_qdir_evt_t(smbd_requ, status));
 			lock.lock();
 		}
 		if (!smbd_qdir->closed) {
