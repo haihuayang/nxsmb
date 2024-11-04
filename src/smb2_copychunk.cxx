@@ -124,7 +124,7 @@ static x_job_t::retval_t copychunk_job_run(x_job_t *job, void *data)
 	out->total_bytes_writen = X_H2LE32(total_count);
 	state->out_buf_length = x_convert_assert<uint32_t>(sizeof(x_smb2_fsctl_srv_copychunk_out_t));
 
-	X_SMBD_CHAN_POST_USER(smbd_requ->smbd_chan,
+	X_SMBD_REQU_POST_USER(smbd_requ,
 			new copychunk_evt_t(smbd_requ, status));
 	delete copychunk_job;
 	return x_job_t::JOB_DONE;

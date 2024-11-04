@@ -10,15 +10,16 @@
 using smbd_requ_table_t = x_idtable_t<x_smbd_requ_t, x_idtable_64_traits_t>;
 static smbd_requ_table_t *g_smbd_requ_table;
 
-x_smbd_requ_state_create_t::x_smbd_requ_state_create_t(const x_smb2_uuid_t &client_guid)
-	: in_client_guid(client_guid)
+x_smbd_requ_state_create_t::x_smbd_requ_state_create_t(const x_smb2_uuid_t &client_guid,
+		uint32_t server_capabilities)
+	: client_guid(client_guid), server_capabilities(server_capabilities)
 {
 }
 
 x_smbd_requ_state_create_t::~x_smbd_requ_state_create_t()
 {
 	if (replay_reserved) {
-		x_smbd_replay_cache_clear(in_client_guid, in_context.create_guid);
+		x_smbd_replay_cache_clear(client_guid, in_context.create_guid);
 	}
 	if (smbd_object) {
 		x_smbd_release_object_and_stream(smbd_object, smbd_stream);
@@ -37,12 +38,14 @@ static long interim_timeout_func(x_timer_job_t *timer)
 	return -1;
 }
 
-x_smbd_requ_t::x_smbd_requ_t(x_buf_t *in_buf, uint32_t in_msgsize,
+x_smbd_requ_t::x_smbd_requ_t(x_smbd_conn_t *smbd_conn, x_buf_t *in_buf,
+		uint32_t in_msgsize,
 		bool encrypted)
 	: interim_timer(interim_timeout_func), in_buf(in_buf)
 	, compound_id(X_SMBD_COUNTER_INC_CREATE(requ, 1) + 1)
 	, in_msgsize(in_msgsize)
 	, encrypted(encrypted)
+	, smbd_conn(x_ref_inc(smbd_conn))
 {
 }
 
@@ -61,6 +64,7 @@ x_smbd_requ_t::~x_smbd_requ_t()
 	x_ref_dec_if(smbd_tcon);
 	x_ref_dec_if(smbd_chan);
 	x_ref_dec_if(smbd_sess);
+	x_ref_dec(smbd_conn);
 	X_SMBD_COUNTER_INC_DELETE(requ, 1);
 }
 
@@ -77,10 +81,10 @@ void x_ref_dec(x_smbd_requ_t *smbd_requ)
 	g_smbd_requ_table->decref(smbd_requ->id);
 }
 
-x_smbd_requ_t *x_smbd_requ_create(x_buf_t *in_buf, uint32_t in_msgsize,
-		bool encrypted)
+x_smbd_requ_t *x_smbd_requ_create(x_smbd_conn_t *smbd_conn, x_buf_t *in_buf,
+		uint32_t in_msgsize, bool encrypted)
 {
-	auto smbd_requ = new x_smbd_requ_t(in_buf, in_msgsize, encrypted);
+	auto smbd_requ = new x_smbd_requ_t(smbd_conn, in_buf, in_msgsize, encrypted);
 	if (!g_smbd_requ_table->store(smbd_requ, smbd_requ->id)) {
 		delete smbd_requ;
 		return nullptr;

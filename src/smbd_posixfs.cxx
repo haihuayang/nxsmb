@@ -740,7 +740,7 @@ static posixfs_open_t *posixfs_open_create(
 			x_smbd_open_state_t{
 				state.granted_access,
 				state.in_share_access,
-				x_smbd_conn_curr_client_guid(),
+				state.client_guid,
 				state.in_context.create_guid,
 				state.in_context.app_instance_id,
 				state.in_context.app_instance_version_high,
@@ -1180,7 +1180,7 @@ static x_job_t::retval_t posixfs_read_job_run(x_job_t *job, void *sche)
 	NTSTATUS status = posixfs_do_read(posixfs_object, *state, posixfs_read_job->delay_ms);
 
 	x_smbd_release_object(&posixfs_object->base);
-	X_SMBD_CHAN_POST_USER(smbd_requ->smbd_chan,
+	X_SMBD_REQU_POST_USER(smbd_requ,
 			new posixfs_read_evt_t(smbd_requ, status));
 	delete posixfs_read_job;
 	return x_job_t::JOB_DONE;
@@ -1418,7 +1418,7 @@ static x_job_t::retval_t posixfs_write_job_run(x_job_t *job, void *data)
 			posixfs_write_job->delay_ms);
 
 	x_smbd_release_object(&posixfs_object->base);
-	X_SMBD_CHAN_POST_USER(smbd_requ->smbd_chan,
+	X_SMBD_REQU_POST_USER(smbd_requ,
 			new posixfs_write_evt_t(smbd_requ, status));
 	delete posixfs_write_job;
 	return x_job_t::JOB_DONE;
@@ -2122,7 +2122,7 @@ NTSTATUS posixfs_object_op_getinfo(
 	posixfs_object_t *posixfs_object = posixfs_object_from_base_t::container(smbd_object);
 
 	if (state->in_info_class == x_smb2_info_class_t::FILE) {
-		return x_smbd_open_getinfo_file(smbd_open, *state, posixfs_get_file_info_t());
+		return x_smbd_open_getinfo_file(smbd_conn, smbd_open, *state, posixfs_get_file_info_t());
 	} else if (state->in_info_class == x_smb2_info_class_t::FS) {
 		return getinfo_fs(smbd_requ, posixfs_object, *state);
 	} else if (state->in_info_class == x_smb2_info_class_t::SECURITY) {
@@ -2756,7 +2756,7 @@ NTSTATUS x_smbd_posixfs_create_object(x_smbd_object_t *smbd_object,
 				NOTIFY_ACTION_ADDED,
 				uint16_t((state.in_create_options & X_SMB2_CREATE_OPTION_DIRECTORY_FILE) ? FILE_NOTIFY_CHANGE_DIR_NAME : FILE_NOTIFY_CHANGE_FILE_NAME),
 				state.in_context.lease.parent_key,
-				x_smbd_conn_curr_client_guid(),
+				state.client_guid,
 				smbd_object->parent_object,
 				nullptr,
 				smbd_object->path_base,
@@ -2783,7 +2783,7 @@ NTSTATUS x_smbd_posixfs_create_object(x_smbd_object_t *smbd_object,
 				NOTIFY_ACTION_ADDED_STREAM,
 				FILE_NOTIFY_CHANGE_STREAM_NAME,
 				state.in_context.lease.parent_key,
-				x_smbd_conn_curr_client_guid(),
+				state.client_guid,
 				smbd_object->parent_object,
 				nullptr,
 				smbd_object->path_base + u":" + smbd_stream->name,
@@ -2962,7 +2962,7 @@ static NTSTATUS smbd_posixfs_create_open(x_smbd_open_t **psmbd_open,
 				NOTIFY_ACTION_MODIFIED,
 				notify_actions,
 				state->in_context.lease.parent_key,
-				x_smbd_conn_curr_client_guid(),
+				state->client_guid,
 				state->smbd_object->parent_object, nullptr,
 				posixfs_object->base.path_base, {});
 		reload_meta = true;

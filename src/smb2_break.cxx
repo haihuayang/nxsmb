@@ -113,7 +113,7 @@ static NTSTATUS x_smb2_process_lease_break(x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ,
 		const x_smb2_lease_break_t *in_lease_break)
 {
-	x_smbd_requ_state_lease_break_t state;
+	x_smbd_requ_state_lease_break_t state{x_smbd_conn_get_client_guid(smbd_conn)};
 	decode_in_lease_break(state, in_lease_break);
 
 	X_SMBD_REQU_LOG(OP, smbd_requ,  " lease=%s",

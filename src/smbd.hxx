@@ -171,15 +171,6 @@ struct x_smbd_durable_t
 
 int x_smbd_conn_srv_init(int port);
 
-
-extern __thread x_smbd_conn_t *g_smbd_conn_curr;
-#define X_SMBD_CONN_ASSERT(smbd_conn) X_ASSERT((smbd_conn) == g_smbd_conn_curr)
-const x_smb2_uuid_t &x_smbd_conn_curr_client_guid();
-uint16_t x_smbd_conn_curr_dialect();
-uint16_t x_smbd_conn_curr_get_signing_algo();
-uint16_t x_smbd_conn_curr_get_cryption_algo();
-std::shared_ptr<std::u16string> x_smbd_conn_curr_name();
-
 struct x_smbd_negprot_t
 {
 	uint16_t dialect;
@@ -195,9 +186,10 @@ struct x_smbd_negprot_t
 	x_smb2_uuid_t client_guid;
 };
 
-const x_smbd_negprot_t &x_smbd_conn_curr_negprot();
 int x_smbd_conn_negprot(x_smbd_conn_t *smbd_conn,
 		const x_smbd_negprot_t &negprot, bool smb1);
+const x_smb2_uuid_t &x_smbd_conn_get_client_guid(const x_smbd_conn_t *smbd_conn);
+const std::shared_ptr<std::u16string> &x_smbd_conn_get_client_name(const x_smbd_conn_t *smbd_conn);
 const x_smbd_negprot_t &x_smbd_conn_get_negprot(const x_smbd_conn_t *smbd_conn);
 uint16_t x_smbd_conn_get_dialect(const x_smbd_conn_t *smbd_conn);
 uint16_t x_smbd_conn_get_cryption_algo(const x_smbd_conn_t *smbd_conn);
@@ -232,7 +224,7 @@ void x_smbd_conn_post_interim(x_smbd_requ_t *smbd_requ);
 
 int x_smbd_sess_table_init(uint32_t count);
 uint32_t x_smbd_sess_get_count();
-x_smbd_sess_t *x_smbd_sess_create();
+x_smbd_sess_t *x_smbd_sess_create(const x_smbd_conn_t *smbd_conn);
 x_smbd_sess_t *x_smbd_sess_lookup(NTSTATUS &status,
 		uint64_t id, const x_smb2_uuid_t &client_guid);
 NTSTATUS x_smbd_sess_auth_succeeded(x_smbd_sess_t *smbd_sess,

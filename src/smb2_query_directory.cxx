@@ -232,7 +232,7 @@ static x_job_t::retval_t smbd_qdir_job_run(x_job_t *job, void *sche)
 
 			NTSTATUS status = smbd_qdir->closed ? NT_STATUS_FILE_CLOSED :
 				smbd_qdir_process_requ(smbd_qdir, smbd_requ);
-			X_SMBD_CHAN_POST_USER(smbd_requ->smbd_chan,
+			X_SMBD_REQU_POST_USER(smbd_requ,
 					new smbd_qdir_evt_t(smbd_requ, status));
 			lock.lock();
 		}

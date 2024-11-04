@@ -595,8 +595,7 @@ void x_smbd_wakeup_requ_list(const x_smbd_requ_id_list_t &requ_list)
 		X_SMBD_REQU_LOG(DBG, smbd_requ, " count=%d", count);
 		X_ASSERT(count > 0);
 		if (count == 1) {
-			defer_requ_evt_t *evt = new defer_requ_evt_t(smbd_requ);
-			X_SMBD_CHAN_POST_USER(smbd_requ->smbd_chan, evt);
+			X_SMBD_REQU_POST_USER(smbd_requ, new defer_requ_evt_t(smbd_requ));
 		} else {
 			x_ref_dec(smbd_requ);
 		}
@@ -679,11 +678,11 @@ struct send_lease_break_evt_t
 };
 
 bool x_smbd_open_match_get_lease(const x_smbd_open_t *smbd_open,
+	       	const x_smb2_uuid_t &client_guid,
 		x_smb2_lease_t &lease)
 {
 	return x_smbd_lease_match_get(smbd_open->smbd_lease,
-			x_smbd_conn_curr_client_guid(),
-			lease);
+			client_guid, lease);
 }
 
 /* smbd_object is locked */
@@ -773,7 +772,7 @@ static bool check_app_instance(x_smbd_object_t *smbd_object,
 				!(open_state.app_instance_id == state.in_context.app_instance_id)) {
 			continue;
 		}
-		if (open_state.client_guid == x_smbd_conn_curr_client_guid()) {
+		if (open_state.client_guid == state.client_guid) {
 			continue;
 		}
 		if ((open_state.app_instance_version_high != 0 ||
@@ -901,7 +900,8 @@ static inline uint8_t get_lease_type(const x_smbd_open_t *smbd_open)
 	}
 }
 
-static NTSTATUS grant_oplock(x_smbd_object_t *smbd_object,
+static NTSTATUS grant_oplock(x_smbd_requ_t *smbd_requ,
+		x_smbd_object_t *smbd_object,
 		x_smbd_stream_t *smbd_stream,
 		x_smbd_sharemode_t *sharemode,
 		x_smbd_requ_state_create_t &state,
@@ -919,8 +919,7 @@ static NTSTATUS grant_oplock(x_smbd_object_t *smbd_object,
 
 	if (smbd_object->type == x_smbd_object_t::type_dir &&
 			!smbd_stream) {
-		if (lease && (x_smbd_conn_curr_negprot().server_capabilities &
-					X_SMB2_CAP_DIRECTORY_LEASING)) {
+		if (lease && (state.server_capabilities & X_SMB2_CAP_DIRECTORY_LEASING)) {
 			granted = lease->state & (X_SMB2_LEASE_READ|X_SMB2_LEASE_HANDLE);
 			/* TODO workaround directory leasing upgrade issue,
 			 * x_smbd_lease_grant check requested == granted 
@@ -1357,7 +1356,7 @@ NTSTATUS x_smbd_open_create(
 		state->out_maximal_access = maximal_access;
 	}
 
-       	status = grant_oplock(smbd_object,
+       	status = grant_oplock(smbd_requ, smbd_object,
 			smbd_stream,
 			sharemode,
 			*state, out_oplock_level);
@@ -1642,7 +1641,7 @@ static NTSTATUS smbd_open_reconnect(x_smbd_open_t *smbd_open,
 	}
 	if (smbd_open->smbd_lease) {
 		if (!x_smbd_lease_match_get(smbd_open->smbd_lease,
-					x_smbd_conn_curr_client_guid(),
+					state.client_guid,
 					state.in_context.lease)) {
 			X_LOG(SMB, NOTICE, "lease not match");
 			return NT_STATUS_OBJECT_NAME_NOT_FOUND;

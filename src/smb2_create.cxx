@@ -252,7 +252,7 @@ static void smb2_create_success(x_smbd_conn_t *smbd_conn,
 	x_smbd_open_t *smbd_open = smbd_requ->smbd_open;
 	if (state.replay_reserved) {
 		/* TODO atomic */
-		x_smbd_replay_cache_set(state.in_client_guid,
+		x_smbd_replay_cache_set(state.client_guid,
 				state.in_context.create_guid,
 				smbd_open);
 		smbd_open->open_state.flags |= x_smbd_open_state_t::F_REPLAY_CACHED;
@@ -385,7 +385,7 @@ static NTSTATUS smb2_process_create(x_smbd_requ_t *smbd_requ,
 
 	// smbd_requ->async_done_fn = x_smb2_create_async_done;
 	if (state->in_oplock_level == X_SMB2_OPLOCK_LEVEL_LEASE) {
-		state->smbd_lease = x_smbd_lease_find(x_smbd_conn_curr_client_guid(),
+		state->smbd_lease = x_smbd_lease_find(state->client_guid,
 				state->in_context.lease, true);
 	}
 
@@ -406,14 +406,16 @@ NTSTATUS x_smb2_process_create(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_req
 
 	/* TODO check limit of open for both total and per conn*/
 
-	auto dialect = x_smbd_conn_get_dialect(smbd_conn);
-	auto state = std::make_unique<x_smbd_requ_state_create_t>(x_smbd_conn_curr_client_guid());
-	NTSTATUS status = decode_in_create(dialect, *state, in_hdr, smbd_requ->in_requ_len);
+	const auto &negprot = x_smbd_conn_get_negprot(smbd_conn);
+	auto state = std::make_unique<x_smbd_requ_state_create_t>(negprot.client_guid,
+			negprot.server_capabilities);
+	NTSTATUS status = decode_in_create(negprot.dialect, *state, in_hdr,
+			smbd_requ->in_requ_len);
 	if (!NT_STATUS_IS_OK(status)) {
 		X_SMBD_REQU_RETURN_STATUS(smbd_requ, status);
 	}
 
-	if (dialect < X_SMB2_DIALECT_210 &&
+	if (negprot.dialect < X_SMB2_DIALECT_210 &&
 			state->in_oplock_level == X_SMB2_OPLOCK_LEVEL_LEASE) {
 		state->in_oplock_level = X_SMB2_OPLOCK_LEVEL_NONE;
 	}
@@ -427,7 +429,7 @@ NTSTATUS x_smb2_process_create(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_req
 
 		status = x_smbd_replay_cache_lookup(
 				&smbd_requ->smbd_open,
-				state->in_client_guid,
+				state->client_guid,
 				state->in_context.create_guid,
 				state->replay_operation);
 		if (NT_STATUS_EQUAL(status, NT_STATUS_FWP_RESERVED)) {
@@ -446,7 +448,9 @@ NTSTATUS x_smb2_process_create(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_req
 		auto &open_state = smbd_requ->smbd_open->open_state;
 		if (state->replay_operation) {
 			if (smbd_requ->smbd_open->smbd_lease) {
-				if (!x_smbd_open_match_get_lease(smbd_requ->smbd_open, state->in_context.lease)) {
+				if (!x_smbd_open_match_get_lease(smbd_requ->smbd_open,
+							state->client_guid,
+							state->in_context.lease)) {
 					X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_ACCESS_DENIED);
 				}
 			} else {
@@ -457,7 +461,9 @@ NTSTATUS x_smb2_process_create(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_req
 
 		} else if (state->in_oplock_level == X_SMB2_OPLOCK_LEVEL_LEASE &&
 				(open_state.oplock_level != X_SMB2_OPLOCK_LEVEL_LEASE ||
-				 !x_smbd_open_match_get_lease(smbd_requ->smbd_open, state->in_context.lease))) {
+				 !x_smbd_open_match_get_lease(smbd_requ->smbd_open,
+					 state->client_guid,
+					 state->in_context.lease))) {
 			X_REF_DEC(smbd_requ->smbd_open);
 			X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_ACCESS_DENIED);
 		}

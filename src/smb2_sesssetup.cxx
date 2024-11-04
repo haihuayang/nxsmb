@@ -113,7 +113,7 @@ NTSTATUS x_smb2_process_sesssetup(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_
 	bool new_auth = false;
 	/* smbd_sess must be valid if smbd_chan is */
 	X_ASSERT(!smbd_requ->smbd_chan || smbd_requ->smbd_sess);
-	uint16_t dialect = x_smbd_conn_get_dialect(smbd_conn);
+	const x_smbd_negprot_t &negprot = x_smbd_conn_get_negprot(smbd_conn);
 
 	if (state->in_flags & X_SMB2_SESSION_FLAG_BINDING) {
 		if (!smbd_requ->is_signed()) {
@@ -121,7 +121,7 @@ NTSTATUS x_smb2_process_sesssetup(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_
 		}
 		X_ASSERT(smbd_requ->smbd_sess);
 
-		uint16_t curr_signing_algo = x_smbd_conn_curr_get_signing_algo();
+		uint16_t curr_signing_algo = negprot.signing_algo;
 		uint16_t sess_signing_algo;
 		X_ASSERT(x_smbd_sess_get_signing_key(smbd_requ->smbd_sess, &sess_signing_algo));
 		
@@ -135,11 +135,11 @@ NTSTATUS x_smb2_process_sesssetup(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_
 			X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_NOT_SUPPORTED);
 		}
 
-		if (dialect < X_SMB2_DIALECT_300) {
+		if (negprot.dialect < X_SMB2_DIALECT_300) {
 			X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_REQUEST_NOT_ACCEPTED);
 		}
 
-		if (x_smbd_sess_get_cryption_algo(smbd_requ->smbd_sess) != x_smbd_conn_curr_get_cryption_algo()) {
+		if (x_smbd_sess_get_cryption_algo(smbd_requ->smbd_sess) != negprot.cryption_algo) {
 			X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 		}
 
@@ -147,7 +147,7 @@ NTSTATUS x_smb2_process_sesssetup(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_
 			X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_REQUEST_NOT_ACCEPTED);
 		}
 
-		if (x_smbd_sess_get_dialect(smbd_requ->smbd_sess) != x_smbd_conn_curr_dialect()) {
+		if (x_smbd_sess_get_dialect(smbd_requ->smbd_sess) != negprot.dialect) {
 			X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 		}
 
@@ -166,7 +166,7 @@ NTSTATUS x_smb2_process_sesssetup(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_
 			new_auth = true;
 		}
 	} else if (!smbd_requ->smbd_sess) {
-		smbd_requ->smbd_sess = x_smbd_sess_create();
+		smbd_requ->smbd_sess = x_smbd_sess_create(smbd_conn);
 		if (!smbd_requ->smbd_sess) {
 			X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_INSUFFICIENT_RESOURCES);
 		}
@@ -212,10 +212,10 @@ NTSTATUS x_smb2_process_sesssetup(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_
 			out_security,
 			state->in_flags & X_SMB2_SESSION_FLAG_BINDING,
 			x_convert<uint8_t>(state->in_security_mode |
-				x_smbd_conn_curr_negprot().server_security_mode),
+				negprot.server_security_mode),
 			new_auth);
 	if (!NT_STATUS_EQUAL(status, X_NT_STATUS_INTERNAL_BLOCKED)) {
-		smb2_sesssetup_done(smbd_conn, smbd_requ, dialect, status,
+		smb2_sesssetup_done(smbd_conn, smbd_requ, negprot.dialect, status,
 				*state, out_security);
 	} else {
 		smbd_requ->save_requ_state(state);

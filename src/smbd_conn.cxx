@@ -94,6 +94,7 @@ void x_ref_dec(x_smbd_conn_t *smbd_conn)
 	}
 }
 
+static __thread x_smbd_conn_t *g_smbd_conn_curr = nullptr;
 struct smbd_conn_curr_t
 {
 	smbd_conn_curr_t(x_smbd_conn_t *smbd_conn) {
@@ -117,6 +118,16 @@ const x_smb2_preauth_t *x_smbd_conn_get_preauth(x_smbd_conn_t *smbd_conn)
 	} else {
 		return nullptr;
 	}
+}
+
+const x_smb2_uuid_t &x_smbd_conn_get_client_guid(const x_smbd_conn_t *smbd_conn)
+{
+	return smbd_conn->negprot.client_guid;
+}
+
+const std::shared_ptr<std::u16string> &x_smbd_conn_get_client_name(const x_smbd_conn_t *smbd_conn)
+{
+	return smbd_conn->machine_name;
 }
 
 const x_smbd_negprot_t &x_smbd_conn_get_negprot(const x_smbd_conn_t *smbd_conn)
@@ -650,8 +661,7 @@ NTSTATUS x_smbd_conn_dispatch_update_counts(
 		x_smbd_requ_t *smbd_requ,
 		bool modify_call)
 {
-	// X_ASSERT(smbd_requ->smbd_conn == g_smbd_conn_curr);
-	if (x_smbd_conn_curr_dialect() < X_SMB2_DIALECT_300) {
+	if (x_smbd_conn_get_dialect(smbd_requ->smbd_conn) < X_SMB2_DIALECT_300) {
 		return NT_STATUS_OK;
 	}
 
@@ -1246,8 +1256,8 @@ static int x_smbd_conn_process_smb(x_smbd_conn_t *smbd_conn, x_buf_t *buf, uint3
 		smbhdr = x_get_be32(buf->data + offset);
 	}
 
-	x_ref_ptr_t<x_smbd_requ_t> smbd_requ{x_smbd_requ_create(buf,
-			msgsize, encrypted)};
+	x_ref_ptr_t<x_smbd_requ_t> smbd_requ{x_smbd_requ_create(smbd_conn,
+			buf, msgsize, encrypted)};
 	
 	if (smbhdr == X_SMB2_MAGIC) {
 		if (len < sizeof(x_smb2_header_t)) {
@@ -1475,38 +1485,6 @@ static void x_smbd_conn_terminate_chans(x_smbd_conn_t *smbd_conn)
 		 */
 		x_smbd_chan_unlinked(link, smbd_conn);
 	}
-}
-
-__thread x_smbd_conn_t *g_smbd_conn_curr = nullptr;
-
-const x_smbd_negprot_t &x_smbd_conn_curr_negprot()
-{
-	return g_smbd_conn_curr->negprot;
-}
-
-const x_smb2_uuid_t &x_smbd_conn_curr_client_guid()
-{
-	return g_smbd_conn_curr->negprot.client_guid;
-}
-
-uint16_t x_smbd_conn_curr_dialect()
-{
-	return g_smbd_conn_curr->negprot.dialect;
-}
-
-uint16_t x_smbd_conn_curr_get_signing_algo()
-{
-	return g_smbd_conn_curr->negprot.signing_algo;
-}
-
-uint16_t x_smbd_conn_curr_get_cryption_algo()
-{
-	return g_smbd_conn_curr->negprot.cryption_algo;
-}
-
-std::shared_ptr<std::u16string> x_smbd_conn_curr_name()
-{
-	return g_smbd_conn_curr->machine_name;
 }
 
 static bool x_smbd_conn_upcall_cb_getevents(x_epoll_upcall_t *upcall, x_fdevents_t &fdevents)
@@ -1824,7 +1802,7 @@ struct send_interim_evt_t
 void x_smbd_conn_post_interim(x_smbd_requ_t *smbd_requ)
 {
 	send_interim_evt_t *evt = new send_interim_evt_t(smbd_requ);
-	if (!x_smbd_chan_post_user(smbd_requ->smbd_chan, &evt->base, false)) {
+	if (!x_smbd_conn_post_user(smbd_requ->smbd_conn, &evt->base, false)) {
 		delete evt;
 	}
 }

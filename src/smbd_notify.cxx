@@ -92,7 +92,7 @@ static void x_smbd_object_notify_change(x_smbd_object_t *smbd_object,
 		auto notify_changes = std::exchange(curr_open->notify_changes, {});
 		curr_open->pending_requ_list.remove(smbd_requ);
 
-		X_SMBD_CHAN_POST_USER(smbd_requ->smbd_chan, 
+		X_SMBD_REQU_POST_USER(smbd_requ, 
 				new smd_notify_evt_t(smbd_requ,
 					std::move(notify_changes)));
 	}

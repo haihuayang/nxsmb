@@ -17,9 +17,9 @@ static inline uint64_t get_nonce_rand()
 	return ret;
 }
 
-static inline uint64_t get_nonce_high_max()
+static inline uint64_t get_nonce_high_max(const x_smbd_conn_t *smbd_conn)
 {
-	uint16_t cryption_algo = x_smbd_conn_curr_get_cryption_algo();
+	uint16_t cryption_algo = x_smbd_conn_get_cryption_algo(smbd_conn);
 	int nonce_size = x_smb2_signing_get_nonce_size(cryption_algo);
 	if (nonce_size >= 16) {
 		return UINT64_MAX;
@@ -33,11 +33,12 @@ static inline uint64_t get_nonce_high_max()
 struct x_smbd_sess_t
 {
 	enum { MAX_CHAN_COUNT = 32, };
-	x_smbd_sess_t() : tick_create(tick_now)
-		, connection_dialect(x_smbd_conn_curr_dialect())
+	x_smbd_sess_t(const x_smbd_conn_t *smbd_conn)
+		: tick_create(tick_now)
+		, connection_dialect(x_smbd_conn_get_dialect(smbd_conn))
 		, nonce_high_random(get_nonce_rand())
-		, nonce_high_max(get_nonce_high_max())
-		, machine_name{x_smbd_conn_curr_name()}
+		, nonce_high_max(get_nonce_high_max(smbd_conn))
+		, machine_name(x_smbd_conn_get_client_name(smbd_conn))
 	{
 		X_SMBD_COUNTER_INC_CREATE(sess, 1);
 	}
@@ -87,9 +88,9 @@ static bool match_user(const x_smbd_user_t &u1, const x_smbd_user_t &u2)
 	return u1.uid == u2.uid && u1.domain_sid == u2.domain_sid;
 }
 
-x_smbd_sess_t *x_smbd_sess_create()
+x_smbd_sess_t *x_smbd_sess_create(const x_smbd_conn_t *smbd_conn)
 {
-	x_smbd_sess_t *smbd_sess = new x_smbd_sess_t;
+	x_smbd_sess_t *smbd_sess = new x_smbd_sess_t(smbd_conn);
 	if (!g_smbd_sess_table->store(smbd_sess, smbd_sess->id)) {
 		delete smbd_sess;
 		X_SMBD_COUNTER_INC(toomany_sess, 1);

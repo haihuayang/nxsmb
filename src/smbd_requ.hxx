@@ -173,6 +173,7 @@ struct x_smbd_requ_state_notify_t : x_smbd_requ_state_async_t
 
 struct x_smbd_requ_state_lease_break_t
 {
+	const x_smb2_uuid_t in_client_guid;
 	uint32_t in_flags;
 	uint32_t in_state;
 	x_smb2_lease_key_t in_key;
@@ -210,12 +211,14 @@ struct x_smbd_requ_state_close_t
 
 struct x_smbd_requ_state_create_t : x_smbd_requ_state_async_t
 {
-	x_smbd_requ_state_create_t(const x_smb2_uuid_t &client_guid);
+	x_smbd_requ_state_create_t(const x_smb2_uuid_t &client_guid,
+			uint32_t server_capabilities);
 	~x_smbd_requ_state_create_t();
 	void async_done(void *ctx_conn, x_smbd_requ_t *smbd_requ,
 			NTSTATUS status) override;
 
-	const x_smb2_uuid_t in_client_guid;
+	const x_smb2_uuid_t client_guid;
+	const uint32_t server_capabilities;
 
 	uint8_t in_oplock_level;
 	uint8_t out_oplock_level;
@@ -278,7 +281,8 @@ struct x_smbd_requ_t
 		INTERIM_S_SENT,
 	};
 
-	explicit x_smbd_requ_t(x_buf_t *in_buf, uint32_t in_msgsize, bool encrypted);
+	explicit x_smbd_requ_t(x_smbd_conn_t *smbd_conn, x_buf_t *in_buf,
+			uint32_t in_msgsize, bool encrypted);
 	~x_smbd_requ_t();
 
 	const uint8_t *get_in_data() const {
@@ -361,6 +365,7 @@ struct x_smbd_requ_t
 
 	uint32_t out_length = 0;
 	x_bufref_t *out_buf_head{}, *out_buf_tail{};
+	x_smbd_conn_t * const smbd_conn;
 	x_smbd_sess_t *smbd_sess{};
 	x_smbd_chan_t *smbd_chan{};
 	x_smbd_tcon_t *smbd_tcon{};
@@ -387,7 +392,7 @@ X_DECLARE_MEMBER_TRAITS(requ_async_traits, x_smbd_requ_t, async_link)
 using x_smbd_requ_id_list_t = std::vector<uint64_t>;
 
 int x_smbd_requ_pool_init(uint32_t count);
-x_smbd_requ_t *x_smbd_requ_create(x_buf_t *in_buf, uint32_t in_msgsize, bool encrypted);
+x_smbd_requ_t *x_smbd_requ_create(x_smbd_conn_t *smbd_conn, x_buf_t *in_buf, uint32_t in_msgsize, bool encrypted);
 uint64_t x_smbd_requ_get_async_id(const x_smbd_requ_t *smbd_requ);
 x_smbd_requ_t *x_smbd_requ_lookup(uint64_t id);
 x_smbd_requ_t *x_smbd_requ_async_lookup(uint64_t id, const x_smbd_conn_t *smbd_conn, bool remove);
@@ -425,6 +430,10 @@ void x_smbd_schedule_notify(
 		const std::u16string &path_base,
 		const std::u16string &new_path_base);
 
+#define X_SMBD_REQU_POST_USER(smbd_requ, evt) do { \
+	auto __evt = (evt); \
+	x_smbd_conn_post_user((smbd_requ)->smbd_conn, &__evt->base, true); \
+} while (0)
 
 
 #endif /* __smbd_requ__hxx__ */

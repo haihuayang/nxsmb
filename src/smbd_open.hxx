@@ -640,6 +640,7 @@ bool x_smbd_check_io_brl_conflict(x_smbd_object_t *smbd_object,
 void x_smbd_lock_retry(x_smbd_sharemode_t *sharemode);
 
 bool x_smbd_open_match_get_lease(const x_smbd_open_t *smbd_open,
+		const x_smb2_uuid_t &client_guid,
 		x_smb2_lease_t &lease);
 
 static inline x_smbd_qdir_t *x_smbd_qdir_create(x_smbd_open_t *smbd_open)
@@ -756,7 +757,7 @@ static NTSTATUS x_smbd_getinfo_encode_le(T val,
 }
 
 template <typename T>
-NTSTATUS x_smbd_open_getinfo_file(x_smbd_open_t *smbd_open,
+NTSTATUS x_smbd_open_getinfo_file(x_smbd_conn_t *smbd_conn, x_smbd_open_t *smbd_open,
 		x_smbd_requ_state_getinfo_t &state, const T &op)
 {
 	if (state.in_info_level == x_smb2_info_level_t::FILE_BASIC_INFORMATION) {
@@ -860,7 +861,7 @@ NTSTATUS x_smbd_open_getinfo_file(x_smbd_open_t *smbd_open,
 		x_smbd_get_file_info(*info, op.get_object_meta(smbd_open));
 
 	} else if (state.in_info_level == x_smb2_info_level_t::FILE_NORMALIZED_NAME_INFORMATION) {
-		if (x_smbd_conn_curr_dialect() < 0x311) {
+		if (x_smbd_conn_get_dialect(smbd_conn) < X_SMB2_DIALECT_311) {
 			RETURN_STATUS(NT_STATUS_NOT_SUPPORTED);
 		}
 		if (state.in_output_buffer_length < sizeof(x_smb2_file_normalized_name_info_t)) {

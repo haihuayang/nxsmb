@@ -271,7 +271,7 @@ void x_smbd_lock_retry(x_smbd_sharemode_t *sharemode)
 				if (!brl_conflict(sharemode, curr_open, state->in_lock_elements)) {
 					curr_open->pending_requ_list.remove(smbd_requ);
 					smbd_lock_insert(curr_open, state->in_lock_elements);
-					X_SMBD_CHAN_POST_USER(smbd_requ->smbd_chan, 
+					X_SMBD_REQU_POST_USER(smbd_requ, 
 							new lock_evt_t(smbd_requ));
 				}
 			}

@@ -446,20 +446,19 @@ static NTSTATUS smbd_lease_process_break(x_smbd_lease_t *smbd_lease,
 
 NTSTATUS x_smbd_lease_process_break(x_smbd_requ_state_lease_break_t &state)
 {
-	auto &client_guid = x_smbd_conn_curr_client_guid();
 	auto &lease_key = state.in_key;
 
 	x_smbd_lease_t *smbd_lease;
 	NTSTATUS status;
-	uint32_t hash = lease_hash(client_guid, lease_key);
+	uint32_t hash = lease_hash(state.in_client_guid, lease_key);
 
 	{
 		auto lock = smbd_lease_lock(hash);
 
-		smbd_lease = smbd_lease_find(hash, client_guid, lease_key);
+		smbd_lease = smbd_lease_find(hash, state.in_client_guid, lease_key);
 		if (!smbd_lease) {
 			X_LOG(SMB, DBG, "smbd_lease_find failed client %s lease_key %s",
-					x_tostr(client_guid).c_str(),
+					x_tostr(state.in_client_guid).c_str(),
 					x_tostr(lease_key).c_str());
 			return NT_STATUS_OBJECT_NAME_NOT_FOUND;
 		}
@@ -467,7 +466,7 @@ NTSTATUS x_smbd_lease_process_break(x_smbd_requ_state_lease_break_t &state)
 		if (!smbd_lease->smbd_object) {
 			/* not yet granted */
 			X_LOG(SMB, DBG, "smbd_lease_find not granted %s lease_key %s",
-					x_tostr(client_guid).c_str(),
+					x_tostr(state.in_client_guid).c_str(),
 					x_tostr(lease_key).c_str());
 			return NT_STATUS_OBJECT_NAME_NOT_FOUND;
 		}

@@ -816,7 +816,7 @@ static NTSTATUS ipc_object_op_getinfo(
 		std::unique_ptr<x_smbd_requ_state_getinfo_t> &state)
 {
 	if (state->in_info_class == x_smb2_info_class_t::FILE) {
-		return x_smbd_open_getinfo_file(smbd_open, *state, ipc_get_file_info_t());
+		return x_smbd_open_getinfo_file(smbd_conn, smbd_open, *state, ipc_get_file_info_t());
 	} else if (state->in_info_class == x_smb2_info_class_t::SECURITY) {
 		return x_smbd_open_getinfo_security(smbd_open, *state, ipc_get_security_descriptor_t());
 	}
@@ -964,7 +964,7 @@ static NTSTATUS ipc_op_create_open(x_smbd_open_t **psmbd_open,
 			x_smbd_open_state_t{
 				state->in_desired_access,
 				state->in_share_access,
-				x_smbd_conn_curr_client_guid(),
+				state->client_guid,
 				state->in_context.create_guid,
 				state->in_context.app_instance_id,
 				state->in_context.app_instance_version_high,

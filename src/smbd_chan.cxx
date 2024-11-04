@@ -233,8 +233,9 @@ static void smbd_chan_set_keys(x_smbd_chan_t *smbd_chan,
 	}
 
 	X_LOG(SMB, DBG, "session_key=\n%s", x_hex_dump(auth_session_key.data(), auth_session_key.size(), "    ").c_str());
-	smbd_chan->keys.signing_algo = x_smbd_conn_curr_get_signing_algo();
-	smbd_chan->keys.cryption_algo = x_smbd_conn_curr_get_cryption_algo();
+	const x_smbd_negprot_t &negprot = x_smbd_conn_get_negprot(smbd_chan->smbd_conn);
+	smbd_chan->keys.signing_algo = negprot.signing_algo;
+	smbd_chan->keys.cryption_algo = negprot.cryption_algo;
 	uint32_t in_cryption_key_len = out_cryption_key_len;
 	if (in_cryption_key_len > auth_session_key_len) {
 		in_cryption_key_len = auth_session_key_len;
@@ -397,7 +398,7 @@ static NTSTATUS smbd_chan_auth_updated(x_smbd_chan_t *smbd_chan, x_smbd_requ_t *
 
 	if (!NT_STATUS_IS_OK(status)) {
 		smbd_chan->state = x_smbd_chan_t::S_FAILED;
-		smbd_chan_unlink_conn(smbd_chan, g_smbd_conn_curr);
+		smbd_chan_unlink_conn(smbd_chan, smbd_chan->smbd_conn);
 		smbd_chan_unlink_sess(smbd_chan, smbd_chan->smbd_sess, false);
 	}
 
@@ -622,12 +623,7 @@ struct smbd_chan_logoff_evt_t
 void x_smbd_chan_logoff(x_dlink_t *sess_link, x_smbd_sess_t *smbd_sess)
 {
 	x_smbd_chan_t *smbd_chan = X_CONTAINER_OF(sess_link, x_smbd_chan_t, sess_link);
-	if (g_smbd_conn_curr == smbd_chan->smbd_conn) {
-		smbd_chan_logoff(g_smbd_conn_curr, smbd_chan);
-		x_ref_dec(smbd_chan);
-	} else {
-		X_SMBD_CHAN_POST_USER(smbd_chan, new smbd_chan_logoff_evt_t(smbd_chan));
-	}
+	X_SMBD_CHAN_POST_USER(smbd_chan, new smbd_chan_logoff_evt_t(smbd_chan));
 }
 
 bool x_smbd_chan_post_user(x_smbd_chan_t *smbd_chan, x_fdevt_user_t *fdevt_user, bool always)
