@@ -219,7 +219,6 @@ void x_smb2_reply(x_smbd_conn_t *smbd_conn,
 NTSTATUS x_smbd_conn_dispatch_update_counts(
 		x_smbd_requ_t *smbd_requ,
 		bool modify_call);
-void x_smbd_conn_post_interim(x_smbd_requ_t *smbd_requ);
 
 
 int x_smbd_sess_table_init(uint32_t count);

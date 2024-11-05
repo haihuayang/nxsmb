@@ -61,7 +61,7 @@ void x_smbd_requ_state_notify_t::async_done(void *ctx_conn,
 }
 
 /* SMB2_NOTIFY */
-static void posixfs_notify_cancel(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
+static void posixfs_notify_cancel(x_nxfsd_conn_t *nxfsd_conn, x_smbd_requ_t *smbd_requ)
 {
 	x_smbd_open_t *smbd_open = smbd_requ->smbd_open;
 	x_smbd_object_t *smbd_object = smbd_open->smbd_object;
@@ -70,7 +70,7 @@ static void posixfs_notify_cancel(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_
 		std::lock_guard<std::mutex> lock(smbd_object->mutex);
 		smbd_open->pending_requ_list.remove(smbd_requ);
 	}
-	x_smbd_conn_post_cancel(smbd_conn, smbd_requ, NT_STATUS_CANCELLED);
+	x_smbd_requ_post_cancel(smbd_requ, NT_STATUS_CANCELLED);
 }
 
 static NTSTATUS smbd_open_notify(x_smbd_open_t *smbd_open,

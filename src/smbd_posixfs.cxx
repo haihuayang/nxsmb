@@ -1193,9 +1193,9 @@ inline posixfs_read_job_t::posixfs_read_job_t(posixfs_object_t *po, x_smbd_requ_
 {
 }
 
-static void posixfs_read_cancel(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
+static void posixfs_read_cancel(x_nxfsd_conn_t *nxfsd_conn, x_smbd_requ_t *smbd_requ)
 {
-	x_smbd_conn_post_cancel(smbd_conn, smbd_requ, NT_STATUS_CANCELLED);
+	x_smbd_requ_post_cancel(smbd_requ, NT_STATUS_CANCELLED);
 }
 
 static NTSTATUS posixfs_ads_read(posixfs_object_t *posixfs_object,
@@ -1431,9 +1431,9 @@ inline posixfs_write_job_t::posixfs_write_job_t(posixfs_object_t *po, x_smbd_req
 {
 }
 
-static void posixfs_write_cancel(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
+static void posixfs_write_cancel(x_nxfsd_conn_t *nxfsd_conn, x_smbd_requ_t *smbd_requ)
 {
-	x_smbd_conn_post_cancel(smbd_conn, smbd_requ, NT_STATUS_CANCELLED);
+	x_smbd_requ_post_cancel(smbd_requ, NT_STATUS_CANCELLED);
 }
 
 NTSTATUS posixfs_object_op_write(

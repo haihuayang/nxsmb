@@ -261,7 +261,7 @@ x_smbd_qdir_t::~x_smbd_qdir_t()
 	X_SMBD_COUNTER_INC_DELETE(qdir, 1);
 }
 
-static void smbd_qdir_cancel(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
+static void smbd_qdir_cancel(x_nxfsd_conn_t *nxfsd_conn, x_smbd_requ_t *smbd_requ)
 {
 	x_smbd_open_t *smbd_open = smbd_requ->smbd_open;
 	{
@@ -274,7 +274,7 @@ static void smbd_qdir_cancel(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 		/* TODO check if processing the requ, if so, cannot remove it */
 		smbd_qdir->requ_list.remove(smbd_requ);
 	}
-	x_smbd_conn_post_cancel(smbd_conn, smbd_requ, NT_STATUS_CANCELLED);
+	x_smbd_requ_post_cancel(smbd_requ, NT_STATUS_CANCELLED);
 }
 
 NTSTATUS x_smb2_process_query_directory(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)

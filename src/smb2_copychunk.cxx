@@ -136,9 +136,9 @@ inline copychunk_job_t::copychunk_job_t(x_smbd_requ_t *smbd_requ, x_smbd_open_t 
 {
 }
 
-static void copychunk_cancel(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
+static void copychunk_cancel(x_nxfsd_conn_t *nxfsd_conn, x_smbd_requ_t *smbd_requ)
 {
-	x_smbd_conn_post_cancel(smbd_conn, smbd_requ, NT_STATUS_CANCELLED);
+	x_smbd_requ_post_cancel(smbd_requ, NT_STATUS_CANCELLED);
 }
 
 static NTSTATUS copychunk_invalid_limit(x_smbd_requ_state_ioctl_t &state)

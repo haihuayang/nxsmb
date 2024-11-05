@@ -869,9 +869,9 @@ static bool open_mode_check(x_smbd_object_t *smbd_object,
 	return false;
 }
 
-static void smbd_create_cancel(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
+static void smbd_create_cancel(x_nxfsd_conn_t *nxfsd_conn, x_smbd_requ_t *smbd_requ)
 {
-	x_smbd_conn_post_cancel(smbd_conn, smbd_requ, NT_STATUS_CANCELLED);
+	x_smbd_requ_post_cancel(smbd_requ, NT_STATUS_CANCELLED);
 }
 
 static void defer_open(x_smbd_sharemode_t *sharemode,

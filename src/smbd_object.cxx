@@ -441,9 +441,9 @@ static NTSTATUS delay_rename_for_lease_break(x_smbd_object_t *smbd_object,
 	return NT_STATUS_OK;
 }
 
-static void smbd_rename_cancel(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
+static void smbd_rename_cancel(x_nxfsd_conn_t *nxfsd_conn, x_smbd_requ_t *smbd_requ)
 {
-	x_smbd_conn_post_cancel(smbd_conn, smbd_requ, NT_STATUS_CANCELLED);
+	x_smbd_requ_post_cancel(smbd_requ, NT_STATUS_CANCELLED);
 }
 
 static inline NTSTATUS parent_compatible_open(x_smbd_object_t *smbd_object)
@@ -660,7 +660,7 @@ NTSTATUS x_smbd_object_set_delete_pending_intl(x_smbd_object_t *smbd_object,
 					continue;
 				}
 				curr_open->pending_requ_list.remove(requ_notify);
-				x_smbd_conn_post_cancel(x_smbd_chan_get_conn(requ_notify->smbd_chan),
+				x_smbd_requ_post_cancel(
 						requ_notify, NT_STATUS_DELETE_PENDING);
 			}
 		}

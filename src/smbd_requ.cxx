@@ -34,18 +34,18 @@ static long interim_timeout_func(x_timer_job_t *timer)
 	/* we already have a ref on smbd_chan when adding timer */
 	x_smbd_requ_t *smbd_requ = X_CONTAINER_OF(timer,
 			x_smbd_requ_t, interim_timer);
-	x_smbd_conn_post_interim(smbd_requ);
+	x_smbd_requ_post_interim(smbd_requ);
 	return -1;
 }
 
-x_smbd_requ_t::x_smbd_requ_t(x_smbd_conn_t *smbd_conn, x_buf_t *in_buf,
+x_smbd_requ_t::x_smbd_requ_t(x_nxfsd_conn_t *nxfsd_conn, x_buf_t *in_buf,
 		uint32_t in_msgsize,
 		bool encrypted)
 	: interim_timer(interim_timeout_func), in_buf(in_buf)
 	, compound_id(X_SMBD_COUNTER_INC_CREATE(requ, 1) + 1)
 	, in_msgsize(in_msgsize)
 	, encrypted(encrypted)
-	, smbd_conn(x_ref_inc(smbd_conn))
+	, nxfsd_conn(x_ref_inc(nxfsd_conn))
 {
 }
 
@@ -64,7 +64,7 @@ x_smbd_requ_t::~x_smbd_requ_t()
 	x_ref_dec_if(smbd_tcon);
 	x_ref_dec_if(smbd_chan);
 	x_ref_dec_if(smbd_sess);
-	x_ref_dec(smbd_conn);
+	x_ref_dec(nxfsd_conn);
 	X_SMBD_COUNTER_INC_DELETE(requ, 1);
 }
 
@@ -81,10 +81,10 @@ void x_ref_dec(x_smbd_requ_t *smbd_requ)
 	g_smbd_requ_table->decref(smbd_requ->id);
 }
 
-x_smbd_requ_t *x_smbd_requ_create(x_smbd_conn_t *smbd_conn, x_buf_t *in_buf,
+x_smbd_requ_t *x_smbd_requ_create(x_nxfsd_conn_t *nxfsd_conn, x_buf_t *in_buf,
 		uint32_t in_msgsize, bool encrypted)
 {
-	auto smbd_requ = new x_smbd_requ_t(smbd_conn, in_buf, in_msgsize, encrypted);
+	auto smbd_requ = new x_smbd_requ_t(nxfsd_conn, in_buf, in_msgsize, encrypted);
 	if (!g_smbd_requ_table->store(smbd_requ, smbd_requ->id)) {
 		delete smbd_requ;
 		return nullptr;
@@ -298,8 +298,7 @@ struct x_smbd_clean_pending_requ_list_evt_t
 		x_smbd_requ_t *smbd_requ;
 		while ((smbd_requ = evt->pending_requ_list.get_front()) != nullptr) {
 			evt->pending_requ_list.remove(smbd_requ);
-			x_smbd_conn_post_cancel(x_smbd_chan_get_conn(smbd_requ->smbd_chan),
-					smbd_requ, smbd_requ->status);
+			x_smbd_requ_post_cancel(smbd_requ, smbd_requ->status);
 		}
 
 		delete evt;
