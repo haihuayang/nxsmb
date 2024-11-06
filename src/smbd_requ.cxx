@@ -1,11 +1,9 @@
 
 #include "smbd.hxx"
 #include "smbd_stats.hxx"
-#include "smbd_ctrl.hxx"
 #include "smbd_open.hxx"
 #include "smbd_replay.hxx"
 #include "nxfsd_sched.hxx"
-#include "include/idtable.hxx"
 
 x_smbd_requ_state_create_t::x_smbd_requ_state_create_t(const x_smb2_uuid_t &client_guid,
 		uint32_t server_capabilities)
@@ -119,39 +117,6 @@ NTSTATUS x_smbd_requ_init_open(x_smbd_requ_t *smbd_requ,
 		X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_FILE_CLOSED);
 	}
 }
-#if 0
-struct x_smbd_requ_list_t : x_ctrl_handler_t
-{
-	x_smbd_requ_list_t() : iter(g_smbd_requ_table->iter_start()) {
-	}
-	bool output(std::string &data) override;
-	smbd_requ_table_t::iter_t iter;
-};
-
-bool x_smbd_requ_list_t::output(std::string &data)
-{
-	std::ostringstream os;
-
-	bool ret = g_smbd_requ_table->iter_entry(iter, [&os](const x_smbd_requ_t *smbd_requ) {
-			/* TODO list channels */
-			os << idl::x_hex_t<uint64_t>(smbd_requ->id) << ' '
-			<< idl::x_hex_t<uint64_t>(smbd_requ->in_smb2_hdr.mid);
-			os << std::endl;
-			return true;
-		});
-	if (ret) {
-		data = os.str(); // TODO avoid copying
-		return true;
-	} else {
-		return false;
-	}
-}
-
-x_ctrl_handler_t *x_smbd_requ_list_create()
-{
-	return new x_smbd_requ_list_t;
-}
-#endif
 
 struct x_smbd_lease_release_evt_t
 {

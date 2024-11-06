@@ -1,6 +1,7 @@
 
 #include "nxfsd.hxx"
 #include "smbd_stats.hxx"
+#include "smbd_ctrl.hxx"
 #include "include/idtable.hxx"
 
 struct nxfsd_requ_deleter_t {
@@ -109,6 +110,36 @@ uint64_t x_nxfsd_requ_get_async_id(const x_nxfsd_requ_t *nxfsd_requ)
 {
 	X_ASSERT(nxfsd_requ->interim_state == x_nxfsd_requ_t::INTERIM_S_SENT);
 	return nxfsd_requ->id;
+}
+
+struct x_nxfsd_requ_list_t : x_ctrl_handler_t
+{
+	x_nxfsd_requ_list_t() : iter(g_nxfsd_requ_table->iter_start()) {
+	}
+	bool output(std::string &data) override;
+	nxfsd_requ_table_t::iter_t iter;
+};
+
+bool x_nxfsd_requ_list_t::output(std::string &data)
+{
+	std::ostringstream os;
+
+	bool ret = g_nxfsd_requ_table->iter_entry(iter, [&os](const x_nxfsd_requ_t *nxfsd_requ) {
+			os << idl::x_hex_t<uint64_t>(nxfsd_requ->id) << ' '
+			<< nxfsd_requ->cbs->cb_tostr(nxfsd_requ) << std::endl;
+			return true;
+		});
+	if (ret) {
+		data = os.str(); // TODO avoid copying
+		return true;
+	} else {
+		return false;
+	}
+}
+
+x_ctrl_handler_t *x_nxfsd_requ_list_create()
+{
+	return new x_nxfsd_requ_list_t;
 }
 
 int x_nxfsd_requ_pool_init(uint32_t count)
