@@ -422,14 +422,14 @@ struct smbd_chan_auth_upcall_evt_t
 
 			if (smbd_chan_set_state(smbd_chan, x_smbd_chan_t::S_PROCESSING,
 						x_smbd_chan_t::S_BLOCKED)) {
-				auto state = smbd_requ->release_state<x_smbd_requ_state_sesssetup_t>();
+				auto state = smbd_requ->base.release_state<x_smbd_requ_state_sesssetup_t>();
 				NTSTATUS status = smbd_chan_auth_updated(smbd_chan, smbd_requ,
 						evt->status,
 						evt->is_bind, evt->security_mode,
 						*evt->auth_info);
 				
 				std::swap(state->out_security, evt->out_security);
-				state->async_done(ctx_conn, smbd_requ, status);
+				state->async_done(ctx_conn, &smbd_requ->base, status);
 			}
 			x_ref_dec(smbd_requ);
 		}

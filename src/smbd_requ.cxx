@@ -7,9 +7,6 @@
 #include "nxfsd_sched.hxx"
 #include "include/idtable.hxx"
 
-using smbd_requ_table_t = x_idtable_t<x_smbd_requ_t, x_idtable_64_traits_t>;
-static smbd_requ_table_t *g_smbd_requ_table;
-
 x_smbd_requ_state_create_t::x_smbd_requ_state_create_t(const x_smb2_uuid_t &client_guid,
 		uint32_t server_capabilities)
 	: client_guid(client_guid), server_capabilities(server_capabilities)
@@ -29,63 +26,69 @@ x_smbd_requ_state_create_t::~x_smbd_requ_state_create_t()
 	}
 }
 
-static long interim_timeout_func(x_timer_job_t *timer)
+static void smbd_requ_cb_destroy(x_nxfsd_requ_t *nxfsd_requ)
 {
-	/* we already have a ref on smbd_chan when adding timer */
-	x_smbd_requ_t *smbd_requ = X_CONTAINER_OF(timer,
-			x_smbd_requ_t, interim_timer);
-	x_smbd_requ_post_interim(smbd_requ);
-	return -1;
+	x_smbd_requ_t *smbd_requ = X_CONTAINER_OF(nxfsd_requ, x_smbd_requ_t, base);
+	delete smbd_requ;
 }
+
+static bool smbd_requ_cb_can_async(const x_nxfsd_requ_t *nxfsd_requ)
+{
+	const x_smbd_requ_t *smbd_requ = X_CONTAINER_OF(nxfsd_requ, x_smbd_requ_t, base);
+	return !smbd_requ->is_compound_followed();
+}
+
+static std::string smbd_requ_cb_tostr(const x_nxfsd_requ_t *nxfsd_requ)
+{
+	const x_smbd_requ_t *smbd_requ = X_CONTAINER_OF(nxfsd_requ, x_smbd_requ_t, base);
+	char buf[256];
+	snprintf(buf, sizeof(buf), X_SMBD_REQU_DBG_FMT, X_SMBD_REQU_DBG_ARG(smbd_requ));
+	return buf;
+}
+
+static const x_nxfsd_requ_cbs_t smbd_requ_upcall_cbs = {
+	smbd_requ_cb_destroy,
+	smbd_requ_cb_can_async,
+	smbd_requ_cb_tostr,
+};
 
 x_smbd_requ_t::x_smbd_requ_t(x_nxfsd_conn_t *nxfsd_conn, x_buf_t *in_buf,
 		uint32_t in_msgsize,
 		bool encrypted)
-	: interim_timer(interim_timeout_func), in_buf(in_buf)
+	: base(&smbd_requ_upcall_cbs, nxfsd_conn, in_buf, in_msgsize)
 	, compound_id(X_SMBD_COUNTER_INC_CREATE(requ, 1) + 1)
-	, in_msgsize(in_msgsize)
 	, encrypted(encrypted)
-	, nxfsd_conn(x_ref_inc(nxfsd_conn))
 {
 }
 
 x_smbd_requ_t::~x_smbd_requ_t()
 {
 	X_SMBD_REQU_LOG(DBG, this, " freed");
-	x_buf_release(in_buf);
 
-	while (out_buf_head) {
-		auto next = out_buf_head->next;
-		delete out_buf_head;
-		out_buf_head = next;
-	}
-
-	x_ref_dec_if(smbd_open);
 	x_ref_dec_if(smbd_tcon);
 	x_ref_dec_if(smbd_chan);
 	x_ref_dec_if(smbd_sess);
-	x_ref_dec(nxfsd_conn);
 	X_SMBD_COUNTER_INC_DELETE(requ, 1);
 }
 
 template <>
 x_smbd_requ_t *x_ref_inc(x_smbd_requ_t *smbd_requ)
 {
-	g_smbd_requ_table->incref(smbd_requ->id);
+	x_ref_inc(&smbd_requ->base);
 	return smbd_requ;
 }
 
 template <>
 void x_ref_dec(x_smbd_requ_t *smbd_requ)
 {
-	g_smbd_requ_table->decref(smbd_requ->id);
+	x_ref_dec(&smbd_requ->base);
 }
 
 x_smbd_requ_t *x_smbd_requ_create(x_nxfsd_conn_t *nxfsd_conn, x_buf_t *in_buf,
 		uint32_t in_msgsize, bool encrypted)
 {
 	auto smbd_requ = new x_smbd_requ_t(nxfsd_conn, in_buf, in_msgsize, encrypted);
-	if (!g_smbd_requ_table->store(smbd_requ, smbd_requ->id)) {
+	if (!x_nxfsd_requ_init(&smbd_requ->base)) {
 		delete smbd_requ;
 		return nullptr;
 	}
@@ -93,89 +96,30 @@ x_smbd_requ_t *x_smbd_requ_create(x_nxfsd_conn_t *nxfsd_conn, x_buf_t *in_buf,
 	return smbd_requ;
 }
 
-uint64_t x_smbd_requ_get_async_id(const x_smbd_requ_t *smbd_requ)
-{
-	X_ASSERT(smbd_requ->interim_state == x_smbd_requ_t::INTERIM_S_SENT);
-	return smbd_requ->id;
-}
-
-x_smbd_requ_t *x_smbd_requ_lookup(uint64_t id)
-{
-	auto [found, smbd_requ] = g_smbd_requ_table->lookup(id);
-	if (!found) {
-		return nullptr;
-	}
-	return smbd_requ;
-}
-
-x_smbd_requ_t *x_smbd_requ_async_lookup(uint64_t id, const x_smbd_conn_t *smbd_conn, bool remove)
-{
-	/* skip client_guid checking, since session bind is signed,
-	 * the check does not improve security
-	 */
-	auto [found, smbd_requ] = g_smbd_requ_table->lookup(id);
-	if (!found) {
-		return nullptr;
-	}
-
-	if (x_smbd_chan_get_conn(smbd_requ->smbd_chan) != smbd_conn || !smbd_requ->cancel_fn) {
-		x_ref_dec(smbd_requ);
-		return nullptr;
-	}
-
-	if (remove) {
-		x_ref_dec(smbd_requ);
-	}
-	return smbd_requ;
-}
-
-void x_smbd_requ_async_done(void *ctx_conn, x_smbd_requ_t *smbd_requ,
-		NTSTATUS status)
-{
-	if (!x_smbd_requ_async_remove(smbd_requ)) {
-		/* it must be cancelled by x_smbd_conn_cancel */
-	}
-	auto state = smbd_requ->release_state();
-	state->async_done(ctx_conn, smbd_requ, status);
-}
-
-void x_smbd_requ_done(x_smbd_requ_t *smbd_requ)
-{
-	X_SMBD_REQU_LOG(DBG, smbd_requ, "");
-	smbd_requ->id = g_smbd_requ_table->remove(smbd_requ->id);
-	smbd_requ->done = true;
-}
-
-int x_smbd_requ_pool_init(uint32_t count)
-{
-	g_smbd_requ_table = new smbd_requ_table_t(count);
-	return 0;
-}
-
 NTSTATUS x_smbd_requ_init_open(x_smbd_requ_t *smbd_requ,
 		uint64_t id_persistent, uint64_t id_volatile,
 		bool modify_call)
 {
-	if (!smbd_requ->smbd_open && !x_smb2_file_id_is_nul(id_persistent,
+	if (!smbd_requ->base.smbd_open && !x_smb2_file_id_is_nul(id_persistent,
 				id_volatile)) {
-		smbd_requ->smbd_open = x_smbd_open_lookup(
+		smbd_requ->base.smbd_open = x_smbd_open_lookup(
 				id_persistent,
 				id_volatile,
 				smbd_requ->smbd_tcon);
 	}
 
-	if (smbd_requ->smbd_open) {
+	if (smbd_requ->base.smbd_open) {
 		return x_smbd_conn_dispatch_update_counts(smbd_requ,
 				modify_call);
 	}
 
-	if (smbd_requ->is_compound_related() && !NT_STATUS_IS_OK(smbd_requ->status)) {
-		X_SMBD_REQU_RETURN_STATUS(smbd_requ, smbd_requ->status);
+	if (smbd_requ->is_compound_related() && !NT_STATUS_IS_OK(smbd_requ->base.status)) {
+		X_SMBD_REQU_RETURN_STATUS(smbd_requ, smbd_requ->base.status);
 	} else {
 		X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_FILE_CLOSED);
 	}
 }
-
+#if 0
 struct x_smbd_requ_list_t : x_ctrl_handler_t
 {
 	x_smbd_requ_list_t() : iter(g_smbd_requ_table->iter_start()) {
@@ -207,33 +151,7 @@ x_ctrl_handler_t *x_smbd_requ_list_create()
 {
 	return new x_smbd_requ_list_t;
 }
-
-
-struct x_smbd_open_release_evt_t
-{
-	static void func(void *ctx_conn, x_fdevt_user_t *fdevt_user)
-	{
-		X_ASSERT(!ctx_conn);
-		x_smbd_open_release_evt_t *evt = X_CONTAINER_OF(fdevt_user,
-				x_smbd_open_release_evt_t, base);
-		x_smbd_open_release(evt->smbd_open);
-		delete evt;
-	}
-
-	explicit x_smbd_open_release_evt_t(x_smbd_open_t *smbd_open)
-		: base(func), smbd_open(smbd_open)
-	{
-	}
-
-	x_fdevt_user_t base;
-	x_smbd_open_t * const smbd_open;
-};
-
-void x_smbd_schedule_release_open(x_smbd_open_t *smbd_open)
-{
-	x_smbd_open_release_evt_t *evt = new x_smbd_open_release_evt_t(smbd_open);
-	x_nxfsd_schedule(&evt->base);
-}
+#endif
 
 struct x_smbd_lease_release_evt_t
 {
@@ -261,33 +179,6 @@ void x_smbd_schedule_release_lease(x_smbd_lease_t *smbd_lease)
 	x_nxfsd_schedule(&evt->base);
 }
 
-struct x_smbd_wakeup_oplock_pending_list_evt_t
-{
-	static void func(void *ctx_conn, x_fdevt_user_t *fdevt_user)
-	{
-		X_ASSERT(!ctx_conn);
-		x_smbd_wakeup_oplock_pending_list_evt_t *evt = X_CONTAINER_OF(fdevt_user,
-				x_smbd_wakeup_oplock_pending_list_evt_t, base);
-		x_smbd_wakeup_requ_list(evt->oplock_pending_list);
-		delete evt;
-	}
-
-	explicit x_smbd_wakeup_oplock_pending_list_evt_t(x_smbd_requ_id_list_t &oplock_pending_list)
-		: base(func), oplock_pending_list(std::move(oplock_pending_list))
-	{
-	}
-
-	x_fdevt_user_t base;
-	x_smbd_requ_id_list_t oplock_pending_list;
-};
-
-void x_smbd_schedule_wakeup_oplock_pending_list(x_smbd_requ_id_list_t &oplock_pending_list)
-{
-	x_smbd_wakeup_oplock_pending_list_evt_t *evt =
-		new x_smbd_wakeup_oplock_pending_list_evt_t(oplock_pending_list);
-	x_nxfsd_schedule(&evt->base);
-}
-
 struct x_smbd_clean_pending_requ_list_evt_t
 {
 	static void func(void *ctx_conn, x_fdevt_user_t *fdevt_user)
@@ -295,10 +186,10 @@ struct x_smbd_clean_pending_requ_list_evt_t
 		X_ASSERT(!ctx_conn);
 		x_smbd_clean_pending_requ_list_evt_t *evt = X_CONTAINER_OF(fdevt_user,
 				x_smbd_clean_pending_requ_list_evt_t, base);
-		x_smbd_requ_t *smbd_requ;
-		while ((smbd_requ = evt->pending_requ_list.get_front()) != nullptr) {
-			evt->pending_requ_list.remove(smbd_requ);
-			x_smbd_requ_post_cancel(smbd_requ, smbd_requ->status);
+		x_nxfsd_requ_t *nxfsd_requ;
+		while ((nxfsd_requ = evt->pending_requ_list.get_front()) != nullptr) {
+			evt->pending_requ_list.remove(nxfsd_requ);
+			x_nxfsd_requ_post_cancel(nxfsd_requ, nxfsd_requ->status);
 		}
 
 		delete evt;

@@ -128,6 +128,7 @@ SET_src_smbd_nx := \
 	auth_ntlmssp auth_krb5 auth_spnego auth \
 	network misc fnmatch \
 	nxfsd_conn \
+	nxfsd_requ \
 	nxfsd_sched \
 	stats \
 	ctrld \

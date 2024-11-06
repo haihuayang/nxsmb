@@ -38,38 +38,38 @@ struct copychunk_evt_t
 	static void func(void *ctx_conn, x_fdevt_user_t *fdevt_user)
 	{
 		copychunk_evt_t *evt = X_CONTAINER_OF(fdevt_user, copychunk_evt_t, base);
-		x_smbd_requ_t *smbd_requ = evt->smbd_requ;
-		X_LOG(SMB, DBG, "evt=%p, requ=%p, ctx_conn=%p", evt, smbd_requ, ctx_conn);
-		x_smbd_requ_async_done(ctx_conn, smbd_requ, evt->status);
+		x_nxfsd_requ_t *nxfsd_requ = evt->nxfsd_requ;
+		X_LOG(SMB, DBG, "evt=%p, requ=%p, ctx_conn=%p", evt, nxfsd_requ, ctx_conn);
+		x_nxfsd_requ_async_done(ctx_conn, nxfsd_requ, evt->status);
 		delete evt;
 	}
 
-	copychunk_evt_t(x_smbd_requ_t *r, NTSTATUS s)
-		: base(func), smbd_requ(r), status(s)
+	copychunk_evt_t(x_nxfsd_requ_t *r, NTSTATUS s)
+		: base(func), nxfsd_requ(r), status(s)
 	{
 	}
 
 	~copychunk_evt_t()
 	{
-		x_ref_dec(smbd_requ);
+		x_ref_dec(nxfsd_requ);
 	}
 
 	x_fdevt_user_t base;
-	x_smbd_requ_t * const smbd_requ;
+	x_nxfsd_requ_t * const nxfsd_requ;
 	NTSTATUS const status;
 };
 
 struct copychunk_job_t
 {
-	copychunk_job_t(x_smbd_requ_t *smbd_requ, x_smbd_open_t *src_open,
+	copychunk_job_t(x_nxfsd_requ_t *nxfsd_requ, x_smbd_open_t *src_open,
 			std::vector<x_smb2_copychunk_t> &&chunks);
 	~copychunk_job_t()
 	{
-		X_ASSERT(!smbd_requ);
+		X_ASSERT(!nxfsd_requ);
 		x_ref_dec(src_open);
 	}
 	x_job_t base;
-	x_smbd_requ_t *smbd_requ;
+	x_nxfsd_requ_t *nxfsd_requ;
 	x_smbd_open_t *const src_open;
 	const std::vector<x_smb2_copychunk_t> chunks;
 };
@@ -78,10 +78,10 @@ static x_job_t::retval_t copychunk_job_run(x_job_t *job, void *data)
 {
 	copychunk_job_t *copychunk_job = X_CONTAINER_OF(job, copychunk_job_t, base);
 
-	x_smbd_requ_t *smbd_requ = copychunk_job->smbd_requ;
-	copychunk_job->smbd_requ = nullptr;
+	x_nxfsd_requ_t *nxfsd_requ = copychunk_job->nxfsd_requ;
+	copychunk_job->nxfsd_requ = nullptr;
 
-	auto state = smbd_requ->get_requ_state<x_smbd_requ_state_ioctl_t>();
+	auto state = nxfsd_requ->get_requ_state<x_smbd_requ_state_ioctl_t>();
 
 	NTSTATUS status = NT_STATUS_OK;
 	uint32_t total_count = 0;
@@ -107,7 +107,7 @@ static x_job_t::retval_t copychunk_job_run(x_job_t *job, void *data)
 		read_state->out_buf = nullptr;
 		write_state->in_buf_offset = 0;
 		write_state->in_buf_length = read_state->out_buf_length;
-		status = x_smbd_open_op_write(smbd_requ->smbd_open, nullptr,
+		status = x_smbd_open_op_write(nxfsd_requ->smbd_open, nullptr,
 				write_state, 0);
 		if (!NT_STATUS_IS_OK(status)) {
 			break;
@@ -124,21 +124,21 @@ static x_job_t::retval_t copychunk_job_run(x_job_t *job, void *data)
 	out->total_bytes_writen = X_H2LE32(total_count);
 	state->out_buf_length = x_convert_assert<uint32_t>(sizeof(x_smb2_fsctl_srv_copychunk_out_t));
 
-	X_SMBD_REQU_POST_USER(smbd_requ,
-			new copychunk_evt_t(smbd_requ, status));
+	X_NXFSD_REQU_POST_USER(nxfsd_requ,
+			new copychunk_evt_t(nxfsd_requ, status));
 	delete copychunk_job;
 	return x_job_t::JOB_DONE;
 }
 
-inline copychunk_job_t::copychunk_job_t(x_smbd_requ_t *smbd_requ, x_smbd_open_t *src_open,
+inline copychunk_job_t::copychunk_job_t(x_nxfsd_requ_t *nxfsd_requ, x_smbd_open_t *src_open,
 			std::vector<x_smb2_copychunk_t> &&chunks)
-	: base(copychunk_job_run), smbd_requ(smbd_requ), src_open(src_open), chunks(chunks)
+	: base(copychunk_job_run), nxfsd_requ(nxfsd_requ), src_open(src_open), chunks(chunks)
 {
 }
 
-static void copychunk_cancel(x_nxfsd_conn_t *nxfsd_conn, x_smbd_requ_t *smbd_requ)
+static void copychunk_cancel(x_nxfsd_conn_t *nxfsd_conn, x_nxfsd_requ_t *nxfsd_requ)
 {
-	x_smbd_requ_post_cancel(smbd_requ, NT_STATUS_CANCELLED);
+	x_nxfsd_requ_post_cancel(nxfsd_requ, NT_STATUS_CANCELLED);
 }
 
 static NTSTATUS copychunk_invalid_limit(x_smbd_requ_state_ioctl_t &state)
@@ -271,16 +271,17 @@ NTSTATUS x_smb2_ioctl_copychunk(
 	}
 
 	/* vfs_offload_token_check_handles */
-	NTSTATUS status = copychunk_check_access(state->ctl_code, src_open, smbd_requ->smbd_open);
+	NTSTATUS status = copychunk_check_access(state->ctl_code, src_open,
+			smbd_requ->base.smbd_open);
 	if (!NT_STATUS_IS_OK(status)) {
 		x_ref_dec(src_open);
 		return status;
 	}
 
-	copychunk_job_t *copychunk_job = new copychunk_job_t(x_ref_inc(smbd_requ),
+	copychunk_job_t *copychunk_job = new copychunk_job_t(x_ref_inc(&smbd_requ->base),
 			src_open, std::move(chunks));
-	smbd_requ->save_requ_state(state);
-	x_smbd_requ_async_insert(smbd_requ, copychunk_cancel, X_NSEC_PER_SEC);
+	smbd_requ->base.save_requ_state(state);
+	x_nxfsd_requ_async_insert(&smbd_requ->base, copychunk_cancel, X_NSEC_PER_SEC);
 	x_smbd_schedule_async(&copychunk_job->base);
 	return NT_STATUS_PENDING;
 }
@@ -295,7 +296,7 @@ NTSTATUS x_smb2_ioctl_request_resume_key(
 	state.out_buf = x_buf_alloc(32);
 	state.out_buf_length = 32;
 	uint64_t *data = (uint64_t *)state.out_buf->data;
-	auto [ persistent_id, volatile_id ] = x_smbd_open_get_id(smbd_requ->smbd_open);
+	auto [ persistent_id, volatile_id ] = x_smbd_open_get_id(smbd_requ->base.smbd_open);
 	*data++ = X_H2LE64(persistent_id);
 	*data++ = X_H2LE64(volatile_id);
 	*data++ = 0;

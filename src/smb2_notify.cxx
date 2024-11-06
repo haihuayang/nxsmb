@@ -16,7 +16,7 @@ static NTSTATUS x_smb2_reply_notify(x_smbd_conn_t *smbd_conn,
 {
 	/* TODO seem windows server remember in_output_buffer_length */
 	uint32_t output_buffer_length = std::min(state.in_output_buffer_length,
-			smbd_requ->smbd_open->notify_buffer_length);
+			smbd_requ->base.smbd_open->notify_buffer_length);
 
 	x_bufref_t *bufref = x_smb2_bufref_alloc(sizeof(x_smb2_notify_resp_t) +
 			output_buffer_length);
@@ -46,9 +46,10 @@ static NTSTATUS x_smb2_reply_notify(x_smbd_conn_t *smbd_conn,
 }
 
 void x_smbd_requ_state_notify_t::async_done(void *ctx_conn,
-		x_smbd_requ_t *smbd_requ,
+		x_nxfsd_requ_t *nxfsd_requ,
 		NTSTATUS status)
 {
+	x_smbd_requ_t *smbd_requ = x_smbd_requ_from_base(nxfsd_requ);
 	X_SMBD_REQU_LOG(OP, smbd_requ, " %s", x_ntstatus_str(status));
 	if (!ctx_conn) {
 		return;
@@ -61,22 +62,23 @@ void x_smbd_requ_state_notify_t::async_done(void *ctx_conn,
 }
 
 /* SMB2_NOTIFY */
-static void posixfs_notify_cancel(x_nxfsd_conn_t *nxfsd_conn, x_smbd_requ_t *smbd_requ)
+static void posixfs_notify_cancel(x_nxfsd_conn_t *nxfsd_conn, x_nxfsd_requ_t *nxfsd_requ)
 {
-	x_smbd_open_t *smbd_open = smbd_requ->smbd_open;
+	x_smbd_open_t *smbd_open = nxfsd_requ->smbd_open;
 	x_smbd_object_t *smbd_object = smbd_open->smbd_object;
 
 	{
 		std::lock_guard<std::mutex> lock(smbd_object->mutex);
-		smbd_open->pending_requ_list.remove(smbd_requ);
+		smbd_open->pending_requ_list.remove(nxfsd_requ);
 	}
-	x_smbd_requ_post_cancel(smbd_requ, NT_STATUS_CANCELLED);
+	x_nxfsd_requ_post_cancel(nxfsd_requ, NT_STATUS_CANCELLED);
 }
 
 static NTSTATUS smbd_open_notify(x_smbd_open_t *smbd_open,
-		x_smbd_requ_t *smbd_requ,
+		x_nxfsd_requ_t *nxfsd_requ,
 		std::unique_ptr<x_smbd_requ_state_notify_t> &state)
 {
+	nxfsd_requ->status = NT_STATUS_NOTIFY_CLEANUP;
 	x_smbd_object_t *smbd_object = smbd_open->smbd_object;
 	auto lock = std::lock_guard(smbd_object->mutex);
 
@@ -88,12 +90,12 @@ static NTSTATUS smbd_open_notify(x_smbd_open_t *smbd_open,
 	state->out_notify_changes = std::move(smbd_open->notify_changes);
 	if (!state->out_notify_changes.empty()) {
 		return NT_STATUS_OK;
-	} else if (!smbd_requ->is_compound_followed()) {
-		smbd_requ->save_requ_state(state);
-		x_ref_inc(smbd_requ);
-		smbd_open->pending_requ_list.push_back(smbd_requ);
+	} else if (nxfsd_requ->can_async()) {
+		nxfsd_requ->save_requ_state(state);
+		x_ref_inc(nxfsd_requ);
+		smbd_open->pending_requ_list.push_back(nxfsd_requ);
 		/* send interim immediately */
-		x_smbd_requ_async_insert(smbd_requ, posixfs_notify_cancel, 0);
+		x_nxfsd_requ_async_insert(nxfsd_requ, posixfs_notify_cancel, 0);
 		return NT_STATUS_PENDING;
 	} else {
 		return NT_STATUS_INTERNAL_ERROR;
@@ -102,7 +104,8 @@ static NTSTATUS smbd_open_notify(x_smbd_open_t *smbd_open,
 
 NTSTATUS x_smb2_process_notify(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 {
-	if (smbd_requ->in_requ_len < sizeof(x_smb2_header_t) + sizeof(x_smb2_notify_requ_t)) {
+	auto [ in_hdr, in_requ_len ] = smbd_requ->base.get_in_data();
+	if (in_requ_len < sizeof(x_smb2_header_t) + sizeof(x_smb2_notify_requ_t)) {
 		X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
 
@@ -110,7 +113,6 @@ NTSTATUS x_smb2_process_notify(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_req
 		X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_USER_SESSION_DELETED);
 	}
 
-	const uint8_t *in_hdr = smbd_requ->get_in_data();
 	auto state = std::make_unique<x_smbd_requ_state_notify_t>();
 	const x_smb2_notify_requ_t *in_notify = (const x_smb2_notify_requ_t *)(in_hdr + sizeof(x_smb2_header_t));
 
@@ -144,7 +146,7 @@ NTSTATUS x_smb2_process_notify(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_req
 		X_SMBD_REQU_RETURN_STATUS(smbd_requ, status);
 	}
 
-	auto smbd_open = smbd_requ->smbd_open;
+	auto smbd_open = smbd_requ->base.smbd_open;
 	if (x_smbd_open_is_data(smbd_open)) {
 		X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
@@ -163,9 +165,8 @@ NTSTATUS x_smb2_process_notify(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_req
 		}
 	}
 
-	smbd_requ->status = NT_STATUS_NOTIFY_CLEANUP;
 	status = smbd_open_notify(smbd_open,
-			smbd_requ, state);
+			&smbd_requ->base, state);
 	if (NT_STATUS_IS_OK(status)) {
 		X_SMBD_REQU_LOG(OP, smbd_requ, " STATUS_SUCCESS");
 		return x_smb2_reply_notify(smbd_conn, smbd_requ, *state);

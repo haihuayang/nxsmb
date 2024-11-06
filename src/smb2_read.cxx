@@ -27,7 +27,7 @@ static void x_smb2_reply_read(x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ,
 		x_smbd_requ_state_read_t &state)
 {
-	smbd_requ->smbd_open->open_state.current_offset =
+	smbd_requ->base.smbd_open->open_state.current_offset =
 		state.in_offset + state.in_length;
 
 	x_bufref_t *bufref = x_smb2_bufref_alloc(sizeof(x_smb2_read_resp_t));
@@ -52,9 +52,10 @@ static void x_smb2_reply_read(x_smbd_conn_t *smbd_conn,
 }
 
 void x_smbd_requ_state_read_t::async_done(void *ctx_conn,
-		x_smbd_requ_t *smbd_requ,
+		x_nxfsd_requ_t *nxfsd_requ,
 		NTSTATUS status)
 {
+	x_smbd_requ_t *smbd_requ = x_smbd_requ_from_base(nxfsd_requ);
 	X_SMBD_REQU_LOG(OP, smbd_requ, " %s out_length=%u", x_ntstatus_str(status),
 			out_buf_length);
 	if (!ctx_conn) {
@@ -76,11 +77,10 @@ NTSTATUS x_smb2_process_read(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 	X_ASSERT(smbd_requ->smbd_chan && smbd_requ->smbd_sess);
 
 	// TODO smbd_smb2_request_verify_creditcharge
-	if (smbd_requ->in_requ_len < sizeof(x_smb2_header_t) + sizeof(x_smb2_read_requ_t)) {
+	auto [ in_hdr, in_requ_len ] = smbd_requ->base.get_in_data();
+	if (in_requ_len < sizeof(x_smb2_header_t) + sizeof(x_smb2_read_requ_t)) {
 		X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
-
-	const uint8_t *in_hdr = smbd_requ->get_in_data();
 
 	auto state = std::make_unique<x_smbd_requ_state_read_t>();
 	decode_in_read(*state, in_hdr);
@@ -109,12 +109,13 @@ NTSTATUS x_smb2_process_read(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 		X_SMBD_REQU_RETURN_STATUS(smbd_requ, status);
 	}
 
-	if (!smbd_requ->smbd_open->check_access_any(idl::SEC_FILE_READ_DATA |
+	auto smbd_open = smbd_requ->base.smbd_open;
+	if (!smbd_open->check_access_any(idl::SEC_FILE_READ_DATA |
 				idl::SEC_FILE_EXECUTE)) {
 		X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_ACCESS_DENIED);
 	}
 
-	if (!x_smbd_open_is_data(smbd_requ->smbd_open)) {
+	if (!x_smbd_open_is_data(smbd_open)) {
 		X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_INVALID_DEVICE_REQUEST);
 	}
 
@@ -124,7 +125,7 @@ NTSTATUS x_smb2_process_read(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 		state->out_buf_length = 0;
 		status = NT_STATUS_OK;
 	} else {
-		status = x_smbd_open_op_read(smbd_requ->smbd_open, smbd_requ,
+		status = x_smbd_open_op_read(smbd_open, &smbd_requ->base,
 				state, smbd_conf.my_dev_delay_read_ms,
 				false);
 	}

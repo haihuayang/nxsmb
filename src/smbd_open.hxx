@@ -122,7 +122,7 @@ struct x_smbd_open_t
 	uint8_t lock_sequence_array[LOCK_SEQUENCE_MAX] = { 0 };
 
 	uint64_t request_count = 0, pre_request_count = 0;
-	x_smbd_requ_id_list_t oplock_pending_list; // pending on oplock
+	x_nxfsd_requ_id_list_t oplock_pending_list; // pending on oplock
 };
 
 struct x_smbd_object_t;
@@ -148,13 +148,13 @@ struct x_smbd_object_ops_t
 			const x_smbd_durable_t &durable);
 	NTSTATUS (*read)(x_smbd_object_t *smbd_object,
 			x_smbd_open_t *smbd_open,
-			x_smbd_requ_t *smbd_requ,
+			x_nxfsd_requ_t *nxfsd_requ,
 			std::unique_ptr<x_smbd_requ_state_read_t> &state,
 			uint32_t delay_ms,
 			bool all);
 	NTSTATUS (*write)(x_smbd_object_t *smbd_object,
 			x_smbd_open_t *smbd_open,
-			x_smbd_requ_t *smbd_requ,
+			x_nxfsd_requ_t *nxfsd_requ,
 			std::unique_ptr<x_smbd_requ_state_write_t> &state,
 			uint32_t delay_ms);
 	NTSTATUS (*flush)(x_smbd_object_t *smbd_object,
@@ -167,10 +167,10 @@ struct x_smbd_object_ops_t
 			std::unique_ptr<x_smbd_requ_state_getinfo_t> &state);
 	NTSTATUS (*setinfo)(x_smbd_object_t *smbd_object,
 			x_smbd_conn_t *smbd_conn,
-			x_smbd_requ_t *smbd_requ,
+			x_nxfsd_requ_t *nxfsd_requ,
 			std::unique_ptr<x_smbd_requ_state_setinfo_t> &state);
 	NTSTATUS (*ioctl)(x_smbd_object_t *smbd_object,
-			x_smbd_requ_t *smbd_requ,
+			x_nxfsd_requ_t *nxfsd_requ,
 			std::unique_ptr<x_smbd_requ_state_ioctl_t> &state);
 	NTSTATUS (*query_allocated_ranges)(x_smbd_object_t *smbd_object,
 			x_smbd_stream_t *smbd_stream,
@@ -411,7 +411,7 @@ NTSTATUS x_smbd_open_op_close(
 
 static inline NTSTATUS x_smbd_open_op_read(
 		x_smbd_open_t *smbd_open,
-		x_smbd_requ_t *smbd_requ,
+		x_nxfsd_requ_t *nxfsd_requ,
 		std::unique_ptr<x_smbd_requ_state_read_t> &state,
 		uint32_t delay_ms,
 		bool all)
@@ -421,12 +421,12 @@ static inline NTSTATUS x_smbd_open_op_read(
 	if (!op_fn) {
 		return NT_STATUS_INVALID_DEVICE_REQUEST;
 	}
-	return op_fn(smbd_object, smbd_open, smbd_requ, state, delay_ms, all);
+	return op_fn(smbd_object, smbd_open, nxfsd_requ, state, delay_ms, all);
 }
 
 static inline NTSTATUS x_smbd_open_op_write(
 		x_smbd_open_t *smbd_open,
-		x_smbd_requ_t *smbd_requ,
+		x_nxfsd_requ_t *nxfsd_requ,
 		std::unique_ptr<x_smbd_requ_state_write_t> &state,
 		uint32_t delay_ms)
 {
@@ -435,7 +435,7 @@ static inline NTSTATUS x_smbd_open_op_write(
 	if (!op_fn) {
 		return NT_STATUS_INVALID_DEVICE_REQUEST;
 	}
-	return op_fn(smbd_object, smbd_open, smbd_requ, state, delay_ms);
+	return op_fn(smbd_object, smbd_open, nxfsd_requ, state, delay_ms);
 }
 
 static inline NTSTATUS x_smbd_open_op_flush(
@@ -462,17 +462,17 @@ static inline NTSTATUS x_smbd_open_op_getinfo(x_smbd_open_t *smbd_open,
 
 static inline NTSTATUS x_smbd_open_op_setinfo(x_smbd_open_t *smbd_open,
 		x_smbd_conn_t *smbd_conn,
-		x_smbd_requ_t *smbd_requ,
+		x_nxfsd_requ_t *nxfsd_requ,
 		std::unique_ptr<x_smbd_requ_state_setinfo_t> &state)
 {
 	x_smbd_object_t *smbd_object = smbd_open->smbd_object;
 	return smbd_object->smbd_volume->ops->setinfo(smbd_object,
-			smbd_conn, smbd_requ, state);
+			smbd_conn, nxfsd_requ, state);
 }
 
 static inline NTSTATUS x_smbd_open_op_ioctl(
 		x_smbd_open_t *smbd_open,
-		x_smbd_requ_t *smbd_requ,
+		x_nxfsd_requ_t *nxfsd_requ,
 		std::unique_ptr<x_smbd_requ_state_ioctl_t> &state)
 {
 	x_smbd_object_t *smbd_object = smbd_open->smbd_object;
@@ -480,7 +480,7 @@ static inline NTSTATUS x_smbd_open_op_ioctl(
 	if (!op_fn) {
 		return NT_STATUS_INVALID_DEVICE_REQUEST;
 	}
-	return op_fn(smbd_object, smbd_requ, state);
+	return op_fn(smbd_object, nxfsd_requ, state);
 }
 
 static inline NTSTATUS x_smbd_open_op_set_delete_on_close(
@@ -616,13 +616,13 @@ bool x_smbd_open_break_lease(x_smbd_open_t *smbd_open,
 		const x_smb2_uuid_t *client_guid,
 		uint8_t break_mask,
 		uint8_t delay_mask,
-		x_smbd_requ_t *smbd_requ,
+		x_nxfsd_requ_t *nxfsd_requ,
 		bool block_breaking);
 
 bool x_smbd_open_break_oplock(x_smbd_object_t *smbd_object,
 		x_smbd_open_t *smbd_open,
 		uint8_t break_mask,
-		x_smbd_requ_t *smbd_requ);
+		x_nxfsd_requ_t *nxfsd_requ);
 
 NTSTATUS x_smbd_break_oplock(
 		x_smbd_open_t *smbd_open,
@@ -679,16 +679,16 @@ NTSTATUS x_smbd_open_object(x_smbd_object_t **psmbd_object,
 
 NTSTATUS x_smbd_object_rename(x_smbd_object_t *smbd_object,
 		x_smbd_open_t *smbd_open,
-		x_smbd_requ_t *smbd_requ,
+		x_nxfsd_requ_t *nxfsd_requ,
 		std::unique_ptr<x_smbd_requ_state_rename_t> &state);
 
 static inline NTSTATUS x_smbd_open_rename(
-		x_smbd_requ_t *smbd_requ,
+		x_nxfsd_requ_t *nxfsd_requ,
 		std::unique_ptr<x_smbd_requ_state_rename_t> &state)
 {
-	auto smbd_open = smbd_requ->smbd_open;
+	auto smbd_open = nxfsd_requ->smbd_open;
 	auto smbd_object = smbd_open->smbd_object;
-	return x_smbd_object_rename(smbd_object, smbd_open, smbd_requ,
+	return x_smbd_object_rename(smbd_object, smbd_open, nxfsd_requ,
 			state);
 }
 
@@ -703,22 +703,22 @@ NTSTATUS x_smbd_open_create(
 
 NTSTATUS x_smbd_object_set_delete_pending_intl(x_smbd_object_t *smbd_object,
 		x_smbd_open_t *smbd_open,
-		x_smbd_requ_t *smbd_requ,
+		x_nxfsd_requ_t *nxfsd_requ,
 		std::unique_ptr<x_smbd_requ_state_disposition_t> &state);
 
 NTSTATUS x_smbd_object_set_delete_pending(x_smbd_object_t *smbd_object,
 		x_smbd_open_t *smbd_open,
-		x_smbd_requ_t *smbd_requ,
+		x_nxfsd_requ_t *nxfsd_requ,
 		std::unique_ptr<x_smbd_requ_state_disposition_t> &state);
 
 static inline NTSTATUS x_smbd_open_set_delete_pending(
-		x_smbd_requ_t *smbd_requ,
+		x_nxfsd_requ_t *nxfsd_requ,
 		std::unique_ptr<x_smbd_requ_state_disposition_t> &state)
 {
-	auto smbd_open = smbd_requ->smbd_open;
+	auto smbd_open = nxfsd_requ->smbd_open;
 	auto smbd_object = smbd_open->smbd_object;
 	return x_smbd_object_set_delete_pending(smbd_object, smbd_open,
-			smbd_requ, state);
+			nxfsd_requ, state);
 }
 
 std::u16string x_smbd_object_get_path(const x_smbd_object_t *smbd_object);
@@ -733,7 +733,7 @@ void x_smbd_save_durable(x_smbd_open_t *smbd_open,
 
 void x_smbd_open_release(x_smbd_open_t *smbd_open);
 
-void x_smbd_wakeup_requ_list(const x_smbd_requ_id_list_t &requ_list);
+void x_smbd_wakeup_requ_list(const x_nxfsd_requ_id_list_t &requ_list);
 
 template <typename T>
 static inline T *x_smbd_getinfo_alloc(std::vector<uint8_t> &out_data)

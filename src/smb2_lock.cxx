@@ -61,9 +61,10 @@ static void smb2_lock_set_sequence(x_smbd_open_t *smbd_open,
 }
 
 void x_smbd_requ_state_lock_t::async_done(void *ctx_conn,
-		x_smbd_requ_t *smbd_requ,
+		x_nxfsd_requ_t *nxfsd_requ,
 		NTSTATUS status)
 {
+	x_smbd_requ_t *smbd_requ = x_smbd_requ_from_base(nxfsd_requ);
 	X_SMBD_REQU_LOG(OP, smbd_requ, " %s", x_ntstatus_str(status));
 	if (!ctx_conn) {
 		return;
@@ -71,7 +72,7 @@ void x_smbd_requ_state_lock_t::async_done(void *ctx_conn,
 	x_smbd_conn_t *smbd_conn = (x_smbd_conn_t *)ctx_conn;
 	X_ASSERT(!NT_STATUS_EQUAL(status, NT_STATUS_PENDING));
 	if (NT_STATUS_IS_OK(status)) {
-		smb2_lock_set_sequence(smbd_requ->smbd_open, *this);
+		smb2_lock_set_sequence(nxfsd_requ->smbd_open, *this);
 		x_smb2_reply_lock(smbd_conn, smbd_requ, *this);
 	}
 	x_smbd_conn_requ_done(smbd_conn, smbd_requ, status);
@@ -222,22 +223,22 @@ struct lock_evt_t
 	static void func(void *ctx_conn, x_fdevt_user_t *fdevt_user)
 	{
 		lock_evt_t *evt = X_CONTAINER_OF(fdevt_user, lock_evt_t, base);
-		x_smbd_requ_t *smbd_requ = evt->smbd_requ;
-		X_LOG(SMB, DBG, "evt=%p, requ=%p, ctx_conn=%p", evt, smbd_requ, ctx_conn);
-		x_smbd_requ_async_done(ctx_conn, smbd_requ, NT_STATUS_OK);
+		x_nxfsd_requ_t *nxfsd_requ = evt->nxfsd_requ;
+		X_LOG(SMB, DBG, "evt=%p, requ=%p, ctx_conn=%p", evt, nxfsd_requ, ctx_conn);
+		x_nxfsd_requ_async_done(ctx_conn, nxfsd_requ, NT_STATUS_OK);
 		delete evt;
 	}
 
-	explicit lock_evt_t(x_smbd_requ_t *requ)
-		: base(func), smbd_requ(requ)
+	explicit lock_evt_t(x_nxfsd_requ_t *requ)
+		: base(func), nxfsd_requ(requ)
 	{
 	}
 	~lock_evt_t()
 	{
-		x_ref_dec(smbd_requ);
+		x_ref_dec(nxfsd_requ);
 	}
 	x_fdevt_user_t base;
-	x_smbd_requ_t * const smbd_requ;
+	x_nxfsd_requ_t * const nxfsd_requ;
 };
 
 static void smbd_lock_insert(x_smbd_open_t *smbd_open,
@@ -262,34 +263,34 @@ void x_smbd_lock_retry(x_smbd_sharemode_t *sharemode)
 	x_smbd_open_t *curr_open;
 	auto &open_list = sharemode->open_list;
 	for (curr_open = open_list.get_front(); curr_open; curr_open = open_list.next(curr_open)) {
-		x_smbd_requ_t *smbd_requ = curr_open->pending_requ_list.get_front();
+		x_nxfsd_requ_t *nxfsd_requ = curr_open->pending_requ_list.get_front();
 		/* TODO show it post retry to smbd_conn */
-		while (smbd_requ) {
-			x_smbd_requ_t *next_requ = curr_open->pending_requ_list.next(smbd_requ);
-			if (smbd_requ->in_smb2_hdr.opcode == X_SMB2_OP_LOCK) {
-				auto state = smbd_requ->get_requ_state<x_smbd_requ_state_lock_t>();
+		while (nxfsd_requ) {
+			x_nxfsd_requ_t *next_requ = curr_open->pending_requ_list.next(nxfsd_requ);
+			auto state = nxfsd_requ->get_requ_state<x_smbd_requ_state_lock_t>();
+			if (state) {
 				if (!brl_conflict(sharemode, curr_open, state->in_lock_elements)) {
-					curr_open->pending_requ_list.remove(smbd_requ);
+					curr_open->pending_requ_list.remove(nxfsd_requ);
 					smbd_lock_insert(curr_open, state->in_lock_elements);
-					X_SMBD_REQU_POST_USER(smbd_requ, 
-							new lock_evt_t(smbd_requ));
+					X_NXFSD_REQU_POST_USER(nxfsd_requ, 
+							new lock_evt_t(nxfsd_requ));
 				}
 			}
-			smbd_requ = next_requ;
+			nxfsd_requ = next_requ;
 		}
 	}
 }
 
-static void smbd_lock_cancel(x_nxfsd_conn_t *nxfsd_conn, x_smbd_requ_t *smbd_requ)
+static void smbd_lock_cancel(x_nxfsd_conn_t *nxfsd_conn, x_nxfsd_requ_t *nxfsd_requ)
 {
-	x_smbd_open_t *smbd_open = smbd_requ->smbd_open;
+	x_smbd_open_t *smbd_open = nxfsd_requ->smbd_open;
 	x_smbd_object_t *smbd_object = smbd_open->smbd_object;
 
 	{
 		std::lock_guard<std::mutex> lock(smbd_object->mutex);
-		smbd_open->pending_requ_list.remove(smbd_requ);
+		smbd_open->pending_requ_list.remove(nxfsd_requ);
 	}
-	x_smbd_requ_post_cancel(smbd_requ, NT_STATUS_CANCELLED);
+	x_nxfsd_requ_post_cancel(nxfsd_requ, NT_STATUS_CANCELLED);
 }
 
 static NTSTATUS smbd_open_lock(
@@ -341,10 +342,11 @@ static NTSTATUS smbd_open_lock(
 	} else {
 		X_ASSERT(state->in_lock_elements.size() == 1);
 		X_LOG(SMB, DBG, "lock conflict");
-		smbd_requ->save_requ_state(state);
-		x_ref_inc(smbd_requ);
-		smbd_open->pending_requ_list.push_back(smbd_requ);
-		x_smbd_requ_async_insert(smbd_requ, smbd_lock_cancel, 0);
+		x_nxfsd_requ_t *nxfsd_requ = &smbd_requ->base;
+		nxfsd_requ->save_requ_state(state);
+		x_ref_inc(nxfsd_requ);
+		smbd_open->pending_requ_list.push_back(nxfsd_requ);
+		x_nxfsd_requ_async_insert(nxfsd_requ, smbd_lock_cancel, 0);
 		return NT_STATUS_PENDING;
 	}
 
@@ -405,14 +407,13 @@ static NTSTATUS smbd_open_unlock(
 
 NTSTATUS x_smb2_process_lock(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 {
-	if (smbd_requ->in_requ_len < sizeof(x_smb2_header_t) + sizeof(x_smb2_lock_requ_t)) {
+	auto [ in_hdr, in_requ_len ] = smbd_requ->base.get_in_data();
+	if (in_requ_len < sizeof(x_smb2_header_t) + sizeof(x_smb2_lock_requ_t)) {
 		X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
 
-	const uint8_t *in_hdr = smbd_requ->get_in_data();
-
 	auto state = std::make_unique<x_smbd_requ_state_lock_t>();
-	if (!decode_in_lock(*state, in_hdr, smbd_requ->in_requ_len)) {
+	if (!decode_in_lock(*state, in_hdr, in_requ_len)) {
 		X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
 
@@ -433,7 +434,7 @@ NTSTATUS x_smb2_process_lock(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 		X_SMBD_REQU_RETURN_STATUS(smbd_requ, status);
 	}
 
-	auto smbd_open = smbd_requ->smbd_open;
+	auto smbd_open = smbd_requ->base.smbd_open;
 
 	if (!x_smbd_open_is_data(smbd_open)) {
 		X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
@@ -460,17 +461,17 @@ NTSTATUS x_smb2_process_lock(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 	}
 
 	if (is_unlock) {
-		status = smbd_open_unlock(smbd_requ->smbd_open,
+		status = smbd_open_unlock(smbd_requ->base.smbd_open,
 				smbd_requ, state);
 	} else {
-		smbd_requ->status = NT_STATUS_RANGE_NOT_LOCKED;
-		status = smbd_open_lock(smbd_requ->smbd_open,
+		smbd_requ->base.status = NT_STATUS_RANGE_NOT_LOCKED;
+		status = smbd_open_lock(smbd_requ->base.smbd_open,
 				smbd_requ, state);
 	}
 	
 
 	if (NT_STATUS_IS_OK(status)) {
-		smb2_lock_set_sequence(smbd_requ->smbd_open, *state);
+		smb2_lock_set_sequence(smbd_requ->base.smbd_open, *state);
 		X_SMBD_REQU_LOG(OP, smbd_requ, " STATUS_SUCCESS");
 		x_smb2_reply_lock(smbd_conn, smbd_requ, *state);
 		return status;

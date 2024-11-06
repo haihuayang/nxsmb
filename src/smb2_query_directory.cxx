@@ -66,9 +66,10 @@ static void x_smb2_reply_qdir(x_smbd_conn_t *smbd_conn,
 
 
 void x_smbd_requ_state_qdir_t::async_done(void *ctx_conn,
-		x_smbd_requ_t *smbd_requ,
+		x_nxfsd_requ_t *nxfsd_requ,
 		NTSTATUS status)
 {
+	x_smbd_requ_t *smbd_requ = x_smbd_requ_from_base(nxfsd_requ);
 	X_SMBD_REQU_LOG(OP, smbd_requ, " %s", x_ntstatus_str(status));
 	if (!ctx_conn) {
 		return;
@@ -86,14 +87,15 @@ static bool smbd_qdir_queue_req(x_smbd_qdir_t *smbd_qdir, x_smbd_requ_t *smbd_re
 	x_ref_inc(smbd_requ);
 	for (auto curr_requ = requ_list.get_back(); curr_requ;
 			curr_requ = requ_list.prev(curr_requ)) {
-		X_ASSERT(smbd_requ->compound_id != curr_requ->compound_id);
-		if (smbd_requ->compound_id > curr_requ->compound_id) {
-			requ_list.insert_after(smbd_requ, curr_requ);
+		x_smbd_requ_t *curr_smbd_requ = x_smbd_requ_from_base(curr_requ);
+		X_ASSERT(smbd_requ->compound_id != curr_smbd_requ->compound_id);
+		if (smbd_requ->compound_id > curr_smbd_requ->compound_id) {
+			requ_list.insert_after(&smbd_requ->base, curr_requ);
 			return false;
 		}
 	}
 
-	requ_list.push_front(smbd_requ);
+	requ_list.push_front(&smbd_requ->base);
 	return smbd_qdir->compound_id_blocking == smbd_requ->compound_id;
 }
 
@@ -107,7 +109,7 @@ static NTSTATUS smbd_qdir_process_requ(x_smbd_qdir_t *smbd_qdir, x_smbd_requ_t *
 	if (smbd_qdir->delay_ms) {
 		usleep(smbd_qdir->delay_ms * 1000);
 	}
-	auto state = smbd_requ->get_requ_state<x_smbd_requ_state_qdir_t>();
+	auto state = smbd_requ->base.get_requ_state<x_smbd_requ_state_qdir_t>();
 	if (smbd_qdir->total_count == 0 ||
 			(state->in_flags & (X_SMB2_CONTINUE_FLAG_REOPEN |
 					    X_SMB2_CONTINUE_FLAG_RESTART))) {
@@ -135,7 +137,7 @@ static NTSTATUS smbd_qdir_process_requ(x_smbd_qdir_t *smbd_qdir, x_smbd_requ_t *
 	std::shared_ptr<x_smbd_user_t> smbd_user;
 	if (x_smbd_tcon_get_abe(smbd_requ->smbd_tcon)) {
 		ppsd = &psd;
-		smbd_user = smbd_requ->smbd_user;
+		smbd_user = smbd_requ->base.smbd_user;
 	}
 
 	uint32_t num = 0, matched_count = 0;
@@ -195,7 +197,7 @@ struct smbd_qdir_evt_t
 		smbd_qdir_evt_t *evt = X_CONTAINER_OF(fdevt_user, smbd_qdir_evt_t, base);
 		x_smbd_requ_t *smbd_requ = evt->smbd_requ;
 		X_LOG(SMB, DBG, "evt=%p, requ=%p, ctx_conn=%p", evt, smbd_requ, ctx_conn);
-		x_smbd_requ_async_done(ctx_conn, smbd_requ, evt->status);
+		x_nxfsd_requ_async_done(ctx_conn, &smbd_requ->base, evt->status);
 		delete evt;
 	}
 
@@ -219,20 +221,21 @@ static x_job_t::retval_t smbd_qdir_job_run(x_job_t *job, void *sche)
 	{
 		auto lock = std::unique_lock(smbd_object->mutex);
 		for (;;) {
-			x_smbd_requ_t *smbd_requ = smbd_qdir->requ_list.get_front();
-			if (!smbd_requ) {
+			x_nxfsd_requ_t *nxfsd_requ = smbd_qdir->requ_list.get_front();
+			if (!nxfsd_requ) {
 				break;
 			}
+			x_smbd_requ_t *smbd_requ = x_smbd_requ_from_base(nxfsd_requ);
 			if (smbd_qdir->compound_id_blocking != 0 &&
 					smbd_qdir->compound_id_blocking != smbd_requ->compound_id) {
 				break;
 			}
-			smbd_qdir->requ_list.remove(smbd_requ);
+			smbd_qdir->requ_list.remove(nxfsd_requ);
 			lock.unlock();
 
 			NTSTATUS status = smbd_qdir->closed ? NT_STATUS_FILE_CLOSED :
 				smbd_qdir_process_requ(smbd_qdir, smbd_requ);
-			X_SMBD_REQU_POST_USER(smbd_requ,
+			X_NXFSD_REQU_POST_USER(nxfsd_requ,
 					new smbd_qdir_evt_t(smbd_requ, status));
 			lock.lock();
 		}
@@ -261,32 +264,31 @@ x_smbd_qdir_t::~x_smbd_qdir_t()
 	X_SMBD_COUNTER_INC_DELETE(qdir, 1);
 }
 
-static void smbd_qdir_cancel(x_nxfsd_conn_t *nxfsd_conn, x_smbd_requ_t *smbd_requ)
+static void smbd_qdir_cancel(x_nxfsd_conn_t *nxfsd_conn, x_nxfsd_requ_t *nxfsd_requ)
 {
-	x_smbd_open_t *smbd_open = smbd_requ->smbd_open;
+	x_smbd_open_t *smbd_open = nxfsd_requ->smbd_open;
 	{
 		auto lock = std::lock_guard(smbd_open->smbd_object->mutex);
-		x_smbd_qdir_t *smbd_qdir = smbd_requ->smbd_open->smbd_qdir;
+		x_smbd_qdir_t *smbd_qdir = smbd_open->smbd_qdir;
 		if (!smbd_qdir) {
 			/* smbd_qdir is closed, do nothing */
 			return;
 		}
 		/* TODO check if processing the requ, if so, cannot remove it */
-		smbd_qdir->requ_list.remove(smbd_requ);
+		smbd_qdir->requ_list.remove(nxfsd_requ);
 	}
-	x_smbd_requ_post_cancel(smbd_requ, NT_STATUS_CANCELLED);
+	x_nxfsd_requ_post_cancel(nxfsd_requ, NT_STATUS_CANCELLED);
 }
 
 NTSTATUS x_smb2_process_query_directory(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 {
-	if (smbd_requ->in_requ_len < sizeof(x_smb2_header_t) + sizeof(x_smb2_qdir_requ_t)) {
+	auto [ in_hdr, in_requ_len ] = smbd_requ->base.get_in_data();
+	if (in_requ_len < sizeof(x_smb2_header_t) + sizeof(x_smb2_qdir_requ_t)) {
 		X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
 
-	const uint8_t *in_hdr = smbd_requ->get_in_data();
-
 	auto state = std::make_unique<x_smbd_requ_state_qdir_t>();
-	if (!decode_in_qdir(*state, in_hdr, smbd_requ->in_requ_len)) {
+	if (!decode_in_qdir(*state, in_hdr, in_requ_len)) {
 		X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
 
@@ -326,7 +328,7 @@ NTSTATUS x_smb2_process_query_directory(x_smbd_conn_t *smbd_conn, x_smbd_requ_t 
 		X_SMBD_REQU_RETURN_STATUS(smbd_requ, status);
 	}
 
-	auto smbd_open = smbd_requ->smbd_open;
+	auto smbd_open = smbd_requ->base.smbd_open;
 	x_smbd_object_t *smbd_object = smbd_open->smbd_object;
 	if (smbd_open->smbd_stream || !x_smbd_object_is_dir(smbd_object)) {
 		return NT_STATUS_INVALID_PARAMETER;
@@ -347,8 +349,8 @@ NTSTATUS x_smb2_process_query_directory(x_smbd_conn_t *smbd_conn, x_smbd_requ_t 
 			}
 		}
 
-		smbd_requ->save_requ_state(state);
-		x_smbd_requ_async_insert(smbd_requ, smbd_qdir_cancel,
+		smbd_requ->base.save_requ_state(state);
+		x_nxfsd_requ_async_insert(&smbd_requ->base, smbd_qdir_cancel,
 				X_NSEC_PER_SEC);
 
 		smbd_qdir_queue_req(smbd_open->smbd_qdir, smbd_requ);

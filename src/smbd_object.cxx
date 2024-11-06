@@ -379,7 +379,7 @@ static NTSTATUS rename_object_intl(
 static NTSTATUS delay_rename_for_lease_break(x_smbd_object_t *smbd_object,
 		x_smbd_sharemode_t *smbd_sharemode,
 		x_smbd_open_t *smbd_open,
-		x_smbd_requ_t *smbd_requ)
+		x_nxfsd_requ_t *nxfsd_requ)
 {
 	if (!smbd_open || !smbd_open->smbd_stream) {
 		for (x_dlink_t *link = smbd_object->active_child_object_list.get_front();
@@ -393,7 +393,7 @@ static NTSTATUS delay_rename_for_lease_break(x_smbd_object_t *smbd_object,
 				/* pass null lease as it could not be same */
 				status = delay_rename_for_lease_break(child_object,
 						&child_object->sharemode,
-						nullptr, smbd_requ);
+						nullptr, nxfsd_requ);
 			}
 
 			child_object->decref();
@@ -423,12 +423,12 @@ static NTSTATUS delay_rename_for_lease_break(x_smbd_object_t *smbd_object,
 		if (curr_open->smbd_lease) {
 			if (x_smbd_open_break_lease(curr_open, nullptr, nullptr,
 						X_SMB2_LEASE_HANDLE, X_SMB2_LEASE_HANDLE,
-						smbd_requ, false)) {
+						nxfsd_requ, false)) {
 				delay = true;
 			}
 		} else {
 			if (x_smbd_open_break_oplock(smbd_object, curr_open,
-						X_SMB2_LEASE_HANDLE, smbd_requ)) {
+						X_SMB2_LEASE_HANDLE, nxfsd_requ)) {
 				delay = true;
 			}
 		}
@@ -441,9 +441,9 @@ static NTSTATUS delay_rename_for_lease_break(x_smbd_object_t *smbd_object,
 	return NT_STATUS_OK;
 }
 
-static void smbd_rename_cancel(x_nxfsd_conn_t *nxfsd_conn, x_smbd_requ_t *smbd_requ)
+static void smbd_rename_cancel(x_nxfsd_conn_t *nxfsd_conn, x_nxfsd_requ_t *nxfsd_requ)
 {
-	x_smbd_requ_post_cancel(smbd_requ, NT_STATUS_CANCELLED);
+	x_nxfsd_requ_post_cancel(nxfsd_requ, NT_STATUS_CANCELLED);
 }
 
 static inline NTSTATUS parent_compatible_open(x_smbd_object_t *smbd_object)
@@ -483,7 +483,7 @@ static inline void smbd_object_set_parent(x_smbd_object_t *smbd_object,
 
 NTSTATUS x_smbd_object_rename(x_smbd_object_t *smbd_object,
 		x_smbd_open_t *smbd_open,
-		x_smbd_requ_t *smbd_requ,
+		x_nxfsd_requ_t *nxfsd_requ,
 		std::unique_ptr<x_smbd_requ_state_rename_t> &state)
 {
 	x_smbd_sharemode_t *sharemode = x_smbd_open_get_sharemode(smbd_open);
@@ -512,11 +512,11 @@ NTSTATUS x_smbd_object_rename(x_smbd_object_t *smbd_object,
 
 	auto lock = std::lock_guard(smbd_object->mutex);
 
-	status = delay_rename_for_lease_break(smbd_object, sharemode, smbd_open, smbd_requ);
+	status = delay_rename_for_lease_break(smbd_object, sharemode, smbd_open, nxfsd_requ);
 	if (NT_STATUS_EQUAL(status, NT_STATUS_PENDING)) {
-		smbd_requ->save_requ_state(state);
+		nxfsd_requ->save_requ_state(state);
 		/* windows server do not send interim response in renaming */
-		x_smbd_requ_async_insert(smbd_requ, smbd_rename_cancel, -1);
+		x_nxfsd_requ_async_insert(nxfsd_requ, smbd_rename_cancel, -1);
 		if (new_parent_object) {
 			x_smbd_release_object(new_parent_object);
 		}
@@ -595,7 +595,7 @@ NTSTATUS x_smbd_object_set_delete_on_close(x_smbd_object_t *smbd_object,
 
 NTSTATUS x_smbd_object_set_delete_pending_intl(x_smbd_object_t *smbd_object,
 		x_smbd_open_t *smbd_open,
-		x_smbd_requ_t *smbd_requ,
+		x_nxfsd_requ_t *nxfsd_requ,
 		std::unique_ptr<x_smbd_requ_state_disposition_t> &state)
 {
 	auto sharemode = x_smbd_open_get_sharemode(smbd_open);
@@ -605,7 +605,7 @@ NTSTATUS x_smbd_object_set_delete_pending_intl(x_smbd_object_t *smbd_object,
 		return NT_STATUS_OK;
 	}
 
-	if (smbd_requ) {
+	if (nxfsd_requ) {
 		NTSTATUS status = x_smbd_can_set_delete_on_close(smbd_object,
 				smbd_open->smbd_stream,
 				smbd_object->meta.file_attributes,
@@ -628,21 +628,21 @@ NTSTATUS x_smbd_object_set_delete_pending_intl(x_smbd_object_t *smbd_object,
 			}
 			if (x_smbd_open_break_lease(curr_open, nullptr, nullptr,
 						X_SMB2_LEASE_HANDLE, X_SMB2_LEASE_HANDLE,
-						smbd_requ, false)) {
+						nxfsd_requ, false)) {
 				delay = true;
 			}
 		} else {
 			if (x_smbd_open_break_oplock(smbd_object, curr_open,
-						X_SMB2_LEASE_HANDLE, smbd_requ)) {
+						X_SMB2_LEASE_HANDLE, nxfsd_requ)) {
 				delay = true;
 			}
 		}
 	}
 
-	if (delay && smbd_requ) {
-		smbd_requ->save_requ_state(state);
+	if (delay && nxfsd_requ) {
+		nxfsd_requ->save_requ_state(state);
 		/* windows server do not send interim response in renaming */
-		x_smbd_requ_async_insert(smbd_requ, smbd_rename_cancel, -1);
+		x_nxfsd_requ_async_insert(nxfsd_requ, smbd_rename_cancel, -1);
 		return NT_STATUS_PENDING;
 	}
 
@@ -650,17 +650,17 @@ NTSTATUS x_smbd_object_set_delete_pending_intl(x_smbd_object_t *smbd_object,
 	if (smbd_object->type == x_smbd_object_t::type_dir &&
 			!smbd_open->smbd_stream) {
 		for (curr_open = open_list.get_front(); curr_open; curr_open = open_list.next(curr_open)) {
-			x_smbd_requ_t *requ_notify, *requ_next;
+			x_nxfsd_requ_t *requ_notify, *requ_next;
 			for (requ_notify = curr_open->pending_requ_list.get_front();
 					requ_notify;
 					requ_notify = requ_next) {
 
 				requ_next = curr_open->pending_requ_list.next(requ_notify);
-				if (requ_notify->in_smb2_hdr.opcode != X_SMB2_OP_NOTIFY) {
+				if (!requ_notify->get_requ_state<x_smbd_requ_state_notify_t>()) {
 					continue;
 				}
 				curr_open->pending_requ_list.remove(requ_notify);
-				x_smbd_requ_post_cancel(
+				x_nxfsd_requ_post_cancel(
 						requ_notify, NT_STATUS_DELETE_PENDING);
 			}
 		}
@@ -670,12 +670,12 @@ NTSTATUS x_smbd_object_set_delete_pending_intl(x_smbd_object_t *smbd_object,
 
 NTSTATUS x_smbd_object_set_delete_pending(x_smbd_object_t *smbd_object,
 		x_smbd_open_t *smbd_open,
-		x_smbd_requ_t *smbd_requ,
+		x_nxfsd_requ_t *nxfsd_requ,
 		std::unique_ptr<x_smbd_requ_state_disposition_t> &state)
 {
 	auto lock = std::lock_guard(smbd_object->mutex);
 	return x_smbd_object_set_delete_pending_intl(smbd_object, smbd_open,
-			smbd_requ, state);
+			nxfsd_requ, state);
 }
 
 std::u16string x_smbd_object_get_path(const x_smbd_object_t *smbd_object)

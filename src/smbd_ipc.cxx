@@ -719,14 +719,14 @@ static int named_pipe_write(
 static NTSTATUS ipc_object_op_read(
 		x_smbd_object_t *smbd_object,
 		x_smbd_open_t *smbd_open,
-		x_smbd_requ_t *smbd_requ,
+		x_nxfsd_requ_t *nxfsd_requ,
 		std::unique_ptr<x_smbd_requ_state_read_t> &state,
 		uint32_t delay_ms,
 		bool all)
 {
-	named_pipe_t *named_pipe = from_smbd_open(smbd_requ->smbd_open);
-	X_SMBD_REQU_LOG(DBG, smbd_requ, "requ_length = %u, output = %lu - %u",
-			state->in_length, named_pipe->output.size(), named_pipe->offset);
+	named_pipe_t *named_pipe = from_smbd_open(nxfsd_requ->smbd_open);
+	X_NXFSD_REQU_LOG(DBG, nxfsd_requ, "requ_length = %u, output = %lu - %u",
+	 		state->in_length, named_pipe->output.size(), named_pipe->offset);
 	return named_pipe_read(from_smbd_object(smbd_object),
 			named_pipe,
 			state->in_length, state->out_buf,
@@ -736,18 +736,18 @@ static NTSTATUS ipc_object_op_read(
 static NTSTATUS ipc_object_op_write(
 		x_smbd_object_t *smbd_object,
 		x_smbd_open_t *smbd_open,
-		x_smbd_requ_t *smbd_requ,
+		x_nxfsd_requ_t *nxfsd_requ,
 		std::unique_ptr<x_smbd_requ_state_write_t> &state,
 		uint32_t delay_ms)
 {
-	named_pipe_t *named_pipe = from_smbd_open(smbd_requ->smbd_open);
+	named_pipe_t *named_pipe = from_smbd_open(nxfsd_requ->smbd_open);
 	if (!NT_STATUS_IS_OK(named_pipe->return_status)) {
 		return named_pipe->return_status;
 	}
 
 	int ret = named_pipe_write(from_smbd_object(smbd_object),
 			named_pipe,
-			smbd_requ->smbd_user,
+			nxfsd_requ->smbd_user,
 			state->in_buf->data + state->in_buf_offset,
 			state->in_buf_length);
 	state->out_count = ret;
@@ -826,7 +826,7 @@ static NTSTATUS ipc_object_op_getinfo(
 static NTSTATUS ipc_object_op_setinfo(
 		x_smbd_object_t *smbd_object,
 		x_smbd_conn_t *smbd_conn,
-		x_smbd_requ_t *smbd_requ,
+		x_nxfsd_requ_t *nxfsd_requ,
 		std::unique_ptr<x_smbd_requ_state_setinfo_t> &state)
 {
 	return NT_STATUS_NOT_SUPPORTED;
@@ -834,11 +834,11 @@ static NTSTATUS ipc_object_op_setinfo(
 
 static NTSTATUS ipc_object_op_ioctl(
 		x_smbd_object_t *smbd_object,
-		x_smbd_requ_t *smbd_requ,
+		x_nxfsd_requ_t *nxfsd_requ,
 		std::unique_ptr<x_smbd_requ_state_ioctl_t> &state)
 {
 	x_smbd_ipc_object_t *ipc_object = from_smbd_object(smbd_object);
-	named_pipe_t *named_pipe = from_smbd_open(smbd_requ->smbd_open);
+	named_pipe_t *named_pipe = from_smbd_open(nxfsd_requ->smbd_open);
 	if (!NT_STATUS_IS_OK(named_pipe->return_status)) {
 		return named_pipe->return_status;
 	}
@@ -847,12 +847,14 @@ static NTSTATUS ipc_object_op_ioctl(
 	case X_SMB2_FSCTL_PIPE_TRANSCEIVE:
 		named_pipe->is_transceive = true;
 		named_pipe_write(ipc_object, named_pipe,
-				smbd_requ->smbd_user,
+				nxfsd_requ->smbd_user,
 				state->in_buf->data + state->in_buf_offset,
 				state->in_buf_length);
-		X_SMBD_REQU_LOG(DBG, smbd_requ, "requ_length = %u, output = %lu - %u",
+
+		X_NXFSD_REQU_LOG(DBG, nxfsd_requ, "requ_length = %u, output = %lu - %u",
 				state->in_max_output_length,
 				named_pipe->output.size(), named_pipe->offset);
+
 		return named_pipe_read(ipc_object, named_pipe,
 				state->in_max_output_length,
 				state->out_buf,
@@ -971,7 +973,7 @@ static NTSTATUS ipc_op_create_open(x_smbd_open_t **psmbd_open,
 				state->in_context.app_instance_version_low,
 				state->in_context.lease.parent_key,
 				0l,
-				smbd_requ->smbd_user->get_owner_sid(),
+				smbd_requ->base.smbd_user->get_owner_sid(),
 				state->valid_flags,
 				0,
 				x_smb2_create_action_t::WAS_OPENED,

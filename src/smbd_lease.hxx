@@ -12,6 +12,7 @@
 
 struct x_smbd_conn_t;
 struct x_smbd_requ_t;
+struct x_nxfsd_requ_t;
 struct x_smbd_lease_t;
 struct x_smbd_object_t;
 struct x_smbd_stream_t;
@@ -61,7 +62,7 @@ uint32_t x_smbd_lease_require_break(x_smbd_lease_t *smbd_lease,
 		uint8_t &new_state,
 		uint16_t &epoch,
 		uint32_t &flags,
-		x_smbd_requ_t *smbd_requ,
+		x_nxfsd_requ_t *nxfsd_requ,
 		bool block_breaking);
 
 NTSTATUS x_smbd_lease_process_break(x_smbd_requ_state_lease_break_t &state);

@@ -18,11 +18,11 @@ static void x_smb2_reply_flush(x_smbd_conn_t *smbd_conn,
 
 NTSTATUS x_smb2_process_flush(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 {
-	if (smbd_requ->in_requ_len < sizeof(x_smb2_header_t) + sizeof(x_smb2_flush_requ_t)) {
+	auto [ in_hdr, in_requ_len ] = smbd_requ->base.get_in_data();
+	if (in_requ_len < sizeof(x_smb2_header_t) + sizeof(x_smb2_flush_requ_t)) {
 		X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
 
-	const uint8_t *in_hdr = smbd_requ->get_in_data();
 	const x_smb2_flush_requ_t *in_flush = (const x_smb2_flush_requ_t *)(in_hdr + sizeof(x_smb2_header_t));
 	uint64_t in_file_id_persistent = X_LE2H64(in_flush->file_id_persistent);
 	uint64_t in_file_id_volatile = X_LE2H64(in_flush->file_id_volatile);
@@ -38,13 +38,13 @@ NTSTATUS x_smb2_process_flush(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ
 		X_SMBD_REQU_RETURN_STATUS(smbd_requ, status);
 	}
 
-	if (!smbd_requ->smbd_open->check_access_any(idl::SEC_FILE_WRITE_DATA)) {
+	if (!smbd_requ->base.smbd_open->check_access_any(idl::SEC_FILE_WRITE_DATA)) {
 		/* TODO smbd_smb2_flush_send directory flush */
 		X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_ACCESS_DENIED);
 	}
 
 	// TODO async smbd_requ->async_done_fn = x_smb2_flush_async_done;
-	status = x_smbd_open_op_flush(smbd_requ->smbd_open, smbd_requ);
+	status = x_smbd_open_op_flush(smbd_requ->base.smbd_open, smbd_requ);
 
 	if (NT_STATUS_IS_OK(status)) {
 		X_SMBD_REQU_LOG(OP, smbd_requ, " STATUS_SUCCESS");

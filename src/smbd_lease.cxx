@@ -21,7 +21,7 @@ struct x_smbd_lease_t
 	const uint32_t hash;
 	uint32_t refcnt{1}; // protected by bucket mutex
 	uint32_t open_cnt{0};
-	x_smbd_requ_id_list_t pending_requ_list;
+	x_nxfsd_requ_id_list_t pending_requ_list;
 };
 
 X_DECLARE_MEMBER_TRAITS(smbd_lease_hash_traits, x_smbd_lease_t, hash_link)
@@ -130,7 +130,7 @@ static inline void smbd_lease_cancel_timer(x_smbd_lease_t *smbd_lease)
 
 void x_smbd_lease_close(x_smbd_lease_t *smbd_lease)
 {
-	x_smbd_requ_id_list_t requ_list;
+	x_nxfsd_requ_id_list_t requ_list;
 	{
 		auto lock = smbd_lease_lock(smbd_lease);
 		X_ASSERT(smbd_lease->open_cnt > 0);
@@ -293,13 +293,13 @@ static bool require_break(x_smbd_lease_t *smbd_lease,
 
 static inline void smbd_lease_add_pending_requ(
 		x_smbd_lease_t *smbd_lease,
-		x_smbd_requ_t *smbd_requ)
+		x_nxfsd_requ_t *nxfsd_requ)
 {
-	int32_t count = smbd_requ->async_pending.fetch_add(1, std::memory_order_relaxed);
+	int32_t count = nxfsd_requ->async_pending.fetch_add(1, std::memory_order_relaxed);
 	X_ASSERT(count >= 0);
-	X_LOG(SMB, DBG, "add requ 0x%lx %p pending %d", smbd_requ->id, smbd_requ,
+	X_LOG(SMB, DBG, "add requ 0x%lx %p pending %d", nxfsd_requ->id, nxfsd_requ,
 			count + 1);
-	smbd_lease->pending_requ_list.push_back(smbd_requ->id);
+	smbd_lease->pending_requ_list.push_back(nxfsd_requ->id);
 }
 
 /* samba process_oplock_break_message */
@@ -313,7 +313,7 @@ uint32_t x_smbd_lease_require_break(x_smbd_lease_t *smbd_lease,
 		uint8_t &new_state,
 		uint16_t &epoch,
 		uint32_t &flags,
-		x_smbd_requ_t *smbd_requ,
+		x_nxfsd_requ_t *nxfsd_requ,
 		bool block_breaking)
 {
 	if (ignore_lease_key && smbd_lease_match(smbd_lease, *client_guid,
@@ -339,9 +339,9 @@ uint32_t x_smbd_lease_require_break(x_smbd_lease_t *smbd_lease,
 			 */
 			smbd_lease->data.breaking_to_required = break_to;
 		}
-		if (smbd_requ && ((smbd_lease->data.state & delay_mask) ||
+		if (nxfsd_requ && ((smbd_lease->data.state & delay_mask) ||
 					block_breaking)) {
-			smbd_lease_add_pending_requ(smbd_lease, smbd_requ);
+			smbd_lease_add_pending_requ(smbd_lease, nxfsd_requ);
 			return X_SMBD_BREAK_ACTION_BLOCKED;
 		}
 		return 0;
@@ -369,8 +369,8 @@ uint32_t x_smbd_lease_require_break(x_smbd_lease_t *smbd_lease,
 	lease_key = smbd_lease->data.key;
 	new_state = break_to;
 	curr_state = break_from;
-	if (block && smbd_requ != 0) {
-		smbd_lease_add_pending_requ(smbd_lease, smbd_requ);
+	if (block && nxfsd_requ != 0) {
+		smbd_lease_add_pending_requ(smbd_lease, nxfsd_requ);
 		return X_SMBD_BREAK_ACTION_SEND | X_SMBD_BREAK_ACTION_BLOCKED;
 	} else {
 		return X_SMBD_BREAK_ACTION_SEND;
@@ -380,7 +380,7 @@ uint32_t x_smbd_lease_require_break(x_smbd_lease_t *smbd_lease,
 /* downgrade_lease() */
 static NTSTATUS smbd_lease_process_break(x_smbd_lease_t *smbd_lease,
 		x_smbd_requ_state_lease_break_t &state,
-		x_smbd_requ_id_list_t &requ_list)
+		x_nxfsd_requ_id_list_t &requ_list)
 {
 	bool modified = false;
 	auto lock = smbd_lease_lock(smbd_lease);
@@ -474,7 +474,7 @@ NTSTATUS x_smbd_lease_process_break(x_smbd_requ_state_lease_break_t &state)
 		++smbd_lease->refcnt;
 	}
 
-	x_smbd_requ_id_list_t requ_list;
+	x_nxfsd_requ_id_list_t requ_list;
 	status = smbd_lease_process_break(smbd_lease, state, requ_list);
 	smbd_lease_decref(smbd_lease);
 
@@ -486,7 +486,7 @@ static long smbd_lease_break_timeout(x_timer_job_t *timer)
 {
 	/* we already have a ref on smbd_chan when adding timer */
 	x_smbd_lease_t *smbd_lease = X_CONTAINER_OF(timer, x_smbd_lease_t, timer);
-	x_smbd_requ_id_list_t requ_list;
+	x_nxfsd_requ_id_list_t requ_list;
 	{
 		auto lock = smbd_lease_lock(smbd_lease);
 		/* down grade lease  TODO */

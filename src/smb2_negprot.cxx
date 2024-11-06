@@ -116,8 +116,8 @@ static const struct {
 #define HDR_VWV 33
 int x_smbd_conn_process_smb1negprot(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 {
-	const uint8_t *in_buf = smbd_requ->in_buf->data;
-	uint32_t len = smbd_requ->in_buf->size;
+	const uint8_t *in_buf = smbd_requ->base.in_buf->data;
+	uint32_t len = smbd_requ->base.in_buf->size;
 	if (len < HDR_VWV + sizeof(uint16_t)) {
 		return -EBADMSG;
 	}
@@ -413,11 +413,11 @@ NTSTATUS x_smb2_process_negprot(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_re
 	X_SMBD_REQU_LOG(OP, smbd_requ,  "");
 
 	// x_smb2_verify_size(smbd_requ, X_SMB2_NEGPROT_BODY_LEN);
-	if (smbd_requ->in_requ_len < sizeof(x_smb2_header_t) + sizeof(x_smb2_negprot_requ_t)) {
+	auto [ in_buf, in_requ_len ] = smbd_requ->base.get_in_data();
+	if (in_requ_len < sizeof(x_smb2_header_t) + sizeof(x_smb2_negprot_requ_t)) {
 		X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
 
-	const uint8_t *in_buf = smbd_requ->get_in_data();
 	const uint8_t *in_body = in_buf + sizeof(x_smb2_header_t);
 
 	const x_smb2_negprot_requ_t *in_requ = (const x_smb2_negprot_requ_t *)in_body;
@@ -425,8 +425,8 @@ NTSTATUS x_smb2_process_negprot(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_re
 	if (dialect_count == 0) {
 		X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
-	if (sizeof(x_smb2_header_t) + sizeof(x_smb2_negprot_requ_t) + dialect_count * sizeof(uint16_t)
-			> smbd_requ->in_requ_len) {
+	if (sizeof(x_smb2_header_t) + sizeof(x_smb2_negprot_requ_t) +
+			dialect_count * sizeof(uint16_t) > in_requ_len) {
 		X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
 
@@ -463,7 +463,7 @@ NTSTATUS x_smb2_process_negprot(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_re
 		uint16_t in_context_count = X_LE2H16(in_requ->context_count);
 		if (!x_check_range<uint32_t>(in_context_offset, 0, 
 					sizeof(x_smb2_header_t) + sizeof(x_smb2_negprot_requ_t),
-					smbd_requ->in_requ_len)) {
+					in_requ_len)) {
 			X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 		}
 
@@ -472,7 +472,7 @@ NTSTATUS x_smb2_process_negprot(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_re
 		uint32_t hash_algos = 0, encryption_algos = 0, signing_algos = 0;
 		uint32_t compression_algos = 0, compression_flags = 0;
 		NTSTATUS status = parse_context(in_context,
-				smbd_requ->in_requ_len - in_context_offset,
+				in_requ_len - in_context_offset,
 				in_context_count, hash_algos,
 				encryption_algos, signing_algos,
 				compression_algos, compression_flags);
@@ -518,7 +518,7 @@ NTSTATUS x_smb2_process_negprot(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_re
 		}
 
 		x_smbd_conn_update_preauth(smbd_conn, 
-				in_buf, smbd_requ->in_requ_len);
+				in_buf, in_requ_len);
 
 		generate_context(out_context_count, out_context,
 				negprot.cryption_algo,
