@@ -75,6 +75,14 @@ struct x_bufref_t
 	x_bufref_t *next{};
 };
 
+static inline void x_bufref_list_free(x_bufref_t *head)
+{
+	while (head) {
+		auto next = head->next;
+		delete head;
+		head = next;
+	}
+}
 
 #endif /* __buf__hxx__ */
 
