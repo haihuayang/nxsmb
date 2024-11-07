@@ -135,7 +135,7 @@ static NTSTATUS smbd_qdir_process_requ(x_smbd_qdir_t *smbd_qdir, x_smbd_requ_t *
 	std::shared_ptr<x_smbd_user_t> smbd_user;
 	if (x_smbd_tcon_get_abe(smbd_requ->smbd_tcon)) {
 		ppsd = &psd;
-		smbd_user = x_smbd_sess_get_user(smbd_requ->smbd_sess);
+		smbd_user = smbd_requ->smbd_user;
 	}
 
 	uint32_t num = 0, matched_count = 0;

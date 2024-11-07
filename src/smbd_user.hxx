@@ -40,5 +40,16 @@ struct x_smbd_user_t
 	}
 };
 
+/* TODO avoid copy */
+static inline const idl::dom_sid x_smbd_user_get_owner_sid(
+		const std::shared_ptr<x_smbd_user_t> &smbd_user)
+{
+	if (smbd_user) {
+		return smbd_user->get_owner_sid();
+	} else {
+		return global_sid_Local_Authority;
+	}
+}
+
 #endif /* __smbd_user__hxx__ */
 

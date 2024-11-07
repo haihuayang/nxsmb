@@ -721,6 +721,7 @@ static posixfs_open_t *posixfs_open_create(
 		NTSTATUS *pstatus,
 		x_smbd_tcon_t *smbd_tcon,
 		posixfs_object_t *posixfs_object,
+		const std::shared_ptr<x_smbd_user_t> &smbd_user,
 		const x_smbd_requ_state_create_t &state,
 		x_smb2_create_action_t create_action,
 		uint8_t oplock_level)
@@ -747,7 +748,7 @@ static posixfs_open_t *posixfs_open_create(
 				state.in_context.app_instance_version_low,
 				state.in_context.lease.parent_key,
 				state.open_priv_data,
-				x_smbd_tcon_get_user(smbd_tcon)->get_owner_sid(),
+				x_smbd_user_get_owner_sid(smbd_user),
 				valid_flags,
 				0,
 				create_action,
@@ -2929,7 +2930,8 @@ static NTSTATUS smbd_posixfs_create_open(x_smbd_open_t **psmbd_open,
 	posixfs_open_t *posixfs_open = nullptr;
 
 	posixfs_open = posixfs_open_create(&status, smbd_requ->smbd_tcon,
-			posixfs_object, *state, create_action, oplock_level);
+			posixfs_object, smbd_requ->smbd_user,
+			*state, create_action, oplock_level);
 	if (!posixfs_open) {
 		return status;
 	}

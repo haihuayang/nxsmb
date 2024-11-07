@@ -747,7 +747,7 @@ static NTSTATUS ipc_object_op_write(
 
 	int ret = named_pipe_write(from_smbd_object(smbd_object),
 			named_pipe,
-			x_smbd_sess_get_user(smbd_requ->smbd_sess),
+			smbd_requ->smbd_user,
 			state->in_buf->data + state->in_buf_offset,
 			state->in_buf_length);
 	state->out_count = ret;
@@ -847,7 +847,7 @@ static NTSTATUS ipc_object_op_ioctl(
 	case X_SMB2_FSCTL_PIPE_TRANSCEIVE:
 		named_pipe->is_transceive = true;
 		named_pipe_write(ipc_object, named_pipe,
-				x_smbd_sess_get_user(smbd_requ->smbd_sess),
+				smbd_requ->smbd_user,
 				state->in_buf->data + state->in_buf_offset,
 				state->in_buf_length);
 		X_SMBD_REQU_LOG(DBG, smbd_requ, "requ_length = %u, output = %lu - %u",
@@ -971,7 +971,7 @@ static NTSTATUS ipc_op_create_open(x_smbd_open_t **psmbd_open,
 				state->in_context.app_instance_version_low,
 				state->in_context.lease.parent_key,
 				0l,
-				x_smbd_tcon_get_user(smbd_requ->smbd_tcon)->get_owner_sid(),
+				smbd_requ->smbd_user->get_owner_sid(),
 				state->valid_flags,
 				0,
 				x_smb2_create_action_t::WAS_OPENED,

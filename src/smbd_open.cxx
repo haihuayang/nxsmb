@@ -1270,7 +1270,7 @@ NTSTATUS x_smbd_open_create(
 	}
 
 	NTSTATUS status;
-	auto smbd_user = x_smbd_sess_get_user(smbd_requ->smbd_sess);
+	auto smbd_user = smbd_requ->smbd_user;
 	uint32_t granted_access, maximal_access = 0;
 	if (smbd_object->exists()) {
 		status = x_smbd_object_access_check(smbd_object,
@@ -1620,11 +1620,12 @@ NTSTATUS x_smbd_open_op_create(x_smbd_requ_t *smbd_requ,
 
 static NTSTATUS smbd_open_reconnect(x_smbd_open_t *smbd_open,
 		x_smbd_tcon_t *smbd_tcon,
+		x_smbd_requ_t *smbd_requ,
 		x_smbd_requ_state_create_t &state)
 {
 	auto smbd_object = smbd_open->smbd_object;
 	auto &open_state = smbd_open->open_state;
-	auto smbd_user = x_smbd_tcon_get_user(smbd_tcon);
+	auto smbd_user = smbd_requ->smbd_user;
 
 	auto lock = smbd_object->lock();
 	if (smbd_open->state != SMBD_OPEN_S_DISCONNECTED) {
@@ -1697,7 +1698,7 @@ NTSTATUS x_smbd_open_op_reconnect(x_smbd_requ_t *smbd_requ,
 		X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_OBJECT_NAME_NOT_FOUND);
 	}
 
-	NTSTATUS status = smbd_open_reconnect(smbd_open, smbd_tcon, *state);
+	NTSTATUS status = smbd_open_reconnect(smbd_open, smbd_tcon, smbd_requ, *state);
 	if (!NT_STATUS_IS_OK(status)) {
 		x_ref_dec(smbd_open);
 		return status;
