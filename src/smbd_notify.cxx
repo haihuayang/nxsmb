@@ -3,17 +3,16 @@
 
 struct smd_notify_evt_t
 {
-	static void func(void *arg, x_fdevt_user_t *fdevt_user)
+	static void func(void *ctx_conn, x_fdevt_user_t *fdevt_user)
 	{
-		x_smbd_conn_t *smbd_conn = (x_smbd_conn_t *)arg;
 		smd_notify_evt_t *evt = X_CONTAINER_OF(fdevt_user, smd_notify_evt_t, base);
 		x_smbd_requ_t *smbd_requ = evt->smbd_requ;
-		X_LOG(SMB, DBG, "evt=%p, requ=%p, smbd_conn=%p", evt, smbd_requ, smbd_conn);
+		X_LOG(SMB, DBG, "evt=%p, requ=%p, ctx_conn=%p", evt, smbd_requ, ctx_conn);
 
 		auto state = smbd_requ->release_state<x_smbd_requ_state_notify_t>();
 		X_ASSERT(state->out_notify_changes.empty());
 		std::swap(state->out_notify_changes, evt->notify_changes);
-		state->async_done(smbd_conn, smbd_requ, NT_STATUS_OK);
+		state->async_done(ctx_conn, smbd_requ, NT_STATUS_OK);
 		delete evt;
 	}
 

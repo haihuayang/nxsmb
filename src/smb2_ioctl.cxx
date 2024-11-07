@@ -475,14 +475,15 @@ static NTSTATUS x_smb2_fsctl_query_network_interface_info(
 	return NT_STATUS_OK;
 }
 
-void x_smbd_requ_state_ioctl_t::async_done(x_smbd_conn_t *smbd_conn,
+void x_smbd_requ_state_ioctl_t::async_done(void *ctx_conn,
 		x_smbd_requ_t *smbd_requ,
 		NTSTATUS status)
 {
 	X_SMBD_REQU_LOG(OP, smbd_requ, " %s", x_ntstatus_str(status));
-	if (!smbd_conn) {
+	if (!ctx_conn) {
 		return;
 	}
+	x_smbd_conn_t *smbd_conn = (x_smbd_conn_t *)ctx_conn;
 	if (NT_STATUS_IS_OK(status) || out_buf_length) {
 		x_smb2_reply_ioctl(smbd_conn, smbd_requ, status, *this);
 		status = NT_STATUS_OK;

@@ -527,20 +527,19 @@ static bool is_lease_stat_open(uint32_t access_mask)
 
 struct defer_requ_evt_t
 {
-	static void func(void *arg, x_fdevt_user_t *fdevt_user)
+	static void func(void *ctx_conn, x_fdevt_user_t *fdevt_user)
 	{
-		x_smbd_conn_t *smbd_conn = (x_smbd_conn_t *)arg;
 		defer_requ_evt_t *evt = X_CONTAINER_OF(fdevt_user,
 				defer_requ_evt_t, base);
 		x_smbd_requ_t *smbd_requ = evt->smbd_requ;
-		X_SMBD_REQU_LOG(DBG, smbd_requ, " smbd_conn=%p", smbd_conn);
+		X_SMBD_REQU_LOG(DBG, smbd_requ, " ctx_conn=%p", ctx_conn);
 
-		if (x_smbd_requ_async_remove(smbd_requ) && smbd_conn) {
+		if (x_smbd_requ_async_remove(smbd_requ) && ctx_conn) {
 			if (smbd_requ->in_smb2_hdr.opcode == X_SMB2_OP_CREATE) {
 				auto state = smbd_requ->release_state<x_smbd_requ_state_create_t>();
 				NTSTATUS status = x_smbd_open_op_create(smbd_requ, state);
 				if (!NT_STATUS_EQUAL(status, NT_STATUS_PENDING)) {
-					state->async_done(smbd_conn, smbd_requ, status);
+					state->async_done(ctx_conn, smbd_requ, status);
 				}
 
 			} else if (smbd_requ->in_smb2_hdr.opcode == X_SMB2_OP_SETINFO) {
@@ -549,14 +548,14 @@ struct defer_requ_evt_t
 					auto state = smbd_requ->release_state<x_smbd_requ_state_rename_t>();
 					NTSTATUS status = x_smbd_open_rename(smbd_requ, state);
 					if (!NT_STATUS_EQUAL(status, NT_STATUS_PENDING)) {
-						state->async_done(smbd_conn, smbd_requ, status);
+						state->async_done(ctx_conn, smbd_requ, status);
 					}
 
 				} else {
 					auto state = smbd_requ->release_state<x_smbd_requ_state_disposition_t>();
 					NTSTATUS status = x_smbd_open_set_delete_pending(smbd_requ, state);
 					if (!NT_STATUS_EQUAL(status, NT_STATUS_PENDING)) {
-						state->async_done(smbd_conn, smbd_requ, status);
+						state->async_done(ctx_conn, smbd_requ, status);
 					}
 				}
 			}
@@ -629,9 +628,9 @@ static long oplock_break_timeout(x_timer_job_t *timer)
 
 struct send_lease_break_evt_t
 {
-	static void func(void *arg, x_fdevt_user_t *fdevt_user)
+	static void func(void *ctx_conn, x_fdevt_user_t *fdevt_user)
 	{
-		x_smbd_conn_t *smbd_conn = (x_smbd_conn_t *)arg;
+		x_smbd_conn_t *smbd_conn = (x_smbd_conn_t *)ctx_conn;
 		send_lease_break_evt_t *evt = X_CONTAINER_OF(fdevt_user,
 				send_lease_break_evt_t, base);
 		X_LOG(SMB, DBG, "send_lease_break_evt=%p curr_state=%d new_state=%d "
@@ -1046,9 +1045,9 @@ static NTSTATUS grant_oplock(x_smbd_object_t *smbd_object,
 
 struct send_oplock_break_evt_t
 {
-	static void func(void *arg, x_fdevt_user_t *fdevt_user)
+	static void func(void *ctx_conn, x_fdevt_user_t *fdevt_user)
 	{
-		x_smbd_conn_t *smbd_conn = (x_smbd_conn_t *)arg;
+		x_smbd_conn_t *smbd_conn = (x_smbd_conn_t *)ctx_conn;
 		send_oplock_break_evt_t *evt = X_CONTAINER_OF(fdevt_user,
 				send_oplock_break_evt_t, base);
 		X_LOG(SMB, DBG, "evt=%p", evt);

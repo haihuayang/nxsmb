@@ -67,8 +67,9 @@ static void smb2_sesssetup_done(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_re
 	}
 }
 
-void x_smbd_requ_state_sesssetup_t::async_done(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ, NTSTATUS status)
+void x_smbd_requ_state_sesssetup_t::async_done(void *ctx_conn, x_smbd_requ_t *smbd_requ, NTSTATUS status)
 {
+	x_smbd_conn_t *smbd_conn = (x_smbd_conn_t *)ctx_conn;
 	smb2_sesssetup_done(smbd_conn, smbd_requ,
 			x_smbd_conn_get_dialect(smbd_conn),
 			status, *this, out_security);

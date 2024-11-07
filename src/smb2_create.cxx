@@ -271,7 +271,7 @@ static void smb2_create_success(x_smbd_conn_t *smbd_conn,
 	x_smb2_reply_create(smbd_conn, smbd_requ, state);
 }
 
-void x_smbd_requ_state_create_t::async_done(x_smbd_conn_t *smbd_conn,
+void x_smbd_requ_state_create_t::async_done(void *ctx_conn,
 		x_smbd_requ_t *smbd_requ,
 		NTSTATUS status)
 {
@@ -279,9 +279,10 @@ void x_smbd_requ_state_create_t::async_done(x_smbd_conn_t *smbd_conn,
 			x_ntstatus_str(status),
 			smbd_requ->smbd_open ? smbd_requ->smbd_open->id_persistent : 0,
 			smbd_requ->smbd_open ? smbd_requ->smbd_open->id_volatile : 0);
-	if (!smbd_conn) {
+	if (!ctx_conn) {
 		return;
 	}
+	x_smbd_conn_t *smbd_conn = (x_smbd_conn_t *)ctx_conn;
 	if (NT_STATUS_IS_OK(status)) {
 		auto &open_state = smbd_requ->smbd_open->open_state;
 		out_oplock_level = open_state.oplock_level;

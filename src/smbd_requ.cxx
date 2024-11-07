@@ -125,14 +125,14 @@ x_smbd_requ_t *x_smbd_requ_async_lookup(uint64_t id, const x_smbd_conn_t *smbd_c
 	return smbd_requ;
 }
 
-void x_smbd_requ_async_done(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ,
+void x_smbd_requ_async_done(void *ctx_conn, x_smbd_requ_t *smbd_requ,
 		NTSTATUS status)
 {
 	if (!x_smbd_requ_async_remove(smbd_requ)) {
 		/* it must be cancelled by x_smbd_conn_cancel */
 	}
 	auto state = smbd_requ->release_state();
-	state->async_done(smbd_conn, smbd_requ, status);
+	state->async_done(ctx_conn, smbd_requ, status);
 }
 
 void x_smbd_requ_done(x_smbd_requ_t *smbd_requ)
@@ -207,9 +207,9 @@ x_ctrl_handler_t *x_smbd_requ_list_create()
 
 struct x_smbd_open_release_evt_t
 {
-	static void func(void *arg, x_fdevt_user_t *fdevt_user)
+	static void func(void *ctx_conn, x_fdevt_user_t *fdevt_user)
 	{
-		X_ASSERT(!arg);
+		X_ASSERT(!ctx_conn);
 		x_smbd_open_release_evt_t *evt = X_CONTAINER_OF(fdevt_user,
 				x_smbd_open_release_evt_t, base);
 		x_smbd_open_release(evt->smbd_open);
@@ -233,9 +233,9 @@ void x_smbd_schedule_release_open(x_smbd_open_t *smbd_open)
 
 struct x_smbd_lease_release_evt_t
 {
-	static void func(void *arg, x_fdevt_user_t *fdevt_user)
+	static void func(void *ctx_conn, x_fdevt_user_t *fdevt_user)
 	{
-		X_ASSERT(!arg);
+		X_ASSERT(!ctx_conn);
 		x_smbd_lease_release_evt_t *evt = X_CONTAINER_OF(fdevt_user,
 				x_smbd_lease_release_evt_t, base);
 		x_smbd_lease_close(evt->smbd_lease);
@@ -259,9 +259,9 @@ void x_smbd_schedule_release_lease(x_smbd_lease_t *smbd_lease)
 
 struct x_smbd_wakeup_oplock_pending_list_evt_t
 {
-	static void func(void *arg, x_fdevt_user_t *fdevt_user)
+	static void func(void *ctx_conn, x_fdevt_user_t *fdevt_user)
 	{
-		X_ASSERT(!arg);
+		X_ASSERT(!ctx_conn);
 		x_smbd_wakeup_oplock_pending_list_evt_t *evt = X_CONTAINER_OF(fdevt_user,
 				x_smbd_wakeup_oplock_pending_list_evt_t, base);
 		x_smbd_wakeup_requ_list(evt->oplock_pending_list);
@@ -286,9 +286,9 @@ void x_smbd_schedule_wakeup_oplock_pending_list(x_smbd_requ_id_list_t &oplock_pe
 
 struct x_smbd_clean_pending_requ_list_evt_t
 {
-	static void func(void *arg, x_fdevt_user_t *fdevt_user)
+	static void func(void *ctx_conn, x_fdevt_user_t *fdevt_user)
 	{
-		X_ASSERT(!arg);
+		X_ASSERT(!ctx_conn);
 		x_smbd_clean_pending_requ_list_evt_t *evt = X_CONTAINER_OF(fdevt_user,
 				x_smbd_clean_pending_requ_list_evt_t, base);
 		x_smbd_requ_t *smbd_requ;
@@ -319,9 +319,9 @@ void x_smbd_schedule_clean_pending_requ_list(x_tp_ddlist_t<requ_async_traits> &p
 
 struct x_smbd_notify_evt_t
 {
-	static void func(void *arg, x_fdevt_user_t *fdevt_user)
+	static void func(void *ctx_conn, x_fdevt_user_t *fdevt_user)
 	{
-		X_ASSERT(!arg);
+		X_ASSERT(!ctx_conn);
 		x_smbd_notify_evt_t *evt = X_CONTAINER_OF(fdevt_user,
 				x_smbd_notify_evt_t, base);
 		x_smbd_notify_change(evt->smbd_object,

@@ -65,14 +65,15 @@ static void x_smb2_reply_qdir(x_smbd_conn_t *smbd_conn,
 }
 
 
-void x_smbd_requ_state_qdir_t::async_done(x_smbd_conn_t *smbd_conn,
+void x_smbd_requ_state_qdir_t::async_done(void *ctx_conn,
 		x_smbd_requ_t *smbd_requ,
 		NTSTATUS status)
 {
 	X_SMBD_REQU_LOG(OP, smbd_requ, " %s", x_ntstatus_str(status));
-	if (!smbd_conn) {
+	if (!ctx_conn) {
 		return;
 	}
+	x_smbd_conn_t *smbd_conn = (x_smbd_conn_t *)ctx_conn;
 	if (NT_STATUS_IS_OK(status)) {
 		x_smb2_reply_qdir(smbd_conn, smbd_requ, *this);
 	}
@@ -189,13 +190,12 @@ static NTSTATUS smbd_qdir_process_requ(x_smbd_qdir_t *smbd_qdir, x_smbd_requ_t *
 
 struct smbd_qdir_evt_t
 {
-	static void func(void *arg, x_fdevt_user_t *fdevt_user)
+	static void func(void *ctx_conn, x_fdevt_user_t *fdevt_user)
 	{
-		x_smbd_conn_t *smbd_conn = (x_smbd_conn_t *)arg;
 		smbd_qdir_evt_t *evt = X_CONTAINER_OF(fdevt_user, smbd_qdir_evt_t, base);
 		x_smbd_requ_t *smbd_requ = evt->smbd_requ;
-		X_LOG(SMB, DBG, "evt=%p, requ=%p, smbd_conn=%p", evt, smbd_requ, smbd_conn);
-		x_smbd_requ_async_done(smbd_conn, smbd_requ, evt->status);
+		X_LOG(SMB, DBG, "evt=%p, requ=%p, ctx_conn=%p", evt, smbd_requ, ctx_conn);
+		x_smbd_requ_async_done(ctx_conn, smbd_requ, evt->status);
 		delete evt;
 	}
 

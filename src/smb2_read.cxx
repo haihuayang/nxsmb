@@ -51,15 +51,16 @@ static void x_smb2_reply_read(x_smbd_conn_t *smbd_conn,
 			sizeof(x_smb2_header_t) + sizeof(x_smb2_read_resp_t) + state.out_buf_length);
 }
 
-void x_smbd_requ_state_read_t::async_done(x_smbd_conn_t *smbd_conn,
+void x_smbd_requ_state_read_t::async_done(void *ctx_conn,
 		x_smbd_requ_t *smbd_requ,
 		NTSTATUS status)
 {
 	X_SMBD_REQU_LOG(OP, smbd_requ, " %s out_length=%u", x_ntstatus_str(status),
 			out_buf_length);
-	if (!smbd_conn) {
+	if (!ctx_conn) {
 		return;
 	}
+	x_smbd_conn_t *smbd_conn = (x_smbd_conn_t *)ctx_conn;
 	if (NT_STATUS_IS_OK(status)) {
 		if (out_buf_length < in_minimum_count) {
 			status = NT_STATUS_END_OF_FILE;

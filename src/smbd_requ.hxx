@@ -12,7 +12,7 @@
 struct x_smbd_requ_state_async_t
 {
 	virtual ~x_smbd_requ_state_async_t() { }
-	virtual void async_done(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ,
+	virtual void async_done(void *ctx_conn, x_smbd_requ_t *smbd_requ,
 			NTSTATUS status) = 0;
 };
 
@@ -23,7 +23,7 @@ struct x_smbd_requ_state_read_t : x_smbd_requ_state_async_t
 			x_buf_release(out_buf);
 		}
 	}
-	void async_done(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ,
+	void async_done(void *ctx_conn, x_smbd_requ_t *smbd_requ,
 			NTSTATUS status) override;
 
 	uint8_t in_flags;
@@ -43,7 +43,7 @@ struct x_smbd_requ_state_write_t : x_smbd_requ_state_async_t
 			x_buf_release(in_buf);
 		}
 	}
-	void async_done(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ,
+	void async_done(void *ctx_conn, x_smbd_requ_t *smbd_requ,
 			NTSTATUS status) override;
 
 	uint64_t in_offset;
@@ -61,7 +61,7 @@ struct x_smbd_requ_state_write_t : x_smbd_requ_state_async_t
 
 struct x_smbd_requ_state_lock_t : x_smbd_requ_state_async_t
 {
-	void async_done(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ,
+	void async_done(void *ctx_conn, x_smbd_requ_t *smbd_requ,
 			NTSTATUS status) override;
 
 	uint64_t in_file_id_persistent;
@@ -96,7 +96,7 @@ struct x_smbd_requ_state_setinfo_t
 
 struct x_smbd_requ_state_rename_t : x_smbd_requ_state_async_t
 {
-	void async_done(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ,
+	void async_done(void *ctx_conn, x_smbd_requ_t *smbd_requ,
 			NTSTATUS status) override;
 
 	uint64_t in_file_id_persistent;
@@ -107,7 +107,7 @@ struct x_smbd_requ_state_rename_t : x_smbd_requ_state_async_t
 
 struct x_smbd_requ_state_disposition_t : x_smbd_requ_state_async_t
 {
-	void async_done(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ,
+	void async_done(void *ctx_conn, x_smbd_requ_t *smbd_requ,
 			NTSTATUS status) override;
 
 	uint64_t in_file_id_persistent;
@@ -117,7 +117,7 @@ struct x_smbd_requ_state_disposition_t : x_smbd_requ_state_async_t
 
 struct x_smbd_requ_state_qdir_t : x_smbd_requ_state_async_t
 {
-	void async_done(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ,
+	void async_done(void *ctx_conn, x_smbd_requ_t *smbd_requ,
 			NTSTATUS status) override;
 
 	x_smb2_info_level_t in_info_level;
@@ -141,7 +141,7 @@ struct x_smbd_requ_state_ioctl_t : x_smbd_requ_state_async_t
 			x_buf_release(out_buf);
 		}
 	}
-	void async_done(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ,
+	void async_done(void *ctx_conn, x_smbd_requ_t *smbd_requ,
 			NTSTATUS status) override;
 
 	uint32_t ctl_code;
@@ -164,7 +164,7 @@ struct x_smbd_requ_state_ioctl_t : x_smbd_requ_state_async_t
 
 struct x_smbd_requ_state_notify_t : x_smbd_requ_state_async_t
 {
-	void async_done(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ,
+	void async_done(void *ctx_conn, x_smbd_requ_t *smbd_requ,
 			NTSTATUS status) override;
 
 	uint32_t in_output_buffer_length;
@@ -212,7 +212,7 @@ struct x_smbd_requ_state_create_t : x_smbd_requ_state_async_t
 {
 	x_smbd_requ_state_create_t(const x_smb2_uuid_t &client_guid);
 	~x_smbd_requ_state_create_t();
-	void async_done(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ,
+	void async_done(void *ctx_conn, x_smbd_requ_t *smbd_requ,
 			NTSTATUS status) override;
 
 	const x_smb2_uuid_t in_client_guid;
@@ -254,7 +254,7 @@ struct x_smbd_requ_state_create_t : x_smbd_requ_state_async_t
 
 struct x_smbd_requ_state_sesssetup_t : x_smbd_requ_state_async_t
 {
-	void async_done(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ,
+	void async_done(void *ctx_conn, x_smbd_requ_t *smbd_requ,
 			NTSTATUS status) override;
 
 	uint8_t in_flags;
@@ -395,7 +395,7 @@ void x_smbd_requ_async_insert(x_smbd_requ_t *smbd_requ,
 		void (*cancel_fn)(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ),
 		int64_t interim_timeout_ns);
 bool x_smbd_requ_async_remove(x_smbd_requ_t *smbd_requ);
-void x_smbd_requ_async_done(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ,
+void x_smbd_requ_async_done(void *ctx_conn, x_smbd_requ_t *smbd_requ,
 		NTSTATUS status);
 void x_smbd_requ_done(x_smbd_requ_t *smbd_requ);
 NTSTATUS x_smbd_requ_init_open(x_smbd_requ_t *smbd_requ,
