@@ -28,13 +28,12 @@ static const generic_mapping_t lsa_policy_mapping = {
 template <class Arg>
 static idl::dcerpc_nca_status lsa_OpenPolicy2(
 		x_dcerpc_pipe_t &rpc_pipe,
-		x_smbd_sess_t *smbd_sess,
+		const std::shared_ptr<x_smbd_user_t> &smbd_user,
 		Arg &arg)
 {
 	// _lsa_OpenPolicy2
 	// TODO only allow LOCAL INFORMATION for now
 
-	auto smbd_user = x_smbd_sess_get_user(smbd_sess);
 	uint32_t access_mask = se_rpc_map_maximal_access(
 			*smbd_user, arg.access_mask);
 
@@ -69,7 +68,7 @@ static idl::dcerpc_nca_status lsa_OpenPolicy2(
 
 static idl::dcerpc_nca_status x_smbd_dcerpc_impl_lsa_Close(
 		x_dcerpc_pipe_t &rpc_pipe,
-		x_smbd_sess_t *smbd_sess,
+		const std::shared_ptr<x_smbd_user_t> &smbd_user,
 		idl::lsa_Close &arg)
 {
 	if (!x_smbd_dcerpc_close_handle(rpc_pipe, arg.handle)) {
@@ -88,10 +87,10 @@ X_SMBD_DCERPC_IMPL_TODO(lsa_ChangePassword)
 
 static idl::dcerpc_nca_status x_smbd_dcerpc_impl_lsa_OpenPolicy(
 		x_dcerpc_pipe_t &rpc_pipe,
-		x_smbd_sess_t *smbd_sess,
+		const std::shared_ptr<x_smbd_user_t> &smbd_user,
 		idl::lsa_OpenPolicy &arg)
 {
-	return lsa_OpenPolicy2(rpc_pipe, smbd_sess, arg);
+	return lsa_OpenPolicy2(rpc_pipe, smbd_user, arg);
 }
 
 
@@ -99,7 +98,7 @@ static idl::dcerpc_nca_status x_smbd_dcerpc_impl_lsa_OpenPolicy(
 template <class Arg>
 static inline idl::dcerpc_nca_status lsa_QueryInfoPolicy(
 		x_dcerpc_pipe_t &rpc_pipe,
-		x_smbd_sess_t *smbd_sess,
+		const std::shared_ptr<x_smbd_user_t> &smbd_user,
 		Arg &arg)
 {
 	auto [ found, data ] = x_smbd_dcerpc_find_handle(rpc_pipe, arg.handle);
@@ -177,10 +176,10 @@ static inline idl::dcerpc_nca_status lsa_QueryInfoPolicy(
 
 static idl::dcerpc_nca_status x_smbd_dcerpc_impl_lsa_QueryInfoPolicy(
 		x_dcerpc_pipe_t &rpc_pipe,
-		x_smbd_sess_t *smbd_sess,
+		const std::shared_ptr<x_smbd_user_t> &smbd_user,
 		idl::lsa_QueryInfoPolicy &arg)
 {
-	return lsa_QueryInfoPolicy(rpc_pipe, smbd_sess, arg);
+	return lsa_QueryInfoPolicy(rpc_pipe, smbd_user, arg);
 }
 
 X_SMBD_DCERPC_IMPL_TODO(lsa_SetInfoPolicy)
@@ -222,20 +221,20 @@ X_SMBD_DCERPC_IMPL_TODO(lsa_RetrievePrivateData)
 
 static idl::dcerpc_nca_status x_smbd_dcerpc_impl_lsa_OpenPolicy2(
 		x_dcerpc_pipe_t &rpc_pipe,
-		x_smbd_sess_t *smbd_sess,
+		const std::shared_ptr<x_smbd_user_t> &smbd_user,
 		idl::lsa_OpenPolicy2 &arg)
 {
-	return lsa_OpenPolicy2(rpc_pipe, smbd_sess, arg);
+	return lsa_OpenPolicy2(rpc_pipe, smbd_user, arg);
 }
 
 X_SMBD_DCERPC_IMPL_TODO(lsa_GetUserName)
 
 static idl::dcerpc_nca_status x_smbd_dcerpc_impl_lsa_QueryInfoPolicy2(
 		x_dcerpc_pipe_t &rpc_pipe,
-		x_smbd_sess_t *smbd_sess,
+		const std::shared_ptr<x_smbd_user_t> &smbd_user,
 		idl::lsa_QueryInfoPolicy2 &arg)
 {
-	return lsa_QueryInfoPolicy(rpc_pipe, smbd_sess, arg);
+	return lsa_QueryInfoPolicy(rpc_pipe, smbd_user, arg);
 }
 
 X_SMBD_DCERPC_IMPL_TODO(lsa_SetInfoPolicy2)

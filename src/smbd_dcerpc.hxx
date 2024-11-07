@@ -22,7 +22,7 @@ struct x_dcerpc_pipe_t {
 
 typedef idl::dcerpc_nca_status (*x_dcerpc_rpc_fn_t)(
 		x_dcerpc_pipe_t &rpc_pipe,
-		x_smbd_sess_t *smbd_sess,
+		const std::shared_ptr<x_smbd_user_t> &smbd_user,
 		idl::dcerpc_request request,
 		uint8_t &resp_type,
 		std::vector<uint8_t> &body_output,
@@ -45,7 +45,7 @@ idl::dcerpc_nca_status x_smbd_dcerpc_fault(
 #define X_SMBD_DCERPC_FUNCTION(Arg) \
 static idl::dcerpc_nca_status x_smbd_dcerpc_fn_##Arg( \
 		x_dcerpc_pipe_t &rpc_pipe, \
-		x_smbd_sess_t *smbd_sess, \
+		const std::shared_ptr<x_smbd_user_t> &smbd_user, \
 		idl::dcerpc_request request, \
 		uint8_t &resp_type, \
 		std::vector<uint8_t> &body_output, \
@@ -60,7 +60,7 @@ static idl::dcerpc_nca_status x_smbd_dcerpc_fn_##Arg( \
 		return idl::DCERPC_NCA_S_PROTO_ERROR; \
 	} \
 	X_DEVEL_ASSERT(ret == (long)request.stub_and_verifier.val.size()); \
-	idl::dcerpc_nca_status status = x_smbd_dcerpc_impl_##Arg(rpc_pipe, smbd_sess, arg); \
+	idl::dcerpc_nca_status status = x_smbd_dcerpc_impl_##Arg(rpc_pipe, smbd_user, arg); \
 	if (status == X_SMBD_DCERPC_NCA_STATUS_OK) { \
 		ret = idl::x_ndr_resp_push(arg, body_output, ndr_flags); \
 		X_ASSERT(ret > 0); \
@@ -80,10 +80,10 @@ static idl::dcerpc_nca_status x_smbd_dcerpc_fn_##Arg( \
 X_SMBD_DCERPC_IFACE_ENUM
 #undef X_SMBD_DCERPC_IFACE_DECL
 
-bool x_smbd_dcerpc_is_admin(const x_smbd_sess_t *smbd_sess);
+bool x_smbd_dcerpc_is_admin(const std::shared_ptr<x_smbd_user_t> &smbd_user);
 
-#define X_SMBD_DCERPC_CHECK_ADMIN_ACCESS(smbd_sess, arg) do { \
-	if (!x_smbd_dcerpc_is_admin(smbd_sess)) { \
+#define X_SMBD_DCERPC_CHECK_ADMIN_ACCESS(smbd_user, arg) do { \
+	if (!x_smbd_dcerpc_is_admin(smbd_user)) { \
 		arg.__result = WERR_ACCESS_DENIED; \
 		return X_SMBD_DCERPC_NCA_STATUS_OK; \
 	} \
@@ -100,21 +100,21 @@ std::pair<bool, std::shared_ptr<void>> x_smbd_dcerpc_find_handle(
 		x_dcerpc_pipe_t &rpc_pipe, const idl::policy_handle &handle);
 
 #define X_SMBD_DCERPC_IMPL_TODO(Arg) \
-static idl::dcerpc_nca_status x_smbd_dcerpc_impl_##Arg(x_dcerpc_pipe_t &rpc_pipe, x_smbd_sess_t *smbd_sess, idl::Arg &arg) \
+static idl::dcerpc_nca_status x_smbd_dcerpc_impl_##Arg(x_dcerpc_pipe_t &rpc_pipe, const std::shared_ptr<x_smbd_user_t> &smbd_user, idl::Arg &arg) \
 { \
 	X_TODO; \
 	return idl::DCERPC_NCA_S_FAULT_UNSPEC; \
 }
 
 #define X_SMBD_DCERPC_IMPL_NOT_SUPPORTED(Arg) \
-static idl::dcerpc_nca_status x_smbd_dcerpc_impl_##Arg(x_dcerpc_pipe_t &rpc_pipe, x_smbd_sess_t *smbd_sess, idl::Arg &arg) \
+static idl::dcerpc_nca_status x_smbd_dcerpc_impl_##Arg(x_dcerpc_pipe_t &rpc_pipe, const std::shared_ptr<x_smbd_user_t> &smbd_user, idl::Arg &arg) \
 { \
 	(arg).__result = WERR_NOT_SUPPORTED; \
 	return X_SMBD_DCERPC_NCA_STATUS_OK; \
 }
 
 #define X_SMBD_DCERPC_IMPL_NT_NOT_SUPPORTED(Arg) \
-static idl::dcerpc_nca_status x_smbd_dcerpc_impl_##Arg(x_dcerpc_pipe_t &rpc_pipe, x_smbd_sess_t *smbd_sess, idl::Arg &arg) \
+static idl::dcerpc_nca_status x_smbd_dcerpc_impl_##Arg(x_dcerpc_pipe_t &rpc_pipe, const std::shared_ptr<x_smbd_user_t> &smbd_user, idl::Arg &arg) \
 { \
 	(arg).__result = NT_STATUS_NOT_SUPPORTED; \
 	return X_SMBD_DCERPC_NCA_STATUS_OK; \

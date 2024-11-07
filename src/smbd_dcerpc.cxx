@@ -21,9 +21,8 @@ idl::dcerpc_nca_status x_smbd_dcerpc_fault(
 	return idl::dcerpc_nca_status(0);
 }
 
-bool x_smbd_dcerpc_is_admin(const x_smbd_sess_t *smbd_sess)
+bool x_smbd_dcerpc_is_admin(const std::shared_ptr<x_smbd_user_t> &smbd_user)
 {
-	auto smbd_user = x_smbd_sess_get_user(smbd_sess);
 	if (smbd_user->uid == idl::DOMAIN_RID_ADMINS) {
 		return true;
 	}

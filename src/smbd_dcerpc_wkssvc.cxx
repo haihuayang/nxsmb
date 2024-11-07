@@ -19,7 +19,7 @@ static void __wkssvc_NetWkstaGetInfo(std::shared_ptr<T> &info)
 
 static idl::dcerpc_nca_status x_smbd_dcerpc_impl_wkssvc_NetWkstaGetInfo(
 		x_dcerpc_pipe_t &rpc_pipe,
-		x_smbd_sess_t *smbd_sess,
+		const std::shared_ptr<x_smbd_user_t> &smbd_user,
 		idl::wkssvc_NetWkstaGetInfo &arg)
 {
 	switch (arg.level) {
@@ -34,7 +34,7 @@ static idl::dcerpc_nca_status x_smbd_dcerpc_impl_wkssvc_NetWkstaGetInfo(
 		break;
 
 	case 102:
-		X_SMBD_DCERPC_CHECK_ADMIN_ACCESS(smbd_sess, arg);
+		X_SMBD_DCERPC_CHECK_ADMIN_ACCESS(smbd_user, arg);
 
 		__wkssvc_NetWkstaGetInfo(arg.info.info102);
 		/* TODO does a user logon multiple time count 1 or multi? */

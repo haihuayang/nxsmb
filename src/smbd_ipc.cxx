@@ -495,7 +495,7 @@ static NTSTATUS dcesrv_fault_disconnect(
 static NTSTATUS process_dcerpc_alter(
 		const x_smbd_ipc_object_t *ipc_object,
 		named_pipe_t *named_pipe,
-		x_smbd_sess_t *smbd_sess,
+		const std::shared_ptr<x_smbd_user_t> &smbd_user,
 		uint8_t &resp_type, std::vector<uint8_t> &body_output)
 {
 	if (!named_pipe->allow_alter) {
@@ -542,7 +542,7 @@ static NTSTATUS process_dcerpc_alter(
 static NTSTATUS process_dcerpc_request(
 		const x_smbd_ipc_object_t* ipc_object,
 		named_pipe_t *named_pipe,
-		x_smbd_sess_t *smbd_sess,
+		const std::shared_ptr<x_smbd_user_t> &smbd_user,
 		uint8_t &resp_type, std::vector<uint8_t> &body_output)
 {
 	idl::dcerpc_request request;
@@ -566,7 +566,7 @@ static NTSTATUS process_dcerpc_request(
 		ndr_flags |= ctx->ndr_flags;
 		std::vector<uint8_t> output;
 		dce_status = iface->cmds[opnum](
-				named_pipe->rpc_pipe, smbd_sess,
+				named_pipe->rpc_pipe, smbd_user,
 				request, resp_type, output, ndr_flags);
 		if (dce_status == X_SMBD_DCERPC_NCA_STATUS_OK) {
 			X_TODO_ASSERT(resp_type == idl::DCERPC_PKT_RESPONSE);
@@ -600,7 +600,7 @@ static NTSTATUS process_dcerpc_request(
 static inline NTSTATUS process_ncacn_pdu(
 		const x_smbd_ipc_object_t *ipc_object,
 		named_pipe_t *named_pipe,
-		x_smbd_sess_t *smbd_sess)
+		const std::shared_ptr<x_smbd_user_t> &smbd_user)
 {
 	std::vector<uint8_t> body_output;
 	uint8_t resp_type;
@@ -610,10 +610,10 @@ static inline NTSTATUS process_ncacn_pdu(
 			status = process_dcerpc_bind(ipc_object, named_pipe, resp_type, body_output);
 			break;
 		case idl::DCERPC_PKT_REQUEST:
-			status = process_dcerpc_request(ipc_object, named_pipe, smbd_sess, resp_type, body_output);
+			status = process_dcerpc_request(ipc_object, named_pipe, smbd_user, resp_type, body_output);
 			break;
 		case idl::DCERPC_PKT_ALTER:
-			status = process_dcerpc_alter(ipc_object, named_pipe, smbd_sess, resp_type, body_output);
+			status = process_dcerpc_alter(ipc_object, named_pipe, smbd_user, resp_type, body_output);
 			break;
 		default:
 			X_TODO;
@@ -645,7 +645,7 @@ static inline NTSTATUS process_ncacn_pdu(
 static int named_pipe_write(
 		x_smbd_ipc_object_t *ipc_object,
 		named_pipe_t *named_pipe,
-		x_smbd_sess_t *smbd_sess,
+		const std::shared_ptr<x_smbd_user_t> &smbd_user,
 		const uint8_t *_input_data,
 		uint32_t input_size)
 {
@@ -711,7 +711,7 @@ static int named_pipe_write(
 
 	if (named_pipe->packet_read == named_pipe->pkt.frag_length) {
 		/* complete pdu */
-		named_pipe->return_status = process_ncacn_pdu(ipc_object, named_pipe, smbd_sess);
+		named_pipe->return_status = process_ncacn_pdu(ipc_object, named_pipe, smbd_user);
 	}
 	return x_convert_assert<uint32_t>(data - _input_data);
 }
@@ -747,7 +747,7 @@ static NTSTATUS ipc_object_op_write(
 
 	int ret = named_pipe_write(from_smbd_object(smbd_object),
 			named_pipe,
-			smbd_requ->smbd_sess,
+			x_smbd_sess_get_user(smbd_requ->smbd_sess),
 			state->in_buf->data + state->in_buf_offset,
 			state->in_buf_length);
 	state->out_count = ret;
@@ -847,7 +847,7 @@ static NTSTATUS ipc_object_op_ioctl(
 	case X_SMB2_FSCTL_PIPE_TRANSCEIVE:
 		named_pipe->is_transceive = true;
 		named_pipe_write(ipc_object, named_pipe,
-				smbd_requ->smbd_sess,
+				x_smbd_sess_get_user(smbd_requ->smbd_sess),
 				state->in_buf->data + state->in_buf_offset,
 				state->in_buf_length);
 		X_SMBD_REQU_LOG(DBG, smbd_requ, "requ_length = %u, output = %lu - %u",

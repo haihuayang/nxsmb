@@ -16,7 +16,7 @@ static std::shared_ptr<idl::dssetup_DsRoleInfo> &make_dssetup_DsRoleInfo(
 
 static idl::dcerpc_nca_status x_smbd_dcerpc_impl_dssetup_DsRoleGetPrimaryDomainInformation(
 		x_dcerpc_pipe_t &rpc_pipe,
-		x_smbd_sess_t *smbd_sess,
+		const std::shared_ptr<x_smbd_user_t> &smbd_user,
 		idl::dssetup_DsRoleGetPrimaryDomainInformation &arg)
 {
 	const x_smbd_conf_t &smbd_conf = x_smbd_conf_get_curr();

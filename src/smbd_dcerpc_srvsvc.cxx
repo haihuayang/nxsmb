@@ -164,10 +164,10 @@ X_SMBD_DCERPC_IMPL_NOT_SUPPORTED(srvsvc_NetCharDevQPurgeSelf)
 
 static idl::dcerpc_nca_status x_smbd_dcerpc_impl_srvsvc_NetConnEnum(
 		x_dcerpc_pipe_t &rpc_pipe,
-		x_smbd_sess_t *smbd_sess,
+		const std::shared_ptr<x_smbd_user_t> &smbd_user,
 		idl::srvsvc_NetConnEnum &arg)
 {
-	X_SMBD_DCERPC_CHECK_ADMIN_ACCESS(smbd_sess, arg);
+	X_SMBD_DCERPC_CHECK_ADMIN_ACCESS(smbd_user, arg);
 
 	auto &ctr = arg.info_ctr.ctr;
 	switch (arg.info_ctr.level) {
@@ -189,10 +189,10 @@ static idl::dcerpc_nca_status x_smbd_dcerpc_impl_srvsvc_NetConnEnum(
 
 static idl::dcerpc_nca_status x_smbd_dcerpc_impl_srvsvc_NetFileEnum(
 		x_dcerpc_pipe_t &rpc_pipe,
-		x_smbd_sess_t *smbd_sess,
+		const std::shared_ptr<x_smbd_user_t> &smbd_user,
 		idl::srvsvc_NetFileEnum &arg)
 {
-	X_SMBD_DCERPC_CHECK_ADMIN_ACCESS(smbd_sess, arg);
+	X_SMBD_DCERPC_CHECK_ADMIN_ACCESS(smbd_user, arg);
 
 	auto &ctr = arg.info_ctr.ctr;
 	switch (arg.info_ctr.level) {
@@ -216,10 +216,10 @@ X_SMBD_DCERPC_IMPL_NOT_SUPPORTED(srvsvc_NetFileGetInfo)
 
 static idl::dcerpc_nca_status x_smbd_dcerpc_impl_srvsvc_NetFileClose(
 		x_dcerpc_pipe_t &rpc_pipe,
-		x_smbd_sess_t *smbd_sess,
+		const std::shared_ptr<x_smbd_user_t> &smbd_user,
 		idl::srvsvc_NetFileClose &arg)
 {
-	X_SMBD_DCERPC_CHECK_ADMIN_ACCESS(smbd_sess, arg);
+	X_SMBD_DCERPC_CHECK_ADMIN_ACCESS(smbd_user, arg);
 
 	x_smbd_net_file_close(arg.fid);
 	arg.__result = WERR_OK;
@@ -228,10 +228,10 @@ static idl::dcerpc_nca_status x_smbd_dcerpc_impl_srvsvc_NetFileClose(
 
 static idl::dcerpc_nca_status x_smbd_dcerpc_impl_srvsvc_NetSessEnum(
 		x_dcerpc_pipe_t &rpc_pipe,
-		x_smbd_sess_t *smbd_sess,
+		const std::shared_ptr<x_smbd_user_t> &smbd_user,
 		idl::srvsvc_NetSessEnum &arg)
 {
-	X_SMBD_DCERPC_CHECK_ADMIN_ACCESS(smbd_sess, arg);
+	X_SMBD_DCERPC_CHECK_ADMIN_ACCESS(smbd_user, arg);
 
 	auto &ctr = arg.info_ctr.ctr;
 	switch (arg.info_ctr.level) {
@@ -265,10 +265,10 @@ static idl::dcerpc_nca_status x_smbd_dcerpc_impl_srvsvc_NetSessEnum(
 
 static idl::dcerpc_nca_status x_smbd_dcerpc_impl_srvsvc_NetSessDel(
 		x_dcerpc_pipe_t &rpc_pipe,
-		x_smbd_sess_t *smbd_sess,
+		const std::shared_ptr<x_smbd_user_t> &smbd_user,
 		idl::srvsvc_NetSessDel &arg)
 {
-	X_SMBD_DCERPC_CHECK_ADMIN_ACCESS(smbd_sess, arg);
+	X_SMBD_DCERPC_CHECK_ADMIN_ACCESS(smbd_user, arg);
 
 	x_smbd_net_sess_del(arg.user.get(), arg.client.get());
 
@@ -280,7 +280,7 @@ X_SMBD_DCERPC_IMPL_NOT_SUPPORTED(srvsvc_NetShareAdd)
 
 static idl::dcerpc_nca_status x_smbd_dcerpc_impl_srvsvc_NetShareEnumAll(
 		x_dcerpc_pipe_t &rpc_pipe,
-		x_smbd_sess_t *smbd_sess,
+		const std::shared_ptr<x_smbd_user_t> &smbd_user,
 		idl::srvsvc_NetShareEnumAll &arg)
 {
 	auto &ctr = arg.info_ctr.ctr;
@@ -294,17 +294,17 @@ static idl::dcerpc_nca_status x_smbd_dcerpc_impl_srvsvc_NetShareEnumAll(
 		break;
 
 	case 2:
-		X_SMBD_DCERPC_CHECK_ADMIN_ACCESS(smbd_sess, arg);
+		X_SMBD_DCERPC_CHECK_ADMIN_ACCESS(smbd_user, arg);
 		net_enum(arg, ctr.ctr2->array);
 		break;
 
 	case 501:
-		X_SMBD_DCERPC_CHECK_ADMIN_ACCESS(smbd_sess, arg);
+		X_SMBD_DCERPC_CHECK_ADMIN_ACCESS(smbd_user, arg);
 		net_enum(arg, ctr.ctr501->array);
 		break;
 
 	case 502:
-		X_SMBD_DCERPC_CHECK_ADMIN_ACCESS(smbd_sess, arg);
+		X_SMBD_DCERPC_CHECK_ADMIN_ACCESS(smbd_user, arg);
 		net_enum(arg, ctr.ctr502->array);
 		break;
 
@@ -317,7 +317,7 @@ static idl::dcerpc_nca_status x_smbd_dcerpc_impl_srvsvc_NetShareEnumAll(
 
 static idl::dcerpc_nca_status x_smbd_dcerpc_impl_srvsvc_NetShareGetInfo(
 		x_dcerpc_pipe_t &rpc_pipe,
-		x_smbd_sess_t *smbd_sess,
+		const std::shared_ptr<x_smbd_user_t> &smbd_user,
 		idl::srvsvc_NetShareGetInfo &arg)
 {
 	const x_smbd_conf_t &smbd_conf = x_smbd_conf_get_curr();
@@ -338,7 +338,7 @@ static idl::dcerpc_nca_status x_smbd_dcerpc_impl_srvsvc_NetShareGetInfo(
 		break;
 
 	case 2:
-		X_SMBD_DCERPC_CHECK_ADMIN_ACCESS(smbd_sess, arg);
+		X_SMBD_DCERPC_CHECK_ADMIN_ACCESS(smbd_user, arg);
 		net_get_info(arg, arg.info.info2, *smbd_share);
 		break;
 
@@ -347,7 +347,7 @@ static idl::dcerpc_nca_status x_smbd_dcerpc_impl_srvsvc_NetShareGetInfo(
 		break;
 
 	case 502:
-		X_SMBD_DCERPC_CHECK_ADMIN_ACCESS(smbd_sess, arg);
+		X_SMBD_DCERPC_CHECK_ADMIN_ACCESS(smbd_user, arg);
 		net_get_info(arg, arg.info.info502, *smbd_share);
 		break;
 
@@ -383,7 +383,7 @@ X_SMBD_DCERPC_IMPL_NOT_SUPPORTED(srvsvc_NetShareDelSticky)
 
 static idl::dcerpc_nca_status x_smbd_dcerpc_impl_srvsvc_NetShareCheck(
 		x_dcerpc_pipe_t &rpc_pipe,
-		x_smbd_sess_t *smbd_sess,
+		const std::shared_ptr<x_smbd_user_t> &smbd_user,
 		idl::srvsvc_NetShareCheck &arg)
 {
 	if (arg.device_name.size() == 0 || x_strcase_equal(arg.device_name,
@@ -445,7 +445,7 @@ idl::srvsvc_NetSrvInfo102 x_smbd_net_get_info<idl::srvsvc_NetSrvInfo102>(
 
 static idl::dcerpc_nca_status x_smbd_dcerpc_impl_srvsvc_NetSrvGetInfo(
 		x_dcerpc_pipe_t &rpc_pipe,
-		x_smbd_sess_t *smbd_sess,
+		const std::shared_ptr<x_smbd_user_t> &smbd_user,
 		idl::srvsvc_NetSrvGetInfo &arg)
 {
 	const x_smbd_conf_t &smbd_conf = x_smbd_conf_get_curr();
@@ -473,7 +473,7 @@ X_SMBD_DCERPC_IMPL_NOT_SUPPORTED(srvsvc_NetSrvSetInfo)
 
 static idl::dcerpc_nca_status x_smbd_dcerpc_impl_srvsvc_NetDiskEnum(
 		x_dcerpc_pipe_t &rpc_pipe,
-		x_smbd_sess_t *smbd_sess,
+		const std::shared_ptr<x_smbd_user_t> &smbd_user,
 		idl::srvsvc_NetDiskEnum &arg)
 {
 	auto &array = arg.info.disks;
@@ -496,7 +496,7 @@ X_SMBD_DCERPC_IMPL_NOT_SUPPORTED(srvsvc_NetTransportDel)
 
 static idl::dcerpc_nca_status x_smbd_dcerpc_impl_srvsvc_NetRemoteTOD(
 		x_dcerpc_pipe_t &rpc_pipe,
-		x_smbd_sess_t *smbd_sess,
+		const std::shared_ptr<x_smbd_user_t> &smbd_user,
 		idl::srvsvc_NetRemoteTOD &arg)
 {
 	const time_t unixdate = time(NULL);
@@ -538,7 +538,7 @@ X_SMBD_DCERPC_IMPL_NOT_SUPPORTED(srvsvc_NetPathCompare)
 
 static idl::dcerpc_nca_status x_smbd_dcerpc_impl_srvsvc_NetNameValidate(
 		x_dcerpc_pipe_t &rpc_pipe,
-		x_smbd_sess_t *smbd_sess,
+		const std::shared_ptr<x_smbd_user_t> &smbd_user,
 		idl::srvsvc_NetNameValidate &arg)
 {
 	switch (arg.name_type) {
@@ -559,7 +559,7 @@ X_SMBD_DCERPC_IMPL_NOT_SUPPORTED(srvsvc_NetPRNameCompare)
 
 static idl::dcerpc_nca_status x_smbd_dcerpc_impl_srvsvc_NetShareEnum(
 		x_dcerpc_pipe_t &rpc_pipe,
-		x_smbd_sess_t *smbd_sess,
+		const std::shared_ptr<x_smbd_user_t> &smbd_user,
 		idl::srvsvc_NetShareEnum &arg)
 {
 	auto &ctr = arg.info_ctr.ctr;
@@ -573,12 +573,12 @@ static idl::dcerpc_nca_status x_smbd_dcerpc_impl_srvsvc_NetShareEnum(
 		break;
 
 	case 2:
-		X_SMBD_DCERPC_CHECK_ADMIN_ACCESS(smbd_sess, arg);
+		X_SMBD_DCERPC_CHECK_ADMIN_ACCESS(smbd_user, arg);
 		net_enum(arg, ctr.ctr2->array);
 		break;
 
 	case 502:
-		X_SMBD_DCERPC_CHECK_ADMIN_ACCESS(smbd_sess, arg);
+		X_SMBD_DCERPC_CHECK_ADMIN_ACCESS(smbd_user, arg);
 		net_enum(arg, ctr.ctr502->array);
 		break;
 

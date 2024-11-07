@@ -39,7 +39,7 @@ static std::shared_ptr<x_smbd_registry_key_t> find_handle(
 }
 
 static WERROR open_top_key(x_dcerpc_pipe_t &rpc_pipe,
-		x_smbd_sess_t *smbd_sess,
+		const std::shared_ptr<x_smbd_user_t> &smbd_user,
 		idl::policy_handle &wire_handle,
 		const std::u16string &name)
 {
@@ -63,7 +63,7 @@ static WERROR open_top_key(x_dcerpc_pipe_t &rpc_pipe,
 #define X_SMBD_WINREG_IMPL_NOT_SUPPORTED_FAULT(Arg) \
 static idl::dcerpc_nca_status x_smbd_dcerpc_impl_##Arg( \
 		x_dcerpc_pipe_t &rpc_pipe, \
-		x_smbd_sess_t *smbd_sess, \
+		const std::shared_ptr<x_smbd_user_t> &smbd_user, \
 		idl::Arg &arg) \
 { \
 	arg.__result = WERR_NOT_SUPPORTED; \
@@ -73,53 +73,53 @@ static idl::dcerpc_nca_status x_smbd_dcerpc_impl_##Arg( \
 
 static idl::dcerpc_nca_status x_smbd_dcerpc_impl_winreg_OpenHKCR(
 		x_dcerpc_pipe_t &rpc_pipe,
-		x_smbd_sess_t *smbd_sess,
+		const std::shared_ptr<x_smbd_user_t> &smbd_user,
 		idl::winreg_OpenHKCR &arg)
 {
-	arg.__result = open_top_key(rpc_pipe, smbd_sess, arg.handle, u"HKCR");
+	arg.__result = open_top_key(rpc_pipe, smbd_user, arg.handle, u"HKCR");
 	return X_SMBD_DCERPC_NCA_STATUS_OK;
 }
 
 static idl::dcerpc_nca_status x_smbd_dcerpc_impl_winreg_OpenHKCU(
 		x_dcerpc_pipe_t &rpc_pipe,
-		x_smbd_sess_t *smbd_sess,
+		const std::shared_ptr<x_smbd_user_t> &smbd_user,
 		idl::winreg_OpenHKCU &arg)
 {
-	arg.__result = open_top_key(rpc_pipe, smbd_sess, arg.handle, u"HKCU");
+	arg.__result = open_top_key(rpc_pipe, smbd_user, arg.handle, u"HKCU");
 	return X_SMBD_DCERPC_NCA_STATUS_OK;
 }
 
 static idl::dcerpc_nca_status x_smbd_dcerpc_impl_winreg_OpenHKLM(
 		x_dcerpc_pipe_t &rpc_pipe,
-		x_smbd_sess_t *smbd_sess,
+		const std::shared_ptr<x_smbd_user_t> &smbd_user,
 		idl::winreg_OpenHKLM &arg)
 {
-	arg.__result = open_top_key(rpc_pipe, smbd_sess, arg.handle, u"HKLM");
+	arg.__result = open_top_key(rpc_pipe, smbd_user, arg.handle, u"HKLM");
 	return X_SMBD_DCERPC_NCA_STATUS_OK;
 }
 
 static idl::dcerpc_nca_status x_smbd_dcerpc_impl_winreg_OpenHKPD(
 		x_dcerpc_pipe_t &rpc_pipe,
-		x_smbd_sess_t *smbd_sess,
+		const std::shared_ptr<x_smbd_user_t> &smbd_user,
 		idl::winreg_OpenHKPD &arg)
 {
 	/* TODO special hangle, see samba _winreg_QueryValue  */
-	arg.__result = open_top_key(rpc_pipe, smbd_sess, arg.handle, u"HKLM");
+	arg.__result = open_top_key(rpc_pipe, smbd_user, arg.handle, u"HKLM");
 	return X_SMBD_DCERPC_NCA_STATUS_OK;
 }
 
 static idl::dcerpc_nca_status x_smbd_dcerpc_impl_winreg_OpenHKU(
 		x_dcerpc_pipe_t &rpc_pipe,
-		x_smbd_sess_t *smbd_sess,
+		const std::shared_ptr<x_smbd_user_t> &smbd_user,
 		idl::winreg_OpenHKU &arg)
 {
-	arg.__result = open_top_key(rpc_pipe, smbd_sess, arg.handle, u"HKU");
+	arg.__result = open_top_key(rpc_pipe, smbd_user, arg.handle, u"HKU");
 	return X_SMBD_DCERPC_NCA_STATUS_OK;
 }
 
 static idl::dcerpc_nca_status x_smbd_dcerpc_impl_winreg_CloseKey(
 		x_dcerpc_pipe_t &rpc_pipe,
-		x_smbd_sess_t *smbd_sess,
+		const std::shared_ptr<x_smbd_user_t> &smbd_user,
 		idl::winreg_CloseKey &arg)
 {
 	if (x_smbd_dcerpc_close_handle(rpc_pipe, arg.handle)) {
@@ -133,7 +133,7 @@ static idl::dcerpc_nca_status x_smbd_dcerpc_impl_winreg_CloseKey(
 
 static idl::dcerpc_nca_status x_smbd_dcerpc_impl_winreg_CreateKey(
 		x_dcerpc_pipe_t &rpc_pipe,
-		x_smbd_sess_t *smbd_sess,
+		const std::shared_ptr<x_smbd_user_t> &smbd_user,
 		idl::winreg_CreateKey &arg)
 {
 	std::shared_ptr<x_smbd_registry_key_t> parent_key = find_handle(
@@ -175,7 +175,7 @@ static idl::dcerpc_nca_status x_smbd_dcerpc_impl_winreg_CreateKey(
 
 static idl::dcerpc_nca_status x_smbd_dcerpc_impl_winreg_DeleteKey(
 		x_dcerpc_pipe_t &rpc_pipe,
-		x_smbd_sess_t *smbd_sess,
+		const std::shared_ptr<x_smbd_user_t> &smbd_user,
 		idl::winreg_DeleteKey &arg)
 {
 	std::shared_ptr<x_smbd_registry_key_t> parent_key = find_handle(
@@ -207,7 +207,7 @@ static idl::dcerpc_nca_status x_smbd_dcerpc_impl_winreg_DeleteKey(
 
 static idl::dcerpc_nca_status x_smbd_dcerpc_impl_winreg_DeleteValue(
 		x_dcerpc_pipe_t &rpc_pipe,
-		x_smbd_sess_t *smbd_sess,
+		const std::shared_ptr<x_smbd_user_t> &smbd_user,
 		idl::winreg_DeleteValue &arg)
 {
 	std::shared_ptr<x_smbd_registry_key_t> key = find_handle(
@@ -228,7 +228,7 @@ static idl::dcerpc_nca_status x_smbd_dcerpc_impl_winreg_DeleteValue(
 
 static idl::dcerpc_nca_status x_smbd_dcerpc_impl_winreg_EnumKey(
 		x_dcerpc_pipe_t &rpc_pipe,
-		x_smbd_sess_t *smbd_sess,
+		const std::shared_ptr<x_smbd_user_t> &smbd_user,
 		idl::winreg_EnumKey &arg)
 {
 	std::shared_ptr<x_smbd_registry_key_t> key = find_handle(
@@ -255,7 +255,7 @@ static idl::dcerpc_nca_status x_smbd_dcerpc_impl_winreg_EnumKey(
 
 static idl::dcerpc_nca_status x_smbd_dcerpc_impl_winreg_EnumValue(
 		x_dcerpc_pipe_t &rpc_pipe,
-		x_smbd_sess_t *smbd_sess,
+		const std::shared_ptr<x_smbd_user_t> &smbd_user,
 		idl::winreg_EnumValue &arg)
 {
 	std::shared_ptr<x_smbd_registry_key_t> key = find_handle(
@@ -283,7 +283,7 @@ static idl::dcerpc_nca_status x_smbd_dcerpc_impl_winreg_EnumValue(
 
 static idl::dcerpc_nca_status x_smbd_dcerpc_impl_winreg_FlushKey(
 		x_dcerpc_pipe_t &rpc_pipe,
-		x_smbd_sess_t *smbd_sess,
+		const std::shared_ptr<x_smbd_user_t> &smbd_user,
 		idl::winreg_FlushKey &arg)
 {
 	arg.__result = WERR_OK;
@@ -292,7 +292,7 @@ static idl::dcerpc_nca_status x_smbd_dcerpc_impl_winreg_FlushKey(
 
 static idl::dcerpc_nca_status x_smbd_dcerpc_impl_winreg_GetKeySecurity(
 		x_dcerpc_pipe_t &rpc_pipe,
-		x_smbd_sess_t *smbd_sess,
+		const std::shared_ptr<x_smbd_user_t> &smbd_user,
 		idl::winreg_GetKeySecurity &arg)
 {
 	std::shared_ptr<x_smbd_registry_key_t> key = find_handle(
@@ -313,7 +313,7 @@ X_SMBD_WINREG_IMPL_NOT_SUPPORTED_FAULT(winreg_LoadKey)
 
 static idl::dcerpc_nca_status x_smbd_dcerpc_impl_winreg_NotifyChangeKeyValue(
 		x_dcerpc_pipe_t &rpc_pipe,
-		x_smbd_sess_t *smbd_sess,
+		const std::shared_ptr<x_smbd_user_t> &smbd_user,
 		idl::winreg_NotifyChangeKeyValue &arg)
 {
 	arg.__result = WERR_NOT_SUPPORTED;
@@ -322,7 +322,7 @@ static idl::dcerpc_nca_status x_smbd_dcerpc_impl_winreg_NotifyChangeKeyValue(
 
 static idl::dcerpc_nca_status x_smbd_dcerpc_impl_winreg_OpenKey(
 		x_dcerpc_pipe_t &rpc_pipe,
-		x_smbd_sess_t *smbd_sess,
+		const std::shared_ptr<x_smbd_user_t> &smbd_user,
 		idl::winreg_OpenKey &arg)
 {
 	std::shared_ptr<x_smbd_registry_key_t> parent_key = find_handle(
@@ -362,7 +362,7 @@ static idl::dcerpc_nca_status x_smbd_dcerpc_impl_winreg_OpenKey(
 
 static idl::dcerpc_nca_status x_smbd_dcerpc_impl_winreg_QueryInfoKey(
 		x_dcerpc_pipe_t &rpc_pipe,
-		x_smbd_sess_t *smbd_sess,
+		const std::shared_ptr<x_smbd_user_t> &smbd_user,
 		idl::winreg_QueryInfoKey &arg)
 {
 	std::shared_ptr<x_smbd_registry_key_t> key = find_handle(
@@ -384,7 +384,7 @@ static idl::dcerpc_nca_status x_smbd_dcerpc_impl_winreg_QueryInfoKey(
 
 static idl::dcerpc_nca_status x_smbd_dcerpc_impl_winreg_QueryValue(
 		x_dcerpc_pipe_t &rpc_pipe,
-		x_smbd_sess_t *smbd_sess,
+		const std::shared_ptr<x_smbd_user_t> &smbd_user,
 		idl::winreg_QueryValue &arg)
 {
 	std::shared_ptr<x_smbd_registry_key_t> key = find_handle(
@@ -434,7 +434,7 @@ X_SMBD_WINREG_IMPL_NOT_SUPPORTED_FAULT(winreg_ReplaceKey)
 
 static idl::dcerpc_nca_status x_smbd_dcerpc_impl_winreg_RestoreKey(
 		x_dcerpc_pipe_t &rpc_pipe,
-		x_smbd_sess_t *smbd_sess,
+		const std::shared_ptr<x_smbd_user_t> &smbd_user,
 		idl::winreg_RestoreKey &arg)
 {
 	std::shared_ptr<x_smbd_registry_key_t> key = find_handle(
@@ -450,7 +450,7 @@ static idl::dcerpc_nca_status x_smbd_dcerpc_impl_winreg_RestoreKey(
 
 static idl::dcerpc_nca_status x_smbd_dcerpc_impl_winreg_SaveKey(
 		x_dcerpc_pipe_t &rpc_pipe,
-		x_smbd_sess_t *smbd_sess,
+		const std::shared_ptr<x_smbd_user_t> &smbd_user,
 		idl::winreg_SaveKey &arg)
 {
 	std::shared_ptr<x_smbd_registry_key_t> key = find_handle(
@@ -468,7 +468,7 @@ X_SMBD_DCERPC_IMPL_TODO(winreg_SetKeySecurity)
 
 static idl::dcerpc_nca_status x_smbd_dcerpc_impl_winreg_SetValue(
 		x_dcerpc_pipe_t &rpc_pipe,
-		x_smbd_sess_t *smbd_sess,
+		const std::shared_ptr<x_smbd_user_t> &smbd_user,
 		idl::winreg_SetValue &arg)
 {
 	std::shared_ptr<x_smbd_registry_key_t> key = find_handle(
@@ -491,7 +491,7 @@ X_SMBD_DCERPC_IMPL_TODO(winreg_AbortSystemShutdown)
 
 static idl::dcerpc_nca_status x_smbd_dcerpc_impl_winreg_GetVersion(
 		x_dcerpc_pipe_t &rpc_pipe,
-		x_smbd_sess_t *smbd_sess,
+		const std::shared_ptr<x_smbd_user_t> &smbd_user,
 		idl::winreg_GetVersion &arg)
 {
 	arg.version = 0x00000005; /* Windows 2000 registry API version */
@@ -563,7 +563,7 @@ static WERROR __winreg_QueryMultipleValues(
 
 static idl::dcerpc_nca_status x_smbd_dcerpc_impl_winreg_QueryMultipleValues(
 		x_dcerpc_pipe_t &rpc_pipe,
-		x_smbd_sess_t *smbd_sess,
+		const std::shared_ptr<x_smbd_user_t> &smbd_user,
 		idl::winreg_QueryMultipleValues &arg)
 {
 	uint32_t needed = 0;
@@ -582,7 +582,7 @@ X_SMBD_DCERPC_IMPL_TODO(winreg_OpenHKPN)
 
 static idl::dcerpc_nca_status x_smbd_dcerpc_impl_winreg_QueryMultipleValues2(
 		x_dcerpc_pipe_t &rpc_pipe,
-		x_smbd_sess_t *smbd_sess,
+		const std::shared_ptr<x_smbd_user_t> &smbd_user,
 		idl::winreg_QueryMultipleValues2 &arg)
 {
 	arg.__result = __winreg_QueryMultipleValues(rpc_pipe, arg.key_handle,
