@@ -108,6 +108,7 @@ struct x_smbd_conf_t
 	/* TODO table_tcon use x_idtable_32_traits_t, so max is 64 * 1024 - 9 */
 	uint32_t max_tcons = 64 * 1024 - 9;
 	uint32_t max_opens = 64 * 1024;
+	uint32_t max_requs = 64 * 1024;
 
 	uint32_t allocation_roundup_size = 4096; // TODO should be volume param
 

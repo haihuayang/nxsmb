@@ -1184,6 +1184,7 @@ static int x_smbd_conn_process_smb(x_smbd_conn_t *smbd_conn, x_buf_t *buf, uint3
 
 	x_ref_ptr_t<x_smbd_requ_t> smbd_requ{x_smbd_requ_create(&smbd_conn->base,
 			buf, msgsize, encrypted)};
+	// TODO smbd_requ can be nullptr
 	
 	if (smbhdr == X_SMB2_MAGIC) {
 		if (len < sizeof(x_smb2_header_t)) {

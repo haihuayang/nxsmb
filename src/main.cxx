@@ -2,6 +2,7 @@
 #include "smbd.hxx"
 #include "smbd_stats.hxx"
 #include "smbd_conf.hxx"
+#include "nxfsd.hxx"
 #include <sys/uio.h>
 #include <getopt.h>
 #include <openssl/crypto.h>
@@ -144,6 +145,8 @@ static void nxfsd_init()
 	g_nxfsd.tpool_evtmgmt = tpool;
 
 	g_evtmgmt = x_evtmgmt_create(tpool, max_fd, 1000, 100);
+
+	x_nxfsd_requ_pool_init(smbd_conf->max_requs);
 
 	x_smbd_init();
 	x_smbd_ctrl_init();

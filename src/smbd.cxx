@@ -51,7 +51,6 @@ void x_smbd_init()
 	x_smbd_open_table_init(max_opens);
 	x_smbd_tcon_table_init(std::max(smbd_conf->max_tcons, 1024u));
 	x_smbd_sess_table_init(std::max(smbd_conf->max_sessions, 1024u));
-	x_nxfsd_requ_pool_init(max_opens); // TODO use max_opens for now
 	x_smbd_lease_pool_init(max_opens, max_opens / 16); // TODO use max_opens for now
 	x_smbd_replay_cache_init(max_opens, max_opens / 16); // TODO use max_opens for now
 

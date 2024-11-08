@@ -485,6 +485,8 @@ static bool parse_global_param(x_smbd_conf_t &smbd_conf,
 		return parse_uint32(value, smbd_conf.max_tcons);
 	} else if (name == "my:max opens") {
 		return parse_uint32(value, smbd_conf.max_opens);
+	} else if (name == "my:max requs") {
+		return parse_uint32(value, smbd_conf.max_requs);
 	} else if (name == "my:samba locks dir") {
 		smbd_conf.samba_locks_dir = value;
 	} else if (name == "my:nodes") {
