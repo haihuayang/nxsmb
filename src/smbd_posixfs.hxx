@@ -191,7 +191,8 @@ int posixfs_mktld(const std::shared_ptr<x_smbd_user_t> &smbd_user,
 ssize_t posixfs_object_getxattr(x_smbd_object_t *smbd_object,
 		const char *xattr_name, void *buf, size_t bufsize);
 
-x_smbd_qdir_t *posixfs_qdir_create(x_smbd_open_t *smbd_open, const x_smbd_qdir_ops_t *ops);
+x_smbd_qdir_t *posixfs_qdir_create(x_smbd_open_t *smbd_open, const x_smbd_qdir_ops_t *ops,
+		const std::shared_ptr<x_smbd_user_t> &smbd_user);
 void posixfs_qdir_rewind(x_smbd_qdir_t *smbd_qdir);
 void posixfs_qdir_destroy(x_smbd_qdir_t *smbd_qdir);
 bool posixfs_qdir_get_entry(x_smbd_qdir_t *smbd_qdir,

@@ -65,9 +65,10 @@ static const x_smbd_qdir_ops_t simplefs_qdir_ops = {
 	posixfs_qdir_destroy,
 };
 
-static x_smbd_qdir_t *simplefs_op_qdir_create(x_smbd_open_t *smbd_open)
+static x_smbd_qdir_t *simplefs_op_qdir_create(x_smbd_open_t *smbd_open,
+		const std::shared_ptr<x_smbd_user_t> &smbd_user)
 {
-	return posixfs_qdir_create(smbd_open, &simplefs_qdir_ops); 
+	return posixfs_qdir_create(smbd_open, &simplefs_qdir_ops, smbd_user);
 }
 
 

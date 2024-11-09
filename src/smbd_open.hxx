@@ -36,7 +36,8 @@ struct x_smbd_qdir_ops_t
 
 struct x_smbd_qdir_t
 {
-	x_smbd_qdir_t(x_smbd_open_t *smbd_open, const x_smbd_qdir_ops_t *ops);
+	x_smbd_qdir_t(x_smbd_open_t *smbd_open, const x_smbd_qdir_ops_t *ops,
+			const std::shared_ptr<x_smbd_user_t> &smbd_user);
 	~x_smbd_qdir_t();
 
 	x_job_t base;
@@ -49,6 +50,7 @@ struct x_smbd_qdir_t
 	uint32_t total_count = 0;
 	const uint32_t delay_ms;
 	std::atomic<bool> closed = false;
+	const std::shared_ptr<x_smbd_user_t> smbd_user;
 	x_fnmatch_t *fnmatch = nullptr;
 };
 
@@ -185,7 +187,8 @@ struct x_smbd_object_ops_t
 			uint32_t attributes_value,
 			bool &modified);
 	NTSTATUS (*update_mtime)(x_smbd_object_t *smbd_object);
-	x_smbd_qdir_t *(*qdir_create)(x_smbd_open_t *smbd_open);
+	x_smbd_qdir_t *(*qdir_create)(x_smbd_open_t *smbd_open,
+			const std::shared_ptr<x_smbd_user_t> &smbd_user);
 #if 0
 	bool (*qdir_get_entry)(x_smbd_qdir_t *smbd_qdir,
 			x_smbd_qdir_pos_t &qdir_pos,
@@ -643,9 +646,11 @@ bool x_smbd_open_match_get_lease(const x_smbd_open_t *smbd_open,
 		const x_smb2_uuid_t &client_guid,
 		x_smb2_lease_t &lease);
 
-static inline x_smbd_qdir_t *x_smbd_qdir_create(x_smbd_open_t *smbd_open)
+static inline x_smbd_qdir_t *x_smbd_qdir_create(x_smbd_open_t *smbd_open,
+		const std::shared_ptr<x_smbd_user_t> &smbd_user)
 {
-	return smbd_open->smbd_object->smbd_volume->ops->qdir_create(smbd_open);
+	return smbd_open->smbd_object->smbd_volume->ops->qdir_create(smbd_open,
+			smbd_user);
 }
 
 static inline void x_smbd_qdir_unget_entry(x_smbd_qdir_t *smbd_qdir,

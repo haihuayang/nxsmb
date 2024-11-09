@@ -29,8 +29,9 @@ static const uint64_t posixfs_ads_max_length = 0x10000 - sizeof(posixfs_ads_head
 
 struct posixfs_qdir_t
 {
-	posixfs_qdir_t(x_smbd_open_t *smbd_open, const x_smbd_qdir_ops_t *ops)
-		: base(smbd_open, ops) { }
+	posixfs_qdir_t(x_smbd_open_t *smbd_open, const x_smbd_qdir_ops_t *ops,
+			const std::shared_ptr<x_smbd_user_t> &smbd_user)
+		: base(smbd_open, ops, smbd_user) { }
 	x_smbd_qdir_t base;
 	int save_errno = 0;
 	uint32_t data_length = 0;
@@ -2365,9 +2366,10 @@ bool posixfs_qdir_get_entry(x_smbd_qdir_t *smbd_qdir,
 	return true;
 }
 
-x_smbd_qdir_t *posixfs_qdir_create(x_smbd_open_t *smbd_open, const x_smbd_qdir_ops_t *ops)
+x_smbd_qdir_t *posixfs_qdir_create(x_smbd_open_t *smbd_open, const x_smbd_qdir_ops_t *ops,
+		const std::shared_ptr<x_smbd_user_t> &smbd_user)
 {
-	posixfs_qdir_t *posixfs_qdir = new posixfs_qdir_t(smbd_open, ops);
+	posixfs_qdir_t *posixfs_qdir = new posixfs_qdir_t(smbd_open, ops, smbd_user);
 	return &posixfs_qdir->base;
 }
 

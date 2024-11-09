@@ -134,10 +134,8 @@ static NTSTATUS smbd_qdir_process_requ(x_smbd_qdir_t *smbd_qdir, x_smbd_requ_t *
 		max_count = 1;
 	}
 	std::shared_ptr<idl::security_descriptor> psd, *ppsd = nullptr;
-	std::shared_ptr<x_smbd_user_t> smbd_user;
-	if (x_smbd_tcon_get_abe(smbd_requ->smbd_tcon)) {
+	if (smbd_qdir->smbd_user) {
 		ppsd = &psd;
-		smbd_user = smbd_requ->base.smbd_user;
 	}
 
 	uint32_t num = 0, matched_count = 0;
@@ -155,7 +153,8 @@ static NTSTATUS smbd_qdir_process_requ(x_smbd_qdir_t *smbd_qdir, x_smbd_requ_t *
 			break;
 		}
 		if (psd) {
-			uint32_t access = se_calculate_maximal_access(*psd, *smbd_user);
+			uint32_t access = se_calculate_maximal_access(*psd,
+					*smbd_qdir->smbd_user);
 			psd = nullptr;
 			if ((access & DIR_READ_ACCESS_MASK) != DIR_READ_ACCESS_MASK) {
 				X_LOG(SMB, DBG, "entry '%s' skip by ABE",
@@ -247,9 +246,11 @@ static x_job_t::retval_t smbd_qdir_job_run(x_job_t *job, void *sche)
 	return x_job_t::JOB_DONE;
 }
 
-x_smbd_qdir_t::x_smbd_qdir_t(x_smbd_open_t *smbd_open, const x_smbd_qdir_ops_t *ops)
+x_smbd_qdir_t::x_smbd_qdir_t(x_smbd_open_t *smbd_open, const x_smbd_qdir_ops_t *ops,
+		const std::shared_ptr<x_smbd_user_t> &smbd_user)
 	: base(smbd_qdir_job_run), ops(ops), smbd_open(x_ref_inc(smbd_open))
 	, delay_ms(x_smbd_conf_get_curr().my_dev_delay_qdir_ms)
+	, smbd_user(smbd_user)
 {
 	X_SMBD_COUNTER_INC_CREATE(qdir, 1);
 }
@@ -340,9 +341,13 @@ NTSTATUS x_smb2_process_query_directory(x_smbd_conn_t *smbd_conn, x_smbd_requ_t 
 	}
 
 	{
+		std::shared_ptr<x_smbd_user_t> smbd_user;
+		if (x_smbd_tcon_get_abe(smbd_requ->smbd_tcon)) {
+			smbd_user = smbd_requ->base.smbd_user;
+		}
 		auto lock = std::lock_guard(smbd_object->mutex);
 		if (!smbd_open->smbd_qdir) {
-			smbd_open->smbd_qdir = x_smbd_qdir_create(smbd_open);
+			smbd_open->smbd_qdir = x_smbd_qdir_create(smbd_open, smbd_user);
 			if (!smbd_open->smbd_qdir) {
 				X_SMBD_COUNTER_INC(fail_create_qdir, 1);
 				return NT_STATUS_INSUFFICIENT_RESOURCES;
