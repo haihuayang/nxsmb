@@ -1229,8 +1229,7 @@ NTSTATUS posixfs_object_op_read(
 	x_ref_inc(nxfsd_requ);
 	posixfs_read_job_t *read_job = new posixfs_read_job_t(posixfs_object, nxfsd_requ,
 			delay_ms);
-	nxfsd_requ->save_requ_state(state);
-	x_nxfsd_requ_async_insert(nxfsd_requ, posixfs_read_cancel, X_NSEC_PER_SEC);
+	x_nxfsd_requ_async_insert(nxfsd_requ, state, posixfs_read_cancel, X_NSEC_PER_SEC);
 	x_smbd_schedule_async(&read_job->base);
 	return NT_STATUS_PENDING;
 }
@@ -1381,8 +1380,7 @@ NTSTATUS posixfs_object_op_write(
 	x_ref_inc(nxfsd_requ);
 	posixfs_write_job_t *write_job = new posixfs_write_job_t(posixfs_object, nxfsd_requ,
 			delay_ms);
-	nxfsd_requ->save_requ_state(state);
-	x_nxfsd_requ_async_insert(nxfsd_requ, posixfs_write_cancel, X_NSEC_PER_SEC);
+	x_nxfsd_requ_async_insert(nxfsd_requ, state, posixfs_write_cancel, X_NSEC_PER_SEC);
 	x_smbd_schedule_async(&write_job->base);
 	return NT_STATUS_PENDING;
 }

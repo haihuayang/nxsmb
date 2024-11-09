@@ -343,10 +343,9 @@ static NTSTATUS smbd_open_lock(
 		X_ASSERT(state->in_lock_elements.size() == 1);
 		X_LOG(SMB, DBG, "lock conflict");
 		x_nxfsd_requ_t *nxfsd_requ = &smbd_requ->base;
-		nxfsd_requ->save_requ_state(state);
 		x_ref_inc(nxfsd_requ);
 		smbd_open->pending_requ_list.push_back(nxfsd_requ);
-		x_nxfsd_requ_async_insert(nxfsd_requ, smbd_lock_cancel, 0);
+		x_nxfsd_requ_async_insert(nxfsd_requ, state, smbd_lock_cancel, 0);
 		return NT_STATUS_PENDING;
 	}
 

@@ -235,6 +235,16 @@ void x_nxfsd_requ_async_insert(x_nxfsd_requ_t *nxfsd_requ,
 		void (*cancel_fn)(x_nxfsd_conn_t *nxfsd_conn, x_nxfsd_requ_t *nxfsd_requ),
 		int64_t interim_timeout_ns);
 
+template <class T>
+void x_nxfsd_requ_async_insert(x_nxfsd_requ_t *nxfsd_requ,
+		std::unique_ptr<T> &state,
+		void (*cancel_fn)(x_nxfsd_conn_t *nxfsd_conn, x_nxfsd_requ_t *nxfsd_requ),
+		int64_t interim_timeout_ns)
+{
+	nxfsd_requ->save_requ_state(state);
+	x_nxfsd_requ_async_insert(nxfsd_requ, cancel_fn, interim_timeout_ns);
+}
+
 bool x_nxfsd_requ_async_remove(x_nxfsd_requ_t *nxfsd_requ);
 
 x_nxfsd_requ_t *x_nxfsd_requ_lookup(uint64_t id);

@@ -91,11 +91,10 @@ static NTSTATUS smbd_open_notify(x_smbd_open_t *smbd_open,
 	if (!state->out_notify_changes.empty()) {
 		return NT_STATUS_OK;
 	} else if (nxfsd_requ->can_async()) {
-		nxfsd_requ->save_requ_state(state);
 		x_ref_inc(nxfsd_requ);
 		smbd_open->pending_requ_list.push_back(nxfsd_requ);
 		/* send interim immediately */
-		x_nxfsd_requ_async_insert(nxfsd_requ, posixfs_notify_cancel, 0);
+		x_nxfsd_requ_async_insert(nxfsd_requ, state, posixfs_notify_cancel, 0);
 		return NT_STATUS_PENDING;
 	} else {
 		return NT_STATUS_INTERNAL_ERROR;

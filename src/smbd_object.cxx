@@ -514,9 +514,8 @@ NTSTATUS x_smbd_object_rename(x_smbd_object_t *smbd_object,
 
 	status = delay_rename_for_lease_break(smbd_object, sharemode, smbd_open, nxfsd_requ);
 	if (NT_STATUS_EQUAL(status, NT_STATUS_PENDING)) {
-		nxfsd_requ->save_requ_state(state);
 		/* windows server do not send interim response in renaming */
-		x_nxfsd_requ_async_insert(nxfsd_requ, smbd_rename_cancel, -1);
+		x_nxfsd_requ_async_insert(nxfsd_requ, state, smbd_rename_cancel, -1);
 		if (new_parent_object) {
 			x_smbd_release_object(new_parent_object);
 		}
@@ -640,9 +639,8 @@ NTSTATUS x_smbd_object_set_delete_pending_intl(x_smbd_object_t *smbd_object,
 	}
 
 	if (delay && nxfsd_requ) {
-		nxfsd_requ->save_requ_state(state);
 		/* windows server do not send interim response in renaming */
-		x_nxfsd_requ_async_insert(nxfsd_requ, smbd_rename_cancel, -1);
+		x_nxfsd_requ_async_insert(nxfsd_requ, state, smbd_rename_cancel, -1);
 		return NT_STATUS_PENDING;
 	}
 

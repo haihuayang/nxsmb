@@ -384,8 +384,7 @@ NTSTATUS x_smb2_process_query_directory(x_smbd_conn_t *smbd_conn, x_smbd_requ_t 
 			}
 		}
 
-		smbd_requ->base.save_requ_state(state);
-		x_nxfsd_requ_async_insert(&smbd_requ->base, smbd_qdir_cancel,
+		x_nxfsd_requ_async_insert(&smbd_requ->base, state, smbd_qdir_cancel,
 				X_NSEC_PER_SEC);
 
 		smbd_qdir_queue_req(smbd_open->smbd_qdir, smbd_requ);

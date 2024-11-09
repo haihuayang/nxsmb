@@ -932,11 +932,10 @@ static void defer_open(x_smbd_sharemode_t *sharemode,
 		x_nxfsd_requ_t *nxfsd_requ,
 		std::unique_ptr<x_smbd_requ_state_create_t> &state)
 {
-	nxfsd_requ->save_requ_state(state);
 	/* TODO does it need a timer? can break timer always wake up it? */
 	X_LOG(SMB, DBG, "nxfsd_requ %p interim_state %d", nxfsd_requ,
 			nxfsd_requ->interim_state);
-	x_nxfsd_requ_async_insert(nxfsd_requ, smbd_create_cancel, 0);
+	x_nxfsd_requ_async_insert(nxfsd_requ, state, smbd_create_cancel, 0);
 }
 
 static inline uint8_t get_lease_type(const x_smbd_open_t *smbd_open)
