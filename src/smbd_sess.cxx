@@ -2,7 +2,7 @@
 #include "smbd.hxx"
 #include "include/idtable.hxx"
 #include "smbd_ctrl.hxx"
-#include "smbd_stats.hxx"
+#include "nxfsd_stats.hxx"
 #include "smbd_conf.hxx"
 #include "smbd_dcerpc_srvsvc.hxx"
 
@@ -40,10 +40,10 @@ struct x_smbd_sess_t
 		, nonce_high_max(get_nonce_high_max(smbd_conn))
 		, machine_name(x_smbd_conn_get_client_name(smbd_conn))
 	{
-		X_SMBD_COUNTER_INC_CREATE(sess, 1);
+		X_NXFSD_COUNTER_INC_CREATE(smbd_sess, 1);
 	}
 	~x_smbd_sess_t() {
-		X_SMBD_COUNTER_INC_DELETE(sess, 1);
+		X_NXFSD_COUNTER_INC_DELETE(smbd_sess, 1);
 	}
 
 	const x_tick_t tick_create;
@@ -93,7 +93,7 @@ x_smbd_sess_t *x_smbd_sess_create(const x_smbd_conn_t *smbd_conn)
 	x_smbd_sess_t *smbd_sess = new x_smbd_sess_t(smbd_conn);
 	if (!g_smbd_sess_table->store(smbd_sess, smbd_sess->id)) {
 		delete smbd_sess;
-		X_SMBD_COUNTER_INC(toomany_sess, 1);
+		X_NXFSD_COUNTER_INC(smbd_toomany_sess, 1);
 		return nullptr;
 	}
 	X_LOG(SMB, DBG, "0x%lx %p", smbd_sess->id, smbd_sess);
@@ -199,11 +199,11 @@ bool x_smbd_sess_link_chan(x_smbd_sess_t *smbd_sess, x_dlink_t *link)
 {
 	std::lock_guard<std::mutex> lock(smbd_sess->mutex);
 	if (smbd_sess->state == x_smbd_sess_t::S_DONE) {
-		X_SMBD_COUNTER_INC(stale_sess, 1);
+		X_NXFSD_COUNTER_INC(smbd_stale_sess, 1);
 		return false;
 	}
 	if (smbd_sess->chan_count >= x_smbd_sess_t::MAX_CHAN_COUNT) {
-		X_SMBD_COUNTER_INC(toomany_chan, 1);
+		X_NXFSD_COUNTER_INC(smbd_toomany_chan, 1);
 		return false;
 	}
 	

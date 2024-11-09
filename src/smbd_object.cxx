@@ -1,6 +1,6 @@
 
 #include "smbd_open.hxx"
-#include "smbd_stats.hxx"
+#include "nxfsd_stats.hxx"
 #include "smbd_access.hxx"
 #include "include/SpookyV2.hxx"
 
@@ -10,7 +10,7 @@ x_smbd_object_t::x_smbd_object_t(const std::shared_ptr<x_smbd_volume_t> &smbd_vo
 	: smbd_volume(smbd_volume), priv_data(priv_data), path_hash(path_hash)
 	, parent_object(parent_object), path_base(path_base)
 {
-	X_SMBD_COUNTER_INC_CREATE(object, 1);
+	X_NXFSD_COUNTER_INC_CREATE(smbd_object, 1);
 	if (parent_object) {
 		parent_object->incref();
 		auto lock = std::lock_guard(parent_object->mutex);
@@ -20,7 +20,7 @@ x_smbd_object_t::x_smbd_object_t(const std::shared_ptr<x_smbd_volume_t> &smbd_vo
 
 x_smbd_object_t::~x_smbd_object_t()
 {
-	X_SMBD_COUNTER_INC_DELETE(object, 1);
+	X_NXFSD_COUNTER_INC_DELETE(smbd_object, 1);
 	if (parent_object) {
 		{
 			auto lock = std::lock_guard(parent_object->mutex);
@@ -33,12 +33,12 @@ x_smbd_object_t::~x_smbd_object_t()
 x_smbd_stream_t::x_smbd_stream_t(bool exists, const std::u16string &name)
 	: exists(exists), name(name)
 {
-	X_SMBD_COUNTER_INC_CREATE(stream, 1);
+	X_NXFSD_COUNTER_INC_CREATE(smbd_stream, 1);
 }
 
 x_smbd_stream_t::~x_smbd_stream_t()
 {
-	X_SMBD_COUNTER_INC_DELETE(stream, 1);
+	X_NXFSD_COUNTER_INC_DELETE(smbd_stream, 1);
 }
 
 struct smbd_object_pool_t

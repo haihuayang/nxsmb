@@ -2,7 +2,7 @@
 #include "smbd.hxx"
 #include "smbd_open.hxx"
 #include "smbd_ntacl.hxx"
-#include "smbd_stats.hxx"
+#include "nxfsd_stats.hxx"
 #include "smbd_conf.hxx"
 
 enum {
@@ -282,7 +282,7 @@ x_smbd_qdir_t::x_smbd_qdir_t(x_smbd_open_t *smbd_open, const x_smbd_qdir_ops_t *
 	, delay_ms(x_smbd_conf_get_curr().my_dev_delay_qdir_ms)
 	, smbd_user(smbd_user)
 {
-	X_SMBD_COUNTER_INC_CREATE(qdir, 1);
+	X_NXFSD_COUNTER_INC_CREATE(smbd_qdir, 1);
 }
 
 x_smbd_qdir_t::~x_smbd_qdir_t()
@@ -292,7 +292,7 @@ x_smbd_qdir_t::~x_smbd_qdir_t()
 		x_fnmatch_destroy(fnmatch);
 	}
 	x_ref_dec(smbd_open);
-	X_SMBD_COUNTER_INC_DELETE(qdir, 1);
+	X_NXFSD_COUNTER_INC_DELETE(smbd_qdir, 1);
 }
 
 static void smbd_qdir_cancel(x_nxfsd_conn_t *nxfsd_conn, x_nxfsd_requ_t *nxfsd_requ)
@@ -379,7 +379,7 @@ NTSTATUS x_smb2_process_query_directory(x_smbd_conn_t *smbd_conn, x_smbd_requ_t 
 		if (!smbd_open->smbd_qdir) {
 			smbd_open->smbd_qdir = x_smbd_qdir_create(smbd_open, smbd_user);
 			if (!smbd_open->smbd_qdir) {
-				X_SMBD_COUNTER_INC(fail_create_qdir, 1);
+				X_NXFSD_COUNTER_INC(smbd_fail_alloc_qdir, 1);
 				return NT_STATUS_INSUFFICIENT_RESOURCES;
 			}
 		}

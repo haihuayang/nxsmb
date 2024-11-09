@@ -1,7 +1,7 @@
 
 #include "smbd.hxx"
 #include "smbd_requ.hxx"
-#include "smbd_stats.hxx"
+#include "nxfsd_stats.hxx"
 #include "smbd_conf.hxx"
 
 static constexpr x_array_const_t<char> SMB2_24_signing_label{"SMB2AESCMAC"};
@@ -29,7 +29,7 @@ struct x_smbd_chan_t
 		: tick_create(tick_now)
 		, smbd_conn(x_ref_inc(smbd_conn))
 		, smbd_sess(x_ref_inc(smbd_sess)) {
-		X_SMBD_COUNTER_INC_CREATE(chan, 1);
+		X_NXFSD_COUNTER_INC_CREATE(smbd_chan, 1);
 	}
 	~x_smbd_chan_t() {
 		if (auth) {
@@ -38,7 +38,7 @@ struct x_smbd_chan_t
 
 		x_ref_dec(smbd_sess);
 		x_ref_dec(smbd_conn);
-		X_SMBD_COUNTER_INC_DELETE(chan, 1);
+		X_NXFSD_COUNTER_INC_DELETE(smbd_chan, 1);
 	}
 
 	enum {
@@ -527,7 +527,7 @@ x_smbd_chan_t *x_smbd_chan_create(x_smbd_sess_t *smbd_sess, x_smbd_conn_t *smbd_
 {
 	x_smbd_chan_t *smbd_chan = new x_smbd_chan_t(smbd_conn, smbd_sess);
 	if (!smbd_chan) {
-		X_SMBD_COUNTER_INC(fail_alloc_chan, 1);
+		X_NXFSD_COUNTER_INC(smbd_fail_alloc_chan, 1);
 		return nullptr;
 	}
 

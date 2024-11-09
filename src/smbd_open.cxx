@@ -1,7 +1,7 @@
 
 #include "smbd.hxx"
 #include "smbd_ctrl.hxx"
-#include "smbd_stats.hxx"
+#include "nxfsd_stats.hxx"
 #include "smbd_open.hxx"
 #include "smbd_replay.hxx"
 #include "include/idtable.hxx"
@@ -640,7 +640,7 @@ void x_smbd_wakeup_requ_list(const x_nxfsd_requ_id_list_t &requ_list)
 		x_nxfsd_requ_t *nxfsd_requ = x_nxfsd_requ_lookup(requ_id);
 		if (!nxfsd_requ) {
 			X_LOG(SMB, DBG, "requ_id 0x%lx not exist", requ_id);
-			X_SMBD_COUNTER_INC(wakeup_stale_requ, 1);
+			X_NXFSD_COUNTER_INC(smbd_wakeup_stale, 1);
 			continue;
 		}
 
@@ -1772,7 +1772,7 @@ NTSTATUS x_smbd_open_op_create(x_smbd_requ_t *smbd_requ,
 	X_TRACE_LOC;
 	if (!x_smbd_open_has_space()) {
 		X_LOG(SMB, WARN, "too many opens, cannot allocate new");
-		X_SMBD_COUNTER_INC(toomany_open, 1);
+		X_NXFSD_COUNTER_INC(smbd_toomany_open, 1);
 		return NT_STATUS_INSUFFICIENT_RESOURCES;
 	}
 
@@ -1951,7 +1951,7 @@ NTSTATUS x_smbd_open_restore(
 {
 	if (!x_smbd_open_has_space()) {
 		X_LOG(SMB, WARN, "too many opens, cannot allocate new");
-		X_SMBD_COUNTER_INC(toomany_open, 1);
+		X_NXFSD_COUNTER_INC(smbd_toomany_open, 1);
 		return NT_STATUS_INSUFFICIENT_RESOURCES;
 	}
 
@@ -2020,7 +2020,7 @@ x_smbd_open_t::x_smbd_open_t(x_smbd_object_t *so,
 	, oplock_break_timer(oplock_break_timeout)
 	, open_state(open_state)
 {
-	X_SMBD_COUNTER_INC_CREATE(open, 1);
+	X_NXFSD_COUNTER_INC_CREATE(smbd_open, 1);
 	memset(lock_sequence_array, 0xff, LOCK_SEQUENCE_MAX);
 }
 
@@ -2028,7 +2028,7 @@ x_smbd_open_t::~x_smbd_open_t()
 {
 	x_ref_dec_if(smbd_tcon);
 	x_smbd_release_object_and_stream(smbd_object, smbd_stream);
-	X_SMBD_COUNTER_INC_DELETE(open, 1);
+	X_NXFSD_COUNTER_INC_DELETE(smbd_open, 1);
 }
 
 struct x_smbd_open_list_t : x_ctrl_handler_t

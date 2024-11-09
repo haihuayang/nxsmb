@@ -3,7 +3,7 @@
 #include "smbd_open.hxx"
 #include "smbd_replay.hxx"
 #include "smbd_ntacl.hxx"
-#include "smbd_stats.hxx"
+#include "nxfsd_stats.hxx"
 #include "include/charset.hxx"
 #include "include/nttime.hxx"
 

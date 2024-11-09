@@ -1,6 +1,6 @@
 
 #include "nxfsd.hxx"
-#include "smbd_stats.hxx"
+#include "nxfsd_stats.hxx"
 #include "smbd_ctrl.hxx"
 #include "include/idtable.hxx"
 

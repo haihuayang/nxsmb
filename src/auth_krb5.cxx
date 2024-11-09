@@ -8,7 +8,7 @@
 #include "smbd.hxx"
 #include "smbd_conf.hxx"
 #include "smbd_secrets.hxx"
-#include "smbd_stats.hxx"
+#include "nxfsd_stats.hxx"
 #include <cctype>
 #include <algorithm>
 #include "include/asn1_wrap.hxx"
@@ -33,7 +33,7 @@ struct x_auth_krb5_t
 			const x_smbd_conf_t &smbd_conf);
 	~x_auth_krb5_t()
 	{
-		X_SMBD_COUNTER_INC_DELETE(auth_krb5, 1);
+		X_NXFSD_COUNTER_INC_DELETE(auth_krb5, 1);
 	}
 	x_wbcli_t wbcli;
 	x_wbrequ_t wbrequ;
@@ -312,7 +312,7 @@ x_auth_krb5_t::x_auth_krb5_t(x_auth_context_t *context, const x_auth_ops_t *ops,
 	, max_session_expiration(smbd_conf.max_session_expiration)
 	, conf_realm(smbd_conf.realm)
 {
-	X_SMBD_COUNTER_INC_CREATE(auth_krb5, 1);
+	X_NXFSD_COUNTER_INC_CREATE(auth_krb5, 1);
 	wbcli.requ = &wbrequ;
 	wbcli.resp = &wbresp;
 #if 0

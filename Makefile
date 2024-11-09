@@ -84,7 +84,6 @@ SET_src_smbd_nx := \
 	smbd_secrets \
 	smbd_group_mapping \
 	smbd_ipc \
-	smbd_stats \
 	smbd_requ \
 	smbd_conn \
 	smbd_sess \
@@ -130,6 +129,7 @@ SET_src_smbd_nx := \
 	nxfsd_conn \
 	nxfsd_requ \
 	nxfsd_sched \
+	nxfsd_stats \
 	stats \
 	ctrld \
 	smbd_ntacl \

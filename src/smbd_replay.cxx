@@ -2,7 +2,7 @@
 #include "smbd.hxx"
 #include "smbd_replay.hxx"
 #include "smbd_hashtable.hxx"
-#include "smbd_stats.hxx"
+#include "nxfsd_stats.hxx"
 
 struct replay_item_t
 {
@@ -10,12 +10,12 @@ struct replay_item_t
 			const x_smb2_uuid_t &create_guid)
 		: client_guid(client_guid), create_guid(create_guid)
 	{
-		X_SMBD_COUNTER_INC_CREATE(replay, 1);
+		X_NXFSD_COUNTER_INC_CREATE(smbd_replay, 1);
 	}
 
 	~replay_item_t()
 	{
-		X_SMBD_COUNTER_INC_DELETE(replay, 1);
+		X_NXFSD_COUNTER_INC_DELETE(smbd_replay, 1);
 	}
 
 	x_dqlink_t hash_link; // replay cache

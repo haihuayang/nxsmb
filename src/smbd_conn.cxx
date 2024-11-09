@@ -1,7 +1,7 @@
 
 #include "nxfsd.hxx"
 #include "smbd.hxx"
-#include "smbd_stats.hxx"
+#include "nxfsd_stats.hxx"
 #include "smbd_conf.hxx"
 #include "smbd_open.hxx"
 #include "nxfsd_sched.hxx"
@@ -474,7 +474,7 @@ static int x_smbd_reply_interim(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_re
 	x_bufref_t *bufref = new x_bufref_t{out_buf, 8, sizeof(x_smb2_header_t) + 8};
 	smbd_requ->base.interim_state = x_nxfsd_requ_t::INTERIM_S_SENT;
 	x_smb2_reply_msg(smbd_conn, smbd_requ, bufref, bufref, NT_STATUS_PENDING, sizeof(x_smb2_header_t) + 8);
-	X_SMBD_COUNTER_INC(reply_interim, 1);
+	X_NXFSD_COUNTER_INC(smbd_reply_interim, 1);
 	x_smbd_conn_queue(smbd_conn, smbd_requ);
 
 	return 0;
@@ -509,20 +509,20 @@ static void x_smbd_conn_cancel(x_smbd_conn_t *smbd_conn,
 	if (!smbd_requ) {
 		X_LOG(SMB, ERR, "cannot find pending requ by flags=0x%x, async_id=x%lx, mid=%lu",
 				smb2_hdr.flags, smb2_hdr.async_id, smb2_hdr.mid);
-		X_SMBD_COUNTER_INC(cancel_not_exist, 1);
+		X_NXFSD_COUNTER_INC(smbd_cancel_noent, 1);
 		return;
 	}
 
 	if (!smbd_requ->base.set_cancelled()) {
 		X_SMBD_REQU_LOG(DBG, smbd_requ, " cannot cancell async_id=x%lx, mid=%lu",
 				smb2_hdr.async_id, smb2_hdr.mid);
-		X_SMBD_COUNTER_INC(cancel_too_late, 1);
+		X_NXFSD_COUNTER_INC(smbd_cancel_toolate, 1);
 		return;
 	}
 
 	X_SMBD_REQU_LOG(DBG, smbd_requ, " cancelled async_id=x%lx, mid=%lu",
 			smb2_hdr.async_id, smb2_hdr.mid);
-	X_SMBD_COUNTER_INC(cancel_success, 1);
+	X_NXFSD_COUNTER_INC(smbd_cancel_success, 1);
 	auto cancel_fn = smbd_requ->base.cancel_fn;
 	smbd_requ->base.cancel_fn = nullptr;
 	smbd_conn->base.pending_requ_list.remove(&smbd_requ->base);
@@ -1321,7 +1321,7 @@ x_smbd_conn_t::x_smbd_conn_t(int fd, const x_sockaddr_t &saddr,
 	, machine_name{std::make_shared<std::u16string>(machine_name_from_saddr(saddr))}
 	, seq_bitmap(max_credits)
 {
-	X_SMBD_COUNTER_INC_CREATE(conn, 1);
+	X_NXFSD_COUNTER_INC_CREATE(smbd_conn, 1);
 	negprot.dialect = X_SMB2_DIALECT_000;
 }
 
@@ -1329,7 +1329,7 @@ x_smbd_conn_t::~x_smbd_conn_t()
 {
 	X_LOG(SMB, DBG, "x_smbd_conn_t %p destroy", this);
 	X_ASSERT(!chan_list.get_front());
-	X_SMBD_COUNTER_INC_DELETE(conn, 1);
+	X_NXFSD_COUNTER_INC_DELETE(smbd_conn, 1);
 }
 
 static inline x_smbd_srv_t *x_smbd_from_strm_srv(x_strm_srv_t *strm_srv)

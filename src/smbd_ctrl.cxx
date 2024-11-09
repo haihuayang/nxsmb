@@ -9,7 +9,7 @@
 static x_ctrl_handler_t *smbd_create_handler(const char *command)
 {
 	if (strcmp(command, "stats") == 0) {
-		return x_smbd_stats_report_create();
+		return x_nxfsd_stats_report_create();
 	} else if (strcmp(command, "list-requ") == 0) {
 		return x_nxfsd_requ_list_create();
 	} else if (strcmp(command, "list-sess") == 0) {

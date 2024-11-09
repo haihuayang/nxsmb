@@ -1,7 +1,7 @@
 
 #include "smbd.hxx"
 #include "smbd_ctrl.hxx"
-#include "smbd_stats.hxx"
+#include "nxfsd_stats.hxx"
 #include "smbd_open.hxx"
 #include "include/idtable.hxx"
 #include "smbd_share.hxx"
@@ -23,12 +23,12 @@ struct x_smbd_tcon_t
 		, smbd_sess(x_ref_inc(smbd_sess)), smbd_share(share)
 		, smbd_volume(volume)
        	{
-		X_SMBD_COUNTER_INC_CREATE(tcon, 1);
+		X_NXFSD_COUNTER_INC_CREATE(smbd_tcon, 1);
 	}
 	~x_smbd_tcon_t()
 	{
 		x_ref_dec(smbd_sess);
-		X_SMBD_COUNTER_INC_DELETE(tcon, 1);
+		X_NXFSD_COUNTER_INC_DELETE(smbd_tcon, 1);
 	}
 
 	x_dlink_t sess_link; // protected by smbd_sess' mutex
@@ -69,7 +69,7 @@ x_smbd_tcon_t *x_smbd_tcon_create(x_smbd_sess_t *smbd_sess,
 	x_smbd_tcon_t *smbd_tcon = new x_smbd_tcon_t(smbd_sess, smbshare,
 			std::move(volume), share_access);
 	if (!g_smbd_tcon_table->store(smbd_tcon, smbd_tcon->tid)) {
-		X_SMBD_COUNTER_INC(toomany_tcon, 1);
+		X_NXFSD_COUNTER_INC(smbd_toomany_tcon, 1);
 		delete smbd_tcon;
 		return nullptr;
 	}

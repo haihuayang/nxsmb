@@ -2,7 +2,7 @@
 #include "smbd_requ.hxx"
 #include "misc.hxx"
 #include "smbd_ntacl.hxx"
-#include "smbd_stats.hxx"
+#include "nxfsd_stats.hxx"
 
 enum {
 	SESSSETUP_TIMEOUT = 60 * 1000000000l,
@@ -163,7 +163,7 @@ NTSTATUS x_smb2_process_sesssetup(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_
 			if (!smbd_requ->smbd_chan) {
 				X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_INSUFFICIENT_RESOURCES);
 			}
-			X_SMBD_COUNTER_INC(sess_bind, 1);
+			X_NXFSD_COUNTER_INC(smbd_sess_bind, 1);
 			new_auth = true;
 		}
 	} else if (!smbd_requ->smbd_sess) {

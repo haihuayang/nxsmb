@@ -1,6 +1,6 @@
 
 #include "smbd.hxx"
-#include "smbd_stats.hxx"
+#include "nxfsd_stats.hxx"
 #include "smbd_conf.hxx"
 #include "nxfsd.hxx"
 #include <sys/uio.h>
@@ -28,7 +28,7 @@ static void x_nxfsd_thread_init(uint32_t no)
 		thread_id = g_thread_id_bitmap.alloc();
 	}
 	X_LOG(UTILS, NOTICE, "allocate thread_id %u", thread_id);
-	x_smbd_stats_register(thread_id);
+	x_nxfsd_stats_register(thread_id);
 }
 
 static void *signal_handler_func(void *arg)
@@ -52,7 +52,7 @@ static void *signal_handler_func(void *arg)
 			x_tick_t next = last +
 				X_MSEC_TO_NSEC(smbd_conf->my_stats_interval_ms);
 			if (now >= next) {
-				x_smbd_stats_report();
+				x_nxfsd_stats_report();
 				last = now;
 				timeout = X_MSEC_TO_NSEC(smbd_conf->my_stats_interval_ms);
 			} else {
@@ -101,7 +101,7 @@ static void nxfsd_init()
 	x_log_init(smbd_conf->log_name.c_str(), smbd_conf->log_level.c_str(),
 			smbd_conf->log_file_size);
 
-	x_smbd_stats_init();
+	x_nxfsd_stats_init();
 
 	x_nxfsd_thread_init(0);
 

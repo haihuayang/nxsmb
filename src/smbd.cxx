@@ -15,7 +15,7 @@
 #include "smbd_lease.hxx"
 #include "smbd_replay.hxx"
 #include "smbd_secrets.hxx"
-#include "smbd_stats.hxx"
+#include "nxfsd_stats.hxx"
 #include "smbd_registry.hxx"
 #include "nxfsd.hxx"
 #include "auth.hxx"

@@ -1,7 +1,7 @@
 
 #include "smbd.hxx"
 #include "smbd_open.hxx"
-#include "smbd_stats.hxx"
+#include "nxfsd_stats.hxx"
 
 
 static bool decode_in_close(x_smbd_requ_state_close_t &state,

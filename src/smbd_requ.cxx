@@ -1,6 +1,6 @@
 
 #include "smbd.hxx"
-#include "smbd_stats.hxx"
+#include "nxfsd_stats.hxx"
 #include "smbd_open.hxx"
 #include "smbd_replay.hxx"
 #include "nxfsd_sched.hxx"
@@ -54,7 +54,7 @@ x_smbd_requ_t::x_smbd_requ_t(x_nxfsd_conn_t *nxfsd_conn, x_buf_t *in_buf,
 		uint32_t in_msgsize,
 		bool encrypted)
 	: base(&smbd_requ_upcall_cbs, nxfsd_conn, in_buf, in_msgsize)
-	, compound_id(X_SMBD_COUNTER_INC_CREATE(requ, 1) + 1)
+	, compound_id(X_NXFSD_COUNTER_INC_CREATE(smbd_requ, 1) + 1)
 	, encrypted(encrypted)
 {
 }
@@ -66,7 +66,7 @@ x_smbd_requ_t::~x_smbd_requ_t()
 	x_ref_dec_if(smbd_tcon);
 	x_ref_dec_if(smbd_chan);
 	x_ref_dec_if(smbd_sess);
-	X_SMBD_COUNTER_INC_DELETE(requ, 1);
+	X_NXFSD_COUNTER_INC_DELETE(smbd_requ, 1);
 }
 
 template <>
