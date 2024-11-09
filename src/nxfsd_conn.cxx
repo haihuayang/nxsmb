@@ -4,6 +4,17 @@
 #include "nxfsd_sched.hxx"
 #include <sys/uio.h>
 
+struct nxfsd_context_t
+{
+	x_epoll_upcall_t upcall;
+	uint64_t ep_id;
+	int fd;
+	std::mutex mutex;
+	x_tp_ddlist_t<fdevt_user_conn_traits> fdevt_user_list;
+};
+
+static nxfsd_context_t g_nxfsd_context;
+
 static inline x_nxfsd_conn_t *x_nxfsd_conn_from_upcall(x_epoll_upcall_t *upcall)
 {
 	return X_CONTAINER_OF(upcall, x_nxfsd_conn_t, upcall);
@@ -305,12 +316,24 @@ bool x_nxfsd_conn_post_user(x_nxfsd_conn_t *nxfsd_conn, x_fdevt_user_t *fdevt_us
 	}
 	if (queued) {
 		return true;
-	} else if (!always) {
-		return false;
-	} else {
-		fdevt_user->func(nullptr, fdevt_user);
-		return true;
 	}
+	if (!always) {
+		return false;
+	}
+
+	/* nxfsd_conn is already done, so queued to global context to handle the
+	 * user event, there is no race because only 1 context and original is done
+	 */
+	X_NXFSD_COUNTER_INC_CREATE(orphan_user_evt, 1);
+	{
+		auto lock = std::lock_guard(g_nxfsd_context.mutex);
+		notify = g_nxfsd_context.fdevt_user_list.get_front() == nullptr;
+		g_nxfsd_context.fdevt_user_list.push_back(fdevt_user);
+	}
+	if (notify) {
+		x_evtmgmt_post_events(g_evtmgmt, g_nxfsd_context.ep_id, FDEVT_USER);
+	}
+	return true;
 }
 
 struct nxfsd_cancel_evt_t
@@ -404,4 +427,52 @@ void x_nxfsd_requ_post_interim(x_nxfsd_requ_t *nxfsd_requ)
 	if (!x_nxfsd_conn_post_user(nxfsd_requ->nxfsd_conn, &evt->base, false)) {
 		delete evt;
 	}
+}
+
+static bool nxfsd_context_upcall_cb_getevents(x_epoll_upcall_t *upcall, x_fdevents_t &fdevents)
+{
+	nxfsd_context_t *nxfsd_ctx = X_CONTAINER_OF(upcall, nxfsd_context_t, upcall);
+	uint32_t events = x_fdevents_processable(fdevents);
+	X_ASSERT(!(events & (FDEVT_IN | FDEVT_OUT)));
+	if (events & FDEVT_USER) {
+		for (;;) {
+			x_tp_ddlist_t<fdevt_user_conn_traits> fdevt_user_list;
+			{
+				auto lock = std::lock_guard(nxfsd_ctx->mutex);
+				fdevt_user_list = std::move(nxfsd_ctx->fdevt_user_list);
+			}
+			x_fdevt_user_t *fdevt_user;
+			while ((fdevt_user = fdevt_user_list.get_front())) {
+				fdevt_user_list.remove(fdevt_user);
+				fdevt_user->func(nullptr, fdevt_user);
+				X_NXFSD_COUNTER_INC_DELETE(orphan_user_evt, 1);
+			}
+		}
+		fdevents = x_fdevents_consume(fdevents, FDEVT_USER);
+	}
+	return false;
+}
+
+static void nxfsd_context_upcall_cb_unmonitor(x_epoll_upcall_t *upcall)
+{
+	/* never reach */
+	X_ASSERT(false);
+}
+
+static const x_epoll_upcall_cbs_t nxfsd_context_upcall_cbs = {
+	nxfsd_context_upcall_cb_getevents,
+	nxfsd_context_upcall_cb_unmonitor,
+};
+
+int x_nxfsd_context_init()
+{
+	int fd = x_eventfd(0);
+	X_ASSERT(fd >= 0);
+	g_nxfsd_context.fd = fd;
+	g_nxfsd_context.upcall.cbs = &nxfsd_context_upcall_cbs;
+	g_nxfsd_context.ep_id = x_evtmgmt_monitor(g_evtmgmt, fd, FDEVT_IN,
+			&g_nxfsd_context.upcall);
+	x_evtmgmt_enable_events(g_evtmgmt, g_nxfsd_context.ep_id,
+			FDEVT_IN | FDEVT_ERR | FDEVT_USER);
+	return 0;
 }

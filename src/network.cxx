@@ -165,23 +165,9 @@ static bool x_strm_srv_do_recv(x_strm_srv_t *strm_srv, x_fdevents_t &fdevents)
 	return false;
 }
 
-static bool x_strm_srv_do_user(x_strm_srv_t *strm_srv, x_fdevents_t &fdevents)
-{
-	X_LOG(SMB, DBG, "%p x%lx x%lx", strm_srv, strm_srv->ep_id, fdevents);
-	bool ret = strm_srv->strm_srv_cbs->cb_user(strm_srv);
-	fdevents = x_fdevents_consume(fdevents, FDEVT_USER);
-	return ret;
-}
-
 static bool x_strm_srv_handle_events(x_strm_srv_t *strm_srv, x_fdevents_t &fdevents)
 {
 	uint32_t events = x_fdevents_processable(fdevents);
-	if (events & FDEVT_USER) {
-		if (x_strm_srv_do_user(strm_srv, fdevents)) {
-			return true;
-		}
-		events = x_fdevents_processable(fdevents);
-	}
 	if (events & FDEVT_IN) {
 		return x_strm_srv_do_recv(strm_srv, fdevents);
 	}
@@ -220,7 +206,7 @@ static int x_strm_srv_init(x_strm_srv_t *strm_srv, int sock,
 
 	strm_srv->ep_id = x_evtmgmt_monitor(g_evtmgmt, sock, FDEVT_IN, &strm_srv->upcall);
 	x_evtmgmt_enable_events(g_evtmgmt, strm_srv->ep_id,
-			FDEVT_IN | FDEVT_ERR | FDEVT_SHUTDOWN | FDEVT_USER);
+			FDEVT_IN | FDEVT_ERR | FDEVT_SHUTDOWN);
 	return 0;
 }
 

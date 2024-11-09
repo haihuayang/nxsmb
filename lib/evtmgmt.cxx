@@ -300,22 +300,13 @@ void x_evtmgmt_dispatch(x_evtmgmt_t *ep)
 	}
 }
 
-// copy from include/linux/eventfd.h
-#define EFD_CLOEXEC O_CLOEXEC
-#define EFD_NONBLOCK O_NONBLOCK
-
-#ifndef SYS_eventfd2
-#define SYS_eventfd2	290
-#endif
-#define eventfd(count, flags) syscall(SYS_eventfd2, (count), (flags))
-	
 x_evtmgmt_t *x_evtmgmt_create(x_threadpool_t *tpool, uint32_t max_fd,
 		int max_wait_ms, uint32_t timer_unit_ms)
 {
 	int epfd = epoll_create(16);
 	X_ASSERT(epfd >= 0);
 
-	int timerfd = x_convert_assert<int>(eventfd(0, EFD_CLOEXEC | EFD_NONBLOCK));
+	int timerfd = x_eventfd(0);
 	X_ASSERT(timerfd >= 0);
 
 	struct epoll_event ev;

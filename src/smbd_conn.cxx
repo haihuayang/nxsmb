@@ -1360,15 +1360,9 @@ static void x_smbd_srv_cb_shutdown(x_strm_srv_t *strm_srv)
 	/* TODO may close all accepted client, and notify it is freed */
 }
 
-static bool x_smbd_srv_cb_user(x_strm_srv_t *strm_srv)
-{
-	return false;
-}
-
 static const x_strm_srv_cbs_t smbd_srv_cbs = {
 	x_smbd_srv_cb_accepted,
 	x_smbd_srv_cb_shutdown,
-	x_smbd_srv_cb_user,
 };
 
 static x_smbd_srv_t g_smbd_srv;

@@ -217,6 +217,7 @@ TARGET_SRC_libnxsmb := \
 		lib/librpc/winreg \
 		lib/librpc/ntlmssp \
 		lib/xutils \
+		lib/eventfd \
 		lib/trace \
 		lib/threadpool \
 		lib/evtmgmt \

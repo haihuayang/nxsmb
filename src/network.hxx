@@ -75,8 +75,6 @@ struct x_strm_srv_cbs_t
 	void (*cb_accepted)(x_strm_srv_t *strm_srv, int fd,
 			const struct sockaddr *sa, socklen_t slen);
 	void (*cb_shutdown)(x_strm_srv_t *strm_srv);
-	bool (*cb_user)(x_strm_srv_t *strm_srv);
-
 };
 
 struct x_strm_srv_t

@@ -398,6 +398,8 @@ static inline bool x_bit_all(T v1, T v2)
 	return (v1 & v2) == v2;
 }
 
+int x_eventfd(unsigned int initval);
+
 
 #endif /* __utils__hxx__ */
 

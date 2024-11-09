@@ -246,5 +246,7 @@ void x_nxfsd_requ_done(x_nxfsd_requ_t *nxfsd_requ);
 
 int x_nxfsd_requ_pool_init(uint32_t count);
 
+int x_nxfsd_context_init();
+
 #endif /* __nxfsd__hxx__ */
 

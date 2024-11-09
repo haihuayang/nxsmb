@@ -146,6 +146,8 @@ static void nxfsd_init()
 
 	g_evtmgmt = x_evtmgmt_create(tpool, max_fd, 1000, 100);
 
+	x_nxfsd_context_init();
+
 	x_nxfsd_requ_pool_init(smbd_conf->max_requs);
 
 	x_smbd_init();

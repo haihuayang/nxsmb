@@ -203,16 +203,9 @@ static void ctrl_srv_cb_shutdown(x_strm_srv_t *strm_srv)
 	X_LOG(CTRL, CONN, "%p", strm_srv);
 }
 
-static bool ctrl_srv_cb_user(x_strm_srv_t *strm_srv)
-{
-	X_ASSERT(false);
-	return true;
-}
-
 static const x_strm_srv_cbs_t ctrl_srv_cbs = {
 	ctrl_srv_cb_accepted,
 	ctrl_srv_cb_shutdown,
-	ctrl_srv_cb_user,
 };
 
 int x_ctrld_init(x_ctrld_t &ctrld, const char *name)

@@ -231,6 +231,13 @@ template <class LinkTraits>
 struct x_tp_ddlist_t
 {
 	typedef typename LinkTraits::container_type item_type;
+
+	void swap(x_tp_ddlist_t<LinkTraits> &other)
+	{
+		std::swap(list.front, other.list.front);
+		std::swap(list.back, other.list.back);
+	}
+
 	static item_type *link_2_item(const x_dlink_t *link) {
 		return link ? LinkTraits::container(link) : nullptr;
 	}
