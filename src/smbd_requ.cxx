@@ -5,23 +5,8 @@
 #include "smbd_replay.hxx"
 #include "nxfsd_sched.hxx"
 
-x_smbd_requ_state_create_t::x_smbd_requ_state_create_t(const x_smb2_uuid_t &client_guid,
-		uint32_t server_capabilities)
-	: client_guid(client_guid), server_capabilities(server_capabilities)
-{
-}
-
 x_smbd_requ_state_create_t::~x_smbd_requ_state_create_t()
 {
-	if (replay_reserved) {
-		x_smbd_replay_cache_clear(client_guid, in_context.create_guid);
-	}
-	if (smbd_object) {
-		x_smbd_release_object_and_stream(smbd_object, smbd_stream);
-	}
-	if (smbd_lease) {
-		x_smbd_lease_release(smbd_lease);
-	}
 }
 
 static void smbd_requ_cb_destroy(x_nxfsd_requ_t *nxfsd_requ)

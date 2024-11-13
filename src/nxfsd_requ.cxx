@@ -2,6 +2,8 @@
 #include "nxfsd.hxx"
 #include "nxfsd_stats.hxx"
 #include "smbd_ctrl.hxx"
+#include "smbd_replay.hxx"
+#include "smbd_open.hxx"
 #include "include/idtable.hxx"
 
 struct nxfsd_requ_deleter_t {
@@ -146,6 +148,25 @@ int x_nxfsd_requ_pool_init(uint32_t count)
 {
 	g_nxfsd_requ_table = new nxfsd_requ_table_t(count);
 	return 0;
+}
+
+x_nxfsd_requ_state_open_t::x_nxfsd_requ_state_open_t(const x_smb2_uuid_t &client_guid,
+		uint32_t server_capabilities)
+	: client_guid(client_guid), server_capabilities(server_capabilities)
+{
+}
+
+x_nxfsd_requ_state_open_t::~x_nxfsd_requ_state_open_t()
+{
+	if (replay_reserved) {
+		x_smbd_replay_cache_clear(client_guid, in_context.create_guid);
+	}
+	if (smbd_object) {
+		x_smbd_release_object_and_stream(smbd_object, smbd_stream);
+	}
+	if (smbd_lease) {
+		x_smbd_lease_release(smbd_lease);
+	}
 }
 
 

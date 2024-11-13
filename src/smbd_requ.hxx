@@ -205,50 +205,15 @@ struct x_smbd_requ_state_close_t
 	x_smb2_create_close_info_t out_info;
 };
 
-struct x_smbd_requ_state_create_t : x_nxfsd_requ_state_async_t
+struct x_smbd_requ_state_create_t : x_nxfsd_requ_state_open_t
 {
 	x_smbd_requ_state_create_t(const x_smb2_uuid_t &client_guid,
-			uint32_t server_capabilities);
+			uint32_t server_capabilities)
+		: x_nxfsd_requ_state_open_t(client_guid, server_capabilities) {}
+
 	~x_smbd_requ_state_create_t();
 	void async_done(void *ctx_conn, x_nxfsd_requ_t *nxfsd_requ,
 			NTSTATUS status) override;
-
-	const x_smb2_uuid_t client_guid;
-	const uint32_t server_capabilities;
-
-	uint8_t in_oplock_level;
-	uint8_t out_oplock_level;
-	uint32_t out_contexts{0};
-
-	uint32_t in_impersonation_level;
-	uint32_t in_desired_access;
-	uint32_t in_file_attributes;
-	uint32_t in_share_access;
-	x_smb2_create_disposition_t in_create_disposition;
-	uint32_t in_create_options;
-
-	bool is_dollar_data = false;
-	bool end_with_sep = false;
-	std::u16string in_path;
-	std::u16string in_ads_name;
-
-	uint8_t out_create_flags = 0;
-	bool replay_operation = false;
-	bool replay_reserved = false;
-	uint32_t open_attempt = 0;
-	uint32_t out_maximal_access{0};
-	uint8_t out_qfid_info[32];
-
-	uint32_t granted_access{0}; // internally used
-
-	x_smbd_object_t *smbd_object{};
-	x_smbd_stream_t *smbd_stream{};
-	x_smbd_lease_t *smbd_lease{};
-	std::shared_ptr<x_smbd_share_t> smbd_share;
-	long open_priv_data;
-
-	uint32_t valid_flags = 0;
-	x_smb2_create_requ_context_t in_context;
 };
 
 struct x_smbd_requ_state_sesssetup_t : x_nxfsd_requ_state_async_t
