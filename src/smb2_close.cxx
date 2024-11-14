@@ -84,10 +84,17 @@ NTSTATUS x_smb2_process_close(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ
 		X_SMBD_REQU_RETURN_STATUS(smbd_requ, status);
 	}
 
-	status = x_smbd_open_op_close(smbd_requ->base.smbd_open,
-			smbd_requ, state);
+	x_smb2_create_close_info_t *info = nullptr;
+	if (state->in_flags & X_SMB2_CLOSE_FLAGS_FULL_INFORMATION) {
+		info = &state->out_info;
+	}
+	status = x_smbd_open_op_close(smbd_requ->base.smbd_open, info);
 	if (!NT_STATUS_IS_OK(status)) {
 		X_SMBD_REQU_RETURN_STATUS(smbd_requ, status);
+	}
+
+	if (info) {
+		state->out_flags = X_SMB2_CLOSE_FLAGS_FULL_INFORMATION;
 	}
 
 	x_smb2_reply_close(smbd_conn, smbd_requ, *state);

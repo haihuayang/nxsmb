@@ -406,8 +406,7 @@ static inline x_smbd_sharemode_t *x_smbd_open_get_sharemode(
 
 NTSTATUS x_smbd_open_op_close(
 		x_smbd_open_t *smbd_open,
-		x_smbd_requ_t *smbd_requ,
-		std::unique_ptr<x_smbd_requ_state_close_t> &state);
+		x_smb2_create_close_info_t *info);
 
 static inline NTSTATUS x_smbd_open_op_read(
 		x_smbd_open_t *smbd_open,
