@@ -341,7 +341,7 @@ struct x_smbd_object_t
 		type_dir = 2,
 		type_pipe = 3,
 	};
-	uint16_t type = type_not_exist;
+	uint8_t type = type_not_exist;
 	std::atomic<int> use_count{1};
 	uint32_t num_active_open{0}; // include open on streams
 	x_dlink_t path_hash_link;
