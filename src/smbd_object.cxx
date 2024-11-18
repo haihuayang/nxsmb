@@ -706,4 +706,58 @@ int x_smbd_object_pool_init(size_t max_open)
 	return 0;
 }
 
+NTSTATUS x_smbd_open_getinfo_security(x_smbd_open_t *smbd_open,
+		x_smbd_requ_state_getinfo_t &state)
+{
+	if ((state.in_additional & idl::SECINFO_SACL) &&
+			!smbd_open->check_access_any(idl::SEC_FLAG_SYSTEM_SECURITY)) {
+		return NT_STATUS_ACCESS_DENIED;
+	}
+
+	if ((state.in_additional & (idl::SECINFO_DACL|idl::SECINFO_OWNER|idl::SECINFO_GROUP)) &&
+			!smbd_open->check_access_any(idl::SEC_STD_READ_CONTROL)) {
+		return NT_STATUS_ACCESS_DENIED;
+	}
+
+	auto &tmp = smbd_open->smbd_object->psd;
+	if (!tmp) {
+		return NT_STATUS_INTERNAL_ERROR;
+	}
+
+	std::shared_ptr<idl::security_descriptor> psd;
+	if ((state.in_additional & (idl::SECINFO_DACL|idl::SECINFO_OWNER|idl::SECINFO_GROUP)) == (idl::SECINFO_DACL|idl::SECINFO_OWNER|idl::SECINFO_GROUP)) {
+		psd = tmp;
+	} else {
+		psd = std::make_shared<idl::security_descriptor>();
+		psd->revision = tmp->revision;
+		psd->type = tmp->type;
+		if ((state.in_additional & idl::SECINFO_OWNER)) {
+			psd->owner_sid = tmp->owner_sid;
+		}
+		if ((state.in_additional & idl::SECINFO_GROUP)) {
+			psd->group_sid = tmp->group_sid;
+		}
+		if ((state.in_additional & idl::SECINFO_DACL)) {
+			psd->dacl = tmp->dacl;
+		} else {
+			psd->type &= ~idl::SEC_DESC_DACL_PRESENT;
+		}
+		if ((state.in_additional & idl::SECINFO_SACL)) {
+			psd->sacl = tmp->sacl;
+		} else {
+			psd->type &= ~idl::SEC_DESC_SACL_PRESENT;
+		}
+	}
+
+	/* TODO ndr_push should fail when buffer is not enough */
+	auto ndr_ret = idl::x_ndr_push(*psd, state.out_data, 0);
+	if (ndr_ret < 0) {
+		return x_map_nt_error_from_ndr_err(idl::x_ndr_err_code_t(-ndr_ret));
+	}
+	if (state.out_data.size() > state.in_output_buffer_length) {
+		return NT_STATUS_BUFFER_TOO_SMALL;
+	}
+	return NT_STATUS_OK;
+}
+
 

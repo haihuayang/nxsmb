@@ -349,6 +349,7 @@ struct x_smbd_object_t
 	x_smbd_file_handle_t file_handle;
 	x_smbd_object_meta_t meta;
 	x_smbd_sharemode_t sharemode;
+	std::shared_ptr<idl::security_descriptor> psd;
 	x_ddlist_t active_child_object_list;
 	x_tp_ddlist_t<x_smbd_stream_object_traits> ads_list;
 };
@@ -908,37 +909,8 @@ NTSTATUS x_smbd_open_getinfo_file(x_smbd_conn_t *smbd_conn, x_smbd_open_t *smbd_
 	return NT_STATUS_OK;
 }
 
-template <typename T>
 NTSTATUS x_smbd_open_getinfo_security(x_smbd_open_t *smbd_open,
-		x_smbd_requ_state_getinfo_t &state, const T &op)
-{
-	if ((state.in_additional & idl::SECINFO_SACL) &&
-			!smbd_open->check_access_any(idl::SEC_FLAG_SYSTEM_SECURITY)) {
-		return NT_STATUS_ACCESS_DENIED;
-	}
-
-	if ((state.in_additional & (idl::SECINFO_DACL|idl::SECINFO_OWNER|idl::SECINFO_GROUP)) &&
-			!smbd_open->check_access_any(idl::SEC_STD_READ_CONTROL)) {
-		return NT_STATUS_ACCESS_DENIED;
-	}
-
-	std::shared_ptr<idl::security_descriptor> psd;
-	NTSTATUS status = op(psd, smbd_open, state.in_additional);
-	if (status != NT_STATUS_OK) {
-		return status;
-	}
-
-	/* TODO ndr_push should fail when buffer is not enough */
-	auto ndr_ret = idl::x_ndr_push(*psd, state.out_data, 0);
-	if (ndr_ret < 0) {
-		return x_map_nt_error_from_ndr_err(idl::x_ndr_err_code_t(-ndr_ret));
-	}
-	if (state.out_data.size() > state.in_output_buffer_length) {
-		return NT_STATUS_BUFFER_TOO_SMALL;
-	}
-	return NT_STATUS_OK;
-}
-
+		x_smbd_requ_state_getinfo_t &state);
 
 #endif /* __smbd_open__hxx__ */
 

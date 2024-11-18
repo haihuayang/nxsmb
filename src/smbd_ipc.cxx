@@ -779,35 +779,6 @@ struct ipc_get_file_info_t
 	}
 };
 
-struct ipc_get_security_descriptor_t
-{
-	NTSTATUS operator()(std::shared_ptr<idl::security_descriptor> &ret,
-			x_smbd_open_t *smbd_open,
-			uint32_t in_additional) const
-	{
-		if (in_additional == (idl::SECINFO_DACL|idl::SECINFO_OWNER|idl::SECINFO_GROUP)) {
-			ret = ipc_psd;
-		} else {
-			ret = std::make_shared<idl::security_descriptor>();
-			ret->revision = idl::SECURITY_DESCRIPTOR_REVISION_1;
-			ret->type = idl::SEC_DESC_DACL_PRESENT;
-			if ((in_additional & idl::SECINFO_OWNER)) {
-				ret->owner_sid = ipc_psd->owner_sid;
-			}
-
-			if ((in_additional & idl::SECINFO_GROUP)) {
-				ret->group_sid = ipc_psd->group_sid;
-			}
-
-			if ((in_additional & idl::SECINFO_DACL)) {
-				ret->dacl = ipc_psd->dacl;
-				ret->type |= idl::SEC_DESC_DACL_PRESENT;
-			}
-		}
-		return NT_STATUS_OK;
-	}
-};
-
 static NTSTATUS ipc_object_op_getinfo(
 		x_smbd_object_t *smbd_object,
 		x_smbd_open_t *smbd_open,
@@ -818,7 +789,7 @@ static NTSTATUS ipc_object_op_getinfo(
 	if (state->in_info_class == x_smb2_info_class_t::FILE) {
 		return x_smbd_open_getinfo_file(smbd_conn, smbd_open, *state, ipc_get_file_info_t());
 	} else if (state->in_info_class == x_smb2_info_class_t::SECURITY) {
-		return x_smbd_open_getinfo_security(smbd_open, *state, ipc_get_security_descriptor_t());
+		return x_smbd_open_getinfo_security(smbd_open, *state);
 	}
 	return NT_STATUS_NOT_SUPPORTED;
 }
@@ -1071,6 +1042,7 @@ static NTSTATUS ipc_op_allocate_object(
 	X_ASSERT(ipc_object);
 	item.ipc_object = ipc_object;
 	*p_smbd_object = &ipc_object->base;
+	ipc_object->base.psd = ipc_psd;
 	return NT_STATUS_OK;
 }
 

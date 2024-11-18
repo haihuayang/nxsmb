@@ -251,7 +251,7 @@ static inline auto make_dummy_dacl()
 }
 
 NTSTATUS create_acl_blob_from_old(std::vector<uint8_t> &new_blob,
-		const std::vector<uint8_t> &old_blob,
+		std::shared_ptr<idl::security_descriptor> &curr_psd,
 		idl::security_descriptor &sd,
 		uint32_t security_info_sent)
 {
@@ -264,38 +264,26 @@ NTSTATUS create_acl_blob_from_old(std::vector<uint8_t> &new_blob,
 
 	canonicalize_inheritance_bits(sd);
 	
-	std::shared_ptr<idl::security_descriptor> psd;
-	uint16_t old_hash_type, old_version;
-	std::array<uint8_t, idl::XATTR_SD_HASH_SIZE> old_hash;
-
-	NTSTATUS status = parse_acl_blob(old_blob,
-		psd, &old_hash_type, &old_version,
-		old_hash);
-
-	if (!NT_STATUS_IS_OK(status)) {
-		return status;
-	}
-
-	psd->revision = sd.revision;
+	curr_psd->revision = sd.revision;
 	if (security_info_sent & idl::SECINFO_DACL) {
-		psd->type = sd.type;
+		curr_psd->type = sd.type;
 		/* All our SD's are self relative. */
-		psd->type = idl::security_descriptor_type(psd->type | idl::SEC_DESC_SELF_RELATIVE);
+		curr_psd->type = idl::security_descriptor_type(curr_psd->type | idl::SEC_DESC_SELF_RELATIVE);
 	}
 
 	bool chown_needed = false;
 	if ((security_info_sent & idl::SECINFO_OWNER)) {
-		if (idl::dom_sid_compare(*psd->owner_sid, *sd.owner_sid) != 0) {
+		if (idl::dom_sid_compare(*curr_psd->owner_sid, *sd.owner_sid) != 0) {
 			chown_needed = true;
 		}
-		psd->owner_sid = sd.owner_sid;
+		curr_psd->owner_sid = sd.owner_sid;
 	}
 
 	if ((security_info_sent & idl::SECINFO_GROUP)) {
-		if (idl::dom_sid_compare(*psd->group_sid, *sd.group_sid) != 0) {
+		if (idl::dom_sid_compare(*curr_psd->group_sid, *sd.group_sid) != 0) {
 			chown_needed = true;
 		}
-		psd->group_sid = sd.group_sid;
+		curr_psd->group_sid = sd.group_sid;
 	}
 
 	if (security_info_sent & idl::SECINFO_DACL) {
@@ -307,13 +295,13 @@ NTSTATUS create_acl_blob_from_old(std::vector<uint8_t> &new_blob,
 			 */
 			return NT_STATUS_OK;
 		}
-		psd->dacl = sd.dacl;
-		psd->type = idl::security_descriptor_type(psd->type | idl::SEC_DESC_DACL_PRESENT);
+		curr_psd->dacl = sd.dacl;
+		curr_psd->type = idl::security_descriptor_type(curr_psd->type | idl::SEC_DESC_DACL_PRESENT);
 	}
 
 	if (security_info_sent & idl::SECINFO_SACL) {
-		psd->sacl = sd.sacl;
-		psd->type = idl::security_descriptor_type(psd->type | idl::SEC_DESC_SACL_PRESENT);
+		curr_psd->sacl = sd.sacl;
+		curr_psd->type = idl::security_descriptor_type(curr_psd->type | idl::SEC_DESC_SACL_PRESENT);
 	}
 
 	(void)chown_needed;
@@ -321,7 +309,7 @@ NTSTATUS create_acl_blob_from_old(std::vector<uint8_t> &new_blob,
 	TODO
 	fset_nt_acl_common chown_needed;
 #endif
-	return create_acl_blob(new_blob, psd, idl::XATTR_SD_HASH_TYPE_NONE, std::array<uint8_t, idl::XATTR_SD_HASH_SIZE>());
+	return create_acl_blob(new_blob, curr_psd, idl::XATTR_SD_HASH_TYPE_NONE, std::array<uint8_t, idl::XATTR_SD_HASH_SIZE>());
 }
 
 /*

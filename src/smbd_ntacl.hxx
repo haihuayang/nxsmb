@@ -38,7 +38,7 @@ NTSTATUS parse_setinfo_sd_blob(idl::security_descriptor &sd,
 		const std::vector<uint8_t> &sd_blob);
 
 NTSTATUS create_acl_blob_from_old(std::vector<uint8_t> &new_blob,
-		const std::vector<uint8_t> &old_blob,
+		std::shared_ptr<idl::security_descriptor> &curr_psd,
 		idl::security_descriptor &sd,
 		uint32_t security_info_sent);
 
