@@ -155,14 +155,6 @@ NTSTATUS x_smbd_posixfs_op_create_open(x_smbd_open_t *&smbd_open,
 		const std::string &volume_name,
 		std::unique_ptr<x_smbd_requ_state_create_t> &state);
 
-NTSTATUS x_smbd_posixfs_op_access_check(x_smbd_object_t *smbd_object,
-		uint32_t &granted_access,
-		uint32_t &maximal_access,
-		x_smbd_tcon_t *smbd_tcon,
-		const x_smbd_user_t &smbd_user,
-		uint32_t desired_access,
-		bool overwrite);
-
 void x_smbd_posixfs_op_lease_granted(x_smbd_object_t *smbd_object,
 		x_smbd_stream_t *smbd_stream);
 

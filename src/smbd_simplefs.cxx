@@ -105,7 +105,6 @@ static const x_smbd_object_ops_t simplefs_object_ops = {
 	posixfs_object_op_set_delete_on_close,
 	x_smbd_simple_notify_change,
 	posixfs_op_object_delete,
-	x_smbd_posixfs_op_access_check,
 	x_smbd_posixfs_op_lease_granted,
 	posixfs_op_init_volume,
 	posixfs_op_allocate_object,

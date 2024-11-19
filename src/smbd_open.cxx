@@ -7,6 +7,7 @@
 #include "include/idtable.hxx"
 #include "include/nttime.hxx"
 #include "smbd_access.hxx"
+#include "smbd_ntacl.hxx"
 #include "smbd_dcerpc_srvsvc.hxx"
 #include "nxfsd_sched.hxx"
 
@@ -1286,6 +1287,163 @@ static bool delay_for_oplock(x_smbd_object_t *smbd_object,
 	return delay;
 }
 
+static bool can_delete_file_in_directory(
+		x_smbd_object_t *smbd_object,
+		const x_smbd_tcon_t *smbd_tcon,
+		const x_smbd_user_t &smbd_user)
+{
+#if 0
+	char *dname = NULL;
+	struct smb_filename *smb_fname_parent;
+	bool ret;
+
+	if (!CAN_WRITE(conn)) {
+		return False;
+	}
+
+	if (!lp_acl_check_permissions(SNUM(conn))) {
+		/* This option means don't check. */
+		return true;
+	}
+
+	/* Get the parent directory permission mask and owners. */
+	if (!parent_dirname(ctx, smb_fname->base_name, &dname, NULL)) {
+		return False;
+	}
+
+	smb_fname_parent = synthetic_smb_fname(ctx,
+				dname,
+				NULL,
+				NULL,
+				smb_fname->flags);
+	if (smb_fname_parent == NULL) {
+		ret = false;
+		goto out;
+	}
+
+	if(SMB_VFS_STAT(conn, smb_fname_parent) != 0) {
+		ret = false;
+		goto out;
+	}
+
+	/* fast paths first */
+
+	if (!S_ISDIR(smb_fname_parent->st.st_ex_mode)) {
+		ret = false;
+		goto out;
+	}
+	if (get_current_uid(conn) == (uid_t)0) {
+		/* I'm sorry sir, I didn't know you were root... */
+		ret = true;
+		goto out;
+	}
+
+#ifdef S_ISVTX
+	/* sticky bit means delete only by owner of file or by root or
+	 * by owner of directory. */
+	if (smb_fname_parent->st.st_ex_mode & S_ISVTX) {
+		if (!VALID_STAT(smb_fname->st)) {
+			/* If the file doesn't already exist then
+			 * yes we'll be able to delete it. */
+			ret = true;
+			goto out;
+		}
+
+		/*
+		 * Patch from SATOH Fumiyasu <fumiyas@miraclelinux.com>
+		 * for bug #3348. Don't assume owning sticky bit
+		 * directory means write access allowed.
+		 * Fail to delete if we're not the owner of the file,
+		 * or the owner of the directory as we have no possible
+		 * chance of deleting. Otherwise, go on and check the ACL.
+		 */
+		if ((get_current_uid(conn) !=
+			smb_fname_parent->st.st_ex_uid) &&
+		    (get_current_uid(conn) != smb_fname->st.st_ex_uid)) {
+			DEBUG(10,("can_delete_file_in_directory: not "
+				  "owner of file %s or directory %s",
+				  smb_fname_str_dbg(smb_fname),
+				  smb_fname_str_dbg(smb_fname_parent)));
+			ret = false;
+			goto out;
+		}
+	}
+#endif
+#endif
+	/* now for ACL checks */
+	std::shared_ptr<idl::security_descriptor> psd = smbd_object->parent_object->psd;
+
+	uint32_t rejected_mask = 0;
+	NTSTATUS status = se_file_access_check(*psd, smbd_user, false,
+			idl::SEC_DIR_DELETE_CHILD, &rejected_mask);
+	return NT_STATUS_IS_OK(status);
+	/*
+	 * There's two ways to get the permission to delete a file: First by
+	 * having the DELETE bit on the file itself and second if that does
+	 * not help, by the DELETE_CHILD bit on the containing directory.
+	 *
+	 * Here we only check the directory permissions, we will
+	 * check the file DELETE permission separately.
+	 */
+}
+
+static uint32_t smbd_object_access_check(
+		x_smbd_object_t *smbd_object,
+		uint32_t &granted_access,
+		uint32_t &maximal_access,
+		x_smbd_tcon_t *smbd_tcon,
+		const x_smbd_user_t &smbd_user,
+		const idl::security_descriptor &sd,
+		const uint32_t in_desired_access,
+		bool overwrite)
+{
+	uint32_t share_access = x_smbd_tcon_get_share_access(smbd_tcon);
+	uint32_t out_maximal_access = se_calculate_maximal_access(sd, smbd_user);
+	out_maximal_access &= share_access;
+
+	if (overwrite && (out_maximal_access & idl::SEC_FILE_WRITE_DATA) == 0) {
+		return idl::SEC_FILE_WRITE_DATA;
+	}
+
+	// No access check needed for attribute opens.
+	if ((in_desired_access & ~(idl::SEC_FILE_READ_ATTRIBUTE | idl::SEC_STD_SYNCHRONIZE)) == 0) {
+		granted_access = in_desired_access;
+		maximal_access = out_maximal_access;
+		return 0;
+	}
+
+	uint32_t desired_access = in_desired_access & ~idl::SEC_FLAG_MAXIMUM_ALLOWED;
+
+	uint32_t granted = out_maximal_access;
+	if (in_desired_access & idl::SEC_FLAG_MAXIMUM_ALLOWED) {
+		if (smbd_object->meta.file_attributes & X_SMB2_FILE_ATTRIBUTE_READONLY) {
+			granted &= ~(idl::SEC_FILE_WRITE_DATA | idl::SEC_FILE_APPEND_DATA);
+		}
+		granted |= idl::SEC_FILE_READ_ATTRIBUTE;
+		if (!(granted & idl::SEC_STD_DELETE)) {
+			if (can_delete_file_in_directory(smbd_object,
+						smbd_tcon, smbd_user)) {
+				granted |= idl::SEC_STD_DELETE;
+			}
+		}
+	} else {
+		granted = (desired_access & out_maximal_access);
+	}
+
+	uint32_t rejected_mask = desired_access & ~granted;
+	if ((rejected_mask & idl::SEC_STD_DELETE) && !(in_desired_access
+				& idl::SEC_FLAG_MAXIMUM_ALLOWED)) {
+		if (can_delete_file_in_directory(smbd_object,
+					smbd_tcon, smbd_user)) {
+			granted |= idl::SEC_STD_DELETE;
+			rejected_mask &= ~idl::SEC_STD_DELETE;
+		}
+	}
+	granted_access = granted;
+	maximal_access = out_maximal_access;
+	return rejected_mask;
+}
+
 static inline NTSTATUS x_smbd_object_access_check(x_smbd_object_t *smbd_object,
 		uint32_t &granted_access,
 		uint32_t &maximal_access,
@@ -1294,13 +1452,35 @@ static inline NTSTATUS x_smbd_object_access_check(x_smbd_object_t *smbd_object,
 		uint32_t desired_access,
 		bool overwrite)
 {
-	return smbd_object->smbd_volume->ops->access_check(smbd_object,
-			granted_access,
-			maximal_access,
-			smbd_tcon,
-			smbd_user,
-			desired_access,
-			overwrite);
+	std::shared_ptr<idl::security_descriptor> psd = smbd_object->psd;
+
+	uint32_t rejected_mask = smbd_object_access_check(smbd_object, 
+			granted_access, maximal_access,
+			smbd_tcon, smbd_user,
+			*psd,
+			desired_access, overwrite);
+
+	if (rejected_mask & idl::SEC_FLAG_SYSTEM_SECURITY) {
+		if (smbd_user.priviledge_mask & idl::SEC_PRIV_SECURITY_BIT) {
+			granted_access |= idl::SEC_FLAG_SYSTEM_SECURITY;
+			rejected_mask &= ~idl::SEC_FLAG_SYSTEM_SECURITY;
+		} else {
+			return NT_STATUS_PRIVILEGE_NOT_HELD;
+		}
+	}
+
+        if (rejected_mask & idl::SEC_STD_WRITE_OWNER) {
+		if (smbd_user.priviledge_mask & idl::SEC_PRIV_TAKE_OWNERSHIP_BIT) {
+			granted_access |= idl::SEC_STD_WRITE_OWNER;
+			rejected_mask &= ~idl::SEC_STD_WRITE_OWNER;
+		}
+        }
+
+	if (rejected_mask != 0) {
+		return NT_STATUS_ACCESS_DENIED;
+	}
+
+	return NT_STATUS_OK;
 }
 
 NTSTATUS x_smbd_open_create(

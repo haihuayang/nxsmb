@@ -221,13 +221,6 @@ struct x_smbd_object_ops_t
 	NTSTATUS (*delete_object)(x_smbd_object_t *smbd_object,
 			x_smbd_stream_t *smbd_stream,
 			x_smbd_open_t *smbd_open);
-	NTSTATUS (*access_check)(x_smbd_object_t *smbd_object,
-			uint32_t &granted_access,
-			uint32_t &maximal_access,
-			x_smbd_tcon_t *smbd_tcon,
-			const x_smbd_user_t &smbd_user,
-			uint32_t desired_access,
-			bool overwrite);
 	void (*lease_granted)(x_smbd_object_t *smbd_object,
 			x_smbd_stream_t *smbd_stream);
 

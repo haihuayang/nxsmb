@@ -977,18 +977,6 @@ static uint32_t ipc_op_get_attributes(const x_smbd_object_t *smbd_object)
 }
 #endif
 
-static NTSTATUS ipc_op_access_check(x_smbd_object_t *smbd_object,
-		uint32_t &granted_access,
-		uint32_t &maximal_access,
-		x_smbd_tcon_t *smbd_tcon,
-		const x_smbd_user_t &smbd_user,
-		uint32_t desired_access,
-		bool overwrite)
-{
-	X_ASSERT(0);
-	return NT_STATUS_INTERNAL_ERROR;
-}
-
 static void ipc_op_lease_granted(x_smbd_object_t *smbd_object,
 		x_smbd_stream_t *smbd_stream)
 {
@@ -1108,7 +1096,6 @@ static const x_smbd_object_ops_t x_smbd_ipc_object_ops = {
 	nullptr, // op_set_delete_on_close
 	nullptr, // notify_fname
 	ipc_op_delete_object,
-	ipc_op_access_check,
 	ipc_op_lease_granted,
 	ipc_op_init_volume,
 	ipc_op_allocate_object,
