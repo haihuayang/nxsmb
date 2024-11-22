@@ -143,7 +143,7 @@ typedef bool posixfs_qdir_entry_func_t(x_smbd_object_meta_t *object_meta,
 		std::shared_ptr<idl::security_descriptor> *ppsd,
 		posixfs_object_t *dir_obj,
 		const char *ent_name,
-		uint32_t file_number);
+		uint64_t file_number);
 
 NTSTATUS posixfs_op_create_open(x_smbd_open_t **psmbd_open,
 		x_smbd_requ_t *smbd_requ,
@@ -185,10 +185,7 @@ ssize_t posixfs_object_getxattr(x_smbd_object_t *smbd_object,
 
 x_smbd_qdir_t *posixfs_qdir_create(x_smbd_open_t *smbd_open, const x_smbd_qdir_ops_t *ops,
 		const std::shared_ptr<x_smbd_user_t> &smbd_user);
-void posixfs_qdir_rewind(x_smbd_qdir_t *smbd_qdir);
-void posixfs_qdir_destroy(x_smbd_qdir_t *smbd_qdir);
-bool posixfs_qdir_get_entry(x_smbd_qdir_t *smbd_qdir,
-		x_smbd_qdir_pos_t &qdir_pos,
+NTSTATUS posixfs_qdir_get_entry(x_smbd_qdir_t *smbd_qdir,
 		std::u16string &name,
 		x_smbd_object_meta_t &object_meta,
 		x_smbd_stream_meta_t &stream_meta,
@@ -196,6 +193,11 @@ bool posixfs_qdir_get_entry(x_smbd_qdir_t *smbd_qdir,
 		const char *pseudo_entries[],
 		uint32_t pseudo_entry_count,
 		posixfs_qdir_entry_func_t *process_entry_func);
+void posixfs_qdir_op_unget_entry(x_smbd_qdir_t *smbd_qdir);
+void posixfs_qdir_op_rewind(x_smbd_qdir_t *smbd_qdir);
+void posixfs_qdir_op_tell(x_smbd_qdir_t *smbd_qdir, x_smbd_qdir_pos_t &pos);
+void posixfs_qdir_op_seek(x_smbd_qdir_t *smbd_qdir, const x_smbd_qdir_pos_t &pos);
+void posixfs_qdir_op_destroy(x_smbd_qdir_t *smbd_qdir);
 
 int posixfs_op_init_volume(std::shared_ptr<x_smbd_volume_t> &smbd_volume);
 

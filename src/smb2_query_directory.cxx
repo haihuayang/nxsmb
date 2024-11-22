@@ -104,29 +104,34 @@ static bool smbd_qdir_queue_req(x_smbd_qdir_t *smbd_qdir, x_smbd_requ_t *smbd_re
 		idl::SEC_FILE_READ_ATTRIBUTE| \
 		idl::SEC_STD_READ_CONTROL)
 
-static NTSTATUS smbd_qdir_process_requ(x_smbd_qdir_t *smbd_qdir, x_smbd_requ_t *smbd_requ)
+static NTSTATUS smbd_qdir_process_requ(x_smbd_qdir_t *smbd_qdir,
+		x_smbd_requ_t *smbd_requ, bool new_requ)
 {
 	if (smbd_qdir->delay_ms) {
 		usleep(smbd_qdir->delay_ms * 1000);
 	}
 	auto state = smbd_requ->base.get_requ_state<x_smbd_requ_state_qdir_t>();
-	if (smbd_qdir->total_count == 0 ||
-			(state->in_flags & (X_SMB2_CONTINUE_FLAG_REOPEN |
-					    X_SMB2_CONTINUE_FLAG_RESTART))) {
-		smbd_qdir->error_status = NT_STATUS_OK;
-		if (smbd_qdir->fnmatch) {
-			x_fnmatch_destroy(smbd_qdir->fnmatch);
+	if (new_requ) {
+		X_ASSERT(!state->out_buf);
+
+		if (smbd_qdir->total_count == 0 ||
+				(state->in_flags & (X_SMB2_CONTINUE_FLAG_REOPEN |
+						    X_SMB2_CONTINUE_FLAG_RESTART))) {
+			smbd_qdir->error_status = NT_STATUS_OK;
+			if (smbd_qdir->fnmatch) {
+				x_fnmatch_destroy(smbd_qdir->fnmatch);
+			}
+			smbd_qdir->fnmatch = x_fnmatch_create(state->in_name, true);
+			smbd_qdir->ops->rewind(smbd_qdir);
+
+		} else if (!NT_STATUS_IS_OK(smbd_qdir->error_status)) {
+			return smbd_qdir->error_status;
 		}
-		smbd_qdir->fnmatch = x_fnmatch_create(state->in_name, true);
-		smbd_qdir->ops->rewind(smbd_qdir);
 
-	} else if (!NT_STATUS_IS_OK(smbd_qdir->error_status)) {
-		return smbd_qdir->error_status;
-	}
-
-	state->out_buf = x_buf_alloc(state->in_output_buffer_length);
-	if (!state->out_buf) {
-		return NT_STATUS_NO_MEMORY;
+		state->out_buf = x_buf_alloc(state->in_output_buffer_length);
+		if (!state->out_buf) {
+			return NT_STATUS_NO_MEMORY;
+		}
 	}
 
 	uint32_t max_count = 0x7fffffffu;
@@ -138,7 +143,8 @@ static NTSTATUS smbd_qdir_process_requ(x_smbd_qdir_t *smbd_qdir, x_smbd_requ_t *
 		ppsd = &psd;
 	}
 
-	uint32_t num = 0, matched_count = 0;
+	uint32_t num = 0, matched_count = 0; // TODO should be stored in smbd_qdir
+	NTSTATUS status = NT_STATUS_OK;
 
 	x_smb2_chain_marshall_t marshall{state->out_buf->data,
 		state->out_buf->data + state->out_buf->size, 8};
@@ -146,12 +152,20 @@ static NTSTATUS smbd_qdir_process_requ(x_smbd_qdir_t *smbd_qdir, x_smbd_requ_t *
 		x_smbd_object_meta_t object_meta;
 		x_smbd_stream_meta_t stream_meta;
 		std::u16string ent_name;
-		x_smbd_qdir_pos_t qdir_pos;
-		if (!smbd_qdir->ops->get_entry(smbd_qdir, qdir_pos,
+		status = smbd_qdir->ops->get_entry(smbd_qdir,
 					ent_name,
-					object_meta, stream_meta, ppsd)) {
+					object_meta, stream_meta, ppsd);
+		if (status == NT_STATUS_NO_MORE_FILES) {
+			if (smbd_qdir->total_count + num == 0) {
+				status = NT_STATUS_NO_SUCH_FILE;
+			}
+			break;
+		} if (status == X_NT_STATUS_INTERNAL_BLOCKED) {
+			return status;
+		} else if (!NT_STATUS_IS_OK(status)) {
 			break;
 		}
+		
 		if (psd) {
 			uint32_t access = se_calculate_maximal_access(*psd,
 					*smbd_qdir->smbd_user);
@@ -168,11 +182,12 @@ static NTSTATUS smbd_qdir_process_requ(x_smbd_qdir_t *smbd_qdir, x_smbd_requ_t *
 					ent_name, state->in_info_level)) {
 			++num;
 		} else {
-			x_smbd_qdir_unget_entry(smbd_qdir, qdir_pos);
+			smbd_qdir->ops->unget_entry(smbd_qdir);
 			max_count = num;
 		}
 	}
 
+	smbd_qdir->error_status = status;
 	if (num > 0) {
 		smbd_qdir->total_count += num;
 		state->out_buf_length = marshall.get_size();
@@ -183,10 +198,8 @@ static NTSTATUS smbd_qdir_process_requ(x_smbd_qdir_t *smbd_qdir, x_smbd_requ_t *
 	state->out_buf = nullptr;
 	if (matched_count > 0) {
 		return NT_STATUS_INFO_LENGTH_MISMATCH;
-	} else {
-		return smbd_qdir->error_status = (smbd_qdir->total_count == 0 ?
-				NT_STATUS_NO_SUCH_FILE : NT_STATUS_NO_MORE_FILES);
 	}
+	return smbd_qdir->error_status;
 }
 
 struct smbd_qdir_evt_t
@@ -220,20 +233,37 @@ static x_job_t::retval_t smbd_qdir_job_run(x_job_t *job, void *sche)
 	{
 		auto lock = std::unique_lock(smbd_object->mutex);
 		for (;;) {
-			x_nxfsd_requ_t *nxfsd_requ = smbd_qdir->requ_list.get_front();
+			x_nxfsd_requ_t *nxfsd_requ = smbd_qdir->curr_requ;
+			bool new_requ = false;
 			if (!nxfsd_requ) {
-				break;
+				nxfsd_requ = smbd_qdir->requ_list.get_front();
+				if (!nxfsd_requ) {
+					break;
+				}
+				x_smbd_requ_t *smbd_requ = x_smbd_requ_from_base(nxfsd_requ);
+				if (smbd_qdir->compound_id_blocking != 0 &&
+						smbd_qdir->compound_id_blocking != smbd_requ->compound_id) {
+					break;
+				}
+				smbd_qdir->requ_list.remove(nxfsd_requ);
+				smbd_qdir->curr_requ = nxfsd_requ;
+				new_requ = true;
 			}
-			x_smbd_requ_t *smbd_requ = x_smbd_requ_from_base(nxfsd_requ);
-			if (smbd_qdir->compound_id_blocking != 0 &&
-					smbd_qdir->compound_id_blocking != smbd_requ->compound_id) {
-				break;
-			}
-			smbd_qdir->requ_list.remove(nxfsd_requ);
+
 			lock.unlock();
 
-			NTSTATUS status = smbd_qdir->closed ? NT_STATUS_FILE_CLOSED :
-				smbd_qdir_process_requ(smbd_qdir, smbd_requ);
+			x_smbd_requ_t *smbd_requ = x_smbd_requ_from_base(nxfsd_requ);
+			NTSTATUS status = NT_STATUS_FILE_CLOSED;
+			if (!smbd_qdir->closed) {
+				status = smbd_qdir_process_requ(smbd_qdir, smbd_requ, new_requ);
+			}
+
+			if (status == X_NT_STATUS_INTERNAL_BLOCKED) {
+				return x_job_t::JOB_BLOCKED;
+			} else {
+				smbd_qdir->curr_requ = nullptr;
+			}
+			
 			X_NXFSD_REQU_POST_USER(nxfsd_requ,
 					new smbd_qdir_evt_t(smbd_requ, status));
 			lock.lock();

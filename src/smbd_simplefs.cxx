@@ -16,7 +16,7 @@ static bool simplefs_process_entry(
 		std::shared_ptr<idl::security_descriptor> *ppsd,
 		posixfs_object_t *dir_obj,
 		const char *ent_name,
-		uint32_t file_number)
+		uint64_t file_number)
 {
 	/* TODO match pattern */
 
@@ -46,14 +46,13 @@ static bool simplefs_process_entry(
 	return ret == 0;
 }
 
-static bool simplefs_qdir_op_get_entry(x_smbd_qdir_t *smbd_qdir,
-		x_smbd_qdir_pos_t &qdir_pos,
+static NTSTATUS simplefs_qdir_op_get_entry(x_smbd_qdir_t *smbd_qdir,
 		std::u16string &name,
 		x_smbd_object_meta_t &object_meta,
 		x_smbd_stream_meta_t &stream_meta,
 		std::shared_ptr<idl::security_descriptor> *ppsd)
 {
-	return posixfs_qdir_get_entry(smbd_qdir, qdir_pos, name,
+	return posixfs_qdir_get_entry(smbd_qdir, name,
 			object_meta, stream_meta, ppsd,
 			pseudo_entries, PSEUDO_ENTRIES_COUNT,
 			simplefs_process_entry);
@@ -61,8 +60,11 @@ static bool simplefs_qdir_op_get_entry(x_smbd_qdir_t *smbd_qdir,
 
 static const x_smbd_qdir_ops_t simplefs_qdir_ops = {
 	simplefs_qdir_op_get_entry,
-	posixfs_qdir_rewind,
-	posixfs_qdir_destroy,
+	posixfs_qdir_op_unget_entry,
+	posixfs_qdir_op_rewind,
+	posixfs_qdir_op_tell,
+	posixfs_qdir_op_seek,
+	posixfs_qdir_op_destroy,
 };
 
 static x_smbd_qdir_t *simplefs_op_qdir_create(x_smbd_open_t *smbd_open,
