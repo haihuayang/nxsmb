@@ -1,24 +1,13 @@
 
 #include "smbd_open.hxx"
-#include "include/nttime.hxx"
 
 /* copy from samba/source3/include/ntioctl.h */
 #define IO_REPARSE_TAG_DFS	     0x8000000A
 
-template <class Info>
-static inline void x_smbd_get_time_info(Info &info,
-		const x_smbd_object_meta_t &object_meta)
-{
-	info.creation = { X_H2LE64(x_timespec_to_nttime_val(object_meta.creation)) };
-	info.last_access = { X_H2LE64(x_timespec_to_nttime_val(object_meta.last_access)) };
-	info.last_write = { X_H2LE64(x_timespec_to_nttime_val(object_meta.last_write)) };
-	info.change = { X_H2LE64(x_timespec_to_nttime_val(object_meta.change)) };
-}
-
 void x_smbd_get_file_info(x_smb2_file_basic_info_t &info,
 		const x_smbd_object_meta_t &object_meta)
 {
-	x_smbd_get_time_info(info, object_meta);
+	x_smbd_push_time_info(info, object_meta);
 	info.file_attributes = X_H2LE32(object_meta.file_attributes);
 	info.unused = 0;
 }
@@ -56,7 +45,7 @@ void x_smbd_get_file_info(x_smb2_file_all_info_t &info,
 		uint32_t mode,
 		uint64_t current_offset)
 {
-	x_smbd_get_time_info(info.basic_info, object_meta);
+	x_smbd_push_time_info(info.basic_info, object_meta);
 	info.basic_info.file_attributes = X_H2LE32(object_meta.file_attributes);
 	info.basic_info.unused = 0;
 
@@ -78,7 +67,7 @@ void x_smbd_get_file_info(x_smb2_file_network_open_info_t &info,
 		const x_smbd_object_meta_t &object_meta,
 		const x_smbd_stream_meta_t &stream_meta)
 {
-	x_smbd_get_time_info(info, object_meta);
+	x_smbd_push_time_info(info, object_meta);
 	info.allocation_size = X_H2LE64(stream_meta.allocation_size);
 	info.end_of_file = X_H2LE64(stream_meta.end_of_file);
 	info.file_attributes = X_H2LE32(object_meta.file_attributes);
@@ -124,7 +113,7 @@ bool x_smbd_marshall_dir_entry(x_smb2_chain_marshall_t &marshall,
 			x_smb2_file_id_both_dir_info_t *info = (x_smb2_file_id_both_dir_info_t *)pbegin;
 			info->next_offset = 0;
 			info->file_index = 0;
-			x_smbd_get_time_info(*info, object_meta);
+			x_smbd_push_time_info(*info, object_meta);
 			info->end_of_file = X_H2LE64(stream_meta.end_of_file);
 			info->allocation_size = X_H2LE64(stream_meta.allocation_size);
 			info->file_attributes = X_H2LE32(object_meta.file_attributes);
@@ -161,7 +150,7 @@ bool x_smbd_marshall_dir_entry(x_smb2_chain_marshall_t &marshall,
 			x_smb2_file_id_full_dir_info_t *info = (x_smb2_file_id_full_dir_info_t *)pbegin;
 			info->next_offset = 0;
 			info->file_index = 0;
-			x_smbd_get_time_info(*info, object_meta);
+			x_smbd_push_time_info(*info, object_meta);
 			info->end_of_file = X_H2LE64(stream_meta.end_of_file);
 			info->allocation_size = X_H2LE64(stream_meta.allocation_size);
 			info->file_attributes = X_H2LE32(object_meta.file_attributes);
@@ -194,7 +183,7 @@ bool x_smbd_marshall_dir_entry(x_smb2_chain_marshall_t &marshall,
 			x_smb2_file_dir_info_t *info = (x_smb2_file_dir_info_t *)pbegin;
 			info->next_offset = 0;
 			info->file_index = 0;
-			x_smbd_get_time_info(*info, object_meta);
+			x_smbd_push_time_info(*info, object_meta);
 			info->end_of_file = X_H2LE64(stream_meta.end_of_file);
 			info->allocation_size = X_H2LE64(stream_meta.allocation_size);
 			info->file_attributes = X_H2LE32(object_meta.file_attributes);
@@ -213,7 +202,7 @@ bool x_smbd_marshall_dir_entry(x_smb2_chain_marshall_t &marshall,
 			x_smb2_file_both_dir_info_t *info = (x_smb2_file_both_dir_info_t *)pbegin;
 			info->next_offset = 0;
 			info->file_index = 0;
-			x_smbd_get_time_info(*info, object_meta);
+			x_smbd_push_time_info(*info, object_meta);
 			info->end_of_file = X_H2LE64(stream_meta.end_of_file);
 			info->allocation_size = X_H2LE64(stream_meta.allocation_size);
 			info->file_attributes = X_H2LE32(object_meta.file_attributes);
@@ -246,7 +235,7 @@ bool x_smbd_marshall_dir_entry(x_smb2_chain_marshall_t &marshall,
 			x_smb2_file_full_dir_info_t *info = (x_smb2_file_full_dir_info_t *)pbegin;
 			info->next_offset = 0;
 			info->file_index = 0;
-			x_smbd_get_time_info(*info, object_meta);
+			x_smbd_push_time_info(*info, object_meta);
 			info->end_of_file = X_H2LE64(stream_meta.end_of_file);
 			info->allocation_size = X_H2LE64(stream_meta.allocation_size);
 			info->file_attributes = X_H2LE32(object_meta.file_attributes);

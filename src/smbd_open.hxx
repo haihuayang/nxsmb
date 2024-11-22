@@ -13,6 +13,7 @@
 #include "smbd_lease.hxx"
 #include "smbd_share.hxx"
 #include "smbd_file.hxx"
+#include "include/nttime.hxx"
 
 /* use 16 bytes for qdir pos, hopefully it is enough for all fs */
 struct x_smbd_qdir_pos_t
@@ -887,6 +888,26 @@ NTSTATUS x_smbd_open_getinfo_file(x_smbd_conn_t *smbd_conn, x_smbd_open_t *smbd_
 
 NTSTATUS x_smbd_open_getinfo_security(x_smbd_open_t *smbd_open,
 		x_smbd_requ_state_getinfo_t &state);
+
+template <class Info>
+static inline void x_smbd_push_time_info(Info &info,
+		const x_smbd_object_meta_t &object_meta)
+{
+	info.creation = { X_H2LE64(x_timespec_to_nttime_val(object_meta.creation)) };
+	info.last_access = { X_H2LE64(x_timespec_to_nttime_val(object_meta.last_access)) };
+	info.last_write = { X_H2LE64(x_timespec_to_nttime_val(object_meta.last_write)) };
+	info.change = { X_H2LE64(x_timespec_to_nttime_val(object_meta.change)) };
+}
+
+template <class Info>
+static inline void x_smbd_pull_time_info(const Info &info,
+		x_smbd_object_meta_t &object_meta)
+{
+	object_meta.creation = x_nttime_to_timespec(idl::NTTIME{X_LE2H64(info.creation)});
+	object_meta.last_access = x_nttime_to_timespec(idl::NTTIME{X_LE2H64(info.last_access)});
+	object_meta.last_write = x_nttime_to_timespec(idl::NTTIME{X_LE2H64(info.last_write)});
+	object_meta.change = x_nttime_to_timespec(idl::NTTIME{X_LE2H64(info.change)});
+}
 
 #endif /* __smbd_open__hxx__ */
 
