@@ -497,17 +497,19 @@ NTSTATUS x_smbd_open_op_close(
 			return NT_STATUS_FILE_CLOSED;
 		}
 
-		/* it could happen when client tdis on other channel */
-		if (!x_smbd_tcon_unlink_open(smbd_open->smbd_tcon, &smbd_open->tcon_link)) {
-			return NT_STATUS_FILE_CLOSED;
+		if (smbd_open->smbd_tcon) {
+			/* it could happen when client tdis on other channel */
+			if (!x_smbd_tcon_unlink_open(smbd_open->smbd_tcon,
+						&smbd_open->tcon_link)) {
+				return NT_STATUS_FILE_CLOSED;
+			}
+			smbd_tcon = smbd_open->smbd_tcon;
+			smbd_open->smbd_tcon = nullptr;
 		}
-		smbd_tcon = smbd_open->smbd_tcon;
-		smbd_open->smbd_tcon = nullptr;
 		smbd_open_close(smbd_open, smbd_object, info);
 	}
 
-	X_ASSERT(smbd_tcon);
-	x_ref_dec(smbd_tcon);
+	x_ref_dec_if(smbd_tcon);
 
 	x_smbd_open_release(smbd_open);
 
@@ -538,8 +540,7 @@ void x_smbd_open_unlinked(x_dlink_t *link,
 		}
 	}
 
-	X_ASSERT(smbd_tcon);
-	x_ref_dec(smbd_tcon);
+	x_ref_dec_if(smbd_tcon);
 
 	if (closed) {
 		x_smbd_open_release(smbd_open);
@@ -2050,7 +2051,7 @@ bool x_smbd_open_list_t::output(std::string &data)
 			<< x_smbd_dhmode_to_name(smbd_open->open_state.dhmode)
 			<< ((smbd_open->open_state.flags & x_smbd_open_state_t::F_REPLAY_CACHED) ? 'R' : '-') << ' '
 			<< idl::x_hex_t<uint32_t>(smbd_open->notify_filter) << ' '
-			<< idl::x_hex_t<uint32_t>(x_smbd_tcon_get_id(smbd_open->smbd_tcon)) << " '"
+			<< idl::x_hex_t<uint32_t>(smbd_open->smbd_tcon ? x_smbd_tcon_get_id(smbd_open->smbd_tcon) : 0) << " '"
 			<< x_smbd_open_get_path(smbd_open) << "'" << std::endl;
 			return true;
 			});
