@@ -662,6 +662,12 @@ NTSTATUS x_smbd_open_object(x_smbd_object_t **psmbd_object,
 		long path_priv_data,
 		bool create_if);
 
+NTSTATUS x_smbd_open_object_at(x_smbd_object_t **p_smbd_object,
+		const std::shared_ptr<x_smbd_share_t> &smbd_share,
+		x_smbd_object_t *parent_object,
+		const std::u16string &path_base,
+		bool create_if);
+
 NTSTATUS x_smbd_object_rename(x_smbd_object_t *smbd_object,
 		x_smbd_open_t *smbd_open,
 		x_nxfsd_requ_t *nxfsd_requ,

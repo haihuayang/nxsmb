@@ -335,6 +335,48 @@ NTSTATUS x_smbd_open_object(x_smbd_object_t **p_smbd_object,
 	return status;
 }
 
+NTSTATUS x_smbd_open_object_at(x_smbd_object_t **p_smbd_object,
+		const std::shared_ptr<x_smbd_share_t> &smbd_share,
+		x_smbd_object_t *parent_object,
+		const std::u16string &path_base,
+		bool create_if)
+{
+	if (path_base.empty()) {
+		X_ASSERT(!parent_object);
+		smbd_share->root_object->incref();
+		*p_smbd_object = smbd_share->root_object;
+		return NT_STATUS_OK;
+	}
+
+	if (parent_object->type != x_smbd_object_t::type_dir) {
+		return NT_STATUS_OBJECT_PATH_NOT_FOUND;
+	}
+
+	auto [ ok, path_hash ] = x_smbd_hash_path(*parent_object->smbd_volume,
+			parent_object, path_base);
+	if (!ok) {
+		x_smbd_release_object(parent_object);
+		return NT_STATUS_ILLEGAL_CHARACTER;
+	}
+
+	x_smbd_object_t *smbd_object;
+	NTSTATUS status = x_smbd_object_lookup(&smbd_object, parent_object->smbd_volume,
+			parent_object, path_base,
+			0, create_if, path_hash, true);
+	if (!NT_STATUS_IS_OK(status)) {
+		return status;
+	}
+
+	status = smbd_object_initialize_if(*parent_object->smbd_volume, smbd_object);
+
+	if (!NT_STATUS_IS_OK(status)) {
+		x_smbd_release_object(smbd_object);
+		return status;
+	}
+	*p_smbd_object = smbd_object;
+	return status;
+}
+
 /* rename_internals_fsp */
 static NTSTATUS rename_object_intl(
 		const std::shared_ptr<x_smbd_volume_t> &smbd_volume,
