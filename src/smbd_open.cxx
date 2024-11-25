@@ -2047,6 +2047,7 @@ bool x_smbd_open_list_t::output(std::string &data)
 			<< idl::x_hex_t<uint64_t>(smbd_open->id_volatile) << ' '
 			<< idl::x_hex_t<uint32_t>(smbd_open->open_state.access_mask) << ' '
 			<< idl::x_hex_t<uint32_t>(smbd_open->open_state.share_access) << ' '
+			<< idl::x_hex_t<uint8_t>(smbd_open->open_state.oplock_level) << ' '
 			<< x_smbd_dhmode_to_name(smbd_open->open_state.dhmode)
 			<< ((smbd_open->open_state.flags & x_smbd_open_state_t::F_REPLAY_CACHED) ? 'R' : '-') << ' '
 			<< idl::x_hex_t<uint32_t>(smbd_open->notify_filter) << ' '
