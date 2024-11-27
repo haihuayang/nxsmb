@@ -222,7 +222,7 @@ struct x_smbd_object_ops_t
 
 	void (*destroy_object)(x_smbd_object_t *smbd_object);
 
-	NTSTATUS (*initialize_object)(
+	bool (*initialize_object)(
 			x_smbd_object_t *smbd_object);
 
 	NTSTATUS (*rename_object)(

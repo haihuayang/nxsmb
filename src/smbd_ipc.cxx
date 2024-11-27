@@ -1039,9 +1039,9 @@ static void ipc_op_destroy_object(x_smbd_object_t *smbd_object)
 	X_ASSERT(false);
 }
 
-static NTSTATUS ipc_op_initialize_object(x_smbd_object_t *smbd_object)
+static bool ipc_op_initialize_object(x_smbd_object_t *smbd_object)
 {
-	return NT_STATUS_OK;
+	return true;
 }
 
 static NTSTATUS ipc_op_rename_object(

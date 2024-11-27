@@ -102,7 +102,7 @@ NTSTATUS posixfs_op_allocate_object(x_smbd_object_t **p_smbd_object,
 
 void posixfs_op_destroy_object(x_smbd_object_t *smbd_object);
 
-NTSTATUS posixfs_op_initialize_object(
+bool posixfs_op_initialize_object(
 		x_smbd_object_t *smbd_object);
 
 NTSTATUS posixfs_op_open_stream(x_smbd_object_t *smbd_object,

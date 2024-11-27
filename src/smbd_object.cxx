@@ -209,12 +209,12 @@ static NTSTATUS smbd_object_initialize_if(x_smbd_volume_t &smbd_volume,
 	NTSTATUS status = NT_STATUS_OK;
 	auto lock = std::lock_guard(smbd_object->mutex);
 	if (!(smbd_object->flags & x_smbd_object_t::flag_initialized)) {
-		/* TODO can it fail? */
-		status = smbd_volume.ops->initialize_object(smbd_object);
-		smbd_object->flags = x_smbd_object_t::flag_initialized;
-		if (smbd_object->type != x_smbd_object_t::type_not_exist) {
-			smbd_object->fileid_hash = hash_file_handle(
-					smbd_object->file_handle);
+		if (smbd_volume.ops->initialize_object(smbd_object)) {
+			smbd_object->flags |= x_smbd_object_t::flag_initialized;
+			if (smbd_object->type != x_smbd_object_t::type_not_exist) {
+				smbd_object->fileid_hash = hash_file_handle(
+						smbd_object->file_handle);
+			}
 		}
 	}
 	return status;

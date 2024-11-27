@@ -3111,7 +3111,7 @@ void posixfs_op_destroy_object(x_smbd_object_t *smbd_object)
 	delete posixfs_object;
 }
 
-NTSTATUS posixfs_op_initialize_object(x_smbd_object_t *smbd_object)
+bool posixfs_op_initialize_object(x_smbd_object_t *smbd_object)
 {
 	posixfs_object_t *posixfs_object = posixfs_object_from_base_t::container(smbd_object);
 	std::string unix_path_base;
@@ -3129,7 +3129,6 @@ NTSTATUS posixfs_op_initialize_object(x_smbd_object_t *smbd_object)
 		if (errno == ENOENT) {
 		} else {
 			X_ASSERT(errno == ENOTDIR);
-			return NT_STATUS_OBJECT_PATH_NOT_FOUND;
 		}
 	} else {
 		stream_meta->allocation_size = roundup_allocation_size(
@@ -3137,7 +3136,7 @@ NTSTATUS posixfs_op_initialize_object(x_smbd_object_t *smbd_object)
 				posixfs_object);
 		posixfs_object_set_fd(posixfs_object, fd);
 	}
-	return NT_STATUS_OK;
+	return true;
 }
 
 void posixfs_op_release_stream(
