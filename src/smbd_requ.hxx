@@ -94,6 +94,7 @@ struct x_smbd_requ_state_rename_t : x_nxfsd_requ_state_async_t
 {
 	void async_done(void *ctx_conn, x_nxfsd_requ_t *nxfsd_requ,
 			NTSTATUS status) override;
+	NTSTATUS resume(void *ctx_conn, x_nxfsd_requ_t *nxfsd_requ) override;
 
 	uint64_t in_file_id_persistent;
 	uint64_t in_file_id_volatile;
@@ -105,6 +106,7 @@ struct x_smbd_requ_state_disposition_t : x_nxfsd_requ_state_async_t
 {
 	void async_done(void *ctx_conn, x_nxfsd_requ_t *nxfsd_requ,
 			NTSTATUS status) override;
+	NTSTATUS resume(void *ctx_conn, x_nxfsd_requ_t *nxfsd_requ) override;
 
 	uint64_t in_file_id_persistent;
 	uint64_t in_file_id_volatile;
@@ -214,6 +216,7 @@ struct x_smbd_requ_state_create_t : x_nxfsd_requ_state_open_t
 	~x_smbd_requ_state_create_t();
 	void async_done(void *ctx_conn, x_nxfsd_requ_t *nxfsd_requ,
 			NTSTATUS status) override;
+	NTSTATUS resume(void *ctx_conn, x_nxfsd_requ_t *nxfsd_requ) override;
 };
 
 struct x_smbd_requ_state_sesssetup_t : x_nxfsd_requ_state_async_t

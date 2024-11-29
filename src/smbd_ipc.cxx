@@ -911,41 +911,41 @@ static NTSTATUS ipc_create_object(x_smbd_object_t *smbd_object,
 
 static NTSTATUS ipc_op_create_open(x_smbd_open_t **psmbd_open,
 		x_smbd_requ_t *smbd_requ,
-		std::unique_ptr<x_smbd_requ_state_create_t> &state)
+		x_smbd_requ_state_create_t &state)
 {
-	if (state->in_ads_name.size() > 0 || state->is_dollar_data) {
+	if (state.in_ads_name.size() > 0 || state.is_dollar_data) {
 		return NT_STATUS_OBJECT_NAME_NOT_FOUND;
 	}
 
-	if (state->end_with_sep) {
+	if (state.end_with_sep) {
 		return NT_STATUS_OBJECT_NAME_INVALID;
 	}
 
-	X_ASSERT(state->open_priv_data == 0);
+	X_ASSERT(state.open_priv_data == 0);
 #if 0
 	X_ASSERT(oplock_level == X_SMB2_OPLOCK_LEVEL_NONE);
 	X_ASSERT(create_action == x_smb2_create_action_t::WAS_OPENED);
 #endif
-	if (state->in_desired_access & idl::SEC_STD_DELETE) {
+	if (state.in_desired_access & idl::SEC_STD_DELETE) {
 		*psmbd_open = nullptr;
 		return NT_STATUS_ACCESS_DENIED;
 	}
 
-	x_smbd_ipc_object_t *ipc_object = from_smbd_object(state->smbd_object);
+	x_smbd_ipc_object_t *ipc_object = from_smbd_object(state.smbd_object);
 	named_pipe_t *named_pipe = new named_pipe_t(&ipc_object->base,
 			smbd_requ->smbd_tcon,
 			x_smbd_open_state_t{
-				state->in_desired_access,
-				state->in_share_access,
-				state->client_guid,
-				state->in_context.create_guid,
-				state->in_context.app_instance_id,
-				state->in_context.app_instance_version_high,
-				state->in_context.app_instance_version_low,
-				state->in_context.lease.parent_key,
+				state.in_desired_access,
+				state.in_share_access,
+				state.client_guid,
+				state.in_context.create_guid,
+				state.in_context.app_instance_id,
+				state.in_context.app_instance_version_high,
+				state.in_context.app_instance_version_low,
+				state.in_context.lease.parent_key,
 				0l,
 				smbd_requ->base.smbd_user->get_owner_sid(),
-				state->valid_flags,
+				state.valid_flags,
 				0,
 				x_smb2_create_action_t::WAS_OPENED,
 				X_SMB2_OPLOCK_LEVEL_NONE});

@@ -293,6 +293,13 @@ void x_smbd_requ_state_create_t::async_done(void *ctx_conn,
 	x_smbd_conn_requ_done(smbd_conn, smbd_requ, status);
 }
 
+NTSTATUS x_smbd_requ_state_create_t::resume(void *ctx_conn,
+		x_nxfsd_requ_t *nxfsd_requ)
+{
+	auto smbd_requ = x_smbd_requ_from_base(nxfsd_requ);
+	return x_smbd_open_op_create(smbd_requ, *this);
+}
+
 static bool oplock_valid_for_durable(const x_smbd_requ_state_create_t &state)
 {
 	if (state.in_oplock_level == X_SMB2_OPLOCK_LEVEL_LEASE) {
@@ -300,6 +307,11 @@ static bool oplock_valid_for_durable(const x_smbd_requ_state_create_t &state)
 	} else {
 		return state.in_oplock_level == X_SMB2_OPLOCK_LEVEL_BATCH;
 	}
+}
+
+static void smbd_create_cancel(x_nxfsd_conn_t *nxfsd_conn, x_nxfsd_requ_t *nxfsd_requ)
+{
+	x_nxfsd_requ_post_cancel(nxfsd_requ, NT_STATUS_CANCELLED);
 }
 
 static NTSTATUS smb2_process_create(x_smbd_requ_t *smbd_requ,
@@ -390,7 +402,14 @@ static NTSTATUS smb2_process_create(x_smbd_requ_t *smbd_requ,
 				state->in_context.lease, true);
 	}
 
-	return x_smbd_open_op_create(smbd_requ, state);
+	NTSTATUS status = x_smbd_open_op_create(smbd_requ, *state);
+	if (status == NT_STATUS_PENDING) {
+		/* TODO does it need a timer? can break timer always wake up it? */
+		X_SMBD_REQU_LOG(DBG, smbd_requ, " interim_state %d",
+				smbd_requ->base.interim_state);
+		x_nxfsd_requ_async_insert(&smbd_requ->base, state, smbd_create_cancel, 0);
+	}
+	return status;
 }
 
 NTSTATUS x_smb2_process_create(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)

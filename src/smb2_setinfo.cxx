@@ -84,14 +84,20 @@ void x_smbd_requ_state_rename_t::async_done(void *ctx_conn,
 	x_smbd_conn_requ_done(smbd_conn, smbd_requ, status);
 }
 
+NTSTATUS x_smbd_requ_state_rename_t::resume(void *ctx_conn,
+		x_nxfsd_requ_t *nxfsd_requ)
+{
+	return x_smbd_open_rename(nxfsd_requ, *this);
+}
+
 static NTSTATUS x_smb2_process_rename(x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ,
-		std::unique_ptr<x_smbd_requ_state_rename_t> &state)
+		x_smbd_requ_state_rename_t &state)
 {
 	X_SMBD_REQU_LOG(OP, smbd_requ,  " open=0x%lx,0x%lx '%s:%s'",
-			state->in_file_id_persistent, state->in_file_id_volatile,
-			x_str_todebug(state->in_path).c_str(),
-			x_str_todebug(state->in_stream_name).c_str());
+			state.in_file_id_persistent, state.in_file_id_volatile,
+			x_str_todebug(state.in_path).c_str(),
+			x_str_todebug(state.in_stream_name).c_str());
 
 	/* MS-FSA 2.1.5.14.11 */
 	if (!smbd_requ->base.smbd_open->check_access_any(idl::SEC_STD_DELETE)) {
@@ -99,11 +105,11 @@ static NTSTATUS x_smb2_process_rename(x_smbd_conn_t *smbd_conn,
 	}
 
 	if (smbd_requ->base.smbd_open->smbd_stream) {
-		if (state->in_path.size()) {
+		if (state.in_path.size()) {
 			X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_OBJECT_NAME_INVALID);
 		}
 	} else {
-		if (state->in_stream_name.size()) {
+		if (state.in_stream_name.size()) {
 			X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 		}
 	}
@@ -146,13 +152,19 @@ void x_smbd_requ_state_disposition_t::async_done(void *ctx_conn,
 	x_smbd_conn_requ_done(smbd_conn, smbd_requ, status);
 }
 
+NTSTATUS x_smbd_requ_state_disposition_t::resume(void *ctx_conn,
+		x_nxfsd_requ_t *nxfsd_requ)
+{
+	return x_smbd_open_set_delete_pending(nxfsd_requ, *this);
+}
+
 static NTSTATUS x_smb2_process_disposition(x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ,
-		std::unique_ptr<x_smbd_requ_state_disposition_t> &state)
+		x_smbd_requ_state_disposition_t &state)
 {
 	X_SMBD_REQU_LOG(OP, smbd_requ,  " open=0x%lx,0x%lx delete=%d",
-			state->in_file_id_persistent, state->in_file_id_volatile,
-			state->delete_pending);
+			state.in_file_id_persistent, state.in_file_id_volatile,
+			state.delete_pending);
 
 	/* MS-FSA 2.1.5.14.11 */
 	if (!smbd_requ->base.smbd_open->check_access_any(idl::SEC_STD_DELETE)) {
@@ -167,6 +179,11 @@ static NTSTATUS x_smb2_process_disposition(x_smbd_conn_t *smbd_conn,
 	}
 
 	X_SMBD_REQU_RETURN_STATUS(smbd_requ, status);
+}
+
+static void smbd_setinfo_cancel(x_nxfsd_conn_t *nxfsd_conn, x_nxfsd_requ_t *nxfsd_requ)
+{
+	x_nxfsd_requ_post_cancel(nxfsd_requ, NT_STATUS_CANCELLED);
 }
 
 NTSTATUS x_smb2_process_setinfo(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
@@ -219,7 +236,13 @@ NTSTATUS x_smb2_process_setinfo(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_re
 			state->in_file_id_persistent = in_file_id_persistent;
 			state->in_file_id_volatile = in_file_id_volatile;
 
-			return x_smb2_process_rename(smbd_conn, smbd_requ, state);
+			status = x_smb2_process_rename(smbd_conn, smbd_requ, *state);
+			if (status == NT_STATUS_PENDING) {
+				/* windows server do not send interim response in renaming */
+				x_nxfsd_requ_async_insert(&smbd_requ->base, state,
+						smbd_setinfo_cancel, -1);
+			}
+			return status;
 		} else if (in_info_level == x_smb2_info_level_t::FILE_DISPOSITION_INFORMATION) {
 			auto state = std::make_unique<x_smbd_requ_state_disposition_t>();
 			NTSTATUS status = decode_in_disposition(*state, in_hdr, 
@@ -231,7 +254,13 @@ NTSTATUS x_smb2_process_setinfo(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_re
 			state->in_file_id_persistent = in_file_id_persistent;
 			state->in_file_id_volatile = in_file_id_volatile;
 
-			return x_smb2_process_disposition(smbd_conn, smbd_requ, state);
+			status = x_smb2_process_disposition(smbd_conn, smbd_requ, *state);
+			if (status == NT_STATUS_PENDING) {
+				/* windows server do not send interim response in deleting */
+				x_nxfsd_requ_async_insert(&smbd_requ->base, state,
+						smbd_setinfo_cancel, -1);
+			}
+			return status;
 		}
 	}
 

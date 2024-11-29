@@ -19,6 +19,10 @@ struct x_nxfsd_requ_state_async_t
 	virtual ~x_nxfsd_requ_state_async_t() { }
 	virtual void async_done(void *ctx_conn, x_nxfsd_requ_t *nxfsd_requ,
 			NTSTATUS status) = 0;
+	virtual NTSTATUS resume(void *ctx_conn, x_nxfsd_requ_t *nxfsd_requ) {
+		X_ASSERT(false);
+		return NT_STATUS_INTERNAL_ERROR;
+	}
 };
 
 struct x_nxfsd_requ_cbs_t

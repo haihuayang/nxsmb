@@ -143,7 +143,7 @@ struct x_smbd_object_ops_t
 
 	NTSTATUS (*create_open)(x_smbd_open_t **psmbd_open,
 			x_smbd_requ_t *smbd_requ,
-			std::unique_ptr<x_smbd_requ_state_create_t> &state);
+			x_smbd_requ_state_create_t &state);
 
 	NTSTATUS (*open_durable)(x_smbd_open_t *&smbd_open,
 			std::shared_ptr<x_smbd_share_t> &smbd_share,
@@ -577,19 +577,19 @@ x_smbd_open_t *x_smbd_open_lookup(uint64_t id_presistent, uint64_t id_volatile,
 bool x_smbd_open_store(x_smbd_open_t *smbd_open);
 void x_smbd_open_unlinked(x_dlink_t *link,
 		bool shutdown);
-
+#if 0
 NTSTATUS x_smbd_open_create(x_smbd_open_t **psmbd_open,
 		x_smbd_requ_t *smbd_requ,
 		x_smbd_share_t &smbd_share,
-		std::unique_ptr<x_smbd_requ_state_create_t> &state);
-
+		x_smbd_requ_state_create_t &state);
+#endif
 x_smbd_open_t *x_smbd_open_reopen(NTSTATUS &status,
 		uint64_t id_presistent, uint64_t id_volatile,
 		x_smbd_tcon_t *smbd_tcon,
 		x_smbd_requ_state_create_t &state);
 
 NTSTATUS x_smbd_open_op_create(x_smbd_requ_t *smbd_requ,
-		std::unique_ptr<x_smbd_requ_state_create_t> &state);
+		x_smbd_requ_state_create_t &state);
 NTSTATUS x_smbd_open_op_reconnect(x_smbd_requ_t *smbd_requ,
 		std::unique_ptr<x_smbd_requ_state_create_t> &state);
 
@@ -671,11 +671,11 @@ NTSTATUS x_smbd_open_object_at(x_smbd_object_t **p_smbd_object,
 NTSTATUS x_smbd_object_rename(x_smbd_object_t *smbd_object,
 		x_smbd_open_t *smbd_open,
 		x_nxfsd_requ_t *nxfsd_requ,
-		std::unique_ptr<x_smbd_requ_state_rename_t> &state);
+		x_smbd_requ_state_rename_t &state);
 
 static inline NTSTATUS x_smbd_open_rename(
 		x_nxfsd_requ_t *nxfsd_requ,
-		std::unique_ptr<x_smbd_requ_state_rename_t> &state)
+		x_smbd_requ_state_rename_t &state)
 {
 	auto smbd_open = nxfsd_requ->smbd_open;
 	auto smbd_object = smbd_open->smbd_object;
@@ -687,7 +687,7 @@ NTSTATUS x_smbd_open_create(
 		x_smbd_object_t *smbd_object,
 		x_smbd_stream_t *smbd_stream,
 		x_smbd_requ_t *smbd_requ,
-		std::unique_ptr<x_smbd_requ_state_create_t> &state,
+		x_smbd_requ_state_create_t &state,
 		x_smb2_create_action_t &create_action,
 		uint8_t &out_oplock_level,
 		bool overwrite);
@@ -695,16 +695,16 @@ NTSTATUS x_smbd_open_create(
 NTSTATUS x_smbd_object_set_delete_pending_intl(x_smbd_object_t *smbd_object,
 		x_smbd_open_t *smbd_open,
 		x_nxfsd_requ_t *nxfsd_requ,
-		std::unique_ptr<x_smbd_requ_state_disposition_t> &state);
+		x_smbd_requ_state_disposition_t &state);
 
 NTSTATUS x_smbd_object_set_delete_pending(x_smbd_object_t *smbd_object,
 		x_smbd_open_t *smbd_open,
 		x_nxfsd_requ_t *nxfsd_requ,
-		std::unique_ptr<x_smbd_requ_state_disposition_t> &state);
+		x_smbd_requ_state_disposition_t &state);
 
 static inline NTSTATUS x_smbd_open_set_delete_pending(
 		x_nxfsd_requ_t *nxfsd_requ,
-		std::unique_ptr<x_smbd_requ_state_disposition_t> &state)
+		x_smbd_requ_state_disposition_t &state)
 {
 	auto smbd_open = nxfsd_requ->smbd_open;
 	auto smbd_object = smbd_open->smbd_object;

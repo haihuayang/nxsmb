@@ -199,8 +199,8 @@ static NTSTATUS smbd_object_remove(
 	sharemode->open_list.remove(smbd_open);
 	--smbd_object->num_active_open;
 	if (smbd_open->open_state.flags & x_smbd_open_state_t::F_INITIAL_DELETE_ON_CLOSE) {
-		auto state = std::make_unique<x_smbd_requ_state_disposition_t>();
-		state->delete_pending = true;
+		x_smbd_requ_state_disposition_t state;
+		state.delete_pending = true;
 		x_smbd_object_set_delete_pending_intl(smbd_object, smbd_open,
 				nullptr, state);
 	}
@@ -572,34 +572,13 @@ static bool is_lease_stat_open(uint32_t access_mask)
 
 static void defer_requ_process(void *ctx_conn, x_nxfsd_requ_t *nxfsd_requ)
 {
-	auto state_create = nxfsd_requ->release_state<x_smbd_requ_state_create_t>();
-	if (state_create) {
-		auto smbd_requ = x_smbd_requ_from_base(nxfsd_requ);
-		NTSTATUS status = x_smbd_open_op_create(smbd_requ, state_create);
-		if (!NT_STATUS_EQUAL(status, NT_STATUS_PENDING)) {
-			state_create->async_done(ctx_conn, nxfsd_requ, status);
-		}
-		return;
+	auto state = nxfsd_requ->get_requ_state<x_nxfsd_requ_state_async_t>();
+	NTSTATUS status = state->resume(ctx_conn, nxfsd_requ);
+	X_NXFSD_REQU_LOG(DBG, nxfsd_requ, " ctx_conn=%p status=%s",
+			ctx_conn, x_ntstatus_str(status));
+	if (status != NT_STATUS_PENDING) {
+		x_nxfsd_requ_async_done(ctx_conn, nxfsd_requ, status);
 	}
-
-	auto state_rename = nxfsd_requ->release_state<x_smbd_requ_state_rename_t>();
-	if (state_rename) {
-		NTSTATUS status = x_smbd_open_rename(nxfsd_requ, state_rename);
-		if (!NT_STATUS_EQUAL(status, NT_STATUS_PENDING)) {
-			state_rename->async_done(ctx_conn, nxfsd_requ, status);
-		}
-		return;
-	}
-
-	auto state_delete = nxfsd_requ->release_state<x_smbd_requ_state_disposition_t>();
-	if (state_delete) {
-		NTSTATUS status = x_smbd_open_set_delete_pending(nxfsd_requ, state_delete);
-		if (!NT_STATUS_EQUAL(status, NT_STATUS_PENDING)) {
-			state_delete->async_done(ctx_conn, nxfsd_requ, status);
-		}
-		return;
-	}
-	X_ASSERT(false);
 }
 
 struct defer_requ_evt_t
@@ -611,9 +590,10 @@ struct defer_requ_evt_t
 		x_nxfsd_requ_t *nxfsd_requ = evt->nxfsd_requ;
 		X_NXFSD_REQU_LOG(DBG, nxfsd_requ, " ctx_conn=%p", ctx_conn);
 
-		if (x_nxfsd_requ_async_remove(nxfsd_requ) && ctx_conn) {
+		if (ctx_conn) {
 			defer_requ_process(ctx_conn, nxfsd_requ);
 		} else {
+			x_nxfsd_requ_async_remove(nxfsd_requ);
 			x_nxfsd_requ_done(nxfsd_requ);
 		}
 
@@ -921,21 +901,6 @@ static bool open_mode_check(x_smbd_object_t *smbd_object,
 		}
 	}
 	return false;
-}
-
-static void smbd_create_cancel(x_nxfsd_conn_t *nxfsd_conn, x_nxfsd_requ_t *nxfsd_requ)
-{
-	x_nxfsd_requ_post_cancel(nxfsd_requ, NT_STATUS_CANCELLED);
-}
-
-static void defer_open(x_smbd_sharemode_t *sharemode,
-		x_nxfsd_requ_t *nxfsd_requ,
-		std::unique_ptr<x_smbd_requ_state_create_t> &state)
-{
-	/* TODO does it need a timer? can break timer always wake up it? */
-	X_LOG(SMB, DBG, "nxfsd_requ %p interim_state %d", nxfsd_requ,
-			nxfsd_requ->interim_state);
-	x_nxfsd_requ_async_insert(nxfsd_requ, state, smbd_create_cancel, 0);
 }
 
 static inline uint8_t get_lease_type(const x_smbd_open_t *smbd_open)
@@ -1487,14 +1452,14 @@ NTSTATUS x_smbd_open_create(
 		x_smbd_object_t *smbd_object,
 		x_smbd_stream_t *smbd_stream,
 		x_smbd_requ_t *smbd_requ,
-		std::unique_ptr<x_smbd_requ_state_create_t> &state,
+		x_smbd_requ_state_create_t &state,
 		x_smb2_create_action_t &create_action,
 		uint8_t &out_oplock_level,
 		bool overwrite)
 {
 	if (smbd_object->type == x_smbd_object_t::type_file && overwrite) {
 		// open_match_attributes
-#define MIS_MATCH(attr) (((smbd_object->meta.file_attributes & attr) != 0) && ((state->in_file_attributes & attr) == 0))
+#define MIS_MATCH(attr) (((smbd_object->meta.file_attributes & attr) != 0) && ((state.in_file_attributes & attr) == 0))
 		if (MIS_MATCH(X_SMB2_FILE_ATTRIBUTE_SYSTEM) ||
 				MIS_MATCH(X_SMB2_FILE_ATTRIBUTE_HIDDEN)) {
 			X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_ACCESS_DENIED);
@@ -1510,7 +1475,7 @@ NTSTATUS x_smbd_open_create(
 				maximal_access,
 				smbd_requ->smbd_tcon,
 				*smbd_user,
-				state->in_desired_access,
+				state.in_desired_access,
 				overwrite);
 
 		if (!NT_STATUS_IS_OK(status)) {
@@ -1528,23 +1493,21 @@ NTSTATUS x_smbd_open_create(
 	x_smbd_sharemode_t *sharemode = get_sharemode(
 			smbd_object, smbd_stream);
 
-	if (!check_app_instance(smbd_object, sharemode, *state)) {
+	if (!check_app_instance(smbd_object, sharemode, state)) {
 		X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_FILE_FORCED_CLOSED);
 	}
 
 	bool conflict = open_mode_check(smbd_object,
 			sharemode,
-			granted_access, state->in_share_access);
+			granted_access, state.in_share_access);
 	if (delay_for_oplock(smbd_object,
 				sharemode,
 				&smbd_requ->base,
-				state->smbd_lease,
-				state->in_create_disposition,
+				state.smbd_lease,
+				state.in_create_disposition,
 				overwrite ? granted_access | idl::SEC_FILE_WRITE_DATA : granted_access,
-				conflict, state->open_attempt)) {
-		++state->open_attempt;
-		defer_open(sharemode,
-				&smbd_requ->base, state);
+				conflict, state.open_attempt)) {
+		++state.open_attempt;
 		X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_PENDING);
 	}
 
@@ -1555,16 +1518,16 @@ NTSTATUS x_smbd_open_create(
 	if (!smbd_object->exists() || (smbd_stream && !smbd_stream->exists)) {
 		if (!smbd_object->exists()) {
 			uint32_t access_mask;
-			if (state->in_desired_access & idl::SEC_FLAG_MAXIMUM_ALLOWED) {
+			if (state.in_desired_access & idl::SEC_FLAG_MAXIMUM_ALLOWED) {
 				access_mask = idl::SEC_RIGHTS_FILE_ALL;
 			} else {
-				access_mask = state->in_desired_access;
+				access_mask = state.in_desired_access;
 			}
 
-			if (state->in_create_options & X_SMB2_CREATE_OPTION_DELETE_ON_CLOSE) {
+			if (state.in_create_options & X_SMB2_CREATE_OPTION_DELETE_ON_CLOSE) {
 				status = x_smbd_can_set_delete_on_close(
 						smbd_object, nullptr,
-						state->in_file_attributes,
+						state.in_file_attributes,
 						access_mask);
 				if (!NT_STATUS_IS_OK(status)) {
 					X_SMBD_REQU_RETURN_STATUS(smbd_requ, status);
@@ -1573,9 +1536,9 @@ NTSTATUS x_smbd_open_create(
 		}
 		status = x_smbd_create_object(smbd_object,
 				smbd_stream,
-				*smbd_user, *state,
-				state->in_file_attributes,
-				state->in_context.allocation_size);
+				*smbd_user, state,
+				state.in_file_attributes,
+				state.in_context.allocation_size);
 		if (!NT_STATUS_IS_OK(status)) {
 			X_SMBD_REQU_RETURN_STATUS(smbd_requ, status);
 		}
@@ -1584,14 +1547,14 @@ NTSTATUS x_smbd_open_create(
 		create_action = overwrite ? x_smb2_create_action_t::WAS_OVERWRITTEN :
 			x_smb2_create_action_t::WAS_OPENED;
 
-		state->granted_access = granted_access;
-		state->out_maximal_access = maximal_access;
+		state.granted_access = granted_access;
+		state.out_maximal_access = maximal_access;
 	}
 
        	status = grant_oplock(smbd_requ, smbd_object,
 			smbd_stream,
 			sharemode,
-			*state, out_oplock_level);
+			state, out_oplock_level);
 	if (!NT_STATUS_IS_OK(status)) {
 		X_SMBD_REQU_RETURN_STATUS(smbd_requ, status);
 	}
@@ -1766,7 +1729,7 @@ void x_smbd_save_durable(x_smbd_open_t *smbd_open,
 }
 
 NTSTATUS x_smbd_open_op_create(x_smbd_requ_t *smbd_requ,
-		std::unique_ptr<x_smbd_requ_state_create_t> &state)
+		x_smbd_requ_state_create_t &state)
 {
 	X_TRACE_LOC;
 	if (!x_smbd_open_has_space()) {
@@ -1778,16 +1741,16 @@ NTSTATUS x_smbd_open_op_create(x_smbd_requ_t *smbd_requ,
 	NTSTATUS status;
 	x_smbd_tcon_t *smbd_tcon = smbd_requ->smbd_tcon;
 
-	if (!state->smbd_object) {
+	if (!state.smbd_object) {
 		long path_priv_data{};
 		long open_priv_data{};
 
-		state->smbd_share = x_smbd_tcon_get_share(smbd_requ->smbd_tcon);
+		state.smbd_share = x_smbd_tcon_get_share(smbd_requ->smbd_tcon);
 #if 0
 		status = x_smbd_tcon_resolve_path(smbd_requ->smbd_tcon,
-				state->in_path,
+				state.in_path,
 				smbd_requ->in_smb2_hdr.flags & X_SMB2_HDR_FLAG_DFS,
-				state->smbd_share, path,
+				state.smbd_share, path,
 				path_priv_data, open_priv_data);
 		if (!NT_STATUS_IS_OK(status)) {
 			X_LOG(SMB, WARN, "resolve_path failed");
@@ -1795,25 +1758,25 @@ NTSTATUS x_smbd_open_op_create(x_smbd_requ_t *smbd_requ,
 		}
 
 		X_LOG(SMB, DBG, "resolve_path(%s) to %s, %ld, %ld",
-				x_str_todebug(state->in_path).c_str(),
+				x_str_todebug(state.in_path).c_str(),
 				x_str_todebug(path).c_str(),
 				path_priv_data, open_priv_data);
 #endif
 		x_smbd_object_t *smbd_object = nullptr;
 		status = x_smbd_open_object(&smbd_object,
-				state->smbd_share, state->in_path,
+				state.smbd_share, state.in_path,
 				path_priv_data, true);
 		if (!NT_STATUS_IS_OK(status)) {
 			return status;
 		}
 
-		state->smbd_object = smbd_object;
-		state->open_priv_data = open_priv_data;
+		state.smbd_object = smbd_object;
+		state.open_priv_data = open_priv_data;
 	}
 
 	x_smbd_open_t *smbd_open = nullptr;
 	/* TODO should we check the open limit before create the open */
-	status = state->smbd_object->smbd_volume->ops->create_open(&smbd_open,
+	status = state.smbd_object->smbd_volume->ops->create_open(&smbd_open,
 			smbd_requ, state);
 
 	if (!NT_STATUS_IS_OK(status)) {
@@ -1828,14 +1791,14 @@ NTSTATUS x_smbd_open_op_create(x_smbd_requ_t *smbd_requ,
 	 */
 	bool linked = false;
 	{
-		auto lock = state->smbd_object->lock();
+		auto lock = state.smbd_object->lock();
 		if (smbd_open->state == SMBD_OPEN_S_INIT &&
 				x_smbd_tcon_link_open(smbd_tcon, &smbd_open->tcon_link)) {
 			smbd_open->state = SMBD_OPEN_S_ACTIVE;
 			smbd_open->smbd_tcon = smbd_tcon;
 			linked = true;
 		} else {
-			smbd_open_close(smbd_open, state->smbd_object, nullptr);
+			smbd_open_close(smbd_open, state.smbd_object, nullptr);
 		}
 	}
 

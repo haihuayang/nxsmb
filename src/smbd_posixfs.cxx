@@ -2785,35 +2785,35 @@ static NTSTATUS posixfs_open_stream(x_smbd_object_t *smbd_object,
 
 NTSTATUS posixfs_op_create_open(x_smbd_open_t **psmbd_open,
 		x_smbd_requ_t *smbd_requ,
-		std::unique_ptr<x_smbd_requ_state_create_t> &state)
+		x_smbd_requ_state_create_t &state)
 {
-	x_smbd_object_t *smbd_object = state->smbd_object;
+	x_smbd_object_t *smbd_object = state.smbd_object;
 	X_ASSERT(smbd_object);
 
-	x_smbd_stream_t *smbd_stream = state->smbd_stream;
-	if (!state->in_ads_name.empty() && !smbd_stream) {
+	x_smbd_stream_t *smbd_stream = state.smbd_stream;
+	if (!state.in_ads_name.empty() && !smbd_stream) {
 		NTSTATUS status = posixfs_open_stream(smbd_object,
 				&smbd_stream,
-				state->in_ads_name);
+				state.in_ads_name);
 		if (!NT_STATUS_IS_OK(status)) {
 			return status;
 		}
-		state->smbd_stream = smbd_stream;
+		state.smbd_stream = smbd_stream;
 	}
 
 	/* check lease first */
-	if (state->smbd_lease && !x_smbd_lease_match(state->smbd_lease,
+	if (state.smbd_lease && !x_smbd_lease_match(state.smbd_lease,
 				smbd_object, smbd_stream)) {
 		X_TRACE_REPORT(SMB, OP, "failed match lease");
 		return NT_STATUS_INVALID_PARAMETER;
 	}
 
-	auto in_disposition = state->in_create_disposition;
+	auto in_disposition = state.in_create_disposition;
 	auto lock = smbd_object->lock();
 
 	if (in_disposition == x_smb2_create_disposition_t::CREATE) {
 		if (!smbd_object->exists()) {
-			if (state->end_with_sep) {
+			if (state.end_with_sep) {
 				return NT_STATUS_OBJECT_NAME_INVALID;
 			}
 		} else {
@@ -2823,7 +2823,7 @@ NTSTATUS posixfs_op_create_open(x_smbd_open_t **psmbd_open,
 		}
 
 	} else if (in_disposition == x_smb2_create_disposition_t::OPEN) {
-		if (state->in_context.twrp != 0) {
+		if (state.in_context.twrp != 0) {
 			X_TODO; /* TODO snapshot */
 			return NT_STATUS_OBJECT_NAME_NOT_FOUND;
 		}
@@ -2831,11 +2831,11 @@ NTSTATUS posixfs_op_create_open(x_smbd_open_t **psmbd_open,
 			return NT_STATUS_OBJECT_NAME_NOT_FOUND;
 
 		} else if (x_smbd_object_is_dir(smbd_object)) {
-			if (state->is_dollar_data) {
+			if (state.is_dollar_data) {
 				return NT_STATUS_FILE_IS_A_DIRECTORY;
 			}
 		} else {
-			if (state->end_with_sep) {
+			if (state.end_with_sep) {
 				return NT_STATUS_OBJECT_NAME_INVALID;
 			}
 		}
@@ -2845,16 +2845,16 @@ NTSTATUS posixfs_op_create_open(x_smbd_open_t **psmbd_open,
 		}
 
 	} else if (in_disposition == x_smb2_create_disposition_t::OPEN_IF) {
-		if (state->in_context.twrp != 0) {
+		if (state.in_context.twrp != 0) {
 			/* TODO snapshot */
 			return NT_STATUS_OBJECT_NAME_NOT_FOUND;
 		} else if (!smbd_object->exists()) {
-			if (state->end_with_sep) {
+			if (state.end_with_sep) {
 				return NT_STATUS_OBJECT_NAME_INVALID;
 			}
 
 		} else if (x_smbd_object_is_dir(smbd_object)) {
-			if (state->is_dollar_data) {
+			if (state.is_dollar_data) {
 				return NT_STATUS_FILE_IS_A_DIRECTORY;
 			}
 		}
@@ -2865,7 +2865,7 @@ NTSTATUS posixfs_op_create_open(x_smbd_open_t **psmbd_open,
 
 		} else if (x_smbd_object_is_dir(smbd_object)) {
 			if (!smbd_stream) {
-				if (state->is_dollar_data) {
+				if (state.is_dollar_data) {
 					return NT_STATUS_FILE_IS_A_DIRECTORY;
 				} else {
 					return NT_STATUS_INVALID_PARAMETER;
@@ -2881,17 +2881,17 @@ NTSTATUS posixfs_op_create_open(x_smbd_open_t **psmbd_open,
 		 * different. FILE_SUPERSEDE deletes an existing file
 		 * (requiring delete access) then recreates it.
 		 */
-		if (state->in_context.twrp != 0) {
+		if (state.in_context.twrp != 0) {
 			/* TODO */
 			return NT_STATUS_OBJECT_NAME_NOT_FOUND;
 		} else if (!smbd_object->exists()) {
-			if (state->end_with_sep) {
+			if (state.end_with_sep) {
 				return NT_STATUS_OBJECT_NAME_INVALID;
 			}
 
 		} else if (x_smbd_object_is_dir(smbd_object)) {
-			if (state->in_ads_name.size() == 0) {
-				if (state->is_dollar_data) {
+			if (state.in_ads_name.size() == 0) {
+				if (state.is_dollar_data) {
 					return NT_STATUS_FILE_IS_A_DIRECTORY;
 				} else {
 					return NT_STATUS_INVALID_PARAMETER;
@@ -2907,27 +2907,27 @@ NTSTATUS posixfs_op_create_open(x_smbd_open_t **psmbd_open,
 	bool overwrite = false;
 	x_smb2_create_action_t create_action = x_smb2_create_action_t::WAS_OPENED;
 	uint8_t oplock_level = X_SMB2_OPLOCK_LEVEL_NONE;
-	if (state->smbd_share->get_type() == X_SMB2_SHARE_TYPE_DISK) {
+	if (state.smbd_share->get_type() == X_SMB2_SHARE_TYPE_DISK) {
 		if (smbd_object->exists()) {
 			if (smbd_object->sharemode.meta.delete_on_close) {
 				return NT_STATUS_DELETE_PENDING;
 			}
 
 			if (smbd_object->type == x_smbd_object_t::type_dir) {
-				if (state->in_create_options & X_SMB2_CREATE_OPTION_NON_DIRECTORY_FILE) {
+				if (state.in_create_options & X_SMB2_CREATE_OPTION_NON_DIRECTORY_FILE) {
 					return NT_STATUS_FILE_IS_A_DIRECTORY;
 				}
 			} else {
-				if (state->in_create_options & X_SMB2_CREATE_OPTION_DIRECTORY_FILE) {
+				if (state.in_create_options & X_SMB2_CREATE_OPTION_DIRECTORY_FILE) {
 					return NT_STATUS_NOT_A_DIRECTORY;
 				}
 			}
 
 
 			if ((smbd_object->meta.file_attributes & X_SMB2_FILE_ATTRIBUTE_READONLY) &&
-					(state->in_desired_access & (idl::SEC_FILE_WRITE_DATA | idl::SEC_FILE_APPEND_DATA))) {
+					(state.in_desired_access & (idl::SEC_FILE_WRITE_DATA | idl::SEC_FILE_APPEND_DATA))) {
 				X_LOG(SMB, NOTICE, "deny access 0x%x to '%s' due to readonly 0x%x",
-						state->in_desired_access,
+						state.in_desired_access,
 						x_str_todebug(x_smbd_object_get_path(smbd_object)).c_str(),
 						smbd_object->meta.file_attributes);
 				return NT_STATUS_ACCESS_DENIED;
@@ -2954,8 +2954,8 @@ NTSTATUS posixfs_op_create_open(x_smbd_open_t **psmbd_open,
 		if (!NT_STATUS_IS_OK(status)) {
 			return status;
 		}
-		if (state->in_context.bits & X_SMB2_CONTEXT_FLAG_MXAC) {
-			state->out_contexts |= X_SMB2_CONTEXT_FLAG_MXAC;
+		if (state.in_context.bits & X_SMB2_CONTEXT_FLAG_MXAC) {
+			state.out_contexts |= X_SMB2_CONTEXT_FLAG_MXAC;
 		}
 	}
 
@@ -2963,11 +2963,11 @@ NTSTATUS posixfs_op_create_open(x_smbd_open_t **psmbd_open,
 		overwrite = false;
 	}
 
-	if (state->in_create_options & X_SMB2_CREATE_OPTION_DELETE_ON_CLOSE) {
+	if (state.in_create_options & X_SMB2_CREATE_OPTION_DELETE_ON_CLOSE) {
 		status = x_smbd_can_set_delete_on_close(smbd_object,
 				smbd_stream,
 				smbd_object->meta.file_attributes,
-				state->granted_access);
+				state.granted_access);
 		if (!NT_STATUS_IS_OK(status)) {
 			return status;
 		}
@@ -2976,7 +2976,7 @@ NTSTATUS posixfs_op_create_open(x_smbd_open_t **psmbd_open,
 	/* TODO should we check the open limit before create the open */
 	status = x_smbd_posixfs_create_open(psmbd_open,
 			&smbd_requ->base, smbd_requ->smbd_tcon,
-			*state,
+			state,
 			overwrite,
 			create_action,
 			oplock_level);
@@ -2988,14 +2988,14 @@ NTSTATUS posixfs_op_create_open(x_smbd_open_t **psmbd_open,
 	 * without QFID Windows 10 client query
 	 * couple getinfo x_smb2_info_level_t::FILE_NETWORK_OPEN_INFORMATION
 	 */
-	if (state->in_context.bits & X_SMB2_CONTEXT_FLAG_QFID) {
-		x_put_le64(state->out_qfid_info, smbd_object->meta.inode);
-		x_put_le64(state->out_qfid_info + 8, smbd_object->meta.fsid);
-		memset(state->out_qfid_info + 16, 0, 16);
-		state->out_contexts |= X_SMB2_CONTEXT_FLAG_QFID;
+	if (state.in_context.bits & X_SMB2_CONTEXT_FLAG_QFID) {
+		x_put_le64(state.out_qfid_info, smbd_object->meta.inode);
+		x_put_le64(state.out_qfid_info + 8, smbd_object->meta.fsid);
+		memset(state.out_qfid_info + 16, 0, 16);
+		state.out_contexts |= X_SMB2_CONTEXT_FLAG_QFID;
 	}
 
-	if (state->in_create_options & X_SMB2_CREATE_OPTION_DELETE_ON_CLOSE) {
+	if (state.in_create_options & X_SMB2_CREATE_OPTION_DELETE_ON_CLOSE) {
 		(*psmbd_open)->open_state.flags |= x_smbd_open_state_t::F_INITIAL_DELETE_ON_CLOSE;
 	}
 
