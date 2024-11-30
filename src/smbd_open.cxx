@@ -570,50 +570,6 @@ static bool is_lease_stat_open(uint32_t access_mask)
 			((access_mask & ~stat_open_bits) == 0));
 }
 
-static void defer_requ_process(void *ctx_conn, x_nxfsd_requ_t *nxfsd_requ)
-{
-	auto state = nxfsd_requ->get_requ_state<x_nxfsd_requ_state_async_t>();
-	NTSTATUS status = state->resume(ctx_conn, nxfsd_requ);
-	X_NXFSD_REQU_LOG(DBG, nxfsd_requ, " ctx_conn=%p status=%s",
-			ctx_conn, x_ntstatus_str(status));
-	if (status != NT_STATUS_PENDING) {
-		x_nxfsd_requ_async_done(ctx_conn, nxfsd_requ, status);
-	}
-}
-
-struct defer_requ_evt_t
-{
-	static void func(void *ctx_conn, x_fdevt_user_t *fdevt_user)
-	{
-		defer_requ_evt_t *evt = X_CONTAINER_OF(fdevt_user,
-				defer_requ_evt_t, base);
-		x_nxfsd_requ_t *nxfsd_requ = evt->nxfsd_requ;
-		X_NXFSD_REQU_LOG(DBG, nxfsd_requ, " ctx_conn=%p", ctx_conn);
-
-		if (ctx_conn) {
-			defer_requ_process(ctx_conn, nxfsd_requ);
-		} else {
-			x_nxfsd_requ_async_remove(nxfsd_requ);
-			x_nxfsd_requ_done(nxfsd_requ);
-		}
-
-		delete evt;
-	}
-
-	explicit defer_requ_evt_t(x_nxfsd_requ_t *nxfsd_requ)
-		: base(func), nxfsd_requ(nxfsd_requ)
-	{
-	}
-
-	~defer_requ_evt_t()
-	{
-		x_ref_dec(nxfsd_requ);
-	}
-
-	x_fdevt_user_t base;
-	x_nxfsd_requ_t * const nxfsd_requ;
-};
-
 void x_smbd_wakeup_requ_list(const x_nxfsd_requ_id_list_t &requ_list)
 {
 	for (auto requ_id : requ_list) {
@@ -629,7 +585,7 @@ void x_smbd_wakeup_requ_list(const x_nxfsd_requ_id_list_t &requ_list)
 		X_NXFSD_REQU_LOG(DBG, nxfsd_requ, " count=%d", count);
 		X_ASSERT(count > 0);
 		if (count == 1) {
-			X_NXFSD_REQU_POST_USER(nxfsd_requ, new defer_requ_evt_t(nxfsd_requ));
+			x_nxfsd_requ_resume(nxfsd_requ);
 		} else {
 			x_ref_dec(nxfsd_requ);
 		}

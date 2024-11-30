@@ -114,6 +114,55 @@ uint64_t x_nxfsd_requ_get_async_id(const x_nxfsd_requ_t *nxfsd_requ)
 	return nxfsd_requ->id;
 }
 
+static void nxfsd_requ_resume(void *ctx_conn, x_nxfsd_requ_t *nxfsd_requ)
+{
+	auto state = nxfsd_requ->get_requ_state<x_nxfsd_requ_state_async_t>();
+	NTSTATUS status = state->resume(ctx_conn, nxfsd_requ);
+	X_NXFSD_REQU_LOG(DBG, nxfsd_requ, " ctx_conn=%p status=%s",
+			ctx_conn, x_ntstatus_str(status));
+	if (status != NT_STATUS_PENDING) {
+		x_nxfsd_requ_async_done(ctx_conn, nxfsd_requ, status);
+	}
+}
+
+struct requ_resume_evt_t
+{
+	static void func(void *ctx_conn, x_fdevt_user_t *fdevt_user)
+	{
+		requ_resume_evt_t *evt = X_CONTAINER_OF(fdevt_user,
+				requ_resume_evt_t, base);
+		x_nxfsd_requ_t *nxfsd_requ = evt->nxfsd_requ;
+		X_NXFSD_REQU_LOG(DBG, nxfsd_requ, " ctx_conn=%p", ctx_conn);
+
+		if (ctx_conn) {
+			nxfsd_requ_resume(ctx_conn, nxfsd_requ);
+		} else {
+			x_nxfsd_requ_async_remove(nxfsd_requ);
+			x_nxfsd_requ_done(nxfsd_requ);
+		}
+
+		delete evt;
+	}
+
+	explicit requ_resume_evt_t(x_nxfsd_requ_t *nxfsd_requ)
+		: base(func), nxfsd_requ(nxfsd_requ)
+	{
+	}
+
+	~requ_resume_evt_t()
+	{
+		x_ref_dec(nxfsd_requ);
+	}
+
+	x_fdevt_user_t base;
+	x_nxfsd_requ_t * const nxfsd_requ;
+};
+
+void x_nxfsd_requ_resume(x_nxfsd_requ_t *nxfsd_requ)
+{
+	X_NXFSD_REQU_POST_USER(nxfsd_requ, new requ_resume_evt_t(nxfsd_requ));
+}
+
 struct x_nxfsd_requ_list_t : x_ctrl_handler_t
 {
 	x_nxfsd_requ_list_t() : iter(g_nxfsd_requ_table->iter_start()) {
