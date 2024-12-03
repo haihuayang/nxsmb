@@ -923,5 +923,9 @@ static inline void x_smbd_pull_time_info(const Info &info,
 	object_meta.change = x_nttime_to_timespec(idl::NTTIME{X_LE2H64(info.change)});
 }
 
+uint32_t x_smbd_open_encode_output_contexts(const x_smbd_open_t *smbd_open,
+		const x_nxfsd_requ_state_open_t &state,
+		uint8_t *out_ptr);
+
 #endif /* __smbd_open__hxx__ */
 

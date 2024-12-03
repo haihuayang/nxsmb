@@ -1949,6 +1949,25 @@ x_smbd_open_t::~x_smbd_open_t()
 	X_NXFSD_COUNTER_INC_DELETE(smbd_open, 1);
 }
 
+uint32_t x_smbd_open_encode_output_contexts(const x_smbd_open_t *smbd_open,
+		const x_nxfsd_requ_state_open_t &state,
+		uint8_t *out_ptr)
+{
+	const auto &open_state = smbd_open->open_state;
+	return x_smb2_create_resp_context_encode(out_ptr,
+			open_state.oplock_level == X_SMB2_OPLOCK_LEVEL_LEASE ?
+				&state.in_context.lease : nullptr,
+			state.out_contexts & X_SMB2_CONTEXT_FLAG_MXAC ?
+				&state.out_maximal_access : nullptr,
+			state.out_contexts & X_SMB2_CONTEXT_FLAG_QFID ?
+				state.out_qfid_info : nullptr,
+			state.out_contexts & (X_SMB2_CONTEXT_FLAG_DH2Q | X_SMB2_CONTEXT_FLAG_DHNQ),
+			open_state.dhmode == x_smbd_dhmode_t::PERSISTENT ?
+				X_SMB2_DHANDLE_FLAG_PERSISTENT : 0,
+			open_state.durable_timeout_msec);
+}
+
+
 struct x_smbd_open_list_t : x_ctrl_handler_t
 {
 	x_smbd_open_list_t() : iter(g_smbd_open_table->iter_start()) {

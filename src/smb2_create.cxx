@@ -8,23 +8,6 @@
 #include "include/nttime.hxx"
 
 
-static uint32_t encode_contexts(const x_smbd_requ_state_create_t &state,
-		const x_smbd_open_state_t &open_state,
-		uint8_t *out_ptr)
-{
-	return x_smb2_create_resp_context_encode(out_ptr,
-			open_state.oplock_level == X_SMB2_OPLOCK_LEVEL_LEASE ?
-				&state.in_context.lease : nullptr,
-			state.out_contexts & X_SMB2_CONTEXT_FLAG_MXAC ?
-				&state.out_maximal_access : nullptr,
-			state.out_contexts & X_SMB2_CONTEXT_FLAG_QFID ?
-				state.out_qfid_info : nullptr,
-			state.out_contexts & (X_SMB2_CONTEXT_FLAG_DH2Q | X_SMB2_CONTEXT_FLAG_DHNQ),
-			open_state.dhmode == x_smbd_dhmode_t::PERSISTENT ?
-				X_SMB2_DHANDLE_FLAG_PERSISTENT : 0,
-			open_state.durable_timeout_msec);
-}
-
 static const char16_t SEP = u'\\';
 static bool pop_comp(std::u16string &path)
 {
@@ -208,9 +191,8 @@ static uint32_t encode_out_create(const x_smbd_requ_state_create_t &state,
 	out_create->file_id_volatile = X_H2LE64(id_volatile);
 
 	static_assert((sizeof(x_smb2_create_resp_t) % 8) == 0);
-	uint32_t out_context_length = encode_contexts(state,
-			smbd_open->open_state,
-			(uint8_t *)(out_create + 1));
+	uint32_t out_context_length = x_smbd_open_encode_output_contexts(smbd_open,
+			state, (uint8_t *)(out_create + 1));
 	if (out_context_length == 0) {
 		out_create->context_offset = out_create->context_length = 0;
 	} else {
