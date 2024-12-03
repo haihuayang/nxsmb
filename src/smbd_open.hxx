@@ -608,8 +608,16 @@ bool x_smbd_open_break_oplock(x_smbd_object_t *smbd_object,
 
 NTSTATUS x_smbd_break_oplock(
 		x_smbd_open_t *smbd_open,
+		uint8_t in_oplock_level,
+		uint8_t &out_oplock_level);
+
+static inline NTSTATUS x_smbd_break_oplock(
+		x_smbd_open_t *smbd_open,
 		x_smbd_requ_t *smbd_requ,
-		x_smbd_requ_state_oplock_break_t &state);
+		x_smbd_requ_state_oplock_break_t &state)
+{
+	return x_smbd_break_oplock(smbd_open, state.in_oplock_level, state.out_oplock_level);
+}
 
 void x_smbd_break_others_to_none(x_smbd_object_t *smbd_object,
 		x_smbd_sharemode_t *sharemode,

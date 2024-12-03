@@ -1601,10 +1601,10 @@ NTSTATUS x_smbd_open_create(
 
 NTSTATUS x_smbd_break_oplock(
 		x_smbd_open_t *smbd_open,
-		x_smbd_requ_t *smbd_requ,
-		x_smbd_requ_state_oplock_break_t &state)
+		uint8_t in_oplock_level,
+		uint8_t &out_oplock_level)
 {
-	uint8_t out_oplock_level;
+	uint8_t tmp_oplock_level;
 	x_smbd_object_t *smbd_object = smbd_open->smbd_object;
 	x_nxfsd_requ_id_list_t oplock_pending_list;
 
@@ -1618,17 +1618,17 @@ NTSTATUS x_smbd_break_oplock(
 	}
 
 	if (smbd_open->oplock_break_sent == x_smbd_open_t::OPLOCK_BREAK_TO_NONE_SENT
-			|| state.in_oplock_level == X_SMB2_OPLOCK_LEVEL_NONE) {
-		out_oplock_level = X_SMB2_OPLOCK_LEVEL_NONE;
+			|| in_oplock_level == X_SMB2_OPLOCK_LEVEL_NONE) {
+		tmp_oplock_level = X_SMB2_OPLOCK_LEVEL_NONE;
 	} else {
-		out_oplock_level = X_SMB2_OPLOCK_LEVEL_II;
+		tmp_oplock_level = X_SMB2_OPLOCK_LEVEL_II;
 	}
 	smbd_open->oplock_break_sent = x_smbd_open_t::OPLOCK_BREAK_NOT_SENT;
-	if (smbd_open->open_state.oplock_level != out_oplock_level) {
-		smbd_open->open_state.oplock_level = out_oplock_level;
+	if (smbd_open->open_state.oplock_level != tmp_oplock_level) {
+		smbd_open->open_state.oplock_level = tmp_oplock_level;
 	}
 
-	state.out_oplock_level = out_oplock_level;
+	out_oplock_level = tmp_oplock_level;
 	std::swap(oplock_pending_list, smbd_open->oplock_pending_list);
 	}
 	x_smbd_wakeup_requ_list(oplock_pending_list);
