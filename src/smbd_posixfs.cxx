@@ -726,7 +726,7 @@ static posixfs_open_t *posixfs_open_create(
 		x_smbd_tcon_t *smbd_tcon,
 		posixfs_object_t *posixfs_object,
 		const std::shared_ptr<x_smbd_user_t> &smbd_user,
-		const x_smbd_requ_state_create_t &state,
+		const x_nxfsd_requ_state_open_t &state,
 		x_smb2_create_action_t create_action,
 		uint8_t oplock_level)
 {
@@ -2691,21 +2691,22 @@ static uint32_t filter_attributes(uint32_t new_attr, uint32_t curr_attr)
 }
 
 /* smbd_object's mutex is locked */
-static NTSTATUS smbd_posixfs_create_open(x_smbd_open_t **psmbd_open,
-		x_smbd_requ_t *smbd_requ,
-		std::unique_ptr<x_smbd_requ_state_create_t> &state,
+NTSTATUS x_smbd_posixfs_create_open(x_smbd_open_t **psmbd_open,
+		x_nxfsd_requ_t *nxfsd_requ,
+		x_smbd_tcon_t *smbd_tcon,
+		x_nxfsd_requ_state_open_t &state,
 		bool overwrite,
 		x_smb2_create_action_t create_action,
 		uint8_t oplock_level)
 {
 	NTSTATUS status;
-	posixfs_object_t *posixfs_object = posixfs_object_from_base_t::container(state->smbd_object);
+	posixfs_object_t *posixfs_object = posixfs_object_from_base_t::container(state.smbd_object);
 
 	posixfs_open_t *posixfs_open = nullptr;
 
-	posixfs_open = posixfs_open_create(&status, smbd_requ->smbd_tcon,
-			posixfs_object, smbd_requ->base.smbd_user,
-			*state, create_action, oplock_level);
+	posixfs_open = posixfs_open_create(&status, smbd_tcon,
+			posixfs_object, nxfsd_requ->smbd_user,
+			state, create_action, oplock_level);
 	if (!posixfs_open) {
 		return status;
 	}
@@ -2714,16 +2715,16 @@ static NTSTATUS smbd_posixfs_create_open(x_smbd_open_t **psmbd_open,
 	if (overwrite) {
 		// TODO DELETE_ALL_STREAM;
 		uint32_t notify_actions = 0;
-		if (state->smbd_object->type == x_smbd_object_t::type_file) {
+		if (state.smbd_object->type == x_smbd_object_t::type_file) {
 			int err = ftruncate(posixfs_object->fd, 0);
 			X_TODO_ASSERT(err == 0);
 			notify_actions |= FILE_NOTIFY_CHANGE_SIZE;
 		}
 
-		if (state->in_file_attributes != 0) {
+		if (state.in_file_attributes != 0) {
 			auto &meta = posixfs_object->get_meta();
 			auto curr_attr = meta.file_attributes;
-			auto file_attr = filter_attributes(state->in_file_attributes,
+			auto file_attr = filter_attributes(state.in_file_attributes,
 					curr_attr);
 			if (file_attr != 0 && file_attr != curr_attr) {
 				dos_attr_t dos_attr = { 0 };
@@ -2737,17 +2738,17 @@ static NTSTATUS smbd_posixfs_create_open(x_smbd_open_t **psmbd_open,
 		x_smbd_schedule_notify(
 				NOTIFY_ACTION_MODIFIED,
 				notify_actions,
-				state->in_context.lease.parent_key,
-				state->client_guid,
-				state->smbd_object->parent_object, nullptr,
+				state.in_context.lease.parent_key,
+				state.client_guid,
+				state.smbd_object->parent_object, nullptr,
 				posixfs_object->base.path_base, {});
 		reload_meta = true;
 	} else if (create_action != x_smb2_create_action_t::WAS_CREATED
-			&& (state->in_context.bits & X_SMB2_CONTEXT_FLAG_ALSI)) {
+			&& (state.in_context.bits & X_SMB2_CONTEXT_FLAG_ALSI)) {
 		status = posixfs_set_allocation_size_intl(posixfs_object,
 				nullptr,
-				state->in_context.allocation_size,
-				state->smbd_lease,
+				state.in_context.allocation_size,
+				state.smbd_lease,
 				oplock_level);
 		X_TODO_ASSERT(NT_STATUS_IS_OK(status));
 	}
@@ -2757,9 +2758,9 @@ static NTSTATUS smbd_posixfs_create_open(x_smbd_open_t **psmbd_open,
 				&posixfs_object->get_meta(),
 				&posixfs_object->base.sharemode.meta);
 		X_TODO_ASSERT(err == 0);
-		if ((state->in_context.bits & X_SMB2_CONTEXT_FLAG_ALSI)) {
+		if ((state.in_context.bits & X_SMB2_CONTEXT_FLAG_ALSI)) {
 			posixfs_object->base.sharemode.meta.allocation_size =
-				state->in_context.allocation_size;
+				state.in_context.allocation_size;
 		}
 		posixfs_object->statex_modified = false;
 	}
@@ -2973,8 +2974,9 @@ NTSTATUS posixfs_op_create_open(x_smbd_open_t **psmbd_open,
 	}
 
 	/* TODO should we check the open limit before create the open */
-	status = smbd_posixfs_create_open(psmbd_open,
-			smbd_requ, state,
+	status = x_smbd_posixfs_create_open(psmbd_open,
+			&smbd_requ->base, smbd_requ->smbd_tcon,
+			*state,
 			overwrite,
 			create_action,
 			oplock_level);
