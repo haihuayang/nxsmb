@@ -176,17 +176,6 @@ struct posixfs_open_t
 		: base(so, stream, st, open_state)
 	{
 	}
-
-	uint8_t get_oplock_level() const
-	{
-		return base.open_state.oplock_level;
-	}
-
-	void set_oplock_level(uint8_t oplock_level)
-	{
-		base.open_state.oplock_level = oplock_level;
-	}
-
 	x_smbd_open_t base;
 };
 X_DECLARE_MEMBER_TRAITS(posixfs_open_object_traits, posixfs_open_t, base.object_link)
@@ -455,7 +444,7 @@ static NTSTATUS posixfs_set_end_of_file(
 	auto lock = std::lock_guard(posixfs_object->base.mutex);
 	x_smbd_break_others_to_none(&posixfs_object->base, sharemode,
 			posixfs_open->base.smbd_lease,
-			posixfs_open->get_oplock_level());
+			posixfs_open->base.get_oplock_level());
 
 	// TODO contend_level2_oplocks_begin(fsp, LEVEL2_CONTEND_SET_FILE_LEN);
 	if (posixfs_ads) {
@@ -1356,7 +1345,7 @@ NTSTATUS posixfs_object_op_write(
 		x_smbd_break_others_to_none(smbd_object,
 				x_smbd_open_get_sharemode(smbd_open),
 				posixfs_open->base.smbd_lease,
-				posixfs_open->get_oplock_level());
+				posixfs_open->base.get_oplock_level());
 
 		if (smbd_open->smbd_stream) {
 			posixfs_ads_t *ads = posixfs_ads_from_smbd_stream(smbd_open->smbd_stream);
