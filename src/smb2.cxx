@@ -527,3 +527,194 @@ uint32_t x_smb2_create_resp_context_encode(
 	}
 	return x_convert_assert<uint32_t>(p - out_ptr);
 }
+
+uint32_t x_smb2_create_requ_context_t::encode(uint8_t *out_ptr, uint32_t length) const
+{
+	uint8_t *p = out_ptr;
+	x_smb2_create_context_header_t *ch = nullptr;
+
+	if (bits & X_SMB2_CONTEXT_FLAG_RQLS) {
+		encode_context_one([this] (uint8_t *ptr) {
+				return encode_smb2_lease(this->lease, ptr);
+			}, ch, p, out_ptr, X_SMB2_CREATE_TAG_RQLS);
+	}
+
+	if (bits & X_SMB2_CREATE_TAG_QFID) {
+		encode_context_one([] (uint8_t *ptr) {
+				return 0;
+			}, ch, p, out_ptr, X_SMB2_CREATE_TAG_QFID);
+	}
+
+	if (bits & X_SMB2_CREATE_TAG_TWRP) {
+		encode_context_one([this] (uint8_t *ptr) {
+				*(uint64_t *)ptr = X_H2LE64(this->allocation_size);
+				return 8;
+			}, ch, p, out_ptr, X_SMB2_CREATE_TAG_TWRP);
+	}
+
+	if (bits & X_SMB2_CREATE_TAG_ALSI) {
+		encode_context_one([this] (uint8_t *ptr) {
+				*(uint64_t *)ptr = X_H2LE64(this->twrp);
+				return 8;
+			}, ch, p, out_ptr, X_SMB2_CREATE_TAG_ALSI);
+	}
+
+	if (bits & X_SMB2_CREATE_TAG_MXAC) {
+		encode_context_one([] (uint8_t *ptr) {
+				return 0;
+			}, ch, p, out_ptr, X_SMB2_CREATE_TAG_MXAC);
+	}
+
+	if (security_descriptor) {
+		encode_context_one([this] (uint8_t *ptr) {
+				std::vector<uint8_t> buf;
+				idl::x_ndr_off_t ret = idl::x_ndr_push(
+						*this->security_descriptor, buf, 0);
+				X_ASSERT(ret > 0);
+				memcpy(ptr, buf.data(), buf.size());
+				return x_convert_assert<uint32_t>(buf.size());
+			}, ch, p, out_ptr, X_SMB2_CREATE_TAG_SECD);
+	}
+
+	/* TODO X_SMB2_CREATE_TAG_EXTA */
+	if (bits & X_SMB2_CONTEXT_FLAG_DHNQ) {
+		encode_context_one([] (uint8_t *ptr) {
+				memset(ptr, 0, 16);
+				return 16;
+			}, ch, p, out_ptr, X_SMB2_CREATE_TAG_DHNQ);
+	}
+
+	if (bits & X_SMB2_CREATE_TAG_DHNC) {
+		encode_context_one([this] (uint8_t *ptr) {
+				uint64_t *data = (uint64_t *)ptr;
+				data[0] = X_H2LE64(this->dh_id_persistent);
+				data[1] = X_H2LE64(this->dh_id_volatile);
+				return 16;
+			}, ch, p, out_ptr, X_SMB2_CREATE_TAG_DHNC);
+	}
+
+	if (bits & X_SMB2_CREATE_TAG_DH2Q) {
+		encode_context_one([this] (uint8_t *ptr) {
+				x_smb2_create_dh2q_requ_t *dh2q = (x_smb2_create_dh2q_requ_t *)ptr;
+				dh2q->timeout = X_H2LE32(this->dh_timeout);
+				dh2q->flags = X_H2LE32(this->dh_flags);
+				dh2q->create_guid[0] = this->create_guid.data[0];
+				dh2q->create_guid[1] = this->create_guid.data[1];
+				return x_convert<uint32_t>(sizeof(x_smb2_create_dh2q_requ_t));
+			}, ch, p, out_ptr, X_SMB2_CREATE_TAG_DH2Q);
+	}
+
+	if (bits & X_SMB2_CREATE_TAG_DH2C) {
+		encode_context_one([this] (uint8_t *ptr) {
+				x_smb2_create_dh2c_requ_t *dh2c = (x_smb2_create_dh2c_requ_t *)ptr;
+				dh2c->file_id_persistent = X_H2LE64(this->dh_id_persistent);
+				dh2c->file_id_volatile = X_H2LE64(this->dh_id_volatile);
+				dh2c->create_guid[0] = this->create_guid.data[0];
+				dh2c->create_guid[1] = this->create_guid.data[1];
+				dh2c->flags = X_H2LE32(this->dh_flags);
+				return x_convert<uint32_t>(sizeof(x_smb2_create_dh2c_requ_t));
+			}, ch, p, out_ptr, X_SMB2_CREATE_TAG_DHNC);
+	}
+	/* TODO X_SMB2_CONTEXT_FLAG_APP_INSTANCE_ID, X_SMB2_CONTEXT_FLAG_APP_INSTANCE_VERSION */
+	if (ch) {
+		ch->chain_offset = 0;
+	}
+	return x_convert_assert<uint32_t>(p - out_ptr);
+}
+
+bool x_smb2_create_resp_context_t::decode(const uint8_t *data, uint32_t length)
+{
+	uint32_t in_contexts = 0;
+
+	for (;;) {
+		if (length < sizeof(x_smb2_create_context_header_t)) {
+			return false;
+		}
+
+		const x_smb2_create_context_header_t *ch = (const x_smb2_create_context_header_t *)data;
+		uint32_t chain_off = X_LE2H32(ch->chain_offset);
+		uint16_t tag_off = X_LE2H16(ch->tag_offset);
+		uint16_t tag_len = X_LE2H16(ch->tag_length); // we assume tag_len is 2 bytes
+		uint16_t data_off = X_LE2H16(ch->data_offset);
+		uint32_t data_len = X_LE2H32(ch->data_length);
+
+		uint32_t clen;
+		if (chain_off != 0) {
+			if (chain_off + 0x10 > length) {
+				return false;
+			}
+			clen = chain_off;
+		} else {
+			clen = length;
+		}
+
+		if (!x_check_range<uint32_t>(tag_off, tag_len, 0, clen)) {
+			return false;
+		}
+
+		if (!x_check_range<uint32_t>(data_off, data_len, 0, clen)) {
+			return false;
+		}
+
+		if (tag_len == 4) {
+			uint32_t tag = x_get_be32(data + tag_off);
+			if (tag == X_SMB2_CREATE_TAG_RQLS) {
+				if (decode_smb2_lease(lease,
+							data + data_off,
+							data_len)) {
+					in_contexts |= X_SMB2_CONTEXT_FLAG_RQLS;
+				}
+			} else if (tag == X_SMB2_CREATE_TAG_QFID) {
+				if (data_len != 32) {
+					return false;
+				}
+				memcpy(qfid_info, data + data_off, 32);
+				in_contexts |= X_SMB2_CONTEXT_FLAG_QFID;
+			} else if (tag == X_SMB2_CREATE_TAG_MXAC) {
+				if (data_len != 8) {
+					return false;
+				}
+				uint32_t *ptr = (uint32_t *)(data + data_off);
+				maximal_access = X_LE2H32(ptr[1]);
+				/* TODO ptr[0] is the status */
+				in_contexts |= X_SMB2_CONTEXT_FLAG_MXAC;
+			} else if (tag == X_SMB2_CREATE_TAG_DHNQ) {
+				/* MS-SMB2 2.2.13.2.3 ignore data content */
+				in_contexts |= X_SMB2_CONTEXT_FLAG_DHNQ;
+			} else if (tag == X_SMB2_CREATE_TAG_DH2Q) {
+				if (data_len != sizeof(x_smb2_create_dh2q_resp_t)) {
+					return false;
+				}
+				const x_smb2_create_dh2q_resp_t *dn2q = (const x_smb2_create_dh2q_resp_t *)(data + data_off);
+				durable_timeout_msec = X_LE2H32(dn2q->timeout);
+				durable_flags = X_LE2H32(dn2q->flags);
+				in_contexts |= X_SMB2_CONTEXT_FLAG_DH2Q;
+			} else {
+				X_LOG(SMB, WARN, "unknown create context 0x%x", tag);
+			}
+
+		} else {
+			/* ignore */
+			X_LOG(SMB, WARN, "unknown create context tag_len=%d", tag_len);
+		}
+
+		data += clen;
+		length -= clen;
+
+		if (length == 0) {
+			break;
+		}
+	}
+
+	bits = in_contexts;
+	return true;
+};
+
+uint32_t x_smb2_create_resp_context_t::encode(uint8_t *out_ptr, uint32_t length) const
+{
+	return x_smb2_create_resp_context_encode(out_ptr,
+			(bits & X_SMB2_CONTEXT_FLAG_RQLS) ? &lease : nullptr,
+			(bits & X_SMB2_CONTEXT_FLAG_MXAC) ? &maximal_access : nullptr,
+			(bits & X_SMB2_CONTEXT_FLAG_QFID) ? qfid_info : nullptr,
+			bits, durable_flags, durable_timeout_msec);
+}

@@ -1544,6 +1544,20 @@ struct x_smb2_create_requ_context_t
 	std::shared_ptr<idl::security_descriptor> security_descriptor;
 
 	bool decode(uint16_t dialect, const uint8_t *data, uint32_t length);
+	uint32_t encode(uint8_t *data, uint32_t length) const;
+};
+
+struct x_smb2_create_resp_context_t
+{
+	uint32_t bits = 0;
+	x_smb2_lease_t lease;
+	uint8_t qfid_info[32];
+	uint32_t maximal_access;
+	uint32_t durable_flags;
+	uint32_t durable_timeout_msec;
+
+	bool decode(const uint8_t *data, uint32_t length);
+	uint32_t encode(uint8_t *data, uint32_t length) const;
 };
 
 uint32_t x_smb2_create_resp_context_encode(
