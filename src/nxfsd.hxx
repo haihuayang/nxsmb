@@ -317,6 +317,8 @@ struct x_nxfsd_requ_state_open_t : x_nxfsd_requ_state_async_t
 
 	uint32_t valid_flags = 0;
 	x_smb2_create_requ_context_t in_context;
+
+	std::shared_ptr<x_smbd_user_t> smbd_user;
 };
 
 #endif /* __nxfsd__hxx__ */
