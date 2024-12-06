@@ -241,6 +241,10 @@ static void smb2_create_success(x_smbd_conn_t *smbd_conn,
 		state.replay_reserved = false;
 	}
 
+	if (smbd_open->id_persistent == 0xffffffffu) {
+		auto &smbd_volume = *smbd_open->smbd_object->smbd_volume;
+		smbd_open->id_persistent = x_smbd_volume_non_durable_id(smbd_volume);
+	}
 	x_smbd_save_durable(smbd_open, smbd_requ->smbd_tcon, state);
 
 	auto &open_state = smbd_requ->base.smbd_open->open_state;

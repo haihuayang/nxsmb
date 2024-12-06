@@ -145,6 +145,24 @@ std::shared_ptr<x_smbd_volume_t> x_smbd_volume_create(
 NTSTATUS x_smbd_volume_get_fd_path(std::string &ret,
 		const x_smbd_volume_t &smbd_volumen,
 		int fd);
+
+/*  id_persistent is in 0xVVVVRRRRDDDDDDDD
+ *  the upper 16 bit VVVV is volume_id
+ *  followed by 16 bit RRRR is a random number
+ *  the lower 32 bit DDDDDDDD is the durable slot id
+ *  durable slot id 0xffffffff is reserved for non-durable, assume number of
+ *	slots is less than 2^32 -1
+ *  id_persistent 0xffffffff is reserved for non-initialized,
+ *	assume volume_id never be 0
+ */
+static inline uint64_t x_smbd_volume_non_durable_id(const x_smbd_volume_t &smbd_volume)
+{
+	return (uint64_t)smbd_volume.volume_id << 48 | 0xfffffffful;
+}
+static inline bool x_smbd_is_non_durable_id(uint64_t id)
+{
+	return (id & 0xfffffffful) == 0xfffffffful;
+}
 int x_smbd_volume_allocate_persistent(x_smbd_volume_t &smbd_volume,
 		uint64_t *p_id_persistent, uint64_t id_volatile);
 int x_smbd_volume_save_durable(x_smbd_volume_t &smbd_volume,

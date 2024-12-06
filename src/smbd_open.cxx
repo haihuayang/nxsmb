@@ -1645,7 +1645,7 @@ void x_smbd_save_durable(x_smbd_open_t *smbd_open,
 	}
 
 	auto &smbd_volume = *smbd_open->smbd_object->smbd_volume;
-	if (smbd_open->id_persistent == X_SMBD_OPEN_ID_NON_DURABLE) {
+	if (x_smbd_is_non_durable_id(smbd_open->id_persistent)) {
 		int ret = x_smbd_volume_allocate_persistent(
 				smbd_volume,
 				&smbd_open->id_persistent,

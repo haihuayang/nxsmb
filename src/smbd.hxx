@@ -98,10 +98,6 @@ struct x_smbd_key_set_t
 };
 
 
-enum {
-	X_SMBD_OPEN_ID_NON_DURABLE = 0xfffffffeu, // resolve id for non durable
-};
-
 struct x_smbd_open_state_t
 {
 	enum {

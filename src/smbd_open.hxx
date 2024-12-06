@@ -94,7 +94,7 @@ struct x_smbd_open_t
 	x_smbd_object_t * const smbd_object;
 	x_smbd_stream_t * const smbd_stream; // not null if it is ADS
 	x_smbd_tcon_t * smbd_tcon = nullptr;
-	uint64_t id_persistent = X_SMBD_OPEN_ID_NON_DURABLE;
+	uint64_t id_persistent = 0xffffffffu;
 	uint64_t id_volatile;
 	x_timer_job_t durable_timer;
 
