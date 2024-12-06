@@ -161,28 +161,7 @@ x_smbd_tcon_t *x_smbd_tcon_lookup(uint32_t id, const x_smbd_sess_t *smbd_sess)
 		return nullptr;
 	}
 }
-#if 0
-NTSTATUS x_smbd_tcon_resolve_path(x_smbd_tcon_t *smbd_tcon,
-		const std::u16string &in_path,
-		bool dfs,
-		std::shared_ptr<x_smbd_share_t> &smbd_share,
-		std::shared_ptr<x_smbd_volume_t> &smbd_volume,
-		std::u16string &path,
-		long &path_priv_data,
-		long &open_priv_data)
-{
-	NTSTATUS status = smbd_tcon->smbd_share->resolve_path(
-			smbd_volume, path, path_priv_data, open_priv_data,
-			dfs,
-			in_path.data(),
-			in_path.data() + in_path.length(),
-			smbd_tcon->smbd_volume);
-	if (NT_STATUS_IS_OK(status)) {
-		smbd_share = smbd_tcon->smbd_share;
-	}
-	return status;
-}
-#endif
+
 static inline void smbd_tcon_unlink_open(x_smbd_tcon_t *smbd_tcon, x_dlink_t *link)
 {
 	smbd_tcon->open_list.remove(link);

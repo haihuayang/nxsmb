@@ -129,7 +129,6 @@ static uint8_t *encode_durable(void *p,
 	PUSH_LE64(ptr, open_state.app_instance_version_high);
 	PUSH_LE64(ptr, open_state.app_instance_version_low);
 	PUSH_UUID(ptr, open_state.parent_lease_key);
-	PUSH_LE64(ptr, open_state.priv_data);
 
 	PUSH_SID(ptr, open_state.owner);
 	PUSH_LE32(ptr, open_state.flags);
@@ -211,7 +210,6 @@ static std::unique_ptr<x_smbd_durable_t> decode_durable(const void *data, size_t
 	uint64_t app_instance_version_high = PULL_LE64(ptr);
 	uint64_t app_instance_version_low = PULL_LE64(ptr);
 	x_smb2_uuid_t parent_lease_key = PULL_UUID(ptr);
-	uint64_t priv_data = PULL_LE64(ptr);
 
 	idl::dom_sid owner;
 	if (ptr + 8 > end) {
@@ -274,7 +272,6 @@ static std::unique_ptr<x_smbd_durable_t> decode_durable(const void *data, size_t
 				app_instance_version_high,
 				app_instance_version_low,
 				parent_lease_key,
-				(long)priv_data,
 				owner,
 				flags,
 				channel_sequence,

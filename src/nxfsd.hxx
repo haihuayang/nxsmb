@@ -308,7 +308,6 @@ struct x_nxfsd_requ_state_open_t : x_nxfsd_requ_state_async_t
 	x_smbd_stream_t *smbd_stream{};
 	x_smbd_lease_t *smbd_lease{};
 	std::shared_ptr<x_smbd_share_t> smbd_share;
-	long open_priv_data;
 
 	uint32_t valid_flags = 0;
 	x_smb2_create_requ_context_t in_context;

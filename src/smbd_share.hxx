@@ -94,14 +94,6 @@ struct x_smbd_share_t
 			const char16_t *in_server_end,
 			const char16_t *in_share_begin,
 			const char16_t *in_share_end) const = 0;
-	virtual NTSTATUS resolve_path(std::shared_ptr<x_smbd_volume_t> &smbd_volume,
-			std::u16string &out_path,
-			long &path_priv_data,
-			long &open_priv_data,
-			bool dfs,
-			const char16_t *in_path_begin,
-			const char16_t *in_path_end,
-			const std::shared_ptr<x_smbd_volume_t> &tcon_volume) = 0;
 	virtual std::shared_ptr<x_smbd_volume_t> find_volume(
 			const char16_t *in_share_s, const char16_t *in_share_e)
 			const = 0;

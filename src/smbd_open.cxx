@@ -1424,7 +1424,7 @@ NTSTATUS x_smbd_open_create(
 
 	NTSTATUS status;
 	auto smbd_user = smbd_requ->base.smbd_user;
-	uint32_t granted_access, maximal_access = 0;
+	uint32_t granted_access = 0, maximal_access = 0;
 	if (smbd_object->exists()) {
 		status = x_smbd_object_access_check(smbd_object,
 				granted_access,
@@ -1687,47 +1687,42 @@ void x_smbd_save_durable(x_smbd_open_t *smbd_open,
 NTSTATUS x_smbd_open_op_create(x_smbd_requ_t *smbd_requ,
 		x_smbd_requ_state_create_t &state)
 {
-	X_TRACE_LOC;
 	if (!x_smbd_open_has_space()) {
 		X_LOG(SMB, WARN, "too many opens, cannot allocate new");
 		X_NXFSD_COUNTER_INC(smbd_toomany_open, 1);
 		return NT_STATUS_INSUFFICIENT_RESOURCES;
 	}
 
-	NTSTATUS status;
-	x_smbd_tcon_t *smbd_tcon = smbd_requ->smbd_tcon;
+	bool attempt_create = false;
+	if (state.in_create_disposition == x_smb2_create_disposition_t::CREATE ||
+			state.in_create_disposition == x_smb2_create_disposition_t::OPEN_IF ||
+			state.in_create_disposition == x_smb2_create_disposition_t::SUPERSEDE ||
+			state.in_create_disposition == x_smb2_create_disposition_t::OVERWRITE_IF) {
+		attempt_create = true;
+	} else if (state.in_create_disposition != x_smb2_create_disposition_t::OPEN &&
+			state.in_create_disposition != x_smb2_create_disposition_t::OVERWRITE) {
+		return NT_STATUS_INVALID_PARAMETER;
+	}
 
-	if (!state.smbd_object) {
-		long path_priv_data{};
-		long open_priv_data{};
-
-		state.smbd_share = x_smbd_tcon_get_share(smbd_requ->smbd_tcon);
-#if 0
-		status = x_smbd_tcon_resolve_path(smbd_requ->smbd_tcon,
-				state.in_path,
-				smbd_requ->in_smb2_hdr.flags & X_SMB2_HDR_FLAG_DFS,
-				state.smbd_share, path,
-				path_priv_data, open_priv_data);
-		if (!NT_STATUS_IS_OK(status)) {
-			X_LOG(SMB, WARN, "resolve_path failed");
-			return status;
+	NTSTATUS status = NT_STATUS_OK;
+	while (*state.unresolved_path) {
+		const char16_t *sep = state.unresolved_path;
+		while (*sep && *sep != u'\\') {
+			++sep;
 		}
-
-		X_LOG(SMB, DBG, "resolve_path(%s) to %s, %ld, %ld",
-				x_str_todebug(state.in_path).c_str(),
-				x_str_todebug(path).c_str(),
-				path_priv_data, open_priv_data);
-#endif
+		std::u16string next_comp{state.unresolved_path, sep};
 		x_smbd_object_t *smbd_object = nullptr;
-		status = x_smbd_open_object(&smbd_object,
-				state.smbd_share, state.in_path,
-				path_priv_data, true);
-		if (!NT_STATUS_IS_OK(status)) {
+		status = x_smbd_open_object_at(&smbd_object,
+				smbd_requ,
+				state.smbd_object, next_comp,
+				(!*sep), attempt_create);
+		if (!status.ok()) {
 			return status;
 		}
 
+		x_smbd_release_object(state.smbd_object);
 		state.smbd_object = smbd_object;
-		state.open_priv_data = open_priv_data;
+		state.unresolved_path = (*sep) ? (sep + 1) : sep;
 	}
 
 	x_smbd_open_t *smbd_open = nullptr;
@@ -1735,7 +1730,7 @@ NTSTATUS x_smbd_open_op_create(x_smbd_requ_t *smbd_requ,
 	status = state.smbd_object->smbd_volume->ops->create_open(&smbd_open,
 			smbd_requ, state);
 
-	if (!NT_STATUS_IS_OK(status)) {
+	if (!status.ok()) {
 		X_ASSERT(!smbd_open);
 		return status;
 	}
@@ -1746,6 +1741,7 @@ NTSTATUS x_smbd_open_op_create(x_smbd_requ_t *smbd_requ,
 	 * link into smbd_tcon, probably we should call x_smbd_open_store in the last
 	 */
 	bool linked = false;
+	x_smbd_tcon_t *smbd_tcon = smbd_requ->smbd_tcon;
 	{
 		auto lock = state.smbd_object->lock();
 		if (smbd_open->state == SMBD_OPEN_S_INIT &&

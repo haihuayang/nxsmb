@@ -1531,7 +1531,7 @@ struct x_smb2_create_requ_context_t
 {
 	uint32_t bits = 0;
 	x_smb2_lease_t lease;
-	uint64_t allocation_size;
+	uint64_t allocation_size = 0;
 	uint64_t twrp = 0;
 	uint64_t dh_id_persistent;
 	uint64_t dh_id_volatile;

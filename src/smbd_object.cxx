@@ -203,10 +203,9 @@ static inline uint64_t hash_file_handle(const x_smbd_file_handle_t &fh)
 			fh.base.handle_bytes, 0);
 }
 
-static NTSTATUS smbd_object_initialize_if(x_smbd_volume_t &smbd_volume,
+static bool smbd_object_initialize_if(x_smbd_volume_t &smbd_volume,
 		x_smbd_object_t *smbd_object)
 {
-	NTSTATUS status = NT_STATUS_OK;
 	auto lock = std::lock_guard(smbd_object->mutex);
 	if (!(smbd_object->flags & x_smbd_object_t::flag_initialized)) {
 		if (smbd_volume.ops->initialize_object(smbd_object)) {
@@ -217,7 +216,7 @@ static NTSTATUS smbd_object_initialize_if(x_smbd_volume_t &smbd_volume,
 			}
 		}
 	}
-	return status;
+	return smbd_object->type != x_smbd_object_t::type_not_exist;
 }
 
 static NTSTATUS smbd_object_openat(
@@ -242,11 +241,7 @@ static NTSTATUS smbd_object_openat(
 		return status;
 	}
 
-	status = smbd_object_initialize_if(*smbd_volume, smbd_object);
-	if (!NT_STATUS_IS_OK(status)) {
-		x_smbd_release_object(smbd_object);
-		return status;
-	}
+	smbd_object_initialize_if(*smbd_volume, smbd_object);
 	*p_smbd_object = smbd_object;
 	return NT_STATUS_OK;
 }
@@ -325,29 +320,19 @@ NTSTATUS x_smbd_open_object(x_smbd_object_t **p_smbd_object,
 		return status;
 	}
 
-	status = smbd_object_initialize_if(*parent_object->smbd_volume, smbd_object);
+	smbd_object_initialize_if(*parent_object->smbd_volume, smbd_object);
 
-	if (!NT_STATUS_IS_OK(status)) {
-		x_smbd_release_object(smbd_object);
-		return status;
-	}
 	*p_smbd_object = smbd_object;
 	return status;
 }
 
 NTSTATUS x_smbd_open_object_at(x_smbd_object_t **p_smbd_object,
-		const std::shared_ptr<x_smbd_share_t> &smbd_share,
+		x_smbd_requ_t *smbd_requ,
 		x_smbd_object_t *parent_object,
 		const std::u16string &path_base,
-		bool create_if)
+		bool last_comp,
+		bool attempt_create)
 {
-	if (path_base.empty()) {
-		X_ASSERT(!parent_object);
-		smbd_share->root_object->incref();
-		*p_smbd_object = smbd_share->root_object;
-		return NT_STATUS_OK;
-	}
-
 	if (parent_object->type != x_smbd_object_t::type_dir) {
 		return NT_STATUS_OBJECT_PATH_NOT_FOUND;
 	}
@@ -362,17 +347,23 @@ NTSTATUS x_smbd_open_object_at(x_smbd_object_t **p_smbd_object,
 	x_smbd_object_t *smbd_object;
 	NTSTATUS status = x_smbd_object_lookup(&smbd_object, parent_object->smbd_volume,
 			parent_object, path_base,
-			0, create_if, path_hash, true);
+			0, true, path_hash, true);
 	if (!NT_STATUS_IS_OK(status)) {
 		return status;
 	}
 
-	status = smbd_object_initialize_if(*parent_object->smbd_volume, smbd_object);
-
-	if (!NT_STATUS_IS_OK(status)) {
-		x_smbd_release_object(smbd_object);
-		return status;
+	if (!smbd_object_initialize_if(*parent_object->smbd_volume, smbd_object)) {
+		if (last_comp) {
+			if (!attempt_create) {
+				x_smbd_release_object(smbd_object);
+				return NT_STATUS_OBJECT_NAME_NOT_FOUND;
+			}
+		} else {
+			x_smbd_release_object(smbd_object);
+			return NT_STATUS_OBJECT_PATH_NOT_FOUND;
+		}
 	}
+
 	*p_smbd_object = smbd_object;
 	return status;
 }

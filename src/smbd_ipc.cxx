@@ -918,7 +918,6 @@ static NTSTATUS ipc_op_create_open(x_smbd_open_t **psmbd_open,
 		return NT_STATUS_OBJECT_NAME_INVALID;
 	}
 
-	X_ASSERT(state.open_priv_data == 0);
 #if 0
 	X_ASSERT(oplock_level == X_SMB2_OPLOCK_LEVEL_NONE);
 	X_ASSERT(create_action == x_smb2_create_action_t::WAS_OPENED);
@@ -940,7 +939,6 @@ static NTSTATUS ipc_op_create_open(x_smbd_open_t **psmbd_open,
 				state.in_context.app_instance_version_high,
 				state.in_context.app_instance_version_low,
 				state.in_context.lease.parent_key,
-				0l,
 				smbd_requ->base.smbd_user->get_owner_sid(),
 				state.valid_flags,
 				0,
@@ -1091,7 +1089,6 @@ static const x_smbd_object_ops_t x_smbd_ipc_object_ops = {
 	ipc_object_op_update_mtime,
 	nullptr, // op_qdir_create
 	nullptr, // op_set_delete_on_close
-	nullptr, // notify_fname
 	ipc_op_delete_object,
 	ipc_op_lease_granted,
 	ipc_op_init_volume,
@@ -1148,21 +1145,6 @@ struct ipc_share_t : x_smbd_share_t
 		return false;
 	}
 
-	NTSTATUS resolve_path(std::shared_ptr<x_smbd_volume_t> &smbd_volume,
-			std::u16string &out_path,
-			long &path_priv_data,
-			long &open_priv_data,
-			bool dfs,
-			const char16_t *in_path_begin,
-			const char16_t *in_path_end,
-			const std::shared_ptr<x_smbd_volume_t> &tcon_volume) override
-	{
-		smbd_volume = this->smbd_volume;
-		out_path.assign(in_path_begin, in_path_end);
-		path_priv_data = 0;
-		open_priv_data = 0;
-		return NT_STATUS_OK;
-	}
 	NTSTATUS get_dfs_referral(x_dfs_referral_resp_t &dfs_referral,
 			const char16_t *in_full_path_begin,
 			const char16_t *in_full_path_end,

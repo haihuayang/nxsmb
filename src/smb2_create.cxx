@@ -370,7 +370,10 @@ static NTSTATUS smb2_process_create(x_smbd_requ_t *smbd_requ,
 		}
 	}
 
-	if (!x_smbd_tcon_access_check(smbd_requ->smbd_tcon, state->in_desired_access & ~idl::SEC_FLAG_MAXIMUM_ALLOWED)) {
+	x_smbd_tcon_t *smbd_tcon = smbd_requ->smbd_tcon;
+
+	if (!x_smbd_tcon_access_check(smbd_tcon,
+				state->in_desired_access & ~idl::SEC_FLAG_MAXIMUM_ALLOWED)) {
 		X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_ACCESS_DENIED);
 	}
 
@@ -387,6 +390,11 @@ static NTSTATUS smb2_process_create(x_smbd_requ_t *smbd_requ,
 		state->smbd_lease = x_smbd_lease_find(state->client_guid,
 				state->in_context.lease, true);
 	}
+
+	state->smbd_share = x_smbd_tcon_get_share(smbd_tcon);
+	state->smbd_object = state->smbd_share->root_object;
+	state->smbd_object->incref();
+	state->unresolved_path = state->in_path.c_str();
 
 	NTSTATUS status = x_smbd_open_op_create(smbd_requ, *state);
 	if (status == NT_STATUS_PENDING) {

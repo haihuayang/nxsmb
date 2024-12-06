@@ -190,17 +190,6 @@ struct x_smbd_object_ops_t
 	NTSTATUS (*set_delete_on_close)(x_smbd_object_t *smbd_object,
 			x_smbd_open_t *smbd_open,
 			bool delete_on_close);
-	void (*notify_change)(const std::shared_ptr<x_smbd_volume_t> &smbd_volume,
-			const std::u16string &path,
-			const std::u16string &fullpath,
-			const std::u16string *new_fullpath,
-			uint32_t notify_action,
-			uint32_t notify_filter,
-			const x_smb2_lease_key_t &ignore_lease_key,
-			const x_smb2_uuid_t &client_guid,
-			bool last_level);
-	// void (*destroy)(x_smbd_object_t *smbd_object, x_smbd_open_t *smbd_open);
-	// void (*release_object)(x_smbd_object_t *smbd_object, x_smbd_stream_t *smbd_stream);
 	NTSTATUS (*delete_object)(x_smbd_object_t *smbd_object,
 			x_smbd_stream_t *smbd_stream,
 			x_smbd_open_t *smbd_open);
@@ -660,6 +649,13 @@ NTSTATUS x_smbd_open_object_at(x_smbd_object_t **p_smbd_object,
 		x_smbd_object_t *parent_object,
 		const std::u16string &path_base,
 		bool create_if);
+
+NTSTATUS x_smbd_open_object_at(x_smbd_object_t **p_smbd_object,
+		x_smbd_requ_t *smbd_requ,
+		x_smbd_object_t *parent_object,
+		const std::u16string &path_base,
+		bool last_comp,
+		bool attempt_create);
 
 NTSTATUS x_smbd_object_rename(x_smbd_object_t *smbd_object,
 		x_smbd_open_t *smbd_open,

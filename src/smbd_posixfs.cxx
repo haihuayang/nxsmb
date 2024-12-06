@@ -740,7 +740,6 @@ static posixfs_open_t *posixfs_open_create(
 				state.in_context.app_instance_version_high,
 				state.in_context.app_instance_version_low,
 				state.in_context.lease.parent_key,
-				state.open_priv_data,
 				x_smbd_user_get_owner_sid(smbd_user),
 				valid_flags,
 				0,
@@ -2609,12 +2608,11 @@ NTSTATUS x_smbd_posixfs_create_object(x_smbd_object_t *smbd_object,
 		uint32_t file_attributes,
 		uint64_t allocation_size)
 {
-	NTSTATUS status;
 	posixfs_object_t *posixfs_object = posixfs_object_from_base_t::container(smbd_object);
 	std::shared_ptr<idl::security_descriptor> psd;
 	uint32_t create_count = 0;
 	if (!posixfs_object->exists()) {
-		status = posixfs_new_object(posixfs_object, smbd_user,
+		NTSTATUS status = posixfs_new_object(posixfs_object, smbd_user,
 				state, file_attributes,
 				allocation_size, psd);
 		if (!NT_STATUS_IS_OK(status)) {
@@ -2659,7 +2657,7 @@ NTSTATUS x_smbd_posixfs_create_object(x_smbd_object_t *smbd_object,
 
 	X_ASSERT(create_count > 0);
 	posixfs_access_check_new(*psd, smbd_user, state);
-	return status;
+	return NT_STATUS_OK;
 }
 
 static uint32_t filter_attributes(uint32_t new_attr, uint32_t curr_attr)

@@ -105,7 +105,6 @@ static const x_smbd_object_ops_t simplefs_object_ops = {
 	posixfs_object_op_update_mtime,
 	simplefs_op_qdir_create,
 	posixfs_object_op_set_delete_on_close,
-	x_smbd_simple_notify_change,
 	posixfs_op_object_delete,
 	x_smbd_posixfs_op_lease_granted,
 	posixfs_op_init_volume,
@@ -144,14 +143,6 @@ struct simplefs_share_t : x_smbd_share_t
 	}
 	bool is_dfs() const override { return false; }
 
-	NTSTATUS resolve_path(std::shared_ptr<x_smbd_volume_t> &smbd_volume,
-			std::u16string &out_path,
-			long &path_priv_data,
-			long &open_priv_data,
-			bool dfs,
-			const char16_t *in_path_begin,
-			const char16_t *in_path_end,
-			const std::shared_ptr<x_smbd_volume_t> &tcon_volume) override;
 	NTSTATUS get_dfs_referral(x_dfs_referral_resp_t &dfs_referral,
 			const char16_t *in_full_path_begin,
 			const char16_t *in_full_path_end,
@@ -176,25 +167,6 @@ struct simplefs_share_t : x_smbd_share_t
 
 	std::vector<std::shared_ptr<x_smbd_volume_t>> smbd_volumes;
 };
-
-NTSTATUS simplefs_share_t::resolve_path(
-		std::shared_ptr<x_smbd_volume_t> &smbd_volume,
-		std::u16string &out_path,
-		long &path_priv_data,
-		long &open_priv_data,
-		bool dfs,
-		const char16_t *in_path_begin,
-		const char16_t *in_path_end,
-		const std::shared_ptr<x_smbd_volume_t> &tcon_volume)
-{
-	out_path.assign(in_path_begin, in_path_end);
-#if 0
-	smbd_volume = this->smbd_volume;
-	path_priv_data = 0;
-	open_priv_data = 0;
-#endif
-	return NT_STATUS_OK;
-}
 
 std::shared_ptr<x_smbd_share_t> x_smbd_simplefs_share_create(
 		const std::string &node_name,

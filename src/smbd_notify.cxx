@@ -41,8 +41,7 @@ static void x_smbd_object_notify_change(x_smbd_object_t *smbd_object,
 		const x_smb2_lease_key_t &ignore_lease_key,
 		const x_smb2_uuid_t &client_guid,
 		bool recursive,
-		bool last_level,
-		long open_priv_data)
+		bool last_level)
 {
 	/* TODO change to read lock */
 	auto lock = std::lock_guard(smbd_object->mutex);
@@ -51,10 +50,6 @@ static void x_smbd_object_notify_change(x_smbd_object_t *smbd_object,
 	int count = 0;
 	for (curr_open = open_list.get_front(); curr_open; curr_open = open_list.next(curr_open)) {
 		++count;
-		if (curr_open->open_state.priv_data != open_priv_data) {
-			continue;
-		}
-
 		if (last_level && curr_open->smbd_lease) {
 			x_smbd_open_break_lease(curr_open, &ignore_lease_key, &client_guid,
 					X_SMB2_LEASE_ALL, 0, nullptr, false);
@@ -106,62 +101,6 @@ static void x_smbd_object_notify_change(x_smbd_object_t *smbd_object,
 	}
 }
 
-void x_smbd_simple_notify_change(
-		const std::shared_ptr<x_smbd_volume_t> &smbd_volume,
-		const std::u16string &path,
-		const std::u16string &fullpath,
-		const std::u16string *new_fullpath,
-		uint32_t notify_action,
-		uint32_t notify_filter,
-		const x_smb2_lease_key_t &ignore_lease_key,
-		const x_smb2_uuid_t &client_guid,
-		bool last_level)
-{
-	X_TODO;
-	/* decide later if we need the op_notify_change, previous it is for the dfs */
-#if 0
-	x_smbd_object_t *smbd_object = nullptr;
-	NTSTATUS status = x_smbd_open_object(&smbd_object,
-			smbd_volume, path, 0, false);
-	if (!NT_STATUS_IS_OK(status)) {
-		X_LOG(SMB, DBG, "skip notify %d,x%x '%s', '%s'", notify_action,
-				notify_filter,
-				x_str_todebug(path).c_str(),
-				x_str_todebug(fullpath).c_str());
-		return;
-	}
-
-	X_ASSERT(smbd_object);
-	X_LOG(SMB, DBG, "notify object %d,x%x '%s', '%s'", notify_action,
-			notify_filter,
-			x_str_todebug(path).c_str(),
-			x_str_todebug(fullpath).c_str());
-	x_smbd_object_notify_change(smbd_object, notify_action, notify_filter,
-			path.empty() ? 0: x_convert<uint32_t>(path.length() + 1),
-			fullpath, new_fullpath,
-			ignore_lease_key, client_guid,
-			last_level, 0);
-
-	x_smbd_release_object(smbd_object);
-#endif
-}
-#if 0
-static void notify_one_level(const std::shared_ptr<x_smbd_volume_t> &smbd_volume,
-		const std::u16string &path,
-		const std::u16string &fullpath,
-		const std::u16string *new_fullpath,
-		uint32_t notify_action,
-		uint32_t notify_filter,
-		const x_smb2_lease_key_t &ignore_lease_key,
-		const x_smb2_uuid_t &client_guid,
-		bool last_level)
-{
-	smbd_volume->ops->notify_change(smbd_volume, path, fullpath, new_fullpath,
-			notify_action, notify_filter,
-			ignore_lease_key, client_guid, last_level);
-}
-#endif
-
 void x_smbd_notify_change(
 		x_smbd_object_t *smbd_object,
 		uint32_t action,
@@ -181,8 +120,7 @@ void x_smbd_notify_change(
 			ignore_lease_key,
 			client_guid,
 			recursive,
-			true,
-			0);
+			true);
 
 	for (; parent_object; ) {
 		smbd_object = parent_object;
@@ -195,8 +133,7 @@ void x_smbd_notify_change(
 				ignore_lease_key,
 				client_guid,
 				true,
-				false,
-				0);
+				false);
 		x_smbd_release_object(smbd_object);
 	}
 }

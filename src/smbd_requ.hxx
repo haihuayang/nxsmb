@@ -224,6 +224,7 @@ struct x_smbd_requ_state_create_t : x_nxfsd_requ_state_open_t
 	void async_done(void *ctx_conn, x_nxfsd_requ_t *nxfsd_requ,
 			NTSTATUS status) override;
 	NTSTATUS resume(void *ctx_conn, x_nxfsd_requ_t *nxfsd_requ) override;
+	const char16_t *unresolved_path;
 };
 
 struct x_smbd_requ_state_sesssetup_t : x_nxfsd_requ_state_async_t

@@ -113,7 +113,6 @@ struct x_smbd_open_state_t
 	const uint64_t app_instance_version_high;
 	const uint64_t app_instance_version_low;
 	const x_smb2_lease_key_t parent_lease_key;
-	const long priv_data;
 
 	const idl::dom_sid owner;
 
@@ -308,14 +307,6 @@ bool x_smbd_tcon_unlink_open(x_smbd_tcon_t *smbd_tcon, x_dlink_t *link);
 bool x_smbd_tcon_disconnect(x_smbd_tcon_t *smbd_tcon);
 void x_smbd_tcon_unlinked(x_dlink_t *link, x_smbd_sess_t *smbd_sess, bool shutdown);
 std::u16string x_smbd_tcon_get_volume_label(const x_smbd_tcon_t *smbd_tcon);
-NTSTATUS x_smbd_tcon_resolve_path(x_smbd_tcon_t *smbd_tcon,
-		const std::u16string &in_path,
-		bool dfs,
-		std::shared_ptr<x_smbd_share_t> &smbd_share,
-		std::shared_ptr<x_smbd_volume_t> &smbd_volume,
-		std::u16string &path,
-		long &path_priv_data,
-		long &open_priv_data);
 
 
 
@@ -326,13 +317,6 @@ int x_smbd_posixfs_init(size_t max_open);
 int x_smbd_ipc_init();
 
 
-
-NTSTATUS x_smbd_dfs_resolve_path(
-		const std::shared_ptr<x_smbd_share_t> &smbd_share,
-		const std::u16string &in_path,
-		bool dfs,
-		std::shared_ptr<x_smbd_volume_t> &smbd_volume,
-		std::u16string &path);
 
 void x_smb2_send_lease_break(x_smbd_conn_t *smbd_conn, x_smbd_sess_t *smbd_sess,
 		const x_smb2_lease_key_t *lease_key,
@@ -404,16 +388,6 @@ void x_smbd_notify_change(
 		const x_smb2_uuid_t &client_guid,
 		std::u16string &path_base,
 		std::u16string &new_path_base);
-
-void x_smbd_simple_notify_change(const std::shared_ptr<x_smbd_volume_t> &smbd_volume,
-		const std::u16string &path,
-		const std::u16string &fullpath,
-		const std::u16string *new_fullpath,
-		uint32_t notify_action,
-		uint32_t notify_filter,
-		const x_smb2_lease_key_t &ignore_lease_key,
-		const x_smb2_uuid_t &client_guid,
-		bool last_level);
 
 void x_smbd_schedule_async(x_job_t *job);
 
