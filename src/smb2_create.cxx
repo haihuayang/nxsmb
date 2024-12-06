@@ -283,7 +283,7 @@ NTSTATUS x_smbd_requ_state_create_t::resume(void *ctx_conn,
 		x_nxfsd_requ_t *nxfsd_requ)
 {
 	auto smbd_requ = x_smbd_requ_from_base(nxfsd_requ);
-	return x_smbd_open_op_create(smbd_requ, *this);
+	return x_smbd_open_op_create(nxfsd_requ, smbd_requ->smbd_tcon, *this);
 }
 
 static bool oplock_valid_for_durable(const x_smbd_requ_state_create_t &state)
@@ -396,7 +396,7 @@ static NTSTATUS smb2_process_create(x_smbd_requ_t *smbd_requ,
 	state->smbd_object->incref();
 	state->unresolved_path = state->in_path.c_str();
 
-	NTSTATUS status = x_smbd_open_op_create(smbd_requ, *state);
+	NTSTATUS status = x_smbd_open_op_create(&smbd_requ->base, smbd_tcon, *state);
 	if (status == NT_STATUS_PENDING) {
 		/* TODO does it need a timer? can break timer always wake up it? */
 		X_SMBD_REQU_LOG(DBG, smbd_requ, " interim_state %d",

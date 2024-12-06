@@ -907,7 +907,8 @@ static NTSTATUS ipc_create_object(x_smbd_object_t *smbd_object,
 }
 
 static NTSTATUS ipc_op_create_open(x_smbd_open_t **psmbd_open,
-		x_smbd_requ_t *smbd_requ,
+		x_nxfsd_requ_t *nxfsd_requ,
+		x_smbd_tcon_t *smbd_tcon,
 		x_smbd_requ_state_create_t &state)
 {
 	if (state.in_ads_name.size() > 0 || state.is_dollar_data) {
@@ -929,7 +930,7 @@ static NTSTATUS ipc_op_create_open(x_smbd_open_t **psmbd_open,
 
 	x_smbd_ipc_object_t *ipc_object = from_smbd_object(state.smbd_object);
 	named_pipe_t *named_pipe = new named_pipe_t(&ipc_object->base,
-			smbd_requ->smbd_tcon,
+			smbd_tcon,
 			x_smbd_open_state_t{
 				state.in_desired_access,
 				state.in_share_access,
@@ -939,7 +940,7 @@ static NTSTATUS ipc_op_create_open(x_smbd_open_t **psmbd_open,
 				state.in_context.app_instance_version_high,
 				state.in_context.app_instance_version_low,
 				state.in_context.lease.parent_key,
-				smbd_requ->base.smbd_user->get_owner_sid(),
+				nxfsd_requ->smbd_user->get_owner_sid(),
 				state.valid_flags,
 				0,
 				x_smb2_create_action_t::WAS_OPENED,

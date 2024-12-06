@@ -2773,7 +2773,8 @@ static NTSTATUS posixfs_open_stream(x_smbd_object_t *smbd_object,
 }
 
 NTSTATUS posixfs_op_create_open(x_smbd_open_t **psmbd_open,
-		x_smbd_requ_t *smbd_requ,
+		x_nxfsd_requ_t *nxfsd_requ,
+		x_smbd_tcon_t *smbd_tcon,
 		x_smbd_requ_state_create_t &state)
 {
 	x_smbd_object_t *smbd_object = state.smbd_object;
@@ -2935,7 +2936,8 @@ NTSTATUS posixfs_op_create_open(x_smbd_open_t **psmbd_open,
 		status = x_smbd_open_create(
 				smbd_object,
 				smbd_stream,
-				smbd_requ,
+				nxfsd_requ,
+				smbd_tcon,
 				state,
 				create_action,
 				oplock_level,
@@ -2964,7 +2966,7 @@ NTSTATUS posixfs_op_create_open(x_smbd_open_t **psmbd_open,
 
 	/* TODO should we check the open limit before create the open */
 	status = x_smbd_posixfs_create_open(psmbd_open,
-			&smbd_requ->base, smbd_requ->smbd_tcon,
+			nxfsd_requ, smbd_tcon,
 			state,
 			overwrite,
 			create_action,

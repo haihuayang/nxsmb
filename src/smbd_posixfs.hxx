@@ -143,7 +143,8 @@ typedef bool posixfs_qdir_entry_func_t(x_smbd_object_meta_t *object_meta,
 		uint64_t file_number);
 
 NTSTATUS posixfs_op_create_open(x_smbd_open_t **psmbd_open,
-		x_smbd_requ_t *smbd_requ,
+		x_nxfsd_requ_t *nxfsd_requ,
+		x_smbd_tcon_t *smbd_tcon,
 		x_smbd_requ_state_create_t &state);
 
 NTSTATUS x_smbd_posixfs_op_create_open(x_smbd_open_t *&smbd_open,

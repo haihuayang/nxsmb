@@ -874,7 +874,7 @@ static inline uint8_t get_lease_type(const x_smbd_open_t *smbd_open)
 	}
 }
 
-static NTSTATUS grant_oplock(x_smbd_requ_t *smbd_requ,
+static NTSTATUS grant_oplock(x_nxfsd_requ_t *nxfsd_requ,
 		x_smbd_object_t *smbd_object,
 		x_smbd_stream_t *smbd_stream,
 		x_smbd_sharemode_t *sharemode,
@@ -1407,7 +1407,8 @@ static inline NTSTATUS x_smbd_object_access_check(x_smbd_object_t *smbd_object,
 NTSTATUS x_smbd_open_create(
 		x_smbd_object_t *smbd_object,
 		x_smbd_stream_t *smbd_stream,
-		x_smbd_requ_t *smbd_requ,
+		x_nxfsd_requ_t *nxfsd_requ,
+		x_smbd_tcon_t *smbd_tcon,
 		x_smbd_requ_state_create_t &state,
 		x_smb2_create_action_t &create_action,
 		uint8_t &out_oplock_level,
@@ -1418,30 +1419,30 @@ NTSTATUS x_smbd_open_create(
 #define MIS_MATCH(attr) (((smbd_object->meta.file_attributes & attr) != 0) && ((state.in_file_attributes & attr) == 0))
 		if (MIS_MATCH(X_SMB2_FILE_ATTRIBUTE_SYSTEM) ||
 				MIS_MATCH(X_SMB2_FILE_ATTRIBUTE_HIDDEN)) {
-			X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_ACCESS_DENIED);
+			X_NXFSD_REQU_RETURN_STATUS(nxfsd_requ, NT_STATUS_ACCESS_DENIED);
 		}
 	}
 
 	NTSTATUS status;
-	auto smbd_user = smbd_requ->base.smbd_user;
+	auto smbd_user = nxfsd_requ->smbd_user;
 	uint32_t granted_access = 0, maximal_access = 0;
 	if (smbd_object->exists()) {
 		status = x_smbd_object_access_check(smbd_object,
 				granted_access,
 				maximal_access,
-				smbd_requ->smbd_tcon,
+				smbd_tcon,
 				*smbd_user,
 				state.in_desired_access,
 				overwrite);
 
 		if (!NT_STATUS_IS_OK(status)) {
-			X_SMBD_REQU_RETURN_STATUS(smbd_requ, status);
+			X_NXFSD_REQU_RETURN_STATUS(nxfsd_requ, status);
 		}
 
 		/* TODO seems windows do not check this for folder */
 		if (granted_access & idl::SEC_STD_DELETE) {
 			if (!check_ads_share_access(smbd_object, granted_access)) {
-				X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_SHARING_VIOLATION);
+				X_NXFSD_REQU_RETURN_STATUS(nxfsd_requ, NT_STATUS_SHARING_VIOLATION);
 			}
 		}
 	}
@@ -1450,7 +1451,7 @@ NTSTATUS x_smbd_open_create(
 			smbd_object, smbd_stream);
 
 	if (!check_app_instance(smbd_object, sharemode, state)) {
-		X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_FILE_FORCED_CLOSED);
+		X_NXFSD_REQU_RETURN_STATUS(nxfsd_requ, NT_STATUS_FILE_FORCED_CLOSED);
 	}
 
 	bool conflict = open_mode_check(smbd_object,
@@ -1458,17 +1459,17 @@ NTSTATUS x_smbd_open_create(
 			granted_access, state.in_share_access);
 	if (delay_for_oplock(smbd_object,
 				sharemode,
-				&smbd_requ->base,
+				nxfsd_requ,
 				state.smbd_lease,
 				state.in_create_disposition,
 				overwrite ? granted_access | idl::SEC_FILE_WRITE_DATA : granted_access,
 				conflict, state.open_attempt)) {
 		++state.open_attempt;
-		X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_PENDING);
+		X_NXFSD_REQU_RETURN_STATUS(nxfsd_requ, NT_STATUS_PENDING);
 	}
 
 	if (conflict) {
-		X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_SHARING_VIOLATION);
+		X_NXFSD_REQU_RETURN_STATUS(nxfsd_requ, NT_STATUS_SHARING_VIOLATION);
 	}
 
 	if (!smbd_object->exists() || (smbd_stream && !smbd_stream->exists)) {
@@ -1486,7 +1487,7 @@ NTSTATUS x_smbd_open_create(
 						state.in_file_attributes,
 						access_mask);
 				if (!NT_STATUS_IS_OK(status)) {
-					X_SMBD_REQU_RETURN_STATUS(smbd_requ, status);
+					X_NXFSD_REQU_RETURN_STATUS(nxfsd_requ, status);
 				}
 			}
 		}
@@ -1496,7 +1497,7 @@ NTSTATUS x_smbd_open_create(
 				state.in_file_attributes,
 				state.in_context.allocation_size);
 		if (!NT_STATUS_IS_OK(status)) {
-			X_SMBD_REQU_RETURN_STATUS(smbd_requ, status);
+			X_NXFSD_REQU_RETURN_STATUS(nxfsd_requ, status);
 		}
 		create_action = x_smb2_create_action_t::WAS_CREATED;
 	} else {
@@ -1507,12 +1508,12 @@ NTSTATUS x_smbd_open_create(
 		state.out_maximal_access = maximal_access;
 	}
 
-       	status = grant_oplock(smbd_requ, smbd_object,
+       	status = grant_oplock(nxfsd_requ, smbd_object,
 			smbd_stream,
 			sharemode,
 			state, out_oplock_level);
 	if (!NT_STATUS_IS_OK(status)) {
-		X_SMBD_REQU_RETURN_STATUS(smbd_requ, status);
+		X_NXFSD_REQU_RETURN_STATUS(nxfsd_requ, status);
 	}
 
 	return status;
@@ -1684,7 +1685,8 @@ void x_smbd_save_durable(x_smbd_open_t *smbd_open,
 			smbd_open->smbd_object->file_handle);
 }
 
-NTSTATUS x_smbd_open_op_create(x_smbd_requ_t *smbd_requ,
+NTSTATUS x_smbd_open_op_create(x_nxfsd_requ_t *nxfsd_requ,
+		x_smbd_tcon_t *smbd_tcon,
 		x_smbd_requ_state_create_t &state)
 {
 	if (!x_smbd_open_has_space()) {
@@ -1713,7 +1715,7 @@ NTSTATUS x_smbd_open_op_create(x_smbd_requ_t *smbd_requ,
 		std::u16string next_comp{state.unresolved_path, sep};
 		x_smbd_object_t *smbd_object = nullptr;
 		status = x_smbd_open_object_at(&smbd_object,
-				smbd_requ,
+				nxfsd_requ,
 				state.smbd_object, next_comp,
 				(!*sep), attempt_create);
 		if (!status.ok()) {
@@ -1728,7 +1730,7 @@ NTSTATUS x_smbd_open_op_create(x_smbd_requ_t *smbd_requ,
 	x_smbd_open_t *smbd_open = nullptr;
 	/* TODO should we check the open limit before create the open */
 	status = state.smbd_object->smbd_volume->ops->create_open(&smbd_open,
-			smbd_requ, state);
+			nxfsd_requ, smbd_tcon, state);
 
 	if (!status.ok()) {
 		X_ASSERT(!smbd_open);
@@ -1741,11 +1743,10 @@ NTSTATUS x_smbd_open_op_create(x_smbd_requ_t *smbd_requ,
 	 * link into smbd_tcon, probably we should call x_smbd_open_store in the last
 	 */
 	bool linked = false;
-	x_smbd_tcon_t *smbd_tcon = smbd_requ->smbd_tcon;
 	{
 		auto lock = state.smbd_object->lock();
-		if (smbd_open->state == SMBD_OPEN_S_INIT &&
-				x_smbd_tcon_link_open(smbd_tcon, &smbd_open->tcon_link)) {
+		if (smbd_open->state == SMBD_OPEN_S_INIT && (!smbd_tcon ||
+				x_smbd_tcon_link_open(smbd_tcon, &smbd_open->tcon_link))) {
 			smbd_open->state = SMBD_OPEN_S_ACTIVE;
 			smbd_open->smbd_tcon = smbd_tcon;
 			linked = true;
@@ -1755,9 +1756,11 @@ NTSTATUS x_smbd_open_op_create(x_smbd_requ_t *smbd_requ,
 	}
 
 	if (linked) {
-		x_ref_inc(smbd_tcon); // ref by open
+		if (smbd_tcon) {
+			x_ref_inc(smbd_tcon); // ref by open
+		}
 		x_ref_inc(smbd_open); // ref tcon link
-		smbd_requ->base.smbd_open = x_ref_inc(smbd_open);
+		nxfsd_requ->smbd_open = x_ref_inc(smbd_open);
 	} else {
 		status = NT_STATUS_NETWORK_NAME_DELETED;
 	}

@@ -327,7 +327,7 @@ NTSTATUS x_smbd_open_object(x_smbd_object_t **p_smbd_object,
 }
 
 NTSTATUS x_smbd_open_object_at(x_smbd_object_t **p_smbd_object,
-		x_smbd_requ_t *smbd_requ,
+		x_nxfsd_requ_t *nxfsd_requ,
 		x_smbd_object_t *parent_object,
 		const std::u16string &path_base,
 		bool last_comp,

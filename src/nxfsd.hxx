@@ -209,6 +209,12 @@ bool x_nxfsd_conn_post_user(x_nxfsd_conn_t *nxfsd_conn, x_fdevt_user_t *fdevt_us
 #define X_NXFSD_REQU_LOG(level, nxfsd_requ, fmt, ...) \
 	X_LOG(SMB, level, X_NXFSD_REQU_DBG_FMT fmt, X_NXFSD_REQU_DBG_ARG(nxfsd_requ), ##__VA_ARGS__)
 
+#define X_NXFSD_REQU_RETURN_STATUS(nxfsd_requ, status) do { \
+	X_LOG(SMB, OP, X_NXFSD_REQU_DBG_FMT " %s", \
+			X_NXFSD_REQU_DBG_ARG(nxfsd_requ), \
+			x_ntstatus_str(status)); \
+	return (status); \
+} while (0)
 
 bool x_nxfsd_requ_init(x_nxfsd_requ_t *nxfsd_requ);
 
