@@ -2695,7 +2695,7 @@ NTSTATUS x_smbd_posixfs_create_open(x_smbd_open_t **psmbd_open,
 	posixfs_open_t *posixfs_open = nullptr;
 
 	posixfs_open = posixfs_open_create(&status, smbd_tcon,
-			posixfs_object, nxfsd_requ->smbd_user,
+			posixfs_object, state.smbd_user,
 			state, create_action, oplock_level);
 	if (!posixfs_open) {
 		return status;

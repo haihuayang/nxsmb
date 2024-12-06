@@ -373,7 +373,7 @@ NTSTATUS x_smb2_process_query_directory(x_smbd_conn_t *smbd_conn, x_smbd_requ_t 
 	{
 		std::shared_ptr<x_smbd_user_t> smbd_user;
 		if (x_smbd_tcon_get_abe(smbd_requ->smbd_tcon)) {
-			smbd_user = smbd_requ->base.smbd_user;
+			smbd_user = x_smbd_sess_get_user(smbd_requ->smbd_sess);
 		}
 		auto lock = std::lock_guard(smbd_object->mutex);
 		if (!smbd_open->smbd_qdir) {

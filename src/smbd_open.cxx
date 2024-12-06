@@ -1319,9 +1319,12 @@ static uint32_t smbd_object_access_check(
 		const uint32_t in_desired_access,
 		bool overwrite)
 {
-	uint32_t share_access = x_smbd_tcon_get_share_access(smbd_tcon);
 	uint32_t out_maximal_access = se_calculate_maximal_access(sd, smbd_user);
-	out_maximal_access &= share_access;
+	if (smbd_tcon) {
+		/* TODO for requ from node, tcon is NULL */
+		uint32_t share_access = x_smbd_tcon_get_share_access(smbd_tcon);
+		out_maximal_access &= share_access;
+	}
 
 	if (overwrite && (out_maximal_access & idl::SEC_FILE_WRITE_DATA) == 0) {
 		return idl::SEC_FILE_WRITE_DATA;
@@ -1425,7 +1428,7 @@ NTSTATUS x_smbd_open_create(
 	}
 
 	NTSTATUS status;
-	auto smbd_user = nxfsd_requ->smbd_user;
+	auto &smbd_user = state.smbd_user;
 	uint32_t granted_access = 0, maximal_access = 0;
 	if (smbd_object->exists()) {
 		status = x_smbd_object_access_check(smbd_object,
@@ -1776,7 +1779,7 @@ static NTSTATUS smbd_open_reconnect(x_smbd_open_t *smbd_open,
 {
 	auto smbd_object = smbd_open->smbd_object;
 	auto &open_state = smbd_open->open_state;
-	auto smbd_user = smbd_requ->base.smbd_user;
+	auto &smbd_user = state.smbd_user;
 
 	auto lock = smbd_object->lock();
 	if (smbd_open->state != SMBD_OPEN_S_DISCONNECTED) {

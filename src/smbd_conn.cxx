@@ -859,7 +859,6 @@ static NTSTATUS x_smbd_conn_process_smb2_intl(x_smbd_conn_t *smbd_conn, x_smbd_r
 		if (!smbd_requ->smbd_chan ||  !x_smbd_chan_is_active(smbd_requ->smbd_chan)) {
 			X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_USER_SESSION_DELETED);
 		}
-		smbd_requ->base.smbd_user = x_smbd_sess_get_user(smbd_requ->smbd_sess);
 	}
 
 	bool signing_required = false;

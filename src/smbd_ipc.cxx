@@ -643,6 +643,12 @@ static inline NTSTATUS process_ncacn_pdu(
 	return status;
 }
 
+static std::shared_ptr<x_smbd_user_t> ipc_get_user(x_nxfsd_requ_t *nxfsd_requ)
+{
+	x_smbd_requ_t *smbd_requ = x_smbd_requ_from_base(nxfsd_requ);
+	return x_smbd_sess_get_user(smbd_requ->smbd_sess);
+}
+
 static int named_pipe_write(
 		x_smbd_ipc_object_t *ipc_object,
 		named_pipe_t *named_pipe,
@@ -748,7 +754,7 @@ static NTSTATUS ipc_object_op_write(
 
 	int ret = named_pipe_write(from_smbd_object(smbd_object),
 			named_pipe,
-			nxfsd_requ->smbd_user,
+			ipc_get_user(nxfsd_requ),
 			state->in_buf->data + state->in_buf_offset,
 			state->in_buf_length);
 	state->out_count = ret;
@@ -816,7 +822,7 @@ static NTSTATUS ipc_object_op_ioctl(
 	case X_SMB2_FSCTL_PIPE_TRANSCEIVE:
 		named_pipe->is_transceive = true;
 		named_pipe_write(ipc_object, named_pipe,
-				nxfsd_requ->smbd_user,
+				ipc_get_user(nxfsd_requ),
 				state->in_buf->data + state->in_buf_offset,
 				state->in_buf_length);
 
@@ -941,7 +947,7 @@ static NTSTATUS ipc_op_create_open(x_smbd_open_t **psmbd_open,
 				state.in_context.app_instance_version_high,
 				state.in_context.app_instance_version_low,
 				state.in_context.lease.parent_key,
-				nxfsd_requ->smbd_user->get_owner_sid(),
+				state.smbd_user->get_owner_sid(),
 				state.valid_flags,
 				0,
 				x_smb2_create_action_t::WAS_OPENED,

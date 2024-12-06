@@ -429,6 +429,7 @@ NTSTATUS x_smb2_process_create(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_req
 	if (!NT_STATUS_IS_OK(status)) {
 		X_SMBD_REQU_RETURN_STATUS(smbd_requ, status);
 	}
+	state->smbd_user = x_smbd_sess_get_user(smbd_requ->smbd_sess);
 
 	if (negprot.dialect < X_SMB2_DIALECT_210 &&
 			state->in_oplock_level == X_SMB2_OPLOCK_LEVEL_LEASE) {

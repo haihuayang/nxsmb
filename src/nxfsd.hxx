@@ -148,7 +148,6 @@ struct x_nxfsd_requ_t
 
 	uint32_t out_length = 0;
 	x_bufref_t *out_buf_head{}, *out_buf_tail{};
-	std::shared_ptr<x_smbd_user_t> smbd_user;
 	x_smbd_open_t *smbd_open{};
 	void (*cancel_fn)(x_nxfsd_conn_t *nxfsd_conn, x_nxfsd_requ_t *nxfsd_requ);
 };
