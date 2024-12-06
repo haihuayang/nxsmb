@@ -257,7 +257,7 @@ bool x_smb2_create_requ_context_t::decode(uint16_t dialect, const uint8_t *data,
 	const x_smb2_create_dh2c_requ_t *dh2c = nullptr;
 	uint32_t in_contexts = 0;
 
-	for (;;) {
+	while (length > 0) {
 		if (length < sizeof(x_smb2_create_context_header_t)) {
 			return false;
 		}
@@ -396,10 +396,6 @@ bool x_smb2_create_requ_context_t::decode(uint16_t dialect, const uint8_t *data,
 
 		data += clen;
 		length -= clen;
-
-		if (length == 0) {
-			break;
-		}
 	}
 
 	if ((x_bit_any<uint32_t>(in_contexts, X_SMB2_CONTEXT_FLAG_DHNQ |
@@ -626,7 +622,7 @@ bool x_smb2_create_resp_context_t::decode(const uint8_t *data, uint32_t length)
 {
 	uint32_t in_contexts = 0;
 
-	for (;;) {
+	while (length > 0) {
 		if (length < sizeof(x_smb2_create_context_header_t)) {
 			return false;
 		}
@@ -700,10 +696,6 @@ bool x_smb2_create_resp_context_t::decode(const uint8_t *data, uint32_t length)
 
 		data += clen;
 		length -= clen;
-
-		if (length == 0) {
-			break;
-		}
 	}
 
 	bits = in_contexts;
