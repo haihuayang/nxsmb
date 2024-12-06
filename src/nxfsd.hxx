@@ -229,6 +229,8 @@ uint64_t x_nxfsd_requ_get_async_id(const x_nxfsd_requ_t *nxfsd_requ);
 	x_nxfsd_conn_post_user((nxfsd_requ)->nxfsd_conn, &__evt->base, true); \
 } while (0)
 
+void x_nxfsd_requ_post_error(x_nxfsd_requ_t *nxfsd_requ, NTSTATUS status);
+
 using x_nxfsd_requ_id_list_t = std::vector<uint64_t>;
 
 void x_nxfsd_requ_post_cancel(x_nxfsd_requ_t *nxfsd_requ, NTSTATUS status);
@@ -261,7 +263,9 @@ x_nxfsd_requ_t *x_nxfsd_requ_async_lookup(uint64_t id,
 
 void x_nxfsd_requ_done(x_nxfsd_requ_t *nxfsd_requ);
 
-void x_nxfsd_requ_resume(x_nxfsd_requ_t *nxfsd_requ);
+void x_nxfsd_requ_resume(void *ctx_conn, x_nxfsd_requ_t *nxfsd_requ);
+
+void x_nxfsd_requ_post_resume(x_nxfsd_requ_t *nxfsd_requ);
 
 int x_nxfsd_requ_pool_init(uint32_t count);
 

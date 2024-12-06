@@ -585,7 +585,7 @@ void x_smbd_wakeup_requ_list(const x_nxfsd_requ_id_list_t &requ_list)
 		X_NXFSD_REQU_LOG(DBG, nxfsd_requ, " count=%d", count);
 		X_ASSERT(count > 0);
 		if (count == 1) {
-			x_nxfsd_requ_resume(nxfsd_requ);
+			x_nxfsd_requ_post_resume(nxfsd_requ);
 		} else {
 			x_ref_dec(nxfsd_requ);
 		}
