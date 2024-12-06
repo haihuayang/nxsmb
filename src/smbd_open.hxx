@@ -55,11 +55,19 @@ struct x_smbd_qdir_t
 	x_fnmatch_t *fnmatch = nullptr;
 };
 
+enum class x_smbd_open_type_t : uint8_t
+{
+	none,
+	smbd,
+	proxy,
+	noded,
+};
 struct x_smbd_open_t
 {
 	x_smbd_open_t(x_smbd_object_t *so, x_smbd_stream_t *ss,
 			x_smbd_tcon_t *st,
-			const x_smbd_open_state_t &open_state);
+			const x_smbd_open_state_t &open_state,
+			x_smbd_open_type_t open_type);
 	~x_smbd_open_t();
 	x_smbd_open_t(const x_smbd_open_t &) = delete;
 	x_smbd_open_t(x_smbd_open_t &&) = delete;
@@ -115,6 +123,7 @@ struct x_smbd_open_t
 	x_smbd_qdir_t *smbd_qdir{};
 
 	uint32_t mode = 0; // [MS-FSCC] 2.4.26
+	const x_smbd_open_type_t open_type;
 	bool update_write_time_on_close = false;
 	bool sticky_write_time = false;
 	/* pending_requ_list and notify_changes protected by posixfs_object->mutex */

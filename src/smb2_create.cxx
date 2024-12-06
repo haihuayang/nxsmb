@@ -232,27 +232,29 @@ static void smb2_create_success(x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_state_create_t &state)
 {
 	x_smbd_open_t *smbd_open = smbd_requ->base.smbd_open;
-	if (state.replay_reserved) {
-		/* TODO atomic */
-		x_smbd_replay_cache_set(state.client_guid,
-				state.in_context.create_guid,
-				smbd_open);
-		smbd_open->open_state.flags |= x_smbd_open_state_t::F_REPLAY_CACHED;
-		state.replay_reserved = false;
-	}
+	if (smbd_open->open_type != x_smbd_open_type_t::proxy) {
+		if (state.replay_reserved) {
+			/* TODO atomic */
+			x_smbd_replay_cache_set(state.client_guid,
+					state.in_context.create_guid,
+					smbd_open);
+			smbd_open->open_state.flags |= x_smbd_open_state_t::F_REPLAY_CACHED;
+			state.replay_reserved = false;
+		}
 
-	if (smbd_open->id_persistent == 0xffffffffu) {
-		auto &smbd_volume = *smbd_open->smbd_object->smbd_volume;
-		smbd_open->id_persistent = x_smbd_volume_non_durable_id(smbd_volume);
-	}
-	x_smbd_save_durable(smbd_open, smbd_requ->smbd_tcon, state);
+		if (smbd_open->id_persistent == 0xffffffffu) {
+			auto &smbd_volume = *smbd_open->smbd_object->smbd_volume;
+			smbd_open->id_persistent = x_smbd_volume_non_durable_id(smbd_volume);
+		}
+		x_smbd_save_durable(smbd_open, smbd_requ->smbd_tcon, state);
 
-	auto &open_state = smbd_requ->base.smbd_open->open_state;
-	if (open_state.dhmode != x_smbd_dhmode_t::NONE &&
-			(state.out_oplock_level == X_SMB2_OPLOCK_LEVEL_LEASE ||
-			 state.out_oplock_level == X_SMB2_OPLOCK_LEVEL_BATCH)) {
-		state.out_contexts |= (state.in_context.bits &
-			(X_SMB2_CONTEXT_FLAG_DHNQ | X_SMB2_CONTEXT_FLAG_DH2Q));
+		auto &open_state = smbd_requ->base.smbd_open->open_state;
+		if (open_state.dhmode != x_smbd_dhmode_t::NONE &&
+				(state.out_oplock_level == X_SMB2_OPLOCK_LEVEL_LEASE ||
+				 state.out_oplock_level == X_SMB2_OPLOCK_LEVEL_BATCH)) {
+			state.out_contexts |= (state.in_context.bits &
+				(X_SMB2_CONTEXT_FLAG_DHNQ | X_SMB2_CONTEXT_FLAG_DH2Q));
+		}
 	}
 	x_smb2_reply_create(smbd_conn, smbd_requ, state);
 }

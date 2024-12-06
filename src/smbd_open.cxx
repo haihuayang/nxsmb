@@ -1930,12 +1930,13 @@ static std::string x_smbd_open_get_path(const x_smbd_open_t *smbd_open)
 x_smbd_open_t::x_smbd_open_t(x_smbd_object_t *so,
 		x_smbd_stream_t *strm,
 		x_smbd_tcon_t *st,
-		const x_smbd_open_state_t &open_state)
+		const x_smbd_open_state_t &open_state,
+		x_smbd_open_type_t open_type)
 	: tick_create(tick_now), smbd_object(so), smbd_stream(strm)
 	, durable_timer(smbd_open_durable_timeout)
 	, state(SMBD_OPEN_S_INIT)
 	, oplock_break_timer(oplock_break_timeout)
-	, open_state(open_state)
+	, open_state(open_state), open_type(open_type)
 {
 	X_NXFSD_COUNTER_INC_CREATE(smbd_open, 1);
 	memset(lock_sequence_array, 0xff, LOCK_SEQUENCE_MAX);
