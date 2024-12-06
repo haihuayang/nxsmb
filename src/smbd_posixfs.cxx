@@ -173,7 +173,8 @@ struct posixfs_open_t
 	posixfs_open_t(x_smbd_object_t *so, x_smbd_tcon_t *st,
 			x_smbd_stream_t *stream,
 			const x_smbd_open_state_t &open_state)
-		: base(so, stream, st, open_state, x_smbd_open_type_t::smbd)
+		: base(&x_smbd_local_open_ops, so, stream,
+				st, open_state, x_smbd_open_type_t::smbd)
 	{
 	}
 	x_smbd_open_t base;

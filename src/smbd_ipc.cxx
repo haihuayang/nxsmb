@@ -62,7 +62,8 @@ struct named_pipe_t
 {
 	named_pipe_t(x_smbd_object_t *so, x_smbd_tcon_t *st,
 			const x_smbd_open_state_t &open_state)
-		: base(so, nullptr, st, open_state, x_smbd_open_type_t::smbd) { }
+		: base(&x_smbd_local_open_ops, so, nullptr,
+				st, open_state, x_smbd_open_type_t::smbd) { }
 	x_smbd_open_t base;
 	// const x_dcerpc_iface_t *iface;
 	std::vector<x_bind_context_t> bind_contexts;

@@ -66,19 +66,20 @@ bool x_smbd_open_has_space()
 	return g_smbd_open_table->alloc_count + g_smbd_open_extra < g_smbd_open_table->count;
 }
 
-template <>
-x_smbd_open_t *x_ref_inc(x_smbd_open_t *smbd_open)
+static void x_smbd_local_open_incref(x_smbd_open_t *smbd_open)
 {
 	g_smbd_open_table->incref(smbd_open->id_volatile);
-	return smbd_open;
 }
 
-template <>
-void x_ref_dec(x_smbd_open_t *smbd_open)
+static void x_smbd_local_open_decref(x_smbd_open_t *smbd_open)
 {
 	g_smbd_open_table->decref(smbd_open->id_volatile);
 }
 
+const x_smbd_open_ops_t x_smbd_local_open_ops = {
+	.incref = x_smbd_local_open_incref,
+	.decref = x_smbd_local_open_decref,
+};
 
 int x_smbd_open_table_init(uint32_t count)
 {
@@ -1927,12 +1928,14 @@ static std::string x_smbd_open_get_path(const x_smbd_open_t *smbd_open)
 	}
 }
 
-x_smbd_open_t::x_smbd_open_t(x_smbd_object_t *so,
+x_smbd_open_t::x_smbd_open_t(const x_smbd_open_ops_t *ops,
+		x_smbd_object_t *so,
 		x_smbd_stream_t *strm,
 		x_smbd_tcon_t *st,
 		const x_smbd_open_state_t &open_state,
 		x_smbd_open_type_t open_type)
-	: tick_create(tick_now), smbd_object(so), smbd_stream(strm)
+	: ops(ops), tick_create(tick_now)
+	, smbd_object(so), smbd_stream(strm)
 	, durable_timer(smbd_open_durable_timeout)
 	, state(SMBD_OPEN_S_INIT)
 	, oplock_break_timer(oplock_break_timeout)

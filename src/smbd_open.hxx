@@ -55,6 +55,12 @@ struct x_smbd_qdir_t
 	x_fnmatch_t *fnmatch = nullptr;
 };
 
+struct x_smbd_open_ops_t
+{
+	void (*incref)(x_smbd_open_t *smbd_open);
+	void (*decref)(x_smbd_open_t *smbd_open);
+};
+
 enum class x_smbd_open_type_t : uint8_t
 {
 	none,
@@ -64,7 +70,8 @@ enum class x_smbd_open_type_t : uint8_t
 };
 struct x_smbd_open_t
 {
-	x_smbd_open_t(x_smbd_object_t *so, x_smbd_stream_t *ss,
+	x_smbd_open_t(const x_smbd_open_ops_t *ops,
+			x_smbd_object_t *so, x_smbd_stream_t *ss,
 			x_smbd_tcon_t *st,
 			const x_smbd_open_state_t &open_state,
 			x_smbd_open_type_t open_type);
@@ -98,6 +105,7 @@ struct x_smbd_open_t
 
 	x_dlink_t tcon_link; // protected by the mutex of smbd_tcon
 	x_dlink_t object_link;
+	const x_smbd_open_ops_t * const ops;
 	const x_tick_t tick_create;
 	x_smbd_object_t * const smbd_object;
 	x_smbd_stream_t * const smbd_stream; // not null if it is ADS
@@ -136,6 +144,20 @@ struct x_smbd_open_t
 	uint64_t request_count = 0, pre_request_count = 0;
 	x_nxfsd_requ_id_list_t oplock_pending_list; // pending on oplock
 };
+
+template <>
+inline x_smbd_open_t *x_ref_inc(x_smbd_open_t *smbd_open)
+{
+	smbd_open->ops->incref(smbd_open);
+	return smbd_open;
+}
+
+template <>
+inline void x_ref_dec(x_smbd_open_t *smbd_open)
+{
+	smbd_open->ops->decref(smbd_open);
+}
+
 
 struct x_smbd_object_t;
 struct x_smbd_object_ops_t
@@ -921,6 +943,8 @@ static inline void x_smbd_pull_time_info(const Info &info,
 uint32_t x_smbd_open_encode_output_contexts(const x_smbd_open_t *smbd_open,
 		const x_nxfsd_requ_state_open_t &state,
 		uint8_t *out_ptr);
+
+const extern x_smbd_open_ops_t x_smbd_local_open_ops;
 
 #endif /* __smbd_open__hxx__ */
 
