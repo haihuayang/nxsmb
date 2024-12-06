@@ -44,14 +44,11 @@ NTSTATUS posixfs_object_op_flush(
 NTSTATUS posixfs_object_op_getinfo(
 		x_smbd_object_t *smbd_object,
 		x_smbd_open_t *smbd_open,
-		x_smbd_conn_t *smbd_conn,
-		x_smbd_requ_t *smbd_requ,
-		std::unique_ptr<x_smbd_requ_state_getinfo_t> &state);
+		x_smbd_requ_state_getinfo_t &state);
 NTSTATUS posixfs_object_op_setinfo(
 		x_smbd_object_t *smbd_object,
-		x_smbd_conn_t *smbd_conn,
-		x_nxfsd_requ_t *nxfsd_requ,
-		std::unique_ptr<x_smbd_requ_state_setinfo_t> &state);
+		x_smbd_open_t *smbd_open,
+		x_smbd_requ_state_setinfo_t &state);
 NTSTATUS posixfs_object_op_ioctl(
 		x_smbd_object_t *smbd_object,
 		x_nxfsd_requ_t *nxfsd_requ,

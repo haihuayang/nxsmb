@@ -1751,8 +1751,14 @@ static NTSTATUS setinfo_file(posixfs_object_t *posixfs_object,
 	}
 }
 
-static NTSTATUS getinfo_fs(x_smbd_requ_t *smbd_requ,
-		posixfs_object_t *posixfs_object,
+static std::u16string &get_object_volume_name(const posixfs_object_t *posixfs_object)
+{
+	auto &share = posixfs_object->base.smbd_volume->owner_share;
+	X_ASSERT(share);
+	return share->name_16;
+}
+
+static NTSTATUS getinfo_fs(posixfs_object_t *posixfs_object,
 		x_smbd_requ_state_getinfo_t &state)
 {
 	const x_smbd_conf_t &smbd_conf = x_smbd_conf_get_curr();
@@ -1761,7 +1767,7 @@ static NTSTATUS getinfo_fs(x_smbd_requ_t *smbd_requ,
 			return NT_STATUS_INFO_LENGTH_MISMATCH;
 		}
 
-		std::u16string volume = x_smbd_tcon_get_volume_label(smbd_requ->smbd_tcon);
+		auto &volume = get_object_volume_name(posixfs_object);
 		size_t hash = std::hash<std::u16string>{}(volume + u":" + *smbd_conf.netbios_name_u16);
 
 		uint32_t output_buffer_length = state.in_output_buffer_length & ~1;
@@ -1788,7 +1794,7 @@ static NTSTATUS getinfo_fs(x_smbd_requ_t *smbd_requ,
 			return NT_STATUS_INFO_LENGTH_MISMATCH;
 		}
 
-		std::u16string volume = x_smbd_tcon_get_volume_label(smbd_requ->smbd_tcon);
+		auto &volume = get_object_volume_name(posixfs_object);
 
 		uint32_t output_buffer_length = state.in_output_buffer_length & ~1;
 		size_t buf_size = std::min(size_t(output_buffer_length),
@@ -1912,14 +1918,14 @@ static NTSTATUS getinfo_fs(x_smbd_requ_t *smbd_requ,
 }
 
 static NTSTATUS setinfo_security(posixfs_object_t *posixfs_object,
-		x_nxfsd_requ_t *nxfsd_requ,
+		x_smbd_open_t *smbd_open,
 		const x_smbd_requ_state_setinfo_t &state)
 {
 	uint32_t security_info_sent = state.in_additional & idl::SMB_SUPPORTED_SECINFO_FLAGS;
 	idl::security_descriptor sd;
 
 	NTSTATUS status = parse_setinfo_sd_blob(sd, security_info_sent,
-			nxfsd_requ->smbd_open->open_state.access_mask,
+			smbd_open->open_state.access_mask,
 			state.in_data);
 
 	if (!NT_STATUS_IS_OK(status)) {
@@ -1942,11 +1948,10 @@ static NTSTATUS setinfo_security(posixfs_object_t *posixfs_object,
 		return x_map_nt_error_from_unix(-err);
 	}
 
-	posixfs_open_t *posixfs_open = posixfs_open_from_base_t::container(nxfsd_requ->smbd_open);
 	x_smbd_schedule_notify(
 			NOTIFY_ACTION_MODIFIED, FILE_NOTIFY_CHANGE_SECURITY,
-			posixfs_open->base.open_state.parent_lease_key,
-			posixfs_open->base.open_state.client_guid,
+			smbd_open->open_state.parent_lease_key,
+			smbd_open->open_state.client_guid,
 			posixfs_object->base.parent_object, nullptr,
 			posixfs_object->base.path_base, {});
 	return NT_STATUS_OK;
@@ -1961,20 +1966,18 @@ static NTSTATUS getinfo_quota(posixfs_object_t *posixfs_object,
 NTSTATUS posixfs_object_op_getinfo(
 		x_smbd_object_t *smbd_object,
 		x_smbd_open_t *smbd_open,
-		x_smbd_conn_t *smbd_conn,
-		x_smbd_requ_t *smbd_requ,
-		std::unique_ptr<x_smbd_requ_state_getinfo_t> &state)
+		x_smbd_requ_state_getinfo_t &state)
 {
 	posixfs_object_t *posixfs_object = posixfs_object_from_base_t::container(smbd_object);
 
-	if (state->in_info_class == x_smb2_info_class_t::FILE) {
-		return x_smbd_open_getinfo_file(smbd_conn, smbd_open, *state, posixfs_get_file_info_t());
-	} else if (state->in_info_class == x_smb2_info_class_t::FS) {
-		return getinfo_fs(smbd_requ, posixfs_object, *state);
-	} else if (state->in_info_class == x_smb2_info_class_t::SECURITY) {
-		return x_smbd_open_getinfo_security(smbd_open, *state);
-	} else if (state->in_info_class == x_smb2_info_class_t::QUOTA) {
-		return getinfo_quota(posixfs_object, *state);
+	if (state.in_info_class == x_smb2_info_class_t::FILE) {
+		return x_smbd_open_getinfo_file(smbd_open, state, posixfs_get_file_info_t());
+	} else if (state.in_info_class == x_smb2_info_class_t::FS) {
+		return getinfo_fs(posixfs_object, state);
+	} else if (state.in_info_class == x_smb2_info_class_t::SECURITY) {
+		return x_smbd_open_getinfo_security(smbd_open, state);
+	} else if (state.in_info_class == x_smb2_info_class_t::QUOTA) {
+		return getinfo_quota(posixfs_object, state);
 	} else {
 		return NT_STATUS_INVALID_PARAMETER;
 	}
@@ -1984,20 +1987,19 @@ NTSTATUS posixfs_object_op_getinfo(
 
 NTSTATUS posixfs_object_op_setinfo(
 		x_smbd_object_t *smbd_object,
-		x_smbd_conn_t *smbd_conn,
-		x_nxfsd_requ_t *nxfsd_requ,
-		std::unique_ptr<x_smbd_requ_state_setinfo_t> &state)
+		x_smbd_open_t *smbd_open,
+		x_smbd_requ_state_setinfo_t &state)
 {
 	posixfs_object_t *posixfs_object = posixfs_object_from_base_t::container(smbd_object);
 
-	if (state->in_info_class == x_smb2_info_class_t::FILE) {
-		return setinfo_file(posixfs_object, nxfsd_requ->smbd_open, *state);
+	if (state.in_info_class == x_smb2_info_class_t::FILE) {
+		return setinfo_file(posixfs_object, smbd_open, state);
 #if 0
-	} else if (state->in_info_class == x_smb2_info_class_t::FS) {
+	} else if (state.in_info_class == x_smb2_info_class_t::FS) {
 		return setinfo_fs(posixfs_object, smbd_requ, *state);
 #endif
-	} else if (state->in_info_class == x_smb2_info_class_t::SECURITY) {
-		return setinfo_security(posixfs_object, nxfsd_requ, *state);
+	} else if (state.in_info_class == x_smb2_info_class_t::SECURITY) {
+		return setinfo_security(posixfs_object, smbd_open, state);
 	} else {
 		return NT_STATUS_INVALID_PARAMETER;
 	}

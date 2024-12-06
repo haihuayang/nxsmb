@@ -66,8 +66,12 @@ struct x_smbd_requ_state_lock_t : x_nxfsd_requ_state_async_t
 	std::vector<x_smb2_lock_element_t> in_lock_elements;
 };
 
-struct x_smbd_requ_state_getinfo_t
+struct x_smbd_requ_state_getinfo_t : x_nxfsd_requ_state_async_t
 {
+	void async_done(void *ctx_conn, x_nxfsd_requ_t *nxfsd_requ,
+			NTSTATUS status) override;
+
+	uint16_t in_dialect;
 	x_smb2_info_class_t in_info_class;
 	x_smb2_info_level_t in_info_level;
 	uint32_t in_output_buffer_length;
@@ -80,8 +84,11 @@ struct x_smbd_requ_state_getinfo_t
 	std::vector<uint8_t> out_data;
 };
 
-struct x_smbd_requ_state_setinfo_t
+struct x_smbd_requ_state_setinfo_t : x_nxfsd_requ_state_async_t
 {
+	void async_done(void *ctx_conn, x_nxfsd_requ_t *nxfsd_requ,
+			NTSTATUS status) override;
+
 	x_smb2_info_class_t in_info_class;
 	x_smb2_info_level_t in_info_level;
 	uint32_t in_additional;

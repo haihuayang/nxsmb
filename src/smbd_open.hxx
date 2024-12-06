@@ -165,13 +165,10 @@ struct x_smbd_object_ops_t
 			x_smbd_requ_t *smbd_requ);
 	NTSTATUS (*getinfo)(x_smbd_object_t *smbd_object,
 			x_smbd_open_t *smbd_open,
-			x_smbd_conn_t *smbd_conn,
-			x_smbd_requ_t *smbd_requ,
-			std::unique_ptr<x_smbd_requ_state_getinfo_t> &state);
+			x_smbd_requ_state_getinfo_t &state);
 	NTSTATUS (*setinfo)(x_smbd_object_t *smbd_object,
-			x_smbd_conn_t *smbd_conn,
-			x_nxfsd_requ_t *nxfsd_requ,
-			std::unique_ptr<x_smbd_requ_state_setinfo_t> &state);
+			x_smbd_open_t *smbd_open,
+			x_smbd_requ_state_setinfo_t &state);
 	NTSTATUS (*ioctl)(x_smbd_object_t *smbd_object,
 			x_nxfsd_requ_t *nxfsd_requ,
 			std::unique_ptr<x_smbd_requ_state_ioctl_t> &state);
@@ -433,23 +430,19 @@ static inline NTSTATUS x_smbd_open_op_flush(
 }
 
 static inline NTSTATUS x_smbd_open_op_getinfo(x_smbd_open_t *smbd_open,
-		x_smbd_conn_t *smbd_conn,
-		x_smbd_requ_t *smbd_requ,
-		std::unique_ptr<x_smbd_requ_state_getinfo_t> &state)
+		x_smbd_requ_state_getinfo_t &state)
 {
 	x_smbd_object_t *smbd_object = smbd_open->smbd_object;
 	return smbd_object->smbd_volume->ops->getinfo(smbd_object, smbd_open,
-			smbd_conn, smbd_requ, state);
+			state);
 }
 
 static inline NTSTATUS x_smbd_open_op_setinfo(x_smbd_open_t *smbd_open,
-		x_smbd_conn_t *smbd_conn,
-		x_nxfsd_requ_t *nxfsd_requ,
-		std::unique_ptr<x_smbd_requ_state_setinfo_t> &state)
+		x_smbd_requ_state_setinfo_t &state)
 {
 	x_smbd_object_t *smbd_object = smbd_open->smbd_object;
 	return smbd_object->smbd_volume->ops->setinfo(smbd_object,
-			smbd_conn, nxfsd_requ, state);
+			smbd_open, state);
 }
 
 static inline NTSTATUS x_smbd_open_op_ioctl(
@@ -748,7 +741,7 @@ static NTSTATUS x_smbd_getinfo_encode_le(T val,
 }
 
 template <typename T>
-NTSTATUS x_smbd_open_getinfo_file(x_smbd_conn_t *smbd_conn, x_smbd_open_t *smbd_open,
+NTSTATUS x_smbd_open_getinfo_file(x_smbd_open_t *smbd_open,
 		x_smbd_requ_state_getinfo_t &state, const T &op)
 {
 	if (state.in_info_level == x_smb2_info_level_t::FILE_BASIC_INFORMATION) {
@@ -852,7 +845,7 @@ NTSTATUS x_smbd_open_getinfo_file(x_smbd_conn_t *smbd_conn, x_smbd_open_t *smbd_
 		x_smbd_get_file_info(*info, op.get_object_meta(smbd_open));
 
 	} else if (state.in_info_level == x_smb2_info_level_t::FILE_NORMALIZED_NAME_INFORMATION) {
-		if (x_smbd_conn_get_dialect(smbd_conn) < X_SMB2_DIALECT_311) {
+		if (state.in_dialect < X_SMB2_DIALECT_311) {
 			RETURN_STATUS(NT_STATUS_NOT_SUPPORTED);
 		}
 		if (state.in_output_buffer_length < sizeof(x_smb2_file_normalized_name_info_t)) {

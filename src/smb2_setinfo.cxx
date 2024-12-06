@@ -186,6 +186,22 @@ static void smbd_setinfo_cancel(x_nxfsd_conn_t *nxfsd_conn, x_nxfsd_requ_t *nxfs
 	x_nxfsd_requ_post_cancel(nxfsd_requ, NT_STATUS_CANCELLED);
 }
 
+void x_smbd_requ_state_setinfo_t::async_done(void *ctx_conn,
+		x_nxfsd_requ_t *nxfsd_requ,
+		NTSTATUS status)
+{
+	x_smbd_requ_t *smbd_requ = x_smbd_requ_from_base(nxfsd_requ);
+	X_SMBD_REQU_LOG(OP, smbd_requ, " %s", x_ntstatus_str(status));
+	if (!ctx_conn) {
+		return;
+	}
+	x_smbd_conn_t *smbd_conn = (x_smbd_conn_t *)ctx_conn;
+	if (NT_STATUS_IS_OK(status)) {
+		x_smb2_reply_setinfo(smbd_conn, smbd_requ);
+	}
+	x_smbd_conn_requ_done(smbd_conn, smbd_requ, status);
+}
+
 NTSTATUS x_smb2_process_setinfo(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 {
 	auto [ in_hdr, in_requ_len ] = smbd_requ->base.get_in_data();
@@ -278,13 +294,18 @@ NTSTATUS x_smb2_process_setinfo(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_re
 			uint8_t(state->in_info_class), uint8_t(state->in_info_level),
 			state->in_additional, in_input_buffer_length);
 
-	status = x_smbd_open_op_setinfo(smbd_requ->base.smbd_open, smbd_conn, &smbd_requ->base,
-			state);
+	status = x_smbd_open_op_setinfo(smbd_requ->base.smbd_open,
+			*state);
 	if (NT_STATUS_IS_OK(status)) {
 		X_SMBD_REQU_LOG(OP, smbd_requ, " STATUS_SUCCESS");
 		x_smb2_reply_setinfo(smbd_conn, smbd_requ);
 		return status;
 	}
 
+	if (status == NT_STATUS_PENDING) {
+		/* not sure if windows server send interim response for setinfo */
+		x_nxfsd_requ_async_insert(&smbd_requ->base, state,
+				smbd_setinfo_cancel, -1);
+	}
 	X_SMBD_REQU_RETURN_STATUS(smbd_requ, status);
 }

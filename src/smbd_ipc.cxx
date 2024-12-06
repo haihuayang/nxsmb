@@ -782,23 +782,20 @@ struct ipc_get_file_info_t
 static NTSTATUS ipc_object_op_getinfo(
 		x_smbd_object_t *smbd_object,
 		x_smbd_open_t *smbd_open,
-		x_smbd_conn_t *smbd_conn,
-		x_smbd_requ_t *smbd_requ,
-		std::unique_ptr<x_smbd_requ_state_getinfo_t> &state)
+		x_smbd_requ_state_getinfo_t &state)
 {
-	if (state->in_info_class == x_smb2_info_class_t::FILE) {
-		return x_smbd_open_getinfo_file(smbd_conn, smbd_open, *state, ipc_get_file_info_t());
-	} else if (state->in_info_class == x_smb2_info_class_t::SECURITY) {
-		return x_smbd_open_getinfo_security(smbd_open, *state);
+	if (state.in_info_class == x_smb2_info_class_t::FILE) {
+		return x_smbd_open_getinfo_file(smbd_open, state, ipc_get_file_info_t());
+	} else if (state.in_info_class == x_smb2_info_class_t::SECURITY) {
+		return x_smbd_open_getinfo_security(smbd_open, state);
 	}
 	return NT_STATUS_NOT_SUPPORTED;
 }
 
 static NTSTATUS ipc_object_op_setinfo(
 		x_smbd_object_t *smbd_object,
-		x_smbd_conn_t *smbd_conn,
-		x_nxfsd_requ_t *nxfsd_requ,
-		std::unique_ptr<x_smbd_requ_state_setinfo_t> &state)
+		x_smbd_open_t *smbd_open,
+		x_smbd_requ_state_setinfo_t &state)
 {
 	return NT_STATUS_NOT_SUPPORTED;
 }
