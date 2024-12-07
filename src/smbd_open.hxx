@@ -687,16 +687,18 @@ NTSTATUS x_smbd_open_object_at(x_smbd_object_t **p_smbd_object,
 NTSTATUS x_smbd_object_rename(x_smbd_object_t *smbd_object,
 		x_smbd_open_t *smbd_open,
 		x_nxfsd_requ_t *nxfsd_requ,
-		x_smbd_requ_state_rename_t &state);
+		const std::u16string &dst,
+		bool replace_if_exists);
 
 static inline NTSTATUS x_smbd_open_rename(
 		x_nxfsd_requ_t *nxfsd_requ,
-		x_smbd_requ_state_rename_t &state)
+		const std::u16string &dst,
+		bool replace_if_exists)
 {
 	auto smbd_open = nxfsd_requ->smbd_open;
 	auto smbd_object = smbd_open->smbd_object;
 	return x_smbd_object_rename(smbd_object, smbd_open, nxfsd_requ,
-			state);
+			dst, replace_if_exists);
 }
 
 NTSTATUS x_smbd_open_create(

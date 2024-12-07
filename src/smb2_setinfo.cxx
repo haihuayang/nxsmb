@@ -27,6 +27,7 @@ static void x_smb2_reply_setinfo(x_smbd_conn_t *smbd_conn,
 }
 
 static NTSTATUS decode_in_rename(x_smbd_requ_state_rename_t &state,
+		x_smbd_open_t *smbd_open,
 		const uint8_t *in_hdr,
 		uint16_t in_input_buffer_offset,
 		uint32_t in_input_buffer_length)
@@ -47,17 +48,24 @@ static NTSTATUS decode_in_rename(x_smbd_requ_state_rename_t &state,
 	const char16_t *in_name_begin = (const char16_t *)(in_info + 1);
 	const char16_t *in_name_end = in_name_begin + file_name_length / 2;
 	const char16_t *sep = x_next_sep(in_name_begin, in_name_end, u':');
-	if (sep == in_name_end) {
-		state.in_path = x_utf16le_decode(in_name_begin, in_name_end);
-		state.in_stream_name.clear();
-	} else if (sep == in_name_begin) {
+	if (sep == in_name_begin) {
+		if (!smbd_open->smbd_stream) {
+			/* TODO we do not support rename object itself to a stream */
+			RETURN_STATUS(NT_STATUS_INVALID_PARAMETER);
+		}
 		bool is_dollar_data;
-		NTSTATUS status = x_smb2_parse_stream_name(state.in_stream_name,
+		std::u16string in_stream_name;
+		NTSTATUS status = x_smb2_parse_stream_name(in_stream_name,
 				is_dollar_data, sep + 1, in_name_end);
 		if (!NT_STATUS_IS_OK(status)) {
 			return status;
 		}
-		state.in_path.clear();
+		std::swap(state.in_dst, in_stream_name);
+	} else if (sep == in_name_end) {
+		if (smbd_open->smbd_stream) {
+			RETURN_STATUS(NT_STATUS_INVALID_PARAMETER);
+		}
+		state.in_dst = x_utf16le_decode(in_name_begin, in_name_end);
 	} else {
 		/* rename not allow both path and stream */
 		RETURN_STATUS(NT_STATUS_SHARING_VIOLATION);
@@ -87,34 +95,24 @@ void x_smbd_requ_state_rename_t::async_done(void *ctx_conn,
 NTSTATUS x_smbd_requ_state_rename_t::resume(void *ctx_conn,
 		x_nxfsd_requ_t *nxfsd_requ)
 {
-	return x_smbd_open_rename(nxfsd_requ, *this);
+	return x_smbd_open_rename(nxfsd_requ, in_dst, in_replace_if_exists);
 }
 
 static NTSTATUS x_smb2_process_rename(x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ,
 		x_smbd_requ_state_rename_t &state)
 {
-	X_SMBD_REQU_LOG(OP, smbd_requ,  " open=0x%lx,0x%lx '%s:%s'",
+	X_SMBD_REQU_LOG(OP, smbd_requ,  " open=0x%lx,0x%lx '%s'",
 			state.in_file_id_persistent, state.in_file_id_volatile,
-			x_str_todebug(state.in_path).c_str(),
-			x_str_todebug(state.in_stream_name).c_str());
+			x_str_todebug(state.in_dst).c_str());
 
 	/* MS-FSA 2.1.5.14.11 */
 	if (!smbd_requ->base.smbd_open->check_access_any(idl::SEC_STD_DELETE)) {
 		X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_ACCESS_DENIED);
 	}
 
-	if (smbd_requ->base.smbd_open->smbd_stream) {
-		if (state.in_path.size()) {
-			X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_OBJECT_NAME_INVALID);
-		}
-	} else {
-		if (state.in_stream_name.size()) {
-			X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
-		}
-	}
-
-	NTSTATUS status = x_smbd_open_rename(&smbd_requ->base, state);
+	NTSTATUS status = x_smbd_open_rename(&smbd_requ->base, state.in_dst,
+			state.in_replace_if_exists);
 	if (NT_STATUS_IS_OK(status)) {
 		X_SMBD_REQU_LOG(OP, smbd_requ, " STATUS_SUCCESS");
 		x_smb2_reply_setinfo(smbd_conn, smbd_requ);
@@ -243,7 +241,8 @@ NTSTATUS x_smb2_process_setinfo(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_re
 	if (in_info_class == x_smb2_info_class_t::FILE) {
 		if (in_info_level == x_smb2_info_level_t::FILE_RENAME_INFORMATION) {
 			auto state = std::make_unique<x_smbd_requ_state_rename_t>();
-			NTSTATUS status = decode_in_rename(*state, in_hdr, 
+			NTSTATUS status = decode_in_rename(*state,
+					smbd_requ->base.smbd_open, in_hdr, 
 					in_input_buffer_offset, in_input_buffer_length);
 			if (!NT_STATUS_IS_OK(status)) {
 				X_SMBD_REQU_RETURN_STATUS(smbd_requ, status);

@@ -106,7 +106,7 @@ struct x_smbd_requ_state_rename_t : x_nxfsd_requ_state_async_t
 	uint64_t in_file_id_persistent;
 	uint64_t in_file_id_volatile;
 	bool in_replace_if_exists;
-	std::u16string in_path, in_stream_name;
+	std::u16string in_dst;
 };
 
 struct x_smbd_requ_state_disposition_t : x_nxfsd_requ_state_async_t

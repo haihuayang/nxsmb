@@ -512,7 +512,8 @@ static inline void smbd_object_set_parent(x_smbd_object_t *smbd_object,
 NTSTATUS x_smbd_object_rename(x_smbd_object_t *smbd_object,
 		x_smbd_open_t *smbd_open,
 		x_nxfsd_requ_t *nxfsd_requ,
-		x_smbd_requ_state_rename_t &state)
+		const std::u16string &dst,
+		bool replace_if_exists)
 {
 	x_smbd_sharemode_t *sharemode = x_smbd_open_get_sharemode(smbd_open);
 
@@ -527,7 +528,7 @@ NTSTATUS x_smbd_object_rename(x_smbd_object_t *smbd_object,
 		auto smbd_share = x_smbd_tcon_get_share(smbd_open->smbd_tcon);
 		status = open_parent_object(&new_parent_object, new_path_base,
 				smbd_share->root_object,
-				state.in_path);
+				dst);
 		if (!NT_STATUS_IS_OK(status)) {
 			return status;
 		}
@@ -553,13 +554,13 @@ NTSTATUS x_smbd_object_rename(x_smbd_object_t *smbd_object,
 	}
 
 	if (smbd_open->smbd_stream) {
-		if (x_strcase_equal(smbd_open->smbd_stream->name, state.in_stream_name)) {
+		if (x_strcase_equal(smbd_open->smbd_stream->name, dst)) {
 			return NT_STATUS_OK;
 		}
 		return smbd_object->smbd_volume->ops->rename_stream(smbd_object,
 				smbd_open->smbd_stream,
-				state.in_replace_if_exists,
-				state.in_stream_name);
+				replace_if_exists,
+				dst);
 	}
 
 	auto &pool = smbd_object_pool;
