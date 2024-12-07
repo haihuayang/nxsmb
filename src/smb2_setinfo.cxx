@@ -153,7 +153,7 @@ void x_smbd_requ_state_disposition_t::async_done(void *ctx_conn,
 NTSTATUS x_smbd_requ_state_disposition_t::resume(void *ctx_conn,
 		x_nxfsd_requ_t *nxfsd_requ)
 {
-	return x_smbd_open_set_delete_pending(nxfsd_requ, *this);
+	return x_smbd_open_set_delete_pending(nxfsd_requ, this->delete_pending);
 }
 
 static NTSTATUS x_smb2_process_disposition(x_smbd_conn_t *smbd_conn,
@@ -169,7 +169,8 @@ static NTSTATUS x_smb2_process_disposition(x_smbd_conn_t *smbd_conn,
 		X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_ACCESS_DENIED);
 	}
 
-	NTSTATUS status = x_smbd_open_set_delete_pending(&smbd_requ->base, state);
+	NTSTATUS status = x_smbd_open_set_delete_pending(&smbd_requ->base,
+			state.delete_pending);
 	if (NT_STATUS_IS_OK(status)) {
 		X_SMBD_REQU_LOG(OP, smbd_requ, " STATUS_SUCCESS");
 		x_smb2_reply_setinfo(smbd_conn, smbd_requ);

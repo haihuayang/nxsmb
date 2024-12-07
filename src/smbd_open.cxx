@@ -200,10 +200,8 @@ static NTSTATUS smbd_object_remove(
 	sharemode->open_list.remove(smbd_open);
 	--smbd_object->num_active_open;
 	if (smbd_open->open_state.flags & x_smbd_open_state_t::F_INITIAL_DELETE_ON_CLOSE) {
-		x_smbd_requ_state_disposition_t state;
-		state.delete_pending = true;
 		x_smbd_object_set_delete_pending_intl(smbd_object, smbd_open,
-				nullptr, state);
+				nullptr, true);
 	}
 
 	if (smbd_open->open_state.locks.size()) {

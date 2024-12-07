@@ -622,11 +622,11 @@ NTSTATUS x_smbd_object_set_delete_on_close(x_smbd_object_t *smbd_object,
 NTSTATUS x_smbd_object_set_delete_pending_intl(x_smbd_object_t *smbd_object,
 		x_smbd_open_t *smbd_open,
 		x_nxfsd_requ_t *nxfsd_requ,
-		x_smbd_requ_state_disposition_t &state)
+		bool delete_on_close)
 {
 	auto sharemode = x_smbd_open_get_sharemode(smbd_open);
 
-	if (!state.delete_pending) {
+	if (!delete_on_close) {
 		sharemode->meta.delete_on_close = false;
 		return NT_STATUS_OK;
 	}
@@ -694,11 +694,11 @@ NTSTATUS x_smbd_object_set_delete_pending_intl(x_smbd_object_t *smbd_object,
 NTSTATUS x_smbd_object_set_delete_pending(x_smbd_object_t *smbd_object,
 		x_smbd_open_t *smbd_open,
 		x_nxfsd_requ_t *nxfsd_requ,
-		x_smbd_requ_state_disposition_t &state)
+		bool delete_on_close)
 {
 	auto lock = std::lock_guard(smbd_object->mutex);
 	return x_smbd_object_set_delete_pending_intl(smbd_object, smbd_open,
-			nxfsd_requ, state);
+			nxfsd_requ, delete_on_close);
 }
 
 std::u16string x_smbd_object_get_path(const x_smbd_object_t *smbd_object)
