@@ -259,7 +259,7 @@ struct x_smbd_requ_t
 	}
 
 	uint64_t channel_generation;
-	const uint64_t compound_id;
+	uint64_t compound_id;
 
 	x_smb2_header_t in_smb2_hdr;
 	bool encrypted;

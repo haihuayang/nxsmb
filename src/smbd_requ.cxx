@@ -39,9 +39,9 @@ x_smbd_requ_t::x_smbd_requ_t(x_nxfsd_conn_t *nxfsd_conn, x_buf_t *in_buf,
 		uint32_t in_msgsize,
 		bool encrypted)
 	: base(&smbd_requ_upcall_cbs, nxfsd_conn, in_buf, in_msgsize)
-	, compound_id(X_NXFSD_COUNTER_INC_CREATE(smbd_requ, 1) + 1)
 	, encrypted(encrypted)
 {
+	X_NXFSD_COUNTER_INC_CREATE(smbd_requ, 1);
 }
 
 x_smbd_requ_t::~x_smbd_requ_t()

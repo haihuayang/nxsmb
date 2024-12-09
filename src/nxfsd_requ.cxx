@@ -38,7 +38,9 @@ x_nxfsd_requ_t::~x_nxfsd_requ_t()
 {
 	x_ref_dec_if(smbd_open);
 	x_ref_dec(nxfsd_conn);
-	x_buf_release(in_buf);
+	if (in_buf) {
+		x_buf_release(in_buf);
+	}
 	x_bufref_list_free(out_buf_head);
 }
 

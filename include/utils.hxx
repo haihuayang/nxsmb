@@ -329,6 +329,13 @@ inline void x_ref_dec_if(T *t)
 
 #define X_REF_DEC(t) do { x_ref_dec(t); (t) = nullptr; } while (0)
 
+#define X_REF_DEC_IF(t) do { \
+	if (t) { \
+		x_ref_dec(t); \
+		(t) = nullptr; \
+	} \
+} while (0)
+
 template <class T>
 struct x_ref_ptr_t
 {
