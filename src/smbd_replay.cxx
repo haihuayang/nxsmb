@@ -2,6 +2,7 @@
 #include "smbd.hxx"
 #include "smbd_replay.hxx"
 #include "smbd_hashtable.hxx"
+#include "smbd_open.hxx"
 #include "nxfsd_stats.hxx"
 
 struct replay_item_t
