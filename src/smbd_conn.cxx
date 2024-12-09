@@ -732,11 +732,10 @@ static void smbd_conn_reply_update_counts(
 	}
 }
 
-static bool x_smb2_validate_message_id(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
+static bool x_smb2_validate_message_id(x_smbd_conn_t *smbd_conn,
+		uint16_t credit_charge, uint64_t mid)
 {
-	X_ASSERT(smbd_requ->in_smb2_hdr.opcode != X_SMB2_OP_CANCEL);
-
-	uint16_t credit_charge = std::max(smbd_requ->in_smb2_hdr.credit_charge, uint16_t(1u));
+	credit_charge = std::max(credit_charge, uint16_t(1u));
 
 	if (smbd_conn->credit_granted < credit_charge) {
 		X_LOG(SMB, ERR, "credit_charge %u > credit_granted %lu",
@@ -744,15 +743,15 @@ static bool x_smb2_validate_message_id(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *
 		return false;
 	}
 
-	if (!x_check_range<uint64_t>(smbd_requ->in_smb2_hdr.mid, credit_charge, smbd_conn->credit_seq_low,
+	if (!x_check_range<uint64_t>(mid, credit_charge, smbd_conn->credit_seq_low,
 				smbd_conn->credit_seq_low + smbd_conn->credit_seq_range)) {
-		X_LOG(SMB, ERR, "%lu+%u not in the credit range %lu+%lu", smbd_requ->in_smb2_hdr.mid, credit_charge,
+		X_LOG(SMB, ERR, "%lu+%u not in the credit range %lu+%lu", mid, credit_charge,
 				smbd_conn->credit_seq_low, smbd_conn->credit_seq_range);
 		return false;
 	}
 
 	auto &seq_bitmap = smbd_conn->seq_bitmap;
-	uint64_t id = smbd_requ->in_smb2_hdr.mid;
+	uint64_t id = mid;
 	for (uint16_t i = 0; i < credit_charge; ++i, ++id) {
 		uint64_t offset = id % seq_bitmap.size();
 		if (seq_bitmap[offset]) {
@@ -762,9 +761,9 @@ static bool x_smb2_validate_message_id(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *
 		seq_bitmap[offset] = true;
 	}
 
-	if (smbd_requ->in_smb2_hdr.mid == smbd_conn->credit_seq_low) {
+	if (mid == smbd_conn->credit_seq_low) {
 		uint64_t clear = 0;
-		id = smbd_requ->in_smb2_hdr.mid;
+		id = mid;
 		uint64_t offset = id % seq_bitmap.size();
 		for ( ; seq_bitmap[offset]; ++clear) {
 			seq_bitmap[offset] = false;
@@ -780,7 +779,9 @@ static bool x_smb2_validate_message_id(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *
 
 static NTSTATUS x_smbd_conn_process_smb2_intl(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 {
-	if (!x_smb2_validate_message_id(smbd_conn, smbd_requ)) {
+	if (!x_smb2_validate_message_id(smbd_conn,
+				smbd_requ->in_smb2_hdr.credit_charge,
+				smbd_requ->in_smb2_hdr.mid)) {
 		/* NOTE, WPTS CreditMgmtTestCaseS776 requires it return
 		 * NT_STATUS_INVALID_PARAMETER
 		 */
@@ -1186,7 +1187,7 @@ static int x_smbd_conn_process_smb(x_smbd_conn_t *smbd_conn, x_buf_t *buf, uint3
 	x_ref_ptr_t<x_smbd_requ_t> smbd_requ{x_smbd_requ_create(&smbd_conn->base,
 			buf, msgsize, encrypted)};
 	// TODO smbd_requ can be nullptr
-	
+
 	if (smbhdr == X_SMB2_MAGIC) {
 		if (len < sizeof(x_smb2_header_t)) {
 			return -EBADMSG;
@@ -1206,7 +1207,7 @@ static int x_smbd_conn_process_smb(x_smbd_conn_t *smbd_conn, x_buf_t *buf, uint3
 			.opcode = X_SMB2_OP_NEGPROT,
 		};
 
-		if (!x_smb2_validate_message_id(smbd_conn, smbd_requ)) {
+		if (!x_smb2_validate_message_id(smbd_conn, 1, 0)) {
 			return -EBADMSG;
 		}
 
