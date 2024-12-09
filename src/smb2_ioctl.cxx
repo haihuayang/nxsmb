@@ -498,7 +498,7 @@ static NTSTATUS x_smb2_ioctl_query_allocated_ranges(
 {
 	/* TODO check tcon writable */
 
-	auto smbd_open = smbd_requ->base.smbd_open;
+	auto smbd_open = smbd_requ->smbd_open;
 	if (!smbd_open->check_access_any(idl::SEC_FILE_READ_DATA)) {
 		X_LOG(SMB, NOTICE, "query_allocated_ranges invalid access 0x%x",
 				smbd_open->open_state.access_mask);
@@ -565,7 +565,7 @@ static NTSTATUS x_smb2_ioctl_set_sparse(
 {
 	/* TODO check tcon writable */
 
-	auto smbd_open = smbd_requ->base.smbd_open;
+	auto smbd_open = smbd_requ->smbd_open;
 	if (!smbd_open->check_access_any(idl::SEC_FILE_WRITE_DATA |
 				idl::SEC_FILE_WRITE_ATTRIBUTE |
 				idl::SEC_FILE_APPEND_DATA)) {
@@ -615,7 +615,7 @@ static NTSTATUS x_smb2_ioctl_set_zero_data(
 		x_smbd_requ_state_ioctl_t &state)
 {
 	/* TODO check tcon writable */
-	auto smbd_open = smbd_requ->base.smbd_open;
+	auto smbd_open = smbd_requ->smbd_open;
 	if (!smbd_open->check_access_any(idl::SEC_FILE_WRITE_DATA)) {
 		X_LOG(SMB, NOTICE, "set_sparse invalid access 0x%x",
 				smbd_open->open_state.access_mask);
@@ -696,14 +696,14 @@ static NTSTATUS x_smbd_open_ioctl(x_smbd_conn_t *smbd_conn,
 	case X_SMB2_FSCTL_SET_COMPRESSION:
 		return x_smb2_ioctl_set_compression(smbd_requ, *state);
 	default:
-		return x_smbd_open_op_ioctl(smbd_requ->base.smbd_open,
-				&smbd_requ->base, state);
+		return x_smbd_open_op_ioctl(smbd_requ->smbd_open,
+				smbd_requ, state);
 	}
 }
 
 NTSTATUS x_smb2_process_ioctl(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 {
-	auto [ in_buf, in_offset, in_requ_len ] = smbd_requ->base.get_in_buf();
+	auto [ in_buf, in_offset, in_requ_len ] = smbd_requ->get_in_buf();
 	if (in_requ_len < sizeof(x_smb2_header_t) + sizeof(x_smb2_ioctl_requ_t)) {
 		X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
@@ -780,7 +780,7 @@ enum {
 NTSTATUS x_smb2_process_ioctl_torture(x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ)
 {
-	auto [ in_buf, in_offset, in_requ_len ] = smbd_requ->base.get_in_buf();
+	auto [ in_buf, in_offset, in_requ_len ] = smbd_requ->get_in_buf();
 	if (in_requ_len < sizeof(x_smb2_header_t) + sizeof(x_smb2_ioctl_requ_t)) {
 		X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}

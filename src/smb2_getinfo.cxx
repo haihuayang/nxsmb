@@ -83,7 +83,7 @@ static void smbd_getinfo_cancel(x_nxfsd_conn_t *nxfsd_conn, x_nxfsd_requ_t *nxfs
 
 NTSTATUS x_smb2_process_getinfo(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 {
-	auto [ in_hdr, in_requ_len ] = smbd_requ->base.get_in_data();
+	auto [ in_hdr, in_requ_len ] = smbd_requ->get_in_data();
 	if (in_requ_len < sizeof(x_smb2_header_t) + sizeof(x_smb2_getinfo_requ_t)) {
 		X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
@@ -121,7 +121,7 @@ NTSTATUS x_smb2_process_getinfo(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_re
 		X_SMBD_REQU_RETURN_STATUS(smbd_requ, status);
 	}
 
-	status = x_smbd_open_op_getinfo(smbd_requ->base.smbd_open,
+	status = x_smbd_open_op_getinfo(smbd_requ->smbd_open,
 			*state);
 	if (NT_STATUS_IS_OK(status) || NT_STATUS_EQUAL(status, NT_STATUS_BUFFER_OVERFLOW)) {
 		x_smb2_reply_getinfo(smbd_conn, smbd_requ, *state, status);
@@ -130,8 +130,8 @@ NTSTATUS x_smb2_process_getinfo(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_re
 	if (status == NT_STATUS_PENDING) {
 		/* TODO does it need a timer? can break timer always wake up it? */
 		X_SMBD_REQU_LOG(DBG, smbd_requ, " interim_state %d",
-				smbd_requ->base.interim_state);
-		x_nxfsd_requ_async_insert(&smbd_requ->base, state, smbd_getinfo_cancel, 0);
+				smbd_requ->interim_state);
+		x_nxfsd_requ_async_insert(smbd_requ, state, smbd_getinfo_cancel, 0);
 	}
 
 	X_SMBD_REQU_RETURN_STATUS(smbd_requ, status);

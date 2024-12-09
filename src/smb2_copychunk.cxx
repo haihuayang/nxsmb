@@ -272,15 +272,15 @@ NTSTATUS x_smb2_ioctl_copychunk(
 
 	/* vfs_offload_token_check_handles */
 	NTSTATUS status = copychunk_check_access(state->ctl_code, src_open,
-			smbd_requ->base.smbd_open);
+			smbd_requ->smbd_open);
 	if (!NT_STATUS_IS_OK(status)) {
 		x_ref_dec(src_open);
 		return status;
 	}
 
-	copychunk_job_t *copychunk_job = new copychunk_job_t(x_ref_inc(&smbd_requ->base),
+	copychunk_job_t *copychunk_job = new copychunk_job_t(x_ref_inc(smbd_requ),
 			src_open, std::move(chunks));
-	x_nxfsd_requ_async_insert(&smbd_requ->base, state, copychunk_cancel, X_NSEC_PER_SEC);
+	x_nxfsd_requ_async_insert(smbd_requ, state, copychunk_cancel, X_NSEC_PER_SEC);
 	x_smbd_schedule_async(&copychunk_job->base);
 	return NT_STATUS_PENDING;
 }
@@ -295,7 +295,7 @@ NTSTATUS x_smb2_ioctl_request_resume_key(
 	state.out_buf = x_buf_alloc(32);
 	state.out_buf_length = 32;
 	uint64_t *data = (uint64_t *)state.out_buf->data;
-	auto [ persistent_id, volatile_id ] = x_smbd_open_get_id(smbd_requ->base.smbd_open);
+	auto [ persistent_id, volatile_id ] = x_smbd_open_get_id(smbd_requ->smbd_open);
 	*data++ = X_H2LE64(persistent_id);
 	*data++ = X_H2LE64(volatile_id);
 	*data++ = 0;

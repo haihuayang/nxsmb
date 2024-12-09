@@ -90,12 +90,12 @@ static bool smbd_qdir_queue_req(x_smbd_qdir_t *smbd_qdir, x_smbd_requ_t *smbd_re
 		x_smbd_requ_t *curr_smbd_requ = x_smbd_requ_from_base(curr_requ);
 		X_ASSERT(smbd_requ->compound_id != curr_smbd_requ->compound_id);
 		if (smbd_requ->compound_id > curr_smbd_requ->compound_id) {
-			requ_list.insert_after(&smbd_requ->base, curr_requ);
+			requ_list.insert_after(smbd_requ, curr_requ);
 			return false;
 		}
 	}
 
-	requ_list.push_front(&smbd_requ->base);
+	requ_list.push_front(smbd_requ);
 	return smbd_qdir->compound_id_blocking == smbd_requ->compound_id;
 }
 
@@ -110,7 +110,7 @@ static NTSTATUS smbd_qdir_process_requ(x_smbd_qdir_t *smbd_qdir,
 	if (smbd_qdir->delay_ms) {
 		usleep(smbd_qdir->delay_ms * 1000);
 	}
-	auto state = smbd_requ->base.get_requ_state<x_smbd_requ_state_qdir_t>();
+	auto state = smbd_requ->get_requ_state<x_smbd_requ_state_qdir_t>();
 	if (new_requ) {
 		X_ASSERT(!state->out_buf);
 
@@ -209,7 +209,7 @@ struct smbd_qdir_evt_t
 		smbd_qdir_evt_t *evt = X_CONTAINER_OF(fdevt_user, smbd_qdir_evt_t, base);
 		x_smbd_requ_t *smbd_requ = evt->smbd_requ;
 		X_LOG(SMB, DBG, "evt=%p, requ=%p, ctx_conn=%p", evt, smbd_requ, ctx_conn);
-		x_nxfsd_requ_async_done(ctx_conn, &smbd_requ->base, evt->status);
+		x_nxfsd_requ_async_done(ctx_conn, smbd_requ, evt->status);
 		delete evt;
 	}
 
@@ -313,7 +313,7 @@ static void smbd_qdir_cancel(x_nxfsd_conn_t *nxfsd_conn, x_nxfsd_requ_t *nxfsd_r
 
 NTSTATUS x_smb2_process_query_directory(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 {
-	auto [ in_hdr, in_requ_len ] = smbd_requ->base.get_in_data();
+	auto [ in_hdr, in_requ_len ] = smbd_requ->get_in_data();
 	if (in_requ_len < sizeof(x_smb2_header_t) + sizeof(x_smb2_qdir_requ_t)) {
 		X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
@@ -359,7 +359,7 @@ NTSTATUS x_smb2_process_query_directory(x_smbd_conn_t *smbd_conn, x_smbd_requ_t 
 		X_SMBD_REQU_RETURN_STATUS(smbd_requ, status);
 	}
 
-	auto smbd_open = smbd_requ->base.smbd_open;
+	auto smbd_open = smbd_requ->smbd_open;
 	x_smbd_object_t *smbd_object = smbd_open->smbd_object;
 	if (smbd_open->smbd_stream || !x_smbd_object_is_dir(smbd_object)) {
 		return NT_STATUS_INVALID_PARAMETER;
@@ -384,7 +384,7 @@ NTSTATUS x_smb2_process_query_directory(x_smbd_conn_t *smbd_conn, x_smbd_requ_t 
 			}
 		}
 
-		x_nxfsd_requ_async_insert(&smbd_requ->base, state, smbd_qdir_cancel,
+		x_nxfsd_requ_async_insert(smbd_requ, state, smbd_qdir_cancel,
 				X_NSEC_PER_SEC);
 
 		smbd_qdir_queue_req(smbd_open->smbd_qdir, smbd_requ);

@@ -63,7 +63,7 @@ NTSTATUS x_smb2_process_close(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ
 {
 	X_ASSERT(smbd_requ->smbd_chan && smbd_requ->smbd_sess);
 
-	auto [ in_hdr, in_requ_len ] = smbd_requ->base.get_in_data();
+	auto [ in_hdr, in_requ_len ] = smbd_requ->get_in_data();
 	if (in_requ_len < sizeof(x_smb2_header_t) + sizeof(x_smb2_close_requ_t)) {
 		X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
@@ -88,7 +88,7 @@ NTSTATUS x_smb2_process_close(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ
 	if (state->in_flags & X_SMB2_CLOSE_FLAGS_FULL_INFORMATION) {
 		info = &state->out_info;
 	}
-	status = x_smbd_open_op_close(smbd_requ->base.smbd_open, info);
+	status = x_smbd_open_op_close(smbd_requ->smbd_open, info);
 	if (!NT_STATUS_IS_OK(status)) {
 		X_SMBD_REQU_RETURN_STATUS(smbd_requ, status);
 	}

@@ -16,7 +16,7 @@ static NTSTATUS x_smb2_reply_notify(x_smbd_conn_t *smbd_conn,
 {
 	/* TODO seem windows server remember in_output_buffer_length */
 	uint32_t output_buffer_length = std::min(state.in_output_buffer_length,
-			smbd_requ->base.smbd_open->notify_buffer_length);
+			smbd_requ->smbd_open->notify_buffer_length);
 
 	x_bufref_t *bufref = x_smb2_bufref_alloc(sizeof(x_smb2_notify_resp_t) +
 			output_buffer_length);
@@ -103,7 +103,7 @@ static NTSTATUS smbd_open_notify(x_smbd_open_t *smbd_open,
 
 NTSTATUS x_smb2_process_notify(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 {
-	auto [ in_hdr, in_requ_len ] = smbd_requ->base.get_in_data();
+	auto [ in_hdr, in_requ_len ] = smbd_requ->get_in_data();
 	if (in_requ_len < sizeof(x_smb2_header_t) + sizeof(x_smb2_notify_requ_t)) {
 		X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
@@ -145,7 +145,7 @@ NTSTATUS x_smb2_process_notify(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_req
 		X_SMBD_REQU_RETURN_STATUS(smbd_requ, status);
 	}
 
-	auto smbd_open = smbd_requ->base.smbd_open;
+	auto smbd_open = smbd_requ->smbd_open;
 	if (x_smbd_open_is_data(smbd_open)) {
 		X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
@@ -165,7 +165,7 @@ NTSTATUS x_smb2_process_notify(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_req
 	}
 
 	status = smbd_open_notify(smbd_open,
-			&smbd_requ->base, state);
+			smbd_requ, state);
 	if (NT_STATUS_IS_OK(status)) {
 		X_SMBD_REQU_LOG(OP, smbd_requ, " STATUS_SUCCESS");
 		return x_smb2_reply_notify(smbd_conn, smbd_requ, *state);

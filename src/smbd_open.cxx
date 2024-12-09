@@ -1857,7 +1857,7 @@ NTSTATUS x_smbd_open_op_reconnect(x_smbd_requ_t *smbd_requ,
 	}
 
 	x_ref_inc(smbd_tcon); // ref by smbd_open
-	smbd_requ->base.smbd_open = smbd_open; // TODO ref count
+	smbd_requ->smbd_open = smbd_open; // TODO ref count
 
 	return status;
 }

@@ -238,13 +238,11 @@ struct x_smbd_requ_state_sesssetup_t : x_nxfsd_requ_state_async_t
 	std::vector<uint8_t> out_security;
 };
 
-struct x_smbd_requ_t
+struct x_smbd_requ_t : x_nxfsd_requ_t
 {
 	explicit x_smbd_requ_t(x_nxfsd_conn_t *nxfsd_conn, x_buf_t *in_buf,
 			uint32_t in_msgsize, bool encrypted);
 	~x_smbd_requ_t();
-
-	x_nxfsd_requ_t base;
 
 	bool is_signed() const {
 		return (in_smb2_hdr.flags & X_SMB2_HDR_FLAG_SIGNED) != 0;
@@ -277,12 +275,14 @@ struct x_smbd_requ_t
 
 static inline x_smbd_requ_t *x_smbd_requ_from_base(x_nxfsd_requ_t *nxfsd_requ)
 {
-	return X_CONTAINER_OF(nxfsd_requ, x_smbd_requ_t, base);
+	return dynamic_cast<x_smbd_requ_t *>(nxfsd_requ);
+	//return X_CONTAINER_OF(nxfsd_requ, x_smbd_requ_t, base);
 }
 
 static inline const x_smbd_requ_t *x_smbd_requ_from_base(const x_nxfsd_requ_t *nxfsd_requ)
 {
-	return X_CONTAINER_OF(nxfsd_requ, x_smbd_requ_t, base);
+	return dynamic_cast<const x_smbd_requ_t *>(nxfsd_requ);
+	// return X_CONTAINER_OF(nxfsd_requ, x_smbd_requ_t, base);
 }
 
 
@@ -292,7 +292,7 @@ static inline const x_smbd_requ_t *x_smbd_requ_from_base(const x_nxfsd_requ_t *n
 		(smbd_requ)->in_smb2_hdr.tid, (smbd_requ)->in_smb2_hdr.opcode
 
 #define X_SMBD_REQU_DBG_FMT "requ(%p 0x%lx " X_SMBD_REQU_SUB_DBG_FMT ")"
-#define X_SMBD_REQU_DBG_ARG(smbd_requ) (smbd_requ), (smbd_requ)->base.id, \
+#define X_SMBD_REQU_DBG_ARG(smbd_requ) (smbd_requ), (smbd_requ)->id, \
 		X_SMBD_REQU_SUB_DBG_ARG(smbd_requ)
 
 #define X_SMBD_REQU_RETURN_STATUS(smbd_requ, status) do { \

@@ -27,7 +27,7 @@ static void x_smb2_reply_read(x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ,
 		x_smbd_requ_state_read_t &state)
 {
-	smbd_requ->base.smbd_open->open_state.current_offset =
+	smbd_requ->smbd_open->open_state.current_offset =
 		state.in_offset + state.in_length;
 
 	x_bufref_t *bufref = x_smb2_bufref_alloc(sizeof(x_smb2_read_resp_t));
@@ -77,7 +77,7 @@ NTSTATUS x_smb2_process_read(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 	X_ASSERT(smbd_requ->smbd_chan && smbd_requ->smbd_sess);
 
 	// TODO smbd_smb2_request_verify_creditcharge
-	auto [ in_hdr, in_requ_len ] = smbd_requ->base.get_in_data();
+	auto [ in_hdr, in_requ_len ] = smbd_requ->get_in_data();
 	if (in_requ_len < sizeof(x_smb2_header_t) + sizeof(x_smb2_read_requ_t)) {
 		X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
@@ -109,7 +109,7 @@ NTSTATUS x_smb2_process_read(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 		X_SMBD_REQU_RETURN_STATUS(smbd_requ, status);
 	}
 
-	auto smbd_open = smbd_requ->base.smbd_open;
+	auto smbd_open = smbd_requ->smbd_open;
 	if (!smbd_open->check_access_any(idl::SEC_FILE_READ_DATA |
 				idl::SEC_FILE_EXECUTE)) {
 		X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_ACCESS_DENIED);
@@ -125,7 +125,7 @@ NTSTATUS x_smb2_process_read(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 		state->out_buf_length = 0;
 		status = NT_STATUS_OK;
 	} else {
-		status = x_smbd_open_op_read(smbd_open, &smbd_requ->base,
+		status = x_smbd_open_op_read(smbd_open, smbd_requ,
 				state, smbd_conf.my_dev_delay_read_ms,
 				false);
 	}

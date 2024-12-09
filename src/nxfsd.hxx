@@ -51,7 +51,7 @@ struct x_nxfsd_requ_t
 	explicit x_nxfsd_requ_t(const x_nxfsd_requ_cbs_t *cbs,
 			x_nxfsd_conn_t *nxfsd_conn, x_buf_t *in_buf,
 			uint32_t in_msgsize);
-	~x_nxfsd_requ_t();
+	virtual ~x_nxfsd_requ_t();
 
 	std::tuple<const uint8_t *, uint32_t> get_in_data() const {
 		return {in_buf->data + in_offset, in_requ_len};

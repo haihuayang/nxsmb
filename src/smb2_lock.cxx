@@ -342,7 +342,7 @@ static NTSTATUS smbd_open_lock(
 	} else {
 		X_ASSERT(state->in_lock_elements.size() == 1);
 		X_LOG(SMB, DBG, "lock conflict");
-		x_nxfsd_requ_t *nxfsd_requ = &smbd_requ->base;
+		x_nxfsd_requ_t *nxfsd_requ = smbd_requ;
 		x_ref_inc(nxfsd_requ);
 		smbd_open->pending_requ_list.push_back(nxfsd_requ);
 		x_nxfsd_requ_async_insert(nxfsd_requ, state, smbd_lock_cancel, 0);
@@ -406,7 +406,7 @@ static NTSTATUS smbd_open_unlock(
 
 NTSTATUS x_smb2_process_lock(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 {
-	auto [ in_hdr, in_requ_len ] = smbd_requ->base.get_in_data();
+	auto [ in_hdr, in_requ_len ] = smbd_requ->get_in_data();
 	if (in_requ_len < sizeof(x_smb2_header_t) + sizeof(x_smb2_lock_requ_t)) {
 		X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
@@ -433,7 +433,7 @@ NTSTATUS x_smb2_process_lock(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 		X_SMBD_REQU_RETURN_STATUS(smbd_requ, status);
 	}
 
-	auto smbd_open = smbd_requ->base.smbd_open;
+	auto smbd_open = smbd_requ->smbd_open;
 
 	if (!x_smbd_open_is_data(smbd_open)) {
 		X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
@@ -460,17 +460,17 @@ NTSTATUS x_smb2_process_lock(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 	}
 
 	if (is_unlock) {
-		status = smbd_open_unlock(smbd_requ->base.smbd_open,
+		status = smbd_open_unlock(smbd_requ->smbd_open,
 				smbd_requ, state);
 	} else {
-		smbd_requ->base.status = NT_STATUS_RANGE_NOT_LOCKED;
-		status = smbd_open_lock(smbd_requ->base.smbd_open,
+		smbd_requ->status = NT_STATUS_RANGE_NOT_LOCKED;
+		status = smbd_open_lock(smbd_requ->smbd_open,
 				smbd_requ, state);
 	}
 	
 
 	if (NT_STATUS_IS_OK(status)) {
-		smb2_lock_set_sequence(smbd_requ->base.smbd_open, *state);
+		smb2_lock_set_sequence(smbd_requ->smbd_open, *state);
 		X_SMBD_REQU_LOG(OP, smbd_requ, " STATUS_SUCCESS");
 		x_smb2_reply_lock(smbd_conn, smbd_requ, *state);
 		return status;

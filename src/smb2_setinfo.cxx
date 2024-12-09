@@ -107,11 +107,11 @@ static NTSTATUS x_smb2_process_rename(x_smbd_conn_t *smbd_conn,
 			x_str_todebug(state.in_dst).c_str());
 
 	/* MS-FSA 2.1.5.14.11 */
-	if (!smbd_requ->base.smbd_open->check_access_any(idl::SEC_STD_DELETE)) {
+	if (!smbd_requ->smbd_open->check_access_any(idl::SEC_STD_DELETE)) {
 		X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_ACCESS_DENIED);
 	}
 
-	NTSTATUS status = x_smbd_open_rename(&smbd_requ->base, state.in_dst,
+	NTSTATUS status = x_smbd_open_rename(smbd_requ, state.in_dst,
 			state.in_replace_if_exists);
 	if (NT_STATUS_IS_OK(status)) {
 		X_SMBD_REQU_LOG(OP, smbd_requ, " STATUS_SUCCESS");
@@ -165,11 +165,11 @@ static NTSTATUS x_smb2_process_disposition(x_smbd_conn_t *smbd_conn,
 			state.delete_pending);
 
 	/* MS-FSA 2.1.5.14.11 */
-	if (!smbd_requ->base.smbd_open->check_access_any(idl::SEC_STD_DELETE)) {
+	if (!smbd_requ->smbd_open->check_access_any(idl::SEC_STD_DELETE)) {
 		X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_ACCESS_DENIED);
 	}
 
-	NTSTATUS status = x_smbd_open_set_delete_pending(&smbd_requ->base,
+	NTSTATUS status = x_smbd_open_set_delete_pending(smbd_requ,
 			state.delete_pending);
 	if (NT_STATUS_IS_OK(status)) {
 		X_SMBD_REQU_LOG(OP, smbd_requ, " STATUS_SUCCESS");
@@ -203,7 +203,7 @@ void x_smbd_requ_state_setinfo_t::async_done(void *ctx_conn,
 
 NTSTATUS x_smb2_process_setinfo(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 {
-	auto [ in_hdr, in_requ_len ] = smbd_requ->base.get_in_data();
+	auto [ in_hdr, in_requ_len ] = smbd_requ->get_in_data();
 	if (in_requ_len < sizeof(x_smb2_header_t) + sizeof(x_smb2_setinfo_requ_t)) {
 		X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
 	}
@@ -243,7 +243,7 @@ NTSTATUS x_smb2_process_setinfo(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_re
 		if (in_info_level == x_smb2_info_level_t::FILE_RENAME_INFORMATION) {
 			auto state = std::make_unique<x_smbd_requ_state_rename_t>();
 			NTSTATUS status = decode_in_rename(*state,
-					smbd_requ->base.smbd_open, in_hdr, 
+					smbd_requ->smbd_open, in_hdr, 
 					in_input_buffer_offset, in_input_buffer_length);
 			if (!NT_STATUS_IS_OK(status)) {
 				X_SMBD_REQU_RETURN_STATUS(smbd_requ, status);
@@ -255,7 +255,7 @@ NTSTATUS x_smb2_process_setinfo(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_re
 			status = x_smb2_process_rename(smbd_conn, smbd_requ, *state);
 			if (status == NT_STATUS_PENDING) {
 				/* windows server do not send interim response in renaming */
-				x_nxfsd_requ_async_insert(&smbd_requ->base, state,
+				x_nxfsd_requ_async_insert(smbd_requ, state,
 						smbd_setinfo_cancel, -1);
 			}
 			return status;
@@ -273,7 +273,7 @@ NTSTATUS x_smb2_process_setinfo(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_re
 			status = x_smb2_process_disposition(smbd_conn, smbd_requ, *state);
 			if (status == NT_STATUS_PENDING) {
 				/* windows server do not send interim response in deleting */
-				x_nxfsd_requ_async_insert(&smbd_requ->base, state,
+				x_nxfsd_requ_async_insert(smbd_requ, state,
 						smbd_setinfo_cancel, -1);
 			}
 			return status;
@@ -294,7 +294,7 @@ NTSTATUS x_smb2_process_setinfo(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_re
 			uint8_t(state->in_info_class), uint8_t(state->in_info_level),
 			state->in_additional, in_input_buffer_length);
 
-	status = x_smbd_open_op_setinfo(smbd_requ->base.smbd_open,
+	status = x_smbd_open_op_setinfo(smbd_requ->smbd_open,
 			*state);
 	if (NT_STATUS_IS_OK(status)) {
 		X_SMBD_REQU_LOG(OP, smbd_requ, " STATUS_SUCCESS");
@@ -304,7 +304,7 @@ NTSTATUS x_smb2_process_setinfo(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_re
 
 	if (status == NT_STATUS_PENDING) {
 		/* not sure if windows server send interim response for setinfo */
-		x_nxfsd_requ_async_insert(&smbd_requ->base, state,
+		x_nxfsd_requ_async_insert(smbd_requ, state,
 				smbd_setinfo_cancel, -1);
 	}
 	X_SMBD_REQU_RETURN_STATUS(smbd_requ, status);
