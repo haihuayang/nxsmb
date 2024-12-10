@@ -58,7 +58,7 @@ static void x_smb2_reply_write(x_smbd_conn_t *smbd_conn,
 		const x_smbd_requ_state_write_t &state)
 {
 	x_out_buf_t out_buf;
-	out_buf.head = out_buf.tail = x_smb2_bufref_alloc(sizeof(x_smb2_lease_break_t));
+	out_buf.head = out_buf.tail = x_smb2_bufref_alloc(sizeof(x_smb2_write_resp_t));
 	out_buf.length = out_buf.head->length;
 
 	uint8_t *out_hdr = out_buf.head->get_data();

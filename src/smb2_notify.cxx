@@ -19,7 +19,7 @@ static NTSTATUS x_smb2_reply_notify(x_smbd_conn_t *smbd_conn,
 			smbd_requ->smbd_open->notify_buffer_length);
 
 	x_out_buf_t out_buf;
-	out_buf.head = out_buf.tail = x_smb2_bufref_alloc(sizeof(x_smb2_ioctl_resp_t) +
+	out_buf.head = out_buf.tail = x_smb2_bufref_alloc(sizeof(x_smb2_notify_resp_t) +
 			output_buffer_length);
 
 	uint8_t *out_hdr = out_buf.head->get_data();
