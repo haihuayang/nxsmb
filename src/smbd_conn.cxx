@@ -219,8 +219,7 @@ static const x_smb2_key_t *get_signing_key(const x_smbd_requ_t *smbd_requ,
 	return signing_key;
 }
 
-static void x_smbd_requ_sign_if(x_smbd_conn_t *smbd_conn,
-		x_smbd_requ_t *smbd_requ, x_bufref_t *buf_head)
+static void x_smbd_requ_sign_if(x_smbd_requ_t *smbd_requ, x_bufref_t *buf_head)
 {
 	x_smb2_header_t *smb2_hdr = (x_smb2_header_t *)buf_head->get_data();
 	uint32_t flags = X_LE2H32(smb2_hdr->flags);
@@ -431,7 +430,7 @@ static void x_smb2_reply_msg(x_smbd_conn_t *smbd_conn,
 	if (smbd_requ->is_compound_followed() && !NT_STATUS_EQUAL(status, NT_STATUS_PENDING)) {
 		smb2_hdr->next_command = X_H2LE32(out_buf.length);
 	}
-	x_smbd_requ_sign_if(smbd_conn, smbd_requ, out_buf.head);
+	x_smbd_requ_sign_if(smbd_requ, out_buf.head);
 
 	smbd_requ->compound_out_buf.append(out_buf);
 }
