@@ -18,10 +18,11 @@ static NTSTATUS x_smb2_reply_notify(x_smbd_conn_t *smbd_conn,
 	uint32_t output_buffer_length = std::min(state.in_output_buffer_length,
 			smbd_requ->smbd_open->notify_buffer_length);
 
-	x_bufref_t *bufref = x_smb2_bufref_alloc(sizeof(x_smb2_notify_resp_t) +
+	x_out_buf_t out_buf;
+	out_buf.head = out_buf.tail = x_smb2_bufref_alloc(sizeof(x_smb2_ioctl_resp_t) +
 			output_buffer_length);
 
-	uint8_t *out_hdr = bufref->get_data();
+	uint8_t *out_hdr = out_buf.head->get_data();
 	x_smb2_notify_resp_t *out_notify = (x_smb2_notify_resp_t *)(out_hdr + sizeof(x_smb2_header_t));
 	uint8_t *out_body = (uint8_t *)(out_notify + 1);
 
@@ -33,15 +34,15 @@ static NTSTATUS x_smb2_reply_notify(x_smbd_conn_t *smbd_conn,
 	} else {
 		status = NT_STATUS_OK;
 	}
-	bufref->length = x_convert_assert<uint32_t>(sizeof(x_smb2_header_t) +
-			sizeof(x_smb2_notify_resp_t) + body_length);
+	out_buf.length = out_buf.head->length =
+		x_convert_assert<uint32_t>(sizeof(x_smb2_header_t) +
+				sizeof(x_smb2_notify_resp_t) + body_length);
 
 	out_notify->struct_size = X_H2LE16(sizeof(x_smb2_notify_resp_t) + 1);
 	out_notify->output_buffer_offset = X_H2LE16(sizeof(x_smb2_header_t) + sizeof(x_smb2_notify_resp_t));
 	out_notify->output_buffer_length = X_H2LE32(x_convert_assert<uint32_t>(body_length));
 
-	x_smb2_reply(smbd_conn, smbd_requ, bufref, bufref, status, 
-			bufref->length);
+	x_smb2_reply(smbd_conn, smbd_requ, status, out_buf);
 	return status;
 }
 

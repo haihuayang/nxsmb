@@ -50,18 +50,20 @@ static void x_smb2_reply_qdir(x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ,
 		x_smbd_requ_state_qdir_t &state)
 {
-	x_bufref_t *bufref = x_smb2_bufref_alloc(sizeof(x_smb2_qdir_resp_t));
+	x_out_buf_t out_buf;
+	out_buf.head = out_buf.tail = x_smb2_bufref_alloc(sizeof(x_smb2_qdir_resp_t));
+	out_buf.length = out_buf.head->length;
+
 	if (state.out_buf_length) {
-		bufref->next = new x_bufref_t(state.out_buf, 0, state.out_buf_length);
+		out_buf.head->next = out_buf.tail = new x_bufref_t(state.out_buf, 0, state.out_buf_length);
 		state.out_buf = nullptr;
+		out_buf.length += state.out_buf_length;
 	}
 
-	uint8_t *out_hdr = bufref->get_data();
+	uint8_t *out_hdr = out_buf.head->get_data();
 	encode_out_qdir(state, out_hdr);
 
-	x_smb2_reply(smbd_conn, smbd_requ, bufref,
-			bufref->next ? bufref->next : bufref, NT_STATUS_OK, 
-			sizeof(x_smb2_header_t) + sizeof(x_smb2_qdir_resp_t) + state.out_buf_length);
+	x_smb2_reply(smbd_conn, smbd_requ, NT_STATUS_OK, out_buf);
 }
 
 

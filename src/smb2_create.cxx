@@ -216,15 +216,14 @@ static void x_smb2_reply_create(x_smbd_conn_t *smbd_conn,
 		out_context_length += 0x18 + 56;
 	}
 #endif
-	x_bufref_t *bufref = x_smb2_bufref_alloc(sizeof(x_smb2_create_resp_t) + out_context_length);
-
-	uint8_t *out_hdr = bufref->get_data();
-
+	x_out_buf_t out_buf{};
+	out_buf.head = out_buf.tail = x_smb2_bufref_alloc(sizeof(x_smb2_create_resp_t) +
+			out_context_length);
+	uint8_t *out_hdr = out_buf.head->get_data();
 	uint32_t out_length = encode_out_create(state, smbd_requ->smbd_open, out_hdr);
-	bufref->length = x_convert_assert<uint32_t>(sizeof(x_smb2_header_t) + out_length);
+	out_buf.length = out_buf.head->length = x_convert_assert<uint32_t>(sizeof(x_smb2_header_t) + out_length);
 
-	x_smb2_reply(smbd_conn, smbd_requ, bufref, bufref, NT_STATUS_OK, 
-			bufref->length);
+	x_smb2_reply(smbd_conn, smbd_requ, NT_STATUS_OK, out_buf);
 }
 
 static void smb2_create_success(x_smbd_conn_t *smbd_conn,

@@ -5,15 +5,16 @@
 static void x_smb2_reply_flush(x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ)
 {
-	x_bufref_t *bufref = x_smb2_bufref_alloc(sizeof(x_smb2_flush_resp_t));
+	x_out_buf_t out_buf;
+	out_buf.head = out_buf.tail = x_smb2_bufref_alloc(sizeof(x_smb2_flush_resp_t));
+	out_buf.length = out_buf.head->length;
 
-	uint8_t *out_hdr = bufref->get_data();
-	x_smb2_flush_resp_t *out_flush = (x_smb2_flush_resp_t *)(out_hdr + sizeof(x_smb2_header_t));
-	out_flush->struct_size = X_H2LE16(sizeof(x_smb2_flush_resp_t));
-	out_flush->reserved0 = 0;
+	uint8_t *out_hdr = out_buf.head->get_data();
+	auto out_resp = (x_smb2_flush_resp_t *)(out_hdr + sizeof(x_smb2_header_t));
+	out_resp->struct_size = X_H2LE16(sizeof(x_smb2_flush_resp_t));
+	out_resp->reserved0 = 0;
 
-	x_smb2_reply(smbd_conn, smbd_requ, bufref, bufref, NT_STATUS_OK, 
-			sizeof(x_smb2_header_t) + sizeof(x_smb2_flush_resp_t));
+	x_smb2_reply(smbd_conn, smbd_requ, NT_STATUS_OK, out_buf);
 }
 
 NTSTATUS x_smb2_process_flush(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)

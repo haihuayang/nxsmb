@@ -17,13 +17,14 @@ static void encode_out_setinfo(uint8_t *out_hdr)
 static void x_smb2_reply_setinfo(x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ)
 {
-	x_bufref_t *bufref = x_smb2_bufref_alloc(sizeof(x_smb2_setinfo_resp_t));
+	x_out_buf_t out_buf;
+	out_buf.head = out_buf.tail = x_smb2_bufref_alloc(sizeof(x_smb2_setinfo_resp_t));
+	out_buf.length = out_buf.head->length;
 
-	uint8_t *out_hdr = bufref->get_data();
+	uint8_t *out_hdr = out_buf.head->get_data();
 	encode_out_setinfo(out_hdr);
 
-	x_smb2_reply(smbd_conn, smbd_requ, bufref, bufref, NT_STATUS_OK, 
-			sizeof(x_smb2_header_t) + sizeof(x_smb2_setinfo_resp_t));
+	x_smb2_reply(smbd_conn, smbd_requ, NT_STATUS_OK, out_buf);
 }
 
 static NTSTATUS decode_in_rename(x_smbd_requ_state_rename_t &state,

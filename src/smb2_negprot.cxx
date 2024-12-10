@@ -57,9 +57,12 @@ static NTSTATUS x_smbd_conn_reply_negprot(x_smbd_conn_t *smbd_conn, x_smbd_requ_
 
 #endif	
 
-	x_bufref_t *bufref = x_smb2_bufref_alloc(sizeof(x_smb2_negprot_resp_t) + dyn_len);
-	uint8_t *out_hdr = bufref->get_data();
-	x_smb2_negprot_resp_t *out_resp = (x_smb2_negprot_resp_t *)(out_hdr + sizeof(x_smb2_header_t));
+	x_out_buf_t out_buf;
+	out_buf.head = out_buf.tail = x_smb2_bufref_alloc(sizeof(x_smb2_negprot_resp_t) + dyn_len);
+	out_buf.length = out_buf.head->length;
+
+	uint8_t *out_hdr = out_buf.head->get_data();
+	auto out_resp = (x_smb2_negprot_resp_t *)(out_hdr + sizeof(x_smb2_header_t));
 
 	auto [tick_start, tick_system ] = x_smbd_get_time();
 
@@ -94,8 +97,7 @@ static NTSTATUS x_smbd_conn_reply_negprot(x_smbd_conn_t *smbd_conn, x_smbd_requ_
 		out_resp->context_offset = 0;
 	}
 
-	x_smb2_reply(smbd_conn, smbd_requ, bufref, bufref, NT_STATUS_OK, 
-			sizeof(x_smb2_header_t) + sizeof(x_smb2_negprot_resp_t) + dyn_len);
+	x_smb2_reply(smbd_conn, smbd_requ, NT_STATUS_OK, out_buf);
 	if (negprot.dialect >= X_SMB2_DIALECT_310) {
 		x_smbd_conn_update_preauth(smbd_conn, out_hdr,
 				sizeof(x_smb2_header_t) + sizeof(x_smb2_negprot_resp_t) + dyn_len);

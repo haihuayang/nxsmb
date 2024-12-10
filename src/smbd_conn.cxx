@@ -169,7 +169,6 @@ struct x_smbd_requ_context_t
 		if (in_buf) {
 			x_buf_release(in_buf);
 		}
-		x_bufref_list_free(out_buf_head);
 	}
 
 	void cleanup()
@@ -182,8 +181,7 @@ struct x_smbd_requ_context_t
 	}
 
 	uint64_t compound_id;
-	x_bufref_t *out_buf_head{}, *out_buf_tail{};
-	uint32_t out_length = 0;
+	x_out_buf_t out_buf;
 	x_buf_t *in_buf{};
 	uint32_t in_offset;
 	uint32_t in_msgsize;
@@ -290,9 +288,11 @@ static int x_smbd_conn_create_smb2_tf(x_smbd_conn_t *smbd_conn,
 }
 
 static void x_smbd_conn_queue(x_smbd_conn_t *smbd_conn, x_smbd_sess_t *smbd_sess,
-		bool encrypted,
-		x_bufref_t *out_buf_head, x_bufref_t *out_buf_tail, uint32_t out_length)
+		bool encrypted, x_out_buf_t &out_buf)
 {
+	auto out_buf_head = std::exchange(out_buf.head, nullptr);
+	auto out_buf_tail = std::exchange(out_buf.tail, nullptr);
+	auto out_length = std::exchange(out_buf.length, 0);
 	X_ASSERT(out_buf_head);
 	X_ASSERT(out_length > 0);
 
@@ -317,18 +317,14 @@ static void x_smbd_conn_queue(x_smbd_conn_t *smbd_conn, x_smbd_sess_t *smbd_sess
 
 static void x_smbd_conn_queue(x_smbd_conn_t *smbd_conn, x_smbd_requ_context_t &requ_ctx)
 {
-	auto out_buf_head = std::exchange(requ_ctx.out_buf_head, nullptr);
-	auto out_buf_tail = std::exchange(requ_ctx.out_buf_tail, nullptr);
-	auto out_length = std::exchange(requ_ctx.out_length, 0);
 	x_smbd_conn_queue(smbd_conn, requ_ctx.smbd_sess, requ_ctx.encrypted,
-			out_buf_head, out_buf_tail, out_length);
+			requ_ctx.out_buf);
 }
 
 static void x_smbd_conn_queue(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
 {
-	auto [ out_buf_head, out_buf_tail, out_length ] = smbd_requ->release_out_buf();
 	x_smbd_conn_queue(smbd_conn, smbd_requ->smbd_sess, smbd_requ->encrypted,
-			out_buf_head, out_buf_tail, out_length);
+			smbd_requ->compound_out_buf);
 }
 
 static uint16_t x_smb2_calculate_credit(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ,
@@ -381,14 +377,12 @@ static uint32_t calculate_out_hdr_flags(uint32_t in_hdr_flags, uint32_t out_hdr_
 
 static void x_smb2_reply_msg(x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ,
-		x_bufref_t *buf_head,
-		x_bufref_t *buf_tail,
 		NTSTATUS status,
-		size_t reply_size)
+		x_out_buf_t &out_buf)
 {
 	X_LOG(SMB, DBG, X_SMBD_REQU_DBG_FMT " %s", X_SMBD_REQU_DBG_ARG(smbd_requ), x_ntstatus_str(status));
 	smbd_requ->out_hdr_flags = calculate_out_hdr_flags(smbd_requ->in_smb2_hdr.flags, smbd_requ->out_hdr_flags);
-	x_smb2_header_t *smb2_hdr = (x_smb2_header_t *)buf_head->get_data();
+	x_smb2_header_t *smb2_hdr = (x_smb2_header_t *)out_buf.head->get_data();
 	smb2_hdr->protocol_id = X_H2BE32(X_SMB2_MAGIC);
 	smb2_hdr->length = X_H2LE32(sizeof(x_smb2_header_t));
 	smb2_hdr->credit_charge = X_H2LE16(smbd_requ->in_smb2_hdr.credit_charge);
@@ -410,7 +404,7 @@ static void x_smb2_reply_msg(x_smbd_conn_t *smbd_conn,
 		}
 	}
 
-	if (smbd_requ->out_buf_head) {
+	if (smbd_requ->compound_out_buf.head) {
 		/* not the first in the chain */
 		flags |= (smbd_requ->in_smb2_hdr.flags & X_SMB2_HDR_FLAG_CHAINED);
 	}
@@ -425,20 +419,21 @@ static void x_smb2_reply_msg(x_smbd_conn_t *smbd_conn,
 
 	memset(smb2_hdr->signature, 0, sizeof(smb2_hdr->signature));
 
-	if (smbd_requ->is_compound_followed() || smbd_requ->out_buf_head) {
-		uint32_t pad_len = x_convert<uint32_t>(x_pad_len(reply_size, 8) - reply_size);
+	if (smbd_requ->is_compound_followed() || smbd_requ->compound_out_buf.head) {
+		uint32_t pad_len = x_convert<uint32_t>(x_pad_len(out_buf.length, 8) -
+				out_buf.length);
 		if (pad_len) {
-			memset(buf_tail->get_data() + buf_tail->length, 0, pad_len);
-			buf_tail->length += pad_len;
-			reply_size += pad_len;
+			memset(out_buf.tail->get_data() + out_buf.tail->length, 0, pad_len);
+			out_buf.tail->length += pad_len;
+			out_buf.length += pad_len;
 		}
 	}
 	if (smbd_requ->is_compound_followed() && !NT_STATUS_EQUAL(status, NT_STATUS_PENDING)) {
-		smb2_hdr->next_command = X_H2LE32(x_convert<uint32_t>(reply_size));
+		smb2_hdr->next_command = X_H2LE32(out_buf.length);
 	}
-	x_smbd_requ_sign_if(smbd_conn, smbd_requ, buf_head);
+	x_smbd_requ_sign_if(smbd_conn, smbd_requ, out_buf.head);
 
-	smbd_requ->queue_out_buf(buf_head, buf_tail, x_convert_assert<uint32_t>(reply_size));
+	smbd_requ->compound_out_buf.append(out_buf);
 }
 
 static void smbd_conn_reply_update_counts(
@@ -447,10 +442,8 @@ static void smbd_conn_reply_update_counts(
 
 void x_smb2_reply(x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ,
-		x_bufref_t *buf_head,
-		x_bufref_t *buf_tail,
 		NTSTATUS status,
-		size_t reply_size)
+		x_out_buf_t &out_buf)
 {
 	if (smbd_requ->interim_state != x_nxfsd_requ_t::INTERIM_S_SENT) {
 		smbd_requ->out_credit_granted = x_smb2_calculate_credit(smbd_conn, smbd_requ, status);
@@ -463,7 +456,7 @@ void x_smb2_reply(x_smbd_conn_t *smbd_conn,
 			x_nxfsd_del_timer(&smbd_requ->interim_timer)) {
 		x_ref_dec(smbd_requ);
 	}
-	x_smb2_reply_msg(smbd_conn, smbd_requ, buf_head, buf_tail, status, reply_size);
+	x_smb2_reply_msg(smbd_conn, smbd_requ, status, out_buf);
 	smbd_requ->interim_state = x_nxfsd_requ_t::INTERIM_S_NONE;
 	X_SMBD_UPDATE_OP_HISTOGRAM(smbd_requ);
 }
@@ -483,12 +476,10 @@ static int x_smbd_reply_error(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ
 	X_LOG(SMB, OP, "%ld RESP 0x%x at %s:%d", smbd_requ->in_smb2_hdr.mid,
 			NT_STATUS_V(status), file, line);
 
-	x_buf_t *out_buf = x_smb2_alloc_out_buf(sizeof(x_smb2_error_t));
-
-	uint8_t *out_hdr = x_smb2_get_out_hdr(out_buf);
-
-	uint8_t *out_body = out_hdr + sizeof(x_smb2_header_t);
-	x_smb2_error_t *smb2_err = (x_smb2_error_t *)out_body;
+	x_out_buf_t out_buf;
+	out_buf.head = out_buf.tail = x_smb2_bufref_alloc(sizeof(x_smb2_error_t));
+	uint8_t *out_hdr = out_buf.head->get_data();
+	x_smb2_error_t *smb2_err = (x_smb2_error_t *)(out_hdr + sizeof(x_smb2_header_t));
 	smb2_err->struct_size = X_H2LE16(9);
 	/* workaround test BVT_SMB2Basic_ChangeNotify_ServerReceiveSmb2Close */
 	if (NT_STATUS_EQUAL(status, NT_STATUS_NOTIFY_CLEANUP)) {
@@ -499,8 +490,8 @@ static int x_smbd_reply_error(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ
 	smb2_err->unused0 = 0;
 	smb2_err->byte_count = 0;
 
-	x_bufref_t *bufref = new x_bufref_t{out_buf, 8, sizeof(x_smb2_header_t) + 8};
-	x_smb2_reply(smbd_conn, smbd_requ, bufref, bufref, status, sizeof(x_smb2_header_t) + 8);
+	out_buf.length = out_buf.head->length;
+	x_smb2_reply(smbd_conn, smbd_requ, status, out_buf);
 
 	return 0;
 }
@@ -516,17 +507,16 @@ static int x_smbd_reply_interim(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_re
 	smbd_requ->out_credit_granted = x_smb2_calculate_credit(smbd_conn, smbd_requ, NT_STATUS_PENDING);
 	smbd_requ->out_hdr_flags = calculate_out_hdr_flags(smbd_requ->in_smb2_hdr.flags, smbd_requ->out_hdr_flags);
 
-	x_buf_t *out_buf = x_smb2_alloc_out_buf(8);
-
-	uint8_t *out_hdr = x_smb2_get_out_hdr(out_buf);
-
+	x_out_buf_t out_buf;
+	out_buf.head = out_buf.tail = x_smb2_bufref_alloc(8);
+	uint8_t *out_hdr = out_buf.head->get_data();
 	uint8_t *out_body = out_hdr + sizeof(x_smb2_header_t);
 	memset(out_body, 0, 8);
 	x_put_le16(out_body, 0x9);
+	out_buf.length = out_buf.head->length;
 
-	x_bufref_t *bufref = new x_bufref_t{out_buf, 8, sizeof(x_smb2_header_t) + 8};
 	smbd_requ->interim_state = x_nxfsd_requ_t::INTERIM_S_SENT;
-	x_smb2_reply_msg(smbd_conn, smbd_requ, bufref, bufref, NT_STATUS_PENDING, sizeof(x_smb2_header_t) + 8);
+	x_smb2_reply_msg(smbd_conn, smbd_requ, NT_STATUS_PENDING, out_buf);
 	X_NXFSD_COUNTER_INC(smbd_reply_interim, 1);
 	x_smbd_conn_queue(smbd_conn, smbd_requ);
 
@@ -982,9 +972,7 @@ static void smbd_requ_done(x_smbd_requ_t *smbd_requ, x_smbd_requ_context_t &requ
 	requ_ctx.sess_status = smbd_requ->sess_status;
 	requ_ctx.status = smbd_requ->status;
 	requ_ctx.encrypted = smbd_requ->encrypted;
-	requ_ctx.out_buf_head = std::exchange(smbd_requ->out_buf_head, nullptr);
-	requ_ctx.out_buf_tail = std::exchange(smbd_requ->out_buf_tail, nullptr);
-	requ_ctx.out_length = std::exchange(smbd_requ->out_length, 0);
+	requ_ctx.out_buf = std::move(smbd_requ->compound_out_buf);
 	requ_ctx.smbd_open = std::exchange(smbd_requ->smbd_open, nullptr);
 	requ_ctx.smbd_tcon = std::exchange(smbd_requ->smbd_tcon, nullptr);
 	requ_ctx.smbd_chan = std::exchange(smbd_requ->smbd_chan, nullptr);
@@ -1055,9 +1043,7 @@ static int x_smbd_conn_process_smb2(x_smbd_conn_t *smbd_conn,
 		smbd_requ->smbd_tcon = std::exchange(requ_ctx.smbd_tcon, nullptr);
 		smbd_requ->smbd_chan = std::exchange(requ_ctx.smbd_chan, nullptr);
 		smbd_requ->smbd_sess = std::exchange(requ_ctx.smbd_sess, nullptr);
-		smbd_requ->out_buf_head = std::exchange(requ_ctx.out_buf_head, nullptr);
-		smbd_requ->out_buf_tail = std::exchange(requ_ctx.out_buf_tail, nullptr);
-		smbd_requ->out_length = std::exchange(requ_ctx.out_length, 0);
+		smbd_requ->compound_out_buf = std::move(requ_ctx.out_buf);
 		smbd_requ->sess_status = requ_ctx.sess_status;
 		smbd_requ->status = requ_ctx.status;
 		x_nxfsd_requ_start(smbd_requ, requ_ctx.in_offset, in_requ_len);
@@ -1092,7 +1078,7 @@ static int x_smbd_conn_process_smb2(x_smbd_conn_t *smbd_conn,
 	}
 
 	/* CANCEL request do not have response */
-	if (requ_ctx.out_length > 0) {
+	if (requ_ctx.out_buf.length > 0) {
 		x_smbd_conn_queue(smbd_conn, requ_ctx);
 	}
 	return 0;

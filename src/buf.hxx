@@ -84,5 +84,53 @@ static inline void x_bufref_list_free(x_bufref_t *head)
 	}
 }
 
+struct x_out_buf_t
+{
+	x_out_buf_t() = default;
+	x_out_buf_t(x_out_buf_t &&other)
+	{
+		head = std::exchange(other.head, nullptr);
+		tail = std::exchange(other.tail, nullptr);
+		length = std::exchange(other.length, 0);
+	}
+	x_out_buf_t &operator=(x_out_buf_t &&other)
+	{
+		if (this != &other) {
+			x_bufref_list_free(head);
+			head = std::exchange(other.head, nullptr);
+			tail = std::exchange(other.tail, nullptr);
+			length = std::exchange(other.length, 0);
+		}
+		return *this;
+	}
+
+	~x_out_buf_t()
+	{
+			x_bufref_list_free(head);
+	}
+
+	void append(x_out_buf_t &other)
+	{
+		uint32_t total_length = length + other.length;
+		X_ASSERT(total_length >= length);
+
+		if (tail) {
+			tail->next = other.head;
+			tail = other.tail;
+		} else {
+			head = other.head;
+			tail = other.tail;
+		}
+		length = total_length;
+
+		other.head = other.tail = nullptr;
+		other.length = 0;
+	}
+
+	x_bufref_t *head{};
+	x_bufref_t *tail{};
+	uint32_t length = 0;
+};
+
 #endif /* __buf__hxx__ */
 

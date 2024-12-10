@@ -57,13 +57,14 @@ static void x_smb2_reply_write(x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ,
 		const x_smbd_requ_state_write_t &state)
 {
-	x_bufref_t *bufref = x_smb2_bufref_alloc(sizeof(x_smb2_write_resp_t));
+	x_out_buf_t out_buf;
+	out_buf.head = out_buf.tail = x_smb2_bufref_alloc(sizeof(x_smb2_lease_break_t));
+	out_buf.length = out_buf.head->length;
 
-	uint8_t *out_hdr = bufref->get_data();
+	uint8_t *out_hdr = out_buf.head->get_data();
 	encode_out_write(state, out_hdr);
 
-	x_smb2_reply(smbd_conn, smbd_requ, bufref, bufref, NT_STATUS_OK, 
-			sizeof(x_smb2_header_t) + sizeof(x_smb2_write_resp_t));
+	x_smb2_reply(smbd_conn, smbd_requ, NT_STATUS_OK, out_buf);
 }
 
 void x_smbd_requ_state_write_t::async_done(void *ctx_conn,

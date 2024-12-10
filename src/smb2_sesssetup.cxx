@@ -16,9 +16,12 @@ static void x_smb2_reply_sesssetup(x_smbd_conn_t *smbd_conn,
 		NTSTATUS status,
 		const std::vector<uint8_t> &out_security)
 {
-	x_bufref_t *bufref = x_smb2_bufref_alloc(sizeof(x_smb2_sesssetup_resp_t) +
+	x_out_buf_t out_buf;
+	out_buf.head = out_buf.tail = x_smb2_bufref_alloc(sizeof(x_smb2_sesssetup_resp_t) +
 			out_security.size());
-	uint8_t *out_hdr = bufref->get_data();
+	out_buf.length = out_buf.head->length;
+
+	uint8_t *out_hdr = out_buf.head->get_data();
 	uint8_t *out_body = out_hdr + sizeof(x_smb2_header_t);
 
 	uint16_t out_session_flags = 0; // TODO
@@ -34,8 +37,7 @@ static void x_smb2_reply_sesssetup(x_smbd_conn_t *smbd_conn,
 		smbd_requ->out_hdr_flags |= X_SMB2_HDR_FLAG_SIGNED;
 	}
 
-	x_smb2_reply(smbd_conn, smbd_requ, bufref, bufref, status, 
-			sizeof(x_smb2_header_t) + sizeof(x_smb2_sesssetup_resp_t) + out_security.size());
+	x_smb2_reply(smbd_conn, smbd_requ, status, out_buf);
 
 	if (dialect >= X_SMB2_DIALECT_310 && NT_STATUS_EQUAL(status, NT_STATUS_MORE_PROCESSING_REQUIRED)) {
 		x_smbd_chan_update_preauth(smbd_chan, 

@@ -1210,7 +1210,7 @@ NTSTATUS posixfs_object_op_read(
 	 * but smbtorture require the response is 8 byte aligned.
 	 * so disable async for now
 	 */
-	if (!nxfsd_requ || nxfsd_requ->can_async() || nxfsd_requ->out_buf_head) {
+	if (!nxfsd_requ || nxfsd_requ->can_async() || nxfsd_requ->compound_out_buf.head) {
 		return posixfs_do_read(posixfs_object, *state,
 				delay_ms);
 	}

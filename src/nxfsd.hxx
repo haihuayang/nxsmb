@@ -61,26 +61,6 @@ struct x_nxfsd_requ_t
 		return {in_buf, in_offset, in_requ_len};
 	}
 
-	std::tuple<x_bufref_t *, x_bufref_t *, uint32_t> release_out_buf() {
-		x_bufref_t *out_buf_head = this->out_buf_head;
-		x_bufref_t *out_buf_tail = this->out_buf_tail;
-		uint32_t out_length = this->out_length;
-		this->out_buf_head = this->out_buf_tail = nullptr;
-		this->out_length = 0;
-		return {out_buf_head, out_buf_tail, out_length};
-	}
-
-	void queue_out_buf(x_bufref_t *buf_head, x_bufref_t *buf_tail, uint32_t reply_size) {
-		if (out_buf_tail) {
-			out_buf_tail->next = buf_head;
-			out_buf_tail = buf_tail;
-		} else {
-			out_buf_head = buf_head;
-			out_buf_tail = buf_tail;
-		}
-		out_length += reply_size;
-	}
-
 	bool can_async() const {
 		return cbs->cb_can_async(this);
 	}
@@ -146,8 +126,7 @@ struct x_nxfsd_requ_t
 
 	NTSTATUS status{NT_STATUS_OK};
 
-	uint32_t out_length = 0;
-	x_bufref_t *out_buf_head{}, *out_buf_tail{};
+	x_out_buf_t compound_out_buf;
 	x_smbd_open_t *smbd_open{};
 	void (*cancel_fn)(x_nxfsd_conn_t *nxfsd_conn, x_nxfsd_requ_t *nxfsd_requ);
 };

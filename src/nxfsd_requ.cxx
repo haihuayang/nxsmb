@@ -41,7 +41,6 @@ x_nxfsd_requ_t::~x_nxfsd_requ_t()
 	if (in_buf) {
 		x_buf_release(in_buf);
 	}
-	x_bufref_list_free(out_buf_head);
 }
 
 bool x_nxfsd_requ_init(x_nxfsd_requ_t *nxfsd_requ)

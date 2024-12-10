@@ -30,15 +30,19 @@ static void x_smb2_reply_read(x_smbd_conn_t *smbd_conn,
 	smbd_requ->smbd_open->open_state.current_offset =
 		state.in_offset + state.in_length;
 
-	x_bufref_t *bufref = x_smb2_bufref_alloc(sizeof(x_smb2_read_resp_t));
+	x_out_buf_t out_buf;
+	out_buf.head = out_buf.tail = x_smb2_bufref_alloc(sizeof(x_smb2_read_resp_t));
+	out_buf.length = out_buf.head->length;
+
 	if (state.out_buf) {
-		bufref->next = new x_bufref_t(state.out_buf, 0, state.out_buf_length);
+		out_buf.head->next = out_buf.tail =
+			new x_bufref_t(state.out_buf, 0, state.out_buf_length);
 		state.out_buf = nullptr;
+		out_buf.length += state.out_buf_length;
 	}
 
-	uint8_t *out_hdr = bufref->get_data();
-
-	x_smb2_read_resp_t *out_read = (x_smb2_read_resp_t *)(out_hdr + sizeof(x_smb2_header_t));
+	uint8_t *out_hdr = out_buf.head->get_data();
+	auto out_read = (x_smb2_read_resp_t *)(out_hdr + sizeof(x_smb2_header_t));
 	out_read->struct_size = X_H2LE16(sizeof(x_smb2_read_resp_t) + 1);
 	out_read->data_offset = sizeof(x_smb2_header_t) + sizeof(x_smb2_read_resp_t);
 	out_read->reserved0 = 0;
@@ -46,9 +50,7 @@ static void x_smb2_reply_read(x_smbd_conn_t *smbd_conn,
 	out_read->data_remaining = 0;
 	out_read->reserved1 = 0;
 
-	x_smb2_reply(smbd_conn, smbd_requ, bufref,
-			bufref->next ? bufref->next : bufref, NT_STATUS_OK, 
-			sizeof(x_smb2_header_t) + sizeof(x_smb2_read_resp_t) + state.out_buf_length);
+	x_smb2_reply(smbd_conn, smbd_requ, NT_STATUS_OK, out_buf);
 }
 
 void x_smbd_requ_state_read_t::async_done(void *ctx_conn,

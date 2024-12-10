@@ -207,10 +207,8 @@ void x_smbd_conn_send_unsolicited(x_smbd_conn_t *smbd_conn, x_smbd_sess_t *smbd_
 void x_smbd_conn_send_remove_chan(x_smbd_conn_t *smbd_conn, x_smbd_chan_t *smbd_chan);
 void x_smb2_reply(x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ,
-		x_bufref_t *buf_head,
-		x_bufref_t *buf_tail,
 		NTSTATUS status,
-		size_t reply_size);
+		x_out_buf_t &out_buf);
 NTSTATUS x_smbd_conn_dispatch_update_counts(
 		x_smbd_requ_t *smbd_requ,
 		bool modify_call);

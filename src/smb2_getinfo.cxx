@@ -51,13 +51,14 @@ static void x_smb2_reply_getinfo(x_smbd_conn_t *smbd_conn,
 {
 	X_SMBD_REQU_LOG(OP, smbd_requ,  " %s", x_ntstatus_str(status));
 
-	x_bufref_t *bufref = x_smb2_bufref_alloc(sizeof(x_smb2_getinfo_resp_t) +
+	x_out_buf_t out_buf;
+	out_buf.head = out_buf.tail = x_smb2_bufref_alloc(sizeof(x_smb2_getinfo_resp_t) +
 			state.out_data.size());
+	out_buf.length = out_buf.head->length;
 
-	uint8_t *out_hdr = bufref->get_data();
+	uint8_t *out_hdr = out_buf.head->get_data();
 	encode_out_getinfo(state, out_hdr);
-	x_smb2_reply(smbd_conn, smbd_requ, bufref, bufref, status, 
-			sizeof(x_smb2_header_t) + sizeof(x_smb2_getinfo_resp_t) + state.out_data.size());
+	x_smb2_reply(smbd_conn, smbd_requ, status, out_buf);
 }
 
 void x_smbd_requ_state_getinfo_t::async_done(void *ctx_conn,
