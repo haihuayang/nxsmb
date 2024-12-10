@@ -963,8 +963,21 @@ static NTSTATUS x_smbd_conn_process_smb2_intl(x_smbd_conn_t *smbd_conn, x_smbd_r
 	return op.op_func(smbd_conn, smbd_requ);
 }
 
-static void smbd_requ_done(x_smbd_requ_t *smbd_requ, x_smbd_requ_context_t &requ_ctx)
+static bool is_success(NTSTATUS status)
 {
+	return NT_STATUS_IS_OK(status) ||
+		NT_STATUS_EQUAL(status, NT_STATUS_MORE_PROCESSING_REQUIRED) ||
+		NT_STATUS_EQUAL(status, NT_STATUS_NOTIFY_ENUM_DIR);
+}
+
+static void smbd_requ_done(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ,
+		x_smbd_requ_context_t &requ_ctx, NTSTATUS status)
+{
+	if (!is_success(status)) {
+		X_SMBD_REPLY_ERROR(smbd_conn, smbd_requ, status);
+		smbd_requ->status = status;
+	}
+
 	requ_ctx.compound_id = smbd_requ->compound_id;
 	requ_ctx.in_buf = std::exchange(smbd_requ->in_buf, nullptr);
 	requ_ctx.in_offset = smbd_requ->in_offset + smbd_requ->in_requ_len;
@@ -979,13 +992,6 @@ static void smbd_requ_done(x_smbd_requ_t *smbd_requ, x_smbd_requ_context_t &requ
 	requ_ctx.smbd_sess = std::exchange(smbd_requ->smbd_sess, nullptr);
 
 	x_nxfsd_requ_done(smbd_requ);
-}
-
-static bool is_success(NTSTATUS status)
-{
-	return NT_STATUS_IS_OK(status) ||
-		NT_STATUS_EQUAL(status, NT_STATUS_MORE_PROCESSING_REQUIRED) ||
-		NT_STATUS_EQUAL(status, NT_STATUS_NOTIFY_ENUM_DIR);
 }
 
 static int x_smbd_conn_process_smb2(x_smbd_conn_t *smbd_conn,
@@ -1070,11 +1076,7 @@ static int x_smbd_conn_process_smb2(x_smbd_conn_t *smbd_conn,
 			return 0;
 		}
 
-		if (!is_success(status)) {
-			X_SMBD_REPLY_ERROR(smbd_conn, smbd_requ, status);
-			smbd_requ->status = status;
-		}
-		smbd_requ_done(smbd_requ, requ_ctx);
+		smbd_requ_done(smbd_conn, smbd_requ, requ_ctx, status);
 	}
 
 	/* CANCEL request do not have response */
@@ -1468,13 +1470,8 @@ void x_smbd_conn_requ_done(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ,
 {
 	X_ASSERT(!NT_STATUS_EQUAL(status, NT_STATUS_PENDING));
 
-	if (!is_success(status)) {
-		smbd_requ->status = status;
-		X_SMBD_REPLY_ERROR(smbd_conn, smbd_requ, status);
-	}
-
 	x_smbd_requ_context_t requ_ctx;
-	smbd_requ_done(smbd_requ, requ_ctx);
+	smbd_requ_done(smbd_conn, smbd_requ, requ_ctx, status);
 
 	int err = x_smbd_conn_process_smb2(smbd_conn, requ_ctx);
 	if (err < 0) {
