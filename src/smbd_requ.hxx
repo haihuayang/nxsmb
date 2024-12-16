@@ -169,6 +169,8 @@ struct x_smbd_requ_t : x_nxfsd_requ_t
 		return NT_STATUS_INTERNAL_ERROR;
 	}
 
+	virtual std::tuple<bool, bool, bool> get_properties() const = 0;
+
 	bool can_async() const override {
 		return !is_compound_followed();
 	}

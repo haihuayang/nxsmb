@@ -15,6 +15,10 @@ struct x_smbd_requ_ioctl_t : x_smbd_requ_t
 			x_in_buf_t &in_buf, uint32_t in_msgsize,
 			bool encrypted,
 			x_smbd_requ_state_ioctl_t &state);
+	std::tuple<bool, bool, bool> get_properties() const override
+	{
+		return { true, true, false };
+	}
 	NTSTATUS done_smb2(x_smbd_conn_t *smbd_conn, NTSTATUS status) override;
 	x_smbd_requ_state_ioctl_t state;
 };

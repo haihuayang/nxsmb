@@ -17,6 +17,10 @@ struct x_smbd_requ_write_t : x_smbd_requ_t
 		interim_timeout_ns = X_NSEC_PER_SEC;
 	}
 
+	std::tuple<bool, bool, bool> get_properties() const override
+	{
+		return { true, true, false };
+	}
 	NTSTATUS process(void *ctx_conn) override;
 	NTSTATUS done_smb2(x_smbd_conn_t *smbd_conn, NTSTATUS status) override;
 	NTSTATUS cancelled(void *ctx_conn, int reason) override

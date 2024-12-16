@@ -417,6 +417,10 @@ struct x_smbd_requ_negprot_t : x_smbd_requ_t
 	{
 	}
 
+	std::tuple<bool, bool, bool> get_properties() const override
+	{
+		return { false, false, false };
+	}
 	NTSTATUS process(void *ctx_conn) override
 	{
 		auto smbd_conn = (x_smbd_conn_t *)ctx_conn;

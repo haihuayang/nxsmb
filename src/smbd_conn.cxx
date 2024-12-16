@@ -627,29 +627,26 @@ static const struct {
 	NTSTATUS (* const parse_func)(x_smbd_conn_t *smbd_conn, x_smbd_requ_t **p_smbd_requ,
 			x_in_buf_t &in_buf, uint32_t in_msgsize,
 			bool encrypted);
-	bool const need_channel;
-	bool const need_tcon;
-	bool const allow_sess_expired;
 } x_smb2_op_table[] = {
-	{ x_smb2_parse_NEGPROT, false, false, false, },
-	{ x_smb2_parse_SESSSETUP, false, false, true, },
-	{ x_smb2_parse_LOGOFF, true, false, true, },
-	{ x_smb2_parse_TCON, true, false, false, },
-	{ x_smb2_parse_TDIS, true, true, false, },
-	{ x_smb2_parse_CREATE, true, true, false, },
-	{ x_smb2_parse_CLOSE, true, true, true, },
-	{ x_smb2_parse_FLUSH, true, true, false, },
-	{ x_smb2_parse_READ, true, true, false, },
-	{ x_smb2_parse_WRITE, true, true, false, },
-	{ x_smb2_parse_LOCK, true, true, true, }, // only allow unlock
-	{ x_smb2_parse_IOCTL, true, true, false, },
-	{ nullptr, false, false, true, }, // OP_CANCEL
-	{ x_smb2_parse_KEEPALIVE, false, false, false, },
-	{ x_smb2_parse_QUERY_DIRECTORY, true, true, false, },
-	{ x_smb2_parse_NOTIFY, true, true, false, },
-	{ x_smb2_parse_GETINFO, true, true, false, },
-	{ x_smb2_parse_SETINFO, true, true, false, },
-	{ x_smb2_parse_BREAK, true, true, false, },
+	{ x_smb2_parse_NEGPROT, },
+	{ x_smb2_parse_SESSSETUP, },
+	{ x_smb2_parse_LOGOFF, },
+	{ x_smb2_parse_TCON, },
+	{ x_smb2_parse_TDIS, },
+	{ x_smb2_parse_CREATE, },
+	{ x_smb2_parse_CLOSE, },
+	{ x_smb2_parse_FLUSH, },
+	{ x_smb2_parse_READ, },
+	{ x_smb2_parse_WRITE, },
+	{ x_smb2_parse_LOCK, }, // only allow unlock
+	{ x_smb2_parse_IOCTL, },
+	{ nullptr, }, // OP_CANCEL
+	{ x_smb2_parse_KEEPALIVE, },
+	{ x_smb2_parse_QUERY_DIRECTORY, },
+	{ x_smb2_parse_NOTIFY, },
+	{ x_smb2_parse_GETINFO, },
+	{ x_smb2_parse_SETINFO, },
+	{ x_smb2_parse_BREAK, },
 };
 
 /* Samba smbd_smb2_request_dispatch_update_counts */
@@ -914,11 +911,11 @@ static NTSTATUS x_smbd_conn_check_smb2(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *
 		}
 	}
 #endif
-	const auto &op = x_smb2_op_table[smbd_requ->in_smb2_hdr.opcode];
-	if (op.need_channel) {
+	auto [ need_channel, need_tcon, allow_sess_expired ] = smbd_requ->get_properties();
+	if (need_channel) {
 		if (NT_STATUS_EQUAL(smbd_requ->sess_status,
 					NT_STATUS_NETWORK_SESSION_EXPIRED)) {
-			if (!op.allow_sess_expired) {
+			if (!allow_sess_expired) {
 				X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_NETWORK_SESSION_EXPIRED);
 			}
 		} else if (!NT_STATUS_IS_OK(smbd_requ->sess_status)) {
@@ -966,7 +963,7 @@ static NTSTATUS x_smbd_conn_check_smb2(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *
 	}
 
 	/* TODO signing/encryption */
-	if (op.need_tcon) {
+	if (need_tcon) {
 		X_ASSERT(smbd_requ->smbd_sess);
 		if (!smbd_requ->smbd_tcon) {
 			if (!smbd_requ->in_smb2_hdr.tid) {
@@ -1043,6 +1040,11 @@ struct x_smbd_requ_invalid_t : x_smbd_requ_t
 	~x_smbd_requ_invalid_t()
 	{
 		X_SMBD_REQU_LOG(DBG, this, " freed");
+	}
+
+	std::tuple<bool, bool, bool> get_properties() const override
+	{
+		return { false, false, false };
 	}
 
 	NTSTATUS process(void *ctx_conn) override

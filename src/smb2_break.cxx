@@ -52,6 +52,10 @@ struct x_smbd_requ_oplock_break_t : x_smbd_requ_t
 {
 	using x_smbd_requ_t::x_smbd_requ_t;
 
+	std::tuple<bool, bool, bool> get_properties() const override
+	{
+		return { true, true, false };
+	}
 	NTSTATUS process(void *ctx_conn) override;
 	NTSTATUS done_smb2(x_smbd_conn_t *smbd_conn, NTSTATUS status) override;
 
@@ -96,6 +100,10 @@ struct x_smbd_requ_lease_break_t : x_smbd_requ_t
 {
 	using x_smbd_requ_t::x_smbd_requ_t;
 
+	std::tuple<bool, bool, bool> get_properties() const override
+	{
+		return { true, true, false };
+	}
 	NTSTATUS process(void *ctx_conn) override;
 	NTSTATUS done_smb2(x_smbd_conn_t *smbd_conn, NTSTATUS status) override;
 

@@ -16,6 +16,10 @@ struct x_smbd_requ_rename_t : x_smbd_requ_t
 		, in_replace_if_exists(replace_if_exists), in_dst(std::move(dst))
 	{
 	}
+	std::tuple<bool, bool, bool> get_properties() const override
+	{
+		return { true, true, false };
+	}
 	NTSTATUS process(void *ctx_conn) override;
 	NTSTATUS done_smb2(x_smbd_conn_t *smbd_conn, NTSTATUS status) override;
 
@@ -39,6 +43,10 @@ struct x_smbd_requ_disposition_t : x_smbd_requ_t
 		, in_delete_on_close(delete_on_close)
 	{
 	}
+	std::tuple<bool, bool, bool> get_properties() const override
+	{
+		return { true, true, false };
+	}
 	NTSTATUS process(void *ctx_conn) override;
 	NTSTATUS done_smb2(x_smbd_conn_t *smbd_conn, NTSTATUS status) override;
 
@@ -56,6 +64,10 @@ struct x_smbd_requ_setinfo_t : x_smbd_requ_t
 				in_msgsize, encrypted)
 		, state(std::move(state))
 	{
+	}
+	std::tuple<bool, bool, bool> get_properties() const override
+	{
+		return { true, true, false };
 	}
 	NTSTATUS process(void *ctx_conn) override;
 	NTSTATUS done_smb2(x_smbd_conn_t *smbd_conn, NTSTATUS status) override;

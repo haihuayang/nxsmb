@@ -155,6 +155,10 @@ struct x_smbd_requ_tcon_t : x_smbd_requ_t
 		, smbd_volume(std::move(smbd_volume))
 	{
 	}
+	std::tuple<bool, bool, bool> get_properties() const override
+	{
+		return { true, false, false };
+	}
 	NTSTATUS process(void *ctx_conn) override;
 	NTSTATUS done_smb2(x_smbd_conn_t *smbd_conn, NTSTATUS status) override;
 

@@ -47,6 +47,10 @@ struct x_smbd_requ_close_t : x_smbd_requ_t
 		, in_file_id_volatile(in_file_id_volatile)
 	{
 	}
+	std::tuple<bool, bool, bool> get_properties() const override
+	{
+		return { true, true, true };
+	}
 	NTSTATUS process(void *ctx_conn) override;
 	NTSTATUS done_smb2(x_smbd_conn_t *smbd_conn, NTSTATUS status) override;
 

@@ -685,6 +685,10 @@ enum {
 struct x_smbd_requ_ioctl_torture_t : x_smbd_requ_ioctl_t
 {
 	using x_smbd_requ_ioctl_t::x_smbd_requ_ioctl_t;
+	std::tuple<bool, bool, bool> get_properties() const override
+	{
+		return { false, false, false };
+	}
 	NTSTATUS process(void *ctx_conn) override
 	{
 		return NT_STATUS_OK;
