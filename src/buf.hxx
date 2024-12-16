@@ -106,7 +106,7 @@ struct x_out_buf_t
 
 	~x_out_buf_t()
 	{
-			x_bufref_list_free(head);
+		x_bufref_list_free(head);
 	}
 
 	void append(x_out_buf_t &other)
@@ -130,6 +130,41 @@ struct x_out_buf_t
 	x_bufref_t *head{};
 	x_bufref_t *tail{};
 	uint32_t length = 0;
+};
+
+struct x_in_buf_t
+{
+	x_in_buf_t() = default;
+	x_in_buf_t(x_in_buf_t &&other)
+	{
+		buf = std::exchange(other.buf, nullptr);
+		offset = std::exchange(other.offset, 0);
+		length = std::exchange(other.length, 0);
+	}
+	x_in_buf_t &operator=(x_in_buf_t &&other)
+	{
+		if (this != &other) {
+			if (buf) {
+				x_buf_release(buf);
+			}
+			buf = std::exchange(other.buf, nullptr);
+			offset = std::exchange(other.offset, 0);
+			length = std::exchange(other.length, 0);
+		}
+		return *this;
+	}
+	~x_in_buf_t()
+	{
+		if (buf) {
+			x_buf_release(buf);
+		}
+	}
+	const uint8_t *get_data() const {
+		return buf->data + offset;
+	}
+
+	x_buf_t *buf{};
+	uint32_t offset, length;
 };
 
 #endif /* __buf__hxx__ */

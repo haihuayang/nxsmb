@@ -15,6 +15,8 @@
 #include "smbd_file.hxx"
 #include "include/nttime.hxx"
 
+struct x_smbd_requ_state_setinfo_t;
+
 /* use 16 bytes for qdir pos, hopefully it is enough for all fs */
 struct x_smbd_qdir_pos_t
 {
@@ -184,14 +186,12 @@ struct x_smbd_object_ops_t
 	NTSTATUS (*read)(x_smbd_object_t *smbd_object,
 			x_smbd_open_t *smbd_open,
 			x_nxfsd_requ_t *nxfsd_requ,
-			std::unique_ptr<x_smbd_requ_state_read_t> &state,
-			uint32_t delay_ms,
+			x_smbd_requ_state_read_t &state,
 			bool all);
 	NTSTATUS (*write)(x_smbd_object_t *smbd_object,
 			x_smbd_open_t *smbd_open,
 			x_nxfsd_requ_t *nxfsd_requ,
-			std::unique_ptr<x_smbd_requ_state_write_t> &state,
-			uint32_t delay_ms);
+			x_smbd_requ_state_write_t &state);
 	NTSTATUS (*flush)(x_smbd_object_t *smbd_object,
 			x_smbd_open_t *smbd_open,
 			x_smbd_requ_t *smbd_requ);
@@ -200,10 +200,11 @@ struct x_smbd_object_ops_t
 			x_smbd_requ_state_getinfo_t &state);
 	NTSTATUS (*setinfo)(x_smbd_object_t *smbd_object,
 			x_smbd_open_t *smbd_open,
+			x_smbd_requ_t *smbd_requ,
 			x_smbd_requ_state_setinfo_t &state);
 	NTSTATUS (*ioctl)(x_smbd_object_t *smbd_object,
 			x_nxfsd_requ_t *nxfsd_requ,
-			std::unique_ptr<x_smbd_requ_state_ioctl_t> &state);
+			x_smbd_requ_state_ioctl_t &state);
 	NTSTATUS (*query_allocated_ranges)(x_smbd_object_t *smbd_object,
 			x_smbd_stream_t *smbd_stream,
 			std::vector<x_smb2_file_range_t> &ranges,
@@ -412,8 +413,7 @@ NTSTATUS x_smbd_open_op_close(
 static inline NTSTATUS x_smbd_open_op_read(
 		x_smbd_open_t *smbd_open,
 		x_nxfsd_requ_t *nxfsd_requ,
-		std::unique_ptr<x_smbd_requ_state_read_t> &state,
-		uint32_t delay_ms,
+		x_smbd_requ_state_read_t &state,
 		bool all)
 {
 	x_smbd_object_t *smbd_object = smbd_open->smbd_object;
@@ -421,21 +421,20 @@ static inline NTSTATUS x_smbd_open_op_read(
 	if (!op_fn) {
 		return NT_STATUS_INVALID_DEVICE_REQUEST;
 	}
-	return op_fn(smbd_object, smbd_open, nxfsd_requ, state, delay_ms, all);
+	return op_fn(smbd_object, smbd_open, nxfsd_requ, state, all);
 }
 
 static inline NTSTATUS x_smbd_open_op_write(
 		x_smbd_open_t *smbd_open,
 		x_nxfsd_requ_t *nxfsd_requ,
-		std::unique_ptr<x_smbd_requ_state_write_t> &state,
-		uint32_t delay_ms)
+		x_smbd_requ_state_write_t &state)
 {
 	x_smbd_object_t *smbd_object = smbd_open->smbd_object;
 	auto op_fn = smbd_object->smbd_volume->ops->write;
 	if (!op_fn) {
 		return NT_STATUS_INVALID_DEVICE_REQUEST;
 	}
-	return op_fn(smbd_object, smbd_open, nxfsd_requ, state, delay_ms);
+	return op_fn(smbd_object, smbd_open, nxfsd_requ, state);
 }
 
 static inline NTSTATUS x_smbd_open_op_flush(
@@ -459,17 +458,18 @@ static inline NTSTATUS x_smbd_open_op_getinfo(x_smbd_open_t *smbd_open,
 }
 
 static inline NTSTATUS x_smbd_open_op_setinfo(x_smbd_open_t *smbd_open,
+		x_smbd_requ_t *smbd_requ,
 		x_smbd_requ_state_setinfo_t &state)
 {
 	x_smbd_object_t *smbd_object = smbd_open->smbd_object;
 	return smbd_object->smbd_volume->ops->setinfo(smbd_object,
-			smbd_open, state);
+			smbd_open, smbd_requ, state);
 }
 
 static inline NTSTATUS x_smbd_open_op_ioctl(
 		x_smbd_open_t *smbd_open,
 		x_nxfsd_requ_t *nxfsd_requ,
-		std::unique_ptr<x_smbd_requ_state_ioctl_t> &state)
+		x_smbd_requ_state_ioctl_t &state)
 {
 	x_smbd_object_t *smbd_object = smbd_open->smbd_object;
 	auto op_fn = smbd_object->smbd_volume->ops->ioctl;
@@ -595,7 +595,7 @@ void x_smbd_open_unlinked(x_dlink_t *link,
 NTSTATUS x_smbd_open_create(x_smbd_open_t **psmbd_open,
 		x_smbd_requ_t *smbd_requ,
 		x_smbd_share_t &smbd_share,
-		x_smbd_requ_state_create_t &state);
+		x_nxfsd_requ_state_open_t &state);
 #endif
 x_smbd_open_t *x_smbd_open_reopen(NTSTATUS &status,
 		uint64_t id_presistent, uint64_t id_volatile,
@@ -606,7 +606,7 @@ NTSTATUS x_smbd_open_op_create(x_nxfsd_requ_t *nxfsd_requ,
 		x_smbd_tcon_t *smbd_tcon,
 		x_smbd_requ_state_create_t &state);
 NTSTATUS x_smbd_open_op_reconnect(x_smbd_requ_t *smbd_requ,
-		std::unique_ptr<x_smbd_requ_state_create_t> &state);
+		x_smbd_requ_state_create_t &state);
 
 bool x_smbd_open_break_lease(x_smbd_open_t *smbd_open,
 		const x_smb2_lease_key_t *ignore_lease_key,

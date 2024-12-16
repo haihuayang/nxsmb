@@ -5,36 +5,37 @@
 #include "nxfsd_stats.hxx"
 #include "smbd_conf.hxx"
 
-enum {
-	X_SMB2_FIND_REQU_BODY_LEN = 0x20,
-	X_SMB2_FIND_RESP_BODY_LEN = 0x08,
+struct x_smbd_requ_state_qdir_t
+{
+	x_smb2_info_level_t in_info_level;
+	uint8_t in_flags;
+	uint32_t in_file_index;
+	uint32_t in_output_buffer_length;
+	uint64_t in_file_id_persistent;
+	uint64_t in_file_id_volatile;
+	std::u16string in_name;
+	x_buf_t *out_buf{};
+	uint32_t out_buf_length{0};
 };
 
-static bool decode_in_qdir(x_smbd_requ_state_qdir_t &state,
-		const uint8_t *in_hdr, uint32_t in_len)
+struct x_smbd_requ_qdir_t : x_smbd_requ_t
 {
-	const x_smb2_qdir_requ_t *in_qdir = (const x_smb2_qdir_requ_t *)(in_hdr + sizeof(x_smb2_header_t));
-
-	uint16_t in_name_offset             = X_LE2H16(in_qdir->name_offset);
-	uint16_t in_name_length             = X_LE2H16(in_qdir->name_length);
-
-	if (in_name_length % 2 != 0 || !x_check_range<uint32_t>(in_name_offset, in_name_length, 
-				sizeof(x_smb2_header_t) + sizeof(x_smb2_qdir_requ_t), in_len)) {
-		return false;
+	x_smbd_requ_qdir_t(x_smbd_conn_t *smbd_conn, x_in_buf_t &in_buf,
+			uint32_t in_msgsize, bool encrypted,
+			x_smbd_requ_state_qdir_t &state)
+		: x_smbd_requ_t(smbd_conn, in_buf, in_msgsize, encrypted)
+		, state(std::move(state))
+	{
+		/* wait 1 second to send interim response */
+		interim_timeout_ns = X_NSEC_PER_SEC;
 	}
 
-	state.in_info_level = x_smb2_info_level_t(X_LE2H8(in_qdir->info_level));
-	state.in_flags = X_LE2H8(in_qdir->flags);
-	state.in_file_index = X_LE2H32(in_qdir->file_index);
-	state.in_file_id_persistent = X_LE2H64(in_qdir->file_id_persistent);
-	state.in_file_id_volatile = X_LE2H64(in_qdir->file_id_volatile);
-	state.in_output_buffer_length = X_LE2H32(in_qdir->output_buffer_length);
+	NTSTATUS process(void *ctx_conn) override;
+	NTSTATUS done_smb2(x_smbd_conn_t *smbd_conn, NTSTATUS status) override;
+	NTSTATUS cancelled(void *ctx_conn, int reason) override;
 
-	state.in_name.assign((char16_t *)(in_hdr + in_name_offset),
-			(char16_t *)(in_hdr + in_name_offset + in_name_length));
-
-	return true;
-}
+	x_smbd_requ_state_qdir_t state;
+};
 
 static void encode_out_qdir(const x_smbd_requ_state_qdir_t &state,
 		uint8_t *out_hdr)
@@ -46,11 +47,10 @@ static void encode_out_qdir(const x_smbd_requ_state_qdir_t &state,
 	out_qdir->length = X_H2LE32(x_convert_assert<uint32_t>(state.out_buf_length));
 }
 
-static void x_smb2_reply_qdir(x_smbd_conn_t *smbd_conn,
-		x_smbd_requ_t *smbd_requ,
+static void x_smb2_reply_qdir(x_smbd_requ_t *smbd_requ,
 		x_smbd_requ_state_qdir_t &state)
 {
-	x_out_buf_t out_buf;
+	auto &out_buf = smbd_requ->get_requ_out_buf();
 	out_buf.head = out_buf.tail = x_smb2_bufref_alloc(sizeof(x_smb2_qdir_resp_t));
 	out_buf.length = out_buf.head->length;
 
@@ -62,34 +62,16 @@ static void x_smb2_reply_qdir(x_smbd_conn_t *smbd_conn,
 
 	uint8_t *out_hdr = out_buf.head->get_data();
 	encode_out_qdir(state, out_hdr);
-
-	x_smb2_reply(smbd_conn, smbd_requ, NT_STATUS_OK, out_buf);
 }
 
-
-void x_smbd_requ_state_qdir_t::async_done(void *ctx_conn,
-		x_nxfsd_requ_t *nxfsd_requ,
-		NTSTATUS status)
-{
-	x_smbd_requ_t *smbd_requ = x_smbd_requ_from_base(nxfsd_requ);
-	X_SMBD_REQU_LOG(OP, smbd_requ, " %s", x_ntstatus_str(status));
-	if (!ctx_conn) {
-		return;
-	}
-	x_smbd_conn_t *smbd_conn = (x_smbd_conn_t *)ctx_conn;
-	if (NT_STATUS_IS_OK(status)) {
-		x_smb2_reply_qdir(smbd_conn, smbd_requ, *this);
-	}
-	x_smbd_conn_requ_done(smbd_conn, smbd_requ, status);
-}
 
 static bool smbd_qdir_queue_req(x_smbd_qdir_t *smbd_qdir, x_smbd_requ_t *smbd_requ)
 {
 	auto &requ_list = smbd_qdir->requ_list;
-	x_ref_inc(smbd_requ);
+	smbd_requ->incref();
 	for (auto curr_requ = requ_list.get_back(); curr_requ;
 			curr_requ = requ_list.prev(curr_requ)) {
-		x_smbd_requ_t *curr_smbd_requ = x_smbd_requ_from_base(curr_requ);
+		auto curr_smbd_requ = dynamic_cast<x_smbd_requ_t *>(curr_requ);
 		X_ASSERT(smbd_requ->compound_id != curr_smbd_requ->compound_id);
 		if (smbd_requ->compound_id > curr_smbd_requ->compound_id) {
 			requ_list.insert_after(smbd_requ, curr_requ);
@@ -107,37 +89,37 @@ static bool smbd_qdir_queue_req(x_smbd_qdir_t *smbd_qdir, x_smbd_requ_t *smbd_re
 		idl::SEC_STD_READ_CONTROL)
 
 static NTSTATUS smbd_qdir_process_requ(x_smbd_qdir_t *smbd_qdir,
-		x_smbd_requ_t *smbd_requ, bool new_requ)
+		x_smbd_requ_qdir_t *requ, bool new_requ)
 {
 	if (smbd_qdir->delay_ms) {
 		usleep(smbd_qdir->delay_ms * 1000);
 	}
-	auto state = smbd_requ->get_requ_state<x_smbd_requ_state_qdir_t>();
+	auto &state = requ->state;
 	if (new_requ) {
-		X_ASSERT(!state->out_buf);
+		X_ASSERT(!state.out_buf);
 
 		if (smbd_qdir->total_count == 0 ||
-				(state->in_flags & (X_SMB2_CONTINUE_FLAG_REOPEN |
+				(state.in_flags & (X_SMB2_CONTINUE_FLAG_REOPEN |
 						    X_SMB2_CONTINUE_FLAG_RESTART))) {
 			smbd_qdir->error_status = NT_STATUS_OK;
 			if (smbd_qdir->fnmatch) {
 				x_fnmatch_destroy(smbd_qdir->fnmatch);
 			}
-			smbd_qdir->fnmatch = x_fnmatch_create(state->in_name, true);
+			smbd_qdir->fnmatch = x_fnmatch_create(state.in_name, true);
 			smbd_qdir->ops->rewind(smbd_qdir);
 
 		} else if (!NT_STATUS_IS_OK(smbd_qdir->error_status)) {
 			return smbd_qdir->error_status;
 		}
 
-		state->out_buf = x_buf_alloc(state->in_output_buffer_length);
-		if (!state->out_buf) {
+		state.out_buf = x_buf_alloc(state.in_output_buffer_length);
+		if (!state.out_buf) {
 			return NT_STATUS_NO_MEMORY;
 		}
 	}
 
 	uint32_t max_count = 0x7fffffffu;
-	if (state->in_flags & X_SMB2_CONTINUE_FLAG_SINGLE) {
+	if (state.in_flags & X_SMB2_CONTINUE_FLAG_SINGLE) {
 		max_count = 1;
 	}
 	std::shared_ptr<idl::security_descriptor> psd, *ppsd = nullptr;
@@ -148,8 +130,8 @@ static NTSTATUS smbd_qdir_process_requ(x_smbd_qdir_t *smbd_qdir,
 	uint32_t num = 0, matched_count = 0; // TODO should be stored in smbd_qdir
 	NTSTATUS status = NT_STATUS_OK;
 
-	x_smb2_chain_marshall_t marshall{state->out_buf->data,
-		state->out_buf->data + state->out_buf->size, 8};
+	x_smb2_chain_marshall_t marshall{state.out_buf->data,
+		state.out_buf->data + state.out_buf->size, 8};
 	while (num < max_count) {
 		x_smbd_object_meta_t object_meta;
 		x_smbd_stream_meta_t stream_meta;
@@ -181,7 +163,7 @@ static NTSTATUS smbd_qdir_process_requ(x_smbd_qdir_t *smbd_qdir,
 
 		++matched_count;
 		if (x_smbd_marshall_dir_entry(marshall, object_meta, stream_meta,
-					ent_name, state->in_info_level)) {
+					ent_name, state.in_info_level)) {
 			++num;
 		} else {
 			smbd_qdir->ops->unget_entry(smbd_qdir);
@@ -192,41 +174,17 @@ static NTSTATUS smbd_qdir_process_requ(x_smbd_qdir_t *smbd_qdir,
 	smbd_qdir->error_status = status;
 	if (num > 0) {
 		smbd_qdir->total_count += num;
-		state->out_buf_length = marshall.get_size();
+		state.out_buf_length = marshall.get_size();
 		return NT_STATUS_OK;
 	}
 	
-	x_buf_release(state->out_buf);
-	state->out_buf = nullptr;
+	x_buf_release(state.out_buf);
+	state.out_buf = nullptr;
 	if (matched_count > 0) {
 		return NT_STATUS_INFO_LENGTH_MISMATCH;
 	}
 	return smbd_qdir->error_status;
 }
-
-struct smbd_qdir_evt_t
-{
-	static void func(void *ctx_conn, x_fdevt_user_t *fdevt_user)
-	{
-		smbd_qdir_evt_t *evt = X_CONTAINER_OF(fdevt_user, smbd_qdir_evt_t, base);
-		x_smbd_requ_t *smbd_requ = evt->smbd_requ;
-		X_LOG(SMB, DBG, "evt=%p, requ=%p, ctx_conn=%p", evt, smbd_requ, ctx_conn);
-		x_nxfsd_requ_async_done(ctx_conn, smbd_requ, evt->status);
-		delete evt;
-	}
-
-	smbd_qdir_evt_t(x_smbd_requ_t *r, NTSTATUS s)
-		: base(func), smbd_requ(r), status(s)
-	{
-	}
-	~smbd_qdir_evt_t()
-	{
-		x_ref_dec(smbd_requ);
-	}
-	x_fdevt_user_t base;
-	x_smbd_requ_t * const smbd_requ;
-	NTSTATUS const status;
-};
 
 static x_job_t::retval_t smbd_qdir_job_run(x_job_t *job, void *sche)
 {
@@ -242,7 +200,7 @@ static x_job_t::retval_t smbd_qdir_job_run(x_job_t *job, void *sche)
 				if (!nxfsd_requ) {
 					break;
 				}
-				x_smbd_requ_t *smbd_requ = x_smbd_requ_from_base(nxfsd_requ);
+				auto smbd_requ = dynamic_cast<x_smbd_requ_t *>(nxfsd_requ);
 				if (smbd_qdir->compound_id_blocking != 0 &&
 						smbd_qdir->compound_id_blocking != smbd_requ->compound_id) {
 					break;
@@ -254,20 +212,24 @@ static x_job_t::retval_t smbd_qdir_job_run(x_job_t *job, void *sche)
 
 			lock.unlock();
 
-			x_smbd_requ_t *smbd_requ = x_smbd_requ_from_base(nxfsd_requ);
-			NTSTATUS status = NT_STATUS_FILE_CLOSED;
-			if (!smbd_qdir->closed) {
-				status = smbd_qdir_process_requ(smbd_qdir, smbd_requ, new_requ);
-			}
+			if (nxfsd_requ->set_processing()) {
+				auto requ = dynamic_cast<x_smbd_requ_qdir_t *>(nxfsd_requ);
+				NTSTATUS status = NT_STATUS_FILE_CLOSED;
+				if (!smbd_qdir->closed) {
+					status = smbd_qdir_process_requ(smbd_qdir, requ, new_requ);
+				}
 
-			if (status == X_NT_STATUS_INTERNAL_BLOCKED) {
-				return x_job_t::JOB_BLOCKED;
+				if (status == X_NT_STATUS_INTERNAL_BLOCKED) {
+					return x_job_t::JOB_BLOCKED;
+				} else {
+					smbd_qdir->curr_requ = nullptr;
+				}
+				x_nxfsd_requ_post_done(nxfsd_requ, status);
 			} else {
+				/* already cancelled */
 				smbd_qdir->curr_requ = nullptr;
+				nxfsd_requ->decref();
 			}
-			
-			X_NXFSD_REQU_POST_USER(nxfsd_requ,
-					new smbd_qdir_evt_t(smbd_requ, status));
 			lock.lock();
 		}
 		if (!smbd_qdir->closed) {
@@ -297,71 +259,24 @@ x_smbd_qdir_t::~x_smbd_qdir_t()
 	X_NXFSD_COUNTER_INC_DELETE(smbd_qdir, 1);
 }
 
-static void smbd_qdir_cancel(x_nxfsd_conn_t *nxfsd_conn, x_nxfsd_requ_t *nxfsd_requ)
+NTSTATUS x_smbd_requ_qdir_t::process(void *ctx_conn)
 {
-	x_smbd_open_t *smbd_open = nxfsd_requ->smbd_open;
-	{
-		auto lock = std::lock_guard(smbd_open->smbd_object->mutex);
-		x_smbd_qdir_t *smbd_qdir = smbd_open->smbd_qdir;
-		if (!smbd_qdir) {
-			/* smbd_qdir is closed, do nothing */
-			return;
-		}
-		/* TODO check if processing the requ, if so, cannot remove it */
-		smbd_qdir->requ_list.remove(nxfsd_requ);
-	}
-	x_nxfsd_requ_post_cancel(nxfsd_requ, NT_STATUS_CANCELLED);
-}
+	X_SMBD_REQU_LOG(OP, this, " open=0x%lx,0x%lx",
+			state.in_file_id_persistent, state.in_file_id_volatile);
 
-NTSTATUS x_smb2_process_query_directory(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
-{
-	auto [ in_hdr, in_requ_len ] = smbd_requ->get_in_data();
-	if (in_requ_len < sizeof(x_smb2_header_t) + sizeof(x_smb2_qdir_requ_t)) {
-		X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
+	if (!x_smbd_requ_verify_creditcharge(this,
+				state.in_output_buffer_length)) {
+		X_SMBD_REQU_RETURN_STATUS(this, NT_STATUS_INVALID_PARAMETER);
 	}
 
-	auto state = std::make_unique<x_smbd_requ_state_qdir_t>();
-	if (!decode_in_qdir(*state, in_hdr, in_requ_len)) {
-		X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
-	}
-
-	X_SMBD_REQU_LOG(OP, smbd_requ,  " open=0x%lx,0x%lx",
-			state->in_file_id_persistent, state->in_file_id_volatile);
-
-	if (state->in_output_buffer_length > x_smbd_conn_get_negprot(smbd_conn).max_trans_size) {
-		X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
-	}
-
-	if (!x_smbd_requ_verify_creditcharge(smbd_requ,
-				state->in_output_buffer_length)) {
-		X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
-	}
-
-	switch (state->in_info_level) {
-	case x_smb2_info_level_t::FILE_ID_BOTH_DIR_INFORMATION:
-	case x_smb2_info_level_t::FILE_ID_FULL_DIR_INFORMATION:
-	case x_smb2_info_level_t::FILE_DIRECTORY_INFORMATION:
-	case x_smb2_info_level_t::FILE_BOTH_DIR_INFORMATION:
-	case x_smb2_info_level_t::FILE_FULL_DIRECTORY_INFORMATION:
-	case x_smb2_info_level_t::FILE_NAMES_INFORMATION:
-		break;
-	default:
-		X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
-	}
-
-	if (state->in_output_buffer_length < 4) {
-		X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_INFO_LENGTH_MISMATCH);
-	}
-
-	NTSTATUS status = x_smbd_requ_init_open(smbd_requ,
-			state->in_file_id_persistent,
-			state->in_file_id_volatile,
+	NTSTATUS status = x_smbd_requ_init_open(this,
+			state.in_file_id_persistent,
+			state.in_file_id_volatile,
 			false);
-	if (!NT_STATUS_IS_OK(status)) {
-		X_SMBD_REQU_RETURN_STATUS(smbd_requ, status);
+	if (!status.ok()) {
+		X_SMBD_REQU_RETURN_STATUS(this, status);
 	}
 
-	auto smbd_open = smbd_requ->smbd_open;
 	x_smbd_object_t *smbd_object = smbd_open->smbd_object;
 	if (smbd_open->smbd_stream || !x_smbd_object_is_dir(smbd_object)) {
 		return NT_STATUS_INVALID_PARAMETER;
@@ -372,11 +287,12 @@ NTSTATUS x_smb2_process_query_directory(x_smbd_conn_t *smbd_conn, x_smbd_requ_t 
 		return NT_STATUS_INVALID_DEVICE_REQUEST;
 	}
 
+	std::shared_ptr<x_smbd_user_t> smbd_user;
+	if (x_smbd_tcon_get_abe(this->smbd_tcon)) {
+		smbd_user = x_smbd_sess_get_user(this->smbd_sess);
+	}
+
 	{
-		std::shared_ptr<x_smbd_user_t> smbd_user;
-		if (x_smbd_tcon_get_abe(smbd_requ->smbd_tcon)) {
-			smbd_user = x_smbd_sess_get_user(smbd_requ->smbd_sess);
-		}
 		auto lock = std::lock_guard(smbd_object->mutex);
 		if (!smbd_open->smbd_qdir) {
 			smbd_open->smbd_qdir = x_smbd_qdir_create(smbd_open, smbd_user);
@@ -386,10 +302,7 @@ NTSTATUS x_smb2_process_query_directory(x_smbd_conn_t *smbd_conn, x_smbd_requ_t 
 			}
 		}
 
-		x_nxfsd_requ_async_insert(smbd_requ, state, smbd_qdir_cancel,
-				X_NSEC_PER_SEC);
-
-		smbd_qdir_queue_req(smbd_open->smbd_qdir, smbd_requ);
+		smbd_qdir_queue_req(smbd_open->smbd_qdir, this);
 		/* TODO 
 			if (smbd_requ->smbd_qdir_waiting) {
 				X_ASSERT(smbd_open->smbd_qdir->compound_id_blocking
@@ -402,7 +315,82 @@ NTSTATUS x_smb2_process_query_directory(x_smbd_conn_t *smbd_conn, x_smbd_requ_t 
 		x_smbd_schedule_async(&smbd_open->smbd_qdir->base);
 	}
 
-	X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_PENDING);
+	X_SMBD_REQU_RETURN_STATUS(this, NT_STATUS_PENDING);
+}
+
+NTSTATUS x_smbd_requ_qdir_t::done_smb2(x_smbd_conn_t *smbd_conn, NTSTATUS status)
+{
+	X_SMBD_REQU_LOG(OP, this, " %s", x_ntstatus_str(status));
+	if (status.ok()) {
+		x_smb2_reply_qdir(this, this->state);
+	}
+	return status;
+}
+
+NTSTATUS x_smbd_requ_qdir_t::cancelled(void *ctx_conn, int reason)
+{
+	/* TODO we let the async job to cleanup for now, otherwise there is a race */
+	return NT_STATUS_CANCELLED;
+}
+
+NTSTATUS x_smb2_parse_QUERY_DIRECTORY(x_smbd_conn_t *smbd_conn,
+		x_smbd_requ_t **p_smbd_requ,
+		x_in_buf_t &in_buf, uint32_t in_msgsize,
+		bool encrypted)
+{
+	auto in_smb2_hdr = (const x_smb2_header_t *)(in_buf.get_data());
+
+	if (in_buf.length < sizeof(x_smb2_header_t) + sizeof(x_smb2_qdir_requ_t)) {
+		X_SMBD_SMB2_RETURN_STATUS(in_smb2_hdr, NT_STATUS_INVALID_PARAMETER);
+	}
+
+	auto in_body = (const x_smb2_qdir_requ_t *)(in_smb2_hdr + 1);
+
+	uint16_t in_name_offset             = X_LE2H16(in_body->name_offset);
+	uint16_t in_name_length             = X_LE2H16(in_body->name_length);
+
+	if (in_name_length % 2 != 0 || !x_check_range<uint32_t>(in_name_offset, in_name_length, 
+				sizeof(x_smb2_header_t) + sizeof(x_smb2_qdir_requ_t),
+				in_buf.length)) {
+		X_SMBD_SMB2_RETURN_STATUS(in_smb2_hdr, NT_STATUS_INVALID_PARAMETER);
+	}
+
+	auto in_output_buffer_length = X_LE2H32(in_body->output_buffer_length);
+	if (in_output_buffer_length > x_smbd_conn_get_negprot(smbd_conn).max_trans_size) {
+		X_SMBD_SMB2_RETURN_STATUS(in_smb2_hdr, NT_STATUS_INVALID_PARAMETER);
+	}
+	if (in_output_buffer_length < 4) {
+		X_SMBD_SMB2_RETURN_STATUS(in_smb2_hdr, NT_STATUS_INFO_LENGTH_MISMATCH);
+	}
+
+	x_smbd_requ_state_qdir_t state;
+
+	state.in_info_level = x_smb2_info_level_t(X_LE2H8(in_body->info_level));
+	switch (state.in_info_level) {
+	case x_smb2_info_level_t::FILE_ID_BOTH_DIR_INFORMATION:
+	case x_smb2_info_level_t::FILE_ID_FULL_DIR_INFORMATION:
+	case x_smb2_info_level_t::FILE_DIRECTORY_INFORMATION:
+	case x_smb2_info_level_t::FILE_BOTH_DIR_INFORMATION:
+	case x_smb2_info_level_t::FILE_FULL_DIRECTORY_INFORMATION:
+	case x_smb2_info_level_t::FILE_NAMES_INFORMATION:
+		break;
+	default:
+		X_SMBD_SMB2_RETURN_STATUS(in_smb2_hdr, NT_STATUS_INFO_LENGTH_MISMATCH);
+	}
+
+	state.in_flags = X_LE2H8(in_body->flags);
+	state.in_file_index = X_LE2H32(in_body->file_index);
+	state.in_file_id_persistent = X_LE2H64(in_body->file_id_persistent);
+	state.in_file_id_volatile = X_LE2H64(in_body->file_id_volatile);
+	state.in_output_buffer_length = in_output_buffer_length;
+	auto in_name_ptr = (const uint8_t *)in_smb2_hdr + in_name_offset;
+	state.in_name = x_utf16le_decode((char16_t *)(in_name_ptr),
+			(char16_t *)(in_name_ptr + in_name_length));
+
+	*p_smbd_requ = new x_smbd_requ_qdir_t(smbd_conn, in_buf,
+			in_msgsize, encrypted,
+			state);
+	return NT_STATUS_OK;
 }
 
 /* caller hold smbd_object's mutex */

@@ -1,37 +1,24 @@
 
 #include "smbd_open.hxx"
+#include "smbd_requ.hxx"
 
-static bool decode_in_getinfo(x_smbd_requ_state_getinfo_t &state,
-		const uint8_t *in_hdr, uint32_t in_len)
+namespace {
+
+struct x_smbd_requ_getinfo_t : x_smbd_requ_t
 {
-	const x_smb2_getinfo_requ_t *in_getinfo = (const x_smb2_getinfo_requ_t *)(in_hdr + sizeof(x_smb2_header_t));
-
-	state.in_info_class = x_smb2_info_class_t(X_LE2H8(in_getinfo->info_class));
-	state.in_info_level = x_smb2_info_level_t(X_LE2H8(in_getinfo->info_level));
-	state.in_output_buffer_length = X_LE2H32(in_getinfo->output_buffer_length);
-	state.in_additional = X_LE2H32(in_getinfo->additional);
-	state.in_input_buffer_length = X_LE2H32(in_getinfo->input_buffer_length);
-	state.in_flags = X_LE2H32(in_getinfo->flags);
-	state.in_file_id_persistent = X_LE2H64(in_getinfo->file_id_persistent);
-	state.in_file_id_volatile = X_LE2H64(in_getinfo->file_id_volatile);
-
-	/* TODO input_data ? */
-#if 0
-	if (!x_check_range(requ_getinfo.input_buffer_offset, requ_getinfo.input_buffer_length,
-				0x40 + X_SMB2_GETINFO_REQU_BODY_LEN, in_len)) {
-		return X_SMB2_REPLY_ERROR(smbd_conn, smbd_requ, smbd_sess, in_tid, NT_STATUS_INVALID_PARAMETER);
+	x_smbd_requ_getinfo_t(x_smbd_conn_t *smbd_conn, x_in_buf_t &in_buf,
+			uint32_t in_msgsize, bool encrypted,
+			x_smbd_requ_state_getinfo_t &in_state)
+		: x_smbd_requ_t(smbd_conn, in_buf, in_msgsize, encrypted)
+		, state(in_state)
+	{
 	}
+	NTSTATUS process(void *ctx_conn) override;
+	NTSTATUS done_smb2(x_smbd_conn_t *smbd_conn, NTSTATUS status) override;
 
-	const std::shared_ptr<x_smbconf_t> smbconf = smbd_conn->get_smbconf();
-	if (requ_getinfo.input_buffer_length > smbconf->max_trans) {
-		return X_SMB2_REPLY_ERROR(smbd_conn, smbd_requ, smbd_sess, in_tid, NT_STATUS_INVALID_PARAMETER);
-	}
+	x_smbd_requ_state_getinfo_t state;
+};
 
-	if (requ_getinfo.output_buffer_length > smbconf->max_trans) {
-		return X_SMB2_REPLY_ERROR(smbd_conn, smbd_requ, smbd_sess, in_tid, NT_STATUS_INVALID_PARAMETER);
-	}
-#endif
-	return true;
 }
 
 static void encode_out_getinfo(const x_smbd_requ_state_getinfo_t &state,
@@ -44,97 +31,85 @@ static void encode_out_getinfo(const x_smbd_requ_state_getinfo_t &state,
 	memcpy(out_getinfo + 1, state.out_data.data(), state.out_data.size());
 }
 
-static void x_smb2_reply_getinfo(x_smbd_conn_t *smbd_conn,
-		x_smbd_requ_t *smbd_requ,
-		const x_smbd_requ_state_getinfo_t &state,
+static void x_smb2_reply_getinfo(x_smbd_requ_getinfo_t *requ,
 		NTSTATUS status)
 {
-	X_SMBD_REQU_LOG(OP, smbd_requ,  " %s", x_ntstatus_str(status));
+	X_SMBD_REQU_LOG(OP, requ,  " %s", x_ntstatus_str(status));
 
-	x_out_buf_t out_buf;
+	auto &out_buf = requ->get_requ_out_buf();
 	out_buf.head = out_buf.tail = x_smb2_bufref_alloc(sizeof(x_smb2_getinfo_resp_t) +
-			state.out_data.size());
+			requ->state.out_data.size());
 	out_buf.length = out_buf.head->length;
 
 	uint8_t *out_hdr = out_buf.head->get_data();
-	encode_out_getinfo(state, out_hdr);
-	x_smb2_reply(smbd_conn, smbd_requ, status, out_buf);
+	encode_out_getinfo(requ->state, out_hdr);
 }
 
-void x_smbd_requ_state_getinfo_t::async_done(void *ctx_conn,
-		x_nxfsd_requ_t *nxfsd_requ,
-		NTSTATUS status)
+NTSTATUS x_smbd_requ_getinfo_t::process(void *ctx_conn)
 {
-	x_smbd_requ_t *smbd_requ = x_smbd_requ_from_base(nxfsd_requ);
-	X_SMBD_REQU_LOG(OP, smbd_requ, " %s", x_ntstatus_str(status));
-	if (!ctx_conn) {
-		return;
-	}
-	x_smbd_conn_t *smbd_conn = (x_smbd_conn_t *)ctx_conn;
-	if (status.ok()) {
-		x_smb2_reply_getinfo(smbd_conn, smbd_requ, *this, status);
-	}
-	x_smbd_conn_requ_done(smbd_conn, smbd_requ, status);
-}
+	X_SMBD_REQU_LOG(OP, this,  " open=0x%lx,0x%lx %d:%d input=%u output=%u",
+			state.in_file_id_persistent, state.in_file_id_volatile,
+			uint8_t(state.in_info_class), uint8_t(state.in_info_level),
+			state.in_input_buffer_length, state.in_output_buffer_length);
 
-static void smbd_getinfo_cancel(x_nxfsd_conn_t *nxfsd_conn, x_nxfsd_requ_t *nxfsd_requ)
-{
-	x_nxfsd_requ_post_cancel(nxfsd_requ, NT_STATUS_CANCELLED);
-}
-
-NTSTATUS x_smb2_process_getinfo(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
-{
-	auto [ in_hdr, in_requ_len ] = smbd_requ->get_in_data();
-	if (in_requ_len < sizeof(x_smb2_header_t) + sizeof(x_smb2_getinfo_requ_t)) {
-		X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
+	if (!x_smbd_requ_verify_creditcharge(this,
+				std::max(state.in_input_buffer_length,
+					state.in_output_buffer_length))) {
+		X_SMBD_REQU_RETURN_STATUS(this, NT_STATUS_INVALID_PARAMETER);
 	}
 
-	auto state = std::make_unique<x_smbd_requ_state_getinfo_t>();
-	if (!decode_in_getinfo(*state, in_hdr, in_requ_len)) {
-		X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
-	}
-	state->in_dialect = x_smbd_conn_get_dialect(smbd_conn);
-
-	X_SMBD_REQU_LOG(OP, smbd_requ,  " open=0x%lx,0x%lx %d:%d input=%u output=%u",
-			state->in_file_id_persistent, state->in_file_id_volatile,
-			uint8_t(state->in_info_class), uint8_t(state->in_info_level),
-			state->in_input_buffer_length, state->in_output_buffer_length);
-
-	if (state->in_input_buffer_length > x_smbd_conn_get_negprot(smbd_conn).max_trans_size) {
-		X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
-	}
-
-	if (state->in_output_buffer_length > x_smbd_conn_get_negprot(smbd_conn).max_trans_size) {
-		X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
-	}
-
-	if (!x_smbd_requ_verify_creditcharge(smbd_requ,
-				std::max(state->in_input_buffer_length,
-					state->in_output_buffer_length))) {
-		X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
-	}
-
-	NTSTATUS status = x_smbd_requ_init_open(smbd_requ,
-			state->in_file_id_persistent,
-			state->in_file_id_volatile,
+	NTSTATUS status = x_smbd_requ_init_open(this,
+			state.in_file_id_persistent,
+			state.in_file_id_volatile,
 			false);
 	if (!NT_STATUS_IS_OK(status)) {
-		X_SMBD_REQU_RETURN_STATUS(smbd_requ, status);
+		X_SMBD_REQU_RETURN_STATUS(this, status);
 	}
 
-	status = x_smbd_open_op_getinfo(smbd_requ->smbd_open,
-			*state);
-	if (NT_STATUS_IS_OK(status) || NT_STATUS_EQUAL(status, NT_STATUS_BUFFER_OVERFLOW)) {
-		x_smb2_reply_getinfo(smbd_conn, smbd_requ, *state, status);
-		return NT_STATUS_OK;
-	}
-	if (status == NT_STATUS_PENDING) {
-		/* TODO does it need a timer? can break timer always wake up it? */
-		X_SMBD_REQU_LOG(DBG, smbd_requ, " interim_state %d",
-				smbd_requ->interim_state);
-		x_nxfsd_requ_async_insert(smbd_requ, state, smbd_getinfo_cancel, 0);
+	return x_smbd_open_op_getinfo(this->smbd_open, state);
+}
+
+NTSTATUS x_smbd_requ_getinfo_t::done_smb2(x_smbd_conn_t *smbd_conn, NTSTATUS status)
+{
+	if (status.ok() || status == NT_STATUS_BUFFER_OVERFLOW) {
+		x_smb2_reply_getinfo(this, status);
 	}
 
-	X_SMBD_REQU_RETURN_STATUS(smbd_requ, status);
+	X_SMBD_REQU_RETURN_STATUS(this, status);
+}
+
+NTSTATUS x_smb2_parse_GETINFO(x_smbd_conn_t *smbd_conn, x_smbd_requ_t **p_smbd_requ,
+		x_in_buf_t &in_buf, uint32_t in_msgsize,
+		bool encrypted)
+{
+	auto in_smb2_hdr = (const x_smb2_header_t *)(in_buf.get_data());
+
+	if (in_buf.length < sizeof(x_smb2_header_t) + sizeof(x_smb2_getinfo_requ_t)) {
+		X_SMBD_SMB2_RETURN_STATUS(in_smb2_hdr, NT_STATUS_INVALID_PARAMETER);
+	}
+
+	auto in_body = (const x_smb2_getinfo_requ_t *)(in_smb2_hdr + 1);
+	x_smbd_requ_state_getinfo_t state;
+	state.in_info_class = x_smb2_info_class_t(X_LE2H8(in_body->info_class));
+	state.in_info_level = x_smb2_info_level_t(X_LE2H8(in_body->info_level));
+	state.in_output_buffer_length = X_LE2H32(in_body->output_buffer_length);
+	state.in_additional = X_LE2H32(in_body->additional);
+	state.in_input_buffer_length = X_LE2H32(in_body->input_buffer_length);
+	state.in_flags = X_LE2H32(in_body->flags);
+	state.in_file_id_persistent = X_LE2H64(in_body->file_id_persistent);
+	state.in_file_id_volatile = X_LE2H64(in_body->file_id_volatile);
+	/* TODO input_data ? */
+	state.in_dialect = x_smbd_conn_get_dialect(smbd_conn);
+
+	if (state.in_input_buffer_length > x_smbd_conn_get_negprot(smbd_conn).max_trans_size) {
+		X_SMBD_SMB2_RETURN_STATUS(in_smb2_hdr, NT_STATUS_INVALID_PARAMETER);
+	}
+
+	if (state.in_output_buffer_length > x_smbd_conn_get_negprot(smbd_conn).max_trans_size) {
+		X_SMBD_SMB2_RETURN_STATUS(in_smb2_hdr, NT_STATUS_INVALID_PARAMETER);
+	}
+	*p_smbd_requ = new x_smbd_requ_getinfo_t(smbd_conn, in_buf,
+			in_msgsize, encrypted, state);
+	return NT_STATUS_OK;
 }
 

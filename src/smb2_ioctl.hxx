@@ -9,14 +9,20 @@
 #include "smbd.hxx"
 #include "smbd_requ.hxx"
 
-NTSTATUS x_smb2_ioctl_request_resume_key(
-		x_smbd_requ_t *smbd_requ,
-		x_smbd_requ_state_ioctl_t &state);
+struct x_smbd_requ_ioctl_t : x_smbd_requ_t
+{
+	x_smbd_requ_ioctl_t(x_smbd_conn_t *smbd_conn,
+			x_in_buf_t &in_buf, uint32_t in_msgsize,
+			bool encrypted,
+			x_smbd_requ_state_ioctl_t &state);
+	NTSTATUS done_smb2(x_smbd_conn_t *smbd_conn, NTSTATUS status) override;
+	x_smbd_requ_state_ioctl_t state;
+};
 
-NTSTATUS x_smb2_ioctl_copychunk(
-		x_smbd_conn_t *smbd_conn,
-		x_smbd_requ_t *smbd_requ,
-		std::unique_ptr<x_smbd_requ_state_ioctl_t> &state);
+NTSTATUS x_smbd_parse_ioctl_copychunk(x_smbd_conn_t *smbd_conn,
+		x_smbd_requ_t **p_smbd_requ,
+		x_in_buf_t &in_buf, uint32_t in_msgsize,
+		bool encrypted, x_smbd_requ_state_ioctl_t &state);
 
 #endif /* __smb2_ioctl__hxx__ */
 

@@ -637,6 +637,7 @@ struct x_smb2_preauth_t
 {
 	std::array<char, 64> data{};
 	void update(const void *data, size_t length);
+	void update(const x_bufref_t *buflist);
 };
 
 struct x_smb2_negprot_requ_t

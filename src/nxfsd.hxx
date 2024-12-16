@@ -7,40 +7,15 @@
 #include "smbd_share.hxx"
 #include "include/ntstatus.hxx"
 #include <memory>
+#include <ostream>
 
 struct x_nxfsd_conn_t;
-struct x_nxfsd_requ_t;
 struct x_smbd_open_t;
 struct x_smbd_object_t;
 struct x_smbd_stream_t;
 
-struct x_nxfsd_requ_state_async_t
-{
-	virtual ~x_nxfsd_requ_state_async_t() { }
-	virtual void async_done(void *ctx_conn, x_nxfsd_requ_t *nxfsd_requ,
-			NTSTATUS status) = 0;
-	virtual NTSTATUS resume(void *ctx_conn, x_nxfsd_requ_t *nxfsd_requ) {
-		X_ASSERT(false);
-		return NT_STATUS_INTERNAL_ERROR;
-	}
-};
-
-struct x_nxfsd_requ_cbs_t
-{
-	void (*cb_destroy)(x_nxfsd_requ_t *nxfsd_requ);
-	bool (*cb_can_async)(const x_nxfsd_requ_t *nxfsd_requ);
-	std::string (*cb_tostr)(const x_nxfsd_requ_t *nxfsd_requ);
-};
-
-
 struct x_nxfsd_requ_t
 {
-	enum {
-		S_INIT,
-		S_PROCESSING,
-		S_CANCELLED,
-	};
-
 	enum {
 		INTERIM_S_NONE,
 		INTERIM_S_IMMEDIATE,
@@ -48,88 +23,76 @@ struct x_nxfsd_requ_t
 		INTERIM_S_SENT,
 	};
 
-	explicit x_nxfsd_requ_t(const x_nxfsd_requ_cbs_t *cbs,
-			x_nxfsd_conn_t *nxfsd_conn, x_buf_t *in_buf,
+	explicit x_nxfsd_requ_t(
+			x_nxfsd_conn_t *nxfsd_conn, x_in_buf_t &in_buf,
 			uint32_t in_msgsize);
 	virtual ~x_nxfsd_requ_t();
 
-	std::tuple<const uint8_t *, uint32_t> get_in_data() const {
-		return {in_buf->data + in_offset, in_requ_len};
+	virtual NTSTATUS process(void *ctx_conn) = 0;
+
+	virtual void async_done(void *ctx_conn, NTSTATUS status) = 0;
+
+	enum {
+		CANCEL_BY_CLIENT,
+		CANCEL_BY_CLOSE,
+		CANCEL_BY_SHUTDOWN,
+	};
+	virtual NTSTATUS cancelled(void *ctx_conn, int reason)
+	{
+		X_ASSERT(false);
+		return NT_STATUS_INTERNAL_ERROR;
 	}
 
-	std::tuple<x_buf_t *, uint32_t, uint32_t> get_in_buf() const {
-		return {in_buf, in_offset, in_requ_len};
-	}
+	/* always called in the context of the connection */
+	void cancel(void *ctx_conn, int reason);
 
-	bool can_async() const {
-		return cbs->cb_can_async(this);
-	}
+	/* can be in any context */
+	bool set_processing();
 
-	template <class T>
-	std::unique_ptr<T> release_state() {
-		X_ASSERT(requ_state);
-		auto ptr = dynamic_cast<T *>(requ_state.get());
-		if (ptr) {
-			requ_state.release();
-		}
-		return std::unique_ptr<T>{ptr};
-	}
+	void incref();
 
-	std::unique_ptr<x_nxfsd_requ_state_async_t> release_state() {
-		X_ASSERT(requ_state);
-		return std::move(requ_state);
-	}
+	void decref();
 
-	template <class T>
-	T *get_requ_state() const {
-		X_ASSERT(requ_state);
-		return dynamic_cast<T *>(requ_state.get());
-	}
+	virtual bool can_async() const = 0;
+	virtual std::ostream &tostr(std::ostream &os) const = 0;
 
-	template <class T>
-	void save_requ_state(std::unique_ptr<T> &state) {
-		X_ASSERT(!requ_state);
-		requ_state = std::move(state);
-	}
-
-	bool set_processing() {
-		uint32_t old_val = S_INIT;
-		return std::atomic_compare_exchange_strong(&async_state,
-				&old_val, S_PROCESSING);
-	}
-
-	bool set_cancelled() {
-		uint32_t old_val = S_INIT;
-		return std::atomic_compare_exchange_strong(&async_state,
-				&old_val, S_CANCELLED);
+	x_out_buf_t &get_requ_out_buf() {
+		X_ASSERT(!requ_out_buf.head);
+		return requ_out_buf;
 	}
 
 	x_dlink_t async_link; // link into open
 	x_dlink_t conn_link; // link into conn
 	x_timer_job_t interim_timer;
-	std::unique_ptr<x_nxfsd_requ_state_async_t> requ_state;
-	const x_nxfsd_requ_cbs_t *const cbs;
+	int64_t interim_timeout_ns = 0;
 	x_nxfsd_conn_t * const nxfsd_conn{};
 
-	x_buf_t *in_buf;
 	uint64_t id = 0;
 	// uint64_t channel_generation;
 	// const uint64_t compound_id;
 
-	x_tick_t start;
-	uint32_t in_msgsize, in_offset, in_requ_len;
-	std::atomic<uint32_t> async_state = S_INIT;
+	const x_tick_t start;
+	std::atomic<uint32_t> async_state;
 	std::atomic<int32_t> async_pending = 0;
 	uint8_t interim_state = INTERIM_S_NONE;
 	// bool request_counters_updated = false;
-	bool done = false;
+
+	x_in_buf_t requ_in_buf;
+	const uint32_t in_msgsize;
 
 	NTSTATUS status{NT_STATUS_OK};
+	const char *location = nullptr;
 
 	x_out_buf_t compound_out_buf;
+	x_out_buf_t requ_out_buf;
 	x_smbd_open_t *smbd_open{};
-	void (*cancel_fn)(x_nxfsd_conn_t *nxfsd_conn, x_nxfsd_requ_t *nxfsd_requ);
 };
+
+static inline std::ostream &operator<<(std::ostream &os, const x_nxfsd_requ_t &requ)
+{
+	return requ.tostr(os);
+}
+
 X_DECLARE_MEMBER_TRAITS(requ_async_traits, x_nxfsd_requ_t, async_link)
 X_DECLARE_MEMBER_TRAITS(nxfsd_requ_conn_traits, x_nxfsd_requ_t, conn_link)
 
@@ -182,29 +145,24 @@ void x_nxfsd_conn_queue_buf(x_nxfsd_conn_t *nxfsd_conn, x_bufref_t *buf_head,
 bool x_nxfsd_conn_post_user(x_nxfsd_conn_t *nxfsd_conn, x_fdevt_user_t *fdevt_user, bool always);
 
 #define X_NXFSD_REQU_DBG_FMT "requ(%p 0x%lx %s)"
-#define X_NXFSD_REQU_DBG_ARG(r) (r), (r)->id, (r)->cbs->cb_tostr(r).c_str()
+#define X_NXFSD_REQU_DBG_ARG(r) (r), (r)->id, x_tostr(*(r)).c_str()
 
 #define X_NXFSD_REQU_LOG(level, nxfsd_requ, fmt, ...) \
 	X_LOG(SMB, level, X_NXFSD_REQU_DBG_FMT fmt, X_NXFSD_REQU_DBG_ARG(nxfsd_requ), ##__VA_ARGS__)
 
 #define X_NXFSD_REQU_RETURN_STATUS(nxfsd_requ, status) do { \
+	(nxfsd_requ)->location = __location__; \
 	X_LOG(SMB, OP, X_NXFSD_REQU_DBG_FMT " %s", \
 			X_NXFSD_REQU_DBG_ARG(nxfsd_requ), \
 			x_ntstatus_str(status)); \
 	return (status); \
 } while (0)
 
-bool x_nxfsd_requ_init(x_nxfsd_requ_t *nxfsd_requ);
+bool x_nxfsd_requ_store(x_nxfsd_requ_t *nxfsd_requ);
+void x_nxfsd_requ_remove(x_nxfsd_requ_t *nxfsd_requ);
 
-static inline void x_nxfsd_requ_start(x_nxfsd_requ_t *nxfsd_requ,
-		uint32_t offset, uint32_t in_requ_len)
-{
-	nxfsd_requ->in_offset = offset;
-	nxfsd_requ->in_requ_len = in_requ_len;
-	nxfsd_requ->start = tick_now = x_tick_now();
-	nxfsd_requ->cancel_fn = nullptr;
-	nxfsd_requ->done = false;
-}
+bool x_nxfsd_conn_start_requ(x_nxfsd_conn_t *nxfsd_conn, x_nxfsd_requ_t *nxfsd_requ);
+void x_nxfsd_conn_done_requ(x_nxfsd_requ_t *nxfsd_requ);
 
 uint64_t x_nxfsd_requ_get_async_id(const x_nxfsd_requ_t *nxfsd_requ);
 
@@ -213,41 +171,21 @@ uint64_t x_nxfsd_requ_get_async_id(const x_nxfsd_requ_t *nxfsd_requ);
 	x_nxfsd_conn_post_user((nxfsd_requ)->nxfsd_conn, &__evt->base, true); \
 } while (0)
 
-void x_nxfsd_requ_post_error(x_nxfsd_requ_t *nxfsd_requ, NTSTATUS status);
+void x_nxfsd_requ_post_done(x_nxfsd_requ_t *nxfsd_requ, NTSTATUS status);
 
 using x_nxfsd_requ_id_list_t = std::vector<uint64_t>;
 
-void x_nxfsd_requ_post_cancel(x_nxfsd_requ_t *nxfsd_requ, NTSTATUS status);
+void x_nxfsd_requ_post_cancel(x_nxfsd_requ_t *nxfsd_requ, int reason);
+
+bool x_nxfsd_requ_schedule_interim(x_nxfsd_requ_t *nxfsd_requ);
 
 void x_nxfsd_requ_post_interim(x_nxfsd_requ_t *nxfsd_requ);
 
-void x_nxfsd_requ_async_done(void *ctx_conn, x_nxfsd_requ_t *nxfsd_requ,
-		NTSTATUS status);
-
-void x_nxfsd_requ_async_insert(x_nxfsd_requ_t *nxfsd_requ,
-		void (*cancel_fn)(x_nxfsd_conn_t *nxfsd_conn, x_nxfsd_requ_t *nxfsd_requ),
-		int64_t interim_timeout_ns);
-
-template <class T>
-void x_nxfsd_requ_async_insert(x_nxfsd_requ_t *nxfsd_requ,
-		std::unique_ptr<T> &state,
-		void (*cancel_fn)(x_nxfsd_conn_t *nxfsd_conn, x_nxfsd_requ_t *nxfsd_requ),
-		int64_t interim_timeout_ns)
-{
-	nxfsd_requ->save_requ_state(state);
-	x_nxfsd_requ_async_insert(nxfsd_requ, cancel_fn, interim_timeout_ns);
-}
-
-bool x_nxfsd_requ_async_remove(x_nxfsd_requ_t *nxfsd_requ);
 
 x_nxfsd_requ_t *x_nxfsd_requ_lookup(uint64_t id);
 
 x_nxfsd_requ_t *x_nxfsd_requ_async_lookup(uint64_t id,
 		const x_nxfsd_conn_t *nxfsd_conn, bool remove);
-
-void x_nxfsd_requ_done(x_nxfsd_requ_t *nxfsd_requ);
-
-void x_nxfsd_requ_resume(void *ctx_conn, x_nxfsd_requ_t *nxfsd_requ);
 
 void x_nxfsd_requ_post_resume(x_nxfsd_requ_t *nxfsd_requ);
 
@@ -255,13 +193,13 @@ int x_nxfsd_requ_pool_init(uint32_t count);
 
 int x_nxfsd_context_init();
 
-struct x_nxfsd_requ_state_open_t : x_nxfsd_requ_state_async_t
+struct x_nxfsd_requ_state_open_t
 {
 	x_nxfsd_requ_state_open_t(const x_smb2_uuid_t &client_guid,
 			uint32_t server_capabilities);
 	~x_nxfsd_requ_state_open_t();
-	const x_smb2_uuid_t client_guid;
-	const uint32_t server_capabilities;
+	x_smb2_uuid_t client_guid;
+	uint32_t server_capabilities;
 
 	uint8_t in_oplock_level;
 	uint8_t out_oplock_level;

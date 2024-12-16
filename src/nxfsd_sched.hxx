@@ -10,7 +10,7 @@
 
 struct x_nxfsd_scheduler_t
 {
-	x_nxfsd_scheduler_t();
+	explicit x_nxfsd_scheduler_t(void *ctx_conn);
 	~x_nxfsd_scheduler_t();
 };
 

@@ -5,40 +5,17 @@
 #include "smbd_replay.hxx"
 #include "nxfsd_sched.hxx"
 
-x_smbd_requ_state_create_t::~x_smbd_requ_state_create_t()
+std::ostream &x_smbd_requ_t::tostr(std::ostream &os) const
 {
-}
-
-static void smbd_requ_cb_destroy(x_nxfsd_requ_t *nxfsd_requ)
-{
-	auto smbd_requ = x_smbd_requ_from_base(nxfsd_requ);
-	delete smbd_requ;
-}
-
-static bool smbd_requ_cb_can_async(const x_nxfsd_requ_t *nxfsd_requ)
-{
-	auto smbd_requ = x_smbd_requ_from_base(nxfsd_requ);
-	return !smbd_requ->is_compound_followed();
-}
-
-static std::string smbd_requ_cb_tostr(const x_nxfsd_requ_t *nxfsd_requ)
-{
-	auto smbd_requ = x_smbd_requ_from_base(nxfsd_requ);
 	char buf[256];
-	snprintf(buf, sizeof(buf), X_SMBD_REQU_DBG_FMT, X_SMBD_REQU_DBG_ARG(smbd_requ));
-	return buf;
+	snprintf(buf, sizeof(buf), X_SMBD_REQU_DBG_FMT, X_SMBD_REQU_DBG_ARG(this));
+	return os << buf;
 }
 
-static const x_nxfsd_requ_cbs_t smbd_requ_upcall_cbs = {
-	smbd_requ_cb_destroy,
-	smbd_requ_cb_can_async,
-	smbd_requ_cb_tostr,
-};
-
-x_smbd_requ_t::x_smbd_requ_t(x_nxfsd_conn_t *nxfsd_conn, x_buf_t *in_buf,
-		uint32_t in_msgsize,
+x_smbd_requ_t::x_smbd_requ_t(x_smbd_conn_t *smbd_conn,
+		x_in_buf_t &in_buf, uint32_t in_msgsize,
 		bool encrypted)
-	: x_nxfsd_requ_t(&smbd_requ_upcall_cbs, nxfsd_conn, in_buf, in_msgsize)
+	: x_nxfsd_requ_t((x_nxfsd_conn_t *)(smbd_conn), in_buf, in_msgsize)
 	, encrypted(encrypted)
 {
 	X_NXFSD_COUNTER_INC_CREATE(smbd_requ, 1);
@@ -52,31 +29,6 @@ x_smbd_requ_t::~x_smbd_requ_t()
 	x_ref_dec_if(smbd_chan);
 	x_ref_dec_if(smbd_sess);
 	X_NXFSD_COUNTER_INC_DELETE(smbd_requ, 1);
-}
-
-template <>
-x_smbd_requ_t *x_ref_inc(x_smbd_requ_t *smbd_requ)
-{
-	x_ref_inc((x_nxfsd_requ_t *)smbd_requ);
-	return smbd_requ;
-}
-
-template <>
-void x_ref_dec(x_smbd_requ_t *smbd_requ)
-{
-	x_ref_dec((x_nxfsd_requ_t *)smbd_requ);
-}
-
-x_smbd_requ_t *x_smbd_requ_create(x_nxfsd_conn_t *nxfsd_conn, x_buf_t *in_buf,
-		uint32_t in_msgsize, bool encrypted)
-{
-	auto smbd_requ = new x_smbd_requ_t(nxfsd_conn, in_buf, in_msgsize, encrypted);
-	if (!x_nxfsd_requ_init(smbd_requ)) {
-		delete smbd_requ;
-		return nullptr;
-	}
-	X_SMBD_REQU_LOG(DBG, smbd_requ, " created");
-	return smbd_requ;
 }
 
 NTSTATUS x_smbd_requ_init_open(x_smbd_requ_t *smbd_requ,
@@ -103,18 +55,17 @@ NTSTATUS x_smbd_requ_init_open(x_smbd_requ_t *smbd_requ,
 	}
 }
 
-struct x_smbd_lease_release_evt_t
+struct smbd_lease_release_evt_t
 {
 	static void func(void *ctx_conn, x_fdevt_user_t *fdevt_user)
 	{
-		X_ASSERT(!ctx_conn);
-		x_smbd_lease_release_evt_t *evt = X_CONTAINER_OF(fdevt_user,
-				x_smbd_lease_release_evt_t, base);
+		smbd_lease_release_evt_t *evt = X_CONTAINER_OF(fdevt_user,
+				smbd_lease_release_evt_t, base);
 		x_smbd_lease_close(evt->smbd_lease);
 		delete evt;
 	}
 
-	explicit x_smbd_lease_release_evt_t(x_smbd_lease_t *smbd_lease)
+	explicit smbd_lease_release_evt_t(x_smbd_lease_t *smbd_lease)
 		: base(func), smbd_lease(smbd_lease)
 	{
 	}
@@ -125,49 +76,25 @@ struct x_smbd_lease_release_evt_t
 
 void x_smbd_schedule_release_lease(x_smbd_lease_t *smbd_lease)
 {
-	x_smbd_lease_release_evt_t *evt = new x_smbd_lease_release_evt_t(smbd_lease);
+	smbd_lease_release_evt_t *evt = new smbd_lease_release_evt_t(smbd_lease);
 	x_nxfsd_schedule(&evt->base);
 }
 
-struct x_smbd_clean_pending_requ_list_evt_t
+void x_smbd_schedule_wakeup_pending_requ_list(const x_tp_ddlist_t<requ_async_traits> &pending_requ_list)
 {
-	static void func(void *ctx_conn, x_fdevt_user_t *fdevt_user)
-	{
-		X_ASSERT(!ctx_conn);
-		x_smbd_clean_pending_requ_list_evt_t *evt = X_CONTAINER_OF(fdevt_user,
-				x_smbd_clean_pending_requ_list_evt_t, base);
-		x_nxfsd_requ_t *nxfsd_requ;
-		while ((nxfsd_requ = evt->pending_requ_list.get_front()) != nullptr) {
-			evt->pending_requ_list.remove(nxfsd_requ);
-			x_nxfsd_requ_post_cancel(nxfsd_requ, nxfsd_requ->status);
-		}
-
-		delete evt;
+	x_nxfsd_requ_t *nxfsd_requ;
+	for (nxfsd_requ = pending_requ_list.get_front(); nxfsd_requ;
+			nxfsd_requ = pending_requ_list.next(nxfsd_requ)) {
+		x_nxfsd_requ_post_cancel(nxfsd_requ, x_nxfsd_requ_t::CANCEL_BY_CLOSE);
 	}
-
-	explicit x_smbd_clean_pending_requ_list_evt_t(x_tp_ddlist_t<requ_async_traits> &pending_requ_list)
-		: base(func), pending_requ_list(std::move(pending_requ_list))
-	{
-	}
-
-	x_fdevt_user_t base;
-	x_tp_ddlist_t<requ_async_traits> pending_requ_list;
-};
-
-void x_smbd_schedule_clean_pending_requ_list(x_tp_ddlist_t<requ_async_traits> &pending_requ_list)
-{
-	x_smbd_clean_pending_requ_list_evt_t *evt =
-		new x_smbd_clean_pending_requ_list_evt_t(pending_requ_list);
-	x_nxfsd_schedule(&evt->base);
 }
 
-struct x_smbd_notify_evt_t
+struct smbd_notify_evt_t
 {
 	static void func(void *ctx_conn, x_fdevt_user_t *fdevt_user)
 	{
-		X_ASSERT(!ctx_conn);
-		x_smbd_notify_evt_t *evt = X_CONTAINER_OF(fdevt_user,
-				x_smbd_notify_evt_t, base);
+		smbd_notify_evt_t *evt = X_CONTAINER_OF(fdevt_user,
+				smbd_notify_evt_t, base);
 		x_smbd_notify_change(evt->smbd_object,
 				evt->action,
 				evt->filter,
@@ -178,7 +105,7 @@ struct x_smbd_notify_evt_t
 		delete evt;
 	}
 
-	explicit x_smbd_notify_evt_t(x_smbd_object_t *parent_object,
+	explicit smbd_notify_evt_t(x_smbd_object_t *parent_object,
 			uint32_t action, uint32_t filter,
 			const x_smb2_lease_key_t &ignore_lease_key,
 			const x_smb2_uuid_t &client_guid,
@@ -194,7 +121,7 @@ struct x_smbd_notify_evt_t
 		smbd_object->incref();
 	}
 
-	~x_smbd_notify_evt_t()
+	~smbd_notify_evt_t()
 	{
 		x_smbd_release_object(smbd_object);
 	}
@@ -216,7 +143,7 @@ static void x_smbd_schedule_notify_evt(x_smbd_object_t *parent_object,
 		const std::u16string &path_base,
 		const std::u16string &new_path_base)
 {
-	x_smbd_notify_evt_t *evt = new x_smbd_notify_evt_t(parent_object,
+	smbd_notify_evt_t *evt = new smbd_notify_evt_t(parent_object,
 			action, filter, ignore_lease_key, client_guid,
 			path_base, new_path_base);
 	x_nxfsd_schedule(&evt->base);

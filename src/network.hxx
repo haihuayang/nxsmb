@@ -54,6 +54,13 @@ struct x_strm_send_queue_t
 
 	bool append(x_bufref_t *buf_head, x_bufref_t *buf_tail)
 	{
+		auto tmp = buf_head;
+		while (tmp) {
+			X_ASSERT(tmp->buf);
+			X_ASSERT(tmp->length);
+			tmp = tmp->next;
+		}
+
 		bool orig_empty = (head == nullptr);
 		if (orig_empty) {
 			head = buf_head;

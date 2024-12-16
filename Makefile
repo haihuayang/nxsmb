@@ -12,7 +12,7 @@ TARGET_BUILD_CFLAGS_dbg := -g3
 TARGET_BUILD_LDFLAGS_dbg := -g3
 TARGET_BUILD_CFLAGS_opt := -O2 -g3
 TARGET_BUILD_LDFLAGS_opt := -O2 -g3
-TARGET_BUILD_CFLAGS_dev := -g3 -fsanitize=address
+TARGET_BUILD_CFLAGS_dev := -g3 -fsanitize=address -DNXSMB_DEV=1
 TARGET_BUILD_LDFLAGS_dev := -g3 -fsanitize=address
 
 BUILD ?= dbg
@@ -77,7 +77,6 @@ SET_src_smbd_nx := \
 	smbd_file_info \
 	smbd_access \
 	smbd_posixfs \
-	smbd_notify \
 	smbd_simplefs \
 	smbd_share \
 	smbd_conf \
@@ -113,7 +112,6 @@ SET_src_smbd_nx := \
 	smb2_write \
 	smb2_lock \
 	smb2_ioctl \
-	smb2_cancel \
 	smb2_keepalive \
 	smb2_query_directory \
 	smb2_notify \

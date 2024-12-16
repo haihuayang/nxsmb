@@ -263,7 +263,6 @@ struct smbd_wakeup_oplock_pending_list_evt_t
 {
 	static void func(void *ctx_conn, x_fdevt_user_t *fdevt_user)
 	{
-		X_ASSERT(!ctx_conn);
 		smbd_wakeup_oplock_pending_list_evt_t *evt = X_CONTAINER_OF(fdevt_user,
 				smbd_wakeup_oplock_pending_list_evt_t, base);
 		x_smbd_wakeup_requ_list(evt->oplock_pending_list);
@@ -329,7 +328,7 @@ static void smbd_close_open_intl(
 		X_ASSERT(smbd_object->smbd_volume->watch_tree_cnt > 0);
 		--smbd_object->smbd_volume->watch_tree_cnt;
 	}
-	x_smbd_schedule_clean_pending_requ_list(smbd_open->pending_requ_list);
+	x_smbd_schedule_wakeup_pending_requ_list(smbd_open->pending_requ_list);
 	smbd_schedule_wakeup_oplock_pending_list(smbd_open->oplock_pending_list);
 
 	if (smbd_open->update_write_time_on_close) {
@@ -377,18 +376,17 @@ static void smbd_open_close(
 	}
 }
 
-struct x_smbd_open_release_evt_t
+struct smbd_open_release_evt_t
 {
 	static void func(void *ctx_conn, x_fdevt_user_t *fdevt_user)
 	{
-		X_ASSERT(!ctx_conn);
-		x_smbd_open_release_evt_t *evt = X_CONTAINER_OF(fdevt_user,
-				x_smbd_open_release_evt_t, base);
+		smbd_open_release_evt_t *evt = X_CONTAINER_OF(fdevt_user,
+				smbd_open_release_evt_t, base);
 		x_smbd_open_release(evt->smbd_open);
 		delete evt;
 	}
 
-	explicit x_smbd_open_release_evt_t(x_smbd_open_t *smbd_open)
+	explicit smbd_open_release_evt_t(x_smbd_open_t *smbd_open)
 		: base(func), smbd_open(smbd_open)
 	{
 	}
@@ -409,7 +407,7 @@ static bool smbd_open_close_disconnected(
 	}
 	smbd_open_close(smbd_open, smbd_open->smbd_object, nullptr);
 
-	x_smbd_open_release_evt_t *evt = new x_smbd_open_release_evt_t(smbd_open);
+	smbd_open_release_evt_t *evt = new smbd_open_release_evt_t(smbd_open);
 	x_nxfsd_schedule(&evt->base);
 	return true;
 }
@@ -434,7 +432,7 @@ static bool smbd_open_close_non_requ(x_smbd_open_t *smbd_open,
 
 static long smbd_open_durable_timeout(x_timer_job_t *timer)
 {
-	x_nxfsd_scheduler_t smbd_scheduler;
+	x_nxfsd_scheduler_t smbd_scheduler(nullptr);
 
 	x_smbd_open_t *smbd_open = X_CONTAINER_OF(timer,
 			x_smbd_open_t, durable_timer);
@@ -586,7 +584,7 @@ void x_smbd_wakeup_requ_list(const x_nxfsd_requ_id_list_t &requ_list)
 		if (count == 1) {
 			x_nxfsd_requ_post_resume(nxfsd_requ);
 		} else {
-			x_ref_dec(nxfsd_requ);
+			nxfsd_requ->decref();
 		}
 	}
 }
@@ -613,58 +611,6 @@ static long oplock_break_timeout(x_timer_job_t *timer)
 	x_smbd_wakeup_requ_list(oplock_pending_list);
 	return -1;
 }
-
-struct send_lease_break_evt_t
-{
-	static void func(void *ctx_conn, x_fdevt_user_t *fdevt_user)
-	{
-		x_smbd_conn_t *smbd_conn = (x_smbd_conn_t *)ctx_conn;
-		send_lease_break_evt_t *evt = X_CONTAINER_OF(fdevt_user,
-				send_lease_break_evt_t, base);
-		X_LOG(SMB, DBG, "send_lease_break_evt=%p curr_state=%d new_state=%d "
-				"new_epoch=%u flags=0x%x",
-				evt, evt->curr_state, evt->new_state, evt->new_epoch,
-				evt->flags);
-
-		if (smbd_conn) {
-			x_smb2_send_lease_break(smbd_conn,
-					evt->smbd_sess,
-					&evt->lease_key,
-					evt->curr_state,
-					evt->new_state,
-					evt->new_epoch,
-					evt->flags);
-		}
-		delete evt;
-	}
-
-	send_lease_break_evt_t(x_smbd_sess_t *smbd_sess,
-			const x_smb2_lease_key_t &lease_key,
-			uint8_t curr_state,
-			uint8_t new_state,
-			uint16_t new_epoch,
-			uint32_t flags)
-		: base(func), smbd_sess(smbd_sess)
-		, lease_key(lease_key)
-		, curr_state(curr_state)
-		, new_state(new_state)
-		, new_epoch(new_epoch)
-		, flags(flags)
-	{
-	}
-
-	~send_lease_break_evt_t()
-	{
-		x_ref_dec(smbd_sess);
-	}
-
-	x_fdevt_user_t base;
-	x_smbd_sess_t * const smbd_sess;
-	const x_smb2_lease_key_t lease_key;
-	const uint8_t curr_state, new_state;
-	const uint16_t new_epoch;
-	const uint32_t flags;
-};
 
 bool x_smbd_open_match_get_lease(const x_smbd_open_t *smbd_open,
 	       	const x_smb2_uuid_t &client_guid,
@@ -699,9 +645,9 @@ bool x_smbd_open_break_lease(x_smbd_open_t *smbd_open,
 		/* schedule lease break or close disconnected open */
 		if (smbd_open->smbd_tcon) {
 			x_smbd_sess_t *smbd_sess = x_smbd_tcon_get_sess(smbd_open->smbd_tcon);
-			X_SMBD_SESS_POST_USER(smbd_sess, new send_lease_break_evt_t(
-						smbd_sess, lease_key, curr_state, new_state,
-						new_epoch, flags));
+			x_smbd_post_lease_break(smbd_sess,
+					lease_key, curr_state, new_state,
+					new_epoch, flags);
 		} else {
 			smbd_open_close_disconnected(smbd_open);
 		}
@@ -1832,9 +1778,9 @@ static NTSTATUS smbd_open_reconnect(x_smbd_open_t *smbd_open,
 }
 
 NTSTATUS x_smbd_open_op_reconnect(x_smbd_requ_t *smbd_requ,
-		std::unique_ptr<x_smbd_requ_state_create_t> &state)
+		x_smbd_requ_state_create_t &state)
 {
-	uint64_t id_persistent = state->in_context.dh_id_persistent;
+	uint64_t id_persistent = state.in_context.dh_id_persistent;
 	std::shared_ptr<x_smbd_volume_t> smbd_volume;
 	uint64_t id_volatile = x_smbd_share_lookup_durable(
 			smbd_volume, x_smbd_tcon_get_share(smbd_requ->smbd_tcon),
@@ -1850,7 +1796,7 @@ NTSTATUS x_smbd_open_op_reconnect(x_smbd_requ_t *smbd_requ,
 		X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_OBJECT_NAME_NOT_FOUND);
 	}
 
-	NTSTATUS status = smbd_open_reconnect(smbd_open, smbd_tcon, smbd_requ, *state);
+	NTSTATUS status = smbd_open_reconnect(smbd_open, smbd_tcon, smbd_requ, state);
 	if (!NT_STATUS_IS_OK(status)) {
 		x_ref_dec(smbd_open);
 		return status;

@@ -673,19 +673,7 @@ NTSTATUS x_smbd_object_set_delete_pending_intl(x_smbd_object_t *smbd_object,
 	if (smbd_object->type == x_smbd_object_t::type_dir &&
 			!smbd_open->smbd_stream) {
 		for (curr_open = open_list.get_front(); curr_open; curr_open = open_list.next(curr_open)) {
-			x_nxfsd_requ_t *requ_notify, *requ_next;
-			for (requ_notify = curr_open->pending_requ_list.get_front();
-					requ_notify;
-					requ_notify = requ_next) {
-
-				requ_next = curr_open->pending_requ_list.next(requ_notify);
-				if (!requ_notify->get_requ_state<x_smbd_requ_state_notify_t>()) {
-					continue;
-				}
-				curr_open->pending_requ_list.remove(requ_notify);
-				x_nxfsd_requ_post_cancel(
-						requ_notify, NT_STATUS_DELETE_PENDING);
-			}
+			x_smbd_notify_post_deleting(curr_open, NT_STATUS_DELETE_PENDING);
 		}
 	}
 	return NT_STATUS_OK;

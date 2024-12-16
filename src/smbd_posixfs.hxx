@@ -18,25 +18,23 @@ NTSTATUS posixfs_create_open(x_smbd_open_t **psmbd_open,
 		std::shared_ptr<x_smbd_volume_t> &smbd_volume,
 		const std::u16string &path, uint64_t path_data,
 		x_smbd_requ_t *smbd_requ,
-		std::unique_ptr<x_smbd_requ_state_create_t> &state);
+		x_nxfsd_requ_state_open_t &state);
 NTSTATUS posixfs_object_op_close(
 		x_smbd_object_t *smbd_object,
 		x_smbd_open_t *smbd_open,
 		x_smbd_requ_t *smbd_requ,
-		std::unique_ptr<x_smbd_requ_state_close_t> &state);
+		x_smbd_requ_state_close_t &state);
 NTSTATUS posixfs_object_op_read(
 		x_smbd_object_t *smbd_object,
 		x_smbd_open_t *smbd_open,
 		x_nxfsd_requ_t *nxfsd_requ,
-		std::unique_ptr<x_smbd_requ_state_read_t> &state,
-		uint32_t delay_ms,
+		x_smbd_requ_state_read_t &state,
 		bool all);
 NTSTATUS posixfs_object_op_write(
 		x_smbd_object_t *smbd_object,
 		x_smbd_open_t *smbd_open,
 		x_nxfsd_requ_t *nxfsd_requ,
-		std::unique_ptr<x_smbd_requ_state_write_t> &state,
-		uint32_t delay_ms);
+		x_smbd_requ_state_write_t &state);
 NTSTATUS posixfs_object_op_flush(
 		x_smbd_object_t *smbd_object,
 		x_smbd_open_t *smbd_open,
@@ -48,11 +46,12 @@ NTSTATUS posixfs_object_op_getinfo(
 NTSTATUS posixfs_object_op_setinfo(
 		x_smbd_object_t *smbd_object,
 		x_smbd_open_t *smbd_open,
+		x_smbd_requ_t *smbd_requ,
 		x_smbd_requ_state_setinfo_t &state);
 NTSTATUS posixfs_object_op_ioctl(
 		x_smbd_object_t *smbd_object,
 		x_nxfsd_requ_t *nxfsd_requ,
-		std::unique_ptr<x_smbd_requ_state_ioctl_t> &state);
+		x_smbd_requ_state_ioctl_t &state);
 NTSTATUS posixfs_object_op_query_allocated_ranges(
 		x_smbd_object_t *smbd_object,
 		x_smbd_stream_t *smbd_stream,
@@ -151,7 +150,7 @@ NTSTATUS x_smbd_posixfs_op_create_open(x_smbd_open_t *&smbd_open,
 		x_smbd_requ_t *smbd_requ,
 		const std::shared_ptr<x_smbd_share_t> &smbd_share,
 		const std::string &volume_name,
-		std::unique_ptr<x_smbd_requ_state_create_t> &state);
+		x_smbd_requ_state_create_t &state);
 
 void x_smbd_posixfs_op_lease_granted(x_smbd_object_t *smbd_object,
 		x_smbd_stream_t *smbd_stream);

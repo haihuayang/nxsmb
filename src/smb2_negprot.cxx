@@ -26,14 +26,12 @@ static const uint16_t preferred_compression_algos[] = {
 };
 
 
-static NTSTATUS x_smbd_conn_reply_negprot(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ,
-		const x_smbd_conf_t &smbd_conf,
+static NTSTATUS x_smbd_conn_reply_negprot(x_out_buf_t &out_buf,
+		x_smb2_uuid_t server_guid,
 		const x_smbd_negprot_t &negprot,
 		uint16_t out_context_count,
 		const std::vector<uint8_t> &out_context)
 {
-	X_SMBD_REQU_LOG(OP, smbd_requ,  " dialect=%x", negprot.dialect);
-
 	const std::vector<uint8_t> &security_blob = x_smbd_get_negprot_spnego();
 	size_t dyn_len = security_blob.size();
 
@@ -57,7 +55,7 @@ static NTSTATUS x_smbd_conn_reply_negprot(x_smbd_conn_t *smbd_conn, x_smbd_requ_
 
 #endif	
 
-	x_out_buf_t out_buf;
+	X_ASSERT(!out_buf.head);
 	out_buf.head = out_buf.tail = x_smb2_bufref_alloc(sizeof(x_smb2_negprot_resp_t) + dyn_len);
 	out_buf.length = out_buf.head->length;
 
@@ -70,7 +68,7 @@ static NTSTATUS x_smbd_conn_reply_negprot(x_smbd_conn_t *smbd_conn, x_smbd_requ_
 	out_resp->security_mode = X_H2LE16(negprot.server_security_mode);
 	out_resp->dialect = X_H2LE16(negprot.dialect);
 	out_resp->context_count = X_H2LE16(out_context_count);
-	memcpy(&out_resp->server_guid, &smbd_conf.guid, 16);
+	memcpy(&out_resp->server_guid, &server_guid, sizeof(server_guid));
 	out_resp->capabilities = X_H2LE32(negprot.server_capabilities);
 	out_resp->max_trans_size = X_H2LE32(negprot.max_trans_size);
 	out_resp->max_read_size = X_H2LE32(negprot.max_read_size);
@@ -97,12 +95,6 @@ static NTSTATUS x_smbd_conn_reply_negprot(x_smbd_conn_t *smbd_conn, x_smbd_requ_
 		out_resp->context_offset = 0;
 	}
 
-	x_smb2_reply(smbd_conn, smbd_requ, NT_STATUS_OK, out_buf);
-	if (negprot.dialect >= X_SMB2_DIALECT_310) {
-		x_smbd_conn_update_preauth(smbd_conn, out_hdr,
-				sizeof(x_smb2_header_t) + sizeof(x_smb2_negprot_resp_t) + dyn_len);
-	}
-
 	return NT_STATUS_OK;
 }
 
@@ -116,16 +108,18 @@ static const struct {
 
 #define HDR_WCT 32
 #define HDR_VWV 33
-int x_smbd_conn_process_smb1negprot(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
+int x_smbd_conn_process_smb1negprot(x_smbd_conn_t *smbd_conn,
+		x_buf_t *in_buf, uint32_t in_msgsize,
+		x_out_buf_t &out_buf)
 {
-	const uint8_t *in_buf = smbd_requ->in_buf->data;
-	uint32_t len = smbd_requ->in_buf->size;
+	const uint8_t *in_data = in_buf->data;
+	uint32_t len = in_msgsize;
 	if (len < HDR_VWV + sizeof(uint16_t)) {
 		return -EBADMSG;
 	}
 
-	uint8_t wct = in_buf[HDR_WCT];
-	uint16_t vwv = x_get_le16(in_buf + HDR_VWV);
+	uint8_t wct = in_data[HDR_WCT];
+	uint16_t vwv = x_get_le16(in_data + HDR_VWV);
 	if (len < (size_t)HDR_WCT + 2 *wct + vwv) {
 		return -EBADMSG;
 	}
@@ -134,7 +128,7 @@ int x_smbd_conn_process_smb1negprot(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smb
 		// TODO reply_nterror(req, NT_STATUS_INVALID_PARAMETER);
 		return -EBADMSG;
 	}
-	const char *negobuf = (const char *)in_buf + HDR_WCT + 3 + 2 * wct;
+	const char *negobuf = (const char *)in_data + HDR_WCT + 3 + 2 * wct;
 	if (negobuf[vwv - 1] != '\0') {
 		// TODO reply_nterror(req, NT_STATUS_INVALID_PARAMETER);
 		return -EBADMSG;
@@ -174,11 +168,11 @@ int x_smbd_conn_process_smb1negprot(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smb
 
 	int err = x_smbd_conn_negprot(smbd_conn, negprot, true);
 	if (err) {
-		X_SMBD_REQU_LOG(ERR, smbd_requ,  "err=%d", err);
+		X_LOG(SMB, ERR,  "err=%d", err);
 		return err;
 	}
 
-	x_smbd_conn_reply_negprot(smbd_conn, smbd_requ, smbd_conf, negprot, 0, {});
+	x_smbd_conn_reply_negprot(out_buf, smbd_conf.guid, negprot, 0, {});
 	return 0;
 }
 
@@ -408,44 +402,80 @@ static void generate_context(uint16_t &out_context_count,
 	out_context_count = context_count;
 }
 
-/* return < 0, shutdown immediately
- */
-NTSTATUS x_smb2_process_negprot(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ)
+struct x_smbd_requ_negprot_t : x_smbd_requ_t
 {
-	X_SMBD_REQU_LOG(OP, smbd_requ,  "");
+	x_smbd_requ_negprot_t(x_smbd_conn_t *smbd_conn, x_in_buf_t &in_buf,
+			uint32_t in_msgsize, bool encrypted,
+			x_smb2_uuid_t server_guid,
+			const x_smbd_negprot_t &negprot,
+			uint16_t out_context_count,
+			std::vector<uint8_t> &out_context)
+		: x_smbd_requ_t(smbd_conn, in_buf, in_msgsize, encrypted)
+		, server_guid(server_guid), negprot(negprot)
+		, out_context_count(out_context_count)
+		, out_context(std::move(out_context))
+	{
+	}
+
+	NTSTATUS process(void *ctx_conn) override
+	{
+		auto smbd_conn = (x_smbd_conn_t *)ctx_conn;
+		x_smbd_conn_negprot(smbd_conn, negprot, false);
+		if (negprot.dialect >= X_SMB2_DIALECT_310) {
+			set_preauth(x_smbd_conn_get_preauth(smbd_conn));
+		}
+		return NT_STATUS_OK;
+	}
+	NTSTATUS done_smb2(x_smbd_conn_t *smbd_conn, NTSTATUS status) override
+	{
+		if (status.ok()) {
+			x_smbd_conn_reply_negprot(requ_out_buf, server_guid, negprot,
+					out_context_count, out_context);
+		}
+		return status;
+	}
+
+	x_smb2_uuid_t server_guid;
+	x_smbd_negprot_t negprot;
+	uint16_t out_context_count;
+	std::vector<uint8_t> out_context;
+};
+
+NTSTATUS x_smb2_parse_NEGPROT(x_smbd_conn_t *smbd_conn, x_smbd_requ_t **p_smbd_requ,
+		x_in_buf_t &in_buf, uint32_t in_msgsize,
+		bool encrypted)
+{
+	auto in_smb2_hdr = (const x_smb2_header_t *)(in_buf.get_data());
 
 	// x_smb2_verify_size(smbd_requ, X_SMB2_NEGPROT_BODY_LEN);
-	auto [ in_buf, in_requ_len ] = smbd_requ->get_in_data();
-	if (in_requ_len < sizeof(x_smb2_header_t) + sizeof(x_smb2_negprot_requ_t)) {
-		X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
+	if (in_buf.length < sizeof(x_smb2_header_t) + sizeof(x_smb2_negprot_requ_t)) {
+		X_SMBD_SMB2_RETURN_STATUS(in_smb2_hdr, NT_STATUS_INVALID_PARAMETER);
 	}
 
-	const uint8_t *in_body = in_buf + sizeof(x_smb2_header_t);
-
-	const x_smb2_negprot_requ_t *in_requ = (const x_smb2_negprot_requ_t *)in_body;
-	uint16_t dialect_count = X_LE2H16(in_requ->dialect_count);
+	auto in_body = (const x_smb2_negprot_requ_t *)(in_smb2_hdr + 1);
+	uint16_t dialect_count = X_LE2H16(in_body->dialect_count);
 	if (dialect_count == 0) {
-		X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
+		X_SMBD_SMB2_RETURN_STATUS(in_smb2_hdr, NT_STATUS_INVALID_PARAMETER);
 	}
 	if (sizeof(x_smb2_header_t) + sizeof(x_smb2_negprot_requ_t) +
-			dialect_count * sizeof(uint16_t) > in_requ_len) {
-		X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
+			dialect_count * sizeof(uint16_t) > in_buf.length) {
+		X_SMBD_SMB2_RETURN_STATUS(in_smb2_hdr, NT_STATUS_INVALID_PARAMETER);
 	}
 
 	const x_smbd_conf_t &smbd_conf = x_smbd_conf_get_curr();
 
 	x_smbd_negprot_t negprot;
 	negprot.dialect = x_smb2_dialect_match(smbd_conf.dialects,
-			(const uint16_t *)(in_requ + 1), dialect_count);
+			(const uint16_t *)(in_body + 1), dialect_count);
 	if (negprot.dialect == X_SMB2_DIALECT_000) {
-		X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_NOT_SUPPORTED);
+		X_SMBD_SMB2_RETURN_STATUS(in_smb2_hdr, NT_STATUS_NOT_SUPPORTED);
 	}
 
-	uint16_t in_security_mode = x_get_le16(in_body + 0x04);
-	uint32_t in_capabilities = x_get_le32(in_body + 0x08);
+	uint16_t in_security_mode = X_LE2H16(in_body->security_mode);
+	uint32_t in_capabilities = X_LE2H32(in_body->capabilities);
 
 	x_smb2_uuid_t in_client_guid;
-	in_client_guid.from_bytes(in_requ->client_guid);
+	in_client_guid.from_bytes(in_body->client_guid);
 #if 0
 	const uint8_t *in_dyn = in_body + X_SMB2_NEGPROT_REQU_BODY_LEN;
 	
@@ -461,25 +491,25 @@ NTSTATUS x_smb2_process_negprot(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_re
 	uint16_t out_context_count = 0;
 	std::vector<uint8_t> out_context;
 	if (negprot.dialect >= X_SMB2_DIALECT_310) {
-		uint32_t in_context_offset = X_LE2H32(in_requ->context_offset);
-		uint16_t in_context_count = X_LE2H16(in_requ->context_count);
+		uint32_t in_context_offset = X_LE2H32(in_body->context_offset);
+		uint16_t in_context_count = X_LE2H16(in_body->context_count);
 		if (!x_check_range<uint32_t>(in_context_offset, 0, 
 					sizeof(x_smb2_header_t) + sizeof(x_smb2_negprot_requ_t),
-					in_requ_len)) {
-			X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
+					in_buf.length)) {
+			X_SMBD_SMB2_RETURN_STATUS(in_smb2_hdr, NT_STATUS_INVALID_PARAMETER);
 		}
 
-		const uint8_t *in_context = in_buf + in_context_offset;
+		const uint8_t *in_context = (const uint8_t *)in_smb2_hdr + in_context_offset;
 
 		uint32_t hash_algos = 0, encryption_algos = 0, signing_algos = 0;
 		uint32_t compression_algos = 0, compression_flags = 0;
 		NTSTATUS status = parse_context(in_context,
-				in_requ_len - in_context_offset,
+				in_buf.length - in_context_offset,
 				in_context_count, hash_algos,
 				encryption_algos, signing_algos,
 				compression_algos, compression_flags);
 		if (!NT_STATUS_IS_OK(status)) {
-			X_SMBD_REQU_RETURN_STATUS(smbd_requ, status);
+			X_SMBD_SMB2_RETURN_STATUS(in_smb2_hdr, status);
 		}
 
 		if (encryption_algos & (1 << X_SMB2_ENCRYPTION_AES128_GCM)) {
@@ -505,7 +535,7 @@ NTSTATUS x_smb2_process_negprot(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_re
 		}
 
 		if (hash_algos == 0) {
-			X_SMBD_REQU_RETURN_STATUS(smbd_requ, NT_STATUS_INVALID_PARAMETER);
+			X_SMBD_SMB2_RETURN_STATUS(in_smb2_hdr, NT_STATUS_INVALID_PARAMETER);
 		}
 
 
@@ -520,7 +550,7 @@ NTSTATUS x_smb2_process_negprot(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_re
 		}
 
 		x_smbd_conn_update_preauth(smbd_conn, 
-				in_buf, in_requ_len);
+				in_buf.get_data(), in_buf.length);
 
 		generate_context(out_context_count, out_context,
 				negprot.cryption_algo,
@@ -566,9 +596,11 @@ NTSTATUS x_smb2_process_negprot(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_re
 	negprot.max_read_size = smbd_conf.max_read_size;
 	negprot.max_write_size = smbd_conf.max_write_size;
 
-	x_smbd_conn_negprot(smbd_conn, negprot, false);
-	return x_smbd_conn_reply_negprot(smbd_conn, smbd_requ, smbd_conf, negprot,
-			out_context_count, out_context);
+	x_smbd_requ_negprot_t *smbd_requ = new x_smbd_requ_negprot_t(smbd_conn,
+			in_buf, in_msgsize, encrypted,
+			smbd_conf.guid,
+			negprot, out_context_count, out_context);
+	*p_smbd_requ = smbd_requ;
+	return NT_STATUS_OK;
 }
-
 

@@ -6,9 +6,16 @@
 #include "smbd_open.hxx"
 #include "include/idtable.hxx"
 
+	enum {
+		S_INIT,
+		S_PROCESSING,
+		S_CANCELLED,
+		S_DONE,
+	};
+
 struct nxfsd_requ_deleter_t {
 	void operator()(x_nxfsd_requ_t *nxfsd_requ) {
-		nxfsd_requ->cbs->cb_destroy(nxfsd_requ);
+		delete nxfsd_requ;
 	}
 };
 
@@ -25,12 +32,14 @@ static long interim_timeout_func(x_timer_job_t *timer)
 	return -1;
 }
 
-x_nxfsd_requ_t::x_nxfsd_requ_t(const x_nxfsd_requ_cbs_t *cbs,
+x_nxfsd_requ_t::x_nxfsd_requ_t(
 		x_nxfsd_conn_t *nxfsd_conn,
-		x_buf_t *in_buf, uint32_t in_msgsize)
+		x_in_buf_t &in_buf, uint32_t in_msgsize)
 	: interim_timer(interim_timeout_func)
-	, cbs(cbs), nxfsd_conn(x_ref_inc(nxfsd_conn))
-	, in_buf(in_buf), in_msgsize(in_msgsize)
+	, nxfsd_conn(x_ref_inc(nxfsd_conn))
+	, start(x_tick_now())
+	, async_state(S_INIT)
+	, requ_in_buf(std::move(in_buf)), in_msgsize(in_msgsize)
 {
 }
 
@@ -38,27 +47,47 @@ x_nxfsd_requ_t::~x_nxfsd_requ_t()
 {
 	x_ref_dec_if(smbd_open);
 	x_ref_dec(nxfsd_conn);
-	if (in_buf) {
-		x_buf_release(in_buf);
-	}
 }
 
-bool x_nxfsd_requ_init(x_nxfsd_requ_t *nxfsd_requ)
+void x_nxfsd_requ_t::incref()
+{
+	g_nxfsd_requ_table->incref(id);
+}
+
+void x_nxfsd_requ_t::decref()
+{
+	g_nxfsd_requ_table->decref(id);
+}
+
+void x_nxfsd_requ_t::cancel(void *ctx_conn, int reason)
+{
+	uint32_t old_val = S_INIT;
+	if (!std::atomic_compare_exchange_strong(&async_state,
+				&old_val, S_CANCELLED)) {
+		return;
+	}
+	NTSTATUS status = cancelled(ctx_conn, reason);
+	async_done(ctx_conn, status);
+}
+
+bool x_nxfsd_requ_t::set_processing()
+{
+	uint32_t old_val = S_INIT;
+	return std::atomic_compare_exchange_strong(&async_state,
+			&old_val, S_PROCESSING);
+}
+
+
+bool x_nxfsd_requ_store(x_nxfsd_requ_t *nxfsd_requ)
 {
 	return g_nxfsd_requ_table->store(nxfsd_requ, nxfsd_requ->id);
 }
 
-template <>
-x_nxfsd_requ_t *x_ref_inc(x_nxfsd_requ_t *nxfsd_requ)
+void x_nxfsd_requ_remove(x_nxfsd_requ_t *nxfsd_requ)
 {
-	g_nxfsd_requ_table->incref(nxfsd_requ->id);
-	return nxfsd_requ;
-}
-
-template <>
-void x_ref_dec(x_nxfsd_requ_t *nxfsd_requ)
-{
-	g_nxfsd_requ_table->decref(nxfsd_requ->id);
+	X_NXFSD_REQU_LOG(DBG, nxfsd_requ, "");
+	nxfsd_requ->async_state.store(S_DONE, std::memory_order_relaxed);
+	nxfsd_requ->id = g_nxfsd_requ_table->remove(nxfsd_requ->id);
 }
 
 x_nxfsd_requ_t *x_nxfsd_requ_async_lookup(uint64_t id,
@@ -72,25 +101,21 @@ x_nxfsd_requ_t *x_nxfsd_requ_async_lookup(uint64_t id,
 		return nullptr;
 	}
 
-	if (nxfsd_requ->nxfsd_conn != nxfsd_conn || !nxfsd_requ->cancel_fn) {
-		x_ref_dec(nxfsd_requ);
+	if (nxfsd_requ->nxfsd_conn != nxfsd_conn) {
+		nxfsd_requ->decref();
 		return nullptr;
 	}
 
 	if (remove) {
-		x_ref_dec(nxfsd_requ);
+		nxfsd_requ->decref();
 	}
 	return nxfsd_requ;
 }
 
-void x_nxfsd_requ_async_done(void *ctx_conn, x_nxfsd_requ_t *nxfsd_requ,
+static void x_nxfsd_requ_async_done(void *ctx_conn, x_nxfsd_requ_t *nxfsd_requ,
 		NTSTATUS status)
 {
-	if (!x_nxfsd_requ_async_remove(nxfsd_requ)) {
-		/* it must be cancelled by x_smbd_conn_cancel */
-	}
-	auto state = nxfsd_requ->release_state();
-	state->async_done(ctx_conn, nxfsd_requ, status);
+	nxfsd_requ->async_done(ctx_conn, status);
 }
 
 x_nxfsd_requ_t *x_nxfsd_requ_lookup(uint64_t id)
@@ -102,23 +127,22 @@ x_nxfsd_requ_t *x_nxfsd_requ_lookup(uint64_t id)
 	return nxfsd_requ;
 }
 
-void x_nxfsd_requ_done(x_nxfsd_requ_t *nxfsd_requ)
-{
-	X_NXFSD_REQU_LOG(DBG, nxfsd_requ, "");
-	nxfsd_requ->id = g_nxfsd_requ_table->remove(nxfsd_requ->id);
-	nxfsd_requ->done = true;
-}
-
 uint64_t x_nxfsd_requ_get_async_id(const x_nxfsd_requ_t *nxfsd_requ)
 {
 	X_ASSERT(nxfsd_requ->interim_state == x_nxfsd_requ_t::INTERIM_S_SENT);
 	return nxfsd_requ->id;
 }
 
-void x_nxfsd_requ_resume(void *ctx_conn, x_nxfsd_requ_t *nxfsd_requ)
+static void x_nxfsd_requ_resume(void *ctx_conn, x_nxfsd_requ_t *nxfsd_requ)
 {
-	auto state = nxfsd_requ->get_requ_state<x_nxfsd_requ_state_async_t>();
-	NTSTATUS status = state->resume(ctx_conn, nxfsd_requ);
+	NTSTATUS status = NT_STATUS_CANCELLED;
+	/* TODO review the state transition of requ */
+	if (nxfsd_requ->async_state.load(std::memory_order_relaxed) != S_INIT) {
+		return;
+	}
+	if (ctx_conn) {
+		status = nxfsd_requ->process(ctx_conn);
+	}
 	X_NXFSD_REQU_LOG(DBG, nxfsd_requ, " ctx_conn=%p status=%s",
 			ctx_conn, x_ntstatus_str(status));
 	if (status != NT_STATUS_PENDING) {
@@ -133,15 +157,7 @@ struct requ_resume_evt_t
 		requ_resume_evt_t *evt = X_CONTAINER_OF(fdevt_user,
 				requ_resume_evt_t, base);
 		x_nxfsd_requ_t *nxfsd_requ = evt->nxfsd_requ;
-		X_NXFSD_REQU_LOG(DBG, nxfsd_requ, " ctx_conn=%p", ctx_conn);
-
-		if (ctx_conn) {
-			x_nxfsd_requ_resume(ctx_conn, nxfsd_requ);
-		} else {
-			x_nxfsd_requ_async_remove(nxfsd_requ);
-			x_nxfsd_requ_done(nxfsd_requ);
-		}
-
+		x_nxfsd_requ_resume(ctx_conn, nxfsd_requ);
 		delete evt;
 	}
 
@@ -152,7 +168,7 @@ struct requ_resume_evt_t
 
 	~requ_resume_evt_t()
 	{
-		x_ref_dec(nxfsd_requ);
+		nxfsd_requ->decref();
 	}
 
 	x_fdevt_user_t base;
@@ -164,43 +180,40 @@ void x_nxfsd_requ_post_resume(x_nxfsd_requ_t *nxfsd_requ)
 	X_NXFSD_REQU_POST_USER(nxfsd_requ, new requ_resume_evt_t(nxfsd_requ));
 }
 
-struct requ_error_evt_t
+struct requ_done_evt_t
 {
 	static void func(void *ctx_conn, x_fdevt_user_t *fdevt_user)
 	{
-		requ_error_evt_t *evt = X_CONTAINER_OF(fdevt_user,
-				requ_error_evt_t, base);
+		requ_done_evt_t *evt = X_CONTAINER_OF(fdevt_user,
+				requ_done_evt_t, base);
 		x_nxfsd_requ_t *nxfsd_requ = evt->nxfsd_requ;
 		X_NXFSD_REQU_LOG(DBG, nxfsd_requ, " ctx_conn=%p", ctx_conn);
 
-		if (ctx_conn) {
-			x_nxfsd_requ_async_done(ctx_conn, nxfsd_requ, evt->status);
-		} else {
-			x_nxfsd_requ_async_remove(nxfsd_requ);
-			x_nxfsd_requ_done(nxfsd_requ);
-		}
+		x_nxfsd_requ_async_done(ctx_conn, nxfsd_requ, evt->status);
 
 		delete evt;
 	}
 
-	explicit requ_error_evt_t(x_nxfsd_requ_t *nxfsd_requ, NTSTATUS status)
+	explicit requ_done_evt_t(x_nxfsd_requ_t *nxfsd_requ, NTSTATUS status)
 		: base(func), nxfsd_requ(nxfsd_requ), status(status)
 	{
 	}
 
-	~requ_error_evt_t()
+	~requ_done_evt_t()
 	{
-		x_ref_dec(nxfsd_requ);
+		if (nxfsd_requ) {
+			nxfsd_requ->decref();
+		}
 	}
 
 	x_fdevt_user_t base;
-	x_nxfsd_requ_t * const nxfsd_requ;
+	x_nxfsd_requ_t * nxfsd_requ;
 	NTSTATUS const status;
 };
 
-void x_nxfsd_requ_post_error(x_nxfsd_requ_t *nxfsd_requ, NTSTATUS status)
+void x_nxfsd_requ_post_done(x_nxfsd_requ_t *nxfsd_requ, NTSTATUS status)
 {
-	X_NXFSD_REQU_POST_USER(nxfsd_requ, new requ_error_evt_t(nxfsd_requ, status));
+	X_NXFSD_REQU_POST_USER(nxfsd_requ, new requ_done_evt_t(nxfsd_requ, status));
 }
 
 struct x_nxfsd_requ_list_t : x_ctrl_handler_t
@@ -217,7 +230,7 @@ bool x_nxfsd_requ_list_t::output(std::string &data)
 
 	bool ret = g_nxfsd_requ_table->iter_entry(iter, [&os](const x_nxfsd_requ_t *nxfsd_requ) {
 			os << idl::x_hex_t<uint64_t>(nxfsd_requ->id) << ' '
-			<< nxfsd_requ->cbs->cb_tostr(nxfsd_requ) << std::endl;
+			<< (*nxfsd_requ) << std::endl;
 			return true;
 		});
 	if (ret) {
