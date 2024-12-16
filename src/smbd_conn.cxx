@@ -1005,7 +1005,9 @@ static void smbd_requ_done(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ,
 	}
 	smbd_requ->status = status;
 
-	X_SMBD_REQU_LOG(DBG, smbd_requ, " done status=%s at %s", x_ntstatus_str(status),
+	X_SMBD_REQU_LOG(DBG, smbd_requ, " done %s status=%s at %s",
+			x_tostr(smbd_conn->base).c_str(),
+			x_ntstatus_str(status),
 			smbd_requ->location);
 	x_smb2_reply(smbd_conn, smbd_requ, status, out_buf);
 	X_SMBD_UPDATE_OP_HISTOGRAM(smbd_requ);
@@ -1137,7 +1139,8 @@ static int x_smbd_conn_process_smb2(x_smbd_conn_t *smbd_conn,
 		smbd_requ->sess_status = requ_ctx.sess_status;
 		smbd_requ->status = requ_ctx.status;
 
-		X_SMBD_REQU_LOG(DBG, smbd_requ, " start");
+		X_SMBD_REQU_LOG(DBG, smbd_requ, " start %s",
+				x_tostr(smbd_conn->base).c_str());
 		if (!x_nxfsd_conn_start_requ(&smbd_conn->base, smbd_requ)) {
 			X_TODO;
 			/* delete smbd_requ, and move in_buf into requ_ctx */

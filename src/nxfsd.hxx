@@ -137,6 +137,8 @@ struct x_nxfsd_conn_cbs_t
 	void (*cb_reply_interim)(x_nxfsd_conn_t *nxfsd_conn, x_nxfsd_requ_t *nxfsd_requ);
 };
 
+std::ostream &operator<<(std::ostream &os, const x_nxfsd_conn_t &conn);
+
 void x_nxfsd_conn_start(x_nxfsd_conn_t *nxfsd_conn);
 
 void x_nxfsd_conn_queue_buf(x_nxfsd_conn_t *nxfsd_conn, x_bufref_t *buf_head,
