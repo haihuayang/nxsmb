@@ -670,6 +670,7 @@ NTSTATUS x_smbd_conn_dispatch_update_counts(
 			update_open = true;
 			smbd_requ->request_counters_updated = true;
 		} else if (modify_call) {
+			X_LOG(SMB, ERR, "Replay operation with modify call");
 			return NT_STATUS_FILE_NOT_AVAILABLE;
 		}
 	} else {
@@ -684,6 +685,7 @@ NTSTATUS x_smbd_conn_dispatch_update_counts(
 			update_open = true;
 			smbd_requ->request_counters_updated = true;
 		} else if (modify_call) {
+			X_LOG(SMB, ERR, "Replay operation with modify call");
 			return NT_STATUS_FILE_NOT_AVAILABLE;
 		}
 	}

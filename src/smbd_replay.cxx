@@ -56,7 +56,7 @@ static replay_item_t *replay_cache_find(uint32_t hash,
 			});
 }
 
-NTSTATUS x_smbd_replay_cache_lookup(
+static NTSTATUS smbd_replay_cache_lookup(
 		x_smbd_open_t **psmbd_open,
 		const x_smb2_uuid_t &client_guid,
 		const x_smb2_uuid_t &create_guid,
@@ -83,6 +83,21 @@ NTSTATUS x_smbd_replay_cache_lookup(
 	}
 }
 
+NTSTATUS x_smbd_replay_cache_lookup(
+		x_smbd_open_t **psmbd_open,
+		const x_smb2_uuid_t &client_guid,
+		const x_smb2_uuid_t &create_guid,
+		bool replay_operation)
+{
+	NTSTATUS status = smbd_replay_cache_lookup(psmbd_open, client_guid,
+			create_guid, replay_operation);
+	X_LOG(SMB, DBG, "client=%s create=%s open=%p status=%s",
+			x_tostr(client_guid).c_str(),
+			x_tostr(create_guid).c_str(),
+			*psmbd_open, x_ntstatus_str(status));
+	return status;
+}
+
 void x_smbd_replay_cache_clear(
 		const x_smb2_uuid_t &client_guid,
 		const x_smb2_uuid_t &create_guid)
@@ -97,6 +112,10 @@ void x_smbd_replay_cache_clear(
 		g_replay_cache.hashtable.remove(replay_item);
 	}
 
+	X_LOG(SMB, DBG, "client=%s create=%s open=%p",
+			x_tostr(client_guid).c_str(),
+			x_tostr(create_guid).c_str(),
+			replay_item->smbd_open);
 	if (replay_item->smbd_open) {
 		x_ref_dec(replay_item->smbd_open);
 	}
@@ -110,12 +129,18 @@ void x_smbd_replay_cache_set(
 {
 	uint32_t hash = replay_cache_hash(client_guid, create_guid);
 
-	auto lock = replay_cache_lock(hash);
-	replay_item_t *replay_item = replay_cache_find(hash, client_guid,
-			create_guid);
-	X_ASSERT(replay_item);
-	X_ASSERT(!replay_item->smbd_open);
-	replay_item->smbd_open = x_ref_inc(smbd_open);
+	{
+		auto lock = replay_cache_lock(hash);
+		replay_item_t *replay_item = replay_cache_find(hash, client_guid,
+				create_guid);
+		X_ASSERT(replay_item);
+		X_ASSERT(!replay_item->smbd_open);
+		replay_item->smbd_open = x_ref_inc(smbd_open);
+	}
+	X_LOG(SMB, DBG, "client=%s create=%s open=%p",
+			x_tostr(client_guid).c_str(),
+			x_tostr(create_guid).c_str(),
+			smbd_open);
 }
 #if 0
 bool x_smbd_replay_cache_add(
