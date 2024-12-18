@@ -136,6 +136,7 @@ SET_src_smbd_nx := \
 	smbd_ntacl \
 	smbd_string \
 	util_io \
+	nxdr \
 
 SET_src_nxutils := \
 	nxutils \
