@@ -25,6 +25,11 @@
 	X_NXFSD_COUNTER_DECL(smbd_toomany_chan) \
 	X_NXFSD_COUNTER_DECL(smbd_fail_alloc_chan) \
 	X_NXFSD_COUNTER_DECL(smbd_fail_alloc_qdir) \
+	X_NXFSD_COUNTER_DECL(noded_reply_interim) \
+	X_NXFSD_COUNTER_DECL(nodec_resp_ok) \
+	X_NXFSD_COUNTER_DECL(nodec_resp_pending) \
+	X_NXFSD_COUNTER_DECL(nodec_resp_noent) \
+	X_NXFSD_COUNTER_DECL(nodec_no_dst) \
 
 enum {
 #undef X_NXFSD_COUNTER_DECL
@@ -51,6 +56,10 @@ enum {
 	X_NXFSD_PAIR_COUNTER_DECL(smbd_qdir) \
 	X_NXFSD_PAIR_COUNTER_DECL(auth_krb5) \
 	X_NXFSD_PAIR_COUNTER_DECL(auth_ntlmssp) \
+	X_NXFSD_PAIR_COUNTER_DECL(noded_conn) \
+	X_NXFSD_PAIR_COUNTER_DECL(noded_requ) \
+	X_NXFSD_PAIR_COUNTER_DECL(nodec_conn) \
+	X_NXFSD_PAIR_COUNTER_DECL(nodec_requ) \
 
 enum {
 #undef X_NXFSD_PAIR_COUNTER_DECL
@@ -81,6 +90,9 @@ enum {
 	X_NXFSD_HISTOGRAM_DECL(smbd_op_setinfo) \
 	X_NXFSD_HISTOGRAM_DECL(smbd_op_break) \
 	X_NXFSD_HISTOGRAM_DECL(noded_op_ping) \
+	X_NXFSD_HISTOGRAM_DECL(noded_op_resolve) \
+	X_NXFSD_HISTOGRAM_DECL(noded_op_create) \
+	X_NXFSD_HISTOGRAM_DECL(noded_op_close) \
 
 enum {
 #undef X_NXFSD_HISTOGRAM_DECL

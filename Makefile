@@ -136,6 +136,8 @@ SET_src_smbd_nx := \
 	smbd_string \
 	util_io \
 	nxdr \
+	noded \
+	noded_requ \
 
 SET_src_nxutils := \
 	nxutils \

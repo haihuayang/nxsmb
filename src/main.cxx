@@ -1,5 +1,6 @@
 
 #include "smbd.hxx"
+#include "noded.hxx"
 #include "nxfsd_stats.hxx"
 #include "smbd_conf.hxx"
 #include "nxfsd.hxx"
@@ -159,6 +160,7 @@ static void nxfsd_init(const char *progname)
 	x_nxfsd_requ_pool_init(smbd_conf->max_requs);
 
 	x_smbd_init();
+	x_noded_init();
 	x_smbd_ctrl_init();
 }
 
