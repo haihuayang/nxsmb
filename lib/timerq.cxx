@@ -14,7 +14,7 @@ static void timerq_check(const char *where, const x_timerq_t &timerq)
 	}
 }
 
-#ifdef __X_DEVELOPER__
+#if __X_DEVELOPER__
 #define TIMERQ_CHECK(x) timerq_check(__FUNCTION__, (x))
 #else
 #define TIMERQ_CHECK(x) do { } while(0)

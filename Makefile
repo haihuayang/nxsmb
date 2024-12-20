@@ -15,7 +15,7 @@ TARGET_BUILD_CFLAGS_dbg := -g3
 TARGET_BUILD_LDFLAGS_dbg := -g3
 TARGET_BUILD_CFLAGS_opt := -O2 -g3
 TARGET_BUILD_LDFLAGS_opt := -O2 -g3
-TARGET_BUILD_CFLAGS_dev := -g3 -fsanitize=address -DNXSMB_DEV=1
+TARGET_BUILD_CFLAGS_dev := -g3 -fsanitize=address -D__X_DEVELOPER__=1
 TARGET_BUILD_LDFLAGS_dev := -g3 -fsanitize=address
 
 BUILD ?= dbg
@@ -52,8 +52,7 @@ TARGET_SET_tests := \
 
 TARGET_SET_lib := nxsmb nxversion
 
-TARGET_CFLAGS_EXTRA := \
-	-D__X_DEVELOPER__=1
+TARGET_CFLAGS_EXTRA :=
 
 TARGET_CFLAGS_dependent = \
 	$(TARGET_CFLAGS_platform) \

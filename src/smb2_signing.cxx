@@ -33,13 +33,8 @@ void x_smb2_key_derivation(const uint8_t *KI, size_t KI_len,
 
 /*
  * Compute AES-CMAC digest for the input data (https://tools.ietf.org/html/rfc4493).
- * Param res, output, the digest will be stored and caller must ensure it has AES_CMAC_DIGEST_LENGTH bytes 
- * Param key_data, input, point to address where the AES key is stored.
- * Param key_length, input, the AES key size.
- * Param data1, input, point to the 1st fragment of input data.
- * Param len1, input, the length of the 1st fragment of input data.
- * Param data2, input, point to the 2nd fragment of input data.
- * Param len2, input, the length of the 2nd fragment of input data.
+ * Param digest, output, the digest will be stored and caller must ensure it has AES_CMAC_DIGEST_LENGTH bytes
+ * Param key, input, the AES key
  * Param vector, input, the remain fragments of input data
  * Param count, input, the number of iovec in vector.
  */
@@ -90,6 +85,7 @@ static inline void gmac_aes_128_digest(const x_smb2_key_t &key,
 	X_ASSERT(rc == 1);
 
 	for (unsigned int i=0; i < count; i++) {
+		/* when dst is nullptr, the input data is aad */
 		rc = EVP_EncryptUpdate(ctx, nullptr, &unused,
 				(const uint8_t *)vector[i].iov_base,
 				(int)vector[i].iov_len);
@@ -100,27 +96,6 @@ static inline void gmac_aes_128_digest(const x_smb2_key_t &key,
 
 	rc = EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_GET_TAG, 16, digest);
 	X_ASSERT(rc == 1);
-#if 0
-	printf("Calculated tag:\n  ");
-	for(i = 0; i < sizeof(tag); i++)
-	{
-		printf("%02x", tag[i]);
-
-		if(i == sizeof(tag) - 1) {
-			printf("\n");
-		}
-	}
-
-	printf("Expected tag:\n  ");
-	for(i = 0; i < sizeof(exp); i++)
-	{
-		printf("%02x", exp[i]);
-
-		if(i == sizeof(exp) - 1) {
-			printf("\n");
-		}
-	}
-#endif
 	EVP_CIPHER_CTX_free(ctx);
 }
 
