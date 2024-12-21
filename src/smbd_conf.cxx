@@ -1140,6 +1140,21 @@ std::shared_ptr<x_smbd_volume_t> x_smbd_find_volume(const x_smbd_conf_t &smbd_co
 	return nullptr;
 }
 
+const std::string *x_smbd_volume_is_remote(const x_smbd_conf_t &smbd_conf, uint64_t volume_id)
+{
+	for (auto &smbd_volume : smbd_conf.smbd_volumes) {
+		if (smbd_volume->volume_id == volume_id) {
+			if (smbd_volume->owner_node == smbd_conf.node) {
+				return nullptr;
+			} else {
+				return &smbd_volume->owner_node;
+			}
+		}
+	}
+	X_LOG(CONF, ERR, "volume %lu not found", volume_id);
+	return nullptr;
+}
+
 thread_local std::shared_ptr<x_smbd_conf_t> x_smbd_conf_curr;
 thread_local int x_smbd_conf_curr_count = 0;
 

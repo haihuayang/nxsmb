@@ -187,5 +187,9 @@ struct x_smbd_conf_pin_t
 
 int x_smbd_init_shares(x_smbd_conf_t &smbd_conf);
 
+/* return nullptr if it is local, other pointer to node name */
+const std::string *x_smbd_volume_is_remote(const x_smbd_conf_t &smbd_conf, uint64_t volume_id);
+
+
 #endif /* __smbconf__hxx__ */
 
