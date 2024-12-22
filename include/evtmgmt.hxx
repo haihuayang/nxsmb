@@ -89,5 +89,8 @@ bool x_evtmgmt_post_events(x_evtmgmt_t *ep, uint64_t id, uint32_t events);
 void x_evtmgmt_add_timer(x_evtmgmt_t *ep, x_timer_job_t *timer_job, x_tick_diff_t ns);
 bool x_evtmgmt_del_timer(x_evtmgmt_t *ep, x_timer_job_t *timer_job);
 
+int x_evtmgmt_call(x_evtmgmt_t *ep, uint64_t id, void (*func)(
+			x_epoll_upcall_t *upcall, void *data), void *data);
+
 #endif /* __evtmgmt__hxx__ */
 

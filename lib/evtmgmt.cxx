@@ -331,3 +331,16 @@ x_evtmgmt_t *x_evtmgmt_create(x_threadpool_t *tpool, uint32_t max_fd,
 	return ep;
 }
 
+/* TODO temporary solution */
+int x_evtmgmt_call(x_evtmgmt_t *ep, uint64_t id, void (*func)(
+			x_epoll_upcall_t *upcall, void *data), void *data)
+{
+	x_epoll_entry_t *entry = ep->find_by_id(id);
+	if (!entry) {
+		return -ENOENT;
+	}
+	func(entry->upcall, data);
+	entry->put();
+	return 0;
+}
+
