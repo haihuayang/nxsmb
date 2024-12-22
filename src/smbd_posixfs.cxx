@@ -2609,7 +2609,7 @@ static uint32_t filter_attributes(uint32_t new_attr, uint32_t curr_attr)
 }
 
 /* smbd_object's mutex is locked */
-NTSTATUS x_smbd_posixfs_create_open(x_smbd_open_t **psmbd_open,
+static NTSTATUS x_smbd_posixfs_create_open(
 		x_nxfsd_requ_t *nxfsd_requ,
 		x_smbd_tcon_t *smbd_tcon,
 		x_nxfsd_requ_state_open_t &state,
@@ -2683,7 +2683,7 @@ NTSTATUS x_smbd_posixfs_create_open(x_smbd_open_t **psmbd_open,
 		posixfs_object->statex_modified = false;
 	}
 
-	*psmbd_open = &posixfs_open->base;
+	nxfsd_requ->set_open(&posixfs_open->base);
 	return NT_STATUS_OK;
 }
 
@@ -2701,8 +2701,7 @@ static NTSTATUS posixfs_open_stream(x_smbd_object_t *smbd_object,
 	return NT_STATUS_OK;
 }
 
-NTSTATUS posixfs_op_create_open(x_smbd_open_t **psmbd_open,
-		x_nxfsd_requ_t *nxfsd_requ,
+NTSTATUS posixfs_op_create_open(x_nxfsd_requ_t *nxfsd_requ,
 		x_smbd_tcon_t *smbd_tcon,
 		x_smbd_requ_state_create_t &state)
 {
@@ -2894,7 +2893,7 @@ NTSTATUS posixfs_op_create_open(x_smbd_open_t **psmbd_open,
 	}
 
 	/* TODO should we check the open limit before create the open */
-	status = x_smbd_posixfs_create_open(psmbd_open,
+	status = x_smbd_posixfs_create_open(
 			nxfsd_requ, smbd_tcon,
 			state,
 			overwrite,
@@ -2916,7 +2915,8 @@ NTSTATUS posixfs_op_create_open(x_smbd_open_t **psmbd_open,
 	}
 
 	if (state.in_create_options & X_SMB2_CREATE_OPTION_DELETE_ON_CLOSE) {
-		(*psmbd_open)->open_state.flags |= x_smbd_open_state_t::F_INITIAL_DELETE_ON_CLOSE;
+		nxfsd_requ->smbd_open->open_state.flags |=
+			x_smbd_open_state_t::F_INITIAL_DELETE_ON_CLOSE;
 	}
 
 	return NT_STATUS_OK;

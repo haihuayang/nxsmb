@@ -1675,16 +1675,16 @@ NTSTATUS x_smbd_open_op_create(x_nxfsd_requ_t *nxfsd_requ,
 		state.unresolved_path = (*sep) ? (sep + 1) : sep;
 	}
 
-	x_smbd_open_t *smbd_open = nullptr;
 	/* TODO should we check the open limit before create the open */
-	status = state.smbd_object->smbd_volume->ops->create_open(&smbd_open,
+	status = state.smbd_object->smbd_volume->ops->create_open(
 			nxfsd_requ, smbd_tcon, state);
 
 	if (!status.ok()) {
-		X_ASSERT(!smbd_open);
+		X_ASSERT(!nxfsd_requ->smbd_open);
 		return status;
 	}
 
+	auto smbd_open = nxfsd_requ->smbd_open;
 	X_ASSERT(smbd_open);
 
 	/* if client access the open from other channel now, it does not have
@@ -1708,9 +1708,9 @@ NTSTATUS x_smbd_open_op_create(x_nxfsd_requ_t *nxfsd_requ,
 			x_ref_inc(smbd_tcon); // ref by open
 		}
 		x_ref_inc(smbd_open); // ref tcon link
-		nxfsd_requ->smbd_open = x_ref_inc(smbd_open);
 	} else {
 		status = NT_STATUS_NETWORK_NAME_DELETED;
+		X_REF_DEC(nxfsd_requ->smbd_open);
 	}
 
 	return status;

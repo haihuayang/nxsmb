@@ -56,6 +56,8 @@ struct x_nxfsd_requ_t
 	virtual bool can_async() const = 0;
 	virtual std::ostream &tostr(std::ostream &os) const = 0;
 
+	void set_open(x_smbd_open_t *open);
+
 	x_out_buf_t &get_requ_out_buf() {
 		X_ASSERT(!requ_out_buf.head);
 		return requ_out_buf;

@@ -141,15 +141,8 @@ typedef bool posixfs_qdir_entry_func_t(x_smbd_object_meta_t *object_meta,
 		const char *ent_name,
 		uint64_t file_number);
 
-NTSTATUS posixfs_op_create_open(x_smbd_open_t **psmbd_open,
-		x_nxfsd_requ_t *nxfsd_requ,
+NTSTATUS posixfs_op_create_open(x_nxfsd_requ_t *nxfsd_requ,
 		x_smbd_tcon_t *smbd_tcon,
-		x_smbd_requ_state_create_t &state);
-
-NTSTATUS x_smbd_posixfs_op_create_open(x_smbd_open_t *&smbd_open,
-		x_smbd_requ_t *smbd_requ,
-		const std::shared_ptr<x_smbd_share_t> &smbd_share,
-		const std::string &volume_name,
 		x_smbd_requ_state_create_t &state);
 
 void x_smbd_posixfs_op_lease_granted(x_smbd_object_t *smbd_object,
@@ -171,14 +164,6 @@ NTSTATUS x_smbd_posixfs_object_init(x_smbd_object_t *smbd_object,
 		const std::vector<uint8_t> &ntacl_blob);
 
 x_smbd_object_t *x_smbd_posixfs_object_open_parent(const x_smbd_object_t *child_object);
-
-NTSTATUS x_smbd_posixfs_create_open(x_smbd_open_t **psmbd_open,
-		x_nxfsd_requ_t *nxfsd_requ,
-		x_smbd_tcon_t *smbd_tcon,
-		x_nxfsd_requ_state_open_t &state,
-		bool overwrite,
-		x_smb2_create_action_t create_action,
-		uint8_t oplock_level);
 
 int posixfs_mktld(const std::shared_ptr<x_smbd_user_t> &smbd_user,
 		const x_smbd_volume_t &smbd_volume,

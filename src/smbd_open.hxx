@@ -174,8 +174,7 @@ struct x_smbd_object_ops_t
 			uint32_t file_attributes,
 			uint64_t allocation_size);
 
-	NTSTATUS (*create_open)(x_smbd_open_t **psmbd_open,
-			x_nxfsd_requ_t *nxfsd_requ,
+	NTSTATUS (*create_open)(x_nxfsd_requ_t *nxfsd_requ,
 			x_smbd_tcon_t *smbd_tcon,
 			x_smbd_requ_state_create_t &state);
 

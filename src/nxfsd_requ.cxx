@@ -77,6 +77,11 @@ bool x_nxfsd_requ_t::set_processing()
 			&old_val, S_PROCESSING);
 }
 
+void x_nxfsd_requ_t::set_open(x_smbd_open_t *open)
+{
+	X_ASSERT(!smbd_open);
+	smbd_open = x_ref_inc(open);
+}
 
 bool x_nxfsd_requ_store(x_nxfsd_requ_t *nxfsd_requ)
 {

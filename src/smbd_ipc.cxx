@@ -912,8 +912,7 @@ static NTSTATUS ipc_create_object(x_smbd_object_t *smbd_object,
 	return NT_STATUS_ACCESS_DENIED;
 }
 
-static NTSTATUS ipc_op_create_open(x_smbd_open_t **psmbd_open,
-		x_nxfsd_requ_t *nxfsd_requ,
+static NTSTATUS ipc_op_create_open(x_nxfsd_requ_t *nxfsd_requ,
 		x_smbd_tcon_t *smbd_tcon,
 		x_smbd_requ_state_create_t &state)
 {
@@ -930,7 +929,6 @@ static NTSTATUS ipc_op_create_open(x_smbd_open_t **psmbd_open,
 	X_ASSERT(create_action == x_smb2_create_action_t::WAS_OPENED);
 #endif
 	if (state.in_desired_access & idl::SEC_STD_DELETE) {
-		*psmbd_open = nullptr;
 		return NT_STATUS_ACCESS_DENIED;
 	}
 
@@ -955,13 +953,12 @@ static NTSTATUS ipc_op_create_open(x_smbd_open_t **psmbd_open,
 	if (!x_smbd_open_store(&named_pipe->base)) {
 		X_NXFSD_COUNTER_INC(smbd_toomany_open, 1);
 		delete named_pipe;
-		*psmbd_open = nullptr;
 		return NT_STATUS_INSUFFICIENT_RESOURCES;
 	}
 
 	// x_smbd_open_init(&named_pipe->base, &ipc_object->base, smbd_requ->smbd_tcon,
 
-	*psmbd_open = &named_pipe->base;
+	nxfsd_requ->set_open(&named_pipe->base);
 	return NT_STATUS_OK;
 }
 
