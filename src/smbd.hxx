@@ -140,6 +140,7 @@ struct x_smbd_file_handle_t
 		}
 		return memcmp(base.f_handle, other.base.f_handle, base.handle_bytes);
 	}
+	bool is_share_root() const { return base.handle_bytes == 0; }
 
 	struct file_handle base;
 	unsigned char f_handle[MAX_HANDLE_SZ];
