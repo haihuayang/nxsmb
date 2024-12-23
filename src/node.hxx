@@ -29,6 +29,11 @@ struct x_node_requ_t
 	uint16_t flags;
 };
 
+#define X_NODE_REQU_DBG_FMT "mid=%lu f=0x%x op=%d"
+#define X_NODE_REQU_DBG_ARG(node_requ) \
+		X_LE2H64((node_requ)->mid), X_LE2H16((node_requ)->flags), \
+		((node_requ)->opcode)
+
 struct x_node_resp_t
 {
 	uint64_t mid;
