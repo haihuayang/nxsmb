@@ -191,8 +191,8 @@ static uint32_t encode_out_create(const x_smbd_requ_state_create_t &state,
 	out_create->file_id_volatile = X_H2LE64(id_volatile);
 
 	static_assert((sizeof(x_smb2_create_resp_t) % 8) == 0);
-	uint32_t out_context_length = x_smbd_open_encode_output_contexts(smbd_open,
-			state, (uint8_t *)(out_create + 1));
+	uint32_t out_context_length = state.out_context.encode(
+			(uint8_t *)(out_create + 1), 256);
 	if (out_context_length == 0) {
 		out_create->context_offset = out_create->context_length = 0;
 	} else {
@@ -228,13 +228,14 @@ static void smb2_create_success(x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_state_create_t &state)
 {
 	x_smbd_open_t *smbd_open = smbd_requ->smbd_open;
+	auto &open_state = smbd_requ->smbd_open->open_state;
 	if (smbd_open->open_type != x_smbd_open_type_t::proxy) {
 		if (state.replay_reserved) {
 			/* TODO atomic */
 			x_smbd_replay_cache_set(state.client_guid,
 					state.in_context.create_guid,
 					smbd_open);
-			smbd_open->open_state.flags |= x_smbd_open_state_t::F_REPLAY_CACHED;
+			open_state.flags |= x_smbd_open_state_t::F_REPLAY_CACHED;
 			state.replay_reserved = false;
 		}
 
@@ -244,14 +245,22 @@ static void smb2_create_success(x_smbd_conn_t *smbd_conn,
 		}
 		x_smbd_save_durable(smbd_open, smbd_requ->smbd_tcon, state);
 
-		auto &open_state = smbd_requ->smbd_open->open_state;
 		if (open_state.dhmode != x_smbd_dhmode_t::NONE &&
 				(state.out_oplock_level == X_SMB2_OPLOCK_LEVEL_LEASE ||
 				 state.out_oplock_level == X_SMB2_OPLOCK_LEVEL_BATCH)) {
-			state.out_contexts |= (state.in_context.bits &
+			state.out_context.bits |= (state.in_context.bits &
 				(X_SMB2_CONTEXT_FLAG_DHNQ | X_SMB2_CONTEXT_FLAG_DH2Q));
 		}
 	}
+
+	if (state.out_oplock_level == X_SMB2_OPLOCK_LEVEL_LEASE) {
+		state.out_context.bits |= X_SMB2_CONTEXT_FLAG_RQLS;
+		state.out_context.lease = state.in_context.lease;
+	}
+	state.out_context.durable_flags = open_state.dhmode ==
+		x_smbd_dhmode_t::PERSISTENT ?  X_SMB2_DHANDLE_FLAG_PERSISTENT : 0,
+	state.out_context.durable_timeout_msec = open_state.durable_timeout_msec;
+
 	x_smb2_reply_create(smbd_requ, state);
 }
 #if 0

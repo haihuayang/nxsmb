@@ -871,10 +871,10 @@ static void posixfs_access_check_new(
 		const x_smbd_user_t &smbd_user,
 		x_smbd_requ_state_create_t &state)
 {
-	state.out_maximal_access = se_calculate_maximal_access(sd, smbd_user);
+	state.out_context.maximal_access = se_calculate_maximal_access(sd, smbd_user);
 	/* Windows server seem not do access check for create new object */
 	if (state.in_desired_access & idl::SEC_FLAG_MAXIMUM_ALLOWED) {
-		state.granted_access = state.out_maximal_access;
+		state.granted_access = state.out_context.maximal_access;
 	} else {
 		/* seems windows just grant the desired_access
 		 * state.granted_access = state.out_maximal_access & state.in_desired_access;
@@ -2874,7 +2874,7 @@ NTSTATUS posixfs_op_create_open(x_nxfsd_requ_t *nxfsd_requ,
 			return status;
 		}
 		if (state.in_context.bits & X_SMB2_CONTEXT_FLAG_MXAC) {
-			state.out_contexts |= X_SMB2_CONTEXT_FLAG_MXAC;
+			state.out_context.bits |= X_SMB2_CONTEXT_FLAG_MXAC;
 		}
 	}
 
@@ -2908,10 +2908,10 @@ NTSTATUS posixfs_op_create_open(x_nxfsd_requ_t *nxfsd_requ,
 	 * couple getinfo x_smb2_info_level_t::FILE_NETWORK_OPEN_INFORMATION
 	 */
 	if (state.in_context.bits & X_SMB2_CONTEXT_FLAG_QFID) {
-		x_put_le64(state.out_qfid_info, smbd_object->meta.inode);
-		x_put_le64(state.out_qfid_info + 8, smbd_object->meta.fsid);
-		memset(state.out_qfid_info + 16, 0, 16);
-		state.out_contexts |= X_SMB2_CONTEXT_FLAG_QFID;
+		x_put_le64(state.out_context.qfid_info, smbd_object->meta.inode);
+		x_put_le64(state.out_context.qfid_info + 8, smbd_object->meta.fsid);
+		memset(state.out_context.qfid_info + 16, 0, 16);
+		state.out_context.bits |= X_SMB2_CONTEXT_FLAG_QFID;
 	}
 
 	if (state.in_create_options & X_SMB2_CREATE_OPTION_DELETE_ON_CLOSE) {

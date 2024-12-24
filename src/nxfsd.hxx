@@ -207,7 +207,6 @@ struct x_nxfsd_requ_state_open_t
 
 	uint8_t in_oplock_level;
 	uint8_t out_oplock_level;
-	uint32_t out_contexts{0};
 
 	uint32_t in_impersonation_level;
 	uint32_t in_desired_access;
@@ -225,8 +224,6 @@ struct x_nxfsd_requ_state_open_t
 	bool replay_operation = false;
 	bool replay_reserved = false;
 	uint32_t open_attempt = 0;
-	uint32_t out_maximal_access{0};
-	uint8_t out_qfid_info[32];
 
 	uint32_t granted_access{0}; // internally used
 
@@ -237,6 +234,7 @@ struct x_nxfsd_requ_state_open_t
 
 	uint32_t valid_flags = 0;
 	x_smb2_create_requ_context_t in_context;
+	x_smb2_create_resp_context_t out_context;
 
 	std::shared_ptr<x_smbd_user_t> smbd_user;
 };
