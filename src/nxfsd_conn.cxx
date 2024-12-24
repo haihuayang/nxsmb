@@ -193,6 +193,9 @@ static bool x_nxfsd_conn_do_user(x_nxfsd_conn_t *nxfsd_conn, x_fdevents_t &fdeve
 static bool x_nxfsd_conn_handle_events(x_nxfsd_conn_t *nxfsd_conn, x_fdevents_t &fdevents)
 {
 	uint32_t events = x_fdevents_processable(fdevents);
+	if (events & FDEVT_SHUTDOWN) {
+		return true;
+	}
 	if (events & FDEVT_USER) {
 		if (x_nxfsd_conn_do_user(nxfsd_conn, fdevents)) {
 			return true;
