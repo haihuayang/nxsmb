@@ -1534,7 +1534,6 @@ static void x_smbd_srv_cb_accepted(x_strm_srv_t *strm_srv, int fd,
 {
 	x_sockaddr_t *saddr = (x_sockaddr_t *)sa;
 	X_ASSERT(slen <= sizeof(*saddr));
-	X_LOG(SMB, CONN, "accept %d from %s", fd, saddr->tostring().c_str());
 	set_nbio(fd, 1);
 	saddr->normalize();
 	x_smbd_conf_pin_t smbd_conf_pin;
@@ -1542,6 +1541,8 @@ static void x_smbd_srv_cb_accepted(x_strm_srv_t *strm_srv, int fd,
 	x_smbd_conn_t *smbd_conn = new x_smbd_conn_t(fd, *saddr,
 			smbd_conf.smb2_max_credits);
 	X_ASSERT(smbd_conn != NULL);
+	X_LOG(SMB, CONN, "accepted smbd_conn %p %s", smbd_conn,
+			x_tostr(smbd_conn->base).c_str());
 
 	x_nxfsd_conn_start(&smbd_conn->base);
 }

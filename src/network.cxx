@@ -69,15 +69,15 @@ std::string x_sockaddr_tostr(const struct sockaddr *sa, size_t slen)
 
 }
 
-std::string x_sockaddr_t::tostring() const
+std::ostream &operator<<(std::ostream &os, const x_sockaddr_t &saddr)
 {
-	if (family == AF_INET) {
-		return x_sockaddr_in_tostr(sin);
-	} else if (family == AF_INET6) {
-		return x_sockaddr_in6_tostr(sin6);
+	if (saddr.family == AF_INET) {
+		return os << x_sockaddr_in_tostr(saddr.sin);
+	} else if (saddr.family == AF_INET6) {
+		return os << x_sockaddr_in6_tostr(saddr.sin6);
 	} else {
 		X_ASSERT(0);
-		return {};
+		return os;
 	}
 }
 

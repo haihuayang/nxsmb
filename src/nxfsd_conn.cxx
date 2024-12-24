@@ -293,31 +293,7 @@ x_nxfsd_conn_t::~x_nxfsd_conn_t()
 
 std::ostream &operator<<(std::ostream &os, const x_nxfsd_conn_t &conn)
 {
-	char buf[INET6_ADDRSTRLEN] = "";
-	auto &saddr = conn.saddr;
-	int port = 0;
-	if (saddr.family == AF_INET) {
-		snprintf(buf, sizeof buf, "%d.%d.%d.%d",
-			X_IPQUAD_BE(saddr.sin.sin_addr));
-		port = ntohs(saddr.sin.sin_port);
-	} else if (saddr.family == AF_INET6) {
-		auto &sin6_addr = saddr.sin6.sin6_addr;
-		if (sin6_addr.s6_addr32[0] == 0 && sin6_addr.s6_addr32[1] == 0
-				&& sin6_addr.s6_addr16[4] == 0
-				&& sin6_addr.s6_addr16[5] == 0xffff) {
-			snprintf(buf, sizeof buf, "%d.%d.%d.%d",
-					sin6_addr.s6_addr[12],
-					sin6_addr.s6_addr[13],
-					sin6_addr.s6_addr[14],
-					sin6_addr.s6_addr[15]);
-		} else {
-			inet_ntop(AF_INET6, &saddr.sin6.sin6_addr, buf, sizeof buf);
-		}
-		port = ntohs(saddr.sin6.sin6_port);
-	} else {
-		X_ASSERT(false);
-	}
-	return os << conn.fd << "," << buf << ':' << port;
+	return os << conn.fd << "," << conn.saddr;
 }
 
 
