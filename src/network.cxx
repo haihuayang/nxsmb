@@ -81,6 +81,23 @@ std::string x_sockaddr_t::tostring() const
 	}
 }
 
+void x_sockaddr_t::normalize()
+{
+	if (family == AF_INET6) {
+		auto &sin6_addr = sin6.sin6_addr;
+		if (sin6_addr.s6_addr32[0] == 0 && sin6_addr.s6_addr32[1] == 0
+				&& sin6_addr.s6_addr16[4] == 0
+				&& sin6_addr.s6_addr16[5] == 0xffff) {
+			uint16_t port = sin6.sin6_port;
+			uint32_t ipv4 = sin6_addr.s6_addr32[3];
+			memset(&sin, 0, sizeof sin);
+			sin.sin_family = AF_INET;
+			sin.sin_port = port;
+			sin.sin_addr.s_addr = ipv4;
+		}
+	}
+}
+
 bool x_strm_send_queue_t::send(int fd, x_fdevents_t &fdevents)
 {
 	for (;;) {

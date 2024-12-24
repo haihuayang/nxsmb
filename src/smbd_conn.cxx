@@ -1536,6 +1536,7 @@ static void x_smbd_srv_cb_accepted(x_strm_srv_t *strm_srv, int fd,
 	X_ASSERT(slen <= sizeof(*saddr));
 	X_LOG(SMB, CONN, "accept %d from %s", fd, saddr->tostring().c_str());
 	set_nbio(fd, 1);
+	saddr->normalize();
 	x_smbd_conf_pin_t smbd_conf_pin;
 	const x_smbd_conf_t &smbd_conf = x_smbd_conf_get_curr();
 	x_smbd_conn_t *smbd_conn = new x_smbd_conn_t(fd, *saddr,

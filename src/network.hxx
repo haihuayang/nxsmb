@@ -24,6 +24,7 @@ union x_sockaddr_t
 	struct sockaddr_in6 sin6;
 
 	std::string tostring() const;
+	void normalize();
 };
 
 static inline void set_reuse(int s, int on)
