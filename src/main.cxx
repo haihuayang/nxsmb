@@ -3,6 +3,7 @@
 #include "nxfsd_stats.hxx"
 #include "smbd_conf.hxx"
 #include "nxfsd.hxx"
+#include "include/version.hxx"
 #include <sys/uio.h>
 #include <getopt.h>
 #include <openssl/crypto.h>
@@ -94,12 +95,19 @@ static void main_loop()
 	/* TODO clean up */
 }
 
-static void nxfsd_init()
+static void nxfsd_init(const char *progname)
 {
 	auto smbd_conf = x_smbd_conf_get();
 
 	x_log_init(smbd_conf->log_name.c_str(), smbd_conf->log_level.c_str(),
 			smbd_conf->log_file_size);
+
+	X_LOG(UTILS, NOTICE, "%s build %s %s %s %s %s starting",
+			progname,
+			g_build.version, g_build.git_hash,
+			g_build.build_type,
+			g_build.date,
+			g_build.branch);
 
 	x_nxfsd_stats_init();
 
@@ -154,6 +162,13 @@ static void nxfsd_init()
 	x_smbd_ctrl_init();
 }
 
+static void usage(const char *progname)
+{
+	fprintf(stderr, "Usage: %s -c <configfile> [-D] [-o option] [-v]\n",
+			progname);
+	exit(1);
+}
+
 int main(int argc, char **argv)
 {
 	x_thread_init("MAIN");
@@ -164,13 +179,15 @@ int main(int argc, char **argv)
 		{ "configfile", required_argument, 0, 'c'},
 		{ "daemon", required_argument, 0, 'D'},
 		{ "option", required_argument, 0, 'o'},
+		{ "version", required_argument, 0, 'v'},
 	};
 
+	const char *progname = argv[0];
 	std::vector<std::string> cmdline_options;
 	bool daemon = false;
 	int optind = 0;
 	for (;;) {
-		int c = getopt_long(argc, argv, "c:D:o:",
+		int c = getopt_long(argc, argv, "c:Dvo:",
 				long_options, &optind);
 		if (c == -1) {
 			break;
@@ -185,8 +202,16 @@ int main(int argc, char **argv)
 			case 'o':
 				cmdline_options.push_back(optarg);
 				break;
+			case 'v':
+				printf("%s build %s %s %s %s %s\n",
+						progname,
+						g_build.version, g_build.git_hash,
+						g_build.build_type,
+						g_build.date,
+						g_build.branch);
+				exit(0);
 			default:
-				abort();
+				usage(progname);
 		}
 	}
 
@@ -205,7 +230,7 @@ int main(int argc, char **argv)
 	OPENSSL_init();
 	FIPS_mode_set(0);
 
-	nxfsd_init();
+	nxfsd_init(progname);
 
 	main_loop();
 

@@ -4,6 +4,9 @@ MAKEFLAGS += --no-builtin-rules
 
 PROJECT := nxsmb
 VERSION := 0.1
+GIT_COMMIT := $(shell git describe --always --abbrev=12 --dirty)
+BUILD_DATE := $(shell date '+%Y%m%d-%H%M%S')
+BRANCH := $(shell git rev-parse --abbrev-ref HEAD)
 
 include config.mk
 include functions.mk
@@ -47,7 +50,7 @@ TARGET_SET_tests := \
 	test-timeout \
 	test-charset \
 
-TARGET_SET_lib := nxsmb
+TARGET_SET_lib := nxsmb nxversion
 
 TARGET_CFLAGS_EXTRA := \
 	-D__X_DEVELOPER__=1
@@ -163,7 +166,7 @@ TESTS_LDFLAGS_test-signing := -lcrypto
 
 $(TARGET_DIR_out)/tests/test-compression : $(TARGET_DIR_out)/src/smb2_compression.o
 
-$(TARGET_SET_tests:%=$(TARGET_DIR_out)/tests/%) : $(TARGET_SET_lib:%=$(TARGET_DIR_out)/lib%.a) $(COMMON_LIBS)
+$(TARGET_SET_tests:%=$(TARGET_DIR_out)/tests/%) : $(TARGET_DIR_out)/libnxsmb.a $(COMMON_LIBS)
 
 TARGET_SET_asn1 := spnego gssapi
 
@@ -198,6 +201,23 @@ TARGET_GEN_nxsmb := \
 $(TARGET_SET_tests:%=$(TARGET_DIR_out)/tests/%.o) : $(TARGET_DIR_out)/tests/%.o: tests/%.cxx | target_mkdir target_gen
 	$(CXX) -c $(TARGET_CXXFLAGS) $(TARGET_CFLAGS_EXTRA) $(TARGET_CFLAGS_dependent) -o $@ $<
 
+
+TARGET_SRC_libnxversion := \
+	lib/version
+
+$(TARGET_DIR_out)/libnxversion.a: $(TARGET_SRC_libnxversion:%=$(TARGET_DIR_out)/%.o)
+	ar rcs $@ $^
+
+$(TARGET_DIR_out)/lib/version.o: lib/version.cxx | target_gen
+	$(CXX) -c $(TARGET_CXXFLAGS) $(TARGET_CFLAGS_EXTRA) $(TARGET_CFLAGS_dependent) \
+		-DBUILD_COMMIT=\"$(GIT_COMMIT)\" -DBUILD_DATE=\"$(BUILD_DATE)\" \
+		-DBUILD_TYPE=\"$(BUILD)\" -DBUILD_BRANCH=\"$(BRANCH)\" \
+		-DBUILD_VERSION=\"$(VERSION)\" -DBUILD_PROJECT=\"$(PROJECT)\" \
+		-o $@ $<
+
+$(TARGET_DIR_out)/lib/version.o: \
+		$(shell find src include lib tests scripts -type f) \
+		config.mk functions.mk Makefile
 
 TARGET_SRC_libnxsmb := \
 		lib/librpc/ndr \
