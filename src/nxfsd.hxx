@@ -70,8 +70,7 @@ struct x_nxfsd_requ_t
 	x_nxfsd_conn_t * const nxfsd_conn{};
 
 	uint64_t id = 0;
-	// uint64_t channel_generation;
-	// const uint64_t compound_id;
+	uint64_t compound_id;
 
 	const x_tick_t start;
 	std::atomic<uint32_t> async_state;

@@ -55,7 +55,6 @@ struct x_noded_requ_t : x_nxfsd_requ_t
 	}
 
 	const x_noded_proto_t *proto;
-	uint64_t compound_id;
 	uint32_t magic;
 	x_node_requ_t in_node_requ;
 };

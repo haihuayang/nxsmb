@@ -193,7 +193,6 @@ struct x_smbd_requ_t : x_nxfsd_requ_t
 		this->preauth = preauth;
 	}
 	uint64_t channel_generation;
-	uint64_t compound_id;
 
 	x_smb2_header_t in_smb2_hdr;
 	bool encrypted;
