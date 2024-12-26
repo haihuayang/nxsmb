@@ -154,6 +154,22 @@ struct x_smbd_requ_state_close_t
 	x_smb2_create_close_info_t out_info;
 };
 
+struct x_smbd_requ_state_qdir_t
+{
+	NTSTATUS decode_requ(x_buf_t *in_buf, uint32_t in_offset, uint32_t in_requ_len);
+	NTSTATUS encode_resp(x_out_buf_t &out_buf);
+
+	x_smb2_info_level_t in_info_level;
+	uint8_t in_flags;
+	uint32_t in_file_index;
+	uint32_t in_output_buffer_length;
+	uint64_t in_file_id_persistent;
+	uint64_t in_file_id_volatile;
+	std::u16string in_name;
+	x_buf_t *out_buf{};
+	uint32_t out_buf_length{0};
+};
+
 struct x_smbd_requ_t : x_nxfsd_requ_t
 {
 	explicit x_smbd_requ_t(x_smbd_conn_t *smbd_conn,

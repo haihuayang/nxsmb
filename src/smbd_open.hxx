@@ -922,6 +922,10 @@ NTSTATUS x_smbd_open_getinfo_file(x_smbd_open_t *smbd_open,
 NTSTATUS x_smbd_open_getinfo_security(x_smbd_open_t *smbd_open,
 		x_smbd_requ_state_getinfo_t &state);
 
+NTSTATUS x_smbd_open_op_qdir(x_nxfsd_requ_t *nxfsd_requ, x_smbd_open_t *smbd_open,
+		x_smbd_requ_state_qdir_t &state,
+		const std::shared_ptr<x_smbd_user_t> &smbd_user);
+
 template <class Info>
 static inline void x_smbd_push_time_info(Info &info,
 		const x_smbd_object_meta_t &object_meta)
