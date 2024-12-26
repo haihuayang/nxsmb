@@ -25,7 +25,8 @@ struct x_smbd_qdir_pos_t
 
 struct x_smbd_qdir_ops_t
 {
-	NTSTATUS (*get_entry)(x_smbd_qdir_t *smbd_qdir,
+	NTSTATUS (*get_entry)(x_nxfsd_requ_t *nxfsd_requ,
+			x_smbd_qdir_t *smbd_qdir,
 			std::u16string &name,
 			x_smbd_object_meta_t &object_meta,
 			x_smbd_stream_meta_t &stream_meta,

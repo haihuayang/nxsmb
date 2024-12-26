@@ -140,7 +140,7 @@ static NTSTATUS smbd_qdir_process_requ(x_smbd_qdir_t *smbd_qdir,
 		x_smbd_object_meta_t object_meta;
 		x_smbd_stream_meta_t stream_meta;
 		std::u16string ent_name;
-		status = smbd_qdir->ops->get_entry(smbd_qdir,
+		status = smbd_qdir->ops->get_entry(requ, smbd_qdir,
 					ent_name,
 					object_meta, stream_meta, ppsd);
 		if (status == NT_STATUS_NO_MORE_FILES) {
