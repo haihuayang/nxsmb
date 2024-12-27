@@ -214,7 +214,7 @@ static x_job_t::retval_t smbd_qdir_job_run(x_job_t *job, void *sche)
 				} else {
 					smbd_qdir->curr_requ = nullptr;
 				}
-				x_nxfsd_requ_post_done(nxfsd_requ, status);
+				X_NXFSD_REQU_POST_DONE(nxfsd_requ, status);
 			} else {
 				/* already cancelled */
 				smbd_qdir->curr_requ = nullptr;

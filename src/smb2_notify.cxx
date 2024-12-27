@@ -256,7 +256,7 @@ static void x_smbd_object_notify_change(x_smbd_object_t *smbd_object,
 		X_ASSERT(requ_notify->state.out_notify_changes.empty());
 		requ_notify->state.out_notify_changes = std::move(notify_changes);
 
-		x_nxfsd_requ_post_done(requ_notify, NT_STATUS_OK);
+		X_NXFSD_REQU_POST_DONE(requ_notify, NT_STATUS_OK);
 	}
 	if (recursive && smbd_object->parent_object) {
 		smbd_object->parent_object->incref();
@@ -313,6 +313,6 @@ void x_smbd_notify_post_deleting(x_smbd_open_t *smbd_open, NTSTATUS status)
 		return;
 	}
 
-	x_nxfsd_requ_post_done(requ_notify, status);
+	X_NXFSD_REQU_POST_DONE(requ_notify, status);
 }
 

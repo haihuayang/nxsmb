@@ -269,8 +269,10 @@ struct smbd_wakeup_oplock_pending_list_evt_t
 		delete evt;
 	}
 
-	explicit smbd_wakeup_oplock_pending_list_evt_t(x_nxfsd_requ_id_list_t &oplock_pending_list)
-		: base(func), oplock_pending_list(std::move(oplock_pending_list))
+	explicit smbd_wakeup_oplock_pending_list_evt_t(
+			const char *location,
+			x_nxfsd_requ_id_list_t &oplock_pending_list)
+		: base(func, location), oplock_pending_list(std::move(oplock_pending_list))
 	{
 	}
 
@@ -281,7 +283,7 @@ struct smbd_wakeup_oplock_pending_list_evt_t
 static void smbd_schedule_wakeup_oplock_pending_list(x_nxfsd_requ_id_list_t &oplock_pending_list)
 {
 	smbd_wakeup_oplock_pending_list_evt_t *evt =
-		new smbd_wakeup_oplock_pending_list_evt_t(oplock_pending_list);
+		new smbd_wakeup_oplock_pending_list_evt_t(__location__, oplock_pending_list);
 	x_nxfsd_schedule(&evt->base);
 }
 
@@ -386,8 +388,8 @@ struct smbd_open_release_evt_t
 		delete evt;
 	}
 
-	explicit smbd_open_release_evt_t(x_smbd_open_t *smbd_open)
-		: base(func), smbd_open(smbd_open)
+	explicit smbd_open_release_evt_t(const char *location, x_smbd_open_t *smbd_open)
+		: base(func, location), smbd_open(smbd_open)
 	{
 	}
 
@@ -407,7 +409,7 @@ static bool smbd_open_close_disconnected(
 	}
 	smbd_open_close(smbd_open, smbd_open->smbd_object, nullptr);
 
-	smbd_open_release_evt_t *evt = new smbd_open_release_evt_t(smbd_open);
+	smbd_open_release_evt_t *evt = new smbd_open_release_evt_t(__location__, smbd_open);
 	x_nxfsd_schedule(&evt->base);
 	return true;
 }
@@ -582,7 +584,7 @@ void x_smbd_wakeup_requ_list(const x_nxfsd_requ_id_list_t &requ_list)
 		X_NXFSD_REQU_LOG(DBG, nxfsd_requ, " count=%d", count);
 		X_ASSERT(count > 0);
 		if (count == 1) {
-			x_nxfsd_requ_post_resume(nxfsd_requ);
+			X_NXFSD_REQU_POST_RESUME(nxfsd_requ);
 		} else {
 			nxfsd_requ->decref();
 		}
@@ -980,11 +982,12 @@ struct send_oplock_break_evt_t
 		delete evt;
 	}
 
-	send_oplock_break_evt_t(x_smbd_sess_t *smbd_sess,
+	send_oplock_break_evt_t(const char *location,
+			x_smbd_sess_t *smbd_sess,
 			uint64_t open_persistent_id,
 			uint64_t open_volatile_id,
 			uint8_t oplock_level)
-		: base(func), smbd_sess(smbd_sess)
+		: base(func, location), smbd_sess(smbd_sess)
 		, open_persistent_id(open_persistent_id)
 		, open_volatile_id(open_volatile_id)
 		, oplock_level(oplock_level)
@@ -1048,6 +1051,7 @@ bool x_smbd_open_break_oplock(x_smbd_object_t *smbd_object,
 	if (smbd_open->smbd_tcon) {
 		x_smbd_sess_t *smbd_sess = x_smbd_tcon_get_sess(smbd_open->smbd_tcon);
 		X_SMBD_SESS_POST_USER(smbd_sess, new send_oplock_break_evt_t(
+					__location__,
 					smbd_sess, persistent_id, volatile_id,
 					oplock_level));
 		/* if posted fails, the connection is in shutdown,

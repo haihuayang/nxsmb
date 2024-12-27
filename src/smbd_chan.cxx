@@ -382,8 +382,9 @@ struct smbd_chan_auth_timeout_evt_t
 		delete evt;
 	}
 
-	explicit smbd_chan_auth_timeout_evt_t(x_smbd_chan_t *smbd_chan)
-		: base(func), smbd_chan(smbd_chan)
+	explicit smbd_chan_auth_timeout_evt_t(const char *location,
+			x_smbd_chan_t *smbd_chan)
+		: base(func, location), smbd_chan(smbd_chan)
 	{
 	}
 
@@ -403,7 +404,7 @@ static long smbd_chan_auth_input_timeout(x_timer_job_t *timer)
 	/* we already have a ref on smbd_chan when adding timer */
 	x_smbd_chan_t *smbd_chan = X_CONTAINER_OF(timer, x_smbd_chan_t, timer);
 	X_SMBD_CHAN_POST_USER(smbd_chan, 
-			new smbd_chan_auth_timeout_evt_t(smbd_chan));
+			new smbd_chan_auth_timeout_evt_t(__location__, smbd_chan));
 	return -1;
 }
 
@@ -472,12 +473,13 @@ struct smbd_chan_auth_upcall_evt_t
 		delete evt;
 	}
 
-	smbd_chan_auth_upcall_evt_t(x_smbd_chan_t *smbd_chan,
+	smbd_chan_auth_upcall_evt_t(const char *location,
+			x_smbd_chan_t *smbd_chan,
 			NTSTATUS status,
 			bool is_bind, uint8_t security_mode,
 			std::vector<uint8_t> &out_security,
 			std::shared_ptr<x_auth_info_t> &auth_info)
-		: base(func)
+		: base(func, location)
 		, smbd_chan(smbd_chan), status(status)
 		, is_bind(is_bind), security_mode(security_mode)
 		, out_security(std::move(out_security)), auth_info(auth_info)
@@ -508,6 +510,7 @@ static void smbd_chan_auth_upcall_func(x_auth_upcall_t *auth_upcall,
 	x_smbd_chan_t *smbd_chan = X_CONTAINER_OF(auth_upcall, x_smbd_chan_t, auth_upcall);
 	X_LOG(SMB, DBG, "smbd_chan=%p, status=0x%x", smbd_chan, NT_STATUS_V(status));
 	X_SMBD_CHAN_POST_USER(smbd_chan, new smbd_chan_auth_upcall_evt_t(
+				__location__,
 				smbd_chan, status, is_bind, security_mode,
 				out_security, auth_info));
 }
@@ -643,8 +646,8 @@ struct smbd_chan_logoff_evt_t
 		delete evt;
 	}
 
-	explicit smbd_chan_logoff_evt_t(x_smbd_chan_t *smbd_chan)
-		: base(func), smbd_chan(smbd_chan)
+	explicit smbd_chan_logoff_evt_t(const char *location, x_smbd_chan_t *smbd_chan)
+		: base(func, location), smbd_chan(smbd_chan)
 	{
 	}
 
@@ -661,7 +664,8 @@ struct smbd_chan_logoff_evt_t
 void x_smbd_chan_logoff(x_dlink_t *sess_link, x_smbd_sess_t *smbd_sess)
 {
 	x_smbd_chan_t *smbd_chan = X_CONTAINER_OF(sess_link, x_smbd_chan_t, sess_link);
-	X_SMBD_CHAN_POST_USER(smbd_chan, new smbd_chan_logoff_evt_t(smbd_chan));
+	X_SMBD_CHAN_POST_USER(smbd_chan,
+			new smbd_chan_logoff_evt_t(__location__, smbd_chan));
 }
 
 bool x_smbd_chan_post_user(x_smbd_chan_t *smbd_chan, x_fdevt_user_t *fdevt_user, bool always)

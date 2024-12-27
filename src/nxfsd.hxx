@@ -174,15 +174,26 @@ uint64_t x_nxfsd_requ_get_async_id(const x_nxfsd_requ_t *nxfsd_requ);
 	x_nxfsd_conn_post_user((nxfsd_requ)->nxfsd_conn, &__evt->base, true); \
 } while (0)
 
-void x_nxfsd_requ_post_done(x_nxfsd_requ_t *nxfsd_requ, NTSTATUS status);
+void x_nxfsd_requ_post_done(x_nxfsd_requ_t *nxfsd_requ, NTSTATUS status, const char *location);
+
+#define X_NXFSD_REQU_POST_DONE(nxfsd_requ, status) \
+	x_nxfsd_requ_post_done((nxfsd_requ), (status), __location__)
 
 using x_nxfsd_requ_id_list_t = std::vector<uint64_t>;
 
-void x_nxfsd_requ_post_cancel(x_nxfsd_requ_t *nxfsd_requ, int reason);
+void x_nxfsd_requ_post_cancel(x_nxfsd_requ_t *nxfsd_requ, int reason, const char *location);
+
+#define X_NXFSD_REQU_POST_CANCEL(nxfsd_requ, reason) \
+	x_nxfsd_requ_post_cancel((nxfsd_requ), (reason), __location__)
+
+void x_nxfsd_schedule_cancel(x_nxfsd_requ_t *nxfsd_requ, int reason, const char *location);
+
+#define X_NXFSD_SCHEDULE_CANCEL(nxfsd_requ, reason) \
+	x_nxfsd_schedule_cancel((nxfsd_requ), (reason), __location__)
 
 bool x_nxfsd_requ_schedule_interim(x_nxfsd_requ_t *nxfsd_requ);
 
-void x_nxfsd_requ_post_interim(x_nxfsd_requ_t *nxfsd_requ);
+void x_nxfsd_requ_post_interim(x_nxfsd_requ_t *nxfsd_requ, const char *location);
 
 
 x_nxfsd_requ_t *x_nxfsd_requ_lookup(uint64_t id);
@@ -190,7 +201,10 @@ x_nxfsd_requ_t *x_nxfsd_requ_lookup(uint64_t id);
 x_nxfsd_requ_t *x_nxfsd_requ_async_lookup(uint64_t id,
 		const x_nxfsd_conn_t *nxfsd_conn, bool remove);
 
-void x_nxfsd_requ_post_resume(x_nxfsd_requ_t *nxfsd_requ);
+void x_nxfsd_requ_post_resume(x_nxfsd_requ_t *nxfsd_requ, const char *location);
+
+#define X_NXFSD_REQU_POST_RESUME(nxfsd_requ) \
+	x_nxfsd_requ_post_resume((nxfsd_requ), __location__)
 
 int x_nxfsd_requ_pool_init(uint32_t count);
 

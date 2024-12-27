@@ -240,7 +240,7 @@ void x_smbd_lock_retry(x_smbd_sharemode_t *sharemode)
 							requ->in_lock_elements)) {
 					curr_open->pending_requ_list.remove(nxfsd_requ);
 					smbd_lock_insert(curr_open, requ->in_lock_elements);
-					x_nxfsd_requ_post_done(nxfsd_requ, NT_STATUS_OK);
+					X_NXFSD_REQU_POST_DONE(nxfsd_requ, NT_STATUS_OK);
 				}
 			}
 			nxfsd_requ = next_requ;

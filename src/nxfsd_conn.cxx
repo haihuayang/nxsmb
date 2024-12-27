@@ -69,7 +69,7 @@ static ssize_t nxfsd_conn_check_header(x_nxfsd_conn_t *nxfsd_conn)
 	}
 	ssize_t err = nxfsd_conn->cbs->cb_check_header(nxfsd_conn);
 	if (err < 0) {
-		X_LOG(SMB, ERR, "%p x%lx cb_check_header %ld",
+		X_LOG(EVENT, ERR, "%p x%lx cb_check_header %ld",
 				nxfsd_conn, nxfsd_conn->ep_id, err);
 		return err;
 	}
@@ -86,7 +86,7 @@ static bool x_nxfsd_conn_do_recv(x_nxfsd_conn_t *nxfsd_conn, x_fdevents_t &fdeve
 {
 	X_TRACE_LOC;
 	ssize_t err;
-	X_LOG(SMB, DBG, "conn %p x%lx x%lx", nxfsd_conn, nxfsd_conn->ep_id, fdevents);
+	X_LOG(EVENT, DBG, "conn %p x%lx x%lx", nxfsd_conn, nxfsd_conn->ep_id, fdevents);
 	if (nxfsd_conn->recv_buf == NULL) {
 		X_ASSERT(nxfsd_conn->recv_len < nxfsd_conn->header_size);
 		err = read(nxfsd_conn->fd,
@@ -101,7 +101,7 @@ static bool x_nxfsd_conn_do_recv(x_nxfsd_conn_t *nxfsd_conn, x_fdevents_t &fdeve
 				return false;
 			}
 		} else if (err == 0) {
-			X_LOG(SMB, CONN, "%p x%lx recv nbt_hdr EOF", nxfsd_conn, nxfsd_conn->ep_id);
+			X_LOG(EVENT, CONN, "%p x%lx recv nbt_hdr EOF", nxfsd_conn, nxfsd_conn->ep_id);
 			return true;
 		} else if (errno == EAGAIN) {
 			fdevents = x_fdevents_consume(fdevents, FDEVT_IN);
@@ -109,7 +109,7 @@ static bool x_nxfsd_conn_do_recv(x_nxfsd_conn_t *nxfsd_conn, x_fdevents_t &fdeve
 		} else if (errno == EINTR) {
 			return false;
 		} else {
-			X_LOG(SMB, ERR, "%p x%lx do_recv errno=%d",
+			X_LOG(EVENT, ERR, "%p x%lx do_recv errno=%d",
 					nxfsd_conn, nxfsd_conn->ep_id, errno);
 			return true;
 		}
@@ -130,7 +130,7 @@ static bool x_nxfsd_conn_do_recv(x_nxfsd_conn_t *nxfsd_conn, x_fdevents_t &fdeve
 			int ret = nxfsd_conn->cbs->cb_process_msg(nxfsd_conn, buf, nxfsd_conn->recv_msgsize);
 
 			if (ret) {
-				X_LOG(SMB, ERR, "%p x%lx cb_process_msg %d",
+				X_LOG(EVENT, ERR, "%p x%lx cb_process_msg %d",
 						nxfsd_conn, nxfsd_conn->ep_id, ret);
 				return true;
 			}
@@ -144,13 +144,13 @@ static bool x_nxfsd_conn_do_recv(x_nxfsd_conn_t *nxfsd_conn, x_fdevents_t &fdeve
 			}
 		}
 	} else if (err == 0) {
-		X_LOG(SMB, CONN, "%p x%lx recv nbt_body EOF", nxfsd_conn, nxfsd_conn->ep_id);
+		X_LOG(EVENT, CONN, "%p x%lx recv nbt_body EOF", nxfsd_conn, nxfsd_conn->ep_id);
 		return true;
 	} else if (errno == EAGAIN) {
 		fdevents = x_fdevents_consume(fdevents, FDEVT_IN);
 	} else if (errno == EINTR) {
 	} else {
-		X_LOG(SMB, ERR, "%p x%lx do_recv errno=%d",
+		X_LOG(EVENT, ERR, "%p x%lx do_recv errno=%d",
 				nxfsd_conn, nxfsd_conn->ep_id, errno);
 		return true;
 	}
@@ -159,7 +159,7 @@ static bool x_nxfsd_conn_do_recv(x_nxfsd_conn_t *nxfsd_conn, x_fdevents_t &fdeve
 
 static bool x_nxfsd_conn_do_send(x_nxfsd_conn_t *nxfsd_conn, x_fdevents_t &fdevents)
 {
-	X_LOG(SMB, DBG, "conn %p x%lx x%lx", nxfsd_conn, nxfsd_conn->ep_id, fdevents);
+	X_LOG(EVENT, DBG, "conn %p x%lx x%lx", nxfsd_conn, nxfsd_conn->ep_id, fdevents);
 	bool ret = nxfsd_conn->send_queue.send(nxfsd_conn->fd, fdevents);
 #if 0
 	if (!ret && nxfsd_conn->count_msg < x_nxfsd_conn_t::MAX_MSG) {
@@ -171,7 +171,7 @@ static bool x_nxfsd_conn_do_send(x_nxfsd_conn_t *nxfsd_conn, x_fdevents_t &fdeve
 
 static bool x_nxfsd_conn_do_user(x_nxfsd_conn_t *nxfsd_conn, x_fdevents_t &fdevents)
 {
-	X_LOG(SMB, DBG, "%p x%lx x%lx", nxfsd_conn, nxfsd_conn->ep_id, fdevents);
+	X_LOG(EVENT, DBG, "%p x%lx x%lx", nxfsd_conn, nxfsd_conn->ep_id, fdevents);
 	auto lock = std::unique_lock(nxfsd_conn->mutex);
 	for (;;) {
 		x_fdevt_user_t *fdevt_user = nxfsd_conn->fdevt_user_list.get_front();
@@ -181,6 +181,8 @@ static bool x_nxfsd_conn_do_user(x_nxfsd_conn_t *nxfsd_conn, x_fdevents_t &fdeve
 		nxfsd_conn->fdevt_user_list.remove(fdevt_user);
 		lock.unlock();
 
+		X_LOG(EVENT, DBG, "%p %p created at: %s", nxfsd_conn,
+				fdevt_user, fdevt_user->location);
 		fdevt_user->func(nxfsd_conn, fdevt_user);
 
 		lock.lock();
@@ -217,7 +219,7 @@ static bool x_nxfsd_conn_handle_events(x_nxfsd_conn_t *nxfsd_conn, x_fdevents_t 
 static bool x_nxfsd_conn_upcall_cb_getevents(x_epoll_upcall_t *upcall, x_fdevents_t &fdevents)
 {
 	x_nxfsd_conn_t *nxfsd_conn = x_nxfsd_conn_from_upcall(upcall);
-	X_LOG(SMB, DBG, "%p x%lx", nxfsd_conn, fdevents);
+	X_LOG(EVENT, DBG, "%p x%lx", nxfsd_conn, fdevents);
 
 	x_smbd_conf_pin_t smbd_conf_pin;
 	x_nxfsd_scheduler_t smbd_scheduler(nxfsd_conn);
@@ -229,7 +231,7 @@ static bool x_nxfsd_conn_upcall_cb_getevents(x_epoll_upcall_t *upcall, x_fdevent
 static void x_nxfsd_conn_upcall_cb_unmonitor(x_epoll_upcall_t *upcall)
 {
 	x_nxfsd_conn_t *nxfsd_conn = x_nxfsd_conn_from_upcall(upcall);
-	X_LOG(SMB, CONN, "%p", nxfsd_conn);
+	X_LOG(EVENT, CONN, "%p", nxfsd_conn);
 
 	X_ASSERT_SYSCALL(close(nxfsd_conn->fd));
 	nxfsd_conn->fd = -1;
@@ -357,13 +359,14 @@ struct nxfsd_cancel_evt_t
 	{
 		nxfsd_cancel_evt_t *evt = X_CONTAINER_OF(fdevt_user, nxfsd_cancel_evt_t, base);
 		x_nxfsd_requ_t *nxfsd_requ = evt->nxfsd_requ;
-		X_LOG(SMB, DBG, "evt=%p, requ=%p, conn=%p", evt, nxfsd_requ, ctx_conn);
+		X_LOG(EVENT, DBG, "evt=%p, requ=%p, conn=%p", evt, nxfsd_requ, ctx_conn);
 		nxfsd_requ->cancel(ctx_conn, evt->reason);
 		delete evt;
 	}
 
-	explicit nxfsd_cancel_evt_t(x_nxfsd_requ_t *nxfsd_requ, int reason)
-		: base(func), nxfsd_requ(nxfsd_requ), reason(reason)
+	explicit nxfsd_cancel_evt_t(const char *location,
+			x_nxfsd_requ_t *nxfsd_requ, int reason)
+		: base(func, location), nxfsd_requ(nxfsd_requ), reason(reason)
 	{
 		nxfsd_requ->incref();
 	}
@@ -377,11 +380,18 @@ struct nxfsd_cancel_evt_t
 };
 
 
-void x_nxfsd_requ_post_cancel(x_nxfsd_requ_t *nxfsd_requ, int reason)
+void x_nxfsd_requ_post_cancel(x_nxfsd_requ_t *nxfsd_requ, int reason, const char *location)
 {
-	nxfsd_cancel_evt_t *evt = new nxfsd_cancel_evt_t(nxfsd_requ, reason);
+	nxfsd_cancel_evt_t *evt = new nxfsd_cancel_evt_t(location, nxfsd_requ, reason);
 	x_nxfsd_conn_post_user(nxfsd_requ->nxfsd_conn, &evt->base, true);
 }
+
+void x_nxfsd_schedule_cancel(x_nxfsd_requ_t *nxfsd_requ, int reason, const char *location)
+{
+	nxfsd_cancel_evt_t *evt = new nxfsd_cancel_evt_t(location, nxfsd_requ, reason);
+	x_nxfsd_schedule(&evt->base);
+}
+
 
 /* must be in context of nxfsd_conn */
 bool x_nxfsd_requ_schedule_interim(x_nxfsd_requ_t *nxfsd_requ)
@@ -408,7 +418,7 @@ struct send_interim_evt_t
 		send_interim_evt_t *evt = X_CONTAINER_OF(fdevt_user,
 				send_interim_evt_t, base);
 		x_nxfsd_requ_t *nxfsd_requ = evt->nxfsd_requ;
-		X_LOG(SMB, DBG, "evt=%p, requ=%p, ctx_conn=%p", evt, nxfsd_requ, ctx_conn);
+		X_LOG(EVENT, DBG, "evt=%p, requ=%p, ctx_conn=%p", evt, nxfsd_requ, ctx_conn);
 		if (nxfsd_requ->interim_state != x_nxfsd_requ_t::INTERIM_S_SCHEDULED) {
 			X_ASSERT(nxfsd_requ->interim_state != x_nxfsd_requ_t::INTERIM_S_SENT);
 		} else if (ctx_conn) {
@@ -418,8 +428,8 @@ struct send_interim_evt_t
 		delete evt;
 	}
 
-	explicit send_interim_evt_t(x_nxfsd_requ_t *nxfsd_requ)
-		: base(func), nxfsd_requ(nxfsd_requ)
+	explicit send_interim_evt_t(const char *location, x_nxfsd_requ_t *nxfsd_requ)
+		: base(func, location), nxfsd_requ(nxfsd_requ)
 	{
 	}
 
@@ -432,9 +442,9 @@ struct send_interim_evt_t
 	x_nxfsd_requ_t * const nxfsd_requ;
 };
 
-void x_nxfsd_requ_post_interim(x_nxfsd_requ_t *nxfsd_requ)
+void x_nxfsd_requ_post_interim(x_nxfsd_requ_t *nxfsd_requ, const char *location)
 {
-	send_interim_evt_t *evt = new send_interim_evt_t(nxfsd_requ);
+	send_interim_evt_t *evt = new send_interim_evt_t(location, nxfsd_requ);
 	if (!x_nxfsd_conn_post_user(nxfsd_requ->nxfsd_conn, &evt->base, false)) {
 		delete evt;
 	}
@@ -454,6 +464,8 @@ static bool nxfsd_context_upcall_cb_getevents(x_epoll_upcall_t *upcall, x_fdeven
 		x_fdevt_user_t *fdevt_user;
 		while ((fdevt_user = fdevt_user_list.get_front())) {
 			fdevt_user_list.remove(fdevt_user);
+			X_LOG(EVENT, DBG, "dangling %p created at: %s",
+					fdevt_user, fdevt_user->location);
 			fdevt_user->func(nullptr, fdevt_user);
 		}
 		fdevents = x_fdevents_consume(fdevents, FDEVT_USER);

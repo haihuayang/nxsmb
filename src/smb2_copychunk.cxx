@@ -105,7 +105,7 @@ struct copychunk_job_t
 		out->chunk_bytes_written = 0;
 		out->total_bytes_writen = X_H2LE32(total_count);
 		requ->state.out_buf_length = x_convert_assert<uint32_t>(sizeof(x_smb2_fsctl_srv_copychunk_out_t));
-		x_nxfsd_requ_post_done(nxfsd_requ, status);
+		X_NXFSD_REQU_POST_DONE(nxfsd_requ, status);
 
 		delete copychunk_job;
 		return x_job_t::JOB_DONE;

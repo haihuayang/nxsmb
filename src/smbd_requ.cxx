@@ -65,8 +65,8 @@ struct smbd_lease_release_evt_t
 		delete evt;
 	}
 
-	explicit smbd_lease_release_evt_t(x_smbd_lease_t *smbd_lease)
-		: base(func), smbd_lease(smbd_lease)
+	explicit smbd_lease_release_evt_t(const char *location, x_smbd_lease_t *smbd_lease)
+		: base(func, location), smbd_lease(smbd_lease)
 	{
 	}
 
@@ -76,7 +76,7 @@ struct smbd_lease_release_evt_t
 
 void x_smbd_schedule_release_lease(x_smbd_lease_t *smbd_lease)
 {
-	smbd_lease_release_evt_t *evt = new smbd_lease_release_evt_t(smbd_lease);
+	smbd_lease_release_evt_t *evt = new smbd_lease_release_evt_t(__location__, smbd_lease);
 	x_nxfsd_schedule(&evt->base);
 }
 
@@ -85,7 +85,7 @@ void x_smbd_schedule_wakeup_pending_requ_list(const x_tp_ddlist_t<requ_async_tra
 	x_nxfsd_requ_t *nxfsd_requ;
 	for (nxfsd_requ = pending_requ_list.get_front(); nxfsd_requ;
 			nxfsd_requ = pending_requ_list.next(nxfsd_requ)) {
-		x_nxfsd_requ_post_cancel(nxfsd_requ, x_nxfsd_requ_t::CANCEL_BY_CLOSE);
+		X_NXFSD_REQU_POST_CANCEL(nxfsd_requ, x_nxfsd_requ_t::CANCEL_BY_CLOSE);
 	}
 }
 
@@ -105,13 +105,14 @@ struct smbd_notify_evt_t
 		delete evt;
 	}
 
-	explicit smbd_notify_evt_t(x_smbd_object_t *parent_object,
+	explicit smbd_notify_evt_t(const char *location,
+			x_smbd_object_t *parent_object,
 			uint32_t action, uint32_t filter,
 			const x_smb2_lease_key_t &ignore_lease_key,
 			const x_smb2_uuid_t &client_guid,
 			const std::u16string &path_base,
 			const std::u16string &new_path_base)
-		: base(func), smbd_object(parent_object)
+		: base(func, location), smbd_object(parent_object)
 		, action(action), filter(filter)
 		, ignore_lease_key(ignore_lease_key)
 		, client_guid(client_guid)
@@ -136,14 +137,15 @@ struct smbd_notify_evt_t
 	std::u16string new_path_base;
 };
 
-static void x_smbd_schedule_notify_evt(x_smbd_object_t *parent_object,
+static void x_smbd_schedule_notify_evt(const char *location,
+		x_smbd_object_t *parent_object,
 		uint32_t action, uint32_t filter,
 		const x_smb2_lease_key_t &ignore_lease_key,
 		const x_smb2_uuid_t &client_guid,
 		const std::u16string &path_base,
 		const std::u16string &new_path_base)
 {
-	smbd_notify_evt_t *evt = new smbd_notify_evt_t(parent_object,
+	smbd_notify_evt_t *evt = new smbd_notify_evt_t(location, parent_object,
 			action, filter, ignore_lease_key, client_guid,
 			path_base, new_path_base);
 	x_nxfsd_schedule(&evt->base);
@@ -167,20 +169,23 @@ void x_smbd_schedule_notify(
 		X_ASSERT(notify_action == NOTIFY_ACTION_OLD_NAME);
 
 		if (new_parent_object == parent_object) {
-			x_smbd_schedule_notify_evt(parent_object,
+			x_smbd_schedule_notify_evt(__location__,
+					parent_object,
 					notify_action,
 					notify_filter,
 					ignore_lease_key,
 					client_guid,
 					path_base, new_path_base);
 		} else {
-			x_smbd_schedule_notify_evt(parent_object,
+			x_smbd_schedule_notify_evt(__location__,
+					parent_object,
 					NOTIFY_ACTION_REMOVED,
 					notify_filter,
 					ignore_lease_key,
 					client_guid,
 					path_base, u"");
-			x_smbd_schedule_notify_evt(new_parent_object,
+			x_smbd_schedule_notify_evt(__location__,
+					new_parent_object,
 					NOTIFY_ACTION_ADDED,
 					notify_filter,
 					{},
@@ -190,7 +195,8 @@ void x_smbd_schedule_notify(
 	} else {
 		X_ASSERT(new_path_base.empty());
 		X_ASSERT(notify_action != NOTIFY_ACTION_OLD_NAME);
-		x_smbd_schedule_notify_evt(parent_object,
+		x_smbd_schedule_notify_evt(__location__,
+				parent_object,
 				notify_action,
 				notify_filter,
 				ignore_lease_key,

@@ -521,46 +521,6 @@ static int x_smbd_reply_interim(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_re
 #define X_SMBD_REPLY_INTERIM(smbd_conn, smbd_requ) \
 	x_smbd_reply_interim((smbd_conn), (smbd_requ), __FILE__, __LINE__)
 
-struct smbd_requ_cancel_evt_t
-{
-	static void func(void *ctx_conn, x_fdevt_user_t *fdevt_user)
-	{
-		smbd_requ_cancel_evt_t *evt = X_CONTAINER_OF(fdevt_user,
-				smbd_requ_cancel_evt_t, base);
-
-		auto smbd_requ = evt->smbd_requ;
-		smbd_requ->cancel(ctx_conn, x_nxfsd_requ_t::CANCEL_BY_CLIENT);
-#if 0
-	if (!smbd_requ->set_cancelled()) {
-		X_SMBD_REQU_LOG(DBG, smbd_requ, " cannot cancell async_id=x%lx, mid=%lu",
-				smb2_hdr.async_id, smb2_hdr.mid);
-		X_NXFSD_COUNTER_INC(smbd_cancel_toolate, 1);
-		return;
-	}
-
-	X_SMBD_REQU_LOG(DBG, smbd_requ, " cancelled async_id=x%lx, mid=%lu",
-			smb2_hdr.async_id, smb2_hdr.mid);
-	X_NXFSD_COUNTER_INC(smbd_cancel_success, 1);
-	smbd_conn->base.pending_requ_list.remove(smbd_requ);
-	smbd_requ->cancel(smbd_conn);
-#endif
-		delete evt;
-	}
-
-	explicit smbd_requ_cancel_evt_t(x_smbd_requ_t *smbd_requ)
-		: base(func), smbd_requ(smbd_requ)
-	{
-	}
-
-	~smbd_requ_cancel_evt_t()
-	{
-		smbd_requ->decref();
-	}
-
-	x_fdevt_user_t base;
-	x_smbd_requ_t * const smbd_requ;
-};
-
 
 static void x_smbd_conn_cancel(x_smbd_conn_t *smbd_conn,
 		const x_smb2_header_t &smb2_hdr)
@@ -593,8 +553,7 @@ static void x_smbd_conn_cancel(x_smbd_conn_t *smbd_conn,
 		return;
 	}
 
-	auto evt = new smbd_requ_cancel_evt_t(smbd_requ);
-	x_nxfsd_schedule(&evt->base);
+	X_NXFSD_SCHEDULE_CANCEL(smbd_requ, x_nxfsd_requ_t::CANCEL_BY_CLIENT);
 }
 
 void x_smbd_conn_send_unsolicited(x_smbd_conn_t *smbd_conn, x_smbd_sess_t *smbd_sess,

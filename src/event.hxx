@@ -12,16 +12,19 @@
 struct x_fdevt_user_t
 {
 	typedef void func_t(void *arg, x_fdevt_user_t *);
-	x_fdevt_user_t(func_t f) : func(f) {
+	x_fdevt_user_t(func_t f, const char *l) : func(f), location(l)
+	{
 		X_NXFSD_COUNTER_INC_CREATE(user_evt, 1);
 	}
-	~x_fdevt_user_t() {
+	~x_fdevt_user_t()
+	{
 		X_NXFSD_COUNTER_INC_DELETE(user_evt, 1);
 	}
 	x_fdevt_user_t(const x_fdevt_user_t &) = delete;
 	x_fdevt_user_t &operator=(const x_fdevt_user_t &) = delete;
 	x_dlink_t link;
 	func_t *const func;
+	const char * const location;
 };
 X_DECLARE_MEMBER_TRAITS(fdevt_user_conn_traits, x_fdevt_user_t, link)
 

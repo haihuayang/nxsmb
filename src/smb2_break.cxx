@@ -204,13 +204,14 @@ struct send_lease_break_evt_t
 		delete evt;
 	}
 
-	send_lease_break_evt_t(x_smbd_sess_t *smbd_sess,
+	send_lease_break_evt_t(const char *location,
+			x_smbd_sess_t *smbd_sess,
 			const x_smb2_lease_key_t &lease_key,
 			uint8_t curr_state,
 			uint8_t new_state,
 			uint16_t new_epoch,
 			uint32_t flags)
-		: base(func), smbd_sess(smbd_sess)
+		: base(func, location), smbd_sess(smbd_sess)
 		, lease_key(lease_key)
 		, curr_state(curr_state)
 		, new_state(new_state)
@@ -243,6 +244,7 @@ NTSTATUS x_smbd_requ_lease_break_t::done_smb2(x_smbd_conn_t *smbd_conn, NTSTATUS
 		encode_lease_break_resp(state, out_hdr);
 		if (state.more_break) {
 			send_lease_break_evt_t *evt = new send_lease_break_evt_t(
+					__location__,
 					x_ref_inc(this->smbd_sess), state.in_key,
 					x_convert<uint8_t>(state.more_break_from),
 					x_convert<uint8_t>(state.more_break_to),
@@ -276,6 +278,7 @@ void x_smbd_post_lease_break(x_smbd_sess_t *smbd_sess,
 		uint16_t new_epoch, uint32_t flags)
 {
 	X_SMBD_SESS_POST_USER(smbd_sess, new send_lease_break_evt_t(
+				__location__,
 				smbd_sess, lease_key, curr_state, new_state,
 				new_epoch, flags));
 }

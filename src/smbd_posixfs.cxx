@@ -1038,7 +1038,7 @@ struct posixfs_read_job_t
 		NTSTATUS status = NT_STATUS_CANCELLED;
 		if (nxfsd_requ->set_processing()) {
 			status = posixfs_do_read(posixfs_object, nxfsd_requ, *state);
-			x_nxfsd_requ_post_done(nxfsd_requ, status);
+			X_NXFSD_REQU_POST_DONE(nxfsd_requ, status);
 		}
 		x_smbd_release_object(&posixfs_object->base);
 		delete posixfs_read_job;
@@ -1238,7 +1238,7 @@ struct posixfs_write_job_t
 			auto posixfs_open = posixfs_open_from_base_t::container(nxfsd_requ->smbd_open);
 			status = posixfs_do_write(posixfs_object, posixfs_open,
 					*state);
-			x_nxfsd_requ_post_done(nxfsd_requ, status);
+			X_NXFSD_REQU_POST_DONE(nxfsd_requ, status);
 		}
 		x_smbd_release_object(&posixfs_object->base);
 		delete posixfs_write_job;

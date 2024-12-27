@@ -28,7 +28,7 @@ static long interim_timeout_func(x_timer_job_t *timer)
 	/* we already have a ref on smbd_chan when adding timer */
 	x_nxfsd_requ_t *nxfsd_requ = X_CONTAINER_OF(timer,
 			x_nxfsd_requ_t, interim_timer);
-	x_nxfsd_requ_post_interim(nxfsd_requ);
+	x_nxfsd_requ_post_interim(nxfsd_requ, __location__);
 	return -1;
 }
 
@@ -166,8 +166,8 @@ struct requ_resume_evt_t
 		delete evt;
 	}
 
-	explicit requ_resume_evt_t(x_nxfsd_requ_t *nxfsd_requ)
-		: base(func), nxfsd_requ(nxfsd_requ)
+	explicit requ_resume_evt_t(const char *location, x_nxfsd_requ_t *nxfsd_requ)
+		: base(func, location), nxfsd_requ(nxfsd_requ)
 	{
 	}
 
@@ -180,9 +180,9 @@ struct requ_resume_evt_t
 	x_nxfsd_requ_t * const nxfsd_requ;
 };
 
-void x_nxfsd_requ_post_resume(x_nxfsd_requ_t *nxfsd_requ)
+void x_nxfsd_requ_post_resume(x_nxfsd_requ_t *nxfsd_requ, const char *location)
 {
-	X_NXFSD_REQU_POST_USER(nxfsd_requ, new requ_resume_evt_t(nxfsd_requ));
+	X_NXFSD_REQU_POST_USER(nxfsd_requ, new requ_resume_evt_t(location, nxfsd_requ));
 }
 
 struct requ_done_evt_t
@@ -199,8 +199,9 @@ struct requ_done_evt_t
 		delete evt;
 	}
 
-	explicit requ_done_evt_t(x_nxfsd_requ_t *nxfsd_requ, NTSTATUS status)
-		: base(func), nxfsd_requ(nxfsd_requ), status(status)
+	explicit requ_done_evt_t(const char *location,
+			x_nxfsd_requ_t *nxfsd_requ, NTSTATUS status)
+		: base(func, location), nxfsd_requ(nxfsd_requ), status(status)
 	{
 	}
 
@@ -216,9 +217,9 @@ struct requ_done_evt_t
 	NTSTATUS const status;
 };
 
-void x_nxfsd_requ_post_done(x_nxfsd_requ_t *nxfsd_requ, NTSTATUS status)
+void x_nxfsd_requ_post_done(x_nxfsd_requ_t *nxfsd_requ, NTSTATUS status, const char *location)
 {
-	X_NXFSD_REQU_POST_USER(nxfsd_requ, new requ_done_evt_t(nxfsd_requ, status));
+	X_NXFSD_REQU_POST_USER(nxfsd_requ, new requ_done_evt_t(location, nxfsd_requ, status));
 }
 
 struct x_nxfsd_requ_list_t : x_ctrl_handler_t
