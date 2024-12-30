@@ -8,10 +8,8 @@ namespace {
 
 struct x_smbd_requ_read_t : x_smbd_requ_t
 {
-	x_smbd_requ_read_t(x_smbd_conn_t *smbd_conn, x_in_buf_t &in_buf,
-			uint32_t in_msgsize,
-			bool encrypted)
-		: x_smbd_requ_t(smbd_conn, in_buf, in_msgsize, encrypted)
+	x_smbd_requ_read_t(x_smbd_conn_t *smbd_conn)
+		: x_smbd_requ_t(smbd_conn)
 	{
 		interim_timeout_ns = X_NSEC_PER_SEC;
 	}
@@ -113,8 +111,7 @@ NTSTATUS x_smbd_requ_read_t::done_smb2(x_smbd_conn_t *smbd_conn, NTSTATUS status
 }
 
 NTSTATUS x_smb2_parse_READ(x_smbd_conn_t *smbd_conn, x_smbd_requ_t **p_smbd_requ,
-		x_in_buf_t &in_buf, uint32_t in_msgsize,
-		bool encrypted)
+		x_in_buf_t &in_buf)
 {
 	auto in_smb2_hdr = (const x_smb2_header_t *)(in_buf.get_data());
 
@@ -140,7 +137,7 @@ NTSTATUS x_smb2_parse_READ(x_smbd_conn_t *smbd_conn, x_smbd_requ_t **p_smbd_requ
 
 	const x_smbd_conf_t &smbd_conf = x_smbd_conf_get_curr();
 
-	auto requ = new x_smbd_requ_read_t(smbd_conn, in_buf, in_msgsize, encrypted);
+	auto requ = new x_smbd_requ_read_t(smbd_conn);
 	auto &state = requ->state;
 	state.in_flags = in_flags;
 	state.in_length = in_length;

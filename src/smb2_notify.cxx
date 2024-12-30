@@ -17,9 +17,8 @@ struct x_smbd_requ_state_notify_t
 
 struct x_smbd_requ_notify_t : x_smbd_requ_t
 {
-	x_smbd_requ_notify_t(x_smbd_conn_t *smbd_conn, x_in_buf_t &in_buf,
-			uint32_t in_msgsize, bool encrypted)
-		: x_smbd_requ_t(smbd_conn, in_buf, in_msgsize, encrypted)
+	x_smbd_requ_notify_t(x_smbd_conn_t *smbd_conn)
+		: x_smbd_requ_t(smbd_conn)
 	{
 		interim_timeout_ns = 0;
 	}
@@ -157,8 +156,7 @@ NTSTATUS x_smbd_requ_notify_t::done_smb2(x_smbd_conn_t *smbd_conn, NTSTATUS stat
 }
 
 NTSTATUS x_smb2_parse_NOTIFY(x_smbd_conn_t *smbd_conn, x_smbd_requ_t **p_smbd_requ,
-		x_in_buf_t &in_buf, uint32_t in_msgsize,
-		bool encrypted)
+		x_in_buf_t &in_buf)
 {
 	auto in_smb2_hdr = (const x_smb2_header_t *)(in_buf.get_data());
 
@@ -173,8 +171,7 @@ NTSTATUS x_smb2_parse_NOTIFY(x_smbd_conn_t *smbd_conn, x_smbd_requ_t **p_smbd_re
 		X_SMBD_SMB2_RETURN_STATUS(in_smb2_hdr, NT_STATUS_INVALID_PARAMETER);
 	}
 
-	auto requ = new x_smbd_requ_notify_t(smbd_conn, in_buf,
-			in_msgsize, encrypted);
+	auto requ = new x_smbd_requ_notify_t(smbd_conn);
 	auto &state = requ->state;
 	state.in_flags = X_LE2H16(in_body->flags);
 	state.in_file_id_persistent = X_LE2H64(in_body->file_id_persistent);

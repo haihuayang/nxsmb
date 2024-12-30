@@ -6,13 +6,11 @@ namespace {
 struct x_smbd_requ_lock_t: x_smbd_requ_t
 {
 	x_smbd_requ_lock_t(x_smbd_conn_t *smbd_conn, 
-			x_in_buf_t &in_buf, uint32_t in_msgsize,
-			bool encrypted,
 			uint32_t in_lock_sequence_index,
 			uint64_t in_file_id_persistent,
 			uint64_t in_file_id_volatile,
 			std::vector<x_smb2_lock_element_t> &in_lock_elements)
-		: x_smbd_requ_t(smbd_conn, in_buf, in_msgsize, encrypted)
+		: x_smbd_requ_t(smbd_conn)
 		, in_lock_sequence_index(in_lock_sequence_index)
 		, in_file_id_persistent(in_file_id_persistent)
 		, in_file_id_volatile(in_file_id_volatile)
@@ -419,8 +417,7 @@ NTSTATUS x_smbd_requ_lock_t::done_smb2(x_smbd_conn_t *smbd_conn, NTSTATUS status
 }
 
 NTSTATUS x_smb2_parse_LOCK(x_smbd_conn_t *smbd_conn, x_smbd_requ_t **p_smbd_requ,
-		x_in_buf_t &in_buf, uint32_t in_msgsize,
-		bool encrypted)
+		x_in_buf_t &in_buf)
 {
 	auto in_smb2_hdr = (const x_smb2_header_t *)(in_buf.get_data());
 
@@ -455,8 +452,7 @@ NTSTATUS x_smb2_parse_LOCK(x_smbd_conn_t *smbd_conn, x_smbd_requ_t **p_smbd_requ
 		in_lock_elements.push_back(elem);
 		++in_elem;
 	}
-	*p_smbd_requ = new x_smbd_requ_lock_t(smbd_conn, in_buf,
-			in_msgsize, encrypted,
+	*p_smbd_requ = new x_smbd_requ_lock_t(smbd_conn,
 			in_lock_sequence_index, in_file_id_persistent,
 			in_file_id_volatile, in_lock_elements);
 	return NT_STATUS_OK;

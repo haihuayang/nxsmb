@@ -172,9 +172,7 @@ struct x_smbd_requ_state_qdir_t
 
 struct x_smbd_requ_t : x_nxfsd_requ_t
 {
-	explicit x_smbd_requ_t(x_smbd_conn_t *smbd_conn,
-			x_in_buf_t &in_buf, uint32_t in_msgsize,
-			bool encrypted);
+	explicit x_smbd_requ_t(x_smbd_conn_t *smbd_conn);
 	~x_smbd_requ_t();
 
 	void async_done(void *ctx_conn, NTSTATUS status) override;

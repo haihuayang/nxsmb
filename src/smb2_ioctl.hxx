@@ -12,8 +12,6 @@
 struct x_smbd_requ_ioctl_t : x_smbd_requ_t
 {
 	x_smbd_requ_ioctl_t(x_smbd_conn_t *smbd_conn,
-			x_in_buf_t &in_buf, uint32_t in_msgsize,
-			bool encrypted,
 			x_smbd_requ_state_ioctl_t &state);
 	std::tuple<bool, bool, bool> get_properties() const override
 	{
@@ -25,8 +23,8 @@ struct x_smbd_requ_ioctl_t : x_smbd_requ_t
 
 NTSTATUS x_smbd_parse_ioctl_copychunk(x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t **p_smbd_requ,
-		x_in_buf_t &in_buf, uint32_t in_msgsize,
-		bool encrypted, x_smbd_requ_state_ioctl_t &state);
+		x_in_buf_t &in_buf,
+		x_smbd_requ_state_ioctl_t &state);
 
 #endif /* __smb2_ioctl__hxx__ */
 

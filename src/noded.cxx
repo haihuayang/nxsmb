@@ -260,10 +260,13 @@ static int noded_conn_process_msg(x_noded_conn_t *noded_conn, x_noded_requ_conte
 
 		in_buf.length = in_requ_len;
 		x_noded_requ_t *noded_requ = nullptr;
-		NTSTATUS status = proto->ops[opcode].parse_func(noded_conn, &noded_requ, in_buf, in_requ_len);
+		NTSTATUS status = proto->ops[opcode].parse_func(noded_conn, &noded_requ, in_buf);
 		if (!status.ok()) {
 			X_TODO;
 		}
+
+		noded_requ->requ_in_buf = std::move(requ_ctx.in_buf);
+		noded_requ->in_msgsize = requ_ctx.in_msgsize;
 
 		noded_requ->in_node_requ.mid = X_LE2H64(in_node_requ->mid);
 		noded_requ->in_node_requ.opcode = in_node_requ->opcode;

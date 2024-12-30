@@ -8,10 +8,9 @@ namespace {
 
 struct x_smbd_requ_write_t : x_smbd_requ_t
 {
-	x_smbd_requ_write_t(x_smbd_conn_t *smbd_conn, x_in_buf_t &in_buf,
-			uint32_t in_msgsize, bool encrypted,
+	x_smbd_requ_write_t(x_smbd_conn_t *smbd_conn,
 			x_smbd_requ_state_write_t &state)
-		: x_smbd_requ_t(smbd_conn, in_buf, in_msgsize, encrypted)
+		: x_smbd_requ_t(smbd_conn)
 		, state(std::move(state))
 	{
 		interim_timeout_ns = X_NSEC_PER_SEC;
@@ -129,8 +128,7 @@ NTSTATUS x_smbd_requ_write_t::done_smb2(x_smbd_conn_t *smbd_conn, NTSTATUS statu
 }
 
 NTSTATUS x_smb2_parse_WRITE(x_smbd_conn_t *smbd_conn, x_smbd_requ_t **p_smbd_requ,
-		x_in_buf_t &in_buf, uint32_t in_msgsize,
-		bool encrypted)
+		x_in_buf_t &in_buf)
 {
 	auto in_smb2_hdr = (const x_smb2_header_t *)(in_buf.get_data());
 
@@ -154,8 +152,7 @@ NTSTATUS x_smb2_parse_WRITE(x_smbd_conn_t *smbd_conn, x_smbd_requ_t **p_smbd_req
 	const x_smbd_conf_t &smbd_conf = x_smbd_conf_get_curr();
 	state.dev_delay_ms = smbd_conf.my_dev_delay_write_ms;
 
-	*p_smbd_requ = new x_smbd_requ_write_t(smbd_conn, in_buf,
-			in_msgsize, encrypted, state);
+	*p_smbd_requ = new x_smbd_requ_write_t(smbd_conn, state);
 	return NT_STATUS_OK;
 }
 

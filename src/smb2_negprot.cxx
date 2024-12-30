@@ -404,13 +404,12 @@ static void generate_context(uint16_t &out_context_count,
 
 struct x_smbd_requ_negprot_t : x_smbd_requ_t
 {
-	x_smbd_requ_negprot_t(x_smbd_conn_t *smbd_conn, x_in_buf_t &in_buf,
-			uint32_t in_msgsize, bool encrypted,
+	x_smbd_requ_negprot_t(x_smbd_conn_t *smbd_conn,
 			x_smb2_uuid_t server_guid,
 			const x_smbd_negprot_t &negprot,
 			uint16_t out_context_count,
 			std::vector<uint8_t> &out_context)
-		: x_smbd_requ_t(smbd_conn, in_buf, in_msgsize, encrypted)
+		: x_smbd_requ_t(smbd_conn)
 		, server_guid(server_guid), negprot(negprot)
 		, out_context_count(out_context_count)
 		, out_context(std::move(out_context))
@@ -446,8 +445,7 @@ struct x_smbd_requ_negprot_t : x_smbd_requ_t
 };
 
 NTSTATUS x_smb2_parse_NEGPROT(x_smbd_conn_t *smbd_conn, x_smbd_requ_t **p_smbd_requ,
-		x_in_buf_t &in_buf, uint32_t in_msgsize,
-		bool encrypted)
+		x_in_buf_t &in_buf)
 {
 	auto in_smb2_hdr = (const x_smb2_header_t *)(in_buf.get_data());
 
@@ -601,7 +599,6 @@ NTSTATUS x_smb2_parse_NEGPROT(x_smbd_conn_t *smbd_conn, x_smbd_requ_t **p_smbd_r
 	negprot.max_write_size = smbd_conf.max_write_size;
 
 	x_smbd_requ_negprot_t *smbd_requ = new x_smbd_requ_negprot_t(smbd_conn,
-			in_buf, in_msgsize, encrypted,
 			smbd_conf.guid,
 			negprot, out_context_count, out_context);
 	*p_smbd_requ = smbd_requ;

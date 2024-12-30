@@ -11,9 +11,8 @@ std::ostream &x_noded_requ_t::tostr(std::ostream &os) const
 	return os << buf;
 }
 
-x_noded_requ_t::x_noded_requ_t(x_noded_conn_t *noded_conn,
-		x_in_buf_t &in_buf, uint32_t in_msgsize)
-	: x_nxfsd_requ_t((x_nxfsd_conn_t *)noded_conn, in_buf, in_msgsize)
+x_noded_requ_t::x_noded_requ_t(x_noded_conn_t *noded_conn)
+	: x_nxfsd_requ_t((x_nxfsd_conn_t *)noded_conn)
 {
 	X_NXFSD_COUNTER_INC_CREATE(noded_requ, 1);
 }

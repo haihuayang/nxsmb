@@ -10,11 +10,9 @@ enum {
 
 struct x_smbd_requ_sesssetup_t : x_smbd_requ_t
 {
-	x_smbd_requ_sesssetup_t(x_smbd_conn_t *smbd_conn, x_in_buf_t &in_buf,
-			uint32_t in_msgsize, bool encrypted,
+	x_smbd_requ_sesssetup_t(x_smbd_conn_t *smbd_conn,
 			x_smbd_requ_state_sesssetup_t &state)
-		: x_smbd_requ_t(smbd_conn, in_buf,
-				in_msgsize, encrypted)
+		: x_smbd_requ_t(smbd_conn)
 		, state(std::move(state))
 	{
 	}
@@ -216,8 +214,7 @@ NTSTATUS x_smbd_requ_sesssetup_t::done_smb2(x_smbd_conn_t *smbd_conn, NTSTATUS s
 }
 
 NTSTATUS x_smb2_parse_SESSSETUP(x_smbd_conn_t *smbd_conn, x_smbd_requ_t **p_smbd_requ,
-		x_in_buf_t &in_buf, uint32_t in_msgsize,
-		bool encrypted)
+		x_in_buf_t &in_buf)
 {
 	auto in_smb2_hdr = (const x_smb2_header_t *)(in_buf.get_data());
 
@@ -241,8 +238,7 @@ NTSTATUS x_smb2_parse_SESSSETUP(x_smbd_conn_t *smbd_conn, x_smbd_requ_t **p_smbd
 	state.in_security_mode = in_body->security_mode;
 	state.in_previous_session = X_LE2H64(in_body->previous_session);
 
-	auto smbd_requ = new x_smbd_requ_sesssetup_t(smbd_conn, in_buf,
-			in_msgsize, encrypted,
+	auto smbd_requ = new x_smbd_requ_sesssetup_t(smbd_conn,
 			state);
 	*p_smbd_requ = smbd_requ;
 	return NT_STATUS_OK;

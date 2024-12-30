@@ -584,8 +584,7 @@ void x_smbd_conn_send_unsolicited(x_smbd_conn_t *smbd_conn, x_smbd_sess_t *smbd_
 
 static const struct {
 	NTSTATUS (* const parse_func)(x_smbd_conn_t *smbd_conn, x_smbd_requ_t **p_smbd_requ,
-			x_in_buf_t &in_buf, uint32_t in_msgsize,
-			bool encrypted);
+			x_in_buf_t &in_buf);
 } x_smb2_op_table[] = {
 	{ x_smb2_parse_NEGPROT, },
 	{ x_smb2_parse_SESSSETUP, },
@@ -991,9 +990,9 @@ static void smbd_requ_done(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_requ,
 
 struct x_smbd_requ_invalid_t : x_smbd_requ_t
 {
-	x_smbd_requ_invalid_t(x_smbd_conn_t *smbd_conn, x_in_buf_t &in_buf,
-			uint32_t in_msgsize, bool encrypted, NTSTATUS status)
-		: x_smbd_requ_t(smbd_conn, in_buf, in_msgsize, encrypted)
+	explicit x_smbd_requ_invalid_t(x_smbd_conn_t *smbd_conn,
+			NTSTATUS status)
+		: x_smbd_requ_t(smbd_conn)
 		, status(status)
 	{
 	}
@@ -1022,11 +1021,9 @@ struct x_smbd_requ_invalid_t : x_smbd_requ_t
 };
 
 static x_smbd_requ_t *x_smbd_requ_create_invalid(x_smbd_conn_t *smbd_conn,
-		x_in_buf_t &in_buf, uint32_t in_msgsize, bool encrypted,
-		NTSTATUS status)
+		x_in_buf_t &in_buf, NTSTATUS status)
 {
-	auto smbd_requ = new x_smbd_requ_invalid_t(smbd_conn, in_buf,
-			in_msgsize, encrypted, status);
+	auto smbd_requ = new x_smbd_requ_invalid_t(smbd_conn, status);
 	return smbd_requ;
 }
 
@@ -1065,14 +1062,16 @@ static int x_smbd_conn_process_smb2(x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t *smbd_requ = nullptr;
 		requ_ctx.in_buf.length = in_requ_len;
 		NTSTATUS status = op.parse_func(smbd_conn, &smbd_requ,
-				requ_ctx.in_buf,
-				requ_ctx.in_msgsize, requ_ctx.encrypted);
+				requ_ctx.in_buf);
 		if (!status.ok()) {
 			smbd_requ = x_smbd_requ_create_invalid(
 					smbd_conn, requ_ctx.in_buf,
-					requ_ctx.in_msgsize, requ_ctx.encrypted,
 					status);
 		}
+
+		smbd_requ->requ_in_buf = std::move(requ_ctx.in_buf);
+		smbd_requ->in_msgsize = requ_ctx.in_msgsize;
+		smbd_requ->encrypted = requ_ctx.encrypted;
 
 		smbd_requ->in_smb2_hdr.credit_charge = X_LE2H16(in_smb2_hdr->credit_charge);
 		smbd_requ->in_smb2_hdr.channel_sequence = X_LE2H16(in_smb2_hdr->channel_sequence);

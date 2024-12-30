@@ -36,12 +36,11 @@ static void encode_out_close(uint8_t *out_hdr,
 
 struct x_smbd_requ_close_t : x_smbd_requ_t
 {
-	x_smbd_requ_close_t(x_smbd_conn_t *smbd_conn, x_in_buf_t &in_buf,
-			uint32_t in_msgsize, bool encrypted,
+	x_smbd_requ_close_t(x_smbd_conn_t *smbd_conn,
 			uint16_t in_flags,
 			uint64_t in_file_id_persistent,
 			uint64_t in_file_id_volatile)
-		: x_smbd_requ_t(smbd_conn, in_buf, in_msgsize, encrypted)
+		: x_smbd_requ_t(smbd_conn)
 		, in_flags(in_flags)
 		, in_file_id_persistent(in_file_id_persistent)
 		, in_file_id_volatile(in_file_id_volatile)
@@ -95,8 +94,7 @@ NTSTATUS x_smbd_requ_close_t::done_smb2(x_smbd_conn_t *smbd_conn, NTSTATUS statu
 }
 
 NTSTATUS x_smb2_parse_CLOSE(x_smbd_conn_t *smbd_conn, x_smbd_requ_t **p_smbd_requ,
-		x_in_buf_t &in_buf, uint32_t in_msgsize,
-		bool encrypted)
+		x_in_buf_t &in_buf)
 {
 	auto in_smb2_hdr = (const x_smb2_header_t *)(in_buf.get_data());
 
@@ -106,8 +104,7 @@ NTSTATUS x_smb2_parse_CLOSE(x_smbd_conn_t *smbd_conn, x_smbd_requ_t **p_smbd_req
 
 	auto in_body = (const x_smb2_close_requ_t *)(in_smb2_hdr + 1);
 
-	auto requ = new x_smbd_requ_close_t(smbd_conn, in_buf,
-			in_msgsize, encrypted,
+	auto requ = new x_smbd_requ_close_t(smbd_conn,
 			X_LE2H16(in_body->flags),
 			X_LE2H64(in_body->file_id_persistent),
 			X_LE2H64(in_body->file_id_volatile));

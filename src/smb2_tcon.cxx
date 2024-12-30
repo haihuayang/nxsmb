@@ -146,11 +146,9 @@ static void x_smb2_reply_tcon(
 struct x_smbd_requ_tcon_t : x_smbd_requ_t
 {
 	x_smbd_requ_tcon_t(x_smbd_conn_t *smbd_conn,
-			x_in_buf_t &in_buf,
-			uint32_t in_msgsize, bool encrypted,
 			std::shared_ptr<x_smbd_share_t> &smbd_share,
 			std::shared_ptr<x_smbd_volume_t> &smbd_volume)
-		: x_smbd_requ_t(smbd_conn, in_buf, in_msgsize, encrypted)
+		: x_smbd_requ_t(smbd_conn)
 		, smbd_share(std::move(smbd_share))
 		, smbd_volume(std::move(smbd_volume))
 	{
@@ -257,8 +255,7 @@ NTSTATUS x_smbd_requ_tcon_t::done_smb2(x_smbd_conn_t *smbd_conn, NTSTATUS status
 }
 
 NTSTATUS x_smb2_parse_TCON(x_smbd_conn_t *smbd_conn, x_smbd_requ_t **p_smbd_requ,
-		x_in_buf_t &in_buf, uint32_t in_msgsize,
-		bool encrypted)
+		x_in_buf_t &in_buf)
 {
 	auto in_smb2_hdr = (const x_smb2_header_t *)(in_buf.get_data());
 
@@ -308,8 +305,7 @@ NTSTATUS x_smb2_parse_TCON(x_smbd_conn_t *smbd_conn, x_smbd_requ_t **p_smbd_requ
 		X_SMBD_SMB2_RETURN_STATUS(in_smb2_hdr, NT_STATUS_ACCESS_DENIED);
 	}
 
-	auto requ = new x_smbd_requ_tcon_t(smbd_conn, in_buf,
-			in_msgsize, encrypted, smbd_share, smbd_volume);
+	auto requ = new x_smbd_requ_tcon_t(smbd_conn, smbd_share, smbd_volume);
 	*p_smbd_requ = requ;
 	return NT_STATUS_OK;
 }

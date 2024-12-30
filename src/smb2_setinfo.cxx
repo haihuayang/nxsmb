@@ -5,12 +5,10 @@ namespace {
 
 struct x_smbd_requ_rename_t : x_smbd_requ_t
 {
-	x_smbd_requ_rename_t(x_smbd_conn_t *smbd_conn, x_in_buf_t &in_buf,
-			uint32_t in_msgsize, bool encrypted,
+	x_smbd_requ_rename_t(x_smbd_conn_t *smbd_conn,
 			uint64_t file_id_persistent, uint64_t file_id_volatile,
 			bool replace_if_exists, std::u16string &&dst)
-		: x_smbd_requ_t(smbd_conn, in_buf,
-				in_msgsize, encrypted)
+		: x_smbd_requ_t(smbd_conn)
 		, in_file_id_persistent(file_id_persistent)
 		, in_file_id_volatile(file_id_volatile)
 		, in_replace_if_exists(replace_if_exists), in_dst(std::move(dst))
@@ -32,12 +30,10 @@ struct x_smbd_requ_rename_t : x_smbd_requ_t
 
 struct x_smbd_requ_disposition_t : x_smbd_requ_t
 {
-	x_smbd_requ_disposition_t(x_smbd_conn_t *smbd_conn, x_in_buf_t &in_buf,
-			uint32_t in_msgsize, bool encrypted,
+	x_smbd_requ_disposition_t(x_smbd_conn_t *smbd_conn,
 			uint64_t file_id_persistent, uint64_t file_id_volatile,
 			bool delete_on_close)
-		: x_smbd_requ_t(smbd_conn, in_buf,
-				in_msgsize, encrypted)
+		: x_smbd_requ_t(smbd_conn)
 		, in_file_id_persistent(file_id_persistent)
 		, in_file_id_volatile(file_id_volatile)
 		, in_delete_on_close(delete_on_close)
@@ -57,11 +53,9 @@ struct x_smbd_requ_disposition_t : x_smbd_requ_t
 
 struct x_smbd_requ_setinfo_t : x_smbd_requ_t
 {
-	x_smbd_requ_setinfo_t(x_smbd_conn_t *smbd_conn, x_in_buf_t &in_buf,
-			uint32_t in_msgsize, bool encrypted,
+	x_smbd_requ_setinfo_t(x_smbd_conn_t *smbd_conn,
 			x_smbd_requ_state_setinfo_t &state)
-		: x_smbd_requ_t(smbd_conn, in_buf,
-				in_msgsize, encrypted)
+		: x_smbd_requ_t(smbd_conn)
 		, state(std::move(state))
 	{
 	}
@@ -249,8 +243,7 @@ NTSTATUS x_smbd_requ_setinfo_t::done_smb2(x_smbd_conn_t *smbd_conn, NTSTATUS sta
 }
 
 NTSTATUS x_smb2_parse_SETINFO(x_smbd_conn_t *smbd_conn, x_smbd_requ_t **p_smbd_requ,
-		x_in_buf_t &in_buf, uint32_t in_msgsize,
-		bool encrypted)
+		x_in_buf_t &in_buf)
 {
 	auto in_smb2_hdr = (const x_smb2_header_t *)(in_buf.get_data());
 
@@ -292,8 +285,7 @@ NTSTATUS x_smb2_parse_SETINFO(x_smbd_conn_t *smbd_conn, x_smbd_requ_t **p_smbd_r
 			if (!status.ok()) {
 				X_SMBD_SMB2_RETURN_STATUS(in_smb2_hdr, status);
 			}
-			*p_smbd_requ = new x_smbd_requ_rename_t(smbd_conn, in_buf,
-					in_msgsize, encrypted,
+			*p_smbd_requ = new x_smbd_requ_rename_t(smbd_conn,
 					in_file_id_persistent, in_file_id_volatile,
 					in_replace_if_exists, std::move(in_dst));
 			return NT_STATUS_OK;
@@ -305,8 +297,7 @@ NTSTATUS x_smb2_parse_SETINFO(x_smbd_conn_t *smbd_conn, x_smbd_requ_t **p_smbd_r
 			if (!status.ok()) {
 				X_SMBD_SMB2_RETURN_STATUS(in_smb2_hdr, status);
 			}
-			*p_smbd_requ = new x_smbd_requ_disposition_t(smbd_conn, in_buf,
-					in_msgsize, encrypted,
+			*p_smbd_requ = new x_smbd_requ_disposition_t(smbd_conn,
 					in_file_id_persistent, in_file_id_volatile,
 					in_delete_on_close);
 			return NT_STATUS_OK;
@@ -322,8 +313,7 @@ NTSTATUS x_smb2_parse_SETINFO(x_smbd_conn_t *smbd_conn, x_smbd_requ_t **p_smbd_r
 	auto input_ptr = (const uint8_t *)in_smb2_hdr + in_input_buffer_offset;
 	state.in_data.assign(input_ptr, input_ptr + in_input_buffer_length);
 
-	*p_smbd_requ = new x_smbd_requ_setinfo_t(smbd_conn, in_buf,
-			in_msgsize, encrypted,
+	*p_smbd_requ = new x_smbd_requ_setinfo_t(smbd_conn,
 			state);
 	return NT_STATUS_OK;
 }

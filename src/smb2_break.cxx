@@ -123,8 +123,7 @@ NTSTATUS x_smbd_requ_lease_break_t::process(void *ctx_conn)
 }
 
 NTSTATUS x_smb2_parse_BREAK(x_smbd_conn_t *smbd_conn, x_smbd_requ_t **p_smbd_requ,
-		x_in_buf_t &in_buf, uint32_t in_msgsize,
-		bool encrypted)
+		x_in_buf_t &in_buf)
 {
 	auto in_smb2_hdr = (const x_smb2_header_t *)(in_buf.get_data());
 
@@ -138,16 +137,14 @@ NTSTATUS x_smb2_parse_BREAK(x_smbd_conn_t *smbd_conn, x_smbd_requ_t **p_smbd_req
 			X_SMBD_SMB2_RETURN_STATUS(in_smb2_hdr, NT_STATUS_INVALID_PARAMETER);
 		}
 		auto in_lease_break = (const x_smb2_lease_break_t *)in_break;
-		auto requ = new x_smbd_requ_lease_break_t(smbd_conn, in_buf,
-				in_msgsize, encrypted);
+		auto requ = new x_smbd_requ_lease_break_t(smbd_conn);
 		decode_in_lease_break(requ->state, in_lease_break);
 		requ->state.in_client_guid = x_smbd_conn_get_client_guid(smbd_conn);
 		*p_smbd_requ = requ;
 		return NT_STATUS_OK;
 
 	} else {
-		auto requ = new x_smbd_requ_oplock_break_t(smbd_conn, in_buf,
-				in_msgsize, encrypted);
+		auto requ = new x_smbd_requ_oplock_break_t(smbd_conn);
 		decode_in_oplock_break(requ->state, in_break);
 		*p_smbd_requ = requ;
 		return NT_STATUS_OK;

@@ -7,10 +7,9 @@
 
 struct x_smbd_requ_qdir_t : x_smbd_requ_t
 {
-	x_smbd_requ_qdir_t(x_smbd_conn_t *smbd_conn, x_in_buf_t &in_buf,
-			uint32_t in_msgsize, bool encrypted,
+	x_smbd_requ_qdir_t(x_smbd_conn_t *smbd_conn,
 			x_smbd_requ_state_qdir_t &state)
-		: x_smbd_requ_t(smbd_conn, in_buf, in_msgsize, encrypted)
+		: x_smbd_requ_t(smbd_conn)
 		, state(std::move(state))
 	{
 		/* wait 1 second to send interim response */
@@ -401,8 +400,7 @@ NTSTATUS x_smbd_requ_state_qdir_t::encode_resp(x_out_buf_t &out_buf)
 
 NTSTATUS x_smb2_parse_QUERY_DIRECTORY(x_smbd_conn_t *smbd_conn,
 		x_smbd_requ_t **p_smbd_requ,
-		x_in_buf_t &in_buf, uint32_t in_msgsize,
-		bool encrypted)
+		x_in_buf_t &in_buf)
 {
 	x_smbd_requ_state_qdir_t state;
 	NTSTATUS status = state.decode_requ(in_buf.buf, in_buf.offset, in_buf.length);
@@ -413,9 +411,7 @@ NTSTATUS x_smb2_parse_QUERY_DIRECTORY(x_smbd_conn_t *smbd_conn,
 	if (state.in_output_buffer_length > x_smbd_conn_get_negprot(smbd_conn).max_trans_size) {
 		X_SMBD_SMB2_RETURN_STATUS(in_smb2_hdr, NT_STATUS_INVALID_PARAMETER);
 	}
-	*p_smbd_requ = new x_smbd_requ_qdir_t(smbd_conn, in_buf,
-			in_msgsize, encrypted,
-			state);
+	*p_smbd_requ = new x_smbd_requ_qdir_t(smbd_conn, state);
 	return NT_STATUS_OK;
 }
 

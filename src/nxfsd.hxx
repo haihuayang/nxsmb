@@ -23,9 +23,7 @@ struct x_nxfsd_requ_t
 		INTERIM_S_SENT,
 	};
 
-	explicit x_nxfsd_requ_t(
-			x_nxfsd_conn_t *nxfsd_conn, x_in_buf_t &in_buf,
-			uint32_t in_msgsize);
+	explicit x_nxfsd_requ_t(x_nxfsd_conn_t *nxfsd_conn);
 	virtual ~x_nxfsd_requ_t();
 
 	virtual NTSTATUS process(void *ctx_conn) = 0;
@@ -79,7 +77,7 @@ struct x_nxfsd_requ_t
 	// bool request_counters_updated = false;
 
 	x_in_buf_t requ_in_buf;
-	const uint32_t in_msgsize;
+	uint32_t in_msgsize;
 
 	NTSTATUS status{NT_STATUS_OK};
 	const char *location = nullptr;

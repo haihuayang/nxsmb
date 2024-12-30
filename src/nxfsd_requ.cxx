@@ -33,13 +33,11 @@ static long interim_timeout_func(x_timer_job_t *timer)
 }
 
 x_nxfsd_requ_t::x_nxfsd_requ_t(
-		x_nxfsd_conn_t *nxfsd_conn,
-		x_in_buf_t &in_buf, uint32_t in_msgsize)
+		x_nxfsd_conn_t *nxfsd_conn)
 	: interim_timer(interim_timeout_func)
 	, nxfsd_conn(x_ref_inc(nxfsd_conn))
 	, start(x_tick_now())
 	, async_state(S_INIT)
-	, requ_in_buf(std::move(in_buf)), in_msgsize(in_msgsize)
 {
 }
 

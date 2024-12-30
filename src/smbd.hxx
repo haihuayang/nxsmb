@@ -345,8 +345,7 @@ int x_smbd_conn_process_smb1negprot(x_smbd_conn_t *smbd_conn,
 		x_out_buf_t &out_buf);
 
 #define X_SMB2_OP_DECL(x) NTSTATUS x_smb2_parse_##x(x_smbd_conn_t *smbd_conn, \
-		x_smbd_requ_t **p_smbd_requ, x_in_buf_t &in_buf, uint32_t in_msgsize, \
-		bool encrypted);
+		x_smbd_requ_t **p_smbd_requ, x_in_buf_t &in_buf);
 X_SMB2_OP_ENUM
 
 

@@ -12,11 +12,8 @@ std::ostream &x_smbd_requ_t::tostr(std::ostream &os) const
 	return os << buf;
 }
 
-x_smbd_requ_t::x_smbd_requ_t(x_smbd_conn_t *smbd_conn,
-		x_in_buf_t &in_buf, uint32_t in_msgsize,
-		bool encrypted)
-	: x_nxfsd_requ_t((x_nxfsd_conn_t *)(smbd_conn), in_buf, in_msgsize)
-	, encrypted(encrypted)
+x_smbd_requ_t::x_smbd_requ_t(x_smbd_conn_t *smbd_conn)
+	: x_nxfsd_requ_t((x_nxfsd_conn_t *)(smbd_conn))
 {
 	X_NXFSD_COUNTER_INC_CREATE(smbd_requ, 1);
 }

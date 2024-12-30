@@ -51,8 +51,7 @@ NTSTATUS x_smbd_requ_tdis_t::done_smb2(x_smbd_conn_t *smbd_conn, NTSTATUS status
 }
 
 NTSTATUS x_smb2_parse_TDIS(x_smbd_conn_t *smbd_conn, x_smbd_requ_t **p_smbd_requ,
-		x_in_buf_t &in_buf, uint32_t in_msgsize,
-		bool encrypted)
+		x_in_buf_t &in_buf)
 {
 	auto in_smb2_hdr = (const x_smb2_header_t *)(in_buf.get_data());
 
@@ -60,7 +59,7 @@ NTSTATUS x_smb2_parse_TDIS(x_smbd_conn_t *smbd_conn, x_smbd_requ_t **p_smbd_requ
 		X_SMBD_SMB2_RETURN_STATUS(in_smb2_hdr, NT_STATUS_INVALID_PARAMETER);
 	}
 
-	auto requ = new x_smbd_requ_tdis_t(smbd_conn, in_buf, in_msgsize, encrypted);
+	auto requ = new x_smbd_requ_tdis_t(smbd_conn);
 	*p_smbd_requ = requ;
 	return NT_STATUS_OK;
 }

@@ -69,12 +69,9 @@ static inline bool file_id_is_nul(const x_smbd_requ_state_ioctl_t &ioctl)
 } while (0)
 
 x_smbd_requ_ioctl_t::x_smbd_requ_ioctl_t(x_smbd_conn_t *smbd_conn,
-		x_in_buf_t &in_buf, uint32_t in_msgsize,
-		bool encrypted,
 		x_smbd_requ_state_ioctl_t &state)
-	: x_smbd_requ_t(smbd_conn, in_buf,
-			in_msgsize, encrypted)
-			, state(std::move(state))
+	: x_smbd_requ_t(smbd_conn)
+	, state(std::move(state))
 {
 }
 
@@ -707,7 +704,7 @@ struct x_smbd_requ_ioctl_with_open_t : x_smbd_requ_ioctl_t
 
 
 NTSTATUS x_smb2_parse_IOCTL(x_smbd_conn_t *smbd_conn, x_smbd_requ_t **p_smbd_requ,
-		x_in_buf_t &in_buf, uint32_t in_msgsize, bool encrypted)
+		x_in_buf_t &in_buf)
 {
 	auto in_smb2_hdr = (const x_smb2_header_t *)(in_buf.get_data());
 
@@ -737,7 +734,7 @@ NTSTATUS x_smb2_parse_IOCTL(x_smbd_conn_t *smbd_conn, x_smbd_requ_t **p_smbd_req
 	}
 
 #define REQU_IOCTL_NEW(T) do { \
-	*p_smbd_requ = new T(smbd_conn, in_buf, in_msgsize, encrypted, state); \
+	*p_smbd_requ = new T(smbd_conn, state); \
 	return NT_STATUS_OK; \
 } while (0)
 
@@ -754,8 +751,7 @@ NTSTATUS x_smb2_parse_IOCTL(x_smbd_conn_t *smbd_conn, x_smbd_requ_t **p_smbd_req
 	case X_SMB2_FSCTL_SRV_COPYCHUNK_WRITE: /* FALL THROUGH */
 	case X_SMB2_FSCTL_SRV_COPYCHUNK:
 		return x_smbd_parse_ioctl_copychunk(smbd_conn, p_smbd_requ,
-				in_buf, in_msgsize, encrypted,
-				state);
+				in_buf, state);
 	case X_SMB2_FSCTL_SRV_REQUEST_RESUME_KEY:
 		REQU_IOCTL_NEW(x_smbd_requ_ioctl_request_resume_key_t);
 	case X_SMB2_FSCTL_SET_SPARSE:

@@ -34,12 +34,11 @@ struct x_smb2_fsctl_srv_copychunk_out_t
 
 struct x_smbd_requ_copychunk_t : x_smbd_requ_ioctl_t
 {
-	x_smbd_requ_copychunk_t(x_smbd_conn_t *smbd_conn, x_in_buf_t &in_buf,
-			uint32_t in_msgsize, bool encrypted,
+	x_smbd_requ_copychunk_t(x_smbd_conn_t *smbd_conn,
 			x_smbd_requ_state_ioctl_t &state,
 			uint64_t src_id_persistent, uint64_t src_id_volatile,
 			std::vector<x_smb2_copychunk_t> &chunks)
-		: x_smbd_requ_ioctl_t(smbd_conn, in_buf, in_msgsize, encrypted, state)
+		: x_smbd_requ_ioctl_t(smbd_conn, state)
 		, src_id_persistent(src_id_persistent), src_id_volatile(src_id_volatile)
 		, chunks(std::move(chunks))
 	{
@@ -142,18 +141,17 @@ struct x_smbd_requ_copychunk_invalid_t : x_smbd_requ_ioctl_t
 	}
 };
 
-static NTSTATUS copychunk_invalid_limit(x_smbd_conn_t *smbd_conn, x_smbd_requ_t **p_smbd_requ,
-		x_in_buf_t &in_buf, uint32_t in_msgsize,
-		bool encrypted, x_smbd_requ_state_ioctl_t &state)
+static NTSTATUS copychunk_invalid_limit(x_smbd_conn_t *smbd_conn,
+		x_smbd_requ_t **p_smbd_requ,
+		x_smbd_requ_state_ioctl_t &state)
 {
-	*p_smbd_requ = new x_smbd_requ_copychunk_invalid_t(smbd_conn, in_buf,
-			in_msgsize, encrypted, state);
+	*p_smbd_requ = new x_smbd_requ_copychunk_invalid_t(smbd_conn, state);
 	return NT_STATUS_OK;
 }
 
 NTSTATUS x_smbd_parse_ioctl_copychunk(x_smbd_conn_t *smbd_conn, x_smbd_requ_t **p_smbd_requ,
-		x_in_buf_t &in_buf, uint32_t in_msgsize,
-		bool encrypted, x_smbd_requ_state_ioctl_t &state)
+		x_in_buf_t &in_buf,
+		x_smbd_requ_state_ioctl_t &state)
 {
 	auto in_smb2_hdr = (const x_smb2_header_t *)(in_buf.get_data());
 	if (state.in_input_length < sizeof(x_smb2_fsctl_srv_copychunk_in_t)) {
@@ -173,8 +171,7 @@ NTSTATUS x_smbd_parse_ioctl_copychunk(x_smbd_conn_t *smbd_conn, x_smbd_requ_t **
 	 *   ServerSideCopyMaxNumberofChunks
 	 */
 	if (chunk_count > COPYCHUNK_MAX_CHUNKS) {
-		return copychunk_invalid_limit(smbd_conn, p_smbd_requ, in_buf,
-				in_msgsize, encrypted, state);
+		return copychunk_invalid_limit(smbd_conn, p_smbd_requ, state);
 	}
 	if (in->unused1 != 0) {
 		X_SMBD_SMB2_RETURN_STATUS(in_smb2_hdr, NT_STATUS_OBJECT_NAME_NOT_FOUND);
@@ -186,8 +183,7 @@ NTSTATUS x_smbd_parse_ioctl_copychunk(x_smbd_conn_t *smbd_conn, x_smbd_requ_t **
 	for (uint32_t i = 0; i < chunk_count; ++i, ++chunk) {
 		uint32_t length = X_LE2H32(chunk->length);
 		if (length == 0 || length > COPYCHUNK_MAX_CHUNK_LEN) {
-			return copychunk_invalid_limit(smbd_conn, p_smbd_requ, in_buf,
-					in_msgsize, encrypted, state);
+			return copychunk_invalid_limit(smbd_conn, p_smbd_requ, state);
 		}
 
 		total_asked += length;
@@ -197,12 +193,10 @@ NTSTATUS x_smbd_parse_ioctl_copychunk(x_smbd_conn_t *smbd_conn, x_smbd_requ_t **
 	}
 
 	if (total_asked > COPYCHUNK_MAX_TOTAL_LEN) {
-		return copychunk_invalid_limit(smbd_conn, p_smbd_requ, in_buf,
-				in_msgsize, encrypted, state);
+		return copychunk_invalid_limit(smbd_conn, p_smbd_requ, state);
 	}
 
-	*p_smbd_requ = new x_smbd_requ_copychunk_t(smbd_conn, in_buf,
-			in_msgsize, encrypted,
+	*p_smbd_requ = new x_smbd_requ_copychunk_t(smbd_conn,
 			state,
 			X_LE2H64(in->file_id_persistent),
 			X_LE2H64(in->file_id_volatile),

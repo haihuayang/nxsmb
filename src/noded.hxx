@@ -19,7 +19,7 @@ struct x_noded_op_t
 {
 	NTSTATUS (* const parse_func)(x_noded_conn_t *noded_conn,
 			x_noded_requ_t **p_noded_requ,
-			x_in_buf_t &in_buf, uint32_t in_msgsize);
+			x_in_buf_t &in_buf);
 };
 
 struct x_noded_proto_t
@@ -33,8 +33,7 @@ int x_noded_register_proto(uint32_t magic, uint32_t num_ops, const x_noded_op_t 
 
 struct x_noded_requ_t : x_nxfsd_requ_t
 {
-	explicit x_noded_requ_t(x_noded_conn_t *noded_conn,
-			x_in_buf_t &in_buf, uint32_t in_msgsize);
+	explicit x_noded_requ_t(x_noded_conn_t *noded_conn);
 	~x_noded_requ_t();
 
 	void async_done(void *ctx_conn, NTSTATUS status) override;

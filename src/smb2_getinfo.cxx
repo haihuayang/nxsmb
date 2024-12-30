@@ -6,10 +6,9 @@ namespace {
 
 struct x_smbd_requ_getinfo_t : x_smbd_requ_t
 {
-	x_smbd_requ_getinfo_t(x_smbd_conn_t *smbd_conn, x_in_buf_t &in_buf,
-			uint32_t in_msgsize, bool encrypted,
+	x_smbd_requ_getinfo_t(x_smbd_conn_t *smbd_conn,
 			x_smbd_requ_state_getinfo_t &in_state)
-		: x_smbd_requ_t(smbd_conn, in_buf, in_msgsize, encrypted)
+		: x_smbd_requ_t(smbd_conn)
 		, state(in_state)
 	{
 	}
@@ -83,8 +82,7 @@ NTSTATUS x_smbd_requ_getinfo_t::done_smb2(x_smbd_conn_t *smbd_conn, NTSTATUS sta
 }
 
 NTSTATUS x_smb2_parse_GETINFO(x_smbd_conn_t *smbd_conn, x_smbd_requ_t **p_smbd_requ,
-		x_in_buf_t &in_buf, uint32_t in_msgsize,
-		bool encrypted)
+		x_in_buf_t &in_buf)
 {
 	auto in_smb2_hdr = (const x_smb2_header_t *)(in_buf.get_data());
 
@@ -112,8 +110,7 @@ NTSTATUS x_smb2_parse_GETINFO(x_smbd_conn_t *smbd_conn, x_smbd_requ_t **p_smbd_r
 	if (state.in_output_buffer_length > x_smbd_conn_get_negprot(smbd_conn).max_trans_size) {
 		X_SMBD_SMB2_RETURN_STATUS(in_smb2_hdr, NT_STATUS_INVALID_PARAMETER);
 	}
-	*p_smbd_requ = new x_smbd_requ_getinfo_t(smbd_conn, in_buf,
-			in_msgsize, encrypted, state);
+	*p_smbd_requ = new x_smbd_requ_getinfo_t(smbd_conn, state);
 	return NT_STATUS_OK;
 }
 
