@@ -152,7 +152,8 @@ x_smbd_object_t *x_smbd_posixfs_open_object_by_handle(NTSTATUS *pstatus,
 		std::shared_ptr<x_smbd_volume_t> &smbd_volume,
 		x_smbd_file_handle_t *file_handle);
 
-NTSTATUS x_smbd_posixfs_create_object(x_smbd_object_t *smbd_object,
+NTSTATUS x_smbd_posixfs_create_object(x_nxfsd_requ_t *nxfsd_requ,
+		x_smbd_object_t *smbd_object,
 		x_smbd_stream_t *smbd_stream,
 		const x_smbd_user_t &smbd_user,
 		x_smbd_requ_state_create_t &state,

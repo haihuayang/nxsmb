@@ -168,7 +168,8 @@ struct x_smbd_object_ops_t
 	x_smbd_object_t *(*open_root_object)(
 			std::shared_ptr<x_smbd_volume_t> &smbd_volume);
 
-	NTSTATUS (*create_object)(x_smbd_object_t *smbd_object,
+	NTSTATUS (*create_object)(x_nxfsd_requ_t *nxfsd_requ,
+			x_smbd_object_t *smbd_object,
 			x_smbd_stream_t *smbd_stream,
 			const x_smbd_user_t &smbd_user,
 			x_smbd_requ_state_create_t &state,
@@ -517,14 +518,16 @@ static inline NTSTATUS x_smbd_object_delete(
 			smbd_stream, smbd_open);
 }
 
-static inline NTSTATUS x_smbd_create_object(x_smbd_object_t *smbd_object,
+static inline NTSTATUS x_smbd_create_object(x_nxfsd_requ_t *nxfsd_requ,
+		x_smbd_object_t *smbd_object,
 		x_smbd_stream_t *smbd_stream,
 		const x_smbd_user_t &smbd_user,
 		x_smbd_requ_state_create_t &state,
 		uint32_t file_attributes,
 		uint64_t allocation_size)
 {
-	return smbd_object->smbd_volume->ops->create_object(smbd_object,
+	return smbd_object->smbd_volume->ops->create_object(nxfsd_requ,
+			smbd_object,
 			smbd_stream,
 			smbd_user, state,
 			file_attributes,

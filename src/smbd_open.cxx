@@ -1443,7 +1443,7 @@ NTSTATUS x_smbd_open_create(
 				}
 			}
 		}
-		status = x_smbd_create_object(smbd_object,
+		status = x_smbd_create_object(nxfsd_requ, smbd_object,
 				smbd_stream,
 				*smbd_user, state,
 				state.in_file_attributes,
