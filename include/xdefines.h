@@ -3,6 +3,7 @@
 #define __include__xdefines__h__
 
 #include <errno.h>
+#include <stdint.h>
 
 /* these macros gain us a few percent of speed on gcc */
 #if (__GNUC__ >= 3)

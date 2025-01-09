@@ -6,6 +6,7 @@
 #error "Must be c++"
 #endif
 
+#include "xdefines.h"
 #include <vector>
 #include <string>
 
