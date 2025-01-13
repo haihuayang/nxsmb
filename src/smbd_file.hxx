@@ -8,6 +8,7 @@
 
 #include "defines.hxx"
 #include "smb2.hxx"
+#include <fcntl.h>
 
 struct x_smbd_object_meta_t
 {
@@ -29,6 +30,24 @@ struct x_smbd_stream_meta_t
 	uint64_t end_of_file;
 	uint64_t allocation_size;
 	bool delete_on_close = false;
+};
+
+struct x_smbd_file_handle_t
+{
+	int cmp(const x_smbd_file_handle_t &other) const
+	{
+		if (base.handle_type != other.base.handle_type) {
+			return base.handle_type - other.base.handle_type;
+		}
+		if (base.handle_bytes != other.base.handle_bytes) {
+			return int(base.handle_bytes - other.base.handle_bytes);
+		}
+		return memcmp(base.f_handle, other.base.f_handle, base.handle_bytes);
+	}
+	bool is_share_root() const { return base.handle_bytes == 0; }
+
+	struct file_handle base;
+	unsigned char f_handle[MAX_HANDLE_SZ];
 };
 
 void x_smbd_get_file_info(x_smb2_file_basic_info_t &info,

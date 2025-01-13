@@ -16,7 +16,6 @@
 #include <string.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
-#include <fcntl.h>
 #include <unistd.h>
 #include "smb2.hxx"
 #include "smbd_proto.hxx"
@@ -27,6 +26,7 @@
 #include "include/librpc/security.hxx"
 #include "include/librpc/samr.hxx"
 
+#include "smbd_file.hxx"
 #include "smbd_user.hxx"
 #include "network.hxx"
 
@@ -126,24 +126,6 @@ struct x_smbd_open_state_t
 	uint64_t current_offset = 0;
 	uint64_t channel_generation;
 	std::vector<x_smb2_lock_element_t> locks;
-};
-
-struct x_smbd_file_handle_t
-{
-	int cmp(const x_smbd_file_handle_t &other) const
-	{
-		if (base.handle_type != other.base.handle_type) {
-			return base.handle_type - other.base.handle_type;
-		}
-		if (base.handle_bytes != other.base.handle_bytes) {
-			return int(base.handle_bytes - other.base.handle_bytes);
-		}
-		return memcmp(base.f_handle, other.base.f_handle, base.handle_bytes);
-	}
-	bool is_share_root() const { return base.handle_bytes == 0; }
-
-	struct file_handle base;
-	unsigned char f_handle[MAX_HANDLE_SZ];
 };
 
 struct x_smbd_lease_data_t
