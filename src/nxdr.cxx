@@ -25,14 +25,16 @@ bool x_nxdr_utf16string_l2_le(x_nxdr_pull_t &nxdr, std::u16string &val)
 	if (length % 2 != 0) {
 		return false;
 	}
-	val.reserve(length / 2);
+	std::u16string tmp;
+	tmp.reserve(length / 2);
 	for (uint16_t i = 0; i < length / 2; ++i) {
 		uint16_t ch;
 		if (!x_nxdr_uint16(nxdr, ch)) {
 			return false;
 		}
-		val.push_back(ch);
+		tmp.push_back(ch);
 	}
+	std::swap(val, tmp);
 	return true;
 }
 
