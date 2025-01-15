@@ -37,6 +37,9 @@ struct x_smbd_requ_state_read_t
 		}
 	}
 
+	NTSTATUS decode_requ(x_buf_t *in_requ_buf, uint32_t in_requ_off, uint32_t in_requ_len);
+	NTSTATUS encode_resp(x_out_buf_t &out_buf);
+
 	uint8_t in_flags;
 	uint32_t in_length;
 	uint64_t in_offset;
@@ -50,6 +53,9 @@ struct x_smbd_requ_state_read_t
 
 struct x_smbd_requ_state_write_t
 {
+	NTSTATUS decode_requ(x_buf_t *in_requ_buf, uint32_t in_requ_off, uint32_t in_requ_len);
+	NTSTATUS encode_resp(x_out_buf_t &out_buf);
+
 	uint64_t in_offset;
 	uint64_t in_file_id_persistent;
 	uint64_t in_file_id_volatile;
@@ -65,6 +71,9 @@ struct x_smbd_requ_state_write_t
 
 struct x_smbd_requ_state_lock_t
 {
+	NTSTATUS decode_requ(x_buf_t *in_requ_buf, uint32_t in_requ_off, uint32_t in_requ_len);
+	NTSTATUS encode_resp(x_out_buf_t &out_buf);
+
 	uint64_t in_file_id_persistent;
 	uint64_t in_file_id_volatile;
 	uint32_t in_lock_sequence_index;
@@ -73,7 +82,10 @@ struct x_smbd_requ_state_lock_t
 
 struct x_smbd_requ_state_getinfo_t
 {
-	uint16_t in_dialect;
+	NTSTATUS decode_requ(x_buf_t *in_requ_buf, uint32_t in_requ_off, uint32_t in_requ_len);
+	NTSTATUS encode_resp(x_out_buf_t &out_buf);
+
+	uint16_t in_dialect = X_SMB2_DIALECT_311; // TODO cfsc should forward dialect
 	x_smb2_info_class_t in_info_class;
 	x_smb2_info_level_t in_info_level;
 	uint32_t in_output_buffer_length;
@@ -88,6 +100,9 @@ struct x_smbd_requ_state_getinfo_t
 
 struct x_smbd_requ_state_setinfo_t
 {
+	NTSTATUS decode_requ(x_buf_t *in_requ_buf, uint32_t in_requ_off, uint32_t in_requ_len);
+	NTSTATUS encode_resp(x_out_buf_t &out_buf);
+
 	uint64_t in_file_id_persistent;
 	uint64_t in_file_id_volatile;
 	x_smb2_info_class_t in_info_class;
@@ -103,6 +118,10 @@ struct x_smbd_requ_state_ioctl_t
 			x_buf_release(out_buf);
 		}
 	}
+
+	NTSTATUS decode_requ(x_buf_t *in_requ_buf, uint32_t in_requ_off, uint32_t in_requ_len);
+	NTSTATUS encode_resp(x_out_buf_t &out_buf);
+
 	uint32_t in_ctl_code;
 	uint32_t in_flags;
 	uint64_t in_file_id_persistent;
@@ -142,7 +161,9 @@ struct x_smbd_requ_state_oplock_break_t
 
 struct x_smbd_requ_state_close_t
 {
-	uint16_t in_struct_size;
+	NTSTATUS decode_requ(x_buf_t *in_requ_buf, uint32_t in_requ_off, uint32_t in_requ_len);
+	NTSTATUS encode_resp(x_out_buf_t &out_buf);
+
 	uint16_t in_flags;
 	uint32_t in_reserved;
 	uint64_t in_file_id_persistent;
@@ -156,7 +177,7 @@ struct x_smbd_requ_state_close_t
 
 struct x_smbd_requ_state_qdir_t
 {
-	NTSTATUS decode_requ(x_buf_t *in_buf, uint32_t in_offset, uint32_t in_requ_len);
+	NTSTATUS decode_requ(x_buf_t *in_requ_buf, uint32_t in_requ_off, uint32_t in_requ_len);
 	NTSTATUS encode_resp(x_out_buf_t &out_buf);
 
 	x_smb2_info_level_t in_info_level;

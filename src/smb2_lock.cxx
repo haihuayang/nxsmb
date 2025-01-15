@@ -6,15 +6,8 @@ namespace {
 struct x_smbd_requ_lock_t: x_smbd_requ_t
 {
 	x_smbd_requ_lock_t(x_smbd_conn_t *smbd_conn, 
-			uint32_t in_lock_sequence_index,
-			uint64_t in_file_id_persistent,
-			uint64_t in_file_id_volatile,
-			std::vector<x_smb2_lock_element_t> &in_lock_elements)
-		: x_smbd_requ_t(smbd_conn)
-		, in_lock_sequence_index(in_lock_sequence_index)
-		, in_file_id_persistent(in_file_id_persistent)
-		, in_file_id_volatile(in_file_id_volatile)
-		, in_lock_elements(std::move(in_lock_elements))
+			x_smbd_requ_state_lock_t &state)
+		: x_smbd_requ_t(smbd_conn), state(std::move(state))
 	{
 		interim_timeout_ns = 0;
 	}
@@ -34,35 +27,19 @@ struct x_smbd_requ_lock_t: x_smbd_requ_t
 			NT_STATUS_CANCELLED : NT_STATUS_RANGE_NOT_LOCKED;
 	}
 
-	uint32_t in_lock_sequence_index;
-	uint64_t in_file_id_persistent;
-	uint64_t in_file_id_volatile;
-	std::vector<x_smb2_lock_element_t> in_lock_elements;
+	x_smbd_requ_state_lock_t state;
 };
 
-}
-
-static void x_smb2_reply_lock(x_smbd_requ_t *smbd_requ)
-{
-	auto &out_buf = smbd_requ->get_requ_out_buf();
-	out_buf.head = out_buf.tail = x_smb2_bufref_alloc(sizeof(x_smb2_lock_resp_t));
-	out_buf.length = out_buf.head->length;
-
-	uint8_t *out_hdr = out_buf.head->get_data();
-
-	auto out_lock = (x_smb2_lock_resp_t *)(out_hdr + sizeof(x_smb2_header_t));
-	out_lock->struct_size = X_H2LE16(sizeof(x_smb2_lock_resp_t));
-	out_lock->reserved0 = 0;
 }
 
 static void smb2_lock_set_sequence(x_smbd_open_t *smbd_open,
 		const x_smbd_requ_lock_t *requ)
 {
-	auto lock_sequence_bucket = requ->in_lock_sequence_index >> 4;
+	auto lock_sequence_bucket = requ->state.in_lock_sequence_index >> 4;
 	if (lock_sequence_bucket > 0 &&
 			lock_sequence_bucket <= x_smbd_open_t::LOCK_SEQUENCE_MAX) {
 		smbd_open->lock_sequence_array[lock_sequence_bucket - 1] =
-			requ->in_lock_sequence_index & 0xf;
+			requ->state.in_lock_sequence_index & 0xf;
 	}
 }
 
@@ -235,9 +212,9 @@ void x_smbd_lock_retry(x_smbd_sharemode_t *sharemode)
 			auto requ = dynamic_cast<x_smbd_requ_lock_t *>(nxfsd_requ);
 			if (requ) {
 				if (!brl_conflict(sharemode, curr_open,
-							requ->in_lock_elements)) {
+							requ->state.in_lock_elements)) {
 					curr_open->pending_requ_list.remove(nxfsd_requ);
-					smbd_lock_insert(curr_open, requ->in_lock_elements);
+					smbd_lock_insert(curr_open, requ->state.in_lock_elements);
 					X_NXFSD_REQU_POST_DONE(nxfsd_requ, NT_STATUS_OK);
 				}
 			}
@@ -250,8 +227,8 @@ static NTSTATUS smbd_open_lock(
 		x_smbd_open_t *smbd_open,
 		x_smbd_requ_lock_t *requ)
 {
-	if (requ->in_lock_elements.size() > 1) {
-		for (const auto &le: requ->in_lock_elements) {
+	if (requ->state.in_lock_elements.size() > 1) {
+		for (const auto &le: requ->state.in_lock_elements) {
 			if (le.flags != (X_SMB2_LOCK_FLAG_SHARED | X_SMB2_LOCK_FLAG_FAIL_IMMEDIATELY) &&
 					le.flags != (X_SMB2_LOCK_FLAG_EXCLUSIVE | X_SMB2_LOCK_FLAG_FAIL_IMMEDIATELY)) {
 				X_SMBD_REQU_RETURN_STATUS(requ, NT_STATUS_INVALID_PARAMETER);
@@ -261,7 +238,7 @@ static NTSTATUS smbd_open_lock(
 			}
 		}
 	} else {
-		for (const auto &le: requ->in_lock_elements) {
+		for (const auto &le: requ->state.in_lock_elements) {
 			if (le.flags != X_SMB2_LOCK_FLAG_SHARED &&
 					le.flags != X_SMB2_LOCK_FLAG_EXCLUSIVE &&
 					le.flags != (X_SMB2_LOCK_FLAG_SHARED | X_SMB2_LOCK_FLAG_FAIL_IMMEDIATELY) &&
@@ -277,22 +254,22 @@ static NTSTATUS smbd_open_lock(
 	x_smbd_sharemode_t *sharemode = x_smbd_open_get_sharemode(
 			smbd_open);
 	x_smbd_object_t *smbd_object = smbd_open->smbd_object;
-	auto first_flags = requ->in_lock_elements[0].flags;
+	auto first_flags = requ->state.in_lock_elements[0].flags;
 
 	std::lock_guard<std::mutex> lock(smbd_object->mutex);
-	if (smbd_open->open_state.locks.size() + requ->in_lock_elements.size() >
+	if (smbd_open->open_state.locks.size() + requ->state.in_lock_elements.size() >
 			X_SMBD_MAX_LOCKS_PER_OPEN) {
 		return NT_STATUS_INSUFFICIENT_RESOURCES;
 	}
 
 	bool conflict = brl_conflict(sharemode, smbd_open,
-			requ->in_lock_elements);
+			requ->state.in_lock_elements);
 	if (!conflict) {
-		smbd_lock_insert(smbd_open, requ->in_lock_elements);
+		smbd_lock_insert(smbd_open, requ->state.in_lock_elements);
 	} else if (first_flags & X_SMB2_LOCK_FLAG_FAIL_IMMEDIATELY) {
 		return NT_STATUS_LOCK_NOT_GRANTED;
 	} else {
-		X_ASSERT(requ->in_lock_elements.size() == 1);
+		X_ASSERT(requ->state.in_lock_elements.size() == 1);
 		X_LOG(SMB, DBG, "lock conflict");
 		requ->incref();
 		smbd_open->pending_requ_list.push_back(requ);
@@ -319,7 +296,7 @@ static NTSTATUS smbd_open_unlock(
 	auto &locks = smbd_open->open_state.locks;
 	std::lock_guard<std::mutex> lock(smbd_object->mutex);
 
-	for (auto &l1: requ->in_lock_elements) {
+	for (auto &l1: requ->state.in_lock_elements) {
 		if (l1.flags != X_SMB2_LOCK_FLAG_UNLOCK) {
 			status = NT_STATUS_INVALID_PARAMETER;
 			break;
@@ -356,17 +333,17 @@ static NTSTATUS smbd_open_unlock(
 NTSTATUS x_smbd_requ_lock_t::process(void *ctx_conn)
 {
 	X_SMBD_REQU_LOG(OP, this,  " open=0x%lx,0x%lx",
-			this->in_file_id_persistent, this->in_file_id_volatile);
+			state.in_file_id_persistent, state.in_file_id_volatile);
 
-	bool is_unlock = this->in_lock_elements[0].flags == X_SMB2_LOCK_FLAG_UNLOCK;
+	bool is_unlock = state.in_lock_elements[0].flags == X_SMB2_LOCK_FLAG_UNLOCK;
 	if (!is_unlock && NT_STATUS_EQUAL(this->sess_status,
 				NT_STATUS_NETWORK_SESSION_EXPIRED)) {
 		X_SMBD_REQU_RETURN_STATUS(this, NT_STATUS_NETWORK_SESSION_EXPIRED);
 	}
 
 	NTSTATUS status = x_smbd_requ_init_open(this,
-			this->in_file_id_persistent,
-			this->in_file_id_volatile,
+			state.in_file_id_persistent,
+			state.in_file_id_volatile,
 			false);
 	if (!NT_STATUS_IS_OK(status)) {
 		X_SMBD_REQU_RETURN_STATUS(this, status);
@@ -379,13 +356,13 @@ NTSTATUS x_smbd_requ_lock_t::process(void *ctx_conn)
 	auto smbd_conn = (x_smbd_conn_t *)ctx_conn;
 	if (smbd_open->open_state.dhmode != x_smbd_dhmode_t::NONE ||
 			(x_smbd_conn_get_capabilities(smbd_conn) & X_SMB2_CAP_MULTI_CHANNEL)) {
-		auto lock_sequence_bucket = this->in_lock_sequence_index >> 4;
+		auto lock_sequence_bucket = state.in_lock_sequence_index >> 4;
 		if (lock_sequence_bucket > 0 &&
 				lock_sequence_bucket <= x_smbd_open_t::LOCK_SEQUENCE_MAX) {
 			if (smbd_open->lock_sequence_array[lock_sequence_bucket - 1] ==
-					(this->in_lock_sequence_index & 0xf)) {
+					(state.in_lock_sequence_index & 0xf)) {
 				X_LOG(SMB, NOTICE, "replayed smb2 lock request detected, sequence = 0x%x",
-						this->in_lock_sequence_index);
+						state.in_lock_sequence_index);
 				return NT_STATUS_OK;
 			}
 			/* not a replay, mark it invalid */
@@ -393,7 +370,7 @@ NTSTATUS x_smbd_requ_lock_t::process(void *ctx_conn)
 		}
 	} else {
 		/* disable check_lock_sequence */
-		this->in_lock_sequence_index = 0;
+		state.in_lock_sequence_index = 0;
 	}
 
 	if (is_unlock) {
@@ -409,19 +386,23 @@ NTSTATUS x_smbd_requ_lock_t::process(void *ctx_conn)
 NTSTATUS x_smbd_requ_lock_t::done_smb2(x_smbd_conn_t *smbd_conn, NTSTATUS status)
 {
 	X_SMBD_REQU_LOG(OP, this, " %s", x_ntstatus_str(status));
-	if (status.ok()) {
+	if (status.ok() && !requ_out_buf.head) {
 		smb2_lock_set_sequence(smbd_open, this);
-		x_smb2_reply_lock(this);
+		auto &out_buf = get_requ_out_buf();
+		out_buf.head = out_buf.tail = x_smb2_bufref_alloc(sizeof(x_smb2_lock_resp_t));
+		out_buf.length = out_buf.head->length;
+
+		status = state.encode_resp(out_buf);
 	}
 	return status;
 }
 
-NTSTATUS x_smb2_parse_LOCK(x_smbd_conn_t *smbd_conn, x_smbd_requ_t **p_smbd_requ,
-		x_in_buf_t &in_buf)
+NTSTATUS x_smbd_requ_state_lock_t::decode_requ(x_buf_t *in_requ_buf,
+		uint32_t in_requ_off, uint32_t in_requ_len)
 {
-	auto in_smb2_hdr = (const x_smb2_header_t *)(in_buf.get_data());
+	auto in_smb2_hdr = (const x_smb2_header_t *)(in_requ_buf->data + in_requ_off);
 
-	if (in_buf.length < sizeof(x_smb2_header_t) + sizeof(x_smb2_lock_requ_t)) {
+	if (in_requ_len < sizeof(x_smb2_header_t) + sizeof(x_smb2_lock_requ_t)) {
 		X_SMBD_SMB2_RETURN_STATUS(in_smb2_hdr, NT_STATUS_INVALID_PARAMETER);
 	}
 
@@ -434,14 +415,14 @@ NTSTATUS x_smb2_parse_LOCK(x_smbd_conn_t *smbd_conn, x_smbd_requ_t **p_smbd_requ
 	
 	if ((lock_count - 1) * sizeof(x_smb2_lock_element_t) +
 			sizeof(x_smb2_lock_requ_t) +
-			sizeof(x_smb2_header_t) > in_buf.length) {
+			sizeof(x_smb2_header_t) > in_requ_len) {
 		X_SMBD_SMB2_RETURN_STATUS(in_smb2_hdr, NT_STATUS_INVALID_PARAMETER);
 	}
 
-	auto in_lock_sequence_index = X_LE2H32(in_body->lock_sequence_index);
-	auto in_file_id_persistent = X_LE2H64(in_body->file_id_persistent);
-	auto in_file_id_volatile = X_LE2H64(in_body->file_id_volatile);
-	std::vector<x_smb2_lock_element_t> in_lock_elements;
+	in_lock_sequence_index = X_LE2H32(in_body->lock_sequence_index);
+	in_file_id_persistent = X_LE2H64(in_body->file_id_persistent);
+	in_file_id_volatile = X_LE2H64(in_body->file_id_volatile);
+
 	in_lock_elements.reserve(lock_count);
 	const x_smb2_lock_element_t *in_elem = in_body->lock_elements;
 	for (uint16_t i = 0; i < lock_count; ++i) {
@@ -452,9 +433,31 @@ NTSTATUS x_smb2_parse_LOCK(x_smbd_conn_t *smbd_conn, x_smbd_requ_t **p_smbd_requ
 		in_lock_elements.push_back(elem);
 		++in_elem;
 	}
-	*p_smbd_requ = new x_smbd_requ_lock_t(smbd_conn,
-			in_lock_sequence_index, in_file_id_persistent,
-			in_file_id_volatile, in_lock_elements);
+
+	return NT_STATUS_OK;
+}
+
+NTSTATUS x_smbd_requ_state_lock_t::encode_resp(x_out_buf_t &out_buf)
+{
+	uint8_t *out_hdr = out_buf.head->get_data();
+	auto out_lock = (x_smb2_lock_resp_t *)(out_hdr + sizeof(x_smb2_header_t));
+	out_lock->struct_size = X_H2LE16(sizeof(x_smb2_lock_resp_t));
+	out_lock->reserved0 = 0;
+
+	return NT_STATUS_OK;
+}
+
+
+NTSTATUS x_smb2_parse_LOCK(x_smbd_conn_t *smbd_conn, x_smbd_requ_t **p_smbd_requ,
+		x_in_buf_t &in_buf)
+{
+	x_smbd_requ_state_lock_t state;
+	NTSTATUS status = state.decode_requ(in_buf.buf, in_buf.offset, in_buf.length);
+	if (!status.ok()) {
+		return status;
+	}
+
+	*p_smbd_requ = new x_smbd_requ_lock_t(smbd_conn, state);
 	return NT_STATUS_OK;
 }
 
