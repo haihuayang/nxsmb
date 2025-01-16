@@ -815,6 +815,9 @@ NTSTATUS x_smbd_open_getinfo_file(x_smbd_open_t *smbd_open,
 		return x_smbd_getinfo_encode_le(uint32_t(0), state);
 
 	} else if (state.in_info_level == x_smb2_info_level_t::FILE_FULL_EA_INFORMATION) {
+		if (!smbd_open->check_access_any(idl::SEC_FILE_READ_EA)) {
+			RETURN_STATUS(NT_STATUS_ACCESS_DENIED);
+		}
 		/* TODO we do not support EA for now */
 		RETURN_STATUS(NT_STATUS_NO_EAS_ON_FILE);
 
@@ -866,6 +869,9 @@ NTSTATUS x_smbd_open_getinfo_file(x_smbd_open_t *smbd_open,
 	} else if (state.in_info_level == x_smb2_info_level_t::FILE_ATTRIBUTE_TAG_INFORMATION) {
 		if (state.in_output_buffer_length < sizeof(x_smb2_file_attribute_tag_info_t)) {
 			RETURN_STATUS(NT_STATUS_INFO_LENGTH_MISMATCH);
+		}
+		if (!smbd_open->check_access_any(idl::SEC_FILE_READ_ATTRIBUTE | idl::SEC_FILE_EXECUTE)) {
+			RETURN_STATUS(NT_STATUS_ACCESS_DENIED);
 		}
 		auto info = x_smbd_getinfo_alloc<x_smb2_file_attribute_tag_info_t>(state.out_data);
 		x_smbd_get_file_info(*info, op.get_object_meta(smbd_open));
