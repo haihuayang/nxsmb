@@ -28,7 +28,7 @@ TARGET_CFLAGS = $(TARGET_PROJECT_CFLAGS) -Wstrict-prototypes -MT $@ -MMD -MP -MF
 TARGET_CXXFLAGS = $(TARGET_PROJECT_CFLAGS) -std=c++2a -Werror -Wunused -Wconversion -Wmissing-declarations -Wno-invalid-offsetof -Wno-multichar -MT $@ -MMD -MP -MF $@.d
 TARGET_LDFLAGS := $(TARGET_LDFLAGS) $(TARGET_BUILD_LDFLAGS)
 
-TARGET_DIR_out := $(BUILD).linux.x86_64
+TARGET_DIR_out := $(BUILD).$(PLATFORM).x86_64
 
 TARGET_SET_dir := bin lib lib/librpc librpc/idl lib/asn1 src tests
 
