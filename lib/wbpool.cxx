@@ -196,7 +196,7 @@ static void wb_connect_or_schedule(x_wbpool_t *wbpool, wbconn_t *wbconn)
 {
 	if (wb_connect(wbpool, wbconn) != 0) {
 		wbconn->timeout = tick_now + RECONNECT_INTERVAL;
-		std::unique_lock<std::mutex> lock(wbpool->mutex);
+		auto lock = std::lock_guard(wbpool->mutex);
 		X_ASSERT(wbpool->state == x_wbpool_t::S_CONNECTING);
 		wbpool->disconnected_list.push_back(wbconn);
 		wbpool->state = x_wbpool_t::S_NONE;
@@ -216,7 +216,7 @@ static void handshake_wbcli_cb_reply(x_wbcli_t *wbcli, int err)
 	x_wbpool_t *wbpool = wbconn->wbpool;
 	wbconn_t *wbc_to_connect = nullptr;
 	{
-		std::unique_lock<std::mutex> lock(wbpool->mutex);
+		auto lock = std::lock_guard(wbpool->mutex);
 		X_ASSERT(wbpool->state == x_wbpool_t::S_CONNECTING);
 		wbc_to_connect = wbpool->disconnected_list.get_front();
 		if (wbc_to_connect) {
@@ -236,7 +236,7 @@ static long wbpool_timer_job_func(x_timer_job_t *timer_job)
 	x_wbpool_t *wbpool = X_CONTAINER_OF(timer_job, x_wbpool_t, timer_job);
 	wbconn_t *wbconn_disconnected = nullptr, *wbconn_ready = nullptr;
 	{
-		std::unique_lock<std::mutex> lock(wbpool->mutex);
+		auto lock = std::lock_guard(wbpool->mutex);
 		if (wbpool->state == x_wbpool_t::S_NONE) {
 			wbconn_disconnected = wbpool->disconnected_list.get_front();
 			if (wbconn_disconnected) {
@@ -392,7 +392,7 @@ static bool wbconn_upcall_cb_getevents(x_epoll_upcall_t *upcall,
 				wbcli->on_reply(0);
 
 				{
-					std::unique_lock<std::mutex> lock(wbpool->mutex);
+					auto lock = std::lock_guard(wbpool->mutex);
 					wbcli = wbpool->queue.get_front();
 					if (wbcli == nullptr) {
 						wbconn->timeout = tick_now + PING_INTERVAL;
@@ -457,7 +457,7 @@ static void wbconn_upcall_cb_unmonitor(x_epoll_upcall_t *upcall)
 	}
 
 	x_wbpool_t *wbpool = wbconn->wbpool;
-	std::unique_lock<std::mutex> lock(wbpool->mutex);
+	auto lock = std::lock_guard(wbpool->mutex);
 	wbpool->disconnected_list.push_back(wbconn);
 	if (wbconn->handshaking) {
 		wbconn->handshaking = false;
@@ -494,7 +494,7 @@ int x_wbpool_request(x_wbpool_t *wbpool, x_wbcli_t *wbcli)
 	wbcli->requ->header.length = sizeof(wbcli->requ->header);
 	wbcli->requ->header.extra_len = x_convert_assert<uint32_t>(wbcli->requ->extra.size());
 	{
-		std::unique_lock<std::mutex> lock(wbpool->mutex);
+		auto lock = std::lock_guard(wbpool->mutex);
 		wbconn = wbpool->ready_list.get_front();
 		if (!wbconn) {
 			wbcli->timeout = tick_now + WBCLI_TIMEOUT;

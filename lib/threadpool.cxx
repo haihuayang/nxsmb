@@ -36,7 +36,7 @@ static void __threadpool_schedule_job(x_threadpool_t *tp, x_job_t *job)
 {
 	X_ASSERT(job->state == x_job_t::STATE_SCHEDULED);
 	{
-		std::unique_lock<std::mutex> ul(tp->mutex);
+		auto lock = std::lock_guard(tp->mutex);
 		tp->queue.push_back(job);
 		job->state = x_job_t::STATE_SCHEDULED;
 	}

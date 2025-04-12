@@ -56,7 +56,7 @@ size_t pool_iterator_t<HashTraits>::get_next(Func &&func, size_t min_count)
 	}
 
 	size_t count = 0;
-	std::unique_lock<std::mutex> lock(ppool->mutex);
+	auto lock = std::lock_guard(ppool->mutex);
 	while (next_bucket_idx < ppool->hashtable.buckets.size()) {
 		for (x_dqlink_t *link = ppool->hashtable.buckets[next_bucket_idx].get_front();
 				link; link = link->get_next()) {
