@@ -368,7 +368,6 @@ struct nxfsd_cancel_evt_t
 			x_nxfsd_requ_t *nxfsd_requ, int reason)
 		: base(func, location), nxfsd_requ(nxfsd_requ), reason(reason)
 	{
-		nxfsd_requ->incref();
 	}
 	~nxfsd_cancel_evt_t()
 	{

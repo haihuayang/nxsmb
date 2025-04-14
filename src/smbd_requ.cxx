@@ -82,6 +82,7 @@ void x_smbd_schedule_wakeup_pending_requ_list(const x_tp_ddlist_t<requ_async_tra
 	x_nxfsd_requ_t *nxfsd_requ;
 	for (nxfsd_requ = pending_requ_list.get_front(); nxfsd_requ;
 			nxfsd_requ = pending_requ_list.next(nxfsd_requ)) {
+		nxfsd_requ->incref();
 		X_NXFSD_REQU_POST_CANCEL(nxfsd_requ, x_nxfsd_requ_t::CANCEL_BY_CLOSE);
 	}
 }
