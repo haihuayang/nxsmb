@@ -501,6 +501,8 @@ static bool parse_global_param(x_smbd_conf_t &smbd_conf,
 		return parse_uint32(value, smbd_conf.my_dev_delay_write_ms);
 	} else if (name == "my:dev delay qdir ms") {
 		return parse_uint32(value, smbd_conf.my_dev_delay_qdir_ms);
+	} else if (name == "durable log max record") {
+		return parse_uint32(value, smbd_conf.durable_log_max_record);
 	} else if (name == "node port") {
 		return parse_uint32(value, smbd_conf.node_port);
 

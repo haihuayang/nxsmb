@@ -120,6 +120,8 @@ struct x_smbd_conf_t
 	uint32_t my_dev_delay_write_ms = 0;
 	uint32_t my_dev_delay_qdir_ms = 0;
 
+	uint32_t durable_log_max_record = 0x10000;
+
 	std::tuple<uint8_t, uint8_t, uint16_t> my_nbt_version{10, 0, 17763};
 
 	std::string log_name = "stderr";

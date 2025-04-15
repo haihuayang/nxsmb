@@ -2942,7 +2942,8 @@ ssize_t posixfs_object_getxattr(x_smbd_object_t *smbd_object,
 }
 
 static int smbd_volume_read(int vol_fd,
-		int &rootdir_fd, x_smbd_durable_db_t *&durable_db)
+		int &rootdir_fd, x_smbd_durable_db_t *&durable_db,
+		uint32_t durable_log_max_record)
 {
 	int rfd = openat(vol_fd, "root", O_RDONLY);
 	if (rfd < 0) {
@@ -2959,7 +2960,7 @@ static int smbd_volume_read(int vol_fd,
 	}
 
 	durable_db = x_smbd_durable_db_init(vol_fd,
-			0x100000, 300); /* TODO the number */
+			0x100000, durable_log_max_record);
 
 	rootdir_fd = rfd;
 	return 0;
@@ -2999,7 +3000,8 @@ int posixfs_op_init_volume(std::shared_ptr<x_smbd_volume_t> &smbd_volume)
 		return -1;
 	}
 
-	int ret = smbd_volume_read(vol_fd, rootdir_fd, durable_db);
+	auto smbd_conf = x_smbd_conf_get();
+	int ret = smbd_volume_read(vol_fd, rootdir_fd, durable_db, smbd_conf->durable_log_max_record);
 	close(vol_fd);
 	if (ret < 0) {
 		X_LOG(SMB, ERR, "cannot read volume %u, %d",
