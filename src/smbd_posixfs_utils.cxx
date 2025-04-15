@@ -47,12 +47,14 @@ static void fill_statex(x_smbd_object_meta_t *object_meta,
 	object_meta->nlink = kst.nlink;
 }
 
-static void posixfs_statex_get_(int fd,
+static int posixfs_statex_get_(int fd,
+		const char *name,
 		zfs_ntnx_kstat_t &kst,
 		dos_attr_t &dos_attr,
-		uint64_t &fsid)
+		uint64_t &fsid,
+		uint8_t *ntacl_buf, uint32_t *p_ntacl_buf_size)
 {
-	zfs_ntnx_attrex_tag_t tags[3], *ptag = tags;
+	zfs_ntnx_attrex_tag_t tags[4], *ptag = tags;
 
 	ptag->tag = ZFS_NTNX_ATTREX_TAG_STAT;
 	ptag->size = sizeof(zfs_ntnx_kstat_t);
@@ -69,10 +71,20 @@ static void posixfs_statex_get_(int fd,
 	ptag->data = 0;
 	ptag++;
 
+	if (ntacl_buf) {
+		ptag->tag = ZFS_NTNX_ATTREX_TAG_XATTR_NTACL;
+		ptag->size = *p_ntacl_buf_size;
+		ptag->data = (unsigned long)ntacl_buf;
+		ptag++;
+	}
+
 	int err = zfs_ntnx_ioc_attrex(minerva_zfsdev_fd, fd,
 			AT_SYMLINK_NOFOLLOW,
-			nullptr, ZFS_NTNX_ATTREX_OP_GET,
-			3, tags);
+			name, ZFS_NTNX_ATTREX_OP_GET,
+			uint16_t(ptag - tags), tags);
+	if (err < 0) {
+		return -errno;
+	}
 	X_ASSERT(err == 0);
 
 	if (dos_attr.file_attrs & X_SMB2_FILE_ATTRIBUTE_DIRECTORY) {
@@ -84,6 +96,10 @@ static void posixfs_statex_get_(int fd,
 		}
 	}
 	fsid = tags[2].data;
+	if (ntacl_buf) {
+		*p_ntacl_buf_size = tags[3].size;
+	}
+	return 0;
 }
 
 int posixfs_statex_get(int fd, x_smbd_object_meta_t *object_meta,
@@ -92,9 +108,41 @@ int posixfs_statex_get(int fd, x_smbd_object_meta_t *object_meta,
 	zfs_ntnx_kstat_t kst;
 	dos_attr_t dos_attr;
 	uint64_t fsid;
-	posixfs_statex_get_(fd, kst, dos_attr, fsid);
+	int err = posixfs_statex_get_(fd, nullptr, kst, dos_attr, fsid, nullptr, nullptr);
+	X_ASSERT(err == 0);
 	X_LOG(SMB, DBG, "posixfs_statex_get(%d) blocks=%llu size=%lu",
 			fd, kst.blocks, kst.size);
+	fill_statex(object_meta, stream_meta, kst, dos_attr, fsid);
+	return 0;
+}
+
+int posixfs_statex_getat(int dirfd, const char *name,
+		x_smbd_object_meta_t *object_meta,
+		x_smbd_stream_meta_t *stream_meta,
+		std::shared_ptr<idl::security_descriptor> *ppsd)
+{
+	zfs_ntnx_kstat_t kst;
+	dos_attr_t dos_attr;
+	uint64_t fsid;
+	uint8_t ntacl_buf[0x10000], *ntacl_buf_ptr = nullptr;
+	uint32_t ntacl_buf_size = 0;
+	if (ppsd) {
+		ntacl_buf_ptr = ntacl_buf;
+		ntacl_buf_size = sizeof(ntacl_buf);
+	}
+
+	int err = posixfs_statex_get_(dirfd, name, kst, dos_attr, fsid, ntacl_buf_ptr,
+			&ntacl_buf_size);
+	if (err < 0) {
+		return err;
+	}
+	if (ppsd) {
+		uint16_t hash_type;
+		uint16_t version;
+		std::array<uint8_t, idl::XATTR_SD_HASH_SIZE> hash;
+		parse_acl_blob(ntacl_buf, ntacl_buf_size, *ppsd, &hash_type,
+				&version, hash);
+	}
 	fill_statex(object_meta, stream_meta, kst, dos_attr, fsid);
 	return 0;
 }
@@ -139,7 +187,8 @@ void posixfs_post_create(int fd, uint32_t file_attrs,
 	zfs_ntnx_kstat_t kst;
 	dos_attr_t dos_attr;
 	uint64_t fsid;
-	posixfs_statex_get_(fd, kst, dos_attr, fsid);
+	int err = posixfs_statex_get_(fd, nullptr, kst, dos_attr, fsid, nullptr, nullptr);
+	X_ASSERT(err == 0);
 	if (file_attrs != 0) {
 		dos_attr.attr_mask = DOS_SET_CREATE_TIME | DOS_SET_FILE_ATTR,
 		dos_attr.file_attrs = file_attrs;
@@ -216,6 +265,26 @@ int posixfs_statex_get(int fd, x_smbd_object_meta_t *object_meta,
 	return 0;
 }
 
+int posixfs_statex_getat(int dirfd, const char *name,
+		x_smbd_object_meta_t *object_meta,
+		x_smbd_stream_meta_t *stream_meta,
+		std::shared_ptr<idl::security_descriptor> *ppsd)
+{
+	int fd = openat(dirfd, name, O_NOFOLLOW);
+	if (fd < 0) {
+		return -errno;
+	}
+	int err = posixfs_statex_get(fd, object_meta, stream_meta);
+	if (err == 0) {
+		if (ppsd) {
+			posixfs_get_sd(fd, *ppsd);
+			/* TODO check return value */
+		}
+	}
+	close(fd);
+	return err;
+}
+
 void posixfs_post_create(int fd, uint32_t file_attrs,
 		x_smbd_object_meta_t *object_meta,
 		x_smbd_stream_meta_t *stream_meta,
@@ -286,26 +355,6 @@ NTSTATUS posixfs_get_sd(int fd, std::shared_ptr<idl::security_descriptor> &psd)
 	uint16_t version;
 	std::array<uint8_t, idl::XATTR_SD_HASH_SIZE> hash;
 	return parse_acl_blob(blob.data(), blob.size(), psd, &hash_type, &version, hash);
-}
-
-int posixfs_statex_getat(int dirfd, const char *name,
-		x_smbd_object_meta_t *object_meta,
-		x_smbd_stream_meta_t *stream_meta,
-		std::shared_ptr<idl::security_descriptor> *ppsd)
-{
-	int fd = openat(dirfd, name, O_NOFOLLOW);
-	if (fd < 0) {
-		return -errno;
-	}
-	int err = posixfs_statex_get(fd, object_meta, stream_meta);
-	if (err == 0) {
-		if (ppsd) {
-			posixfs_get_sd(fd, *ppsd);
-			/* TODO check return value */
-		}
-	}
-	close(fd);
-	return err;
 }
 
 /* TODO we can use file_attrs to indicate if it is a dir */
