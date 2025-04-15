@@ -82,7 +82,7 @@ static int show_security_desc(char **argv)
 	uint16_t hash_type;
 	uint16_t version;
 	std::array<uint8_t, idl::XATTR_SD_HASH_SIZE> hash;
-	NTSTATUS status = parse_acl_blob(blob, psd, &hash_type, &version, hash);
+	NTSTATUS status = parse_acl_blob(blob.data(), blob.size(), psd, &hash_type, &version, hash);
 	assert(NT_STATUS_IS_OK(status));
 	std::cout << "SD " << idl_tostring(*psd) << std::endl;
 	return 0;
@@ -192,7 +192,7 @@ static NTSTATUS get_sd(int fd,
 	uint16_t hash_type;
 	uint16_t version;
 	std::array<uint8_t, idl::XATTR_SD_HASH_SIZE> hash;
-	return parse_acl_blob(blob, psd, &hash_type, &version, hash);
+	return parse_acl_blob(blob.data(), blob.size(), psd, &hash_type, &version, hash);
 }
 
 static inline void output_timespec(const char *name, const struct timespec *ts)

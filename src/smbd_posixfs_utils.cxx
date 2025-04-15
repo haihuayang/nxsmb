@@ -285,7 +285,7 @@ NTSTATUS posixfs_get_sd(int fd, std::shared_ptr<idl::security_descriptor> &psd)
 	uint16_t hash_type;
 	uint16_t version;
 	std::array<uint8_t, idl::XATTR_SD_HASH_SIZE> hash;
-	return parse_acl_blob(blob, psd, &hash_type, &version, hash);
+	return parse_acl_blob(blob.data(), blob.size(), psd, &hash_type, &version, hash);
 }
 
 int posixfs_statex_getat(int dirfd, const char *name,

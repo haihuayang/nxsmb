@@ -21,7 +21,7 @@ struct generic_mapping_t
 
 uint32_t se_map_generic(uint32_t access_mask, const generic_mapping_t &mapping);
 
-NTSTATUS parse_acl_blob(const std::vector<uint8_t> &blob,
+NTSTATUS parse_acl_blob(const uint8_t *data, size_t size,
 		std::shared_ptr<idl::security_descriptor> &psd,
 		uint16_t *p_hash_type,
 		uint16_t *p_version,

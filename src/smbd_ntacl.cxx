@@ -3,14 +3,14 @@
 #include "smbd_ntacl.hxx"
 #include "util_sid.hxx"
 
-NTSTATUS parse_acl_blob(const std::vector<uint8_t> &blob,
+NTSTATUS parse_acl_blob(const uint8_t *data, size_t size,
 		std::shared_ptr<idl::security_descriptor> &psd,
 		uint16_t *p_hash_type,
 		uint16_t *p_version,
 		std::array<uint8_t, idl::XATTR_SD_HASH_SIZE> &hash)
 {
 	idl::xattr_NTACL xacl;
-	idl::x_ndr_off_t ret = idl::x_ndr_pull(xacl, blob.data(), blob.size(), 0);
+	idl::x_ndr_off_t ret = idl::x_ndr_pull(xacl, data, size, 0);
 	if (ret < 0) {
 		return NT_STATUS_INTERNAL_ERROR;
 	}

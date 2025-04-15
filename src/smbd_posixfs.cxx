@@ -136,7 +136,7 @@ static NTSTATUS posixfs_get_sd_by_fd(int fd,
 	uint16_t hash_type;
 	uint16_t version;
 	std::array<uint8_t, idl::XATTR_SD_HASH_SIZE> hash;
-	return parse_acl_blob(blob, psd, &hash_type, &version, hash);
+	return parse_acl_blob(blob.data(), blob.size(), psd, &hash_type, &version, hash);
 }
 
 static int posixfs_openat(int dirfd, const char *path,
