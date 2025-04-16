@@ -477,6 +477,8 @@ static bool parse_global_param(x_smbd_conf_t &smbd_conf,
 		return parse_uint32(value, smbd_conf.client_thread_count);
 	} else if (name == "my:async thread count") {
 		return parse_uint32(value, smbd_conf.async_thread_count);
+	} else if (name == "my:winbindd connection count") {
+		return parse_uint32(value, smbd_conf.winbindd_connection_count);
 	} else if (name == "my:max connections") {
 		return parse_uint32(value, smbd_conf.max_connections);
 	} else if (name == "my:max sessions") {

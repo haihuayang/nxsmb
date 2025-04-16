@@ -41,7 +41,7 @@ void x_smbd_init()
 {
 	auto smbd_conf = x_smbd_conf_get();
 
-	g_smbd.wbpool = x_wbpool_create(g_evtmgmt, 2,
+	g_smbd.wbpool = x_wbpool_create(g_evtmgmt, smbd_conf->winbindd_connection_count,
 			smbd_conf->samba_locks_dir + "/winbindd_privileged/pipe");
 
 	x_smbd_registry_init();

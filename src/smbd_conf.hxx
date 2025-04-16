@@ -85,6 +85,7 @@ struct x_smbd_conf_t
 	uint32_t node_port = 7526;
 	uint32_t client_thread_count = 0;
 	uint32_t async_thread_count = 0;
+	uint32_t winbindd_connection_count = 10;
 
 	uint32_t max_trans_size = 1024 * 1024;
 	uint32_t max_read_size = 1024 * 1024;
