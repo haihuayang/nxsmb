@@ -740,9 +740,9 @@ static int parse_smbconf(x_smbd_conf_t &smbd_conf)
 		}
 
 		if (smbd_conf.async_thread_count == 0) {
-			X_LOG(CONF, NOTICE, "set async_thread_count to 4 * %d",
+			X_LOG(CONF, NOTICE, "set async_thread_count to 10 * %d",
 					ncpu);
-			smbd_conf.async_thread_count = 4 * ncpu;
+			smbd_conf.async_thread_count = 10 * ncpu;
 		}
 	}
 
