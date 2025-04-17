@@ -106,7 +106,7 @@ static int smbd_durable_post_output(x_smbd_durable_db_t *db,
 	return ret;
 }
 
-int x_smbd_durable_remove(x_smbd_durable_db_t *db, uint64_t id_persistent)
+int x_smbd_durable_remove(x_smbd_durable_db_t *db, bool sync, uint64_t id_persistent)
 {
 	X_LOG(SMB, DBG, "id_persistent=0x%lx", id_persistent);
 	uint32_t slot_id = get_durable_slot(id_persistent);
@@ -118,10 +118,10 @@ int x_smbd_durable_remove(x_smbd_durable_db_t *db, uint64_t id_persistent)
 
 	auto log_fd = db->log_fd;
 	return smbd_durable_post_output(db, *log_fd,
-			x_smbd_durable_log_close(log_fd->fd, id_persistent));
+			x_smbd_durable_log_close(log_fd->fd, sync, id_persistent));
 }
 
-int x_smbd_durable_disconnect(x_smbd_durable_db_t *db, uint64_t id_persistent)
+int x_smbd_durable_disconnect(x_smbd_durable_db_t *db, bool sync, uint64_t id_persistent)
 {
 	X_LOG(SMB, DBG, "id_persistent=0x%lx", id_persistent);
 	uint32_t slot_id = get_durable_slot(id_persistent);
@@ -130,7 +130,7 @@ int x_smbd_durable_disconnect(x_smbd_durable_db_t *db, uint64_t id_persistent)
 
 	auto log_fd = db->log_fd;
 	return smbd_durable_post_output(db, *log_fd,
-			x_smbd_durable_log_disconnect(log_fd->fd, id_persistent,
+			x_smbd_durable_log_disconnect(log_fd->fd, sync, id_persistent,
 				get_epoch_msec()));
 }
 
@@ -154,6 +154,7 @@ int x_smbd_durable_save(x_smbd_durable_db_t *db,
 }
 
 int x_smbd_durable_update_flags(x_smbd_durable_db_t *db,
+		bool sync,
 		uint64_t id_persistent,
 		uint32_t flags)
 {
@@ -161,11 +162,12 @@ int x_smbd_durable_update_flags(x_smbd_durable_db_t *db,
 
 	auto log_fd = db->log_fd;
 	return smbd_durable_post_output(db, *log_fd,
-			x_smbd_durable_log_flags(log_fd->fd, id_persistent,
+			x_smbd_durable_log_flags(log_fd->fd, sync, id_persistent,
 				flags));
 }
 
 int x_smbd_durable_update_locks(x_smbd_durable_db_t *db,
+		bool sync,
 		uint64_t id_persistent,
 		const std::vector<x_smb2_lock_element_t> &locks)
 {
@@ -173,7 +175,7 @@ int x_smbd_durable_update_locks(x_smbd_durable_db_t *db,
 
 	auto log_fd = db->log_fd;
 	return smbd_durable_post_output(db, *log_fd,
-			x_smbd_durable_log_locks(log_fd->fd, id_persistent,
+			x_smbd_durable_log_locks(log_fd->fd, sync, id_persistent,
 				locks));
 }
 

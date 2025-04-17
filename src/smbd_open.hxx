@@ -92,6 +92,10 @@ struct x_smbd_open_t
 		return (open_state.access_mask & access) == access;
 	}
 
+	bool is_persistent() const {
+		return open_state.dhmode == x_smbd_dhmode_t::PERSISTENT;
+	}
+
 	bool is_disconnected() const {
 		return smbd_tcon == nullptr;
 	}

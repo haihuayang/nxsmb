@@ -565,7 +565,8 @@ void x_smbd_durable_log_init_header(int fd, uint64_t next_file_no)
 	X_ASSERT(err == sizeof header);
 }
 
-static int smbd_durable_log_output(int fd, x_smbd_durable_record_t *rec,
+static int smbd_durable_log_output(int fd, bool sync,
+		x_smbd_durable_record_t *rec,
 		uint32_t type, uint32_t size,
 		uint64_t id_persistent)
 {
@@ -578,6 +579,9 @@ static int smbd_durable_log_output(int fd, x_smbd_durable_record_t *rec,
 		return -errno;
 	} else if (ret != ssize_t(size)) {
 		return -EIO;
+	}
+	if (sync) {
+		fsync(fd);
 	}
 	return 0;
 }
@@ -604,21 +608,21 @@ int x_smbd_durable_log_durable(int fd,
 	uint8_t *ptr = encode_durable(rec + 1, disconnect_msec,
 			id_volatile, open_state, lease_data, file_handle);
 
-	return smbd_durable_log_output(fd, rec,
+	return smbd_durable_log_output(fd, open_state.dhmode == x_smbd_dhmode_t::PERSISTENT, rec,
 			x_smbd_durable_record_t::type_durable,
 			x_convert_assert<uint32_t>(ptr - (uint8_t *)rec),
 			id_persistent);
 }
 
-int x_smbd_durable_log_close(int fd, uint64_t id_persistent)
+int x_smbd_durable_log_close(int fd, bool sync, uint64_t id_persistent)
 {
 	x_smbd_durable_record_t record;
-	return smbd_durable_log_output(fd, &record,
+	return smbd_durable_log_output(fd, sync, &record,
 			x_smbd_durable_record_t::type_close,
 			sizeof record, id_persistent);
 }
 
-int x_smbd_durable_log_disconnect(int fd, uint64_t id_persistent, uint64_t disconnect_msec)
+int x_smbd_durable_log_disconnect(int fd, bool sync, uint64_t id_persistent, uint64_t disconnect_msec)
 {
 	struct {
 		x_smbd_durable_record_t record;
@@ -627,12 +631,12 @@ int x_smbd_durable_log_disconnect(int fd, uint64_t id_persistent, uint64_t disco
 
 	record.disconnect_msec = X_H2LE64(disconnect_msec);
 
-	return smbd_durable_log_output(fd, &record.record,
+	return smbd_durable_log_output(fd, sync, &record.record,
 			x_smbd_durable_record_t::type_disconnect,
 			sizeof record, id_persistent);
 }
 
-int x_smbd_durable_log_flags(int fd, uint64_t id_persistent, uint32_t flags)
+int x_smbd_durable_log_flags(int fd, bool sync, uint64_t id_persistent, uint32_t flags)
 {
 	struct {
 		x_smbd_durable_record_t record;
@@ -643,12 +647,12 @@ int x_smbd_durable_log_flags(int fd, uint64_t id_persistent, uint32_t flags)
 	record.flags = X_H2LE32(flags);
 	record.unused0 = 0;
 
-	return smbd_durable_log_output(fd, &record.record,
+	return smbd_durable_log_output(fd, sync, &record.record,
 			x_smbd_durable_record_t::type_update_flags,
 			sizeof record, id_persistent);
 }
 
-int x_smbd_durable_log_locks(int fd, uint64_t id_persistent,
+int x_smbd_durable_log_locks(int fd, bool sync, uint64_t id_persistent,
 		const std::vector<x_smb2_lock_element_t> &locks)
 {
 	X_LOG(SMB, DBG, "id_persistent=0x%lx", id_persistent);
@@ -673,7 +677,7 @@ int x_smbd_durable_log_locks(int fd, uint64_t id_persistent,
 		PUSH_LE32(ptr, 0);
 	}
 
-	return smbd_durable_log_output(fd, rec,
+	return smbd_durable_log_output(fd, sync, rec,
 			x_smbd_durable_record_t::type_update_locks,
 			x_convert<uint32_t>(size), id_persistent);
 }

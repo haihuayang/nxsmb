@@ -115,30 +115,35 @@ int x_smbd_volume_update_durable_flags(x_smbd_volume_t &smbd_volume,
 		const x_smbd_open_state_t &open_state)
 {
 	return x_smbd_durable_update_flags(smbd_volume.smbd_durable_db,
+			open_state.dhmode == x_smbd_dhmode_t::PERSISTENT,
 			id_persistent,
 			open_state.flags);
 }
 
 int x_smbd_volume_update_durable_locks(x_smbd_volume_t &smbd_volume,
+		bool sync,
 		uint64_t id_persistent,
 		const std::vector<x_smb2_lock_element_t> &locks)
 {
 	return x_smbd_durable_update_locks(smbd_volume.smbd_durable_db,
+			sync,
 			id_persistent, locks);
 }
 
 int x_smbd_volume_disconnect_durable(x_smbd_volume_t &smbd_volume,
+		bool sync,
 		uint64_t id_persistent)
 {
 	return x_smbd_durable_disconnect(smbd_volume.smbd_durable_db,
-			id_persistent);
+			sync, id_persistent);
 }
 
 int x_smbd_volume_remove_durable(x_smbd_volume_t &smbd_volume,
+		bool sync,
 		uint64_t id_persistent)
 {
 	return x_smbd_durable_remove(smbd_volume.smbd_durable_db,
-			id_persistent);
+			sync, id_persistent);
 }
 
 int x_smbd_volume_restore_durable(std::shared_ptr<x_smbd_share_t> smbd_share,

@@ -31,10 +31,12 @@ uint64_t x_smbd_durable_lookup(x_smbd_durable_db_t *durable_db,
 		uint64_t id_persistent);
 
 int x_smbd_durable_update_flags(x_smbd_durable_db_t *db,
+		bool sync,
 		uint64_t id_persistent,
 		uint32_t flags);
 
 int x_smbd_durable_update_locks(x_smbd_durable_db_t *db,
+		bool sync,
 		uint64_t id_persistent,
 		const std::vector<x_smb2_lock_element_t> &locks);
 
@@ -45,9 +47,9 @@ int x_smbd_durable_save(x_smbd_durable_db_t *db,
 		const x_smbd_lease_data_t &lease_data,
 		const x_smbd_file_handle_t &file_handle);
 
-int x_smbd_durable_remove(x_smbd_durable_db_t *db, uint64_t id_persistent);
+int x_smbd_durable_remove(x_smbd_durable_db_t *db, bool sync, uint64_t id_persistent);
 
-int x_smbd_durable_disconnect(x_smbd_durable_db_t *db, uint64_t id_persistent);
+int x_smbd_durable_disconnect(x_smbd_durable_db_t *db, bool sync, uint64_t id_persistent);
 
 x_smbd_durable_db_t *x_smbd_durable_db_open(int fd);
 
@@ -91,13 +93,13 @@ int x_smbd_durable_log_durable(int fd,
 		const x_smbd_lease_data_t &lease_data,
 		const x_smbd_file_handle_t &file_handle);
 
-int x_smbd_durable_log_close(int fd, uint64_t id_persistent);
+int x_smbd_durable_log_close(int fd, bool sync, uint64_t id_persistent);
 
-int x_smbd_durable_log_disconnect(int fd, uint64_t id_persistent, uint64_t disconnect_msec);
+int x_smbd_durable_log_disconnect(int fd, bool sync, uint64_t id_persistent, uint64_t disconnect_msec);
 
-int x_smbd_durable_log_flags(int fd, uint64_t id_persistent, uint32_t flags);
+int x_smbd_durable_log_flags(int fd, bool sync, uint64_t id_persistent, uint32_t flags);
 
-int x_smbd_durable_log_locks(int fd, uint64_t id_persistent,
+int x_smbd_durable_log_locks(int fd, bool sync, uint64_t id_persistent,
 		const std::vector<x_smb2_lock_element_t> &locks);
 
 void x_smbd_durable_log_init_header(int fd, uint64_t next_file_no);

@@ -192,6 +192,7 @@ static void smbd_lock_insert(x_smbd_open_t *smbd_open,
 	if (smbd_open->open_state.dhmode != x_smbd_dhmode_t::NONE) {
 		int ret = x_smbd_volume_update_durable_locks(
 				*smbd_open->smbd_object->smbd_volume,
+				smbd_open->is_persistent(),
 				smbd_open->id_persistent,
 				locks);
 		X_LOG(SMB, DBG, "durable_update_locks for %p 0x%lx, ret = %d",
@@ -320,6 +321,7 @@ static NTSTATUS smbd_open_unlock(
 		if (smbd_open->open_state.dhmode != x_smbd_dhmode_t::NONE) {
 			int ret = x_smbd_volume_update_durable_locks(
 					*smbd_open->smbd_object->smbd_volume,
+					smbd_open->is_persistent(),
 					smbd_open->id_persistent,
 					locks);
 			X_LOG(SMB, DBG, "durable_update_locks for %p 0x%lx, ret = %d",

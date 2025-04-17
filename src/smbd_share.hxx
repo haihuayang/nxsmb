@@ -167,11 +167,14 @@ int x_smbd_volume_update_durable_flags(x_smbd_volume_t &smbd_volume,
 		uint64_t id_persistent,
 		const x_smbd_open_state_t &open_state);
 int x_smbd_volume_update_durable_locks(x_smbd_volume_t &smbd_volume,
+		bool sync,
 		uint64_t id_persistent,
 		const std::vector<x_smb2_lock_element_t> &locks);
 int x_smbd_volume_remove_durable(x_smbd_volume_t &smbd_volume,
+		bool sync,
 		uint64_t id_persistent);
 int x_smbd_volume_disconnect_durable(x_smbd_volume_t &smbd_volume,
+		bool sync,
 		uint64_t id_persistent);
 std::shared_ptr<x_smbd_share_t> x_smbd_ipc_share_create();
 std::shared_ptr<x_smbd_share_t> x_smbd_simplefs_share_create(

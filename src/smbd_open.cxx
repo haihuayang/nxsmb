@@ -296,6 +296,7 @@ static void smbd_close_open_intl(
 	if (smbd_open->open_state.dhmode != x_smbd_dhmode_t::NONE) {
 		int ret = x_smbd_volume_remove_durable(
 				*smbd_open->smbd_object->smbd_volume,
+				smbd_open->is_persistent(),
 				smbd_open->id_persistent);
 		X_LOG(SMB, DBG, "remove_durable for %p 0x%lx, ret = %d",
 				smbd_open, smbd_open->id_persistent, ret);
@@ -476,6 +477,7 @@ static bool smbd_open_set_durable(x_smbd_open_t *smbd_open)
 
 	int ret = x_smbd_volume_disconnect_durable(
 			*smbd_object->smbd_volume,
+			smbd_open->is_persistent(),
 			smbd_open->id_persistent);
 	X_LOG(SMB, DBG, "set_durable_expired for %p 0x%lx, ret = %d",
 			smbd_open, smbd_open->id_persistent, ret);
