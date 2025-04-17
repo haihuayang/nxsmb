@@ -22,6 +22,11 @@ struct x_smbd_requ_sesssetup_t : x_smbd_requ_t
 		return { false, false, true };
 	}
 
+	NTSTATUS cancelled(void *ctx_conn, int reason)
+	{
+		return NT_STATUS_CANCELLED;
+	}
+
 	NTSTATUS process(void *ctx_conn) override;
 	NTSTATUS done_smb2(x_smbd_conn_t *smbd_conn, NTSTATUS status) override;
 
