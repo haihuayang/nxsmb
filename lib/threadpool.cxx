@@ -45,20 +45,16 @@ struct x_threadpool_t
 static void __threadpool_schedule_job(x_threadpool_t *tp, x_job_t *job)
 {
 	X_ASSERT(job->state == x_job_t::STATE_SCHEDULED);
-	x_thread_t *thread = nullptr;
-	{
-		auto lock = std::lock_guard(tp->mutex);
-		if (tp->free_thread_list) {
-			thread = tp->free_thread_list;
-			tp->free_thread_list = thread->next;
-			thread->next = nullptr;
-			thread->job = job;
-		} else {
-			tp->queue.push_back(job);
-		}
-	}
-	if (thread) {
+	auto lock = std::lock_guard(tp->mutex);
+	if (tp->free_thread_list) {
+		x_thread_t *thread = nullptr;
+		thread = tp->free_thread_list;
+		tp->free_thread_list = thread->next;
+		thread->next = nullptr;
+		thread->job = job;
 		thread->cond.notify_one();
+	} else {
+		tp->queue.push_back(job);
 	}
 }
 
