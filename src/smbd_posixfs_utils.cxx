@@ -43,6 +43,8 @@ static void fill_statex(x_smbd_object_meta_t *object_meta,
 	/* samba use mtime for change time */
 	object_meta->change = kst.mtime;
 	stream_meta->end_of_file = S_ISDIR(kst.mode) ? 0 : kst.size;
+	stream_meta->allocation_size = S_ISDIR(kst.mode) ? 0 :
+		std::max(uint64_t(kst.blocks) * 512, uint64_t(kst.size)); /* TODO */
 	object_meta->file_attributes = dos_attr.file_attrs;
 	object_meta->nlink = kst.nlink;
 }
