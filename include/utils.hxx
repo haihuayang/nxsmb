@@ -369,6 +369,18 @@ struct x_ref_ptr_t
 	T *val;
 };
 
+namespace std
+{
+
+template <class T>
+void swap(x_ref_ptr_t<T> &a, x_ref_ptr_t<T> &b) noexcept
+{
+	using std::swap;
+	swap(a.val, b.val);
+}
+
+} // namespace std
+
 struct x_bitmap_t
 {
 	enum { invalid = (uint32_t)-1, };

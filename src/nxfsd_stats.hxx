@@ -42,6 +42,7 @@ enum {
 #define X_NXFSD_PAIR_COUNTER_ENUM \
 	X_NXFSD_PAIR_COUNTER_DECL(user_evt) \
 	X_NXFSD_PAIR_COUNTER_DECL(orphan_user_evt) \
+	X_NXFSD_PAIR_COUNTER_DECL(durable_fd) \
 	X_NXFSD_PAIR_COUNTER_DECL(smbd_conn) \
 	X_NXFSD_PAIR_COUNTER_DECL(smbd_sess) \
 	X_NXFSD_PAIR_COUNTER_DECL(smbd_chan) \

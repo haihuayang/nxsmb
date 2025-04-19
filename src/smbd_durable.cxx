@@ -1,5 +1,6 @@
 
 #include "include/bits.hxx"
+#include "include/utils.hxx"
 #include "smbd_durable.hxx"
 #include <sys/mman.h>
 #include <unistd.h>
@@ -7,7 +8,7 @@
 #include <sys/stat.h>
 #include <string.h>
 #include <atomic>
-#include <mutex>
+#include <shared_mutex>
 #include <queue>
 #include <stdlib.h>
 #include <dirent.h>
@@ -21,12 +22,40 @@ struct x_smbd_durable_slot_t
 
 struct x_smbd_durable_fd_t
 {
-	x_smbd_durable_fd_t(int fd) : fd(fd) { }
-	~x_smbd_durable_fd_t() { X_ASSERT(close(fd) == 0); }
+	x_smbd_durable_fd_t(int fd) : fd(fd) {
+		X_NXFSD_COUNTER_INC_CREATE(durable_fd, 1);
+	}
+	~x_smbd_durable_fd_t() {
+		X_ASSERT(close(fd) == 0);
+		X_NXFSD_COUNTER_INC_DELETE(durable_fd, 1);
+	}
 
+	std::atomic<int> refcnt{1};
 	const int fd;
 	std::atomic<uint64_t> num_record{};
 };
+
+template <>
+x_smbd_durable_fd_t *x_ref_inc(x_smbd_durable_fd_t *log_fd)
+{
+	log_fd->refcnt.fetch_add(1, std::memory_order_relaxed);
+	return log_fd;
+}
+
+template <>
+void x_ref_dec(x_smbd_durable_fd_t *log_fd)
+{
+	if (log_fd->refcnt.fetch_sub(1, std::memory_order_acq_rel) == 1) {
+		delete log_fd;
+	}
+}
+
+static inline void smbd_durable_fd_release(x_smbd_durable_fd_t *log_fd)
+{
+	if (log_fd->refcnt.fetch_sub(1, std::memory_order_acq_rel) == 1) {
+		delete log_fd;
+	}
+}
 
 struct x_smbd_durable_db_t
 {
@@ -42,12 +71,20 @@ struct x_smbd_durable_db_t
 	std::atomic<int> refcnt{1};
 	const int dir_fd;
 	const uint32_t max_record_per_file;
-	std::shared_ptr<x_smbd_durable_fd_t> log_fd;
+	std::shared_mutex mutex;
+	x_ref_ptr_t<x_smbd_durable_fd_t> log_fd{nullptr};
 	uint64_t next_file_no;
 
 	std::atomic<int64_t> num_durable;
 	std::vector<x_smbd_durable_slot_t> slots;
 };
+
+static inline x_smbd_durable_fd_t *get_log_fd(x_smbd_durable_db_t *db)
+{
+	std::shared_lock<std::shared_mutex> lock(db->mutex);
+	db->log_fd->refcnt.fetch_add(1, std::memory_order_relaxed);
+	return db->log_fd;
+}
 
 static inline uint64_t get_epoch_msec()
 {
@@ -116,7 +153,7 @@ int x_smbd_durable_remove(x_smbd_durable_db_t *db, bool sync, uint64_t id_persis
 	X_ASSERT(id_volatile != 0);
 	X_ASSERT(db->num_durable.fetch_sub(1, std::memory_order_relaxed) > 0);
 
-	auto log_fd = db->log_fd;
+	auto log_fd = x_ref_ptr_t(get_log_fd(db));
 	return smbd_durable_post_output(db, *log_fd,
 			x_smbd_durable_log_close(log_fd->fd, sync, id_persistent));
 }
@@ -128,7 +165,7 @@ int x_smbd_durable_disconnect(x_smbd_durable_db_t *db, bool sync, uint64_t id_pe
 
 	X_ASSERT(slot_id < db->slots.size());
 
-	auto log_fd = db->log_fd;
+	auto log_fd = x_ref_ptr_t(get_log_fd(db));
 	return smbd_durable_post_output(db, *log_fd,
 			x_smbd_durable_log_disconnect(log_fd->fd, sync, id_persistent,
 				get_epoch_msec()));
@@ -143,7 +180,7 @@ int x_smbd_durable_save(x_smbd_durable_db_t *db,
 {
 	X_LOG(SMB, DBG, "id_persistent=0x%lx", id_persistent);
 
-	auto log_fd = db->log_fd;
+	auto log_fd = x_ref_ptr_t(get_log_fd(db));
 	return smbd_durable_post_output(db, *log_fd,
 			x_smbd_durable_log_durable(log_fd->fd, id_persistent,
 				uint64_t(-1),
@@ -160,7 +197,7 @@ int x_smbd_durable_update_flags(x_smbd_durable_db_t *db,
 {
 	X_LOG(SMB, DBG, "id_persistent=0x%lx", id_persistent);
 
-	auto log_fd = db->log_fd;
+	auto log_fd = x_ref_ptr_t(get_log_fd(db));
 	return smbd_durable_post_output(db, *log_fd,
 			x_smbd_durable_log_flags(log_fd->fd, sync, id_persistent,
 				flags));
@@ -173,7 +210,7 @@ int x_smbd_durable_update_locks(x_smbd_durable_db_t *db,
 {
 	X_LOG(SMB, DBG, "id_persistent=0x%lx", id_persistent);
 
-	auto log_fd = db->log_fd;
+	auto log_fd = x_ref_ptr_t(get_log_fd(db));
 	return smbd_durable_post_output(db, *log_fd,
 			x_smbd_durable_log_locks(log_fd->fd, sync, id_persistent,
 				locks));
@@ -288,7 +325,7 @@ void x_smbd_durable_db_restore(
 
 	durable_db->next_file_no = next_file_no;
 	fd = smbd_durable_open_log(durable_db, 0);
-	durable_db->log_fd = std::make_shared<x_smbd_durable_fd_t>(fd);
+	durable_db->log_fd = x_ref_ptr_t(new x_smbd_durable_fd_t(fd));
 	X_LOG(SMB, NOTICE, "durable_restored %ld", count);
 }
 
@@ -303,8 +340,11 @@ static void smbd_durable_merge_log(x_smbd_durable_db_t *durable_db)
 {
 	uint64_t max_file_no = durable_db->next_file_no;
 	int fd = smbd_durable_open_log(durable_db, 0);
-	auto log_fd = std::make_shared<x_smbd_durable_fd_t>(fd);
-	std::swap(durable_db->log_fd, log_fd);
+	auto log_fd = x_ref_ptr_t(new x_smbd_durable_fd_t(fd));
+	{
+		auto lock = std::unique_lock(durable_db->mutex);
+		std::swap(durable_db->log_fd, log_fd);
+	}
 
 	if ((max_file_no % 3) != 0) {
 		return;
@@ -313,7 +353,7 @@ static void smbd_durable_merge_log(x_smbd_durable_db_t *durable_db)
 	X_LOG(SMB, DBG, "merge durable log file for dirfd %d, next_file_no %lx",
 			durable_db->dir_fd, max_file_no);
 
-	if (log_fd.use_count() > 1) {
+	if (log_fd->refcnt.load(std::memory_order_relaxed) > 1) {
 		--max_file_no;
 		X_LOG(SMB, DBG, "some thread still write into 0x%016lx, skip it",
 				max_file_no);
