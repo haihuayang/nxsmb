@@ -62,6 +62,7 @@ void x_smbd_durable_db_restore(
 		NTSTATUS (*restore_fn)(
 			std::shared_ptr<x_smbd_share_t> &smbd_share,
 			std::shared_ptr<x_smbd_volume_t> &smbd_volume,
+			uint64_t id_persistent,
 			x_smbd_durable_t &durable, uint64_t timeout_msec));
 
 struct x_smbd_durable_db_visitor_t

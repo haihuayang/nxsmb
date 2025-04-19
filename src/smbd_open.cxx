@@ -1817,6 +1817,7 @@ NTSTATUS x_smbd_open_op_reconnect(x_smbd_requ_t *smbd_requ,
 NTSTATUS x_smbd_open_restore(
 		std::shared_ptr<x_smbd_share_t> &smbd_share,
 		std::shared_ptr<x_smbd_volume_t> &smbd_volume,
+		uint64_t id_persistent,
 		x_smbd_durable_t &smbd_durable,
 		uint64_t timeout_msec)
 {
@@ -1847,6 +1848,8 @@ NTSTATUS x_smbd_open_restore(
 	if (!NT_STATUS_IS_OK(status)) {
 		return status;
 	}
+
+	smbd_open->id_persistent = id_persistent;
 
 	if ((open_state.flags & x_smbd_open_state_t::F_REPLAY_CACHED) &&
 			open_state.create_guid.is_valid()) {

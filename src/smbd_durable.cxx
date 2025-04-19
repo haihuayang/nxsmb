@@ -219,6 +219,7 @@ void x_smbd_durable_db_restore(
 		NTSTATUS (*restore_fn)(
 			std::shared_ptr<x_smbd_share_t> &smbd_share,
 			std::shared_ptr<x_smbd_volume_t> &smbd_volume,
+			uint64_t id_persistent,
 			x_smbd_durable_t &durable, uint64_t timeout_msec))
 {
 	uint64_t next_file_no;
@@ -254,7 +255,7 @@ void x_smbd_durable_db_restore(
 					id_persistent);
 			continue;
 		}
-		NTSTATUS status = restore_fn(smbd_share, smbd_volume, *durable, timeout_msec);
+		NTSTATUS status = restore_fn(smbd_share, smbd_volume, id_persistent, *durable, timeout_msec);
 		if (!NT_STATUS_IS_OK(status)) {
 			X_LOG(SMB, WARN, "failed to restore open %lx:%lx",
 					id_persistent,

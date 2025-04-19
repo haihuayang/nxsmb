@@ -196,6 +196,7 @@ int x_smbd_simplefs_rmtld(std::shared_ptr<x_smbd_share_t> &smbd_share,
 NTSTATUS x_smbd_open_restore(
 		std::shared_ptr<x_smbd_share_t> &smbd_share,
 		std::shared_ptr<x_smbd_volume_t> &smbd_volume,
+		uint64_t id_persistent,
 		x_smbd_durable_t &smbd_durable,
 		uint64_t timeout_msec);
 
