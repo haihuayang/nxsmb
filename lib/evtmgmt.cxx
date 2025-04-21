@@ -121,7 +121,8 @@ static x_job_t::retval_t epoll_job_run(x_job_t *job, void *data)
 	x_epoll_entry_t *entry = X_CONTAINER_OF(job, x_epoll_entry_t, job);
 	x_fdevents_t fdevents = entry->get_fdevents();
 	x_evtmgmt_t *evtmgmt = (x_evtmgmt_t *)data;
-	X_LOG(EVENT, DBG, "%d fdevents=0x%lx", evtmgmt->get_entry_fd(entry), fdevents);
+	X_LOG(EVENT, DBG, "job=%p fd=%d fdevents=0x%lx",
+			job, evtmgmt->get_entry_fd(entry), fdevents);
 	if (x_fdevents_processable(fdevents)) {
 		if (entry->upcall->on_getevents(fdevents)) {
 			evtmgmt->release(entry);
@@ -134,8 +135,8 @@ static x_job_t::retval_t epoll_job_run(x_job_t *job, void *data)
 
 	x_fdevents_t oval, nval;
 	entry->modify_fdevents(fdevents, &oval, &nval);
-	X_LOG(EVENT, DBG, "%d fdevents=0x%lx, oval=0x%lx, nval=0x%lx",
-			evtmgmt->get_entry_fd(entry), fdevents, oval, nval);
+	X_LOG(EVENT, DBG, "job=%p fd=%d fdevents=0x%lx, oval=0x%lx, nval=0x%lx",
+			job, evtmgmt->get_entry_fd(entry), fdevents, oval, nval);
 	uint32_t ret = x_fdevents_processable(nval);
 	if (ret == 0) {
 		return x_job_t::JOB_BLOCKED;
