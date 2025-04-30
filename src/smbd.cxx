@@ -83,6 +83,39 @@ void x_smbd_init()
 	x_smbd_conn_srv_init(smbd_conf->port);
 }
 
+#undef X_SMBD_COUNTER_DECL
+#define X_SMBD_COUNTER_DECL(x) # x,
+static const char *smbd_counter_names[] = {
+	X_SMBD_COUNTER_ENUM
+};
+
+#undef X_SMBD_PAIR_COUNTER_DECL
+#define X_SMBD_PAIR_COUNTER_DECL(x) # x,
+static const char *smbd_pair_counter_names[] = {
+	X_SMBD_PAIR_COUNTER_ENUM
+};
+
+#undef X_SMBD_HISTOGRAM_DECL
+#define X_SMBD_HISTOGRAM_DECL(x) # x,
+static const char *smbd_histogram_names[] = {
+	X_SMBD_HISTOGRAM_ENUM
+};
+
+x_stats_module_t x_smbd_stats = {
+	"smbd",
+	X_SMBD_COUNTER_ID_MAX,
+	X_SMBD_PAIR_COUNTER_ID_MAX,
+	X_SMBD_HISTOGRAM_ID_MAX,
+	smbd_counter_names,
+	smbd_pair_counter_names,
+	smbd_histogram_names,
+};
+
+void x_smbd_stats_init()
+{
+	x_stats_register_module(x_smbd_stats);
+}
+
 const std::vector<uint8_t> &x_smbd_get_negprot_spnego()
 {
 	return g_smbd.negprot_spnego;

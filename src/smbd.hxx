@@ -6,7 +6,6 @@
 #error "Must be c++"
 #endif
 
-#include "event.hxx"
 #include "include/wbpool.hxx"
 #include <vector>
 #include <list>
@@ -35,10 +34,6 @@ const NTSTATUS X_NT_STATUS_INTERNAL_TERMINATE	= {2};
 
 x_auth_t *x_smbd_create_auth(const void *sec_buf, size_t sec_len);
 const std::vector<uint8_t> &x_smbd_get_negprot_spnego();
-
-enum {
-	X_SMBD_MAX_THREAD = 256,
-};
 
 enum {
 	/* in seconds */
@@ -355,6 +350,103 @@ void x_smbd_notify_post_deleting(x_smbd_open_t *smbd_open, NTSTATUS status);
 void x_smbd_schedule_async(x_job_t *job);
 
 void x_smbd_init();
+
+/* Declare counter id below, e.g., X_SMBD_COUNTER_DECL(name) */
+#define X_SMBD_COUNTER_ENUM \
+	X_SMBD_COUNTER_DECL(smbd_sess_bind) \
+	X_SMBD_COUNTER_DECL(smbd_reply_interim) \
+	X_SMBD_COUNTER_DECL(smbd_cancel_success) \
+	X_SMBD_COUNTER_DECL(smbd_cancel_toolate) \
+	X_SMBD_COUNTER_DECL(smbd_cancel_noent) \
+	X_SMBD_COUNTER_DECL(smbd_wakeup_stale) \
+	X_SMBD_COUNTER_DECL(smbd_toomany_open) \
+	X_SMBD_COUNTER_DECL(smbd_toomany_tcon) \
+	X_SMBD_COUNTER_DECL(smbd_toomany_sess) \
+	X_SMBD_COUNTER_DECL(smbd_stale_sess) \
+	X_SMBD_COUNTER_DECL(smbd_toomany_chan) \
+	X_SMBD_COUNTER_DECL(smbd_fail_alloc_chan) \
+	X_SMBD_COUNTER_DECL(smbd_fail_alloc_qdir) \
+
+enum {
+#undef X_SMBD_COUNTER_DECL
+#define X_SMBD_COUNTER_DECL(x) X_SMBD_COUNTER_ID_ ## x,
+	X_SMBD_COUNTER_ENUM
+	X_SMBD_COUNTER_ID_MAX,
+};
+
+/* Declare pair counter id below, e.g., X_SMBD_PAIR_COUNTER_DECL(name) */
+#define X_SMBD_PAIR_COUNTER_ENUM \
+	X_SMBD_PAIR_COUNTER_DECL(durable_fd) \
+	X_SMBD_PAIR_COUNTER_DECL(smbd_conn) \
+	X_SMBD_PAIR_COUNTER_DECL(smbd_sess) \
+	X_SMBD_PAIR_COUNTER_DECL(smbd_chan) \
+	X_SMBD_PAIR_COUNTER_DECL(smbd_tcon) \
+	X_SMBD_PAIR_COUNTER_DECL(smbd_object) \
+	X_SMBD_PAIR_COUNTER_DECL(smbd_stream) \
+	X_SMBD_PAIR_COUNTER_DECL(smbd_lease) \
+	X_SMBD_PAIR_COUNTER_DECL(posixfs_ads) \
+	X_SMBD_PAIR_COUNTER_DECL(smbd_open) \
+	X_SMBD_PAIR_COUNTER_DECL(smbd_replay) \
+	X_SMBD_PAIR_COUNTER_DECL(smbd_requ) \
+	X_SMBD_PAIR_COUNTER_DECL(smbd_qdir) \
+	X_SMBD_PAIR_COUNTER_DECL(auth_krb5) \
+	X_SMBD_PAIR_COUNTER_DECL(auth_ntlmssp) \
+
+enum {
+#undef X_SMBD_PAIR_COUNTER_DECL
+#define X_SMBD_PAIR_COUNTER_DECL(x) X_SMBD_PAIR_COUNTER_ID_ ## x,
+	X_SMBD_PAIR_COUNTER_ENUM
+	X_SMBD_PAIR_COUNTER_ID_MAX,
+};
+
+/* Declare histogram id below, e.g., X_SMBD_HISTOGRAM_DECL(name) */
+#define X_SMBD_HISTOGRAM_ENUM \
+	X_SMBD_HISTOGRAM_DECL(smbd_op_negprot) \
+	X_SMBD_HISTOGRAM_DECL(smbd_op_sesssetup) \
+	X_SMBD_HISTOGRAM_DECL(smbd_op_logoff) \
+	X_SMBD_HISTOGRAM_DECL(smbd_op_tcon) \
+	X_SMBD_HISTOGRAM_DECL(smbd_op_tdis) \
+	X_SMBD_HISTOGRAM_DECL(smbd_op_create) \
+	X_SMBD_HISTOGRAM_DECL(smbd_op_close) \
+	X_SMBD_HISTOGRAM_DECL(smbd_op_flush) \
+	X_SMBD_HISTOGRAM_DECL(smbd_op_read) \
+	X_SMBD_HISTOGRAM_DECL(smbd_op_write) \
+	X_SMBD_HISTOGRAM_DECL(smbd_op_lock) \
+	X_SMBD_HISTOGRAM_DECL(smbd_op_ioctl) \
+	X_SMBD_HISTOGRAM_DECL(smbd_op_cancel) \
+	X_SMBD_HISTOGRAM_DECL(smbd_op_keepalive) \
+	X_SMBD_HISTOGRAM_DECL(smbd_op_querydir) \
+	X_SMBD_HISTOGRAM_DECL(smbd_op_notify) \
+	X_SMBD_HISTOGRAM_DECL(smbd_op_getinfo) \
+	X_SMBD_HISTOGRAM_DECL(smbd_op_setinfo) \
+	X_SMBD_HISTOGRAM_DECL(smbd_op_break) \
+
+enum {
+#undef X_SMBD_HISTOGRAM_DECL
+#define X_SMBD_HISTOGRAM_DECL(x) X_SMBD_HISTOGRAM_ID_ ## x,
+	X_SMBD_HISTOGRAM_ENUM
+	X_SMBD_HISTOGRAM_ID_MAX,
+};
+
+extern x_stats_module_t x_smbd_stats;
+
+#define X_SMBD_COUNTER_INC(id, num) \
+	X_STATS_COUNTER_INC(x_smbd_stats.counter_base + X_SMBD_COUNTER_ID_##id, (num))
+
+#define X_SMBD_COUNTER_INC_CREATE(id, num) \
+	X_STATS_COUNTER_INC_CREATE(x_smbd_stats.pair_counter_base + X_SMBD_PAIR_COUNTER_ID_##id, (num))
+
+#define X_SMBD_COUNTER_INC_DELETE(id, num) \
+	X_STATS_COUNTER_INC_DELETE(x_smbd_stats.pair_counter_base + X_SMBD_PAIR_COUNTER_ID_##id, (num))
+
+#define X_SMBD_HISTOGRAM_UPDATE_(id, elapsed) do { \
+	local_stats.histograms[x_smbd_stats.histogram_base + id].update(elapsed); \
+} while (0)
+
+#define X_SMBD_HISTOGRAM_UPDATE(id, elapsed) \
+	X_SMBD_HISTOGRAM_UPDATE_(X_SMBD_HISTOGRAM_ID_ ## id, elapsed)
+
+void x_smbd_stats_init();
 
 #endif /* __smbd__hxx__ */
 

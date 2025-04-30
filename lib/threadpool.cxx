@@ -1,5 +1,6 @@
 
 #include "include/threadpool.hxx"
+#include "include/sched.hxx"
 #include <pthread.h>
 #include <vector>
 #include <mutex>
@@ -53,8 +54,10 @@ static void __threadpool_schedule_job(x_threadpool_t *tp, x_job_t *job)
 		thread->next = nullptr;
 		thread->job = job;
 		thread->cond.notify_one();
+		X_SCHED_COUNTER_INC(sched_wakeup, 1);
 	} else {
 		tp->queue.push_back(job);
+		X_SCHED_COUNTER_INC(sched_queue, 1);
 	}
 }
 
@@ -64,10 +67,12 @@ static inline void __threadpool_continue_job(x_threadpool_t *tpool, x_thread_t *
 		/* no pending job */
 		X_LOG(EVENT, DBG, "continue job %p", job);
 		thread_self->job = job;
+		X_SCHED_COUNTER_INC(sched_selfcont, 1);
 	} else {
 		/* no thread waiting */
 		X_LOG(EVENT, DBG, "queue job %p", job);
 		tpool->queue.push_back(job);
+		X_SCHED_COUNTER_INC(sched_requeue, 1);
 	}
 }
 
@@ -108,6 +113,7 @@ static void *thread_func(void *arg)
 				X_ASSERT(!thread_self->next);
 				thread_self->next = tpool->free_thread_list;
 				tpool->free_thread_list = thread_self;
+				X_SCHED_COUNTER_INC(sched_nojob, 1);
 				thread_self->cond.wait(ul);
 				continue;
 			}
@@ -118,8 +124,9 @@ static void *thread_func(void *arg)
 		auto orig_job_state = job->state.exchange(x_job_t::STATE_RUNNING);
 		X_ASSERT(orig_job_state == x_job_t::STATE_SCHEDULED);
 
-		tick_now = x_tick_now();
+		auto tick_start = tick_now = x_tick_now();
 		x_job_t::retval_t status = job->run(job, tpool->private_data);
+		X_SCHED_HISTOGRAM_UPDATE(sched_run, X_STATS_ELAPSED(tick_start, x_tick_now()));
 		X_LOG(EVENT, DBG, "run job %p %d", job, status);
 		if (status == x_job_t::JOB_DONE) {
 			ul.lock();
@@ -213,6 +220,7 @@ bool x_threadpool_schedule(x_threadpool_t *tpool, x_job_t *job)
 		uint32_t state = oval & 0xffff;
 		if (state == x_job_t::STATE_DONE) {
 			X_ASSERT(oval == state);
+			X_SCHED_COUNTER_INC(sched_done, 1);
 			return false;
 		} else if (state == x_job_t::STATE_RUNNING) {
 			nval = state | 0x10000;
@@ -220,6 +228,7 @@ bool x_threadpool_schedule(x_threadpool_t *tpool, x_job_t *job)
 			nval = x_job_t::STATE_SCHEDULED;
 		} else {
 			/* Already scheduled */
+			X_SCHED_COUNTER_INC(sched_already, 1);
 			return true;
 		}
 

@@ -20,7 +20,7 @@ static struct {
 } g_nxfsd;
 
 static __thread int thread_id = -1;
-static x_bitmap_t g_thread_id_bitmap{X_SMBD_MAX_THREAD};
+static x_bitmap_t g_thread_id_bitmap{X_NXFSD_MAX_THREAD};
 static std::mutex g_thread_id_mutex;
 
 static void x_nxfsd_thread_init(uint32_t no)
@@ -110,6 +110,9 @@ static void nxfsd_init(const char *progname)
 			g_build.date,
 			g_build.branch);
 
+	x_sched_stats_init();
+	x_smbd_stats_init();
+	x_noded_stats_init();
 	x_nxfsd_stats_init();
 
 	x_nxfsd_thread_init(0);

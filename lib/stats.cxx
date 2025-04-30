@@ -1,6 +1,6 @@
 
 #include "include/utils.hxx"
-#include "stats.hxx"
+#include "include/stats.hxx"
 #include <vector>
 
 static struct {
@@ -8,23 +8,35 @@ static struct {
 	uint32_t num_pair_counter;
 	uint32_t num_histogram;
 	uint32_t num_thread;
+	std::vector<x_stats_module_t *> modules;
 	x_stats_t **stats_table{};
 } g_stats;
 
 thread_local x_stats_t local_stats;
 
-void x_stats_init(uint32_t num_thread, uint32_t num_counter,
-		uint32_t num_pair_counter, uint32_t num_histogram)
+int x_stats_register_module(x_stats_module_t &mod)
+{
+	mod.counter_base = g_stats.num_counter;
+	g_stats.num_counter += mod.num_counter;
+
+	mod.pair_counter_base = g_stats.num_pair_counter;
+	g_stats.num_pair_counter += mod.num_pair_counter;
+
+	mod.histogram_base = g_stats.num_histogram;
+	g_stats.num_histogram += mod.num_histogram;
+
+	g_stats.modules.push_back(&mod);
+	return 0;
+}
+
+void x_stats_init(uint32_t num_thread)
 {
 	X_ASSERT(!g_stats.stats_table);
-	g_stats.num_counter = num_counter;
-	g_stats.num_pair_counter = num_pair_counter;
-	g_stats.num_histogram = num_histogram;
 	g_stats.num_thread = num_thread;
 	g_stats.stats_table = new x_stats_t*[num_thread]{};
 }
 
-int x_stats_register(uint32_t thread_id)
+int x_stats_register_thread(uint32_t thread_id)
 {
 	X_ASSERT(thread_id < g_stats.num_thread);
 	if (g_stats.stats_table[thread_id]) {
@@ -51,7 +63,7 @@ int x_stats_register(uint32_t thread_id)
 	return 0;
 }
 
-void x_stats_unregister(uint32_t thread_id)
+void x_stats_unregister_thread(uint32_t thread_id)
 {
 	/* we do not free the thread local stats, later new thread allocated
 	 * with the same thread_id can keep using the local stats.
@@ -233,26 +245,36 @@ static void output_histogram(std::ostream &os,
 }
 
 std::string x_stats_output(const x_stats_store_t &stats,
-		const char *const counter_names[],
-		const char *const pair_counter_names[],
-		const char *const histogram_names[],
 		uint32_t band_start, uint32_t band_group, uint32_t band_step)
 {
+	if (g_stats.modules.empty()) {
+		return {};
+	}
+
 	std::ostringstream os;
 	bool first = true;
+	uint32_t mi = 0;
 	for (uint32_t ci = 0; ci < g_stats.num_counter; ++ci) {
+		while (ci >= g_stats.modules[mi]->counter_base + g_stats.modules[mi]->num_counter) {
+			++mi;
+		}
 		auto total = stats.counters[ci];
 		if (total) {
 			if (first) {
 				output_counter_header(os);
 				first = false;
 			}
-			output_counter(os, total, counter_names[ci]);
+			output_counter(os, total, g_stats.modules[mi]->counter_names[ci - g_stats.modules[mi]->counter_base]);
 		}
 	}
 
 	first = true;
+	mi = 0;
 	for (uint32_t pi = 0; pi < g_stats.num_pair_counter; ++pi) {
+		while (pi >= g_stats.modules[mi]->pair_counter_base +
+				g_stats.modules[mi]->num_pair_counter) {
+			++mi;
+		}
 		auto total_create = stats.pair_counters[pi * 2];
 		auto total_delete = stats.pair_counters[pi * 2 + 1];
 		if (total_create != 0 || total_delete != 0) {
@@ -260,12 +282,17 @@ std::string x_stats_output(const x_stats_store_t &stats,
 				output_pair_header(os);
 				first = false;
 			}
-			output_pair(os, total_create, total_delete, pair_counter_names[pi]);
+			output_pair(os, total_create, total_delete,
+					g_stats.modules[mi]->pair_counter_names[pi - g_stats.modules[mi]->pair_counter_base]);
 		}
 	}
 
 	first = true;
+	mi = 0;
 	for (uint32_t hi = 0; hi < g_stats.num_histogram; ++hi) {
+		while (hi >= g_stats.modules[mi]->histogram_base + g_stats.modules[mi]->num_histogram) {
+			++mi;
+		}
 		if (stats.histogram_totals[hi] > 0) {
 			if (first) {
 				output_histogram_header(os, band_start, band_group, band_step);
@@ -274,7 +301,7 @@ std::string x_stats_output(const x_stats_store_t &stats,
 			output_histogram(os, band_start, band_group, band_step,
 					stats.histograms[hi],
 					stats.histogram_totals[hi],
-					histogram_names[hi]);
+					g_stats.modules[mi]->histogram_names[hi - g_stats.modules[mi]->histogram_base]);
 		}
 	}
 

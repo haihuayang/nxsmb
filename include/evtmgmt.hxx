@@ -7,7 +7,9 @@
 #endif
 
 #include "threadpool.hxx"
+#include "sched.hxx"
 #include "timeout.hxx"
+#include "stats.hxx"
 #include <sys/epoll.h>
 
 enum {
@@ -91,6 +93,24 @@ bool x_evtmgmt_del_timer(x_evtmgmt_t *ep, x_timer_job_t *timer_job);
 
 int x_evtmgmt_call(x_evtmgmt_t *ep, uint64_t id, void (*func)(
 			x_epoll_upcall_t *upcall, void *data), void *data);
+
+struct x_fdevt_user_t
+{
+	typedef void func_t(void *arg, x_fdevt_user_t *);
+	x_fdevt_user_t(func_t f, const char *l) : func(f), location(l)
+	{
+		X_SCHED_COUNTER_INC_CREATE(user_evt, 1);
+	}
+	~x_fdevt_user_t()
+	{
+		X_SCHED_COUNTER_INC_DELETE(user_evt, 1);
+	}
+	x_fdevt_user_t(const x_fdevt_user_t &) = delete;
+	x_fdevt_user_t &operator=(const x_fdevt_user_t &) = delete;
+	x_dlink_t link;
+	func_t *const func;
+	const char * const location;
+};
 
 #endif /* __evtmgmt__hxx__ */
 

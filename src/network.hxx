@@ -7,12 +7,15 @@
 #endif
 
 #include "include/utils.hxx"
+#include "include/evtmgmt.hxx"
 #include "buf.hxx"
-#include "event.hxx"
 #include <string>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <sys/ioctl.h>
+
+
+extern x_evtmgmt_t *g_evtmgmt;
 
 std::string x_sockaddr_tostr(const struct sockaddr *sa, size_t slen);
 

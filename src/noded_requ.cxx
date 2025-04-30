@@ -14,13 +14,13 @@ std::ostream &x_noded_requ_t::tostr(std::ostream &os) const
 x_noded_requ_t::x_noded_requ_t(x_noded_conn_t *noded_conn)
 	: x_nxfsd_requ_t((x_nxfsd_conn_t *)noded_conn)
 {
-	X_NXFSD_COUNTER_INC_CREATE(noded_requ, 1);
+	X_NODED_COUNTER_INC_CREATE(noded_requ, 1);
 }
 
 x_noded_requ_t::~x_noded_requ_t()
 {
 	X_NODED_REQU_LOG(DBG, this, " freed");
-	X_NXFSD_COUNTER_INC_DELETE(noded_requ, 1);
+	X_NODED_COUNTER_INC_DELETE(noded_requ, 1);
 }
 
 NTSTATUS x_noded_requ_init_open(x_noded_requ_t *noded_requ,

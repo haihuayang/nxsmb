@@ -127,7 +127,7 @@ static void x_noded_set_reply_hdr(x_noded_requ_t *noded_requ,
 	auto __now = x_tick_now(); \
 	auto __elapsed = __now - (r)->start; \
 	X_ASSERT(__elapsed >= 0); \
-	X_STATS_HISTOGRAM_UPDATE(X_NXFSD_HISTOGRAM_ID_noded_op_ping + (r)->in_node_requ.opcode, __elapsed / 1000); \
+	X_NODED_HISTOGRAM_UPDATE_((r)->in_node_requ.opcode, __elapsed / 1000); \
 } while (0)
 
 static void x_noded_reply(x_noded_conn_t *noded_conn,
@@ -181,7 +181,7 @@ static int x_noded_reply_interim(x_noded_conn_t *noded_conn, x_noded_requ_t *nod
 	out_resp->async_id = X_H2LE64(x_nxfsd_requ_get_async_id(noded_requ));
 
 	x_noded_set_reply_hdr(noded_requ, NT_STATUS_PENDING, out_buf);
-	X_NXFSD_COUNTER_INC(noded_reply_interim, 1);
+	X_NODED_COUNTER_INC(noded_reply_interim, 1);
 
 	noded_requ->compound_out_buf.append(out_buf);
 
@@ -406,13 +406,13 @@ x_noded_conn_t::x_noded_conn_t(int fd, const x_sockaddr_t &saddr)
 	: base(&noded_conn_upcall_cbs, fd, saddr, x_noded_conn_t::MAX_MSG,
 			sizeof(node_hdr), &node_hdr)
 {
-	X_NXFSD_COUNTER_INC_CREATE(noded_conn, 1);
+	X_NODED_COUNTER_INC_CREATE(noded_conn, 1);
 }
 
 x_noded_conn_t::~x_noded_conn_t()
 {
 	X_LOG(NODED, DBG, "x_noded_conn_t %p destroy", this);
-	X_NXFSD_COUNTER_INC_DELETE(noded_conn, 1);
+	X_NODED_COUNTER_INC_DELETE(noded_conn, 1);
 }
 
 static inline x_noded_t *x_noded_from_strm_srv(x_strm_srv_t *strm_srv)
@@ -505,3 +505,35 @@ void x_noded_conn_link_open(x_nxfsd_conn_t *nxfsd_conn, x_smbd_open_t *smbd_open
 }
 
 
+#undef X_NODED_COUNTER_DECL
+#define X_NODED_COUNTER_DECL(x) # x,
+static const char *noded_counter_names[] = {
+	X_NODED_COUNTER_ENUM
+};
+
+#undef X_NODED_PAIR_COUNTER_DECL
+#define X_NODED_PAIR_COUNTER_DECL(x) # x,
+static const char *noded_pair_counter_names[] = {
+	X_NODED_PAIR_COUNTER_ENUM
+};
+
+#undef X_NODED_HISTOGRAM_DECL
+#define X_NODED_HISTOGRAM_DECL(x) # x,
+static const char *noded_histogram_names[] = {
+	X_NODED_HISTOGRAM_ENUM
+};
+
+x_stats_module_t x_noded_stats = {
+	"noded",
+	X_NODED_COUNTER_ID_MAX,
+	X_NODED_PAIR_COUNTER_ID_MAX,
+	X_NODED_HISTOGRAM_ID_MAX,
+	noded_counter_names,
+	noded_pair_counter_names,
+	noded_histogram_names,
+};
+
+void x_noded_stats_init()
+{
+	x_stats_register_module(x_noded_stats);
+}

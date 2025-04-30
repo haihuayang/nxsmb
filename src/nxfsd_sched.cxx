@@ -1,4 +1,5 @@
 
+#include "nxfsd.hxx"
 #include "nxfsd_sched.hxx"
 
 struct x_nxfsd_defer_t

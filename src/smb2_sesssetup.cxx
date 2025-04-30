@@ -130,7 +130,7 @@ NTSTATUS x_smbd_requ_sesssetup_t::process(void *ctx_conn)
 			if (!this->smbd_chan) {
 				X_SMBD_REQU_RETURN_STATUS(this, NT_STATUS_INSUFFICIENT_RESOURCES);
 			}
-			X_NXFSD_COUNTER_INC(smbd_sess_bind, 1);
+			X_SMBD_COUNTER_INC(smbd_sess_bind, 1);
 			new_auth = true;
 		}
 	} else if (!this->smbd_sess) {

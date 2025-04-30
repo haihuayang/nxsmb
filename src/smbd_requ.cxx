@@ -15,7 +15,7 @@ std::ostream &x_smbd_requ_t::tostr(std::ostream &os) const
 x_smbd_requ_t::x_smbd_requ_t(x_smbd_conn_t *smbd_conn)
 	: x_nxfsd_requ_t((x_nxfsd_conn_t *)(smbd_conn))
 {
-	X_NXFSD_COUNTER_INC_CREATE(smbd_requ, 1);
+	X_SMBD_COUNTER_INC_CREATE(smbd_requ, 1);
 }
 
 x_smbd_requ_t::~x_smbd_requ_t()
@@ -25,7 +25,7 @@ x_smbd_requ_t::~x_smbd_requ_t()
 	x_ref_dec_if(smbd_tcon);
 	x_ref_dec_if(smbd_chan);
 	x_ref_dec_if(smbd_sess);
-	X_NXFSD_COUNTER_INC_DELETE(smbd_requ, 1);
+	X_SMBD_COUNTER_INC_DELETE(smbd_requ, 1);
 }
 
 NTSTATUS x_smbd_requ_init_open(x_smbd_requ_t *smbd_requ,

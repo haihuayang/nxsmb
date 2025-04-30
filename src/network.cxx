@@ -7,6 +7,9 @@
 #include <sys/uio.h>
 
 
+x_evtmgmt_t *g_evtmgmt = nullptr;
+
+
 static int tcp_bind(int port)
 {
 	int sock = socket(PF_INET6, SOCK_STREAM, IPPROTO_TCP);

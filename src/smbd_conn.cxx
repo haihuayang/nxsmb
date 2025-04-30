@@ -127,7 +127,7 @@ uint32_t x_smbd_conn_get_capabilities(const x_smbd_conn_t *smbd_conn)
 	auto __now = x_tick_now(); \
 	auto __elapsed = __now - (smbd_requ)->start; \
 	X_ASSERT(__elapsed >= 0); \
-	X_STATS_HISTOGRAM_UPDATE((smbd_requ)->in_smb2_hdr.opcode, __elapsed / 1000); \
+	X_SMBD_HISTOGRAM_UPDATE_((smbd_requ)->in_smb2_hdr.opcode, __elapsed / 1000); \
 } while (0)
 
 int x_smbd_conn_negprot(x_smbd_conn_t *smbd_conn,
@@ -511,7 +511,7 @@ static int x_smbd_reply_interim(x_smbd_conn_t *smbd_conn, x_smbd_requ_t *smbd_re
 
 	smbd_requ->interim_state = x_nxfsd_requ_t::INTERIM_S_SENT;
 	x_smb2_set_reply_hdr(smbd_requ, NT_STATUS_PENDING, out_buf);
-	X_NXFSD_COUNTER_INC(smbd_reply_interim, 1);
+	X_SMBD_COUNTER_INC(smbd_reply_interim, 1);
 
 	smbd_requ->compound_out_buf.append(out_buf);
 
@@ -549,7 +549,7 @@ static void x_smbd_conn_cancel(x_smbd_conn_t *smbd_conn,
 	if (!smbd_requ) {
 		X_LOG(SMB, ERR, "cannot find pending requ by flags=0x%x, async_id=x%lx, mid=%lu",
 				smb2_hdr.flags, smb2_hdr.async_id, smb2_hdr.mid);
-		X_NXFSD_COUNTER_INC(smbd_cancel_noent, 1);
+		X_SMBD_COUNTER_INC(smbd_cancel_noent, 1);
 		return;
 	}
 
@@ -1471,7 +1471,7 @@ x_smbd_conn_t::x_smbd_conn_t(int fd, const x_sockaddr_t &saddr,
 	, machine_name{std::make_shared<std::u16string>(machine_name_from_saddr(saddr))}
 	, seq_bitmap(max_credits)
 {
-	X_NXFSD_COUNTER_INC_CREATE(smbd_conn, 1);
+	X_SMBD_COUNTER_INC_CREATE(smbd_conn, 1);
 	negprot.dialect = X_SMB2_DIALECT_000;
 }
 
@@ -1479,7 +1479,7 @@ x_smbd_conn_t::~x_smbd_conn_t()
 {
 	X_LOG(SMB, DBG, "x_smbd_conn_t %p destroy", this);
 	X_ASSERT(!chan_list.get_front());
-	X_NXFSD_COUNTER_INC_DELETE(smbd_conn, 1);
+	X_SMBD_COUNTER_INC_DELETE(smbd_conn, 1);
 }
 
 static inline x_smbd_srv_t *x_smbd_from_strm_srv(x_strm_srv_t *strm_srv)

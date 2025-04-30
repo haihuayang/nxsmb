@@ -69,7 +69,7 @@ all: $(TARGET_SET_tests:%=$(TARGET_DIR_out)/tests/%) \
 	$(TARGET_DIR_out)/bin/nxutils
 
 SET_src_smbd_nx := \
-	main event \
+	main \
 	smbd \
 	smbd_registry \
 	smbd_replay \
@@ -130,7 +130,6 @@ SET_src_smbd_nx := \
 	nxfsd_requ \
 	nxfsd_sched \
 	nxfsd_stats \
-	stats \
 	ctrld \
 	smbd_ntacl \
 	smbd_string \
@@ -254,6 +253,7 @@ TARGET_SRC_libnxsmb := \
 		lib/SpookyV2 \
 		lib/ntlmssp \
 		lib/spnego \
+		lib/stats \
 
 
 $(TARGET_DIR_out)/libnxsmb.a: \

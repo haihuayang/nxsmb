@@ -235,7 +235,7 @@ x_smbd_qdir_t::x_smbd_qdir_t(x_smbd_open_t *smbd_open, const x_smbd_qdir_ops_t *
 	, delay_ms(x_smbd_conf_get_curr().my_dev_delay_qdir_ms)
 	, smbd_user(smbd_user)
 {
-	X_NXFSD_COUNTER_INC_CREATE(smbd_qdir, 1);
+	X_SMBD_COUNTER_INC_CREATE(smbd_qdir, 1);
 }
 
 x_smbd_qdir_t::~x_smbd_qdir_t()
@@ -245,7 +245,7 @@ x_smbd_qdir_t::~x_smbd_qdir_t()
 		x_fnmatch_destroy(fnmatch);
 	}
 	x_ref_dec(smbd_open);
-	X_NXFSD_COUNTER_INC_DELETE(smbd_qdir, 1);
+	X_SMBD_COUNTER_INC_DELETE(smbd_qdir, 1);
 }
 
 NTSTATUS x_smbd_open_op_qdir(x_nxfsd_requ_t *nxfsd_requ, x_smbd_open_t *smbd_open,
@@ -267,7 +267,7 @@ NTSTATUS x_smbd_open_op_qdir(x_nxfsd_requ_t *nxfsd_requ, x_smbd_open_t *smbd_ope
 		if (!smbd_open->smbd_qdir) {
 			smbd_open->smbd_qdir = x_smbd_qdir_create(smbd_open, smbd_user);
 			if (!smbd_open->smbd_qdir) {
-				X_NXFSD_COUNTER_INC(smbd_fail_alloc_qdir, 1);
+				X_SMBD_COUNTER_INC(smbd_fail_alloc_qdir, 1);
 				return NT_STATUS_INSUFFICIENT_RESOURCES;
 			}
 		}

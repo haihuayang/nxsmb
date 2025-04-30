@@ -577,7 +577,7 @@ void x_smbd_wakeup_requ_list(const x_nxfsd_requ_id_list_t &requ_list)
 		x_nxfsd_requ_t *nxfsd_requ = x_nxfsd_requ_lookup(requ_id);
 		if (!nxfsd_requ) {
 			X_LOG(SMB, DBG, "requ_id 0x%lx not exist", requ_id);
-			X_NXFSD_COUNTER_INC(smbd_wakeup_stale, 1);
+			X_SMBD_COUNTER_INC(smbd_wakeup_stale, 1);
 			continue;
 		}
 
@@ -1645,7 +1645,7 @@ NTSTATUS x_smbd_open_op_create(x_nxfsd_requ_t *nxfsd_requ,
 {
 	if (!x_smbd_open_has_space()) {
 		X_LOG(SMB, WARN, "too many opens, cannot allocate new");
-		X_NXFSD_COUNTER_INC(smbd_toomany_open, 1);
+		X_SMBD_COUNTER_INC(smbd_toomany_open, 1);
 		return NT_STATUS_INSUFFICIENT_RESOURCES;
 	}
 
@@ -1823,7 +1823,7 @@ NTSTATUS x_smbd_open_restore(
 {
 	if (!x_smbd_open_has_space()) {
 		X_LOG(SMB, WARN, "too many opens, cannot allocate new");
-		X_NXFSD_COUNTER_INC(smbd_toomany_open, 1);
+		X_SMBD_COUNTER_INC(smbd_toomany_open, 1);
 		return NT_STATUS_INSUFFICIENT_RESOURCES;
 	}
 
@@ -1897,7 +1897,7 @@ x_smbd_open_t::x_smbd_open_t(const x_smbd_open_ops_t *ops,
 	, oplock_break_timer(oplock_break_timeout)
 	, open_state(open_state), open_type(open_type)
 {
-	X_NXFSD_COUNTER_INC_CREATE(smbd_open, 1);
+	X_SMBD_COUNTER_INC_CREATE(smbd_open, 1);
 	memset(lock_sequence_array, 0xff, LOCK_SEQUENCE_MAX);
 }
 
@@ -1905,7 +1905,7 @@ x_smbd_open_t::~x_smbd_open_t()
 {
 	x_ref_dec_if(smbd_tcon);
 	x_smbd_release_object_and_stream(smbd_object, smbd_stream);
-	X_NXFSD_COUNTER_INC_DELETE(smbd_open, 1);
+	X_SMBD_COUNTER_INC_DELETE(smbd_open, 1);
 }
 
 struct x_smbd_open_list_t : x_ctrl_handler_t

@@ -58,7 +58,7 @@ struct x_auth_ntlmssp_t
 			const x_smbd_conf_t &smbd_conf);
 	~x_auth_ntlmssp_t()
 	{
-		X_NXFSD_COUNTER_INC_DELETE(auth_ntlmssp, 1);
+		X_SMBD_COUNTER_INC_DELETE(auth_ntlmssp, 1);
 	}
 
 	// only server side for now
@@ -1306,7 +1306,7 @@ x_auth_ntlmssp_t::x_auth_ntlmssp_t(x_auth_context_t *context, const x_auth_ops_t
 	, dns_name(auth_ntlmssp_get_dns_name(netbios_name, dns_domain))
 	, workgroup_8(smbd_conf.workgroup_8)
 {
-	X_NXFSD_COUNTER_INC_CREATE(auth_ntlmssp, 1);
+	X_SMBD_COUNTER_INC_CREATE(auth_ntlmssp, 1);
 	wbcli.requ = &wbrequ;
 	wbcli.resp = &wbresp;
 

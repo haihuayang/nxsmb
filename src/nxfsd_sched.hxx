@@ -6,7 +6,7 @@
 #error "Must be c++"
 #endif
 
-#include "event.hxx"
+#include "include/evtmgmt.hxx"
 
 struct x_nxfsd_scheduler_t
 {

@@ -345,3 +345,36 @@ int x_evtmgmt_call(x_evtmgmt_t *ep, uint64_t id, void (*func)(
 	return 0;
 }
 
+#undef X_SCHED_COUNTER_DECL
+#define X_SCHED_COUNTER_DECL(x) # x,
+static const char *event_counter_names[] = {
+	X_SCHED_COUNTER_ENUM
+};
+
+#undef X_SCHED_PAIR_COUNTER_DECL
+#define X_SCHED_PAIR_COUNTER_DECL(x) # x,
+static const char *event_pair_counter_names[] = {
+	X_SCHED_PAIR_COUNTER_ENUM
+};
+
+#undef X_SCHED_HISTOGRAM_DECL
+#define X_SCHED_HISTOGRAM_DECL(x) # x,
+static const char *event_histogram_names[] = {
+	X_SCHED_HISTOGRAM_ENUM
+};
+
+x_stats_module_t x_sched_stats = {
+	"sched",
+	X_SCHED_COUNTER_ID_MAX,
+	X_SCHED_PAIR_COUNTER_ID_MAX,
+	X_SCHED_HISTOGRAM_ID_MAX,
+	event_counter_names,
+	event_pair_counter_names,
+	event_histogram_names,
+};
+
+void x_sched_stats_init()
+{
+	x_stats_register_module(x_sched_stats);
+}
+

@@ -185,10 +185,10 @@ X_DECLARE_MEMBER_TRAITS(posixfs_open_from_base_t, posixfs_open_t, base)
 struct posixfs_ads_t
 {
 	posixfs_ads_t(bool exists, const std::u16string &name) : base(exists, name) {
-		X_NXFSD_COUNTER_INC_CREATE(posixfs_ads, 1);
+		X_SMBD_COUNTER_INC_CREATE(posixfs_ads, 1);
 	}
 	~posixfs_ads_t() {
-		X_NXFSD_COUNTER_INC_DELETE(posixfs_ads, 1);
+		X_SMBD_COUNTER_INC_DELETE(posixfs_ads, 1);
 	}
 
 	x_smbd_stream_meta_t &get_meta() {
@@ -688,7 +688,7 @@ static posixfs_open_t *posixfs_open_create_intl(
 	posixfs_open->base.smbd_lease = smbd_lease;
 
 	if (!x_smbd_open_store(&posixfs_open->base)) {
-		X_NXFSD_COUNTER_INC(smbd_toomany_open, 1);
+		X_SMBD_COUNTER_INC(smbd_toomany_open, 1);
 		if (posixfs_open->base.smbd_lease) {
 			x_smbd_lease_close(posixfs_open->base.smbd_lease);
 			posixfs_open->base.smbd_lease = nullptr;

@@ -23,11 +23,11 @@ struct x_smbd_durable_slot_t
 struct x_smbd_durable_fd_t
 {
 	x_smbd_durable_fd_t(int fd) : fd(fd) {
-		X_NXFSD_COUNTER_INC_CREATE(durable_fd, 1);
+		X_SMBD_COUNTER_INC_CREATE(durable_fd, 1);
 	}
 	~x_smbd_durable_fd_t() {
 		X_ASSERT(close(fd) == 0);
-		X_NXFSD_COUNTER_INC_DELETE(durable_fd, 1);
+		X_SMBD_COUNTER_INC_DELETE(durable_fd, 1);
 	}
 
 	std::atomic<int> refcnt{1};

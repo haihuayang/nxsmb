@@ -55,6 +55,21 @@ struct x_stats_t
 	x_histogram_t *histograms;
 };
 
+struct x_stats_module_t
+{
+	const char * const name;
+	const uint32_t num_counter;
+	const uint32_t num_pair_counter;
+	const uint32_t num_histogram;
+
+	const char *const * const counter_names;
+	const char *const * const pair_counter_names;
+	const char *const * const histogram_names;
+
+	uint32_t counter_base = -1;
+	uint32_t pair_counter_base = -1;
+	uint32_t histogram_base = -1;
+};
 
 extern thread_local x_stats_t local_stats;
 
@@ -71,10 +86,12 @@ extern thread_local x_stats_t local_stats;
 	local_stats.histograms[id].update(elapsed); \
 } while (0)
 
-void x_stats_init(uint32_t num_thread, uint32_t num_counter,
-		uint32_t num_pair_counter, uint32_t num_histogram);
-int x_stats_register(uint32_t thread_id);
-void x_stats_unregister(uint32_t thread_id);
+#define X_STATS_ELAPSED(start, end) (((end) - (start)) / 1000)
+
+void x_stats_init(uint32_t num_thread);
+int x_stats_register_module(x_stats_module_t &mod);
+int x_stats_register_thread(uint32_t thread_id);
+void x_stats_unregister_thread(uint32_t thread_id);
 
 struct x_stats_store_t
 {
@@ -90,9 +107,6 @@ void x_stats_collect(x_stats_store_t &store);
 void x_stats_load(x_stats_store_t &store);
 
 std::string x_stats_output(const x_stats_store_t &stats,
-		const char *const counter_names[],
-		const char *const pair_counter_names[],
-		const char *const histogram_names[],
 		uint32_t band_start, uint32_t band_group, uint32_t band_step);
 
 #endif /* __stats__hxx__ */

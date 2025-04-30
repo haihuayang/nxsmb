@@ -111,7 +111,7 @@ static void smbd_lease_decref(x_smbd_lease_t *smbd_lease)
 		if (smbd_lease->smbd_object) {
 			x_smbd_release_object_and_stream(smbd_lease->smbd_object, smbd_lease->smbd_stream);
 		}
-		X_NXFSD_COUNTER_INC_DELETE(smbd_lease, 1);
+		X_SMBD_COUNTER_INC_DELETE(smbd_lease, 1);
 		delete smbd_lease;
 	}
 }
@@ -511,7 +511,7 @@ inline x_smbd_lease_t::x_smbd_lease_t(const x_smb2_uuid_t &client_guid,
 	: client_guid(client_guid), data{lease_key, version, 0, uint16_t(epoch + 1)}
 	, hash(hash)
 {
-	X_NXFSD_COUNTER_INC_CREATE(smbd_lease, 1);
+	X_SMBD_COUNTER_INC_CREATE(smbd_lease, 1);
 }
 
 int x_smbd_lease_pool_init(uint32_t count, uint32_t mutex_count)

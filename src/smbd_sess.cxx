@@ -40,10 +40,10 @@ struct x_smbd_sess_t
 		, nonce_high_max(get_nonce_high_max(smbd_conn))
 		, machine_name(x_smbd_conn_get_client_name(smbd_conn))
 	{
-		X_NXFSD_COUNTER_INC_CREATE(smbd_sess, 1);
+		X_SMBD_COUNTER_INC_CREATE(smbd_sess, 1);
 	}
 	~x_smbd_sess_t() {
-		X_NXFSD_COUNTER_INC_DELETE(smbd_sess, 1);
+		X_SMBD_COUNTER_INC_DELETE(smbd_sess, 1);
 	}
 
 	const x_tick_t tick_create;
@@ -93,7 +93,7 @@ x_smbd_sess_t *x_smbd_sess_create(const x_smbd_conn_t *smbd_conn)
 	x_smbd_sess_t *smbd_sess = new x_smbd_sess_t(smbd_conn);
 	if (!g_smbd_sess_table->store(smbd_sess, smbd_sess->id)) {
 		delete smbd_sess;
-		X_NXFSD_COUNTER_INC(smbd_toomany_sess, 1);
+		X_SMBD_COUNTER_INC(smbd_toomany_sess, 1);
 		return nullptr;
 	}
 	X_LOG(SMB, DBG, "0x%lx %p", smbd_sess->id, smbd_sess);
@@ -199,11 +199,11 @@ bool x_smbd_sess_link_chan(x_smbd_sess_t *smbd_sess, x_dlink_t *link)
 {
 	std::lock_guard<std::mutex> lock(smbd_sess->mutex);
 	if (smbd_sess->state == x_smbd_sess_t::S_DONE) {
-		X_NXFSD_COUNTER_INC(smbd_stale_sess, 1);
+		X_SMBD_COUNTER_INC(smbd_stale_sess, 1);
 		return false;
 	}
 	if (smbd_sess->chan_count >= x_smbd_sess_t::MAX_CHAN_COUNT) {
-		X_NXFSD_COUNTER_INC(smbd_toomany_chan, 1);
+		X_SMBD_COUNTER_INC(smbd_toomany_chan, 1);
 		return false;
 	}
 	

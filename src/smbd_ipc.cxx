@@ -952,7 +952,7 @@ static NTSTATUS ipc_op_create_open(x_nxfsd_requ_t *nxfsd_requ,
 				X_SMB2_OPLOCK_LEVEL_NONE});
 	ipc_object->base.incref();
 	if (!x_smbd_open_store(&named_pipe->base)) {
-		X_NXFSD_COUNTER_INC(smbd_toomany_open, 1);
+		X_SMBD_COUNTER_INC(smbd_toomany_open, 1);
 		delete named_pipe;
 		return NT_STATUS_INSUFFICIENT_RESOURCES;
 	}

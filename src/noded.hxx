@@ -104,6 +104,59 @@ void x_noded_reply(x_noded_conn_t *noded_conn,
 		NTSTATUS status,
 		size_t reply_size);
 
+/* Declare counter id below, e.g., X_NODED_COUNTER_DECL(name) */
+#define X_NODED_COUNTER_ENUM \
+	X_NODED_COUNTER_DECL(noded_reply_interim) \
+
+enum {
+#undef X_NODED_COUNTER_DECL
+#define X_NODED_COUNTER_DECL(x) X_NODED_COUNTER_ID_ ## x,
+	X_NODED_COUNTER_ENUM
+	X_NODED_COUNTER_ID_MAX,
+};
+
+/* Declare pair counter id below, e.g., X_NODED_PAIR_COUNTER_DECL(name) */
+#define X_NODED_PAIR_COUNTER_ENUM \
+	X_NODED_PAIR_COUNTER_DECL(noded_conn) \
+	X_NODED_PAIR_COUNTER_DECL(noded_requ) \
+
+enum {
+#undef X_NODED_PAIR_COUNTER_DECL
+#define X_NODED_PAIR_COUNTER_DECL(x) X_NODED_PAIR_COUNTER_ID_ ## x,
+	X_NODED_PAIR_COUNTER_ENUM
+	X_NODED_PAIR_COUNTER_ID_MAX,
+};
+
+/* Declare histogram id below, e.g., X_NODED_HISTOGRAM_DECL(name) */
+#define X_NODED_HISTOGRAM_ENUM \
+	X_NODED_HISTOGRAM_DECL(noded_op_ping) \
+
+enum {
+#undef X_NODED_HISTOGRAM_DECL
+#define X_NODED_HISTOGRAM_DECL(x) X_NODED_HISTOGRAM_ID_ ## x,
+	X_NODED_HISTOGRAM_ENUM
+	X_NODED_HISTOGRAM_ID_MAX,
+};
+
+extern x_stats_module_t x_noded_stats;
+
+#define X_NODED_COUNTER_INC(id, num) \
+	X_STATS_COUNTER_INC(x_noded_stats.counter_base + X_NODED_COUNTER_ID_##id, (num))
+
+#define X_NODED_COUNTER_INC_CREATE(id, num) \
+	X_STATS_COUNTER_INC_CREATE(x_noded_stats.pair_counter_base + X_NODED_PAIR_COUNTER_ID_##id, (num))
+
+#define X_NODED_COUNTER_INC_DELETE(id, num) \
+	X_STATS_COUNTER_INC_DELETE(x_noded_stats.pair_counter_base + X_NODED_PAIR_COUNTER_ID_##id, (num))
+
+#define X_NODED_HISTOGRAM_UPDATE_(id, elapsed) do { \
+	local_stats.histograms[x_noded_stats.histogram_base + id].update(elapsed); \
+} while (0)
+
+#define X_NODED_HISTOGRAM_UPDATE(id, elapsed) \
+	X_NODED_HISTOGRAM_UPDATE_(X_NODED_HISTOGRAM_ID_ ## id, elapsed)
+
+void x_noded_stats_init();
 
 #endif /* __noded__hxx__ */
 
