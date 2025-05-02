@@ -98,6 +98,12 @@ static bool x_nxfsd_conn_do_recv(x_nxfsd_conn_t *nxfsd_conn, x_fdevents_t &fdeve
 			if (err < 0) {
 				return true;
 			} else if (err == 0) {
+				int ret = nxfsd_conn->cbs->cb_process_msg(nxfsd_conn, nullptr, 0);
+				if (ret) {
+					X_LOG(EVENT, ERR, "%p x%lx cb_process_msg %d",
+							nxfsd_conn, nxfsd_conn->ep_id, ret);
+					return true;
+				}
 				return false;
 			}
 		} else if (err == 0) {

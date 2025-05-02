@@ -1381,6 +1381,10 @@ static void smbd_conn_cb_destroy(x_nxfsd_conn_t *nxfsd_conn)
 #define NBSSmessage     0x00   /* session message */
 static int smbd_conn_cb_process_msg(x_nxfsd_conn_t *nxfsd_conn, x_buf_t *buf, uint32_t msgsize)
 {
+	if (msgsize == 0) {
+		X_ASSERT(!buf);
+		return 0;
+	}
 	x_smbd_conn_t *smbd_conn = smbd_conn_from_base(nxfsd_conn);
 	return x_smbd_conn_process_smb(smbd_conn, buf, msgsize);
 }
