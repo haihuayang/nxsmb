@@ -1,6 +1,7 @@
 
 #include "smbd_durable.hxx"
 #include <dirent.h>
+#include <zlib.h> // for crc32
 
 static const char magic[8] = "DURABLE";
 static constexpr size_t X_SMBD_DURABLE_LOG_LENGTH = strlen(X_SMBD_DURABLE_LOG);
@@ -95,6 +96,13 @@ static inline size_t length_open_state(const x_smbd_open_state_t &open_state)
 		PUSH_LE32(ptr, 0); \
 	} \
 } while (0)
+
+static inline uint32_t x_crc32(const x_smbd_durable_record_t *rec, uint32_t size)
+{
+	uLong crc = crc32(0, Z_NULL, 0);
+	crc = crc32(crc, (const uint8_t *)rec + 4, size - 4);
+	return x_convert<uint32_t>(crc);
+}
 
 static uint8_t *encode_durable(void *p,
 		uint64_t disconnect_msec,
@@ -339,6 +347,12 @@ static ssize_t smbd_durable_read(int fd,
 			return -EINVAL;
 		}
 
+		uint32_t crc = x_crc32(record, size);
+		if (crc != X_LE2H32(record->cksum)) {
+			REPORT_ERR("invalid record cksum 0x%08x != 0x%08x",
+					crc, X_LE2H32(record->cksum));
+			break;
+		}
 		if (type == x_smbd_durable_record_t::type_durable) {
 			std::unique_ptr<x_smbd_durable_t> durable =
 				decode_durable(record + 1, size -
@@ -570,9 +584,11 @@ static int smbd_durable_log_output(int fd, bool sync,
 		uint32_t type, uint32_t size,
 		uint64_t id_persistent)
 {
-	rec->cksum = 0; // TODO
 	rec->type_size = X_H2LE32((type << 24) | size);
 	rec->id_persistent = X_H2LE64(id_persistent);
+
+	uint32_t crc = x_crc32(rec, size);
+	rec->cksum = X_H2LE32(crc);
 
 	ssize_t ret = write(fd, rec, size);
 	if (ret < 0) {
