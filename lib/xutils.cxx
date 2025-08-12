@@ -1,6 +1,8 @@
 
 #include "include/utils.hxx"
-#include <memory>
+#include <atomic>
+#include <mutex>
+#include <shared_mutex>
 #include <stdlib.h>
 #include <stdarg.h>
 #include <unistd.h>
@@ -36,18 +38,45 @@ struct x_logger_t
 		return dirfd != -1;
 	}
 
+	std::atomic<int> refcnt{1};
 	int dirfd;
 	const int fd;
 	uint64_t filesize;
 	const std::string base;
 };
 
-static std::shared_ptr<x_logger_t> log_init_stderr()
+template <>
+x_logger_t *x_ref_inc(x_logger_t *log_fd)
 {
-	return std::make_shared<x_logger_t>(-1, 2, 0ul, "");
+	log_fd->refcnt.fetch_add(1, std::memory_order_relaxed);
+	return log_fd;
 }
 
-static std::shared_ptr<x_logger_t> g_logger = log_init_stderr();
+template <>
+void x_ref_dec(x_logger_t *log_fd)
+{
+	if (log_fd->refcnt.fetch_sub(1, std::memory_order_acq_rel) == 1) {
+		delete log_fd;
+	}
+}
+
+static x_logger_t *log_init_stderr()
+{
+	std::string name{};
+	return new x_logger_t(-1, 2, 0ul, name);
+}
+
+static struct {
+	std::shared_mutex mutex;
+	x_ref_ptr_t<x_logger_t> logger{log_init_stderr()};
+} g_logger;
+
+static inline x_logger_t *get_logger()
+{
+	std::shared_lock<std::shared_mutex> lock(g_logger.mutex);
+	g_logger.logger->refcnt.fetch_add(1, std::memory_order_relaxed);
+	return g_logger.logger;
+}
 
 static void vlog(const char *log_class_name,
 		const char *log_level_name,
@@ -80,7 +109,7 @@ static void vlog(const char *log_class_name,
 	p += len;
 	*p++ = '\n';
 
-	auto logger = g_logger;
+	x_ref_ptr_t<x_logger_t> logger{get_logger()};
 	write(logger->fd, buf, p - buf);
 }
 
@@ -167,7 +196,7 @@ static int open_dir(int &dirfd, int &fd, std::string &basebuf, char *path)
 	return 0;
 }
 
-static std::shared_ptr<x_logger_t> log_init_file(const char *log_name, uint64_t filesize)
+static x_logger_t *log_init_file(const char *log_name, uint64_t filesize)
 {
 	char *tmp = strdup(log_name);
 	if (!tmp) {
@@ -184,7 +213,7 @@ static std::shared_ptr<x_logger_t> log_init_file(const char *log_name, uint64_t 
 		X_LOG(UTILS, ERR, "open_dir %s, err=%d", log_name, err);
 		return nullptr;
 	}
-	return std::make_shared<x_logger_t>(dirfd, logfd, filesize, base);
+	return new x_logger_t(dirfd, logfd, filesize, base);
 }
 
 static unsigned int map_name(const char *names[], unsigned int count,
@@ -312,22 +341,22 @@ int x_log_init(const char *log_name, const char *log_level_param, uint64_t files
 	}
 
 	if (!log_name) {
-		g_logger->filesize = filesize;
+		g_logger.logger->filesize = filesize;
 		return 0;
 	}
 
-	std::shared_ptr<x_logger_t> logger;
-	if (strcmp(log_name, "stderr") == 0) {
-		logger = log_init_stderr();
-	} else {
-		logger = log_init_file(log_name, filesize);
-	}
+	x_ref_ptr_t<x_logger_t> logger{(strcmp(log_name, "stderr") == 0) ?
+		log_init_stderr() : log_init_file(log_name, filesize)};
 
 	if (!logger) {
 		return -1;
 	}
 
-	g_logger = logger;
+	{
+		auto lock = std::unique_lock(g_logger.mutex);
+		std::swap(g_logger.logger, logger);
+	}
+
 	x_log(X_LOG_CLASS_UTILS, X_LOG_LEVEL_NOTICE,
 			X_LOG_AT_FMT " init log %s logfd=%d filesize=%ld"
 #undef X_LOG_CLASS_DECL
@@ -344,7 +373,7 @@ int x_log_init(const char *log_name, const char *log_level_param, uint64_t files
 /* should be called by at most 1 thread concurrently */
 void x_log_check_size()
 {
-	auto logger = g_logger;
+	x_ref_ptr_t<x_logger_t> logger{get_logger()};
 	if (logger->is_file()) {
 		struct stat st;
 		int err = fstat(logger->fd, &st);
@@ -354,11 +383,18 @@ void x_log_check_size()
 			if (logfd == -1) {
 				X_LOG(UTILS, ERR, "fail open new log, errno=%d", errno);
 			}
-			auto new_logger = std::make_shared<x_logger_t>(logger->dirfd,
+
+			x_ref_ptr_t<x_logger_t> new_logger{new x_logger_t(
+					logger->dirfd,
 					logfd, logger->filesize,
-					logger->base);
+					logger->base)};
+
+			{
+				auto lock = std::unique_lock(g_logger.mutex);
+				std::swap(g_logger.logger, new_logger);
+			}
+
 			logger->dirfd = -2;
-			g_logger = new_logger;
 		}
 	}
 }
