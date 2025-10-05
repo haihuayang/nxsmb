@@ -254,6 +254,7 @@ TARGET_SRC_libnxsmb := \
 		lib/ntlmssp \
 		lib/spnego \
 		lib/stats \
+		lib/iuflog \
 
 
 $(TARGET_DIR_out)/libnxsmb.a: \
