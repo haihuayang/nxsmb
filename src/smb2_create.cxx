@@ -243,7 +243,9 @@ static void smb2_create_success(x_smbd_conn_t *smbd_conn,
 			auto &smbd_volume = *smbd_open->smbd_object->smbd_volume;
 			smbd_open->id_persistent = x_smbd_volume_non_durable_id(smbd_volume);
 		}
-		x_smbd_save_durable(smbd_open, smbd_requ->smbd_tcon, state);
+		if (!state.replay_operation) {
+			x_smbd_save_durable(smbd_open, smbd_requ->smbd_tcon, state);
+		}
 
 		if (open_state.dhmode != x_smbd_dhmode_t::NONE &&
 				(state.out_oplock_level == X_SMB2_OPLOCK_LEVEL_LEASE ||
