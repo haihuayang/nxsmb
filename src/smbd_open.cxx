@@ -1808,6 +1808,11 @@ NTSTATUS x_smbd_open_op_reconnect(x_smbd_requ_t *smbd_requ,
 		return status;
 	}
 
+	x_smbd_volume_reconnect_durable(
+			*smbd_open->smbd_object->smbd_volume,
+			smbd_open->open_state.dhmode == x_smbd_dhmode_t::PERSISTENT,
+			smbd_open->id_persistent);
+
 	x_ref_inc(smbd_tcon); // ref by smbd_open
 	smbd_requ->smbd_open = smbd_open; // TODO ref count
 

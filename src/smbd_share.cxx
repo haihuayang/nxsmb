@@ -138,6 +138,14 @@ int x_smbd_volume_disconnect_durable(x_smbd_volume_t &smbd_volume,
 			sync, id_persistent);
 }
 
+int x_smbd_volume_reconnect_durable(x_smbd_volume_t &smbd_volume,
+		bool sync,
+		uint64_t id_persistent)
+{
+	return x_smbd_durable_reconnect(smbd_volume.smbd_durable_db,
+			sync, id_persistent);
+}
+
 int x_smbd_volume_remove_durable(x_smbd_volume_t &smbd_volume,
 		bool sync,
 		uint64_t id_persistent)

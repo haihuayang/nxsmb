@@ -176,6 +176,9 @@ int x_smbd_volume_remove_durable(x_smbd_volume_t &smbd_volume,
 int x_smbd_volume_disconnect_durable(x_smbd_volume_t &smbd_volume,
 		bool sync,
 		uint64_t id_persistent);
+int x_smbd_volume_reconnect_durable(x_smbd_volume_t &smbd_volume,
+		bool sync,
+		uint64_t id_persistent);
 std::shared_ptr<x_smbd_share_t> x_smbd_ipc_share_create();
 std::shared_ptr<x_smbd_share_t> x_smbd_simplefs_share_create(
 		const std::string &node_name,
