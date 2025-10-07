@@ -195,26 +195,10 @@ static NTSTATUS get_sd(int fd,
 	return parse_acl_blob(blob.data(), blob.size(), psd, &hash_type, &version, hash);
 }
 
-static inline void output_timespec(const char *name, const struct timespec *ts)
-{
-	struct tm *lt = localtime(&ts->tv_sec);
-	printf("%s: %d-%02d-%02d %02d:%02d:%02d %c%ld %ld.%09ld\n",
-			name,
-			lt->tm_year + 1900,
-			lt->tm_mon + 1,
-			lt->tm_mday,
-			lt->tm_hour,
-			lt->tm_min,
-			lt->tm_sec,
-			lt->tm_gmtoff > 0 ? '+' : '-',
-			std::abs(lt->tm_gmtoff),
-			ts->tv_sec, ts->tv_nsec);
-}
-
-static void output_timespec(const char *name, const struct timespec ts)
+static void output_timespec(const char *name, const struct timespec &ts)
 {
 	struct tm *lt = localtime(&ts.tv_sec);
-	printf("%s: %d-%02d-%02d %02d:%02d:%02d %c%ld %ld.%09ld\n",
+	printf("%s: %d-%02d-%02d %02d:%02d:%02d %c%ld %ld.%09ld",
 			name,
 			lt->tm_year + 1900,
 			lt->tm_mon + 1,
@@ -249,10 +233,10 @@ static int show_attrex(char **argv)
 	printf("Inode: %lu\n", object_meta.inode);
 	printf("Nlink: %lu\n", object_meta.nlink);
 	output_timespec("Birth", object_meta.creation);
-	output_timespec("Access", object_meta.last_access);
-	output_timespec("Modify", object_meta.last_write);
-	output_timespec("Change", object_meta.change);
-	printf("Size: %lu\n", stream_meta.end_of_file);
+	output_timespec("\nAccess", object_meta.last_access);
+	output_timespec("\nModify", object_meta.last_write);
+	output_timespec("\nChange", object_meta.change);
+	printf("\nSize: %lu\n", stream_meta.end_of_file);
 	printf("Allocation: %lu\n", stream_meta.allocation_size);
 	printf("DosAttr: 0x%x\n", object_meta.file_attributes);
 	printf("NTACL: %s\n", idl_tostring(*psd).c_str());
@@ -281,6 +265,81 @@ static int set_dos_attr(char **argv)
 	return 0;
 }
 
+struct durable_printer_t : x_smbd_durable_log_visitor_t
+{
+	bool initiate(uint64_t id, x_smbd_durable_t &durable) override;
+	bool update(uint64_t id, x_smbd_durable_update_t &update) override;
+	bool finalize(uint64_t id) override;
+	size_t num_initiate = 0;
+	size_t num_update = 0;
+	size_t num_finalize = 0;
+};
+
+bool durable_printer_t::initiate(uint64_t id, x_smbd_durable_t &durable)
+{
+	auto &lease_data = durable.lease_data;
+	printf("I 0x%lx 0x%lx %c%c 0x%x %s %u %d-%d-%x%c-%x-%x ",
+			id,
+			durable.id_volatile,
+			x_smbd_dhmode_to_name(durable.open_state.dhmode),
+			(durable.open_state.flags & x_smbd_open_state_t::F_REPLAY_CACHED) ? 'R' : '-',
+			durable.open_state.access_mask,
+			x_tostr(durable.open_state.owner).c_str(),
+			durable.open_state.durable_timeout_msec,
+			lease_data.version,
+			lease_data.epoch,
+			lease_data.state,
+			lease_data.breaking,
+			lease_data.breaking_to_requested,
+			lease_data.breaking_to_required);
+	if (durable.disconnect_msec == (uint64_t)-1) {
+		printf("active");
+	} else {
+		struct timespec ts;
+		ts.tv_sec = durable.disconnect_msec / 1000;
+		ts.tv_nsec = (durable.disconnect_msec % 1000) * 1000000;
+		output_timespec("disconnect", ts);
+	}
+	printf(" locks %zu", durable.open_state.locks.size());
+	for (auto &lock: durable.open_state.locks) {
+		printf("\n\t[%lu,%lu,%x]", lock.offset, lock.length,
+				lock.flags);
+	}
+	printf("\n");
+	++num_initiate;
+	return true;
+}
+
+bool durable_printer_t::update(uint64_t id, x_smbd_durable_update_t &update)
+{
+	printf("U 0x%lx ", id);
+	if (update.type == x_smbd_durable_update_t::type_disconnect) {
+		printf("D %ld", update.disconnect_msec);
+	} else if (update.type == x_smbd_durable_update_t::type_reconnect) {
+		printf("R");
+	} else if (update.type == x_smbd_durable_update_t::type_update_flags) {
+		printf("F 0x%x", update.flags);
+	} else if (update.type == x_smbd_durable_update_t::type_update_locks) {
+		printf("L %zu", update.locks.size());
+		for (auto &lock: update.locks) {
+			printf("\n\t[%lu,%lu,%x]", lock.offset, lock.length,
+					lock.flags);
+		}
+	} else {
+		printf("?");
+	}
+	printf("\n");
+	++num_update;
+	return true;
+}
+
+bool durable_printer_t::finalize(uint64_t id)
+{
+	printf("F 0x%lx\n", id);
+	++num_finalize;
+	return true;
+}
+
 static int list_volume_durable(const char *volume, const char *log_file)
 {
 	int dirfd = open(volume, O_RDONLY);
@@ -288,46 +347,37 @@ static int list_volume_durable(const char *volume, const char *log_file)
 		fprintf(stderr, "cannot open volume %s\n", volume);
 		return 1;
 	}
-	std::map<uint64_t, std::unique_ptr<x_smbd_durable_t>> durables;
+
+	int dfd = openat(dirfd, X_SMBD_DURABLE_DIR, O_RDONLY);
+	close(dirfd);
+
+	if (dfd < 0) {
+		fprintf(stderr, "cannot open durable dir %s/%s\n",
+				volume, X_SMBD_DURABLE_DIR);
+		return 1;
+	}
+
+	durable_printer_t printer;
 	std::vector<std::string> log_files;
-	uint64_t skip_file_no;
 	ssize_t ret;
 	if (log_file) {
-		ret = x_smbd_durable_log_read_file(dirfd, log_file,
-				false, skip_file_no,
-				durables);
+		ret = x_smbd_durable_log_read_file(dfd, log_file,
+				false, printer);
 	} else {
-		ret = x_smbd_durable_log_read(dirfd, uint64_t(-1),
-				skip_file_no, durables,
-				log_files);
+		ret = x_smbd_durable_log_read(dfd, printer);
 	}
-	close(dirfd);
+
+	close(dfd);
 
 	if (ret < 0) {
 		fprintf(stderr, "Error in read durable log, %ld\n", ret);
 		return int(ret);
 	}
-	for (auto &[id_persistent, durable]: durables) {
-		printf("0x%lx 0x%lx %c%c 0x%x %s %u ",
-				id_persistent,
-				durable->id_volatile,
-				x_smbd_dhmode_to_name(durable->open_state.dhmode),
-				(durable->open_state.flags & x_smbd_open_state_t::F_REPLAY_CACHED) ? 'R' : '-',
-				durable->open_state.access_mask,
-				x_tostr(durable->open_state.owner).c_str(),
-				durable->open_state.durable_timeout_msec);
-		if (durable->disconnect_msec == (uint64_t)-1) {
-			printf("active");
-		} else {
-			struct timespec ts;
-			ts.tv_sec = durable->disconnect_msec / 1000;
-			ts.tv_nsec = (durable->disconnect_msec % 1000) * 1000000;
-			output_timespec("disconnect", &ts);
-		}
+	printf("total %zu initiate, %zu update, %zu finalize\n",
+			printer.num_initiate,
+			printer.num_update,
+			printer.num_finalize);
 
-		printf("\n");
-	}
-	printf("total record: %ld, merged: %lu\n", ret, durables.size());
 	return 0;
 }
 

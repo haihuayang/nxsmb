@@ -2959,9 +2959,26 @@ static int smbd_volume_read(int vol_fd,
 		return -EINVAL;
 	}
 
-	durable_db = x_smbd_durable_db_init(vol_fd,
+	int err = mkdirat(vol_fd, X_SMBD_DURABLE_DIR, 0755);
+	if (err < 0) {
+		if (errno != EEXIST) {
+			X_LOG(SMB, ERR, "cannot mkdir smb-durable, errno=%d", errno);
+			close(rfd);
+			return -errno;
+		}
+	}
+
+	int dfd = openat(vol_fd, X_SMBD_DURABLE_DIR, O_RDONLY);
+	if (dfd < 0) {
+		X_LOG(SMB, ERR, "cannot open %s, errno=%d", X_SMBD_DURABLE_DIR, errno);
+		close(rfd);
+		return -errno;
+	}
+
+	durable_db = x_smbd_durable_db_init(dfd,
 			0x100000, durable_log_max_record);
 
+	close(dfd);
 	rootdir_fd = rfd;
 	return 0;
 }
