@@ -245,6 +245,11 @@ int main(int argc, char **argv)
 	return 0;
 }
 
+x_threadpool_t *x_nxfsd_get_async_tpool()
+{
+	return g_nxfsd.tpool_async;
+}
+
 void x_smbd_schedule_async(x_job_t *job)
 {
 	bool ret = x_threadpool_schedule(g_nxfsd.tpool_async, job);

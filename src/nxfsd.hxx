@@ -25,6 +25,8 @@ static inline bool x_nxfsd_del_timer(x_timer_job_t *entry)
 	return x_evtmgmt_del_timer(g_evtmgmt, entry);
 }
 
+x_threadpool_t *x_nxfsd_get_async_tpool();
+
 
 struct x_nxfsd_conn_t;
 struct x_smbd_open_t;
