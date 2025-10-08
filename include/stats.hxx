@@ -57,6 +57,8 @@ struct x_stats_t
 
 struct x_stats_module_t
 {
+	enum { INVALID_BASE = (uint32_t)-1 };
+
 	const char * const name;
 	const uint32_t num_counter;
 	const uint32_t num_pair_counter;
@@ -66,24 +68,35 @@ struct x_stats_module_t
 	const char *const * const pair_counter_names;
 	const char *const * const histogram_names;
 
-	uint32_t counter_base = -1;
-	uint32_t pair_counter_base = -1;
-	uint32_t histogram_base = -1;
+	uint32_t counter_base = INVALID_BASE;
+	uint32_t pair_counter_base = INVALID_BASE;
+	uint32_t histogram_base = INVALID_BASE;
 };
 
 extern thread_local x_stats_t local_stats;
 
-#define X_STATS_COUNTER_INC(id, num) \
-	__atomic_fetch_add(&local_stats.counters[id], (num), __ATOMIC_RELAXED)
+#define X_STATS_COUNTER_INC(base, id, num) do { \
+	if (x_likely(base != x_stats_module_t::INVALID_BASE)) { \
+		__atomic_fetch_add(&local_stats.counters[(base) + (id)], (num), __ATOMIC_RELAXED); \
+	} \
+} while (0)
 
-#define X_STATS_COUNTER_INC_CREATE(id, num) \
-	__atomic_fetch_add(&local_stats.pair_counters[(id) * 2], (num), __ATOMIC_RELAXED)
+#define X_STATS_COUNTER_INC_CREATE(base, id, num) do { \
+	if (x_likely(base != x_stats_module_t::INVALID_BASE)) { \
+		__atomic_fetch_add(&local_stats.pair_counters[((base) + (id)) * 2], (num), __ATOMIC_RELAXED); \
+	} \
+} while (0)
 
-#define X_STATS_COUNTER_INC_DELETE(id, num) \
-	__atomic_fetch_add(&local_stats.pair_counters[(id) * 2 + 1], (num), __ATOMIC_RELAXED)
+#define X_STATS_COUNTER_INC_DELETE(base, id, num) do { \
+	if (x_likely(base != x_stats_module_t::INVALID_BASE)) { \
+		__atomic_fetch_add(&local_stats.pair_counters[((base) + (id)) * 2 + 1], (num), __ATOMIC_RELAXED); \
+	} \
+} while (0)
 
-#define X_STATS_HISTOGRAM_UPDATE(id, elapsed) do { \
-	local_stats.histograms[id].update(elapsed); \
+#define X_STATS_HISTOGRAM_UPDATE(base, id, elapsed) do { \
+	if (x_likely(base != x_stats_module_t::INVALID_BASE)) { \
+		local_stats.histograms[(base) + (id)].update(elapsed); \
+	} \
 } while (0)
 
 #define X_STATS_ELAPSED(start, end) (((end) - (start)) / 1000)

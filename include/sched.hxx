@@ -50,17 +50,16 @@ enum {
 extern x_stats_module_t x_sched_stats;
 
 #define X_SCHED_COUNTER_INC(id, num) \
-	X_STATS_COUNTER_INC(x_sched_stats.counter_base + X_SCHED_COUNTER_ID_##id, (num))
+	X_STATS_COUNTER_INC(x_sched_stats.counter_base, X_SCHED_COUNTER_ID_##id, (num))
 
 #define X_SCHED_COUNTER_INC_CREATE(id, num) \
-	X_STATS_COUNTER_INC_CREATE(x_sched_stats.pair_counter_base + X_SCHED_PAIR_COUNTER_ID_##id, (num))
+	X_STATS_COUNTER_INC_CREATE(x_sched_stats.pair_counter_base, X_SCHED_PAIR_COUNTER_ID_##id, (num))
 
 #define X_SCHED_COUNTER_INC_DELETE(id, num) \
-	X_STATS_COUNTER_INC_DELETE(x_sched_stats.pair_counter_base + X_SCHED_PAIR_COUNTER_ID_##id, (num))
+	X_STATS_COUNTER_INC_DELETE(x_sched_stats.pair_counter_base, X_SCHED_PAIR_COUNTER_ID_##id, (num))
 
-#define X_SCHED_HISTOGRAM_UPDATE_(id, elapsed) do { \
-	local_stats.histograms[x_sched_stats.histogram_base + id].update(elapsed); \
-} while (0)
+#define X_SCHED_HISTOGRAM_UPDATE_(id, elapsed) \
+	X_STATS_HISTOGRAM_UPDATE(x_sched_stats.histogram_base, (id), (elapsed))
 
 #define X_SCHED_HISTOGRAM_UPDATE(id, elapsed) \
 	X_SCHED_HISTOGRAM_UPDATE_(X_SCHED_HISTOGRAM_ID_ ## id, elapsed)

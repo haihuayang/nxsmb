@@ -141,17 +141,16 @@ enum {
 extern x_stats_module_t x_noded_stats;
 
 #define X_NODED_COUNTER_INC(id, num) \
-	X_STATS_COUNTER_INC(x_noded_stats.counter_base + X_NODED_COUNTER_ID_##id, (num))
+	X_STATS_COUNTER_INC(x_noded_stats.counter_base, X_NODED_COUNTER_ID_##id, (num))
 
 #define X_NODED_COUNTER_INC_CREATE(id, num) \
-	X_STATS_COUNTER_INC_CREATE(x_noded_stats.pair_counter_base + X_NODED_PAIR_COUNTER_ID_##id, (num))
+	X_STATS_COUNTER_INC_CREATE(x_noded_stats.pair_counter_base, X_NODED_PAIR_COUNTER_ID_##id, (num))
 
 #define X_NODED_COUNTER_INC_DELETE(id, num) \
-	X_STATS_COUNTER_INC_DELETE(x_noded_stats.pair_counter_base + X_NODED_PAIR_COUNTER_ID_##id, (num))
+	X_STATS_COUNTER_INC_DELETE(x_noded_stats.pair_counter_base, X_NODED_PAIR_COUNTER_ID_##id, (num))
 
-#define X_NODED_HISTOGRAM_UPDATE_(id, elapsed) do { \
-	local_stats.histograms[x_noded_stats.histogram_base + id].update(elapsed); \
-} while (0)
+#define X_NODED_HISTOGRAM_UPDATE_(id, elapsed) \
+	X_STATS_HISTOGRAM_UPDATE(x_noded_stats.histogram_base, (id), (elapsed))
 
 #define X_NODED_HISTOGRAM_UPDATE(id, elapsed) \
 	X_NODED_HISTOGRAM_UPDATE_(X_NODED_HISTOGRAM_ID_ ## id, elapsed)
