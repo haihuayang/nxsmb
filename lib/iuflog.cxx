@@ -518,7 +518,7 @@ void x_iuflog_restore(x_iuflog_t *log,
 	std::vector<std::string> log_files;
 	ssize_t ret = iuflog_read_states(log, uint64_t(-1),
 			next_file_no, log_files, states);
-	X_LOG(UTILS, DBG, "x_smbd_durable_log_read ret %ld", ret);
+	X_LOG(UTILS, DBG, "iuflog_read_states ret %ld", ret);
 
 	int fd = openat(log->dir_fd, IUFLOG_TMP,
 			O_WRONLY | O_CREAT | O_TRUNC, 0644);
@@ -591,7 +591,7 @@ static void iuflog_merge_log(x_iuflog_t *log)
 
 	ssize_t ret = iuflog_read_states(log, max_file_no,
 			next_file_no, log_files, states);
-	X_LOG(UTILS, DBG, "x_smbd_durable_log_read ret %ld", ret);
+	X_LOG(UTILS, DBG, "iuflog_read_states ret %ld", ret);
 
 	fd = openat(log->dir_fd, IUFLOG_TMP,
 			O_WRONLY | O_CREAT | O_TRUNC, 0644);
