@@ -49,6 +49,7 @@ TARGET_SET_tests := \
 	test-compression \
 	test-timeout \
 	test-charset \
+	test-iuflog \
 
 TARGET_SET_lib := nxsmb nxversion
 
@@ -166,6 +167,8 @@ $(TARGET_DIR_out)/tests/test-signing : $(TARGET_DIR_out)/src/smb2_signing.o
 TESTS_LDFLAGS_test-signing := -lcrypto
 
 $(TARGET_DIR_out)/tests/test-compression : $(TARGET_DIR_out)/src/smb2_compression.o
+
+TESTS_LDFLAGS_test-iuflog := -lz
 
 $(TARGET_SET_tests:%=$(TARGET_DIR_out)/tests/%) : $(TARGET_DIR_out)/libnxsmb.a $(COMMON_LIBS)
 
