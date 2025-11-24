@@ -2151,6 +2151,7 @@ NTSTATUS posixfs_qdir_get_entry(x_smbd_qdir_t *smbd_qdir,
 	for (;;) {
 		const char *ent_name;
 		auto &pos = posixfs_qdir->pos;
+		auto file_number = pos.file_number;
 		if (pos.file_number >= pseudo_entry_count) {
 			ent_name = posixfs_qdir_get_fs_entry(posixfs_qdir,
 					posixfs_object);
@@ -2175,9 +2176,9 @@ NTSTATUS posixfs_qdir_get_entry(x_smbd_qdir_t *smbd_qdir,
 		}
 
 		if (!process_entry_func(&object_meta, &stream_meta, ppsd,
-					posixfs_object, ent_name, pos.file_number)) {
+					posixfs_object, ent_name, file_number)) {
 			X_LOG(SMB, WARN, "qdir_process_entry %s %ld,0x%lx %d errno=%d",
-					ent_name, pos.file_number, pos.filepos,
+					ent_name, file_number, pos.filepos,
 					pos.offset_in_block, errno);
 			continue;
 		}
