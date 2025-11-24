@@ -235,10 +235,10 @@ static void fill_statex(x_smbd_object_meta_t *object_meta,
 	 */
 	object_meta->fsid = stat.st_dev;
 	object_meta->inode = stat.st_ino;
-	object_meta->creation = x_timespec_to_nttime(dos_attr.create_time);
-	object_meta->last_access = x_timespec_to_nttime(stat.st_atim);
-	object_meta->last_write = x_timespec_to_nttime(stat.st_mtim);
-	object_meta->change = x_timespec_to_nttime(stat.st_ctim);
+	object_meta->creation = dos_attr.create_time;
+	object_meta->last_access = stat.st_atim;
+	object_meta->last_write = stat.st_mtim;
+	object_meta->change = stat.st_ctim;
 	stream_meta->end_of_file = S_ISDIR(stat.st_mode) ? 0 : stat.st_size;
 	stream_meta->allocation_size = S_ISDIR(stat.st_mode) ? 0 :
 		std::max(stat.st_blocks * 512, stat.st_size); /* TODO */
