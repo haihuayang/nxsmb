@@ -129,8 +129,7 @@ struct x_smbd_conf_t
 	uint64_t log_file_size = 2048 * 1024;
 	std::string netbios_name_l8, workgroup_8, dns_domain_l8, realm;
 	std::shared_ptr<std::u16string> netbios_name_u16, workgroup_u16, dns_domain_l16;
-	std::string private_dir, lib_dir;
-	std::string samba_locks_dir;
+	std::string samba_lib_dir;
 	std::vector<std::string> interfaces;
 	std::shared_ptr<const std::vector<x_iface_t>> local_ifaces;
 

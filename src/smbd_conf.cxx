@@ -445,8 +445,6 @@ static bool parse_global_param(x_smbd_conf_t &smbd_conf,
 		return parse_uint32(value, smbd_conf.smb2_break_timeout_ms);
 	} else if (name == "sess setup timeout ms") {
 		return parse_uint32(value, smbd_conf.sess_setup_timeout_ms);
-	} else if (name == "private dir") {
-		smbd_conf.private_dir = value;
 	} else if (name == "node") {
 		smbd_conf.node = value;
 	} else if (name == "max session expiration") {
@@ -489,8 +487,8 @@ static bool parse_global_param(x_smbd_conf_t &smbd_conf,
 		return parse_uint32(value, smbd_conf.max_opens);
 	} else if (name == "my:max requs") {
 		return parse_uint32(value, smbd_conf.max_requs);
-	} else if (name == "my:samba locks dir") {
-		smbd_conf.samba_locks_dir = value;
+	} else if (name == "my:samba lib dir") {
+		smbd_conf.samba_lib_dir = value;
 	} else if (name == "my:nodes") {
 		return parse_nodes(smbd_conf.nodes, value);
 	} else if (name == "my:volume map") {
@@ -686,9 +684,7 @@ static int parse_smbconf(x_smbd_conf_t &smbd_conf)
 	std::ifstream in(path);
 
 	auto samba_path = get_samba_path(path);
-	smbd_conf.private_dir = samba_path + "/private";
-	smbd_conf.lib_dir = samba_path + "/lib";
-	smbd_conf.samba_locks_dir = samba_path + "/var/locks";
+	smbd_conf.samba_lib_dir = "/var/lib/samba";
 	std::unique_ptr<x_smbd_share_spec_t> share_spec;
 
 	unsigned int lineno = 0;
@@ -802,7 +798,7 @@ static int parse_smbconf(x_smbd_conf_t &smbd_conf)
 	}
 
 	int err = x_smbd_secrets_load(smbd_conf.secrets,
-			smbd_conf.private_dir,
+			smbd_conf.samba_lib_dir + "/private",
 			smbd_conf.workgroup_8,
 			netbios_name_u8);
 	if (err != 0) {
@@ -811,7 +807,7 @@ static int parse_smbconf(x_smbd_conf_t &smbd_conf)
 	}
 
 	err = x_smbd_group_mapping_load(smbd_conf.group_mapping,
-			smbd_conf.lib_dir);
+			smbd_conf.samba_lib_dir);
 	if (err != 0) {
 		X_LOG(CONF, ERR, "Fail loading group_mapping");
 		return err;
