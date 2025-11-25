@@ -185,6 +185,7 @@ int main(int argc, char **argv)
 		{ "daemon", required_argument, 0, 'D'},
 		{ "option", required_argument, 0, 'o'},
 		{ "version", required_argument, 0, 'v'},
+		{ NULL },
 	};
 
 	const char *progname = argv[0];
@@ -221,7 +222,7 @@ int main(int argc, char **argv)
 	}
 
 	if (!configfile) {
-		configfile = "/my/samba/etc/smb.conf";
+		configfile = "/etc/nxsmb/smbd.conf";
 	}
 	int err = x_smbd_conf_init(configfile, cmdline_options);
 	if (err < 0) {
