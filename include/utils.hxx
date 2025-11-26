@@ -384,7 +384,12 @@ void swap(x_ref_ptr_t<T> &a, x_ref_ptr_t<T> &b) noexcept
 struct x_bitmap_t
 {
 	enum { invalid = (uint32_t)-1, };
-	x_bitmap_t(uint32_t max) : data((max + 63) / 64), max(max) {}
+	void init(uint32_t max)
+	{
+		X_ASSERT(this->max == 0);
+		data.resize((max + 63) / 64);
+		this->max = max;
+	}
 	uint32_t alloc()
 	{
 		uint32_t ret = 0;
@@ -404,7 +409,7 @@ struct x_bitmap_t
 	}
 
 	std::vector<uint64_t> data;
-	uint32_t max;
+	uint32_t max = 0;
 };
 
 template <class T>

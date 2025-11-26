@@ -17,18 +17,19 @@ static struct {
 	x_threadpool_t *tpool_evtmgmt{}, *tpool_async{};
 	x_tick_t tick_start_mono, tick_start_real;
 	pthread_t signal_handler_thread;
+	x_bitmap_t thread_id_bitmap;
+	std::mutex thread_id_mutex;
 } g_nxfsd;
 
-static __thread int thread_id = -1;
-static x_bitmap_t g_thread_id_bitmap{X_NXFSD_MAX_THREAD};
-static std::mutex g_thread_id_mutex;
+static __thread uint32_t thread_id = x_bitmap_t::invalid;
 
 static void x_nxfsd_thread_init(uint32_t no)
 {
 	{
-		auto lock = std::lock_guard(g_thread_id_mutex);
-		thread_id = g_thread_id_bitmap.alloc();
+		auto lock = std::lock_guard(g_nxfsd.thread_id_mutex);
+		thread_id = g_nxfsd.thread_id_bitmap.alloc();
 	}
+	X_ASSERT(thread_id != x_bitmap_t::invalid);
 	X_LOG(UTILS, NOTICE, "allocate thread_id %u", thread_id);
 	x_nxfsd_stats_register(thread_id);
 }
@@ -110,10 +111,12 @@ static void nxfsd_init(const char *progname)
 			g_build.date,
 			g_build.branch);
 
+	g_nxfsd.thread_id_bitmap.init(smbd_conf->get_num_thread());
+
 	x_sched_stats_init();
 	x_smbd_stats_init();
 	x_noded_stats_init();
-	x_nxfsd_stats_init();
+	x_nxfsd_stats_init(smbd_conf->get_num_thread());
 
 	x_nxfsd_thread_init(0);
 

@@ -9,7 +9,7 @@
 #include "include/xdefines.h"
 #include "include/stats.hxx"
 
-void x_nxfsd_stats_init();
+void x_nxfsd_stats_init(uint32_t num_thread);
 int x_nxfsd_stats_register(uint32_t thread_id);
 void x_nxfsd_stats_report();
 

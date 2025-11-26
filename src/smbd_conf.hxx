@@ -80,6 +80,11 @@ struct x_smbd_conf_t
 		return ret;
 	}
 
+	uint32_t get_num_thread() const {
+		/* reserve 8 more threads for other tasks */
+		return client_thread_count + async_thread_count + 8;
+	}
+
 	x_smb2_uuid_t guid; // uint8_t guid[16];
 	uint32_t port = 445;
 	uint32_t node_port = 7526;

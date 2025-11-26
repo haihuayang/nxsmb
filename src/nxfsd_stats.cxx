@@ -6,9 +6,9 @@
 static std::mutex nxfsd_stats_mutex;
 static x_stats_store_t nxfsd_stats_store;
 
-void x_nxfsd_stats_init()
+void x_nxfsd_stats_init(uint32_t num_thread)
 {
-	x_stats_init(X_NXFSD_MAX_THREAD);
+	x_stats_init(num_thread);
 	nxfsd_stats_store.init();
 }
 
