@@ -12,17 +12,19 @@ Build Instructions
 ------------------
 
 On Rocky Linux 8.10 (currently only tested on this platform):
-1, install dependencies
+1. install dependencies
    sudo dnf install -y epel-release
    sudo dnf install -y gcc-toolset-13-gcc-c++ python3 make
    sudo dnf install -y heimdal-devel libtdb-devel openssl-devel libuuid-devel libattr-devel jemalloc-devel
-2, enable gcc-toolset-13
+
+2. enable gcc-toolset-13
    source /opt/rh/gcc-toolset-13/enable
-3, download samba source code, nxsmb internally communicate with samba winbindd service, so please
+
+3. download samba source code, nxsmb internally communicate with samba winbindd service, so please
 checkout the same version as your samba installation
    e.g., git clone https://git.samba.org/samba.git && cd samba && git checkout v4-19-stable 
 
-4, build nxsmb
+4. build nxsmb
    make TARGET_CFLAGS_platform=-I<samba-dir>/nsswitch PLATFORM=linux
 
 
@@ -31,7 +33,8 @@ Run nxsmb
 nxsmb requires samba winbindd service as well as the net util to join domain, you can
 either build samba from source, or install package 'samba-common-bin' and 'winbind'.
 
-1, modify /etc/samba/smb.conf to include the following lines:
+1. modify /etc/samba/smb.conf to include the following lines:
+```
 [global]
 security = ADS
 workgroup = YOUR_DOMAIN
@@ -40,22 +43,23 @@ netbios name = YOUR_SERVER_NAME
 winbind use default domain = yes
 winbind enum users = yes
 winbind enum groups = yes
+```
 
-2, join domain
+2. join domain
    sudo net ads join ...
 
-3, start winbindd service
+3. start winbindd service
    sudo systemctl start winbind
 
-4, create directory for nxsmb, e.g.,
+4. create directory for nxsmb, e.g.,
    sudo mkdir -p /var/log/nxsmb /etc/nxsmb
 
-5, create shares directory, e.g.,
+5. create shares directory, e.g.,
    sudo mkdir -p /home/nxsmb/shares/SMBBasic
    sudo ./dbg.linux.x86_64/nxutils init-volume /home/nxsmb/shares/SMBBasic
 
-6, create /etc/nxsmb/smbd.conf, e.g.,
-
+6. create /etc/nxsmb/smbd.conf, e.g.,
+```
 log level = SMB:DBG
 realm = YOUR_REALM
 netbios name = YOUR_SERVER_NAME
@@ -79,8 +83,9 @@ my:volume map = \
 [SMBBasic]
 my:uuid = d3115fc0-d376-4783-b9df-517a57a28968
 my:volumes = 85d49bcb-7c14-404b-b11a-ffe207732329
+```
 
-7, start smbd_nx
+7. start smbd_nx
    sudo ./dbg.linux.x86_64/bin/smbd_nx -c /etc/nxsmb/smbd.conf
 
 
