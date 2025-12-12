@@ -1,4 +1,5 @@
 
+#include "include/crypto.hxx"
 #include "smb2.hxx"
 #include <openssl/sha.h>
 

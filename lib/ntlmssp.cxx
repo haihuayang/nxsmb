@@ -9,11 +9,6 @@
 #include "include/librpc/ntlmssp.hxx"
 #include "include/charset.hxx"
 #include "include/nttime.hxx"
-#include <openssl/evp.h>
-#include <openssl/md5.h>
-#include <openssl/md4.h>
-#include <openssl/rc4.h>
-#include "include/crypto.hxx"
 
 static inline void vector_append(std::vector<uint8_t> &vec, const void *b, const void *e)
 {
@@ -23,34 +18,6 @@ static inline void vector_append(std::vector<uint8_t> &vec, const void *b, const
 static inline void vector_append(std::vector<uint8_t> &vec, std::vector<uint8_t> &vec2)
 {
 	vec.insert(std::end(vec), std::begin(vec2), std::end(vec2));
-}
-
-
-static void dump_arc4_state(const char *description, const EVP_CIPHER_CTX *ctx)
-{
-	// dump_data_pw(description, state->sbox, sizeof(state->sbox));
-}
-
-static void arcfour_crypt_sbox(EVP_CIPHER_CTX *ctx, void *data, size_t data_len)
-{
-	dump_arc4_state("ntlmssp hash: \n", ctx);
-	int outl;
-	EVP_CipherUpdate(ctx, (uint8_t *)data, &outl, (const uint8_t *)data,
-			(unsigned int)data_len);
-	X_ASSERT(outl == (int)data_len);
-}
-
-static void arcfour_init(EVP_CIPHER_CTX *ctx, const void *key, size_t key_len)
-{
-	EVP_CipherInit(ctx, EVP_rc4(), (const uint8_t *)key, nullptr, 0);
-}
-
-static void arcfour_crypt(uint8_t *data, const void *key, size_t data_len)
-{
-	EVP_CIPHER_CTX *ctx = EVP_CIPHER_CTX_new();
-	arcfour_init(ctx, key, 16);
-	arcfour_crypt_sbox(ctx, data, data_len);
-	EVP_CIPHER_CTX_free(ctx);
 }
 
 static int NTOWFv2(uint8_t *digest, uint32_t dlen,
@@ -194,7 +161,7 @@ int x_ntlmssp_client_authenticate(std::vector<uint8_t> &out,
 	if (auth_msg.NegotiateFlags & idl::NTLMSSP_NEGOTIATE_KEY_EXCH) {
 		uint8_t tmp[16];
 		memcpy(tmp, exported_session_key, 16);
-		arcfour_crypt(tmp, session_base_key, 16);
+		x_ntlmssp_arcfour_crypt(tmp, session_base_key, 16);
 		auth_msg.EncryptedRandomSessionKey->val.assign(tmp, tmp + 16);
 	} else {
 		memcpy(exported_session_key, session_base_key, 16);

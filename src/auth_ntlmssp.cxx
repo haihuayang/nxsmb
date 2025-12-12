@@ -16,11 +16,7 @@
 #include "include/nttime.hxx"
 #include "util_sid.hxx"
 #include <zlib.h>
-#include <openssl/evp.h>
-#include <openssl/md5.h>
-#include <openssl/hmac.h>
-#include <openssl/rc4.h>
-#include "include/crypto.hxx"
+#include "include/ntlmssp.hxx"
 
 
 
@@ -41,15 +37,9 @@ struct str_const_t {
 
 struct x_ntlmssp_crypt_direction_t
 {
-	~x_ntlmssp_crypt_direction_t() {
-		if (seal_state) {
-			EVP_CIPHER_CTX_free(seal_state);
-		}
-	}
-
 	uint32_t seq_num;
 	uint8_t sign_key[16];
-	EVP_CIPHER_CTX *seal_state = nullptr;
+	x_cipher_ctx_t seal_state;;
 };
 
 struct x_auth_ntlmssp_t
@@ -204,42 +194,15 @@ static const uint8_t srv_seal_const[] = "session key to server-to-client sealing
  *
  */
 
-static void dump_arc4_state(const char *description, const EVP_CIPHER_CTX *ctx)
-{
-	dump_data_pw(description, state->sbox, sizeof(state->sbox));
-}
-
-static void arcfour_crypt_sbox(EVP_CIPHER_CTX *ctx, void *data, size_t data_len)
-{
-	dump_arc4_state("ntlmssp hash: \n", ctx);
-	int outl;
-	EVP_CipherUpdate(ctx, (uint8_t *)data, &outl, (const uint8_t *)data,
-			(unsigned int)data_len);
-	X_ASSERT(outl == (int)data_len);
-}
-
-static void arcfour_init(EVP_CIPHER_CTX *ctx, const void *key, size_t key_len)
-{
-	EVP_CipherInit(ctx, EVP_rc4(), (const uint8_t *)key, nullptr, 0);
-}
-
-static void arcfour_crypt(uint8_t *data, const void *key, size_t data_len)
-{
-	EVP_CIPHER_CTX *ctx = EVP_CIPHER_CTX_new();
-	arcfour_init(ctx, key, 16);
-	arcfour_crypt_sbox(ctx, data, data_len);
-	EVP_CIPHER_CTX_free(ctx);
-}
-
 static void calc_ntlmv2_key(uint8_t subkey[16],
 			    const uint8_t *session_key, size_t session_key_len,
 			    const str_const_t &label)
 {
-	MD5_CTX ctx3;
-	MD5_Init(&ctx3);
-	MD5_Update(&ctx3, session_key, session_key_len);
-	MD5_Update(&ctx3, label.data, label.size);
-	MD5_Final(subkey, &ctx3);
+	struct iovec iov[] = {
+		{ (void *)session_key, session_key_len, },
+		{ (void *)label.data, label.size, },
+	};
+	x_md5(subkey, iov, 2);
 }
 
 enum ntlmssp_direction {
@@ -284,7 +247,7 @@ static std::array<uint8_t, 16> ntlmssp_make_packet_signature(x_auth_ntlmssp_t *n
 		X_ASSERT(dlen == sizeof(digest));
 
 		if (encrypt_sig && (ntlmssp->neg_flags & idl::NTLMSSP_NEGOTIATE_KEY_EXCH)) {
-			arcfour_crypt_sbox(crypt.seal_state, digest, 8);
+			x_ntlmssp_arcfour_crypt_sbox(crypt.seal_state, digest, 8);
 		}
 
 		*((uint32_t *)sig.data()) = X_H2LE32( idl::NTLMSSP_SIGN_VERSION);
@@ -304,7 +267,7 @@ static std::array<uint8_t, 16> ntlmssp_make_packet_signature(x_auth_ntlmssp_t *n
 
 		crypt.seq_num++;
 
-		arcfour_crypt_sbox(crypt.seal_state,
+		x_ntlmssp_arcfour_crypt_sbox(crypt.seal_state,
 				   sig.data() + 4, sig.size() - 4);
 	}
 	return sig;
@@ -391,249 +354,6 @@ static NTSTATUS ntlmssp_check_packet(x_auth_ntlmssp_t *ntlmssp,
 	return NT_STATUS_OK;
 }
 
-#if 0
-/**
- * Seal data with the NTLMSSP algorithm
- *
- */
-
-static NTSTATUS ntlmssp_seal_packet(struct ntlmssp_state *ntlmssp_state,
-			     TALLOC_CTX *sig_mem_ctx,
-			     uint8_t *data, size_t length,
-			     const uint8_t *whole_pdu, size_t pdu_length,
-			     DATA_BLOB *sig)
-{
-	if (!(ntlmssp->neg_flags & NTLMSSP_NEGOTIATE_SEAL)) {
-		DEBUG(3, ("NTLMSSP Sealing not negotiated - cannot seal packet!\n"));
-		return NT_STATUS_INVALID_PARAMETER;
-	}
-
-	if (!(ntlmssp->neg_flags & NTLMSSP_NEGOTIATE_SIGN)) {
-		DEBUG(3, ("NTLMSSP Sealing not negotiated - cannot seal packet!\n"));
-		return NT_STATUS_INVALID_PARAMETER;
-	}
-
-	if (!ntlmssp->session_key.length) {
-		DEBUG(3, ("NO session key, cannot seal packet\n"));
-		return NT_STATUS_NO_USER_SESSION_KEY;
-	}
-
-	DEBUG(10,("ntlmssp_seal_data: seal\n"));
-	dump_data_pw("ntlmssp clear data\n", data, length);
-	if (ntlmssp->neg_flags & NTLMSSP_NEGOTIATE_NTLM2) {
-		NTSTATUS nt_status;
-		/*
-		 * The order of these two operations matters - we
-		 * must first seal the packet, then seal the
-		 * sequence number - this is because the
-		 * send_seal_hash is not constant, but is is rather
-		 * updated with each iteration
-		 */
-		nt_status = ntlmssp_make_packet_signature(ntlmssp_state,
-							  sig_mem_ctx,
-							  data, length,
-							  whole_pdu, pdu_length,
-							  NTLMSSP_SEND,
-							  sig, false);
-		if (!NT_STATUS_IS_OK(nt_status)) {
-			return nt_status;
-		}
-
-		arcfour_crypt_sbox(&ntlmssp_state->crypt->ntlm2.sending.seal_state,
-				   data, length);
-		if (ntlmssp->neg_flags & NTLMSSP_NEGOTIATE_KEY_EXCH) {
-			arcfour_crypt_sbox(&ntlmssp_state->crypt->ntlm2.sending.seal_state,
-					   sig->data+4, 8);
-		}
-	} else {
-		NTSTATUS status;
-		uint32_t crc;
-
-		crc = crc32_calc_buffer(data, length);
-
-		status = msrpc_gen(sig_mem_ctx,
-			       sig, "dddd",
-			       NTLMSSP_SIGN_VERSION, 0, crc,
-			       ntlmssp_state->crypt->ntlm.seq_num);
-		if (!NT_STATUS_IS_OK(status)) {
-			return status;
-		}
-
-		/*
-		 * The order of these two operations matters - we
-		 * must first seal the packet, then seal the
-		 * sequence number - this is because the ntlmv1_arc4_state
-		 * is not constant, but is is rather updated with
-		 * each iteration
-		 */
-
-		dump_arc4_state("ntlmv1 arc4 state:\n",
-				&ntlmssp_state->crypt->ntlm.seal_state);
-		arcfour_crypt_sbox(&ntlmssp_state->crypt->ntlm.seal_state,
-				   data, length);
-
-		dump_arc4_state("ntlmv1 arc4 state:\n",
-				&ntlmssp_state->crypt->ntlm.seal_state);
-
-		arcfour_crypt_sbox(&ntlmssp_state->crypt->ntlm.seal_state,
-				   sig->data+4, sig->length-4);
-
-		ntlmssp_state->crypt->ntlm.seq_num++;
-	}
-	dump_data_pw("ntlmssp signature\n", sig->data, sig->length);
-	dump_data_pw("ntlmssp sealed data\n", data, length);
-
-	return NT_STATUS_OK;
-}
-
-/**
- * Unseal data with the NTLMSSP algorithm
- *
- */
-
-NTSTATUS ntlmssp_unseal_packet(struct ntlmssp_state *ntlmssp_state,
-			       uint8_t *data, size_t length,
-			       const uint8_t *whole_pdu, size_t pdu_length,
-			       const DATA_BLOB *sig)
-{
-	NTSTATUS status;
-	if (!ntlmssp_state->session_key.length) {
-		DEBUG(3, ("NO session key, cannot unseal packet\n"));
-		return NT_STATUS_NO_USER_SESSION_KEY;
-	}
-
-	DEBUG(10,("ntlmssp_unseal_packet: seal\n"));
-	dump_data_pw("ntlmssp sealed data\n", data, length);
-
-	if (ntlmssp_state->neg_flags & NTLMSSP_NEGOTIATE_NTLM2) {
-		/* First unseal the data. */
-		arcfour_crypt_sbox(&ntlmssp_state->crypt->ntlm2.receiving.seal_state,
-				   data, length);
-		dump_data_pw("ntlmv2 clear data\n", data, length);
-	} else {
-		arcfour_crypt_sbox(&ntlmssp_state->crypt->ntlm.seal_state,
-				   data, length);
-		dump_data_pw("ntlmv1 clear data\n", data, length);
-	}
-	status = ntlmssp_check_packet(ntlmssp_state,
-				      data, length,
-				      whole_pdu, pdu_length,
-				      sig);
-
-	if (!NT_STATUS_IS_OK(status)) {
-		DEBUG(1,("NTLMSSP packet check for unseal failed due to invalid signature on %llu bytes of input:\n",
-			 (unsigned long long)length));
-	}
-	return status;
-}
-
-NTSTATUS ntlmssp_wrap(struct ntlmssp_state *ntlmssp_state,
-		      TALLOC_CTX *out_mem_ctx,
-		      const DATA_BLOB *in,
-		      DATA_BLOB *out)
-{
-	NTSTATUS nt_status;
-	DATA_BLOB sig;
-
-	if (ntlmssp_state->neg_flags & NTLMSSP_NEGOTIATE_SEAL) {
-		if (in->length + NTLMSSP_SIG_SIZE < in->length) {
-			return NT_STATUS_INVALID_PARAMETER;
-		}
-
-		*out = data_blob_talloc(out_mem_ctx, NULL, in->length + NTLMSSP_SIG_SIZE);
-		if (!out->data) {
-			return NT_STATUS_NO_MEMORY;
-		}
-		memcpy(out->data + NTLMSSP_SIG_SIZE, in->data, in->length);
-
-		nt_status = ntlmssp_seal_packet(ntlmssp_state, out_mem_ctx,
-						out->data + NTLMSSP_SIG_SIZE,
-						out->length - NTLMSSP_SIG_SIZE,
-						out->data + NTLMSSP_SIG_SIZE,
-						out->length - NTLMSSP_SIG_SIZE,
-						&sig);
-
-		if (NT_STATUS_IS_OK(nt_status)) {
-			memcpy(out->data, sig.data, NTLMSSP_SIG_SIZE);
-			talloc_free(sig.data);
-		}
-		return nt_status;
-
-	} else if (ntlmssp_state->neg_flags & NTLMSSP_NEGOTIATE_SIGN) {
-		if (in->length + NTLMSSP_SIG_SIZE < in->length) {
-			return NT_STATUS_INVALID_PARAMETER;
-		}
-
-		*out = data_blob_talloc(out_mem_ctx, NULL, in->length + NTLMSSP_SIG_SIZE);
-		if (!out->data) {
-			return NT_STATUS_NO_MEMORY;
-		}
-		memcpy(out->data + NTLMSSP_SIG_SIZE, in->data, in->length);
-
-		nt_status = ntlmssp_sign_packet(ntlmssp_state, out_mem_ctx,
-						out->data + NTLMSSP_SIG_SIZE,
-						out->length - NTLMSSP_SIG_SIZE,
-						out->data + NTLMSSP_SIG_SIZE,
-						out->length - NTLMSSP_SIG_SIZE,
-						&sig);
-
-		if (NT_STATUS_IS_OK(nt_status)) {
-			memcpy(out->data, sig.data, NTLMSSP_SIG_SIZE);
-			talloc_free(sig.data);
-		}
-		return nt_status;
-	} else {
-		*out = data_blob_talloc(out_mem_ctx, in->data, in->length);
-		if (!out->data) {
-			return NT_STATUS_NO_MEMORY;
-		}
-		return NT_STATUS_OK;
-	}
-}
-
-NTSTATUS ntlmssp_unwrap(struct ntlmssp_state *ntlmssp_state,
-			TALLOC_CTX *out_mem_ctx,
-			const DATA_BLOB *in,
-			DATA_BLOB *out)
-{
-	DATA_BLOB sig;
-
-	if (ntlmssp_state->neg_flags & NTLMSSP_NEGOTIATE_SEAL) {
-		if (in->length < NTLMSSP_SIG_SIZE) {
-			return NT_STATUS_INVALID_PARAMETER;
-		}
-		sig.data = in->data;
-		sig.length = NTLMSSP_SIG_SIZE;
-
-		*out = data_blob_talloc(out_mem_ctx, in->data + NTLMSSP_SIG_SIZE, in->length - NTLMSSP_SIG_SIZE);
-
-		return ntlmssp_unseal_packet(ntlmssp_state,
-					     out->data, out->length,
-					     out->data, out->length,
-					     &sig);
-
-	} else if (ntlmssp_state->neg_flags & NTLMSSP_NEGOTIATE_SIGN) {
-		if (in->length < NTLMSSP_SIG_SIZE) {
-			return NT_STATUS_INVALID_PARAMETER;
-		}
-		sig.data = in->data;
-		sig.length = NTLMSSP_SIG_SIZE;
-
-		*out = data_blob_talloc(out_mem_ctx, in->data + NTLMSSP_SIG_SIZE, in->length - NTLMSSP_SIG_SIZE);
-
-		return ntlmssp_check_packet(ntlmssp_state,
-					    out->data, out->length,
-					    out->data, out->length,
-					    &sig);
-	} else {
-		*out = data_blob_talloc(out_mem_ctx, in->data, in->length);
-		if (!out->data) {
-			return NT_STATUS_NO_MEMORY;
-		}
-		return NT_STATUS_OK;
-	}
-}
-#endif
 /**
    Initialise the state for NTLMSSP signing.
 */
@@ -723,15 +443,9 @@ static void ntlmssp_sign_reset(x_auth_ntlmssp_t *ntlmssp,
 			dump_data_pw("NTLMSSP seal key:\n",
 					seal_key, 16);
 
-			if (ntlmssp->crypt_dirs[i].seal_state) {
-				EVP_CIPHER_CTX_free(ntlmssp->crypt_dirs[i].seal_state);
-			}
-			ntlmssp->crypt_dirs[i].seal_state = EVP_CIPHER_CTX_new();
-			arcfour_init(ntlmssp->crypt_dirs[i].seal_state,
-					seal_key, sizeof(seal_key));
-
-			dump_arc4_state("NTLMSSP seal arc4 state:\n",
-					ntlmssp->crypt_dirs[i].seal_state);
+			ntlmssp->crypt_dirs[i].seal_state.cleanup();
+			ntlmssp->crypt_dirs[i].seal_state.init_rc4(
+					seal_key, sizeof(seal_key), false);
 
 			/* seq num */
 			if (reset_seqnums) {
@@ -784,16 +498,9 @@ static void ntlmssp_sign_reset(x_auth_ntlmssp_t *ntlmssp,
 			}
 		}
 
-		if (ntlmssp->crypt_dirs[0].seal_state) {
-			EVP_CIPHER_CTX_free(ntlmssp->crypt_dirs[0].seal_state);
-		}
-		ntlmssp->crypt_dirs[0].seal_state = EVP_CIPHER_CTX_new();
-		arcfour_init(ntlmssp->crypt_dirs[0].seal_state,
-			     seal_session_key, seal_session_key_len);
-
-		dump_arc4_state("NTLMv1 arc4 state:\n",
-				ntlmssp->crypt_dirs[0].seal_state);
-
+		ntlmssp->crypt_dirs[0].seal_state.cleanup();
+		ntlmssp->crypt_dirs[0].seal_state.init_rc4(
+			     seal_session_key, (unsigned int)seal_session_key_len, false);
 		if (reset_seqnums) {
 			ntlmssp->crypt_dirs[0].seq_num = 0;
 		}
@@ -1042,7 +749,7 @@ static NTSTATUS ntlmssp_post_auth(x_auth_ntlmssp_t *ntlmssp, x_auth_info_t &auth
 
 	if ((ntlmssp->neg_flags & idl::NTLMSSP_NEGOTIATE_KEY_EXCH) != 0 && session_key_length == 16) {
 		std::array<uint8_t, 16> tmp = ntlmssp->encrypted_session_key;
-		arcfour_crypt(tmp.data(), session_key_data, 16);
+		x_ntlmssp_arcfour_crypt(tmp.data(), session_key_data, 16);
 		auth_info.session_key.assign(tmp.begin(), tmp.end());
 	} else {
 		auth_info.session_key.assign(session_key_data, session_key_data + session_key_length);
