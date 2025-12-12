@@ -17,6 +17,7 @@
 #include "util_sid.hxx"
 #include <zlib.h>
 #include <openssl/evp.h>
+#include <openssl/err.h>
 #include <openssl/md5.h>
 #include <openssl/hmac.h>
 #include <openssl/rc4.h>
@@ -209,6 +210,27 @@ static void dump_arc4_state(const char *description, const EVP_CIPHER_CTX *ctx)
 	dump_data_pw(description, state->sbox, sizeof(state->sbox));
 }
 
+#if OPENSSL_VERSION_NUMBER >= 0x30000000L
+static void arcfour_crypt_sbox(EVP_CIPHER_CTX *ctx, void *data, size_t data_len)
+{
+	dump_arc4_state("ntlmssp hash: \n", ctx);
+
+	//OpenSSL 3.x: Use EVP_Cipher (Samba approach)
+	int ret = EVP_Cipher(ctx, (uint8_t *)data, (const uint8_t *)data, (int)data_len);
+
+	if (ret != 1) {
+		X_LOG(AUTH, ERR, "EVP_Cipher failed");
+		unsigned long err = ERR_get_error();
+		if (err != 0) {
+			char err_buf[256];
+			ERR_error_string_n(err, err_buf, sizeof(err_buf));
+			X_LOG(AUTH, ERR, "OpenSSL error: %s (0x%lx)", err_buf, err);
+		}
+	}
+
+	X_LOG(AUTH, DBG, "EVP_Cipher completed successfully for %zu bytes", data_len);
+}
+#else
 static void arcfour_crypt_sbox(EVP_CIPHER_CTX *ctx, void *data, size_t data_len)
 {
 	dump_arc4_state("ntlmssp hash: \n", ctx);
@@ -217,11 +239,41 @@ static void arcfour_crypt_sbox(EVP_CIPHER_CTX *ctx, void *data, size_t data_len)
 			(unsigned int)data_len);
 	X_ASSERT(outl == (int)data_len);
 }
+#endif
 
+
+#if OPENSSL_VERSION_NUMBER >= 0x30000000L
+static void arcfour_init(EVP_CIPHER_CTX *ctx, const void *key, size_t key_len)
+{
+    // Use Samba approach: initialize CTX first, then use EVP_CipherInit_ex
+	EVP_CIPHER_CTX_init(ctx);
+
+	// Use EVP_CipherInit_ex instead of EVP_CipherInit
+	int ret = EVP_CipherInit_ex(ctx, EVP_rc4(), NULL, (const uint8_t *)key, NULL, 0);
+
+	if (ret != 1) {
+		X_LOG(AUTH, ERR, "EVP_CipherInit_ex failed");
+		unsigned long err = ERR_get_error();
+		if (err != 0) {
+			char err_buf[256];
+			ERR_error_string_n(err, err_buf, sizeof(err_buf));
+			X_LOG(AUTH, ERR, "OpenSSL error: %s (0x%lx)", err_buf, err);
+		}
+		// If failed, try fallback method
+		EVP_CIPHER_CTX_cleanup(ctx);
+		EVP_CIPHER_CTX_new();
+		ret = EVP_CipherInit(ctx, EVP_rc4(), (const uint8_t *)key, nullptr, 0);
+		if (ret != 1) {
+			X_LOG(AUTH, ERR, "Fallback EVP_CipherInit also failed");
+		}
+	}
+}
+#else
 static void arcfour_init(EVP_CIPHER_CTX *ctx, const void *key, size_t key_len)
 {
 	EVP_CipherInit(ctx, EVP_rc4(), (const uint8_t *)key, nullptr, 0);
 }
+#endif
 
 static void arcfour_crypt(uint8_t *data, const void *key, size_t data_len)
 {

@@ -11,7 +11,7 @@ BRANCH := $(shell git rev-parse --abbrev-ref HEAD)
 include config.mk
 include functions.mk
 
-TARGET_BUILD_CFLAGS_dbg := -g3
+TARGET_BUILD_CFLAGS_dbg := -g3 -DOPENSSL_SUPPRESS_DEPRECATED=0
 TARGET_BUILD_LDFLAGS_dbg := -g3
 TARGET_BUILD_CFLAGS_opt := -O2 -g3
 TARGET_BUILD_LDFLAGS_opt := -O2 -g3
