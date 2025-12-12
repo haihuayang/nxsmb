@@ -11,25 +11,26 @@ g++, heimdal-devel, libtdb-devel, openssl-devel, libuuid-devel, libattr-devel, j
 Build Instructions
 ------------------
 
-On Rocky Linux 8.10 (currently only tested on this platform):
 1. install dependencies
+For example On Rocky Linux 8.10
 ```
    sudo dnf install -y epel-release
    sudo dnf install -y gcc-toolset-13-gcc-c++ python3 make
    sudo dnf install -y heimdal-devel libtdb-devel openssl-devel libuuid-devel libattr-devel jemalloc-devel
-```
-3. enable gcc-toolset-13, e.g,
-```
    source /opt/rh/gcc-toolset-13/enable
 ```
-5. download samba source code, nxsmb internally communicate with samba winbindd service, so please
+on Ubuntu 24.04
+```
+   sudo apt install -y g++ heimdal-dev libtdb-dev libssl-dev  uuid-dev libattr1-dev libjemalloc-dev
+```
+2. download samba source code, nxsmb internally communicate with samba winbindd service, so please
 checkout the same version as your samba installation, e.g.,
 ```
    git clone https://git.samba.org/samba.git && cd samba && git checkout v4-19-stable 
 ```
-5. build nxsmb
+3. build nxsmb
 ```
-   make TARGET_CFLAGS_platform=-I<samba-dir>/nsswitch PLATFORM=linux
+   make TARGET_CFLAGS_platform=-I<samba-dir>/nsswitch PLATFORM=linux -j$(nproc)
 ```
 
 Run nxsmb
@@ -53,22 +54,22 @@ winbind enum groups = yes
 ```
    sudo net ads join ...
 ```
-4. start winbindd service
+3. start winbindd service
 ```
    sudo systemctl start winbind
 ```
-5. create directory for nxsmb, e.g.,
+4. create directory for nxsmb, e.g.,
 ```
    sudo mkdir -p /var/log/nxsmb /etc/nxsmb
 ```
 
-6. create shares directory, e.g.,
+5. create shares directory, e.g.,
 ```
    sudo mkdir -p /home/nxsmb/shares/SMBBasic
    sudo ./dbg.linux.x86_64/nxutils init-volume /home/nxsmb/shares/SMBBasic
 ```
 
-8. create /etc/nxsmb/smbd.conf, e.g.,
+6. create /etc/nxsmb/smbd.conf, e.g.,
 ```
 log level = SMB:DBG
 realm = YOUR_REALM
