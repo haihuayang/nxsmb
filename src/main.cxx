@@ -89,6 +89,79 @@ static void *signal_handler_func(void *arg)
 	return nullptr;
 }
 
+#if OPENSSL_VERSION_NUMBER >= 0x30000000L
+
+#include <openssl/provider.h>
+#include <openssl/evp.h>
+
+static OSSL_PROVIDER *legacy_provider = NULL;
+static OSSL_PROVIDER *fips_provider = NULL;
+
+/*
+ *  Initialize OpenSSL 3.x providers for FIPS and legacy algorithm support
+ *  This replaces the deprecated FIPS_mode_set(0) call
+ */
+static int init_openssl_providers() {
+	X_LOG(UTILS, NOTICE, "Initializing OpenSSL 3.x providers for FIPS + legacy support...");
+
+	// 1. Load default provider (always required)
+	OSSL_PROVIDER *default_provider = OSSL_PROVIDER_load(NULL, "default");
+	if (!default_provider) {
+		X_LOG(UTILS, ERR, "Failed to load default provider");
+		return 0;
+	}
+	X_LOG(UTILS, NOTICE, "Default provider loaded");
+
+	// 2. Load legacy provider (for RC4 and other deprecated algorithms)
+	legacy_provider = OSSL_PROVIDER_load(NULL, "legacy");
+	if (!legacy_provider) {
+		X_LOG(UTILS, ERR, "Failed to load legacy provider - RC4 will not work");
+		// 不返回失败，因为有些应用可能不需要RC4
+	} else {
+		X_LOG(UTILS, NOTICE, "Legacy provider loaded successfully");
+	}
+
+	// 3. Load FIPS provider (if available and needed) 
+	fips_provider = OSSL_PROVIDER_load(NULL, "fips");
+	if (!fips_provider) {
+		X_LOG(UTILS, NOTICE, "FIPS provider not available or not loaded - continuing without FIPS");
+	} else {
+		X_LOG(UTILS, NOTICE, "FIPS provider loaded successfully");
+	}
+
+	// 4. Verify RC4 availability
+	const EVP_CIPHER *rc4 = EVP_rc4();
+	if (rc4) {
+		X_LOG(UTILS, NOTICE, "RC4 algorithm is available: %s", EVP_CIPHER_name(rc4));
+	} else {
+		X_LOG(UTILS, ERR, "RC4 algorithm is NOT available - NTLM authentication may fail");
+	}
+
+	return 1;
+}
+
+/*
+ *  Cleanup OpenSSL providers before application exit
+ */
+static void cleanup_openssl_providers() {
+	if (legacy_provider) {
+		OSSL_PROVIDER_unload(legacy_provider);
+		legacy_provider = NULL;
+		X_LOG(UTILS, NOTICE, "Legacy provider unloaded");
+	}
+
+	if (fips_provider) {
+		OSSL_PROVIDER_unload(fips_provider);
+		fips_provider = NULL;
+		X_LOG(UTILS, NOTICE, "FIPS provider unloaded");
+	}
+}
+
+#endif
+
+
+
+
 static void main_loop()
 {
 	while (!g_nxfsd.stopped) {
@@ -237,12 +310,23 @@ int main(int argc, char **argv)
 	(void)daemon;
 
 	OPENSSL_init();
-	FIPS_mode_set(0);
 
+#if OPENSSL_VERSION_NUMBER >= 0x30000000L
+    // Replace: FIPS_mode_set(0);
+    if (!init_openssl_providers()) {
+        X_LOG(UTILS, ERR, "Failed to initialize OpenSSL providers");
+        exit(1);
+    }
+#else
+	FIPS_mode_set(0);
+#endif
 	nxfsd_init(progname);
 
 	main_loop();
 
+#if OPENSSL_VERSION_NUMBER >= 0x30000000L
+    cleanup_openssl_providers();
+#endif
 	x_threadpool_destroy(g_nxfsd.tpool_evtmgmt);
 	x_threadpool_destroy(g_nxfsd.tpool_async);
 	pthread_join(g_nxfsd.signal_handler_thread, nullptr);
