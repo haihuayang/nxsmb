@@ -9,6 +9,10 @@
 #include <openssl/evp.h>
 #include <sys/uio.h>
 
+int x_crypto_init();
+
+void x_crypto_fini();
+
 unsigned int x_hmac(void *digest, unsigned int dlen,
 		const EVP_MD *md,
 		const void *KI, unsigned int KI_len,

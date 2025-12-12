@@ -5,9 +5,9 @@
 #include "smbd_conf.hxx"
 #include "nxfsd.hxx"
 #include "include/version.hxx"
+#include "include/crypto.hxx"
 #include <sys/uio.h>
 #include <getopt.h>
-#include <openssl/crypto.h>
 #include <sys/resource.h>
 #include <pthread.h>
 
@@ -233,11 +233,14 @@ int main(int argc, char **argv)
 		exit(1);
 	}
 
+	err = x_crypto_init();
+	if (err < 0) {
+		fprintf(stderr, "x_crypto_init failed %d\n", err);
+		exit(1);
+	}
+
 	// TODO daemonize
 	(void)daemon;
-
-	OPENSSL_init();
-	FIPS_mode_set(0);
 
 	nxfsd_init(progname);
 
@@ -246,6 +249,9 @@ int main(int argc, char **argv)
 	x_threadpool_destroy(g_nxfsd.tpool_evtmgmt);
 	x_threadpool_destroy(g_nxfsd.tpool_async);
 	pthread_join(g_nxfsd.signal_handler_thread, nullptr);
+
+	x_crypto_fini();
+
 	return 0;
 }
 

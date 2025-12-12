@@ -4,7 +4,6 @@
 #include "smbd_open.hxx"
 #include <fcntl.h>
 #include <unistd.h>
-#include <openssl/sha.h>
 #include <sys/stat.h>
 
 #if 0

@@ -51,3 +51,14 @@ unsigned int x_hmac(void *digest, unsigned int dlen,
 	struct iovec vec = { (void *)data, size };
 	return x_hmac(digest, dlen, md, KI, KI_len, &vec, 1);
 }
+
+int x_crypto_init()
+{
+	OPENSSL_init();
+	FIPS_mode_set(0);
+	return 0;
+}
+
+void x_crypto_fini()
+{
+}
