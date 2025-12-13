@@ -899,7 +899,7 @@ def load_idl_with_import(infp):
 		if o['TYPE'] != "IMPORT":
 			continue
 		for path in o['PATHS']:
-			import_name = re.sub('^"(.*)\.idl"$', r'\1', path)
+			import_name = re.sub(r'^"(.*)\.idl"$', r'\1', path)
 			imports.append(import_name)
 	return idl, imports
 
@@ -2353,7 +2353,7 @@ namespace idl {{
 
 def output_header_IMPORT(out, o):
 	for path in o['PATHS']:
-		import_name = re.sub('^"(.*)\.idl"$', r'\1', path)
+		import_name = re.sub(r'^"(.*)\.idl"$', r'\1', path)
 		out(f'#include "include/librpc/{import_name}.hxx"')
 	out()
 
@@ -2416,7 +2416,7 @@ def process_depend(out, name, idl, outdir):
 		if o['TYPE'] != "IMPORT":
 			continue
 		for path in o['PATHS']:
-			import_name = re.sub('^"(.*)\.idl"$', r'\1', path)
+			import_name = re.sub(r'^"(.*)\.idl"$', r'\1', path)
 			out(f'''
 {outdir}/{name}.idl.hxx: {outdir}/{import_name}.json
 {outdir}/{name}.idl.ndr.cxx: include/librpc/{import_name}.hxx
