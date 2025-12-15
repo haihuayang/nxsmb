@@ -24,8 +24,9 @@ struct posixfs_ads_header_t
 	uint32_t allocation_size;
 };
 
+#define MAX_XATTR_SIZE 0x10000
 // TODO ext4 xattr max size is 4k while linux fattr is 64k
-static const uint64_t posixfs_ads_max_length = 0x10000 - sizeof(posixfs_ads_header_t);
+static const uint64_t posixfs_ads_max_length = MAX_XATTR_SIZE - sizeof(posixfs_ads_header_t);
 
 struct posixfs_qdir_t
 {
@@ -277,7 +278,7 @@ template <class T>
 static int posixfs_foreach_xattr(const posixfs_object_t *posixfs_object,
 		const char *prefix, T &&visitor)
 {
-	std::vector<char> buf(0x10000);
+	std::vector<char> buf(MAX_XATTR_SIZE);
 	ssize_t ret = flistxattr(posixfs_object->fd, buf.data(), buf.size());
 	X_TODO_ASSERT(ret >= 0);
 	if (ret == 0) {
@@ -310,7 +311,7 @@ static int posixfs_ads_foreach_2(const posixfs_object_t *posixfs_object, T &&vis
 {
 	return posixfs_ads_foreach_1(posixfs_object, [=] (const char *xattr_name,
 				const char *stream_name) {
-			std::vector<uint8_t> content(0x10000);
+			std::vector<uint8_t> content(MAX_XATTR_SIZE);
 			ssize_t ret = fgetxattr(posixfs_object->fd, xattr_name, content.data(), content.size());
 			X_TODO_ASSERT(ret >= x_convert<ssize_t>(sizeof(posixfs_ads_header_t)));
 			const posixfs_ads_header_t *ads_hdr = (posixfs_ads_header_t *)content.data();
@@ -382,7 +383,7 @@ static inline void posixfs_object_remove_ads(posixfs_object_t *posixfs_object,
 static NTSTATUS posixfs_ads_set_eof(posixfs_object_t *posixfs_object,
 		posixfs_ads_t *posixfs_ads, uint64_t new_size)
 {
-	std::vector<uint8_t> content(0x10000);
+	std::vector<uint8_t> content(MAX_XATTR_SIZE);
 	ssize_t ret = fgetxattr(posixfs_object->fd, posixfs_ads->xattr_name.c_str(), content.data(), content.size());
 	X_TODO_ASSERT(ret >= ssize_t(sizeof(posixfs_ads_header_t)));
 	posixfs_ads_header_t *ads_hdr = (posixfs_ads_header_t *)content.data();
@@ -398,14 +399,20 @@ static NTSTATUS posixfs_ads_set_eof(posixfs_object_t *posixfs_object,
 	}
 
 	ret = fsetxattr(posixfs_object->fd, posixfs_ads->xattr_name.c_str(), content.data(), content.size(), 0);
-	X_TODO_ASSERT(ret == 0);
+	if (ret < 0) {
+		X_LOG(SMB, NOTICE, "fsetxattr %s length %lu errno=%d",
+				posixfs_ads->xattr_name.c_str(),
+				content.size(), errno);
+		X_TODO_ASSERT(errno == ENOSPC);
+		return NT_STATUS_DISK_FULL;
+	}
 	return NT_STATUS_OK;
 }
 
 static NTSTATUS posixfs_ads_set_alloc(posixfs_object_t *posixfs_object,
 		posixfs_ads_t *posixfs_ads, uint64_t new_size)
 {
-	std::vector<uint8_t> content(0x10000);
+	std::vector<uint8_t> content(MAX_XATTR_SIZE);
 	ssize_t ret = fgetxattr(posixfs_object->fd, posixfs_ads->xattr_name.c_str(), content.data(), content.size());
 	X_TODO_ASSERT(ret >= ssize_t(sizeof(posixfs_ads_header_t)));
 	posixfs_ads_header_t *ads_hdr = (posixfs_ads_header_t *)content.data();
@@ -612,11 +619,13 @@ NTSTATUS posixfs_op_rename_stream(
 	if (!x_str_convert(new_name_utf8, new_stream_name)) {
 		return NT_STATUS_ILLEGAL_CHARACTER;
 	}
-	posixfs_ads_foreach_1(posixfs_object, [=, &collision] (const char *xattr_name,
+	std::string remove_xattr_name;
+	posixfs_ads_foreach_1(posixfs_object, [=, &collision, &remove_xattr_name] (
+				const char *xattr_name,
 				const char *stream_name) {
 			if (x_strcase_equal(stream_name, new_name_utf8)) {
 				if (replace_if_exists) {
-					fremovexattr(posixfs_object->fd, xattr_name);
+					remove_xattr_name = xattr_name;
 				} else {
 					collision = true;
 				}
@@ -635,7 +644,20 @@ NTSTATUS posixfs_op_rename_stream(
 	X_TODO_ASSERT(ret >= 0);
 
 	std::string new_xattr_name = POSIXFS_ADS_PREFIX + new_name_utf8;
-	fsetxattr(posixfs_object->fd, new_xattr_name.c_str(), data.data(), ret, 0);
+	ssize_t err = fsetxattr(posixfs_object->fd, new_xattr_name.c_str(),
+			data.data(), ret, 0);
+	if (err < 0) {
+		X_LOG(SMB, ERR, "fsetxattr %s length=%ld errno=%d",
+				new_xattr_name.c_str(), ret, errno);
+		if (ret == ERANGE) {
+			/* stream name too long */
+			return NT_STATUS_OBJECT_NAME_INVALID;
+		}
+		X_TODO_ASSERT(false);
+	}
+	if (!remove_xattr_name.empty()) {
+		fremovexattr(posixfs_object->fd, remove_xattr_name.c_str());
+	}
 	posixfs_ads->base.name = new_stream_name;
 	posixfs_ads->xattr_name = new_xattr_name;
 
@@ -964,18 +986,28 @@ static std::string posixfs_get_ads_xattr_name(const std::string &stream_name)
 	return POSIXFS_ADS_PREFIX + stream_name;
 }
 
-static void posixfs_ads_reset(posixfs_object_t *posixfs_object,
+static NTSTATUS posixfs_ads_reset(posixfs_object_t *posixfs_object,
 		posixfs_ads_t *posixfs_ads,
 		uint32_t allocation_size)
 {
 	posixfs_ads_header_t ads_header = { 0, allocation_size };
 	int ret = fsetxattr(posixfs_object->fd, posixfs_ads->xattr_name.c_str(),
 		&ads_header, sizeof(ads_header), 0);
+	if (ret < 0) {
+		X_LOG(SMB, ERR, "fsetxattr %s errno=%d",
+				posixfs_ads->xattr_name.c_str(),
+				errno);
+		if (errno == ERANGE) {
+			/* stream name too long */
+			return NT_STATUS_OBJECT_NAME_INVALID;
+		}
+		X_TODO_ASSERT(false);
+	}
 	posixfs_ads->base.exists = true;
 	// posixfs_ads->initialized = true;
 	posixfs_ads->get_meta().allocation_size = allocation_size;
 	posixfs_ads->get_meta().end_of_file = 0;
-	X_TODO_ASSERT(ret >= 0);
+	return NT_STATUS_OK;
 }
 
 /* TODO should not hold the posixfs_object's mutex */
@@ -1072,7 +1104,7 @@ static NTSTATUS posixfs_ads_read(posixfs_object_t *posixfs_object,
 	if (max_read > state.in_length) {
 		max_read = state.in_length;
 	}
-	std::vector<uint8_t> content(0x10000);
+	std::vector<uint8_t> content(MAX_XATTR_SIZE);
 	ssize_t ret = fgetxattr(posixfs_object->fd, ads->xattr_name.c_str(), content.data(), content.size());
 	X_TODO_ASSERT(ret >= ssize_t(sizeof(posixfs_ads_header_t)));
 	const posixfs_ads_header_t *ads_hdr = (const posixfs_ads_header_t *)content.data();
@@ -1094,7 +1126,7 @@ static NTSTATUS posixfs_ads_write(posixfs_object_t *posixfs_object,
 	if (last_offset > posixfs_ads_max_length) {
 		return NT_STATUS_DISK_FULL; // windows server return this
 	}
-	std::vector<uint8_t> content(0x10000);
+	std::vector<uint8_t> content(MAX_XATTR_SIZE);
 	ssize_t ret = fgetxattr(posixfs_object->fd, posixfs_ads->xattr_name.c_str(), content.data(), content.size());
 	X_TODO_ASSERT(ret >= ssize_t(sizeof(posixfs_ads_header_t)));
 	posixfs_ads_header_t *ads_hdr = (posixfs_ads_header_t *)content.data();
@@ -1115,7 +1147,12 @@ static NTSTATUS posixfs_ads_write(posixfs_object_t *posixfs_object,
 		content.resize(sizeof(posixfs_ads_header_t) + orig_eof);
 	}
 	ret = fsetxattr(posixfs_object->fd, posixfs_ads->xattr_name.c_str(), content.data(), content.size(), 0);
-	X_TODO_ASSERT(ret == 0);
+	if (ret == -1) {
+		X_LOG(SMB, NOTICE, "fsetxattr %s errno=%d",
+				posixfs_ads->xattr_name.c_str(), errno);
+		X_TODO_ASSERT(errno == ENOSPC);
+		return NT_STATUS_DISK_FULL;
+	}
 	return NT_STATUS_OK;
 }
 
@@ -1531,6 +1568,7 @@ static NTSTATUS posixfs_set_ea(posixfs_object_t *posixfs_object,
 			if (name != ea.name) {
 				X_LOG(SMB, DBG, "remove existed ea '%s'", name);
 				ret = fremovexattr(posixfs_object->fd, xattr_name.c_str());
+				X_TODO_ASSERT(ret == 0);
 			} else {
 				X_LOG(SMB, DBG, "skip zero ea '%s'", name);
 				ret = 0;
@@ -1538,8 +1576,14 @@ static NTSTATUS posixfs_set_ea(posixfs_object_t *posixfs_object,
 		} else {
 			ret = fsetxattr(posixfs_object->fd, xattr_name.c_str(),
 					ea.value, ea.value_length, 0);
+			if (ret < 0) {
+				X_LOG(SMB, NOTICE, "fsetxattr %s length %d errno=%d",
+						xattr_name.c_str(), ea.value_length,
+						errno);
+				X_TODO_ASSERT(errno == ENOSPC);
+				return NT_STATUS_DISK_FULL;
+			}
 		}
-		X_TODO_ASSERT(ret == 0);
 	}
 
 	return NT_STATUS_OK;
@@ -2567,14 +2611,17 @@ NTSTATUS x_smbd_posixfs_create_object(x_nxfsd_requ_t *nxfsd_requ,
 
 	if (smbd_stream && !smbd_stream->exists) {
 		// TODO should it fail for large in_allocation_size?
-		++create_count;
 		uint32_t allocation_size = x_convert_assert<uint32_t>(
 				std::min(state.in_context.allocation_size, posixfs_ads_max_length));
 		posixfs_ads_t *posixfs_ads = posixfs_ads_from_smbd_stream(smbd_stream);
 		posixfs_ads->xattr_name = posixfs_get_ads_xattr_name(
 				x_str_convert_assert<std::string>(smbd_stream->name));
-		posixfs_ads_reset(posixfs_object, posixfs_ads, allocation_size);
+		NTSTATUS status = posixfs_ads_reset(posixfs_object, posixfs_ads, allocation_size);
+		if (!status.ok()) {
+			return status;
+		}
 
+		++create_count;
 		x_smbd_schedule_notify(
 				NOTIFY_ACTION_ADDED_STREAM,
 				FILE_NOTIFY_CHANGE_STREAM_NAME,
