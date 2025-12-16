@@ -91,9 +91,9 @@ bool x_cipher_ctx_t::init(const EVP_CIPHER *evp, const void *key, unsigned int k
 
 #include <openssl/provider.h>
 
-static OSSL_PROVIDER *legacy_provider = NULL;
-static OSSL_PROVIDER *fips_provider = NULL;
-
+static OSSL_PROVIDER *g_legacy_provider = nullptr;
+static OSSL_PROVIDER *g_fips_provider = nullptr;
+static OSSL_PROVIDER *g_default_provider =nullptr;
 /*
  *  Initialize OpenSSL 3.x providers for FIPS and legacy algorithm support
  *  This replaces the deprecated FIPS_mode_set(0) call
@@ -102,32 +102,35 @@ static int init_openssl_providers() {
 	X_LOG(UTILS, NOTICE, "Initializing OpenSSL 3.x providers for FIPS + legacy support...");
 
 	// 1. Load default provider (always required)
-	OSSL_PROVIDER *default_provider = OSSL_PROVIDER_load(NULL, "default");
-	if (!default_provider) {
+	g_default_provider = OSSL_PROVIDER_load(NULL, "default");
+	if (!g_default_provider) {
 		X_LOG(UTILS, ERR, "Failed to load default provider");
 		return -1;
 	}
 	X_LOG(UTILS, NOTICE, "Default provider loaded");
 
 	// 2. Load legacy provider (for RC4 and other deprecated algorithms)
-	legacy_provider = OSSL_PROVIDER_load(NULL, "legacy");
-	if (!legacy_provider) {
+	g_legacy_provider = OSSL_PROVIDER_load(NULL, "legacy");
+	if (!g_legacy_provider) {
 		X_LOG(UTILS, ERR, "Failed to load legacy provider - RC4 will not work");
-		// 不返回失败，因为有些应用可能不需要RC4
+        return -1;
+        //TODO: If RC4 is not required, alternative handling may be necessary.
 	} else {
 		X_LOG(UTILS, NOTICE, "Legacy provider loaded successfully");
 	}
 
 	// 3. Load FIPS provider (if available and needed) 
-	fips_provider = OSSL_PROVIDER_load(NULL, "fips");
-	if (!fips_provider) {
+	g_fips_provider = OSSL_PROVIDER_load(NULL, "fips");
+	if (!g_fips_provider) {
 		X_LOG(UTILS, NOTICE, "FIPS provider not available or not loaded - continuing without FIPS");
+        return -1;
 	} else {
 		X_LOG(UTILS, NOTICE, "FIPS provider loaded successfully");
 	}
 
 	// 4. Verify RC4 availability
 	const EVP_CIPHER *rc4 = EVP_rc4();
+    X_ASSERT(rc4);
 	if (rc4) {
 		X_LOG(UTILS, NOTICE, "RC4 algorithm is available: %s", EVP_CIPHER_name(rc4));
 	} else {
@@ -152,16 +155,21 @@ int x_crypto_init()
 void x_crypto_fini()
 {
 #if OPENSSL_VERSION_NUMBER >= 0x30000000L
-	if (legacy_provider) {
-		OSSL_PROVIDER_unload(legacy_provider);
-		legacy_provider = NULL;
+	if (g_legacy_provider) {
+		OSSL_PROVIDER_unload(g_legacy_provider);
+		g_legacy_provider = nullptr;
 		X_LOG(UTILS, NOTICE, "Legacy provider unloaded");
 	}
 
-	if (fips_provider) {
-		OSSL_PROVIDER_unload(fips_provider);
-		fips_provider = NULL;
+	if (g_fips_provider) {
+		OSSL_PROVIDER_unload(g_fips_provider);
+		g_fips_provider = nullptr;
 		X_LOG(UTILS, NOTICE, "FIPS provider unloaded");
+	}
+	if (g_default_provider) {
+		OSSL_PROVIDER_unload(g_default_provider);
+		g_default_provider = nullptr;
+		X_LOG(UTILS, NOTICE, "Default provider unloaded");
 	}
 #endif
 }
