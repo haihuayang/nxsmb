@@ -87,13 +87,81 @@ bool x_cipher_ctx_t::init(const EVP_CIPHER *evp, const void *key, unsigned int k
 }
 
 
+#if OPENSSL_VERSION_NUMBER >= 0x30000000L
+
+#include <openssl/provider.h>
+
+static OSSL_PROVIDER *legacy_provider = NULL;
+static OSSL_PROVIDER *fips_provider = NULL;
+
+/*
+ *  Initialize OpenSSL 3.x providers for FIPS and legacy algorithm support
+ *  This replaces the deprecated FIPS_mode_set(0) call
+ */
+static int init_openssl_providers() {
+	X_LOG(UTILS, NOTICE, "Initializing OpenSSL 3.x providers for FIPS + legacy support...");
+
+	// 1. Load default provider (always required)
+	OSSL_PROVIDER *default_provider = OSSL_PROVIDER_load(NULL, "default");
+	if (!default_provider) {
+		X_LOG(UTILS, ERR, "Failed to load default provider");
+		return -1;
+	}
+	X_LOG(UTILS, NOTICE, "Default provider loaded");
+
+	// 2. Load legacy provider (for RC4 and other deprecated algorithms)
+	legacy_provider = OSSL_PROVIDER_load(NULL, "legacy");
+	if (!legacy_provider) {
+		X_LOG(UTILS, ERR, "Failed to load legacy provider - RC4 will not work");
+		// 不返回失败，因为有些应用可能不需要RC4
+	} else {
+		X_LOG(UTILS, NOTICE, "Legacy provider loaded successfully");
+	}
+
+	// 3. Load FIPS provider (if available and needed) 
+	fips_provider = OSSL_PROVIDER_load(NULL, "fips");
+	if (!fips_provider) {
+		X_LOG(UTILS, NOTICE, "FIPS provider not available or not loaded - continuing without FIPS");
+	} else {
+		X_LOG(UTILS, NOTICE, "FIPS provider loaded successfully");
+	}
+
+	// 4. Verify RC4 availability
+	const EVP_CIPHER *rc4 = EVP_rc4();
+	if (rc4) {
+		X_LOG(UTILS, NOTICE, "RC4 algorithm is available: %s", EVP_CIPHER_name(rc4));
+	} else {
+		X_LOG(UTILS, ERR, "RC4 algorithm is NOT available - NTLM authentication may fail");
+	}
+
+	return 0;
+}
+#endif
+
 int x_crypto_init()
 {
 	OPENSSL_init();
+#if OPENSSL_VERSION_NUMBER >= 0x30000000L
+	return init_openssl_providers();
+#else
 	FIPS_mode_set(0);
 	return 0;
+#endif
 }
 
 void x_crypto_fini()
 {
+#if OPENSSL_VERSION_NUMBER >= 0x30000000L
+	if (legacy_provider) {
+		OSSL_PROVIDER_unload(legacy_provider);
+		legacy_provider = NULL;
+		X_LOG(UTILS, NOTICE, "Legacy provider unloaded");
+	}
+
+	if (fips_provider) {
+		OSSL_PROVIDER_unload(fips_provider);
+		fips_provider = NULL;
+		X_LOG(UTILS, NOTICE, "FIPS provider unloaded");
+	}
+#endif
 }
