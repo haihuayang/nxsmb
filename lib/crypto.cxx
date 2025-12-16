@@ -113,8 +113,8 @@ static int init_openssl_providers() {
 	g_legacy_provider = OSSL_PROVIDER_load(NULL, "legacy");
 	if (!g_legacy_provider) {
 		X_LOG(UTILS, ERR, "Failed to load legacy provider - RC4 will not work");
-        return -1;
-        //TODO: If RC4 is not required, alternative handling may be necessary.
+		return -1;
+		//TODO: If RC4 is not required, alternative handling may be necessary.
 	} else {
 		X_LOG(UTILS, NOTICE, "Legacy provider loaded successfully");
 	}
@@ -122,7 +122,7 @@ static int init_openssl_providers() {
 	// 3. Load FIPS provider (if available and needed) 
 	g_fips_provider = OSSL_PROVIDER_load(NULL, "fips");
 	if (!g_fips_provider) {
-		X_LOG(UTILS, NOTICE, "FIPS provider not available or not loaded - continuing without FIPS");
+		X_LOG(UTILS, ERR, "Failed to load FIPS provider - initialization failed");
         return -1;
 	} else {
 		X_LOG(UTILS, NOTICE, "FIPS provider loaded successfully");
@@ -131,11 +131,8 @@ static int init_openssl_providers() {
 	// 4. Verify RC4 availability
 	const EVP_CIPHER *rc4 = EVP_rc4();
     X_ASSERT(rc4);
-	if (rc4) {
-		X_LOG(UTILS, NOTICE, "RC4 algorithm is available: %s", EVP_CIPHER_name(rc4));
-	} else {
-		X_LOG(UTILS, ERR, "RC4 algorithm is NOT available - NTLM authentication may fail");
-	}
+	X_LOG(UTILS, NOTICE, "RC4 algorithm is available: %s", EVP_CIPHER_name(rc4));
+
 
 	return 0;
 }
