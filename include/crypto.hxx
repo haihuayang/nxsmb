@@ -6,6 +6,8 @@
 #error "Must be c++"
 #endif
 
+#define OPENSSL_SUPPRESS_DEPRECATED
+
 #include <openssl/evp.h>
 #include <sys/uio.h>
 
