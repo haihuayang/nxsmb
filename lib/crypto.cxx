@@ -98,7 +98,8 @@ static OSSL_PROVIDER *g_default_provider =nullptr;
  *  Initialize OpenSSL 3.x providers for FIPS and legacy algorithm support
  *  This replaces the deprecated FIPS_mode_set(0) call
  */
-static int init_openssl_providers() {
+static int init_openssl_providers()
+{
 	X_LOG(UTILS, NOTICE, "Initializing OpenSSL 3.x providers for FIPS + legacy support...");
 
 	// 1. Load default provider (always required)
@@ -130,7 +131,7 @@ static int init_openssl_providers() {
 
 	// 4. Verify RC4 availability
 	const EVP_CIPHER *rc4 = EVP_rc4();
-    X_ASSERT(rc4);
+	X_ASSERT(rc4);
 	X_LOG(UTILS, NOTICE, "RC4 algorithm is available: %s", EVP_CIPHER_name(rc4));
 
 
