@@ -1,0 +1,11 @@
+#!/bin/sh
+
+set -e
+
+curdir=$(cd "$(dirname "$0")" && pwd)
+topdir=$(git rev-parse --show-toplevel)
+
+for hook in pre-commit commit-msg; do
+	cp -f "$curdir/git-hook-templ" "$topdir/.git/hooks/$hook"
+	chmod +x "$topdir/.git/hooks/$hook"
+done

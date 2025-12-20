@@ -1,0 +1,21 @@
+#!/bin/sh
+
+set -eu
+(
+echo "Running git hook: $0 $@"
+env
+echo
+) >> /tmp/git-hook.log 2>&1
+
+name=$(basename "$0")
+topdir=$(git rev-parse --show-toplevel)
+
+if [ $? -ne 0 ]; then
+	echo "git rev-parse --show-toplevel failed"
+	exit 1
+fi
+
+script=${topdir}/scripts/"$name"-hook
+
+[ -f "$script" ] || exit 0
+"$script" "$@"

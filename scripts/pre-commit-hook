@@ -1,0 +1,5 @@
+#!/bin/sh
+
+topdir=$(git rev-parse --show-toplevel)
+git diff --cached | $topdir/scripts/checkpatch.pl --no-tree -q -
+

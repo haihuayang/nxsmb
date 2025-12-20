@@ -101,6 +101,14 @@ my:volumes = 85d49bcb-7c14-404b-b11a-ffe207732329
 
 
 
+Contribution
+-------
+Please install git hooks before committing code
+```
+   ./scripts/install-git-hooks
+```
+
+
 Contact
 -------
 If you have any question, feel free to contact me.  
