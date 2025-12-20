@@ -3816,7 +3816,7 @@ sub process {
 		}
 
 # check we are in a valid source file if not then ignore this hunk
-		next if ($realfile !~ /\.(h|c|rs|s|S|sh|dtsi|dts)$/);
+		next if ($realfile !~ /\.(h|c|hxx|cxx|rs|s|S|sh|dtsi|dts)$/);
 
 # check for using SPDX-License-Identifier on the wrong line number
 		if ($realline != $checklicenseline &&
@@ -3907,7 +3907,7 @@ sub process {
 		}
 
 # check we are in a valid source file C or perl if not then ignore this hunk
-		next if ($realfile !~ /\.(h|c|pl|dtsi|dts)$/);
+		next if ($realfile !~ /\.(h|c|hxx|cxx|pl|dtsi|dts)$/);
 
 # at the beginning of a line any tabs must come first and anything
 # more than $tabsize must use tabs.
@@ -4158,7 +4158,7 @@ sub process {
 		}
 
 # check we are in a valid C source file if not then ignore this hunk
-		next if ($realfile !~ /\.(h|c)$/);
+		next if ($realfile !~ /\.(h|c|hxx|cxx)$/);
 
 # check for unusual line ending [ or (
 		if ($line =~ /^\+.*([\[\(])\s*$/) {
@@ -7129,7 +7129,7 @@ sub process {
 		}
 
 # check for new externs in .h files.
-		if ($realfile =~ /\.h$/ &&
+		if ($realfile =~ /\.(h|hxx)$/ &&
 		    $line =~ /^\+\s*(extern\s+)$Type\s*$Ident\s*\(/s) {
 			if (CHK("AVOID_EXTERNS",
 				"extern prototypes should be avoided in .h files\n" . $herecurr) &&
@@ -7139,7 +7139,7 @@ sub process {
 		}
 
 # check for new externs in .c files.
-		if ($realfile =~ /\.c$/ && defined $stat &&
+		if ($realfile =~ /\.(c|cxx)$/ && defined $stat &&
 		    $stat =~ /^.\s*(?:extern\s+)?$Type\s+($Ident)(\s*)\(/s)
 		{
 			my $function_name = $1;
@@ -7160,7 +7160,7 @@ sub process {
 				     "arguments for function declarations should follow identifier\n" . $herecurr);
 			}
 
-		} elsif ($realfile =~ /\.c$/ && defined $stat &&
+		} elsif ($realfile =~ /\.(c|cxx)$/ && defined $stat &&
 		    $stat =~ /^\+extern struct\s+(\w+)\s+(\w+)\[\];/)
 		{
 			my ($st_type, $st_name) = ($1, $2);
@@ -7175,7 +7175,7 @@ sub process {
 			     . "is this a linker symbol ?\n" . $herecurr);
 		  LIKELY_LINKER_SYMBOL:
 
-		} elsif ($realfile =~ /\.c$/ && defined $stat &&
+		} elsif ($realfile =~ /\.(c|cxx)$/ && defined $stat &&
 		    $stat =~ /^.\s*extern\s+/)
 		{
 			WARN("AVOID_EXTERNS",
