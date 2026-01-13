@@ -56,6 +56,7 @@ winbind enum groups = yes
 ```
 3. start winbindd service
 ```
+   sudo systemctl enable winbind
    sudo systemctl start winbind
 ```
 4. create directory for nxsmb, e.g.,
